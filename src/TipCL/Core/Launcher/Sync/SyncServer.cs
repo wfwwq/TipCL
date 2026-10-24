@@ -13,7 +13,7 @@ namespace TipCL.Core.Launcher.Sync;
 
 /// <summary>
 /// 局域网存档同步服务：手机端通过 UDP 广播找到电脑，输入配对码拿到令牌，再用 HTTP 列出、下载、上传世界。
-/// 只接受局域网 / 本机来源的连接。协议见 docs/save-sync.md。
+/// 只接受局域网 / 本机来源的连接。
 /// </summary>
 public static class SyncServer
 {
