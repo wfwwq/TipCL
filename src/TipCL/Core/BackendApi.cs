@@ -402,6 +402,18 @@ public class BackendApi
 		return Client.TestConnection(_with_stored_secrets(settings));
 	}
 
+	public object ai_vision_status(object settings = null, object force = null)
+	{
+		VisionCaps.Result r = VisionCaps.Detect(_with_stored_secrets(settings), Py.Truthy(force));
+		return PyDict.Of("supported", r.Supported, "source", r.Source, "model", r.Model, "mode", VisionCaps.Mode, "text", VisionCaps.Describe(r));
+	}
+
+	public object ai_vision_set_mode(object mode = null)
+	{
+		VisionCaps.Mode = Py.S(mode);
+		return PyDict.Of("ok", true, "mode", VisionCaps.Mode);
+	}
+
 	public object ai_list_models(object settings = null)
 	{
 		PyDict settings2 = _with_stored_secrets(settings);
@@ -511,7 +523,7 @@ public class BackendApi
 		return I18nCore.Tr("（提示：") + text3 + I18nCore.Tr("）");
 	}
 
-	public object ai_send(object text, [Def("")] object chat_id = null, object launch = null, object context = null)
+	public object ai_send(object text, [Def("")] object chat_id = null, object launch = null, object context = null, object images = null)
 	{
 		lock (_ai_lock)
 		{
@@ -526,7 +538,7 @@ public class BackendApi
 		_ui_launch = Py.DictCtor(Py.Truthy(launch) ? launch : new PyDict());
 		Thread thread = new Thread((ThreadStart)delegate
 		{
-			_ai_run(text, chat_id, context);
+			_ai_run(text, chat_id, context, images);
 		});
 		thread.IsBackground = true;
 		thread.Name = "ai-send";
@@ -534,7 +546,7 @@ public class BackendApi
 		return PyDict.Of("ok", true, "started", true);
 	}
 
-	private void _ai_run(object text0, object chat_id, object context)
+	private void _ai_run(object text0, object chat_id, object context, object images = null)
 	{
 		string text1 = ((text0 == null) ? null : ((text0 as string) ?? Py.Str(text0)));
 		PyDict pyDict = Store.Load();
@@ -561,7 +573,7 @@ public class BackendApi
 		}
 		try
 		{
-			AgentResult agentResult = Agent.RunAgent(this, pyDict2, history, text1, OnDelta, OnStatus, ConfirmFn, AskFn, Cancelled, httpCancel, DrainInputs);
+			AgentResult agentResult = Agent.RunAgent(this, pyDict2, history, text1, OnDelta, OnStatus, ConfirmFn, AskFn, Cancelled, httpCancel, DrainInputs, images as List<object>);
 			FlushDelta(force: true);
 			if (_ai_cancel)
 			{
