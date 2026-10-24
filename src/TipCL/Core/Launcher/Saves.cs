@@ -14,7 +14,7 @@ public static class Saves
 
 	private static readonly Regex _STAMP_RE = new Regex("-(\\d{8}-\\d{6})(?:-\\d+)?$");
 
-	private static string StripStamp(string stem)
+	internal static string StripStamp(string stem)
 	{
 		return _STAMP_RE.Replace(stem, "", 1);
 	}
