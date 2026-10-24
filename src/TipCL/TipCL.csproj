@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>TipCL</AssemblyName>
+    <RootNamespace>TipCL</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+
+    <Version>3.2.0</Version>
+    <Product>TipCL 启动器</Product>
+    <AssemblyTitle>TipCL 启动器</AssemblyTitle>
+    <Company>TipCL</Company>
+    <!-- 反编译还原的代码会有大量风格类警告，这里不当成错误 -->
+    <NoWarn>$(NoWarn);CS0168;CS0219;CS0162;CS0649;CS0414;CS8981</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Management" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- 把依赖 DLL 打进单个 exe -->
+    <PackageReference Include="Costura.Fody" Version="6.0.0" PrivateAssets="all" />
+    <PackageReference Include="Fody" Version="6.9.2" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 内置资源：词表与 AI 模型规则（CoreResources 以 TipCL.Core.<路径> 读取） -->
+    <EmbeddedResource Include="Resources\locales\en.json" LogicalName="TipCL.Core.locales.en.json" />
+    <EmbeddedResource Include="Resources\locales\zh_CN.json" LogicalName="TipCL.Core.locales.zh_CN.json" />
+    <EmbeddedResource Include="Resources\ai\model_rules.json" LogicalName="TipCL.Core.ai.model_rules.json" />
+  </ItemGroup>
+
+</Project>

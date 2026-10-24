@@ -1,0 +1,92 @@
+<Window x:Class="TipCL.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework" Title="TipCL" Width="1180" Height="740" MinWidth="900" MinHeight="580" WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize" TextOptions.TextFormattingMode="Ideal" UseLayoutRounding="True" AllowDrop="True" Background="#00FFFFFF" xmlns:tipcl="clr-namespace:TipCL">
+  <shell:WindowChrome.WindowChrome>
+    <shell:WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+  </shell:WindowChrome.WindowChrome>
+  <Border Name="RootBorder" Background="#00FFFFFF" BorderBrush="{DynamicResource B.GlassBorder}" BorderThickness="1">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="40" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+      <Grid Name="ContentLayer" Row="0" RowSpan="2">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="40" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid Name="WallHost" Row="0" RowSpan="2" IsHitTestVisible="False" ClipToBounds="True" />
+        <Border Name="ChromeBar" Grid.Row="0" Background="{DynamicResource B.GlassStrong}" BorderBrush="{DynamicResource B.GlassBorder}" BorderThickness="0,0,0,1">
+          <Grid>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+              <Border Width="20" Height="20" CornerRadius="6" Background="{DynamicResource B.LogoFill}">
+                <TextBlock Text="T" Foreground="{DynamicResource B.OnLogo}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <TextBlock Text="TipCL" FontSize="13.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="9,0,0,0" />
+              <Border Width="1" Height="14" Background="{DynamicResource B.Line}" Margin="10,0" />
+              <TextBlock Name="PageTitle" FontSize="12.5" Foreground="{DynamicResource B.InkMuted}" VerticalAlignment="Center" />
+              <Border Name="BridgePill" CornerRadius="999" Padding="7,1,8,2" Margin="10,0,0,0" Background="{DynamicResource B.AccentSoft}" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                  <Ellipse Name="BridgeDot" Width="6" Height="6" Fill="{DynamicResource B.Warn}" VerticalAlignment="Center" />
+                  <TextBlock Name="BridgeText" FontSize="11" Margin="5,0,0,0" Foreground="{DynamicResource B.AccentText}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+              <Button Name="ThemeBtn" Style="{StaticResource Btn.Caption}" FontSize="13" Content="" />
+              <Button Name="MinBtn" Style="{StaticResource Btn.Caption}" Content="" />
+              <Button Name="MaxBtn" Style="{StaticResource Btn.Caption}" Content="" />
+              <Button Name="CloseBtn" Style="{StaticResource Btn.CaptionClose}" Content="" />
+            </StackPanel>
+          </Grid>
+        </Border>
+        <Grid Row="1">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Name="SideCol" Width="196" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <Border Name="SideBar" Grid.Column="0" Background="{DynamicResource B.Glass}" BorderBrush="{DynamicResource B.GlassBorder}" BorderThickness="0,0,1,0">
+            <DockPanel>
+              <Border Name="SideFooter" DockPanel.Dock="Bottom" Padding="0,6,0,10">
+                <StackPanel Name="PinnedHost" />
+              </Border>
+              <ScrollViewer Name="NavScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,8,0,4">
+                <StackPanel Name="NavHost" />
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+          <Thumb Name="SideGrip" Grid.Column="1" Width="4" Cursor="SizeWE" Background="#00FFFFFF">
+            <Control.Template>
+              <ControlTemplate TargetType="{x:Type Thumb}">
+                <Border Background="#00FFFFFF">
+                  <Border Name="L" Width="2" Background="#00FFFFFF" HorizontalAlignment="Center" />
+                </Border>
+                <ControlTemplate.Triggers>
+                  <Trigger Property="UIElement.IsMouseOver" Value="True">
+                    <Setter TargetName="L" Value="{DynamicResource B.Accent}" Property="Border.Background" />
+                  </Trigger>
+                </ControlTemplate.Triggers>
+              </ControlTemplate>
+            </Control.Template>
+          </Thumb>
+          <Grid Column="2">
+            <Rectangle Name="PageWash" Fill="{DynamicResource B.PageWash}" />
+            <ContentControl Name="PageHost" Focusable="False" />
+            <Border Name="DockHost" VerticalAlignment="Bottom" Margin="16,0,16,14" Visibility="Collapsed" />
+          </Grid>
+        </Grid>
+        <Canvas Name="FlyHost" Grid.Row="0" Grid.RowSpan="2" IsHitTestVisible="False" />
+        <Border Name="DropVeil" Grid.Row="1" Visibility="Collapsed" IsHitTestVisible="False" Background="{DynamicResource B.Mask}" Margin="0">
+          <Border CornerRadius="14" Padding="26,20,26,22" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{DynamicResource B.GlassStrong}" BorderBrush="{DynamicResource B.GlassBorder}">
+            <StackPanel>
+              <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="30" HorizontalAlignment="Center" Foreground="{DynamicResource B.Accent}" />
+              <TextBlock Name="DropVeilTitle" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
+              <TextBlock Name="DropVeilHint" FontSize="12" Margin="0,3,0,0" MaxWidth="360" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource B.InkMuted}" />
+            </StackPanel>
+          </Border>
+        </Border>
+      </Grid>
+      <StackPanel Name="ToastHost" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,16,0" />
+      <Grid Name="DialogHost" Row="0" RowSpan="2" Visibility="Collapsed" />
+    </Grid>
+  </Border>
+</Window>

@@ -1,0 +1,13 @@
+namespace TipCL.Models;
+
+public sealed class ModsTarget
+{
+	public string Label { get; set; } = "";
+
+	public string Value { get; set; } = "";
+
+	public override string ToString()
+	{
+		return Label;
+	}
+}
