@@ -147,7 +147,7 @@ public static class Client
 	{
 		try
 		{
-			return Py.Truthy(Py.DictOr(Py.Or(ModelCaps(settings).Get("inputFormat"), new PyDict())).Get("supportsImage"));
+			return VisionCaps.Supports(settings);
 		}
 		catch (Exception)
 		{
