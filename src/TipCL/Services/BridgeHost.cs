@@ -128,6 +128,7 @@ public sealed class BridgeHost : IDisposable
 			CoreState.Bus = new EventBus();
 			CoreState.Api = new BackendApi(CoreState.Bus);
 			CoreState.Root = root;
+			TipCL.Core.Launcher.Ai.McpServer.StartIfEnabled(CoreState.Api);
 			bus = CoreState.Bus;
 			return CoreState.Api;
 		}
