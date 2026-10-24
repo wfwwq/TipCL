@@ -84,6 +84,7 @@ public static class Tools
 
 	private static List<object> WithMemoryTools(List<object> schemas)
 	{
+		schemas.AddRange(ExtraTools.Schemas());
 		schemas.AddRange((List<object>)PyJson.Loads("[{\"type\": \"function\", \"function\": {\"name\": \"remember\", \"description\": \"把值得长期记住的事写进记忆，下次对话还能看到。玩家说出偏好（常玩版本、加载器、喜欢的光影、内存大小）、电脑配置（显卡、内存）、或你刚帮他修好一个问题（原因和解决办法）时调用。一次只记一条，写成简短的一句话，不要记一次性的闲聊。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"text\": {\"type\": \"string\", \"description\": \"要记住的一句话，如：常玩 1.20.1 Fabric，喜欢 BSL 光影\"}}, \"required\": [\"text\"]}}}, {\"type\": \"function\", \"function\": {\"name\": \"forget\", \"description\": \"删除包含关键词的记忆。玩家让你忘掉某事，或发现记忆已过时、记错时调用。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"keyword\": {\"type\": \"string\", \"description\": \"要删除的记忆里包含的关键词\"}}, \"required\": [\"keyword\"]}}}]"));
 		return schemas;
 	}
@@ -133,7 +134,7 @@ public static class Tools
 		{
 			string text = _selection_text(messages);
 			List<string> list = new List<string>(AiData.CORE_TOOLS);
-			(string[], string[])[] kEYWORD_TOOLS = AiData.KEYWORD_TOOLS;
+			(string[], string[])[] kEYWORD_TOOLS = AiData.KEYWORD_TOOLS.Concat(ExtraTools.Keywords).ToArray();
 			for (int i = 0; i < kEYWORD_TOOLS.Length; i++)
 			{
 				var (source, array) = kEYWORD_TOOLS[i];
@@ -725,7 +726,7 @@ public static class Tools
 		string value3;
 		if (!_FMT.TryGetValue(name, out string value2))
 		{
-			return I18nCore.Tr(_TOOL_LABELS.TryGetValue(name, out value3) ? value3 : name);
+			return I18nCore.Tr((_TOOL_LABELS.TryGetValue(name, out value3) || ExtraTools.Labels.TryGetValue(name, out value3)) ? value3 : name);
 		}
 		string text = I18nCore.Tr(value2);
 		Dictionary<string, object> fields = new Dictionary<string, object>
@@ -1004,7 +1005,7 @@ public static class Tools
 		case "read_artifact":
 			return Artifacts.ReadArtifact(args.Get("artifact_id"), Py.Or(args.Get("offset"), 0L), Py.Or(args.Get("limit"), 200L));
 		default:
-			return "未知工具: " + name;
+			return ExtraTools.Run(backend, name, args) ?? ("未知工具: " + name);
 		}
 	}
 
