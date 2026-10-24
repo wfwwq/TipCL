@@ -25,6 +25,10 @@ public sealed class AiPage : PageBase
 
 	private readonly ChatInput _input = new ChatInput();
 
+	private readonly List<string> _pendingImages = new List<string>();
+
+	private readonly TextBlock _imgChip = new TextBlock();
+
 	private readonly ComboBox _perm = Ui.Combo(new string[5]
 	{
 		I18n.L("每次确认"),
@@ -360,8 +364,11 @@ public sealed class AiPage : PageBase
 		{
 			PageBase.Run(OpenPermissionPanelAsync);
 		}, "B.InkMuted", 15.0);
+		Button elImg = AiIcons.Flat("M3 5h18v14H3z M8.5 8.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3z M21 15l-5-5L5 19", null, I18n.L("附图片（也可以直接粘贴或拖进来）"), PickImage, "B.InkMuted", 15.0);
+		SetupImageInput();
 		_sendStop.Content = _send;
 		Grid grid4 = Ui.G(null, "Auto,Auto,Auto,Auto,Auto,*,Auto");
+		grid4.Add(Ui.H(6.0, elImg.VCenter(), _imgChip.VCenter()).M(4.0, 0.0, 0.0, 0.0), 0, 5);
 		grid4.Add(el2.VCenter(), 0);
 		grid4.Add(_model.M(4.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
 		grid4.Add(_modelFetch.M(2.0, 0.0, 0.0, 0.0).VCenter(), 0, 2);
@@ -376,6 +383,7 @@ public sealed class AiPage : PageBase
 			Child = Ui.V(6.0, grid3, grid4)
 		};
 		_composer.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+		HookImageDrop(_composer);
 		_composer.SetResourceReference(Border.BorderBrushProperty, "B.Line");
 		_input.GotKeyboardFocus += delegate
 		{
@@ -1300,6 +1308,131 @@ public sealed class AiPage : PageBase
 		return ActiveChat?.Messages.LastOrDefault((AiMsgDto m) => m.Role == "user" && !string.IsNullOrWhiteSpace(m.Content) && !m.Id.StartsWith("steer_", StringComparison.Ordinal))?.Content ?? "";
 	}
 
+	private static readonly string[] _imgExts = new string[6] { ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp" };
+
+	private void PickImage()
+	{
+		string path = Dlg.PickFile(I18n.L("图片") + "|*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp", I18n.L("选择图片"));
+		if (path != null)
+		{
+			AddImage(path);
+		}
+	}
+
+	private void AddImage(string path)
+	{
+		if (string.IsNullOrEmpty(path) || _pendingImages.Contains(path) || !_imgExts.Contains(System.IO.Path.GetExtension(path).ToLowerInvariant()))
+		{
+			return;
+		}
+		if (_pendingImages.Count >= 4)
+		{
+			PageBase.Toast(I18n.L("最多附 4 张图"), "", ToastKind.Warning);
+			return;
+		}
+		_pendingImages.Add(path);
+		SyncImageChip();
+		_ = CheckVisionAsync();
+	}
+
+	private async Task CheckVisionAsync()
+	{
+		try
+		{
+			JsonElement r = await PageBase.Api.TryCallAsync<JsonElement>("ai_vision_status");
+			if (r.ValueKind == JsonValueKind.Object && r.TryGetProperty("supported", out var s) && s.ValueKind == JsonValueKind.False)
+			{
+				PageBase.Toast(I18n.L("当前模型可能看不了图"), I18n.L("图片会被省略。可在「设置 → AI 助手 → 识图」里改成「支持」或换模型"), ToastKind.Warning);
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private void SyncImageChip()
+	{
+		_imgChip.Text = (_pendingImages.Count > 0) ? I18n.L("{0} 张图 ×", _pendingImages.Count) : "";
+		_imgChip.ToolTip = (_pendingImages.Count > 0) ? (string.Join("\n", _pendingImages) + "\n" + I18n.L("点击清空")) : null;
+	}
+
+	private void SetupImageInput()
+	{
+		_imgChip.FontSize = 12.0;
+		_imgChip.Cursor = Cursors.Hand;
+		_imgChip.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
+		_imgChip.MouseLeftButtonUp += delegate
+		{
+			_pendingImages.Clear();
+			SyncImageChip();
+		};
+		_input.PreviewKeyDown += delegate(object _, KeyEventArgs e)
+		{
+			if (e.Key != Key.V || (Keyboard.Modifiers & ModifierKeys.Control) == 0)
+			{
+				return;
+			}
+			try
+			{
+				if (Clipboard.ContainsImage())
+				{
+					System.Windows.Media.Imaging.BitmapSource img = Clipboard.GetImage();
+					string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TipCL-paste");
+					System.IO.Directory.CreateDirectory(dir);
+					string file = System.IO.Path.Combine(dir, DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + ".png");
+					using (System.IO.FileStream fs = System.IO.File.Create(file))
+					{
+						System.Windows.Media.Imaging.PngBitmapEncoder enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+						enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(img));
+						enc.Save(fs);
+					}
+					AddImage(file);
+					e.Handled = true;
+				}
+				else if (Clipboard.ContainsFileDropList())
+				{
+					foreach (string f in Clipboard.GetFileDropList())
+					{
+						AddImage(f);
+					}
+					e.Handled = _pendingImages.Count > 0;
+				}
+			}
+			catch (Exception)
+			{
+			}
+		};
+	}
+
+	private void HookImageDrop(UIElement target)
+	{
+		target.AllowDrop = true;
+		target.PreviewDragOver += delegate(object _, DragEventArgs e)
+		{
+			if (e.Data.GetDataPresent(DataFormats.FileDrop) && ((string[])e.Data.GetData(DataFormats.FileDrop)).Any((string f) => _imgExts.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant())))
+			{
+				e.Effects = DragDropEffects.Copy;
+				e.Handled = true;
+			}
+		};
+		target.PreviewDrop += delegate(object _, DragEventArgs e)
+		{
+			if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+			{
+				return;
+			}
+			string[] files = ((string[])e.Data.GetData(DataFormats.FileDrop)).Where((string f) => _imgExts.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant())).ToArray();
+			if (files.Length > 0)
+			{
+				foreach (string f in files)
+				{
+					AddImage(f);
+				}
+				e.Handled = true;
+			}
+		};
+	}
+
 	private Task SendAsync()
 	{
 		return SendTextAsync(_input.Text);
@@ -1323,6 +1456,10 @@ public sealed class AiPage : PageBase
 	private async Task SendTextAsync(string raw, bool echo = true)
 	{
 		string text = (raw ?? "").Trim();
+		if (text.Length == 0 && echo && _pendingImages.Count > 0)
+		{
+			text = I18n.L("看看这张图");
+		}
 		if (text.Length == 0)
 		{
 			return;
@@ -1361,7 +1498,7 @@ public sealed class AiPage : PageBase
 		_status.Text = I18n.L("思考中…");
 		if (echo)
 		{
-			Add(new Bubble("user", text, RetryFrom));
+			Add(new Bubble("user", (_pendingImages.Count > 0) ? (text + "\n" + I18n.L("［附图 {0} 张］", _pendingImages.Count)) : text, RetryFrom));
 		}
 		_stream.Clear();
 		_roundBubble = OpenRound();
@@ -1370,11 +1507,15 @@ public sealed class AiPage : PageBase
 			["instance"] = PageBase.Win?.Prefs.CatalogInstance ?? "",
 			["username"] = PageBase.Win?.Prefs.LastUser ?? ""
 		};
+		List<string> images = (echo ? _pendingImages.ToList() : new List<string>());
+		_pendingImages.Clear();
+		SyncImageChip();
 		OpResult opResult = await PageBase.Api.TryCallAsync<OpResult>("ai_send", new
 		{
 			text = text,
 			chat_id = _store.ActiveId,
-			launch = launch
+			launch = launch,
+			images = images
 		});
 		if (opResult == null || !opResult.Ok)
 		{
