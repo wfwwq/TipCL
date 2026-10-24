@@ -7,6 +7,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{4E1D2198-B62
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TipCL", "src\TipCL\TipCL.csproj", "{A2873ECD-DE64-4C9B-AF58-02621BBF1ED7}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{89ACB176-E117-41C0-9F9A-79360C97CFFC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TipCL.Tests", "tests\TipCL.Tests\TipCL.Tests.csproj", "{ED1A660C-E4BB-4601-8B97-E1DAA72F8EF2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,8 +24,13 @@ Global
 		{A2873ECD-DE64-4C9B-AF58-02621BBF1ED7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A2873ECD-DE64-4C9B-AF58-02621BBF1ED7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A2873ECD-DE64-4C9B-AF58-02621BBF1ED7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ED1A660C-E4BB-4601-8B97-E1DAA72F8EF2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED1A660C-E4BB-4601-8B97-E1DAA72F8EF2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED1A660C-E4BB-4601-8B97-E1DAA72F8EF2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED1A660C-E4BB-4601-8B97-E1DAA72F8EF2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{A2873ECD-DE64-4C9B-AF58-02621BBF1ED7} = {4E1D2198-B626-45A2-8E0C-F34EE1455DCE}
+		{ED1A660C-E4BB-4601-8B97-E1DAA72F8EF2} = {89ACB176-E117-41C0-9F9A-79360C97CFFC}
 	EndGlobalSection
 EndGlobal
