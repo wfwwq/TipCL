@@ -44,6 +44,9 @@
 git clone https://github.com/wfwwq/TipCL.git
 cd TipCL
 dotnet build src/TipCL/TipCL.csproj -c Release
+
+# 运行单元测试（Windows / Linux 都可以）
+dotnet test tests/TipCL.Tests
 ```
 
 产物在 `src/TipCL/bin/Release/net48/TipCL.exe`，依赖已通过 Costura 打进单个 exe。
