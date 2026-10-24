@@ -49,7 +49,7 @@ public static class ToolMeta
 		new ToolMetaInfo("forget", ro: true, "none", "low", lr: false)
 	};
 
-	public static Dictionary<string, ToolMetaInfo> Map => _map ?? (_map = ALL.ToDictionary((ToolMetaInfo m) => m.name));
+	public static Dictionary<string, ToolMetaInfo> Map => _map ?? (_map = ALL.Concat(ExtraTools.Meta).ToDictionary((ToolMetaInfo m) => m.name));
 
 	public static ToolMetaInfo Get(object name)
 	{
