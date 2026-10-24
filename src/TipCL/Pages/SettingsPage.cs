@@ -653,7 +653,7 @@ public sealed class SettingsPage : PageBase
 		Border border4 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("下载并发线程数"), SliderRow(_threads, _threadsLbl), I18n.L("同时下载的文件数量")), Ui.Field(I18n.L("单文件分片数"), SliderRow(_segs, _segsLbl), I18n.L("8MB 以上的大文件拆成几段同时下；1 为关闭")), Ui.Field(I18n.L("文件下载源"), _src, I18n.L("自动测速，官方慢于 4 秒改走 BMCLAPI")), Ui.Field(I18n.L("社区资源源"), _comm, I18n.L("模组 / 整合包：MCIM 国内镜像，挂了可改官方")), Ui.Field(I18n.L("跟随系统代理"), _proxy, I18n.L("默认开。关掉才强制直连")), Ui.Field(I18n.L("下载限速 (KB/s)"), _limit.Left(), I18n.L("0 表示不限制")), Ui.Field("CurseForge Key", SecretRow(_cfKey, _cfReset), I18n.L("留空保存不修改；不填用内置 Key"))));
 		Border border5 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("游戏目录"), grid2, I18n.L("所有实例的落脚处；切换会校验可写性")), Ui.Field(I18n.L("默认内存"), SliderRow(_mem, _memLbl), I18n.L("新实例的默认 JVM 内存")), Ui.Field("", Ui.H(8.0, _rec, Ui.Small(I18n.L("按本机内存 / CPU 给一组推荐值")).VCenter())), Ui.Field(I18n.L("默认分辨率"), Ui.H(6.0, _w, Ui.Txt("×").VCenter(), _h), I18n.L("游戏窗口的默认宽高")), Ui.Field(I18n.L("默认实例"), _inst, I18n.L("安装与启动缺省使用的实例")), Ui.Field(I18n.L("新版本默认隔离"), _iso, I18n.L("安装新版本时写入，可在版本设置里改")), Ui.Field(I18n.L("内存回收器"), _gc, I18n.L("启动时写入 JVM，版本设置可覆盖")), Ui.Field(I18n.L("默认游戏窗口"), _win, I18n.L("可被版本设置覆盖")), Ui.Field(I18n.L("默认 JVM 参数"), _jvm, I18n.L("所有版本都会带上，版本设置可再追加")), Ui.Field(I18n.L("允许多开"), _multi, I18n.L("关掉则游戏已在运行时不再启动第二个"))));
 		Border border6 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("共享 libraries"), _shareLib, I18n.L("所有实例共享依赖库（节省空间，降低隔离性）")), Ui.Field(I18n.L("共享 assets 资源"), _shareAssets, I18n.L("所有实例共享资源文件（节省空间，降低隔离性）")), Ui.Field(I18n.L("空间清理"), Ui.H(8.0, _clean, _cleanInfo.VCenter()), I18n.L("扫描未引用的依赖库、残留 .part 与更新缓存，确认后再删"))));
-		Border border7 = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("AI 助手"), I18n.L("对话里下游戏、装模组、读崩溃日志")), Ui.Field(I18n.L("接入方式"), _aiMode), Ui.Field(I18n.L("网关地址"), _aiGateway, I18n.L("公共网关模式下生效")), Ui.Field(I18n.L("端点地址"), _aiBase, I18n.L("自定义模式下的 OpenAI 兼容 base_url")), Ui.Field("API Key", SecretRow(_aiKey, _aiKeyReset), I18n.L("留空保存不修改；不填用内置令牌")), Ui.Field(I18n.L("模型"), Ui.H(8.0, _aiModel, _aiModelFetch.VCenter()), I18n.L("自动拉取可用模型；拉不到可直接手填")), Ui.Field(I18n.L("上下文窗口（token）"), _aiCtx, I18n.L("模型真实窗口未知时按 128k 保守压缩；实测后可改大")), Ui.Field(I18n.L("备用模型（可选）"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它；留空不启用")), Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildMcpField(), Ui.Field("", _testAi.Left())));
+		Border border7 = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("AI 助手"), I18n.L("对话里下游戏、装模组、读崩溃日志")), Ui.Field(I18n.L("接入方式"), _aiMode), Ui.Field(I18n.L("网关地址"), _aiGateway, I18n.L("公共网关模式下生效")), Ui.Field(I18n.L("端点地址"), _aiBase, I18n.L("自定义模式下的 OpenAI 兼容 base_url")), Ui.Field("API Key", SecretRow(_aiKey, _aiKeyReset), I18n.L("留空保存不修改；不填用内置令牌")), Ui.Field(I18n.L("模型"), Ui.H(8.0, _aiModel, _aiModelFetch.VCenter()), I18n.L("自动拉取可用模型；拉不到可直接手填")), Ui.Field(I18n.L("上下文窗口（token）"), _aiCtx, I18n.L("模型真实窗口未知时按 128k 保守压缩；实测后可改大")), Ui.Field(I18n.L("备用模型（可选）"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它；留空不启用")), Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildVisionField(), BuildMcpField(), Ui.Field("", _testAi.Left())));
 		Border border8 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("启动器可见性"), _vis, I18n.L("游戏启动后启动器窗口怎么处理")), Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")), Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html 文件路径")), Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")), Ui.Field(I18n.L("更新地址"), _updateUrl, I18n.L("留空用默认更新源")), Ui.Field(I18n.L("微软 Client ID"), _msClient, I18n.L("自建 Azure 应用时填")), Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")), Ui.Field("", _langPreview), Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
 		{
 			PageBase.Run(FirstRunWizard.ShowAsync, I18n.L("向导没能打开"));
@@ -698,6 +698,73 @@ public sealed class SettingsPage : PageBase
 		_aiKey.Tag = (_aiKeyClear ? I18n.L("保存后恢复为内置令牌") : (_aiKeySet ? string.Format(I18n.L("已保存自己的令牌（{0}），留空不修改"), _aiKeyHint) : "sk-…"));
 		_cfReset.Visibility = ((!_cfSet || _cfClear) ? Visibility.Collapsed : Visibility.Visible);
 		_aiKeyReset.Visibility = ((!_aiKeySet || _aiKeyClear) ? Visibility.Collapsed : Visibility.Visible);
+	}
+
+	private Grid BuildVisionField()
+	{
+		TextBlock status = Ui.Muted(I18n.L("检测中…"));
+		ComboBox mode = KeyCombo(new(string, string)[3]
+		{
+			("auto", I18n.L("自动检测")),
+			("on", I18n.L("支持")),
+			("off", I18n.L("不支持"))
+		}, 120.0);
+		bool syncing = true;
+		async Task RefreshAsync(bool force)
+		{
+			status.Text = force ? I18n.L("检测中…") : status.Text;
+			try
+			{
+				Dictionary<string, object> dictionary = ((await PageBase.Api.TryCallAsync("get_settings", null, new Dictionary<string, JsonElement>())) ?? new Dictionary<string, JsonElement>()).ToDictionary<KeyValuePair<string, JsonElement>, string, object>((KeyValuePair<string, JsonElement> kv) => kv.Key, (KeyValuePair<string, JsonElement> kv) => kv.Value);
+				dictionary["ai_mode"] = AiModeWire();
+				dictionary["ai_gateway_url"] = _aiGateway.Text?.Trim() ?? "";
+				dictionary["ai_base_url"] = (IsBuiltinAi ? "" : (_aiBase.Text?.Trim() ?? ""));
+				if (!IsBuiltinAi && !string.IsNullOrEmpty(_aiKey.Text?.Trim()))
+				{
+					dictionary["ai_api_key"] = _aiKey.Text.Trim();
+				}
+				dictionary["ai_model"] = AiModelValue();
+				JsonElement r = await PageBase.Api.CallAsync<JsonElement>("ai_vision_status", new
+				{
+					settings = dictionary,
+					force = force
+				});
+				if (r.TryGetProperty("mode", out var m))
+				{
+					syncing = true;
+					SelectKey(mode, m.GetString() ?? "auto");
+					syncing = false;
+				}
+				status.Text = r.TryGetProperty("text", out var t) ? (t.GetString() ?? "") : "";
+			}
+			catch (Exception ex)
+			{
+				status.Text = I18n.L("检测失败：") + ex.Message;
+			}
+		}
+		SelectKey(mode, "auto");
+		mode.SelectionChanged += async delegate
+		{
+			if (syncing)
+			{
+				return;
+			}
+			await PageBase.Api.TryCallAsync<JsonElement>("ai_vision_set_mode", new
+			{
+				mode = KeyOf(mode)
+			});
+			await RefreshAsync(force: false);
+		};
+		Button detect = Ui.Btn(I18n.L("重新检测"), BtnKind.Chip, delegate
+		{
+			PageBase.Run(() => RefreshAsync(force: true), I18n.L("检测失败"));
+		});
+		syncing = false;
+		base.Loaded += delegate
+		{
+			PageBase.Run(() => RefreshAsync(force: false));
+		};
+		return Ui.Field(I18n.L("识图"), Ui.H(8.0, mode, detect.VCenter(), status.VCenter()), I18n.L("自动检测：先查公开模型能力库，查不到就发张小图实测；也可以手动指定"));
 	}
 
 	private Grid BuildMcpField()
