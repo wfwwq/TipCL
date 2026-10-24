@@ -2226,5 +2226,13 @@
  "在 AI 对话界面的输入框上方设置": "Set it above the input box in the AI chat",
  "单文件分片数": "Segments per file",
  "8MB 以上的大文件拆成几段同时下；1 为关闭": "Split files over 8 MB into this many parallel parts; 1 turns it off",
- "关": "Off"
+ "关": "Off",
+ "配对码": "Pairing code",
+ "已配对设备": "Paired devices",
+ "换一个配对码": "New pairing code",
+ "清除已配对设备": "Forget paired devices",
+ "手机同步": "Phone sync",
+ "在同一个 Wi-Fi 下和手机启动器互传存档": "Transfer worlds with your phone launcher over the same Wi-Fi",
+ "局域网同步": "LAN sync",
+ "打开后手机端会自动发现这台电脑，输入配对码即可；覆盖前都会先自动备份": "Your phone finds this PC automatically; enter the pairing code. Worlds are backed up before being overwritten"
 }
