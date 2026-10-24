@@ -13,10 +13,10 @@ namespace TipCL.Core.Launcher.Ai;
 /// </summary>
 public static class ExtraTools
 {
-	public static readonly string[] Names = new string[13]
+	public static readonly string[] Names = new string[14]
 	{
 		"get_system_info", "diagnose_lag", "tune_jvm", "list_saves", "backup_save", "list_save_backups", "restore_save_backup", "multiplayer", "list_accounts", "add_offline_account",
-		"switch_account", "set_skin", "open_folder"
+		"switch_account", "set_skin", "open_folder", "phone_sync"
 	};
 
 	public static readonly Dictionary<string, string> Labels = new Dictionary<string, string>
@@ -33,10 +33,11 @@ public static class ExtraTools
 		{ "add_offline_account", "添加离线账号" },
 		{ "switch_account", "切换账号" },
 		{ "set_skin", "设置皮肤" },
-		{ "open_folder", "打开文件夹" }
+		{ "open_folder", "打开文件夹" },
+		{ "phone_sync", "手机同步" }
 	};
 
-	public static readonly ToolMetaInfo[] Meta = new ToolMetaInfo[13]
+	public static readonly ToolMetaInfo[] Meta = new ToolMetaInfo[14]
 	{
 		new ToolMetaInfo("get_system_info", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("diagnose_lag", ro: true, "read", "low", lr: false),
@@ -50,16 +51,18 @@ public static class ExtraTools
 		new ToolMetaInfo("add_offline_account", ro: false, "write_local", "low", lr: false),
 		new ToolMetaInfo("switch_account", ro: false, "write_local", "low", lr: false),
 		new ToolMetaInfo("set_skin", ro: false, "write_local", "low", lr: false),
-		new ToolMetaInfo("open_folder", ro: true, "none", "low", lr: false)
+		new ToolMetaInfo("open_folder", ro: true, "none", "low", lr: false),
+		new ToolMetaInfo("phone_sync", ro: false, "write_local", "low", lr: false)
 	};
 
-	public static readonly (string[] keys, string[] extra)[] Keywords = new(string[], string[])[5]
+	public static readonly (string[] keys, string[] extra)[] Keywords = new(string[], string[])[6]
 	{
 		(new string[14] { "卡顿", "很卡", "掉帧", "帧数", "fps", "FPS", "lag", "优化", "流畅", "内存", "JVM", "jvm", "GC", "电脑配置" }, new string[3] { "get_system_info", "diagnose_lag", "tune_jvm" }),
 		(new string[9] { "备份", "回滚", "还原", "恢复", "存档", "坏档", "世界", "save", "backup" }, new string[5] { "list_saves", "backup_save", "list_save_backups", "restore_save_backup", "open_folder" }),
 		(new string[9] { "联机", "开房", "房间", "朋友一起", "一起玩", "局域网", "陶瓦", "lan", "multiplayer" }, new string[1] { "multiplayer" }),
 		(new string[7] { "皮肤", "账号", "账户", "披风", "离线", "skin", "account" }, new string[4] { "list_accounts", "add_offline_account", "switch_account", "set_skin" }),
-		(new string[3] { "文件夹", "目录", "folder" }, new string[1] { "open_folder" })
+		(new string[3] { "文件夹", "目录", "folder" }, new string[1] { "open_folder" }),
+		(new string[8] { "手机", "平板", "同步", "安卓", "配对", "传到", "phone", "sync" }, new string[2] { "phone_sync", "list_saves" })
 	};
 
 	private const string SchemasJson = "[" +
@@ -75,7 +78,8 @@ public static class ExtraTools
 		"{\"type\": \"function\", \"function\": {\"name\": \"add_offline_account\", \"description\": \"添加离线账号\", \"parameters\": {\"type\": \"object\", \"properties\": {\"username\": {\"type\": \"string\", \"description\": \"3-16 位英文、数字或下划线\"}}, \"required\": [\"username\"]}}}, " +
 		"{\"type\": \"function\", \"function\": {\"name\": \"switch_account\", \"description\": \"切换当前使用的账号\", \"parameters\": {\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\"}}, \"required\": [\"name\"]}}}, " +
 		"{\"type\": \"function\", \"function\": {\"name\": \"set_skin\", \"description\": \"给账号换皮肤：传本地 png 皮肤文件路径（可以是用户刚附的图片），model 为 classic（粗手臂）或 slim（细手臂）\", \"parameters\": {\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"description\": \"账号名\"}, \"path\": {\"type\": \"string\", \"description\": \"皮肤 png 路径\"}, \"model\": {\"type\": \"string\", \"description\": \"classic / slim\"}}, \"required\": [\"name\", \"path\"]}}}, " +
-		"{\"type\": \"function\", \"function\": {\"name\": \"open_folder\", \"description\": \"在资源管理器里打开实例的文件夹，方便用户自己放文件\", \"parameters\": {\"type\": \"object\", \"properties\": {\"kind\": {\"type\": \"string\", \"description\": \"game / mods / saves / resourcepacks / shaderpacks / config / logs / backups\"}, \"instance\": {\"type\": \"string\"}}}}}" +
+		"{\"type\": \"function\", \"function\": {\"name\": \"open_folder\", \"description\": \"在资源管理器里打开实例的文件夹，方便用户自己放文件\", \"parameters\": {\"type\": \"object\", \"properties\": {\"kind\": {\"type\": \"string\", \"description\": \"game / mods / saves / resourcepacks / shaderpacks / config / logs / backups\"}, \"instance\": {\"type\": \"string\"}}}}}, " +
+		"{\"type\": \"function\", \"function\": {\"name\": \"phone_sync\", \"description\": \"手机与电脑同步存档（同一 Wi-Fi 下，手机启动器发现电脑后输入配对码）。action：status 查看状态、配对码和地址；start 打开同步服务；stop 关闭；new_code 换配对码；forget 清除已配对设备。实际传输由手机端发起，这里负责开服务并把配对码告诉玩家。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"status / start / stop / new_code / forget\"}}, \"required\": [\"action\"]}}}" +
 		"]";
 
 	public static List<object> Schemas()
@@ -137,11 +141,44 @@ public static class ExtraTools
 			backend.set_account_skin(Py.S(args.Get("name")), path, model);
 			return "已给 " + Py.S(args.Get("name")) + " 换上皮肤（" + model + "）。离线账号进游戏即生效；正版账号的皮肤需要到 Minecraft 官网更换。";
 		}
+		case "phone_sync":
+			return PhoneSync(args);
 		case "open_folder":
 			return OpenFolder(backend, args);
 		default:
 			return null;
 		}
+	}
+
+	private static object PhoneSync(PyDict args)
+	{
+		string action = Py.S(Py.Or(args.Get("action"), "status")).Trim().ToLowerInvariant();
+		switch (action)
+		{
+		case "start":
+			if (!Sync.SyncServer.SetEnabled(true))
+			{
+				return "同步服务没能启动：" + Sync.SyncServer.LastError;
+			}
+			break;
+		case "stop":
+			Sync.SyncServer.SetEnabled(false);
+			return "已关闭手机同步";
+		case "new_code":
+			if (Sync.SyncServer.Running)
+			{
+				Sync.SyncServer.NewCode();
+			}
+			break;
+		case "forget":
+			Sync.SyncServer.ForgetDevices();
+			return "已清除所有已配对的手机，下次需要重新输入配对码";
+		}
+		if (!Sync.SyncServer.Running)
+		{
+			return PyDict.Of("running", false, "hint", "手机同步没开，可以用 action=start 打开（设置 → 手机同步 也能开）");
+		}
+		return PyDict.Of("running", true, "pair_code", Sync.SyncServer.PairCode, "addresses", Sync.SyncServer.Addresses().Cast<object>().ToList(), "paired_devices", Sync.SyncServer.Devices().Select((Sync.SyncServer.Device d) => (object)d.name).ToList(), "hint", "让玩家在手机启动器里打开存档同步，选这台电脑（或手动填地址），输入配对码。首次打开时 Windows 防火墙可能弹窗，需要允许专用网络访问。");
 	}
 
 	private static object Ver(PyDict args)
