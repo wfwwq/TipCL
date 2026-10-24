@@ -21,7 +21,7 @@ public static class McpServer
 	public const string ProtocolVersion = "2025-06-18";
 
 	// 依赖启动器界面的工具不对外开放
-	private static readonly HashSet<string> _hidden = new HashSet<string> { "ask_user", "dispatch_subagent", "update_plan" };
+	private static readonly HashSet<string> _hidden = new HashSet<string> { "ask_user", "dispatch_subagent", "update_plan", "remember", "forget" };
 
 	private static readonly object _lock = new object();
 
