@@ -7,7 +7,7 @@ public static class ToolMeta
 {
 	private static Dictionary<string, ToolMetaInfo> _map;
 
-	public static readonly ToolMetaInfo[] ALL = new ToolMetaInfo[36]
+	public static readonly ToolMetaInfo[] ALL = new ToolMetaInfo[38]
 	{
 		new ToolMetaInfo("ask_user", ro: true, "none", "low", lr: false),
 		new ToolMetaInfo("get_launcher_state", ro: true, "none", "low", lr: false),
@@ -44,7 +44,9 @@ public static class ToolMeta
 		new ToolMetaInfo("write_mod_config", ro: false, "write_local", "high", lr: false),
 		new ToolMetaInfo("read_artifact", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("dispatch_subagent", ro: true, "none", "low", lr: false),
-		new ToolMetaInfo("update_plan", ro: true, "none", "low", lr: false)
+		new ToolMetaInfo("update_plan", ro: true, "none", "low", lr: false),
+		new ToolMetaInfo("remember", ro: true, "none", "low", lr: false),
+		new ToolMetaInfo("forget", ro: true, "none", "low", lr: false)
 	};
 
 	public static Dictionary<string, ToolMetaInfo> Map => _map ?? (_map = ALL.ToDictionary((ToolMetaInfo m) => m.name));
