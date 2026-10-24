@@ -15,7 +15,7 @@
 <img src="https://img.shields.io/badge/UI-WPF-6CB33E?style=flat-square" alt="WPF" />
 <img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E4%B8%AD%E6%96%87%20%7C%20English-F4A93B?style=flat-square" alt="中文 | English" />
 
-[功能](#-功能) · [下载与构建](#-下载与构建) · [目录结构](#-目录结构) · [开发者选项](#-开发者选项)
+[功能](#-功能) · [下载与构建](#-下载与构建) · [MCP Server](#-mcp-server) · [目录结构](#-目录结构) · [开发者选项](#-开发者选项)
 
 </div>
 
@@ -30,7 +30,7 @@
 | 🗂️ **实例与存档** | 多实例隔离、存档管理、Java 自动检测 |
 | 👤 **账号** | 微软正版、外置登录（authlib-injector）、离线皮肤 |
 | 🌐 **联机** | 内置 Terracotta 局域网联机 |
-| 🤖 **AI 助手** | 读懂崩溃日志，给出一键修复建议 |
+| 🤖 **AI 助手** | 读懂崩溃日志，给出一键修复建议；可作为 MCP Server 供外部 AI 调用 |
 | 🏠 **仪表盘首页** | 启动配置、实时日志、快捷入口、游戏时长、新闻，布局随心拖拽 |
 | 🎨 **外观** | 浅色 / 深色主题，中英双语界面 |
 
@@ -60,6 +60,26 @@ src/TipCL/
 ├─ Core/                        启动器内核：下载、安装、启动、账号、模组、联机、AI
 └─ Resources/                   内置词表与 AI 模型规则
 ```
+
+## 🔌 MCP Server
+
+TipCL 可以作为本机 MCP Server，让 Claude、Cursor 等外部 AI 直接调用启动器的工具（查实例、装版本/模组/整合包/光影、启动游戏、诊断崩溃）。
+
+在 **设置 → AI 助手 → MCP Server** 打开开关即可，地址：`http://127.0.0.1:25585/mcp`（只监听本机）。
+
+Claude Code：
+
+```bat
+claude mcp add --transport http tipcl http://127.0.0.1:25585/mcp
+```
+
+Cursor（`~/.cursor/mcp.json`）：
+
+```json
+{ "mcpServers": { "tipcl": { "url": "http://127.0.0.1:25585/mcp" } } }
+```
+
+Claude Desktop 等只支持 stdio 的客户端可通过 `npx mcp-remote http://127.0.0.1:25585/mcp` 接入。端口可在数据目录的 `mcp_server.json` 里改。
 
 ## 🛠️ 开发者选项
 
