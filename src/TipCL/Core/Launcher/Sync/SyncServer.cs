@@ -384,6 +384,43 @@ public static class SyncServer
 
 		public Stream Body;
 
+		/// <summary>已读取的请求体字节数。</summary>
+		public long Consumed;
+
+		public int Read(byte[] buf, int off, int count)
+		{
+			if (ContentLength >= 0)
+			{
+				count = (int)Math.Min(count, ContentLength - Consumed);
+			}
+			if (count <= 0)
+			{
+				return 0;
+			}
+			int n = Body.Read(buf, off, count);
+			if (n > 0)
+			{
+				Consumed += n;
+			}
+			return n;
+		}
+
+		/// <summary>
+		/// 回复前把没读完的请求体读掉（最多 64 MB）。否则客户端还在发送时关闭连接，
+		/// Windows 会回 RST，对方就收不到错误响应。
+		/// </summary>
+		public void Drain()
+		{
+			if (ContentLength <= Consumed || ContentLength - Consumed > 64L * 1024 * 1024)
+			{
+				return;
+			}
+			byte[] buf = new byte[81920];
+			while (Read(buf, 0, buf.Length) > 0)
+			{
+			}
+		}
+
 		public string Q(string k)
 		{
 			return Query.TryGetValue(k, out var v) ? v : "";
@@ -410,7 +447,20 @@ public static class SyncServer
 				{
 					return;
 				}
-				Route(req, ns);
+				try
+				{
+					Route(req, ns);
+				}
+				finally
+				{
+					try
+					{
+						req.Drain();
+					}
+					catch (Exception)
+					{
+					}
+				}
 			}
 			catch (Exception)
 			{
@@ -571,7 +621,7 @@ public static class SyncServer
 		int off = 0;
 		while (off < buf.Length)
 		{
-			int n = r.Body.Read(buf, off, buf.Length - off);
+			int n = r.Read(buf, off, buf.Length - off);
 			if (n <= 0)
 			{
 				break;
@@ -685,6 +735,7 @@ public static class SyncServer
 		Device dev = Auth(r);
 		if (dev == null)
 		{
+			r.Drain();
 			WriteJson(s, 401, Err("未配对或令牌失效，请重新配对", "unauthorized"));
 			return;
 		}
@@ -812,83 +863,78 @@ public static class SyncServer
 			WriteJson(s, 413, Err("存档太大", "too_large"));
 			return;
 		}
-		bool exists = File.Exists(Path.Combine(worldDir, "level.dat"));
 		bool force = r.Q("force") == "1" || r.Q("force") == "true";
 		string baseHash = r.Q("base");
-		lock (_ioLock)
+		string tmp = Path.Combine(Path.GetTempPath(), "tipcl-up-" + Guid.NewGuid().ToString("N") + ".zip");
+		try
 		{
-			if (exists && SaveSync.IsLocked(worldDir))
+			// 先完整收下请求体再回复，避免客户端还在发送时就被断开
+			using (FileStream fs = new FileStream(tmp, FileMode.Create, FileAccess.Write))
 			{
-				WriteJson(s, 423, Err("电脑上正在玩这个存档，退出世界后再同步", "locked"));
+				byte[] buf = new byte[81920];
+				while (r.Consumed < r.ContentLength)
+				{
+					int n = r.Read(buf, 0, buf.Length);
+					if (n <= 0)
+					{
+						return;
+					}
+					fs.Write(buf, 0, n);
+				}
+			}
+			string bad = SaveSync.CheckZip(tmp);
+			if (bad != null)
+			{
+				WriteJson(s, 400, Err(bad, "bad_zip"));
 				return;
 			}
-			if (!force)
+			lock (_ioLock)
 			{
-				string current = exists ? SaveSync.WorldHash(worldDir) : "";
-				if (current != baseHash)
+				bool exists = File.Exists(Path.Combine(worldDir, "level.dat"));
+				if (exists && SaveSync.IsLocked(worldDir))
 				{
-					PyDict conflict = PyDict.Of("error", "conflict", "message", exists ? "电脑上的存档在上次同步后也改过" : "电脑上没有这个存档了", "exists", exists);
-					if (exists)
-					{
-						conflict["world"] = SaveSync.WorldInfo(worldDir);
-					}
-					WriteJson(s, 409, conflict);
+					WriteJson(s, 423, Err("电脑上正在玩这个存档，退出世界后再同步", "locked"));
 					return;
 				}
-			}
-			string tmp = Path.Combine(Path.GetTempPath(), "tipcl-up-" + Guid.NewGuid().ToString("N") + ".zip");
-			try
-			{
-				using (FileStream fs = new FileStream(tmp, FileMode.Create, FileAccess.Write))
+				if (!force)
 				{
-					byte[] buf = new byte[81920];
-					long left = r.ContentLength;
-					while (left > 0)
+					string current = exists ? SaveSync.WorldHash(worldDir) : "";
+					if (current != baseHash)
 					{
-						int n = r.Body.Read(buf, 0, (int)Math.Min(buf.Length, left));
-						if (n <= 0)
+						PyDict conflict = PyDict.Of("error", "conflict", "message", exists ? "电脑上的存档在上次同步后也改过" : "电脑上没有这个存档了", "exists", exists);
+						if (exists)
 						{
-							throw new IOException("上传中断");
+							conflict["world"] = SaveSync.WorldInfo(worldDir);
 						}
-						fs.Write(buf, 0, n);
-						left -= n;
+						WriteJson(s, 409, conflict);
+						return;
 					}
-				}
-				string bad = SaveSync.CheckZip(tmp);
-				if (bad != null)
-				{
-					WriteJson(s, 400, Err(bad, "bad_zip"));
-					return;
 				}
 				PyDict info = SaveSync.ImportZip(target, world, tmp);
 				WriteJson(s, 200, info);
 			}
-			catch (IOException ex)
+		}
+		catch (Exception ex)
+		{
+			try
 			{
-				try
+				WriteJson(s, 500, Err(ex.Message));
+			}
+			catch (Exception)
+			{
+			}
+		}
+		finally
+		{
+			try
+			{
+				if (File.Exists(tmp))
 				{
-					WriteJson(s, 500, Err(ex.Message));
-				}
-				catch (Exception)
-				{
+					File.Delete(tmp);
 				}
 			}
-			catch (Exception ex2)
+			catch (Exception)
 			{
-				WriteJson(s, 500, Err(ex2.Message));
-			}
-			finally
-			{
-				try
-				{
-					if (File.Exists(tmp))
-					{
-						File.Delete(tmp);
-					}
-				}
-				catch (Exception)
-				{
-				}
 			}
 		}
 	}
