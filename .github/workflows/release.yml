@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要上传到的发行版标签"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build
+        run: dotnet build src/TipCL/TipCL.csproj -c Release
+      - name: Upload TipCL.exe
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          cp src/TipCL/bin/Release/net48/TipCL.exe TipCL.exe
+          sha256sum TipCL.exe | cut -d' ' -f1 > TipCL.exe.sha256
+          gh release upload "$TAG" TipCL.exe TipCL.exe.sha256 --clobber

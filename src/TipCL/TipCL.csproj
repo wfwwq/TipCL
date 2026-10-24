@@ -10,6 +10,7 @@
     <AssemblyName>TipCL</AssemblyName>
     <RootNamespace>TipCL</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>TipCL.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
 
     <Version>3.2.0</Version>
