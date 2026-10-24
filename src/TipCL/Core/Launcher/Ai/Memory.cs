@@ -4,7 +4,7 @@ public static class Memory
 {
 	private static readonly object _LOCK = new object();
 
-	private static NoopMemory _memory = new NoopMemory();
+	private static NoopMemory _memory = new FileMemory();
 
 	public static NoopMemory GetMemory()
 	{
