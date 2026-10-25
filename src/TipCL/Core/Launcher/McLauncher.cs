@@ -579,7 +579,7 @@ public static class McLauncher
 		PyDict pyDict4 = account_props ?? new PyDict();
 		string text11 = Py.Str(Py.Or(Utils.DashedUuid(Py.Str(Py.Or(pyDict4.Get("uuid"), ""))), "00000000-0000-0000-0000-000000000000"));
 		object obj2 = Py.Or(pyDict4.Get("token"), "0");
-		PyDict placeholders = PyDict.Of("auth_player_name", pyDict4.Get("name", "Player"), "auth_uuid", text11, "auth_access_token", obj2, "auth_session", "token:" + Py.Str(obj2) + ":" + text11, "user_type", pyDict4.Get("user_type", "legacy"), "user_properties", "{}", "auth_xuid", pyDict4.Get("xuid", ""), "clientid", Py.Or(Config.CONFIG.Get("microsoft_client_id"), "tipcl"), "version_name", version_id, "version_type", _version_type(version_id, pyDict2), "game_directory", _remap_safe_game_dir(Py.Truthy(game_directory) ? game_directory : instance.path, text10, pyDict2), "assets_root", text4, "assets_index_name", text3, "game_assets", PPath.Join(text4, "virtual", text3), "natives_directory", text6, "classpath", text9, "library_directory", text5, "classpath_separator", text8, "launcher_name", "TipCL", "launcher_version", "1.0.2", "resolution_width", Py.Str(Py.Or(width, 854L)), "resolution_height", Py.Str(Py.Or(height, 480L)));
+		PyDict placeholders = PyDict.Of("auth_player_name", pyDict4.Get("name", "Player"), "auth_uuid", text11, "auth_access_token", obj2, "auth_session", "token:" + Py.Str(obj2) + ":" + text11, "user_type", pyDict4.Get("user_type", "legacy"), "user_properties", "{}", "auth_xuid", pyDict4.Get("xuid", ""), "clientid", Py.Or(Config.CONFIG.Get("microsoft_client_id"), "tipcl"), "version_name", version_id, "version_type", _version_type(version_id, pyDict2), "game_directory", _remap_safe_game_dir(Py.Truthy(game_directory) ? game_directory : instance.path, text10, pyDict2), "assets_root", text4, "assets_index_name", text3, "game_assets", PPath.Join(text4, "virtual", text3), "natives_directory", text6, "classpath", text9, "library_directory", text5, "classpath_separator", text8, "launcher_name", "TipCL", "launcher_version", "1.0.3", "resolution_width", Py.Str(Py.Or(width, 854L)), "resolution_height", Py.Str(Py.Or(height, 480L)));
 		PyDict features = PyDict.Of("is_demo_user", false, "has_custom_resolution", Py.Truthy(width) || Py.Truthy(height));
 		List<string> list4;
 		string text12;
@@ -646,7 +646,7 @@ public static class McLauncher
 		}
 		if (!list3.Any((string a) => a.Contains("-Dminecraft.launcher.version")))
 		{
-			list3.Add("-Dminecraft.launcher.version=1.0.2");
+			list3.Add("-Dminecraft.launcher.version=1.0.3");
 		}
 		PyDict pyDict5 = Py.DictOr(Py.Or(pyDict2.Get("logging"), new PyDict())).Get("client") as PyDict;
 		if (Py.Truthy(pyDict5) && Py.Truthy(Py.DictOr(Py.Or(pyDict5.Get("file"), new PyDict())).Get("id")))
