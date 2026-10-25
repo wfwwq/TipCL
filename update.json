@@ -1,6 +1,6 @@
 {
-  "version": "1.0.2",
-  "notes": "修复启动即崩溃；新增手机同步存档、MCP Server、AI 长期记忆、看图和补充工具",
-  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.0.2/TipCL.exe",
-  "sha256": "9008a1201200644130a9b9da6eaf84dfb49d0b07f1de41d1a544b047bbd733ae"
+  "version": "1.0.3",
+  "notes": "手机同步重做：直接连接手机启动器，支持 USB 数据线；修复出错弹窗崩溃",
+  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.0.3/TipCL.exe",
+  "sha256": "8c987dfa45ac202b355b99602a999f84bc391648a97581b3a02210e3cb426605"
 }
