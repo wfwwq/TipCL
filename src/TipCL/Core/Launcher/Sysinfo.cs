@@ -757,7 +757,7 @@ public static class Sysinfo
 				return new PyDict(_cacheData);
 			}
 		}
-		PyDict pyDict = PyDict.Of("collected_at", DateTime.Now.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture), "hostname", HostName(), "os", _os_info(), "cpu", _cpu_info(), "memory", MemoryInfo(), "gpus", _gpu_info(), "disks", _disk_info(), "display", _display_info(), "java", _java_info(scan_system_java), "launcher", PyDict.Of("name", "TipCL", "version", "1.0.1", "frozen", true, "python", "", "root", PPath.Norm(Utils.ROOT), "memory_mb", Py.Int(Py.Or(Config.CONFIG.Get("memory_mb"), 0L)), "download_threads", Py.Int(Py.Or(Config.CONFIG.Get("download_threads"), 0L)), "download_source", Py.Or(Config.CONFIG.Get("download_source"), "auto"), "community_source", Py.Or(Config.CONFIG.Get("community_source"), "auto")), "instances", _instance_info());
+		PyDict pyDict = PyDict.Of("collected_at", DateTime.Now.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture), "hostname", HostName(), "os", _os_info(), "cpu", _cpu_info(), "memory", MemoryInfo(), "gpus", _gpu_info(), "disks", _disk_info(), "display", _display_info(), "java", _java_info(scan_system_java), "launcher", PyDict.Of("name", "TipCL", "version", "1.0.2", "frozen", true, "python", "", "root", PPath.Norm(Utils.ROOT), "memory_mb", Py.Int(Py.Or(Config.CONFIG.Get("memory_mb"), 0L)), "download_threads", Py.Int(Py.Or(Config.CONFIG.Get("download_threads"), 0L)), "download_source", Py.Or(Config.CONFIG.Get("download_source"), "auto"), "community_source", Py.Or(Config.CONFIG.Get("community_source"), "auto")), "instances", _instance_info());
 		pyDict["summary"] = Summarize(pyDict);
 		lock (_LOCK)
 		{
