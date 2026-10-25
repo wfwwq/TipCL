@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -955,7 +955,7 @@ public partial class MainWindow : Window
 		}
 	}
 
-	public unsafe void Toast(string title, string body = "", ToastKind kind = ToastKind.Info)
+	public void Toast(string title, string body = "", ToastKind kind = ToastKind.Info)
 	{
 		if (!base.Dispatcher.CheckAccess())
 		{
@@ -969,15 +969,14 @@ public partial class MainWindow : Window
 		{
 			ToastHost.Children.RemoveAt(0);
 		}
-		object obj = kind switch
+		// 反编译产物原先把元组装箱后用指针读取，读到的是引用本身，导致 Glyph 收到 "(, B.Danger)" 而崩溃
+		var (item, item2) = kind switch
 		{
 			ToastKind.Success => ("\uec61", "B.Ok"), 
 			ToastKind.Warning => ("\ue7ba", "B.Warn"), 
 			ToastKind.Error => ("\uea39", "B.Danger"), 
 			_ => ("\ue946", "B.Info"), 
 		};
-		string item = ((ValueTuple<string, string>*)(&obj))->Item1;
-		string item2 = ((ValueTuple<string, string>*)(&obj))->Item2;
 		Border border = new Border
 		{
 			Width = 3.0,
