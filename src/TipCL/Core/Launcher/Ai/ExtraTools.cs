@@ -79,7 +79,7 @@ public static class ExtraTools
 		"{\"type\": \"function\", \"function\": {\"name\": \"switch_account\", \"description\": \"切换当前使用的账号\", \"parameters\": {\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\"}}, \"required\": [\"name\"]}}}, " +
 		"{\"type\": \"function\", \"function\": {\"name\": \"set_skin\", \"description\": \"给账号换皮肤：传本地 png 皮肤文件路径（可以是用户刚附的图片），model 为 classic（粗手臂）或 slim（细手臂）\", \"parameters\": {\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"description\": \"账号名\"}, \"path\": {\"type\": \"string\", \"description\": \"皮肤 png 路径\"}, \"model\": {\"type\": \"string\", \"description\": \"classic / slim\"}}, \"required\": [\"name\", \"path\"]}}}, " +
 		"{\"type\": \"function\", \"function\": {\"name\": \"open_folder\", \"description\": \"在资源管理器里打开实例的文件夹，方便用户自己放文件\", \"parameters\": {\"type\": \"object\", \"properties\": {\"kind\": {\"type\": \"string\", \"description\": \"game / mods / saves / resourcepacks / shaderpacks / config / logs / backups\"}, \"instance\": {\"type\": \"string\"}}}}}, " +
-		"{\"type\": \"function\", \"function\": {\"name\": \"phone_sync\", \"description\": \"手机与电脑同步存档（同一 Wi-Fi 下，手机启动器发现电脑后输入配对码）。action：status 查看状态、配对码和地址；start 打开同步服务；stop 关闭；new_code 换配对码；forget 清除已配对设备。实际传输由手机端发起，这里负责开服务并把配对码告诉玩家。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"status / start / stop / new_code / forget\"}}, \"required\": [\"action\"]}}}" +
+		"{\"type\": \"function\", \"function\": {\"name\": \"phone_sync\", \"description\": \"和手机启动器互传 Java 版存档。手机上要先打开：启动器 → 存档管理 → 从 zip 导入 → 启动同步服务，屏幕会显示地址和 6 位配对码。action：status 查看连接；connect 用 address+code 连接（局域网）；usb 用 code 通过 USB 数据线连接（需手机开 USB 调试）；scan 扫描局域网里的手机；compare 对比两边世界；push 把电脑上的 world 传到手机；pull 把手机上的 world 传到电脑；sync 一键同步（两边都改过的世界会跳过，需要问玩家后再用 push/pull）。被覆盖的一边都会先自动备份。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"status / connect / usb / scan / compare / push / pull / sync\"}, \"address\": {\"type\": \"string\", \"description\": \"手机 IP，可带端口\"}, \"code\": {\"type\": \"string\", \"description\": \"手机上显示的 6 位配对码\"}, \"instance\": {\"type\": \"string\"}, \"version\": {\"type\": \"string\", \"description\": \"开了版本隔离时的版本名\"}, \"root\": {\"type\": \"string\", \"description\": \"手机上的位置 id，默认自动对应（global 或 v:版本名）\"}, \"world\": {\"type\": \"string\", \"description\": \"世界文件夹名\"}}, \"required\": [\"action\"]}}}" +
 		"]";
 
 	public static List<object> Schemas()
@@ -153,32 +153,64 @@ public static class ExtraTools
 	private static object PhoneSync(PyDict args)
 	{
 		string action = Py.S(Py.Or(args.Get("action"), "status")).Trim().ToLowerInvariant();
+		string code = Py.S(Py.Or(args.Get("code"), Sync.PhoneLink.LastToken));
 		switch (action)
 		{
-		case "start":
-			if (!Sync.SyncServer.SetEnabled(true))
-			{
-				return "同步服务没能启动：" + Sync.SyncServer.LastError;
-			}
-			break;
-		case "stop":
-			Sync.SyncServer.SetEnabled(false);
-			return "已关闭手机同步";
-		case "new_code":
-			if (Sync.SyncServer.Running)
-			{
-				Sync.SyncServer.NewCode();
-			}
-			break;
-		case "forget":
-			Sync.SyncServer.ForgetDevices();
-			return "已清除所有已配对的手机，下次需要重新输入配对码";
-		}
-		if (!Sync.SyncServer.Running)
+		case "connect":
 		{
-			return PyDict.Of("running", false, "hint", "手机同步没开，可以用 action=start 打开（设置 → 手机同步 也能开）");
+			Sync.PhoneClient.Info info = Sync.PhoneLink.Connect(Py.S(Py.Or(args.Get("address"), Sync.PhoneLink.LastAddress)), code);
+			return PyDict.Of("connected", true, "device", info.Device, "android", info.Android);
 		}
-		return PyDict.Of("running", true, "pair_code", Sync.SyncServer.PairCode, "addresses", Sync.SyncServer.Addresses().Cast<object>().ToList(), "paired_devices", Sync.SyncServer.Devices().Select((Sync.SyncServer.Device d) => (object)d.name).ToList(), "hint", "让玩家在手机启动器里打开存档同步，选这台电脑（或手动填地址），输入配对码。首次打开时 Windows 防火墙可能弹窗，需要允许专用网络访问。");
+		case "usb":
+		{
+			Sync.PhoneClient.Info info = Sync.PhoneLink.ConnectUsb(code);
+			return PyDict.Of("connected", true, "device", info.Device, "android", info.Android, "via", "usb");
+		}
+		case "scan":
+			return PyDict.Of("found", Sync.PhoneClient.ScanLan().Cast<object>().ToList());
+		case "status":
+			return Sync.PhoneLink.Current == null
+				? PyDict.Of("connected", false, "last_address", Sync.PhoneLink.LastAddress, "hint", "让玩家在手机启动器里打开 存档管理 → 从 zip 导入 → 启动同步服务，把地址和配对码告诉你，再用 connect；插着数据线可以用 usb")
+				: PyDict.Of("connected", true, "device", Sync.PhoneLink.CurrentInfo?.Device ?? "", "roots", Sync.PhoneLink.Roots().Select((Sync.PhoneClient.Root r) => (object)PyDict.Of("id", r.Id, "label", r.Label)).ToList());
+		}
+		if (Sync.PhoneLink.Current == null)
+		{
+			return "还没连接手机：先用 action=connect（address + code）或 action=usb（code）";
+		}
+		Sync.SaveSync.Target t = Sync.SaveSync.FindTarget(Py.S(args.Get("instance")), Py.S(args.Get("version")));
+		if (t == null)
+		{
+			return "找不到这个实例或版本";
+		}
+		string root = Py.S(args.Get("root"));
+		if (root.Length == 0)
+		{
+			root = Sync.PhoneLink.DefaultRoot(t, Sync.PhoneLink.Roots());
+		}
+		string world = Py.S(args.Get("world"));
+		switch (action)
+		{
+		case "compare":
+			return PyDict.Of("pc", t.Label, "phone_root", root, "worlds", Sync.PhoneLink.Compare(t, root).Select((Sync.PhoneLink.Row r) => (object)PyDict.Of("world", r.Name, "state", r.Decision.ToString(), "pc_modified", r.HasLocal ? Stamp(r.LocalMtime / 1000) : "", "phone_modified", r.HasRemote ? Stamp(r.Remote.LastModified / 1000) : "", "in_game", r.LocalLocked)).ToList(), "hint", "Push=电脑较新 Pull=手机较新 Conflict=两边都改过（要问玩家） OnlyLocal/OnlyRemote=只在一边");
+		case "push":
+			Sync.PhoneLink.Push(t, root, world);
+			return "已把「" + world + "」传到手机（手机上原有的版本已备份到电脑）";
+		case "pull":
+			Sync.PhoneLink.Pull(t, root, world);
+			return "已把「" + world + "」从手机传到电脑（电脑上原有的版本已自动备份）";
+		case "sync":
+		{
+			List<string> skipped = new List<string>();
+			List<string> done = Sync.PhoneLink.SyncAll(t, root, delegate(Sync.PhoneLink.Row r)
+			{
+				skipped.Add(r.Name);
+				return Sync.SyncDecision.Same;
+			});
+			return PyDict.Of("done", done.Cast<object>().ToList(), "conflicts_skipped", skipped.Cast<object>().ToList());
+		}
+		default:
+			return "不认识的 action：" + action;
+		}
 	}
 
 	private static object Ver(PyDict args)

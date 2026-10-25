@@ -4,7 +4,7 @@ public static class FeedbackDefaults
 {
 	public const string DEFAULT_FEEDBACK_URL = "http://114.66.28.184:53611";
 
-	public const string CLIENT_HEADER = "TipCL/1.0.2";
+	public const string CLIENT_HEADER = "TipCL/1.0.3";
 
 	public const int HEARTBEAT_SEC = 30;
 

@@ -1,6 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Windows.Controls;
-using System.Windows.Threading;
 using TipCL.Core.Launcher.Sync;
 using TipCL.Services;
 
@@ -8,65 +9,68 @@ namespace TipCL.Pages;
 
 public sealed partial class SettingsPage
 {
-	/// <summary>设置页「手机同步」卡片：开关、配对码、本机地址、清除已配对设备。</summary>
+	/// <summary>设置页「手机同步」卡片：填手机地址（或扫描 / USB）、输入配对码连接，然后打开同步面板。</summary>
 	private Border BuildPhoneSyncCard()
 	{
+		TextBox addr = Ui.Input(I18n.L("手机 IP，如 192.168.1.23"), PhoneLink.LastAddress, 200.0);
+		TextBox code = Ui.Input(I18n.L("配对码"), PhoneLink.LastToken, 90.0);
 		TextBlock status = Ui.Muted("");
 		status.TextWrapping = System.Windows.TextWrapping.Wrap;
-		CheckBox sw = null;
-		void Refresh()
+		Button open = null;
+		void Refresh(string msg = null)
 		{
-			if (SyncServer.Running)
+			PhoneClient.Info info = PhoneLink.CurrentInfo;
+			status.Text = msg ?? (info != null ? I18n.L("已连接") + " " + info.Device + (string.IsNullOrEmpty(info.Android) ? "" : " · Android " + info.Android) : I18n.L("未连接"));
+			open.IsEnabled = PhoneLink.Current != null;
+		}
+		async Task Connect(Func<PhoneClient.Info> f)
+		{
+			if (code.Text.Trim().Length == 0)
 			{
-				int n = SyncServer.Devices().Count;
-				status.Text = I18n.L("配对码") + " " + SyncServer.PairCode + "　·　" + string.Join("  ", SyncServer.Addresses()) + "　·　" + I18n.L("已配对设备") + " " + n;
+				Refresh(I18n.L("请输入手机上显示的 6 位配对码"));
+				return;
 			}
-			else
+			Refresh(I18n.L("正在连接…"));
+			try
 			{
-				status.Text = string.IsNullOrEmpty(SyncServer.LastError) ? I18n.L("未开启") : I18n.L("启动失败：") + SyncServer.LastError;
+				await Task.Run(f);
+				Refresh();
+			}
+			catch (Exception e)
+			{
+				PhoneLink.Disconnect();
+				Refresh(e.Message);
 			}
 		}
-		sw = Ui.Switch(SyncServer.Enabled && SyncServer.Running, delegate
+		Button connect = Ui.Btn(I18n.L("连接"), BtnKind.Primary, delegate
 		{
-			bool on = sw.IsChecked == true;
-			if (on && !SyncServer.SetEnabled(true))
-			{
-				sw.IsChecked = false;
-			}
-			else if (!on)
-			{
-				SyncServer.SetEnabled(false);
-			}
-			Refresh();
+			string a = addr.Text;
+			string t = code.Text;
+			PageBase.Run(() => Connect(() => PhoneLink.Connect(a, t)));
 		});
-		Button code = Ui.Btn(I18n.L("换一个配对码"), BtnKind.Chip, delegate
+		Button usb = Ui.Btn(I18n.L("USB 自动连接"), BtnKind.Chip, delegate
 		{
-			if (SyncServer.Running)
+			string t = code.Text;
+			PageBase.Run(() => Connect(() => PhoneLink.ConnectUsb(t)));
+		});
+		Button scan = Ui.Btn(I18n.L("扫描局域网"), BtnKind.Chip, delegate
+		{
+			PageBase.Run(async () =>
 			{
-				SyncServer.NewCode();
-			}
-			Refresh();
+				Refresh(I18n.L("正在扫描…"));
+				List<string> found = await Task.Run(() => PhoneClient.ScanLan());
+				if (found.Count > 0)
+				{
+					addr.Text = found[0];
+				}
+				Refresh(found.Count == 0 ? I18n.L("没找到手机：确认在同一个 Wi-Fi，且手机上已启动同步服务") : I18n.L("找到") + " " + string.Join("  ", found));
+			});
 		});
-		Button forget = Ui.Btn(I18n.L("清除已配对设备"), BtnKind.Ghost, delegate
+		open = Ui.Btn(I18n.L("打开同步面板"), BtnKind.Normal, delegate
 		{
-			SyncServer.ForgetDevices();
-			Refresh();
+			PageBase.Run(PhoneSyncPanel.ShowAsync, I18n.L("同步失败"));
 		});
-		// 配对成功后配对码会自动更换，定时刷新一下显示
-		DispatcherTimer timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3.0) };
-		timer.Tick += delegate
-		{
-			Refresh();
-		};
-		base.Loaded += delegate
-		{
-			timer.Start();
-		};
-		base.Unloaded += delegate
-		{
-			timer.Stop();
-		};
 		Refresh();
-		return Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("手机同步"), I18n.L("在同一个 Wi-Fi 下和手机启动器互传存档")), Ui.Field(I18n.L("局域网同步"), Ui.H(8.0, sw, code.VCenter(), forget.VCenter()), I18n.L("打开后手机端会自动发现这台电脑，输入配对码即可；覆盖前都会先自动备份")), Ui.Field("", status)));
+		return Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("手机同步"), I18n.L("和手机启动器互传存档：同一个 Wi-Fi，或 USB 数据线")), Ui.Field(I18n.L("连接手机"), Ui.H(8.0, addr.VCenter(), code.VCenter(), connect.VCenter(), scan.VCenter(), usb.VCenter()), I18n.L("手机启动器 → 存档管理 → 从 zip 导入 → 启动同步服务，填上显示的地址和配对码；USB 需打开手机的 USB 调试，并把 adb.exe 放在 TipCL 同目录")), Ui.Field("", Ui.H(8.0, open.VCenter(), status.VCenter()))));
 	}
 }
