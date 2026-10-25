@@ -52,6 +52,9 @@ public sealed partial class SettingsPage : PageBase
 
 	private const string DefaultColor = "#2E9B6B";
 
+	// 必须排在 _visualColor 前面：静态字段按书写顺序初始化
+	internal static ThemeExtras Extras { get; } = LoadExtras();
+
 	private static string _visualColor = NormalizeColor(Extras.ThemeColor) ?? "#2E9B6B";
 
 	private static string _visualBackground = NormalizeBackground(Extras.Background);
@@ -304,8 +307,6 @@ public sealed partial class SettingsPage : PageBase
 	};
 
 	private static readonly string[] BackgroundKeys = new string[3] { "C.Canvas", "B.Canvas", "B.PageWash" };
-
-	internal static ThemeExtras Extras { get; } = LoadExtras();
 
 	public override string Title => I18n.L("设置");
 
