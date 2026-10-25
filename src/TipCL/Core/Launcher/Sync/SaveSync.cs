@@ -26,7 +26,7 @@ public enum SyncDecision
 }
 
 /// <summary>
-/// 存档同步的核心逻辑：世界指纹、同步决策、导入导出。网络部分在 <see cref="SyncServer"/>。
+/// 存档同步的核心逻辑：世界指纹、同步决策、导入导出。和手机通信在 <see cref="PhoneLink"/>。
 /// </summary>
 public static class SaveSync
 {
