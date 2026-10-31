@@ -16,6 +16,9 @@ internal sealed class ChatInput : TextBox
 
 	public event Action<string>? Submitted;
 
+	/// <summary>在发送逻辑之前看按键（斜杠命令候选列表用）；返回 true 表示已处理。</summary>
+	public Func<Key, bool>? KeyIntercept { get; set; }
+
 	public ChatInput()
 	{
 		base.Style = Ui.S("Input.Multi");
@@ -56,6 +59,11 @@ internal sealed class ChatInput : TextBox
 	protected override void OnPreviewKeyDown(KeyEventArgs e)
 	{
 		bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+		if (_composition.Length == 0 && e.Key != Key.ImeProcessed && e.ImeProcessedKey == Key.None && !shift && KeyIntercept != null && KeyIntercept(e.Key))
+		{
+			e.Handled = true;
+			return;
+		}
 		if (ImeGuard.ShouldSend(e.Key, e.ImeProcessedKey, shift, _composition))
 		{
 			string text = base.Text?.Trim() ?? "";
