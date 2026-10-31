@@ -39,6 +39,22 @@ public static class McpServer
 
 	public static string LastError { get; private set; } = "";
 
+	/// <summary>外部客户端最近一次调用的工具名和时间（本机时间）；没调用过为空。</summary>
+	public static string LastTool { get; private set; } = "";
+
+	public static DateTime LastToolAt { get; private set; }
+
+	/// <summary>开关变化时触发（可能在后台线程）。</summary>
+	public static event Action StateChanged;
+
+	/// <summary>外部客户端调用工具时触发：工具名、时间（可能在后台线程）。</summary>
+	public static event Action<string, DateTime> ToolCalled;
+
+	private static void RaiseState()
+	{
+		try { StateChanged?.Invoke(); } catch (Exception) { }
+	}
+
 	private static string PrefPath => Path.Combine(Utils.ResolveRoot(), "mcp_server.json");
 
 	public static bool Enabled
@@ -100,6 +116,7 @@ public static class McpServer
 				LastError = ex.Message;
 			}
 		}
+		RaiseState();
 	}
 
 	public static void Stop()
@@ -110,6 +127,7 @@ public static class McpServer
 			try { _listener?.Stop(); } catch (Exception) { }
 			_listener = null;
 		}
+		RaiseState();
 	}
 
 	private static void AcceptLoop()
@@ -291,10 +309,19 @@ public static class McpServer
 		if (_hidden.Contains(name)) return ToolText("该工具只能在启动器界面里用: " + name, true);
 		BackendApi backend = Backend;
 		if (backend == null) return ToolText("启动器内核还没就绪，请稍后再试", true);
+		NoteToolCall(name);
 		string args = prm.TryGetProperty("arguments", out JsonElement ae) && ae.ValueKind == JsonValueKind.Object ? ae.GetRawText() : "{}";
 		string output = Tools.RunTool(backend, name, args, wait: true);
 		bool isError = LooksLikeError(output);
 		return ToolText(output, isError);
+	}
+
+	/// <summary>记下最近一次外部调用并通知界面。</summary>
+	public static void NoteToolCall(string name)
+	{
+		LastTool = name ?? "";
+		LastToolAt = DateTime.Now;
+		try { ToolCalled?.Invoke(LastTool, LastToolAt); } catch (Exception) { }
 	}
 
 	private static bool LooksLikeError(string output)
