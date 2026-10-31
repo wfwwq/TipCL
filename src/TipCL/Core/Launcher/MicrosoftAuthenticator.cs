@@ -112,10 +112,11 @@ public class MicrosoftAuthenticator
 	public object XblAuthenticate(object ms_token0)
 	{
 		string text = Py.Str(ms_token0);
+		// login.live.com 设备码流程拿到的令牌要以 "d=" 开头，先试它，省掉一次必然失败的往返
 		List<string> obj = ((text.StartsWith("d=", StringComparison.Ordinal) || text.StartsWith("t=", StringComparison.Ordinal)) ? new List<string> { text } : new List<string>
 		{
-			text,
-			"d=" + text
+			"d=" + text,
+			text
 		});
 		AuthResponse authResponse = null;
 		foreach (string item in obj)
@@ -219,6 +220,7 @@ public class MicrosoftAuthenticator
 	public PyDict Login(Action<object, object, object> on_code = null, Action<string> on_status = null, bool open_browser = true)
 	{
 		PyDict deviceCode = GetDeviceCode();
+		AuthHttp.Warmup("https://user.auth.xboxlive.com/", "https://xsts.auth.xboxlive.com/", "https://api.minecraftservices.com/");
 		if (open_browser)
 		{
 			try
@@ -234,8 +236,23 @@ public class MicrosoftAuthenticator
 		object xbl_token = XblAuthenticate(pyDict["access_token"]);
 		object[] array = XstsAuthenticate(xbl_token);
 		object obj = McLogin(array[1], array[0]);
-		CheckEntitlements(obj);
-		PyDict profile = GetProfile(obj);
+		System.Threading.Tasks.Task<bool> entitlements = System.Threading.Tasks.Task.Run(() => CheckEntitlements(obj));
+		// 正版资格与玩家档案互不依赖，并行请求；报错优先级与原先串行时一致（先资格后档案）
+		PyDict profile = null;
+		Exception profileError = null;
+		try
+		{
+			profile = GetProfile(obj);
+		}
+		catch (Exception ex)
+		{
+			profileError = ex;
+		}
+		entitlements.GetAwaiter().GetResult();
+		if (profileError != null)
+		{
+			System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(profileError).Throw();
+		}
 		return PyDict.Of("type", "microsoft", "name", profile["name"], "uuid", profile["uuid"], "access_token", obj, "refresh_token", pyDict.Get("refresh_token"), "xuid", array[1], "expires_at", Py.Time() + 72000.0, "updated_at", Py.Time());
 	}
 
