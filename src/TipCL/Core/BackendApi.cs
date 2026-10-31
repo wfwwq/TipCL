@@ -3711,7 +3711,7 @@ public class BackendApi
 			string text = Updater.Download(pyDict, _dm(ctx));
 			ctx.Log("更新包已下载: " + text);
 			Emit("update_staged", PyDict.Of("package", text, "version", Py.Or(pyDict["latest"], "")));
-			return Py.Fmt(I18nCore.Tr("更新包已下载到 {0}，关闭启动器后运行它即可完成更新"), text);
+			return I18nCore.Tr("更新包已下载，重启启动器即可完成更新");
 		});
 	}
 
