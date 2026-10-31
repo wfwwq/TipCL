@@ -1370,6 +1370,32 @@ public class Installer
 		}
 	}
 
+	/// <summary>Forge / NeoForge 安装处理器需要的最低 Java：26.x 起 25，1.20.5 起 21，其余 17。</summary>
+	public static long InstallerJavaMajor(string mc_version)
+	{
+		long[] t = _mc_tuple(mc_version);
+		if (t[0] >= 26)
+		{
+			return 25L;
+		}
+		if (!TupleLess(t, 1L, 20L, 5L))
+		{
+			return 21L;
+		}
+		return 17L;
+	}
+
+	/// <summary>NeoForge 版本前缀：26.x 起是完整三段（26.3 → 26.3.0），1.20.2+ 是去掉开头的 1。</summary>
+	public static string NeoforgeCalverPrefix(string mc_version)
+	{
+		long[] t = _mc_tuple(mc_version);
+		if (t[0] < 26)
+		{
+			return null;
+		}
+		return t[0] + "." + t[1] + "." + t[2];
+	}
+
 	private static bool TupleLess(long[] a, params long[] b)
 	{
 		for (int i = 0; i < Math.Min(a.Length, b.Length); i++)
@@ -1395,7 +1421,7 @@ public class Installer
 			_note("离线安装 Forge " + full + "（不调用官方安装器）", 0L, 1L);
 			return _install_forge_modern(installer_jar, pyDict, mc_version, force);
 		}
-		string java_exe = Java.JavaForInstaller(TupleLess(_mc_tuple(mc_version), 1L, 17L) ? "forge-legacy" : "forge", dm, on_progress);
+		string java_exe = Java.JavaForInstaller(TupleLess(_mc_tuple(mc_version), 1L, 17L) ? "forge-legacy" : "forge", dm, on_progress, InstallerJavaMajor(mc_version));
 		_note("回退官方 Forge 安装器 " + full, 0L, 1L);
 		return _install_forge_cli(installer_jar, mc_version, full, java_exe);
 	}
@@ -1446,7 +1472,7 @@ public class Installer
 		{
 			PyDict data = _forge_processor_data(installer_jar, profile, text3, text4);
 			_prefetch_mojmaps(data, text2);
-			string java_exe = Java.JavaForInstaller("forge", dm, on_progress);
+			string java_exe = Java.JavaForInstaller("forge", dm, on_progress, InstallerJavaMajor(mc_version));
 			List<object> list2 = (from p in Py.ListOr(Py.Or(profile.Get("processors"), new List<object>()))
 				where StrList(Py.Or(Py.DictOr(p).Get("sides"), Py.L("client"))).Contains("client")
 				select p).ToList();
@@ -1791,7 +1817,7 @@ public class Installer
 			List<string> list2;
 			if (!TupleLess(_mc_tuple(mc_version), 1L, 20L, 2L))
 			{
-				string prefix = string.Join(".", mc_version.Split('.').Skip(1));
+				string prefix = NeoforgeCalverPrefix(mc_version) ?? string.Join(".", mc_version.Split('.').Skip(1));
 				list2 = list.Where((string v) => v.StartsWith(prefix + ".")).ToList();
 			}
 			else
@@ -1821,7 +1847,7 @@ public class Installer
 			on_progress?.Invoke("离线安装 NeoForge " + text, 0L, 1L);
 			return _install_forge_modern(text2, pyDict, mc_version, force);
 		}
-		string java_exe = Java.JavaForInstaller("neoforge", dm, on_progress);
+		string java_exe = Java.JavaForInstaller("neoforge", dm, on_progress, InstallerJavaMajor(mc_version));
 		return _install_forge_cli(text2, mc_version, text, java_exe, "NeoForge");
 	}
 
