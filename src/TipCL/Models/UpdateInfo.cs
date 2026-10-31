@@ -9,7 +9,10 @@ public sealed class UpdateInfo
 
 	public string Message { get; set; } = "";
 
+	[JsonPropertyName("latest")]
 	public string Version { get; set; } = "";
+
+	public string Notes { get; set; } = "";
 
 	public string Url { get; set; } = "";
 }
