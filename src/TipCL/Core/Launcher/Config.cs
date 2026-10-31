@@ -7,6 +7,24 @@ public static class Config
 {
 	public const string ISOLATION_DEFAULTS_VERSION = "2026.09-isolate-all";
 
+	public const string DEFAULT_MS_CLIENT_ID = "00000000402b5328";
+
+	public const string DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/wfwwq/TipCL/main/update.json";
+
+	/// <summary>微软登录 Client ID：不再开放给用户设置，固定用内置值；开发调试可用环境变量 TIPCL_MS_CLIENT_ID 覆盖。</summary>
+	public static string MsClientId()
+	{
+		string env = (System.Environment.GetEnvironmentVariable("TIPCL_MS_CLIENT_ID") ?? "").Trim();
+		return (env.Length > 0) ? env : DEFAULT_MS_CLIENT_ID;
+	}
+
+	/// <summary>更新源：不再开放给用户设置，固定用官方 update.json；开发调试可用环境变量 TIPCL_UPDATE_URL 覆盖。</summary>
+	public static string UpdateUrl()
+	{
+		string env = (System.Environment.GetEnvironmentVariable("TIPCL_UPDATE_URL") ?? "").Trim();
+		return (env.Length > 0) ? env : DEFAULT_UPDATE_URL;
+	}
+
 	internal const string _LEGACY_DEFAULT_ISOLATION = "none";
 
 	public const string AI_GATEWAY_DEFAULTS_VERSION = "2026.10-builtin-newapi";
