@@ -859,6 +859,20 @@ public class BackendApi
 		}
 	}
 
+	internal static string ResolveModsDirForInstall(Instance inst, object version)
+	{
+		if (!Py.Truthy(version))
+		{
+			return null;
+		}
+		PyDict settings = VersionSettings.Load(inst, version);
+		if (!VersionSettings.IsIsolated(settings))
+		{
+			return null;
+		}
+		return VersionSettings.ModsDir(inst, version, settings);
+	}
+
 	internal string _mods_folder(Instance inst, object version = null)
 	{
 		if (Py.Truthy(version))
@@ -1091,7 +1105,7 @@ public class BackendApi
 			string text2 = PPath.Norm(Py.Str(o));
 			ctx.Log("从本地文件安装: " + text2);
 			ctx.Log("实例: " + instance.name + "  路径: " + instance.path);
-			pyDict = ((!(Py.Lower(new PPath(text2).Suffix) == ".mrpack")) ? Modpack.InstallCfZip(downloadManager, text2, instance, on_progress, downloadManager.cancel) : Modpack.InstallMrpack(downloadManager, text2, instance, on_progress, downloadManager.cancel));
+			pyDict = Modpack.InstallAuto(downloadManager, text2, instance, on_progress, downloadManager.cancel);
 		}
 		else
 		{
@@ -1577,16 +1591,21 @@ public class BackendApi
 		object obj = pyDict["file_id"];
 		object mc_version = Py.Or(pyDict["game_version"], pyDict["mc_version"]);
 		List<object> list = new List<object>();
+		string modsDir = ResolveModsDirForInstall(instance2, pyDict["version"]);
+		if (Py.Truthy(modsDir))
+		{
+			ctx.Log(I18nCore.Tr("安装目标: ") + modsDir);
+		}
 		if (Py.Truthy(pyDict["path"]) || Py.Truthy(pyDict["url"]))
 		{
 			object o = Py.Or(pyDict["path"], pyDict["url"]);
 			ctx.Log("安装模组: " + Py.Str(o));
-			Mods.InstallModFromSource(downloadManager, Py.Str(o), instance2, null, null, on_progress, version_id);
+			Mods.InstallModFromSource(downloadManager, Py.Str(o), instance2, null, null, on_progress, version_id, modsDir);
 		}
 		else if (text.StartsWith("curse", StringComparison.Ordinal) && Py.Truthy(pyDict["id"]))
 		{
 			ctx.Log("从 CurseForge 安装模组 id=" + Py.Str(pyDict["id"]));
-			list = Py.ListOr(Py.Or(Py.DictOr(Py.Or(Mods.InstallCurseforgeMod(downloadManager, pyDict.Req("id"), instance2, mc_version, null, null, on_progress, obj), new PyDict()))["dependencies"], new List<object>()));
+			list = Py.ListOr(Py.Or(Py.DictOr(Py.Or(Mods.InstallCurseforgeMod(downloadManager, pyDict.Req("id"), instance2, mc_version, null, null, on_progress, obj, modsDir), new PyDict()))["dependencies"], new List<object>()));
 		}
 		else
 		{
@@ -1594,13 +1613,13 @@ public class BackendApi
 			if (Py.Truthy(pyDict2["id"]) && Py.Lower(Py.Str(Py.Or(pyDict2["source"], text))).StartsWith("curse", StringComparison.Ordinal))
 			{
 				ctx.Log("从 CurseForge 安装模组 id=" + Py.Str(pyDict2["id"]));
-				list = Py.ListOr(Py.Or(Mods.InstallCurseforgeMod(downloadManager, pyDict2.Req("id"), instance2, mc_version, null, null, on_progress, Py.Or(obj, pyDict["version_id"]))["dependencies"], new List<object>()));
+				list = Py.ListOr(Py.Or(Py.DictOr(Py.Or(Mods.InstallCurseforgeMod(downloadManager, pyDict2.Req("id"), instance2, mc_version, null, null, on_progress, Py.Or(obj, pyDict["version_id"]), modsDir), new PyDict()))["dependencies"], new List<object>()));
 			}
 			else
 			{
 				object o2 = Py.Or(pyDict2["slug"], name);
 				ctx.Log("从 Modrinth 安装模组 " + Py.Str(o2));
-				Mods.InstallModFromSource(downloadManager, Py.Str(o2), instance2, mc_version, null, on_progress, version_id);
+				Mods.InstallModFromSource(downloadManager, Py.Str(o2), instance2, mc_version, null, on_progress, version_id, modsDir);
 			}
 		}
 		if (list.Count > 0)
@@ -2388,6 +2407,52 @@ public class BackendApi
 		};
 	}
 
+	/// <summary>先按版本名识别加载器；名字看不出来（自定义命名的版本）时再读版本 json 的 mainClass / libraries。</summary>
+	private List<object> _loader_of_version(Instance inst, string version_id)
+	{
+		List<object> list = (List<object>)loader_of(version_id);
+		string text = Py.Str(list[0]);
+		if (LOADER_TAGS.Any((string[] t) => t[1] == text))
+		{
+			return list;
+		}
+		try
+		{
+			PyDict pyDict = (inst.VersionJson(version_id) as PyDict) ?? new PyDict();
+			StringBuilder sb = new StringBuilder();
+			sb.Append(Py.Lower(Py.S(pyDict["mainClass"]))).Append('\n');
+			foreach (object item in Py.ListOr(Py.Or(pyDict["libraries"], new List<object>())))
+			{
+				if (item is PyDict lib)
+				{
+					sb.Append(Py.Lower(Py.S(lib["name"]))).Append('\n');
+				}
+			}
+			string blob = sb.ToString();
+			string[][] array = new string[6][]
+			{
+				new string[2] { "net.neoforged", "NeoForge" },
+				new string[2] { "org.quiltmc", "Quilt" },
+				new string[2] { "net.fabricmc", "Fabric" },
+				new string[2] { "net.minecraftforge", "Forge" },
+				new string[2] { "optifine", "OptiFine" },
+				new string[2] { "liteloader", "LiteLoader" }
+			};
+			foreach (string[] pair in array)
+			{
+				if (blob.Contains(pair[0]))
+				{
+					string[] tag = LOADER_TAGS.First((string[] t) => t[1] == pair[1]);
+					return new List<object> { tag[1], tag[2] };
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return list;
+	}
+
 	private static string _version_mc_id(Instance inst, string version_id)
 	{
 		PyDict pyDict = (inst.VersionJson(version_id) as PyDict) ?? new PyDict();
@@ -2415,7 +2480,7 @@ public class BackendApi
 			{
 				bool flag2 = VersionSettings.IsIsolated(pyDict);
 				string text2 = VersionSettings.ModsDir(instance, item, pyDict);
-				List<object> list2 = (List<object>)loader_of(item);
+				List<object> list2 = _loader_of_version(instance, item);
 				object obj = Py.Or(pyDict["isolation"], "none");
 				object obj2 = ((obj is string key) ? VersionSettings.ISOLATION_LABELS.Get(key, "") : "");
 				list.Add(PyDict.Of("id", item, "loader", list2[0], "loader_color", list2[1], "mc", _version_mc_id(instance, item), "isolation", obj, "isolation_label", I18nCore.Tr((string)obj2), "isolated", flag2, "mods", _count_mods(text2), "mods_dir", text2, "hidden", flag, "java", Py.Or(pyDict["java"], "自动选择"), "memory_mb", Py.Or(pyDict["memory_mb"], 0L)));
@@ -3315,7 +3380,7 @@ public class BackendApi
 			PyDict pyDict2 = (pyDict["modpack"] as PyDict) ?? new PyDict();
 			object a = ((pyDict2.Count > 0) ? pyDict2["name"] : null);
 			object o = Py.Or(a, pyDict["mc_version"], (list2.Count > 0) ? list2[0] : I18nCore.Tr("未安装版本"));
-			list.Add(PyDict.Of("name", item, "versions", (long)list2.Count, "mc", Py.Str(o), "pack", Py.Or(a, ""), "pack_version", Py.Or((pyDict2.Count > 0) ? pyDict2["version"] : "", ""), "mc_version", Py.Or((pyDict2.Count > 0) ? pyDict2["mc_version"] : null, pyDict["mc_version"], ""), "java", instance.JavaPref(), "java_label", instance_java_label(item)));
+			list.Add(PyDict.Of("name", item, "path", instance.path, "versions", (long)list2.Count, "mc", Py.Str(o), "pack", Py.Or(a, ""), "pack_version", Py.Or((pyDict2.Count > 0) ? pyDict2["version"] : "", ""), "mc_version", Py.Or((pyDict2.Count > 0) ? pyDict2["mc_version"] : null, pyDict["mc_version"], ""), "java", instance.JavaPref(), "java_label", instance_java_label(item)));
 		}
 		_inst_cache = list;
 		_inst_cache_at = num;
@@ -3735,6 +3800,42 @@ public class BackendApi
 	public object scan_official_versions()
 	{
 		return OfficialMigrate.ScanVersions(OfficialMigrate.OfficialDir());
+	}
+
+	public object import_existing_folder(object path, [Def(null)] object name = null)
+	{
+		string src = PPath.Norm(Py.SS(path));
+		if (src.Length == 0 || !LocalFs.IsDir(src) || !LocalFs.IsDir(PPath.Join(src, "versions")))
+		{
+			throw new ValueError(I18nCore.Tr("选中的文件夹不是游戏目录（需要包含 versions 子目录）"));
+		}
+		string srcKey = PPath.Abs(src).TrimEnd('\\', '/');
+		foreach (string item in Instances.ListInstances())
+		{
+			string other = PPath.Abs(Instances.GetInstancePath(item)).TrimEnd('\\', '/');
+			if (string.Equals(other, srcKey, Utils.IS_WINDOWS ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+			{
+				throw new ValueError(I18nCore.Tr("这个文件夹已经在实例列表里了"));
+			}
+		}
+		if (OfficialMigrate.ScanVersions(src).Count == 0)
+		{
+			throw new ValueError(I18nCore.Tr("这个文件夹的 versions 里没有可用的版本（需要 versions/<版本名>/<版本名>.json）"));
+		}
+		string text2 = Instances.UniqueInstanceName(Py.Truthy(name) ? Py.SS(name) : new PPath(src).Name);
+		return StartTask(I18nCore.Tr("导入文件夹 ") + text2, delegate(TaskContext ctx)
+		{
+			ctx.Log(I18nCore.Tr("正在从 ") + src + I18nCore.Tr(" 导入到实例 ") + text2);
+			ctx.Progress(1L, 3L, I18nCore.Tr("扫描版本"));
+			List<object> list = Py.ListOr(Py.Or(OfficialMigrate.Migrate(src, text2, wantVersions: true, wantAssets: true, wantAccounts: false)["versions"], new List<object>()));
+			ctx.Progress(3L, 3L, I18nCore.Tr("完成"));
+			string msg = Py.Fmt(I18nCore.Tr("已导入 {0} 个版本"), (long)list.Count);
+			ctx.Log(msg);
+			CONFIG.Set("default_instance", text2);
+			CONFIG.Save();
+			Emit("ui_changed", new PyDict());
+			return msg;
+		});
 	}
 
 	public object migrate_official_launcher([Def("default")] object instance = null)
