@@ -185,7 +185,7 @@ public static class Client
 		string text4 = Py.RStrip(Py.Strip(Py.Str(Py.Or(settings.Get("ai_gateway_url"), Py.Or(Defaults.DEFAULT_GATEWAY_URL, "")))), "/");
 		if (text4.Length > 0)
 		{
-			return PyDict.Of("mode", "public", "url", text4 + "/tipcl/chat", "models_url", text4 + "/tipcl/models", "headers", PyDict.Of("Content-Type", "application/json", "X-TipCL-Client", "TipCL/1.0.4"), "model", pyDict["model"], "public", true);
+			return PyDict.Of("mode", "public", "url", text4 + "/tipcl/chat", "models_url", text4 + "/tipcl/models", "headers", PyDict.Of("Content-Type", "application/json", "X-TipCL-Client", "TipCL/1.0.5"), "model", pyDict["model"], "public", true);
 		}
 		throw new AIClientError("还没有配置 AI 网关：请到「设置 → AI 助手」填入自建公益网关地址，或切到「自定义 OpenAI 兼容端点」模式填地址与令牌。搭建自建网关的方法请查看启动器安装目录下的说明文档，或访问项目主页。");
 	}
