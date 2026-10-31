@@ -150,7 +150,7 @@ public class AccountManager
 
 	private static PyDict DefaultMicrosoftRefresh(PyDict acc)
 	{
-		return new MicrosoftAuthenticator(Py.Str(Py.Or(Config.CONFIG.Get("microsoft_client_id"), "00000000402b5328"))).Refresh(acc);
+		return new MicrosoftAuthenticator(Config.MsClientId()).Refresh(acc);
 	}
 
 	private static bool Expired(PyDict account)
