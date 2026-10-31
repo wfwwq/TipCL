@@ -200,7 +200,7 @@ public sealed class BridgeHost : IDisposable
 		{
 			if (!File.Exists(server))
 			{
-				throw new FileNotFoundException(I18n.L("找不到 tipcl-bridge.exe 或 bridge/server.py"));
+				throw new FileNotFoundException(I18n.L("找不到外部后端程序（TIPCL_BRIDGE_EXE）"));
 			}
 			backend = I18n.L("Python 桥");
 			processStartInfo.FileName = text;
@@ -324,7 +324,7 @@ public sealed class BridgeHost : IDisposable
 		{
 			return NormalizeRoot(text2);
 		}
-		throw new DirectoryNotFoundException(I18n.L("找不到启动器根目录（需要包含 mclauncher/ 与 bridge/server.py）"));
+		throw new DirectoryNotFoundException(I18n.L("无法准备启动器数据目录，请检查 %LOCALAPPDATA%\\TipCL 是否可写"));
 	}
 
 	public static string FindPython()
