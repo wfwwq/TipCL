@@ -415,7 +415,7 @@ public partial class MainWindow : Window
 				BridgePill.ToolTip = ex.Message;
 				return;
 			}
-			if (await Dlg.Confirm(I18n.L("连接后端失败"), ex.Message + I18n.L("\n\n需要仓库根目录下的 bridge/server.py 或 native/build/tipcl-bridge.exe。"), I18n.L("重试"), I18n.L("退出")))
+			if (await Dlg.Confirm(I18n.L("连接后端失败"), ex.Message + I18n.L("\n\n可以点「重试」；如果反复出现，请关掉所有 TipCL 窗口后再打开。"), I18n.L("重试"), I18n.L("退出")))
 			{
 				await ConnectAsync();
 			}
