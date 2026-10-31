@@ -348,6 +348,7 @@ public sealed class LaunchPage : PageBase
 					JsonElement state = await PageBase.Api.CallAsync("reset_layout");
 					ApplyLayoutState(state);
 					await FillCardData();
+					PageBase.Toast(I18n.L("已恢复默认布局"), I18n.L("{0} 张卡片已回到默认位置", _dash.Layout.VisibleItems().Count()), ToastKind.Success);
 				}
 			});
 		};
