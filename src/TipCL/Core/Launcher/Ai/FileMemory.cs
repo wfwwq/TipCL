@@ -96,6 +96,97 @@ public class FileMemory : NoopMemory
 		return "已记住: " + t;
 	}
 
+	/// <summary>去掉条目开头的 "yyyy-MM-dd " 日期，只留内容。</summary>
+	public static string TextOf(string entry)
+	{
+		string e = (entry ?? "").Trim();
+		if (e.Length > 11 && e[4] == '-' && e[7] == '-' && e[10] == ' ' && char.IsDigit(e[0]) && char.IsDigit(e[3]) && char.IsDigit(e[9]))
+		{
+			return e.Substring(11).Trim();
+		}
+		return e;
+	}
+
+	/// <summary>从 remember 工具的结果里取出记下的内容；不是"已记住"返回 null。</summary>
+	public static string RememberedOf(string toolResult)
+	{
+		string r = (toolResult ?? "").Trim();
+		foreach (string p in new[] { "已记住: ", "已记住：" })
+		{
+			if (r.StartsWith(p, StringComparison.Ordinal)) return r.Substring(p.Length).Trim();
+		}
+		return null;
+	}
+
+	/// <summary>撤销一次 remember：删掉最后一条内容完全相同的记忆。</summary>
+	public static bool Undo(string text)
+	{
+		string t = (text ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+		if (t.Length == 0) return false;
+		lock (_lock)
+		{
+			List<string> all = Entries();
+			for (int i = all.Count - 1; i >= 0; i--)
+			{
+				if (string.Equals(TextOf(all[i]), t, StringComparison.OrdinalIgnoreCase))
+				{
+					all.RemoveAt(i);
+					WriteAll(all);
+					return true;
+				}
+			}
+			return false;
+		}
+	}
+
+	/// <summary>改第 index 条的内容（保留原日期）；空内容等于删除。</summary>
+	public static bool Update(int index, string text)
+	{
+		string t = (text ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+		if (t.Length > MaxEntryChars) t = t.Substring(0, MaxEntryChars);
+		lock (_lock)
+		{
+			List<string> all = Entries();
+			if (index < 0 || index >= all.Count) return false;
+			if (t.Length == 0)
+			{
+				all.RemoveAt(index);
+			}
+			else
+			{
+				string old = all[index];
+				string body = TextOf(old);
+				string date = old.Length > body.Length ? old.Substring(0, old.Length - body.Length).Trim() : "";
+				all[index] = date.Length > 0 ? date + " " + t : t;
+			}
+			WriteAll(all);
+			return true;
+		}
+	}
+
+	public static bool RemoveAt(int index)
+	{
+		lock (_lock)
+		{
+			List<string> all = Entries();
+			if (index < 0 || index >= all.Count) return false;
+			all.RemoveAt(index);
+			WriteAll(all);
+			return true;
+		}
+	}
+
+	/// <summary>清空全部记忆，返回删掉的条数。</summary>
+	public static int Clear()
+	{
+		lock (_lock)
+		{
+			int n = Entries().Count;
+			if (n > 0) WriteAll(new List<string>());
+			return n;
+		}
+	}
+
 	public static string Forget(string keyword)
 	{
 		string k = (keyword ?? "").Trim();
