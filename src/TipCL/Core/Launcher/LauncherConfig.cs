@@ -73,6 +73,11 @@ public sealed class LauncherConfig
 		}
 		else
 		{
+			string value = GameDirDetector.FindExisting();
+			if (!string.IsNullOrEmpty(value))
+			{
+				data["instances_dir"] = value;
+			}
 			MigrateLegacyInstancesDir();
 			MigrateDefaultIsolation();
 			MigrateAiGatewayMode();
