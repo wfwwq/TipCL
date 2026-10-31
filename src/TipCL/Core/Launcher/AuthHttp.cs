@@ -63,6 +63,42 @@ public static class AuthHttp
 		}
 	}
 
+	private static readonly Dictionary<string, DateTime> _warmed = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+	/// <summary>后台预热：提前完成代理探测、DNS、TLS 握手，让真正的登录请求走现成连接。失败静默。</summary>
+	public static void Warmup(params string[] urls)
+	{
+		if (ReplayBase().Length > 0 || Environment.GetEnvironmentVariable("TIPCL_NO_WARMUP") == "1")
+		{
+			return;
+		}
+		foreach (string url in urls)
+		{
+			lock (_warmed)
+			{
+				if (_warmed.TryGetValue(url, out var last) && (DateTime.UtcNow - last).TotalSeconds < 60.0)
+				{
+					continue;
+				}
+				_warmed[url] = DateTime.UtcNow;
+			}
+			string u = url;
+			ThreadPool.QueueUserWorkItem(delegate
+			{
+				try
+				{
+					using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(8.0));
+					using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Head, u);
+					req.Headers.TryAddWithoutValidation("User-Agent", "TipCL/1.0");
+					using HttpResponseMessage resp = Client().SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).GetAwaiter().GetResult();
+				}
+				catch
+				{
+				}
+			});
+		}
+	}
+
 	private static string ReplayBase()
 	{
 		return (Environment.GetEnvironmentVariable("TIPCL_HTTP_REPLAY") ?? "").Trim();
