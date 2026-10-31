@@ -53,7 +53,7 @@ public static class Updater
 		return a.Count.CompareTo(b.Count);
 	}
 
-	public static bool Newer(object remote, string local = "1.0.8")
+	public static bool Newer(object remote, string local = "1.0.9")
 	{
 		return CmpTuple(_parse(remote), _parse(local)) > 0;
 	}
@@ -92,14 +92,14 @@ public static class Updater
 		}
 		catch (Exception e)
 		{
-			return PyDict.Of("ok", false, "current", "1.0.8", "latest", "1.0.8", "has_update", false, "message", "检查更新失败: " + Py.ExcStr(e), "notes", "", "url", "");
+			return PyDict.Of("ok", false, "current", "1.0.9", "latest", "1.0.9", "has_update", false, "message", "检查更新失败: " + Py.ExcStr(e), "notes", "", "url", "");
 		}
 		string text = Py.Str(Py.Or(G(data, "version"), G(data, "latest"), ""));
 		bool flag = text.Length > 0 && Newer(text);
 		string text2 = Py.Lower(Py.Strip(Py.Str(Py.Or(G(data, "sha256"), ""))));
 		bool flag2 = flag && ValidSha256(text2);
 		bool flag3 = flag && !flag2;
-		return PyDict.Of("ok", !flag3, "current", "1.0.8", "latest", (text.Length > 0) ? text : "1.0.8", "has_update", flag2, "message", flag3 ? "更新清单缺少有效 SHA-256，已拒绝自动更新" : (flag ? ("发现 " + text) : "已是最新版本"), "notes", Py.Str(Py.Or(G(data, "notes"), G(data, "changelog"), "")), "url", Py.Str(Py.Or(G(data, "url"), G(data, "download"), "")), "sha256", text2);
+		return PyDict.Of("ok", !flag3, "current", "1.0.9", "latest", (text.Length > 0) ? text : "1.0.9", "has_update", flag2, "message", flag3 ? "更新清单缺少有效 SHA-256，已拒绝自动更新" : (flag ? ("发现 " + text) : "已是最新版本"), "notes", Py.Str(Py.Or(G(data, "notes"), G(data, "changelog"), "")), "url", Py.Str(Py.Or(G(data, "url"), G(data, "download"), "")), "sha256", text2);
 	}
 
 	/// <summary>
