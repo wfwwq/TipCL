@@ -6,6 +6,8 @@ public sealed class InstanceInfo
 {
 	public string Name { get; set; } = "";
 
+	public string Path { get; set; } = "";
+
 	public int Versions { get; set; }
 
 	public string Mc { get; set; } = "";
