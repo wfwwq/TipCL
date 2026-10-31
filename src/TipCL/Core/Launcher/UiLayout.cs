@@ -48,8 +48,13 @@ public static class UiLayout
 	{
 		return new LayoutDoc(new List<LayoutItem>
 		{
+			// 必须与界面端 DashLayout.Default() 完全一致，否则「恢复默认布局」只会剩下两张卡片
 			new LayoutItem("banner", 0.0, 0.0, 1.0, 0.3, "banner-main", 0L),
-			new LayoutItem("config", 0.0, 0.315, 0.315, 0.685, "config-main", 1L)
+			new LayoutItem("config", 0.0, 0.315, 0.315, 0.685, "config-main", 1L),
+			new LayoutItem("log", 0.33, 0.315, 0.405, 0.405, "log-main", 2L),
+			new LayoutItem("quick", 0.33, 0.735, 0.405, 0.265, "quick-main", 3L),
+			new LayoutItem("playtime", 0.75, 0.315, 0.25, 0.19, "playtime-main", 4L),
+			new LayoutItem("news", 0.75, 0.52, 0.25, 0.48, "news-main", 5L)
 		}, 8L);
 	}
 
