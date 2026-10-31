@@ -23,4 +23,6 @@ public sealed class UiPrefs
 	public int SideFrostRadius { get; set; } = 30;
 
 	public string CatalogInstance { get; set; } = "";
+
+	public Dictionary<string, List<string>> VmFavorites { get; set; } = new Dictionary<string, List<string>>();
 }
