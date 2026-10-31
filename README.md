@@ -136,7 +136,7 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 
 ---
 
-<div align="center"><sub>Made with ❤️ for Minecraft players</sub></div>
+<div align="center"><sub>Made with ❤️ for Minecraft players · 感谢 <a href="https://linux.do">LINUX DO</a> 社区的支持</sub></div>
 
 ## 🙏 致谢
 
