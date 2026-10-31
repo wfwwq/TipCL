@@ -441,7 +441,7 @@ public sealed class AccountPage : PageBase
 					task_id = _loginTask
 				});
 			}
-		});
+		}, dismissable: false);
 		_loginTask = await PageBase.Api.StartTaskAsync("start_microsoft_login");
 	}
 
