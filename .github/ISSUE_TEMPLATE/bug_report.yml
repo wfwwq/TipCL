@@ -1,0 +1,36 @@
+name: 🐛 Bug 反馈
+description: 启动器出错、闪退、功能不正常
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: TipCL 版本
+      description: 设置页「关于」里能看到，例如 v1.0.10
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 你做了什么操作、期望是什么、实际出现了什么
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开 …
+        2. 点击 …
+        3. 出现 …
+  - type: input
+    id: env
+    attributes:
+      label: 系统 / 游戏版本 / 加载器
+      placeholder: Windows 11，1.20.1 Fabric
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 可以把崩溃报告、启动器日志直接拖进来
