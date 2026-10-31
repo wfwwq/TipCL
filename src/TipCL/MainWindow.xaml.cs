@@ -126,7 +126,7 @@ public partial class MainWindow : Window
 	public static readonly List<NavDef> NavDefs = new List<NavDef>
 	{
 		new NavDef("launch", I18n.L("启动"), "\ue7c1", () => new LaunchPage()),
-		new NavDef("instance", I18n.L("版本管理"), "\ue80a", () => new InstancePage()),
+		new NavDef("instance", I18n.L("版本管理"), "\ue80a", () => new VersionManagePage()),
 		new NavDef("version", I18n.L("原版游戏"), "\ue7fc", () => new VersionPage()),
 		new NavDef("mod", "Mod", "\uea86", () => new CatalogPage(CatalogKind.Mod)),
 		new NavDef("mods", I18n.L("模组"), "\ue8fd", () => new CatalogPage(CatalogKind.Mod, installedFirst: true)),
