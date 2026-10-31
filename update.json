@@ -1,6 +1,6 @@
 {
-  "version": "1.0.7",
-  "notes": "微软登录弹窗不再误关；自动更新可用（启动检查、一键重启替换）；清理过时提示",
-  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.0.7/TipCL.exe",
-  "sha256": "181abeb21a32f50371c70cde12be58d1bbc3f95956ef3014175d11077436622c"
+  "version": "1.0.8",
+  "notes": "微软登录提速；设置页新增关于与致谢",
+  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.0.8/TipCL.exe",
+  "sha256": "e28beae0752329011e5ed4afaf919e4eea195f3df66a49667d8502f58e10da21"
 }
