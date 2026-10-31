@@ -1140,7 +1140,7 @@ public static class Java
 		return InstallAdoptium(dm, Py.Int(o), on_progress, force, arch);
 	}
 
-	public static string JavaForInstaller(string loader, DownloadManager dm, Action<string, long, long> on_progress = null)
+	public static string JavaForInstaller(string loader, DownloadManager dm, Action<string, long, long> on_progress = null, long minMajor = 17L)
 	{
 		if (loader == "forge-legacy")
 		{
@@ -1153,7 +1153,7 @@ public static class Java
 			}
 			return InstallAdoptium(dm, 8L, on_progress);
 		}
-		long num = 17L;
+		long num = Math.Max(17L, minMajor);
 		foreach (PyDict item2 in ListInstalledJavas())
 		{
 			if (Py.Truthy(item2.Get("major")) && Py.Cmp(item2["major"], num) >= 0)
