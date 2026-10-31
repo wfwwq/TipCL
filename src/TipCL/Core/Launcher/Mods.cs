@@ -635,16 +635,27 @@ public static class Mods
 			return null;
 		}
 		string text2 = Py.Strip(Py.Str(text));
-		if (Regex.IsMatch(text2, "^1\\.\\d+(\\.\\d+)?\\z"))
+		if (Regex.IsMatch(text2, "^(?:1\\.\\d+(\\.\\d+)?|2\\d\\.\\d+(\\.\\d+)?)\\z"))
 		{
 			return text2;
 		}
-		Match match = Regex.Match(text2, "(1\\.\\d+(?:\\.\\d+)?)");
+		Match match = Regex.Match(text2, "(?<![\\d.])(1\\.\\d+(?:\\.\\d+)?)(?![\\d])");
+		if (match.Success)
+		{
+			return match.Groups[1].Value;
+		}
+		// 26.1 起的年份版本号（26.3、26.1.2）；NeoForge 四段号 26.3.0.22 取前三段并去掉 .0
+		match = Regex.Match(text2, "(?<![\\d.])(2\\d\\.\\d+(?:\\.\\d+)?)(?![\\d])");
+		if (!match.Success)
+		{
+			match = Regex.Match(text2, "(?<![\\d.])(2\\d\\.\\d+\\.\\d+)\\.\\d+");
+		}
 		if (!match.Success)
 		{
 			return null;
 		}
-		return match.Groups[1].Value;
+		string v = match.Groups[1].Value;
+		return v.EndsWith(".0") && v.Split('.').Length == 3 ? v.Substring(0, v.Length - 2) : v;
 	}
 
 	public static string DetectMcVersion(Instance instance)
