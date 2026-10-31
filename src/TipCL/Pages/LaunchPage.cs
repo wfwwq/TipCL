@@ -1507,7 +1507,7 @@ public sealed class LaunchPage : PageBase
 		_loginLayer = Dlg.Panel(I18n.L("微软账号登录"), body, 460.0, delegate
 		{
 			_loginLayer = null;
-		});
+		}, dismissable: false);
 		_loginTask = await PageBase.Api.StartTaskAsync("start_microsoft_login");
 	}
 
