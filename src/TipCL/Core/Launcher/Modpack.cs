@@ -9,6 +9,14 @@ namespace TipCL.Core.Launcher;
 
 public static class Modpack
 {
+	private enum PackKind
+	{
+		Mrpack,
+		CurseForge,
+		PlainDir,
+		Unknown
+	}
+
 	public const string MODRINTH_API = "https://api.modrinth.com/v2";
 
 	public const string CURSEFORGE_DOWNLOAD = "https://www.curseforge.com/api/v1/mods/{project_id}/files/{file_id}/download";
@@ -18,6 +26,10 @@ public static class Modpack
 	private static readonly string[] _PLAIN_MC_STRONG = new string[4] { "mods", "config", "versions", "saves" };
 
 	private static readonly Dictionary<string, string> HtmlHeaders = new Dictionary<string, string> { { "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" } };
+
+	private const int _MAX_UNWRAP_DEPTH = 3;
+
+	private const long _MAX_INNER_BYTES = 314572800L;
 
 	private static string BadZipText(Exception e)
 	{
@@ -404,6 +416,229 @@ public static class Modpack
 		}
 	}
 
+	private static List<string> _zip_entry_names(string zipPath)
+	{
+		List<string> list = new List<string>();
+		using ZipArchive zipArchive = ZipFile.OpenRead(zipPath);
+		foreach (ZipArchiveEntry entry in zipArchive.Entries)
+		{
+			list.Add(entry.FullName.Replace("\\", "/"));
+		}
+		return list;
+	}
+
+	private static int _marker_depth(List<string> names, string marker)
+	{
+		int num = 99;
+		foreach (string name in names)
+		{
+			string[] array = Py.Lower(name.Replace("\\", "/")).Split(new char[1] { '/' });
+			if (array.Length <= 5 && array[array.Length - 1] == marker && array.Length - 1 < num)
+			{
+				num = array.Length - 1;
+			}
+		}
+		return num;
+	}
+
+	private static PackKind _sniff_zip_kind(string zipPath, out string note)
+	{
+		note = "";
+		List<string> list;
+		try
+		{
+			list = _zip_entry_names(zipPath);
+		}
+		catch (Exception)
+		{
+			return PackKind.Unknown;
+		}
+		foreach (string item in list)
+		{
+			if (Py.Lower(item.Replace("\\", "/")) == "pcl/setup.ini")
+			{
+				note = "识别为 PCL 导出的一键安装包";
+				break;
+			}
+		}
+		if (_marker_depth(list, "modrinth.index.json") <= 4)
+		{
+			return PackKind.Mrpack;
+		}
+		if (_marker_depth(list, "manifest.json") <= 4)
+		{
+			return PackKind.CurseForge;
+		}
+		HashSet<string> hashSet = new HashSet<string>();
+		foreach (string item2 in list)
+		{
+			string[] array = Py.Lower(item2.Replace("\\", "/")).Split(new char[1] { '/' });
+			for (int i = 0; i < array.Length - 1 && i < 3; i++)
+			{
+				hashSet.Add(array[i]);
+			}
+		}
+		if (_PLAIN_MC_STRONG.Any(hashSet.Contains))
+		{
+			return PackKind.PlainDir;
+		}
+		return PackKind.Unknown;
+	}
+
+	private static bool _file_has_pack_marker(string filePath)
+	{
+		try
+		{
+			List<string> names = _zip_entry_names(filePath);
+			return _marker_depth(names, "modrinth.index.json") <= 4 || _marker_depth(names, "manifest.json") <= 4;
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+	}
+
+	private static int _inner_score(string fullName)
+	{
+		int num = 0;
+		string text = Py.Lower(fullName.Replace("\\", "/"));
+		if (text.EndsWith(".mrpack", StringComparison.Ordinal))
+		{
+			num -= 10;
+		}
+		if (text.Contains("modpack"))
+		{
+			num -= 5;
+		}
+		return num + (text.Split(new char[1] { '/' }).Length - 1);
+	}
+
+	private static string _extract_embedded_pack(string zipPath, string preferredStem)
+	{
+		try
+		{
+			using ZipArchive zipArchive = ZipFile.OpenRead(zipPath);
+			List<ZipArchiveEntry> list = new List<ZipArchiveEntry>();
+			foreach (ZipArchiveEntry entry in zipArchive.Entries)
+			{
+				switch (Py.Lower(new PPath(entry.Name).Suffix))
+				{
+				case ".mrpack":
+				case ".zip":
+				case ".jar":
+					if (entry.Length > 0 && entry.Length < 314572800)
+					{
+						list.Add(entry);
+					}
+					break;
+				}
+			}
+			if (list.Count == 0)
+			{
+				return null;
+			}
+			list.Sort((ZipArchiveEntry a, ZipArchiveEntry b) => _inner_score(a.FullName).CompareTo(_inner_score(b.FullName)));
+			foreach (ZipArchiveEntry item in list)
+			{
+				string text = ((preferredStem.Length > 60) ? preferredStem.Substring(0, 60) : preferredStem);
+				string text2 = Path.Combine(Path.GetTempPath(), text + "_inner_" + Guid.NewGuid().ToString("N").Substring(0, 8) + Py.Lower(new PPath(item.Name).Suffix));
+				try
+				{
+					item.ExtractToFile(text2, overwrite: true);
+					if (_file_has_pack_marker(text2))
+					{
+						return text2;
+					}
+					File.Delete(text2);
+				}
+				catch (Exception)
+				{
+					try
+					{
+						File.Delete(text2);
+					}
+					catch (Exception)
+					{
+					}
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return null;
+	}
+
+	public static PyDict InstallAuto(DownloadManager dm, object source, Instance instance, Action<string, long, long> on_progress = null, Func<bool> cancel = null, bool force = false, string java = null, bool isolate = false, object version_name = null)
+	{
+		return _install_auto(dm, source, instance, on_progress, cancel, force, java, isolate, version_name, 0);
+	}
+
+	private static PyDict _install_auto(DownloadManager dm, object source, Instance instance, Action<string, long, long> on_progress, Func<bool> cancel, bool force, string java, bool isolate, object version_name, int depth)
+	{
+		string text = Py.Str(source);
+		string text2 = Py.Lower(new PPath(text).Suffix);
+		if (HttpRe.IsMatch(text) || LocalFs.IsDir(PPath.Norm(text)))
+		{
+			if (!(text2 == ".mrpack"))
+			{
+				return InstallCfZip(dm, source, instance, on_progress, cancel, force, java, isolate, version_name);
+			}
+			return InstallMrpack(dm, source, instance, on_progress, cancel, force, java, isolate, version_name);
+		}
+		if (!LocalFs.IsFile(PPath.Norm(text)))
+		{
+			throw new ModpackError("找不到整合包文件: " + text);
+		}
+		string zipPath = PPath.Norm(text);
+		string note;
+		PackKind packKind = _sniff_zip_kind(zipPath, out note);
+		if (note.Length > 0)
+		{
+			_emit(on_progress, note);
+		}
+		if (packKind == PackKind.Unknown && depth < 3)
+		{
+			string text3 = _extract_embedded_pack(zipPath, new PPath(text).Stem);
+			if (text3 != null)
+			{
+				_emit(on_progress, "检测到包中包：" + new PPath(text).Name + " 内嵌了真正的整合包，已取出继续识别");
+				try
+				{
+					return _install_auto(dm, text3, instance, on_progress, cancel, force, java, isolate, version_name, depth + 1);
+				}
+				finally
+				{
+					try
+					{
+						File.Delete(text3);
+					}
+					catch (Exception)
+					{
+					}
+				}
+			}
+		}
+		switch (packKind)
+		{
+		case PackKind.Mrpack:
+			if (note.Length == 0)
+			{
+				note = "按内容识别为 Modrinth 整合包";
+			}
+			_emit(on_progress, note + "（不依赖扩展名）");
+			return InstallMrpack(dm, source, instance, on_progress, cancel, force, java, isolate, version_name);
+		case PackKind.CurseForge:
+			_emit(on_progress, "按内容识别为 CurseForge 整合包");
+			break;
+		case PackKind.PlainDir:
+			_emit(on_progress, "按内容识别为 .minecraft 目录压缩包");
+			break;
+		}
+		return InstallCfZip(dm, source, instance, on_progress, cancel, force, java, isolate, version_name);
+	}
+
+
 	public static PyDict InstallMrpack(DownloadManager dm, object source, Instance instance, Action<string, long, long> on_progress = null, Func<bool> cancel = null, bool force = false, string java = null, bool isolate = false, object version_name = null)
 	{
 		string text = Py.Str(source);
@@ -769,7 +1004,7 @@ public static class Modpack
 				select new PPath(p).Name).ToList();
 			list.Sort(string.CompareOrdinal);
 			string text2 = string.Join(", ", list.Take(10));
-			throw new ModpackError("整合包缺少 manifest.json，也不是 .minecraft 目录结构。\nzip 顶层内容: " + ((text2.Length > 0) ? text2 : "(空)") + "\n支持三种格式：CurseForge 导出的 zip（内含 manifest.json）、Modrinth 的 .mrpack、直接压缩的 .minecraft 目录（含 mods / versions 等）。");
+			throw new ModpackError("整合包缺少 manifest.json，也不是 .minecraft 目录结构。\nzip 顶层内容: " + ((text2.Length > 0) ? text2 : "(空)") + "\n已自动检查过内层嵌套压缩包，未发现内含的整合包。\n支持四种格式：CurseForge 导出的 zip（内含 manifest.json）、Modrinth 的 .mrpack、PCL 一键安装包（内含 modpack.mrpack / PCL/Setup.ini）、直接压缩的 .minecraft 目录（含 mods / versions 等）。");
 		}
 		string text3 = new PPath(text).RelativeTo(tmpdir).ToString();
 		string text4 = ((text3 != ".") ? ("（位于 " + text3 + " 子目录）") : "");
