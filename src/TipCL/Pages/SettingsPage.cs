@@ -1470,12 +1470,11 @@ public sealed partial class SettingsPage : PageBase
 			PageBase.Toast(I18n.L("已是最新"), string.IsNullOrEmpty(updateInfo.Message) ? I18n.L("当前就是最新版本") : updateInfo.Message, ToastKind.Success);
 			return;
 		}
-		string text = (updateInfo.Version + "\n" + updateInfo.Message + "\n" + updateInfo.Url).Trim();
-		if (await Dlg.Confirm(I18n.L("发现新版本"), text + I18n.L("\n\n现在下载更新包？"), I18n.L("下载更新"), I18n.L("以后再说")))
+		string text = (updateInfo.Version + "\n" + updateInfo.Notes).Trim();
+		if (await Dlg.Confirm(I18n.L("发现新版本"), text + I18n.L("\n\n现在下载更新？"), I18n.L("下载更新"), I18n.L("以后再说")))
 		{
 			await PageBase.Api.StartTaskAsync("start_self_update");
-			PageBase.Toast(I18n.L("正在下载更新"), I18n.L("进度看下载任务，下完关掉启动器运行更新包即可"), ToastKind.Success);
-			PageBase.Win?.Navigate("tasks");
+			PageBase.Toast(I18n.L("正在下载更新"), I18n.L("下载完会提示你重启完成更新"), ToastKind.Success);
 		}
 	}
 
