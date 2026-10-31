@@ -1,6 +1,6 @@
 {
-  "version": "1.0.9",
-  "notes": "修复「恢复默认布局」不起作用",
-  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.0.9/TipCL.exe",
-  "sha256": "5250911938c150c5eb2a7d4870036576ba3890e8d9c82f352179b40f7d4d88fc"
+  "version": "1.0.10",
+  "notes": "设置页移除更新地址与微软 Client ID，统一用内置值",
+  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.0.10/TipCL.exe",
+  "sha256": "615b2165bf1529f6cf538cda63a44aeb8edc896f5e9a05ade605f7edfccad7a8"
 }
