@@ -770,15 +770,9 @@ public static class Utils
 		string path = AbsPath(dir);
 		for (int i = 0; i < 10000; i++)
 		{
-			StringBuilder stringBuilder = new StringBuilder();
-			lock (_tmpRng)
-			{
-				for (int j = 0; j < 8; j++)
-				{
-					stringBuilder.Append("abcdefghijklmnopqrstuvwxyz0123456789_"[_tmpRng.Next("abcdefghijklmnopqrstuvwxyz0123456789_".Length)]);
-				}
-			}
-			string text = Path.Combine(path, prefix + stringBuilder?.ToString() + suffix);
+			// 用 GUID 生成临时名：new Random() 在 .NET Framework 按 TickCount 取种子，
+			// 两个进程同一时刻启动会生成同样的名字，旧写法在另一进程刚好把文件移走时会直接抛「文件已经存在」。
+			string text = Path.Combine(path, prefix + Guid.NewGuid().ToString("N").Substring(0, 12) + suffix);
 			try
 			{
 				using (new FileStream(text, FileMode.CreateNew, FileAccess.Write))
@@ -786,7 +780,7 @@ public static class Utils
 				}
 				return text;
 			}
-			catch (IOException) when (File.Exists(text))
+			catch (IOException) when (i < 9999 && Directory.Exists(path))
 			{
 			}
 		}
