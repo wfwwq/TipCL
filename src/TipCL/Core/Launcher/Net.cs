@@ -62,7 +62,7 @@ public static class Net
 	static Net()
 	{
 		_PROXY_KEYS = new string[8] { "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "SOCKS_PROXY", "http_proxy", "https_proxy", "all_proxy", "socks_proxy" };
-		USER_AGENT = "TipCL/1.0.4 (python; +minecraft launcher)";
+		USER_AGENT = "TipCL/1.0.5 (python; +minecraft launcher)";
 		_gate = new object();
 		try
 		{
