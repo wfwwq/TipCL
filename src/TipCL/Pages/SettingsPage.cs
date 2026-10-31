@@ -660,7 +660,7 @@ public sealed partial class SettingsPage : PageBase
 			PageBase.Run(FirstRunWizard.ShowAsync, I18n.L("向导没能打开"));
 		}, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));
 		SPanel sPanel = Ui.H(10.0, button, button2).Right();
-		base.Content = PageBase.ScrollBody(Ui.Section(I18n.L("设置"), I18n.L("改动在点「保存设置」后一次性写入后端；外观项随点随看")), border, border2, border3, border4, border5, border6, BuildPhoneSyncCard(), border7, border8, sPanel);
+		base.Content = PageBase.ScrollBody(Ui.Section(I18n.L("设置"), I18n.L("改动在点「保存设置」后一次性写入后端；外观项随点随看")), border, border2, border3, border4, border5, border6, BuildPhoneSyncCard(), border7, BuildMemoryCard(), border8, sPanel);
 	}
 
 	private static UIElement SliderRow(Slider s, TextBlock label)
@@ -766,6 +766,79 @@ public sealed partial class SettingsPage : PageBase
 			PageBase.Run(() => RefreshAsync(force: false));
 		};
 		return Ui.Field(I18n.L("识图"), Ui.H(8.0, mode, detect.VCenter(), status.VCenter()), I18n.L("自动检测：先查公开模型能力库，查不到就发张小图实测；也可以手动指定"));
+	}
+
+	/// <summary>设置 → AI 助手 → 记忆：列出 ai_memory.md 的全部条目，可编辑、删除、清空。</summary>
+	private Border BuildMemoryCard()
+	{
+		SPanel list = Ui.V(4.0);
+		TextBlock count = Ui.Muted("");
+		Button clear = null;
+		void Render()
+		{
+			list.Children.Clear();
+			List<string> entries = TipCL.Core.Launcher.Ai.FileMemory.Entries();
+			count.Text = (entries.Count == 0) ? I18n.L("还没有记忆。对话里说出偏好或修好问题后，助手会自己记下") : I18n.L("共 {0} 条，新对话开始时会带给助手", entries.Count);
+			clear.IsEnabled = entries.Count > 0;
+			for (int i = 0; i < entries.Count; i++)
+			{
+				int index = i;
+				string entry = entries[i];
+				string body = TipCL.Core.Launcher.Ai.FileMemory.TextOf(entry);
+				string date = (entry.Length > body.Length) ? entry.Substring(0, entry.Length - body.Length).Trim() : "";
+				TextBlock text = Ui.Txt(body, 12.5, bold: false, "B.Ink").Wrap();
+				Grid row = Ui.G(null, "Auto,*,Auto,Auto");
+				row.Add(Ui.Txt(date, 11.5, bold: false, "B.InkFaint").M(0.0, 0.0, 10.0, 0.0).VCenter(), 0);
+				row.Add(text.VCenter(), 0, 1);
+				row.Add(Ui.Btn(I18n.L("编辑"), BtnKind.Chip, async delegate
+				{
+					string edited = await Dlg.Prompt(I18n.L("编辑记忆"), I18n.L("内容"), body);
+					if (edited != null && Same(index, entry))
+					{
+						TipCL.Core.Launcher.Ai.FileMemory.Update(index, edited);
+					}
+					Render();
+				}).M(8.0, 0.0, 0.0, 0.0).VCenter(), 0, 2);
+				row.Add(Ui.Btn(I18n.L("删除"), BtnKind.Ghost, delegate
+				{
+					if (Same(index, entry))
+					{
+						TipCL.Core.Launcher.Ai.FileMemory.RemoveAt(index);
+					}
+					Render();
+				}).M(4.0, 0.0, 0.0, 0.0).VCenter(), 0, 3);
+				list.Children.Add(Ui.Pane(row, "B.Paper2", 8.0, 8.0));
+			}
+		}
+		static bool Same(int index, string entry)
+		{
+			List<string> now = TipCL.Core.Launcher.Ai.FileMemory.Entries();
+			if (index < now.Count && now[index] == entry)
+			{
+				return true;
+			}
+			AppServices.Toast(I18n.L("记忆已变化"), I18n.L("文件刚被改过，已刷新列表"), ToastKind.Warning);
+			return false;
+		}
+		clear = Ui.Btn(I18n.L("清空全部"), BtnKind.Danger, async delegate
+		{
+			if (await Dlg.Confirm(I18n.L("清空全部记忆？"), I18n.L("助手记下的偏好、配置和修好过的问题都会删除，无法恢复。"), I18n.L("清空"), null, danger: true))
+			{
+				int n = TipCL.Core.Launcher.Ai.FileMemory.Clear();
+				AppServices.Toast(I18n.L("已清空记忆"), I18n.L("删除了 {0} 条", n), ToastKind.Success);
+			}
+			Render();
+		});
+		Button refresh = Ui.Btn(I18n.L("刷新"), BtnKind.Chip, delegate
+		{
+			Render();
+		}, "\ue72c");
+		Render();
+		base.Loaded += delegate
+		{
+			Render();
+		};
+		return Ui.Card(Ui.V(6.0, Ui.Section(I18n.L("记忆"), I18n.L("AI 助手跨对话记住的偏好和配置（数据目录 ai_memory.md，一行一条）"), Ui.H(8.0, refresh, clear)), count, list));
 	}
 
 	private Grid BuildMcpField()
