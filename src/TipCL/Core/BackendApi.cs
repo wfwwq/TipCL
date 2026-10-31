@@ -2649,7 +2649,7 @@ public class BackendApi
 		{
 			VersionSettings.Save(instance2, text, PyDict.Of("isolation", obj));
 		}
-		return null;
+		return "版本安装完成: " + text;
 	}
 
 	public object repair_version(object instance, object version)
