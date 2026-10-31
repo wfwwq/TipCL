@@ -9,6 +9,8 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using FileMemory = TipCL.Core.Launcher.Ai.FileMemory;
+using McpServer = TipCL.Core.Launcher.Ai.McpServer;
 using TipCL.Models;
 using TipCL.Pages.Ai;
 using TipCL.Services;
@@ -70,7 +72,25 @@ public sealed class AiPage : PageBase
 
 	private readonly Dictionary<string, ToolLine> _toolLines = new Dictionary<string, ToolLine>();
 
-	private readonly Dictionary<string, ToolLine> _taskLines = new Dictionary<string, ToolLine>();
+	private readonly Dictionary<string, TaskCard> _taskCards = new Dictionary<string, TaskCard>();
+
+	private readonly Popup _slashPop = new Popup
+	{
+		Placement = PlacementMode.Top,
+		StaysOpen = true,
+		AllowsTransparency = true,
+		Focusable = false
+	};
+
+	private readonly SPanel _slashRows = Ui.V(2.0);
+
+	private List<SlashCommand> _slashItems = new List<SlashCommand>();
+
+	private int _slashSel = -1;
+
+	private readonly Border _mcpBadge;
+
+	private readonly TextBlock _mcpText = Ui.Txt("", 11.5, bold: false, "B.InkMuted");
 
 	private Bubble? _roundBubble;
 
@@ -265,8 +285,18 @@ public sealed class AiPage : PageBase
 		});
 		_input.Submitted += delegate(string text)
 		{
-			PageBase.Run(() => SendTextAsync(text));
+			SlashCommand cmd = AiChatOps.ExactSlash(text);
+			if (cmd != null)
+			{
+				_input.Clear();
+				RunSlash(cmd);
+			}
+			else
+			{
+				PageBase.Run(() => SendTextAsync(text));
+			}
 		};
+		_input.KeyIntercept = SlashKey;
 		Button button = Ui.Btn(I18n.L("新对话"), BtnKind.Primary, delegate
 		{
 			PageBase.Run(NewChatAsync);
@@ -302,12 +332,39 @@ public sealed class AiPage : PageBase
 		{
 			CornerRadius = new CornerRadius(999.0),
 			Padding = new Thickness(8.0, 2.0, 9.0, 2.0),
-			Margin = new Thickness(10.0, 0.0, 0.0, 0.0),
-			Child = Ui.H(5.0, AiIcons.Icon("M21 8l-9-5-9 5v8l9 5 9-5z M3 8l9 5 9-5 M12 13v8", 12.0, "B.AccentText").VCenter(), _instText.VCenter()),
-			ToolTip = I18n.L("助手默认操作的实例"),
-			Visibility = Visibility.Collapsed
+			Child = Ui.H(5.0, AiIcons.Icon("M21 8l-9-5-9 5v8l9 5 9-5z M3 8l9 5 9-5 M12 13v8", 12.0, "B.AccentText").VCenter(), _instText.VCenter(), Ui.Txt("▾", 10.0, bold: false, "B.AccentText").VCenter()),
+			ToolTip = I18n.L("助手默认操作的实例，点击切换"),
+			Cursor = Cursors.Hand,
+			HorizontalAlignment = HorizontalAlignment.Left
 		};
 		_instPill.SetResourceReference(Border.BackgroundProperty, "B.AccentSoft");
+		_instPill.MouseLeftButtonUp += delegate
+		{
+			PageBase.Run(OpenInstanceMenuAsync, I18n.L("读取实例失败"));
+		};
+		Border mcpDot = new Border
+		{
+			Width = 7.0,
+			Height = 7.0,
+			CornerRadius = new CornerRadius(3.5)
+		};
+		mcpDot.SetResourceReference(Border.BackgroundProperty, "B.Ok");
+		_mcpText.TextTrimming = TextTrimming.CharacterEllipsis;
+		_mcpBadge = new Border
+		{
+			Margin = new Thickness(10.0, 0.0, 0.0, 0.0),
+			Child = Ui.H(5.0, mcpDot.VCenter(), _mcpText.VCenter()),
+			Visibility = Visibility.Collapsed,
+			Background = Brushes.Transparent
+		};
+		McpServer.StateChanged += delegate
+		{
+			base.Dispatcher.BeginInvoke((Action)SyncMcp);
+		};
+		McpServer.ToolCalled += delegate
+		{
+			base.Dispatcher.BeginInvoke((Action)SyncMcp);
+		};
 		_usageLabel.VerticalAlignment = VerticalAlignment.Center;
 		_usageLabel.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
 		Button more = AiIcons.Flat("M12 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2z M19 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2z M5 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2z", null, I18n.L("更多"), delegate
@@ -322,7 +379,7 @@ public sealed class AiPage : PageBase
 		Grid grid2 = Ui.G(null, "Auto,Auto,Auto,*,Auto,Auto,Auto");
 		grid2.Add(el.VCenter(), 0);
 		grid2.Add(_titleText.M(8.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
-		grid2.Add(_instPill.VCenter(), 0, 2);
+		grid2.Add(_mcpBadge.VCenter(), 0, 2);
 		grid2.Add(_ringHost.VCenter(), 0, 4);
 		grid2.Add(_usageLabel.M(6.0, 0.0, 6.0), 0, 5);
 		grid2.Add(more.VCenter(), 0, 6);
@@ -344,6 +401,7 @@ public sealed class AiPage : PageBase
 		_input.TextChanged += delegate
 		{
 			SyncPlaceholder();
+			SyncSlash();
 		};
 		_placeholder.IsHitTestVisible = false;
 		_placeholder.Margin = new Thickness(4.0, 5.0, 0.0, 0.0);
@@ -399,7 +457,19 @@ public sealed class AiPage : PageBase
 		grid5.Add(AiIcons.Icon("M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z", 12.0, "B.InkFaint").VCenter(), 0);
 		grid5.Add(_permTip.M(6.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
 		grid5.Add(_status.VCenter(), 0, 2);
-		SPanel sPanel = Ui.V(8.0, _dock, _composer, grid5.M(4.0, 0.0, 4.0));
+		Border slashCard = new Border
+		{
+			CornerRadius = new CornerRadius(10.0),
+			BorderThickness = new Thickness(1.0),
+			Padding = new Thickness(4.0),
+			Margin = new Thickness(0.0, 0.0, 0.0, 6.0),
+			Child = _slashRows
+		};
+		slashCard.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+		slashCard.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		_slashPop.Child = slashCard;
+		_slashPop.PlacementTarget = _composer;
+		SPanel sPanel = Ui.V(8.0, _dock, _instPill, _composer, grid5.M(4.0, 0.0, 4.0));
 		sPanel.MaxWidth = 760.0;
 		sPanel.Margin = new Thickness(28.0, 4.0, 28.0, 14.0);
 		Grid grid6 = Ui.G("Auto,*,Auto");
@@ -422,6 +492,229 @@ public sealed class AiPage : PageBase
 		base.Content = border2;
 		SyncPlaceholder();
 		SyncPermTip();
+		SyncInstChip();
+		SyncMcp();
+	}
+
+	private void SyncInstChip()
+	{
+		string text = PageBase.Win?.Prefs.CatalogInstance ?? "";
+		_instText.Text = I18n.L("实例：{0}", (text.Length > 0) ? text : I18n.L("默认"));
+	}
+
+	private async Task OpenInstanceMenuAsync()
+	{
+		List<InstanceInfo> list = (await PageBase.Api.TryCallAsync("get_instances", null, new List<InstanceInfo>())) ?? new List<InstanceInfo>();
+		string current = PageBase.Win?.Prefs.CatalogInstance ?? "";
+		ContextMenu menu = new ContextMenu
+		{
+			PlacementTarget = _instPill,
+			Placement = PlacementMode.Top
+		};
+		if (list.Count == 0)
+		{
+			menu.Items.Add(new MenuItem
+			{
+				Header = I18n.L("还没有实例"),
+				IsEnabled = false
+			});
+		}
+		foreach (InstanceInfo item in list)
+		{
+			string name = item.Name;
+			MenuItem mi = new MenuItem
+			{
+				Header = (string.IsNullOrEmpty(item.Mc) ? name : (name + "  ·  " + item.Mc)),
+				IsCheckable = true,
+				IsChecked = (name == current)
+			};
+			mi.Click += delegate
+			{
+				SetAssistantInstance(name);
+			};
+			menu.Items.Add(mi);
+		}
+		menu.IsOpen = true;
+	}
+
+	private void SetAssistantInstance(string name)
+	{
+		MainWindow win = PageBase.Win;
+		if (win == null)
+		{
+			return;
+		}
+		win.Prefs.CatalogInstance = name ?? "";
+		win.SaveUiPrefs();
+		SyncInstChip();
+		PageBase.Toast(I18n.L("已切换实例"), I18n.L("助手接下来默认操作「{0}」", name));
+	}
+
+	private void SyncMcp()
+	{
+		bool running = McpServer.Running;
+		_mcpBadge.Visibility = ((!running) ? Visibility.Collapsed : Visibility.Visible);
+		if (!running)
+		{
+			return;
+		}
+		string last = McpServer.LastTool;
+		_mcpText.Text = (last.Length > 0) ? I18n.L("MCP 已开启 · {0} {1}", last, McpServer.LastToolAt.ToString("HH:mm")) : I18n.L("MCP 已开启");
+		string tip = I18n.L("MCP Server 地址：{0}", McpServer.Url);
+		if (last.Length > 0)
+		{
+			tip = tip + "\n" + I18n.L("最近一次外部调用：{0}（{1}）", last, McpServer.LastToolAt.ToString("yyyy-MM-dd HH:mm:ss"));
+		}
+		_mcpBadge.ToolTip = tip;
+	}
+
+	private void SyncSlash()
+	{
+		List<SlashCommand> items = AiChatOps.MatchSlash(_input.Text);
+		if (items.Count == 0 || !_input.IsKeyboardFocusWithin)
+		{
+			CloseSlash();
+			return;
+		}
+		_slashItems = items;
+		_slashSel = 0;
+		RenderSlash();
+		_slashPop.Width = Math.Max(260.0, _composer.ActualWidth);
+		_slashPop.HorizontalOffset = 0.0;
+		_slashPop.IsOpen = true;
+	}
+
+	private void RenderSlash()
+	{
+		_slashRows.Children.Clear();
+		for (int i = 0; i < _slashItems.Count; i++)
+		{
+			SlashCommand cmd = _slashItems[i];
+			Grid grid = Ui.G(null, "Auto,*");
+			grid.Add(Ui.Txt("/" + I18n.L(cmd.Name), 13.0, bold: true, "B.Ink").VCenter(), 0);
+			grid.Add(Ui.Txt(I18n.L(cmd.Desc), 12.0, bold: false, "B.InkMuted").M(10.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
+			Button row = new Button
+			{
+				Template = AiIcons.FlatButtonTemplate(),
+				Content = grid,
+				Padding = new Thickness(10.0, 6.0, 10.0, 6.0),
+				HorizontalContentAlignment = HorizontalAlignment.Stretch,
+				Cursor = Cursors.Hand,
+				Focusable = false
+			};
+			if (i == _slashSel)
+			{
+				row.SetResourceReference(Control.BackgroundProperty, "B.AccentSoft");
+			}
+			else
+			{
+				row.Background = Brushes.Transparent;
+			}
+			row.Click += delegate
+			{
+				PickSlash(cmd);
+			};
+			_slashRows.Children.Add(row);
+		}
+	}
+
+	private void CloseSlash()
+	{
+		_slashPop.IsOpen = false;
+		_slashItems = new List<SlashCommand>();
+		_slashSel = -1;
+	}
+
+	private bool SlashKey(Key key)
+	{
+		if (!_slashPop.IsOpen || _slashItems.Count == 0)
+		{
+			return false;
+		}
+		switch (key)
+		{
+		case Key.Up:
+		case Key.Down:
+			_slashSel = AiChatOps.MoveSelection(_slashSel, (key == Key.Down) ? 1 : (-1), _slashItems.Count);
+			RenderSlash();
+			return true;
+		case Key.Return:
+		case Key.Tab:
+			if (_slashSel >= 0 && _slashSel < _slashItems.Count)
+			{
+				PickSlash(_slashItems[_slashSel]);
+				return true;
+			}
+			return false;
+		case Key.Escape:
+			CloseSlash();
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	private void PickSlash(SlashCommand cmd)
+	{
+		CloseSlash();
+		_input.Clear();
+		RunSlash(cmd);
+		_input.Focus();
+	}
+
+	private void RunSlash(SlashCommand cmd)
+	{
+		switch (cmd.Local)
+		{
+		case "new_chat":
+			PageBase.Run(NewChatAsync);
+			return;
+		case "clear":
+			PageBase.Run(ClearChatAsync);
+			return;
+		case "rewind":
+			if (_busy)
+			{
+				PageBase.Toast(I18n.L("回合还在跑"), I18n.L("先停止再撤回"), ToastKind.Warning);
+			}
+			else
+			{
+				PageBase.Run(RewindAsync);
+			}
+			return;
+		}
+		if (cmd.Prompt.Length > 0)
+		{
+			PageBase.Run(() => SendTextAsync(I18n.L(cmd.Prompt)));
+		}
+	}
+
+	private async Task ClearChatAsync()
+	{
+		AiChatDto chat = ActiveChat;
+		if (chat == null || chat.Messages.Count == 0)
+		{
+			PageBase.Toast(I18n.L("当前对话是空的"), "");
+			return;
+		}
+		if (await Dlg.Confirm(I18n.L("清空当前对话？"), I18n.L("这个对话的全部消息会被删除，无法恢复（不会还原磁盘改动）。"), I18n.L("清空"), null, danger: true))
+		{
+			string id = chat.Id;
+			await SwitchChatAsync(async delegate
+			{
+				await PageBase.Api.TryCallAsync("ai_delete_chat", new
+				{
+					chat_id = id
+				}, _store);
+				return await PageBase.Api.TryCallAsync("ai_new_chat", null, _store);
+			});
+		}
+	}
+
+	public override void OnHidden()
+	{
+		CloseSlash();
+		base.OnHidden();
 	}
 
 	private void SyncPlaceholder()
@@ -865,9 +1158,7 @@ public sealed class AiPage : PageBase
 		}
 		AiChatDto activeChat = ActiveChat;
 		_titleText.Text = ((activeChat == null || string.IsNullOrWhiteSpace(activeChat.Title)) ? I18n.L("新对话") : activeChat.Title);
-		string text3 = PageBase.Win?.Prefs.CatalogInstance ?? "";
-		_instText.Text = text3;
-		_instPill.Visibility = ((text3.Length <= 0) ? Visibility.Collapsed : Visibility.Visible);
+		SyncInstChip();
 	}
 
 	private ContextMenu DelMenu(string id)
@@ -1014,7 +1305,7 @@ public sealed class AiPage : PageBase
 	{
 		_messages.Children.Clear();
 		_toolLines.Clear();
-		_taskLines.Clear();
+		_taskCards.Clear();
 		_roundBubble = null;
 		_round.Clear();
 		_stream.Clear();
@@ -1061,6 +1352,8 @@ public sealed class AiPage : PageBase
 					text = (text + "\n\n" + message.Note).Trim();
 				}
 				Bubble bubble = new Bubble(message.Role, text, RetryFrom);
+				bubble.OrigText = message.Content;
+				bubble.IsSteer = message.Id.StartsWith("steer_", StringComparison.Ordinal);
 				if (message.Role == "user")
 				{
 					_needWho = true;
@@ -1101,6 +1394,7 @@ public sealed class AiPage : PageBase
 			if (item.IsMine)
 			{
 				item.Rewind = null;
+				item.Edit = null;
 			}
 			else
 			{
@@ -1117,6 +1411,13 @@ public sealed class AiPage : PageBase
 			{
 				PageBase.Run(RewindAsync);
 			};
+		}
+		foreach (Bubble item2 in _messages.Children.OfType<Bubble>())
+		{
+			if (item2.IsMine && !item2.IsSteer)
+			{
+				item2.Edit = EditFrom;
+			}
 		}
 		Bubble bubble = lastAssistant ?? _messages.Children.OfType<Bubble>().LastOrDefault((Bubble b) => !b.IsMine);
 		int num = ((bubble == null) ? (-1) : _messages.Children.IndexOf(bubble));
@@ -1453,6 +1754,62 @@ public sealed class AiPage : PageBase
 		return Task.CompletedTask;
 	}
 
+	private void EditFrom(Bubble bubble, string newText)
+	{
+		PageBase.Run(() => EditResendAsync(bubble, newText), I18n.L("编辑重发失败"));
+	}
+
+	/// <summary>编辑后重发：用撤回检查点逻辑一轮轮回退到这句话之前，再用新内容重跑。</summary>
+	private async Task EditResendAsync(Bubble bubble, string newText)
+	{
+		if (_busy)
+		{
+			PageBase.Toast(I18n.L("回合还在跑"), I18n.L("先停止再编辑"), ToastKind.Warning);
+			return;
+		}
+		string target = (bubble.OrigText ?? "").Trim();
+		List<Bubble> mine = _messages.Children.OfType<Bubble>().Where((Bubble b) => b.IsMine).ToList();
+		int at = mine.IndexOf(bubble);
+		int occurrence = (at < 0) ? 0 : mine.Skip(at + 1).Count((Bubble b) => (b.OrigText ?? "").Trim() == target);
+		_store = (await PageBase.Api.TryCallAsync("ai_list_chats", null, _store)) ?? _store;
+		List<(string, string, string)> msgs = (ActiveChat?.Messages ?? new List<AiMsgDto>()).Select((AiMsgDto m) => (m.Role, m.Id, m.Content)).ToList();
+		int rounds = AiChatOps.RoundsToRewind(msgs, target, occurrence);
+		if (rounds <= 0)
+		{
+			RenderMessages();
+			PageBase.Toast(I18n.L("没法从这句重发"), I18n.L("这句话可能已被压缩进摘要，或是插队消息"), ToastKind.Warning);
+			return;
+		}
+		int restored = 0;
+		for (int i = 0; i < rounds; i++)
+		{
+			JsonElement r = await PageBase.Api.TryCallAsync<JsonElement>("ai_rewind", new
+			{
+				chat_id = (_store.ActiveId ?? "")
+			});
+			bool ok = r.ValueKind == JsonValueKind.Object && r.TryGetProperty("ok", out var okEl) && okEl.ValueKind == JsonValueKind.True;
+			if (r.ValueKind == JsonValueKind.Object && r.TryGetProperty("restored_files", out var rf) && rf.TryGetInt32(out var n))
+			{
+				restored += n;
+			}
+			if (!ok)
+			{
+				_store = (await PageBase.Api.TryCallAsync("ai_list_chats", null, _store)) ?? _store;
+				RenderMessages();
+				string msg = (r.ValueKind == JsonValueKind.Object && r.TryGetProperty("message", out var me) && me.ValueKind == JsonValueKind.String) ? (me.GetString() ?? "") : "";
+				_status.Text = (msg.Length > 0) ? msg : I18n.L("回退没有全部成功，已停下，请检查后再发");
+				return;
+			}
+		}
+		_store = (await PageBase.Api.TryCallAsync("ai_list_chats", null, _store)) ?? _store;
+		RenderMessages();
+		await SendTextAsync(newText);
+		if (restored > 0)
+		{
+			PageBase.Toast(I18n.L("已回退并重发"), I18n.L("{0} 个文件的改动已还原", restored), ToastKind.Success);
+		}
+	}
+
 	private async Task SendTextAsync(string raw, bool echo = true)
 	{
 		string text = (raw ?? "").Trim();
@@ -1476,7 +1833,10 @@ public sealed class AiPage : PageBase
 				if (echo)
 				{
 					_input.Clear();
-					Add(new Bubble("user", text, RetryFrom));
+					Add(new Bubble("user", text, RetryFrom)
+					{
+						IsSteer = true
+					});
 					PageBase.Toast(I18n.L("已插队"), I18n.L("这句话会立刻交给正在运行的助手"));
 				}
 				return;
@@ -1498,7 +1858,10 @@ public sealed class AiPage : PageBase
 		_status.Text = I18n.L("思考中…");
 		if (echo)
 		{
-			Add(new Bubble("user", (_pendingImages.Count > 0) ? (text + "\n" + I18n.L("［附图 {0} 张］", _pendingImages.Count)) : text, RetryFrom));
+			Add(new Bubble("user", (_pendingImages.Count > 0) ? (text + "\n" + I18n.L("［附图 {0} 张］", _pendingImages.Count)) : text, RetryFrom)
+			{
+				OrigText = text
+			});
 		}
 		_stream.Clear();
 		_roundBubble = OpenRound();
@@ -1680,7 +2043,7 @@ public sealed class AiPage : PageBase
 				break;
 			case 'p':
 			{
-				if (text == "progress" && _taskLines.TryGetValue(ev.TaskId, out ToolLine value2))
+				if (text == "progress" && _taskCards.TryGetValue(ev.TaskId, out TaskCard value2))
 				{
 					value2.SetProgress(ev.Current, ev.Total, ev.Message);
 				}
@@ -1689,7 +2052,7 @@ public sealed class AiPage : PageBase
 			case 'f':
 				if (text == "finished")
 				{
-					if (_taskLines.TryGetValue(ev.TaskId, out ToolLine value))
+					if (_taskCards.TryGetValue(ev.TaskId, out TaskCard value))
 					{
 						value.Finish(ev.Success, ev.Message);
 					}
@@ -1997,7 +2360,11 @@ public sealed class AiPage : PageBase
 			break;
 		}
 		case "tool":
-			if (ev.Name == "ask_user")
+			if (IsMemoryTool(ev.Name))
+			{
+				CloseRound();
+			}
+			else if (ev.Name == "ask_user")
 			{
 				if (_roundBubble == null)
 				{
@@ -2014,18 +2381,25 @@ public sealed class AiPage : PageBase
 		case "tool_run":
 		case "tool_start":
 			CloseRound();
+			if (IsMemoryTool(ev.Name))
+			{
+				break;
+			}
 			Line(name, I18n.L("执行中：") + text, ToolState.Running);
 			_status.Text = I18n.L("正在执行操作…");
 			break;
 		case "tool_done":
 		{
 			CloseRound();
-			ToolLine toolLine = Line(name, I18n.L("完成：") + text, ToolState.Done);
-			string text2 = TaskIdOf(ev);
-			if (text2.Length > 0)
+			if (IsMemoryTool(ev.Name) && AddMemoryTag(ev))
 			{
-				toolLine.BindTask();
-				_taskLines[text2] = toolLine;
+				break;
+			}
+			Line(name, I18n.L("完成：") + text, ToolState.Done);
+			string text2 = TaskIdOf(ev);
+			if (text2.Length > 0 && !_taskCards.ContainsKey(text2))
+			{
+				AddTaskCard(text2, ev, text);
 			}
 			_status.Text = I18n.L("操作完成");
 			break;
@@ -2041,6 +2415,145 @@ public sealed class AiPage : PageBase
 			}
 			break;
 		}
+	}
+
+	private static bool IsMemoryTool(string? name)
+	{
+		return name == "remember" || name == "forget";
+	}
+
+	private static string PayloadStr(BridgeEvent ev, string prop)
+	{
+		if (ev.Payload.ValueKind != JsonValueKind.Object || !ev.Payload.TryGetProperty(prop, out var value) || value.ValueKind != JsonValueKind.String)
+		{
+			return "";
+		}
+		return value.GetString() ?? "";
+	}
+
+	/// <summary>remember / forget 的结果显示成小标签；「已记住」带「撤销」。认不出结果时返回 false，按普通步骤显示。</summary>
+	private bool AddMemoryTag(BridgeEvent ev)
+	{
+		string result = PayloadStr(ev, "result");
+		string text;
+		bool undoable = false;
+		string remembered = null;
+		if (ev.Name == "remember")
+		{
+			remembered = FileMemory.RememberedOf(result);
+			if (remembered != null)
+			{
+				text = I18n.L("已记住：") + remembered;
+				undoable = true;
+			}
+			else if (result.StartsWith("已经记过了", StringComparison.Ordinal))
+			{
+				int i = result.IndexOfAny(new char[2] { ':', '：' });
+				text = I18n.L("已记住：") + ((i >= 0) ? result.Substring(i + 1).Trim() : result) + I18n.L("（之前就记过）");
+			}
+			else
+			{
+				return false;
+			}
+		}
+		else
+		{
+			string forgotten = AiChatOps.ForgottenOf(result);
+			if (forgotten == null)
+			{
+				return false;
+			}
+			text = I18n.L("已忘记：") + forgotten;
+		}
+		TextBlock label = Ui.Txt(text, 12.0, bold: false, "B.AccentText");
+		label.TextTrimming = TextTrimming.CharacterEllipsis;
+		label.MaxWidth = 560.0;
+		label.ToolTip = text;
+		SPanel row = Ui.H(6.0, AiIcons.Icon(ev.Name == "remember" ? "M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" : "M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6", 12.0, "B.AccentText").VCenter(), label.VCenter());
+		Border tag = new Border
+		{
+			CornerRadius = new CornerRadius(999.0),
+			Padding = new Thickness(10.0, 3.0, 6.0, 3.0),
+			HorizontalAlignment = HorizontalAlignment.Left,
+			Child = row
+		};
+		tag.SetResourceReference(Border.BackgroundProperty, "B.AccentSoft");
+		if (undoable)
+		{
+			Button undo = null;
+			undo = AiIcons.Flat("M3 7v6h6 M21 17a9 9 0 0 0-15-6.7L3 13", I18n.L("撤销"), I18n.L("删掉刚记下的这条记忆"), delegate
+			{
+				bool ok = FileMemory.Undo(remembered);
+				row.Children.Remove(undo);
+				label.Text = (ok ? I18n.L("已撤销：") : I18n.L("没找到这条记忆：")) + remembered;
+				label.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
+			}, "B.InkMuted", 11.0, pill: true);
+			row.Children.Add(undo.VCenter());
+		}
+		Add(tag);
+		_group = null;
+		_status.Text = I18n.L("操作完成");
+		return true;
+	}
+
+	private void AddTaskCard(string taskId, BridgeEvent ev, string label)
+	{
+		string tool = ev.Name ?? "";
+		string instance = PayloadStr(ev, "instance");
+		TaskCard card = new TaskCard(taskId, label, tool, instance);
+		if (instance.Length > 0 && tool.StartsWith("install_", StringComparison.Ordinal))
+		{
+			if (tool == "install_game")
+			{
+				card.Launch = delegate
+				{
+					string version = AiChatOps.InstalledVersionOf(card.FinishMessage);
+					PageBase.Run(async delegate
+					{
+						PageBase.Win?.Navigate("launch");
+						if (PageBase.Win?.GetPage("launch") is LaunchPage launchPage)
+						{
+							await launchPage.LaunchNowAsync(instance, (version.Length > 0) ? version : null);
+						}
+					}, I18n.L("启动失败"));
+				};
+			}
+			card.OpenFolder = delegate
+			{
+				PageBase.Run(async delegate
+				{
+					if (tool == "install_mod")
+					{
+						await PageBase.Api.CallAsync("open_mods_folder", new { instance });
+					}
+					else
+					{
+						await PageBase.Api.CallAsync("open_instance_folder", new
+						{
+							name = instance
+						});
+					}
+				}, I18n.L("打开文件夹失败"));
+			};
+		}
+		card.Retry = delegate(string reason)
+		{
+			PageBase.Run(() => SendTextAsync(I18n.L("刚才的后台任务「{0}」失败了（{1}），请重试", card.TitleText, reason)));
+		};
+		_taskCards[taskId] = card;
+		Add(card);
+		_group = null;
+		PageBase.Run(async delegate
+		{
+			string title = await PageBase.Api.TryCallAsync("task_title", new
+			{
+				task_id = taskId
+			}, "");
+			if (!string.IsNullOrWhiteSpace(title) && title != taskId)
+			{
+				card.SetTitle(title);
+			}
+		});
 	}
 
 	private static string TaskIdOf(BridgeEvent ev)
