@@ -379,15 +379,9 @@ public static class Saves
 
 	private static string MkDTemp(string prefix, string dir)
 	{
-		Random random = new Random();
 		for (int i = 0; i < 100; i++)
 		{
-			StringBuilder stringBuilder = new StringBuilder(prefix);
-			for (int j = 0; j < 8; j++)
-			{
-				stringBuilder.Append("abcdefghijklmnopqrstuvwxyz0123456789_"[random.Next("abcdefghijklmnopqrstuvwxyz0123456789_".Length)]);
-			}
-			string text = PPath.Join(dir, stringBuilder.ToString());
+			string text = PPath.Join(dir, prefix + Guid.NewGuid().ToString("N").Substring(0, 12));
 			if (!LocalFs.Exists(text))
 			{
 				Directory.CreateDirectory(PPath.Abs(text));
