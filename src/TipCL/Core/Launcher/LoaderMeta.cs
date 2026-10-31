@@ -178,6 +178,11 @@ public static class LoaderMeta
 		{
 			return Py.Str(o);
 		}
+		string calver = Installer.NeoforgeCalverPrefix(text);
+		if (calver != null)
+		{
+			return calver;
+		}
 		long[] array = Installer._mc_tuple(text);
 		if ((array[0] != 1) ? (array[0] > 1) : ((array[1] != 20) ? (array[1] > 20) : (array[2] >= 2)))
 		{
