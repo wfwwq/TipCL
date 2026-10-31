@@ -660,7 +660,7 @@ public sealed partial class SettingsPage : PageBase
 			PageBase.Run(FirstRunWizard.ShowAsync, I18n.L("向导没能打开"));
 		}, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));
 		SPanel sPanel = Ui.H(10.0, button, button2).Right();
-		base.Content = PageBase.ScrollBody(Ui.Section(I18n.L("设置"), I18n.L("改动在点「保存设置」后一次性写入后端；外观项随点随看")), border, border2, border3, border4, border5, border6, BuildPhoneSyncCard(), border7, BuildMemoryCard(), border8, sPanel);
+		base.Content = PageBase.ScrollBody(Ui.Section(I18n.L("设置"), I18n.L("改动在点「保存设置」后一次性写入后端；外观项随点随看")), border, border2, border3, border4, border5, border6, BuildPhoneSyncCard(), border7, BuildMemoryCard(), border8, BuildAboutCard(), sPanel);
 	}
 
 	private static UIElement SliderRow(Slider s, TextBlock label)
@@ -2019,5 +2019,12 @@ public sealed partial class SettingsPage : PageBase
 			return fallback;
 		}
 		return result;
+	}
+
+	private static Border BuildAboutCard()
+	{
+		TextBlock thanks = Ui.Muted("@368****168 \u2014 " + I18n.L("帮忙测试了正版（微软）验证"));
+		thanks.TextWrapping = TextWrapping.Wrap;
+		return Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("关于"), I18n.L("TipCL 启动器")), Ui.Field(I18n.L("版本"), Ui.Muted(TipCL.Core.Launcher.AppInfo.APP_VERSION)), Ui.Field(I18n.L("致谢"), thanks, I18n.L("感谢每一位帮忙测试的朋友"))));
 	}
 }
