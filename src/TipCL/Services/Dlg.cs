@@ -339,7 +339,7 @@ public static class Dlg
 		return result;
 	}
 
-	public static Layer Panel(string title, UIElement body, double width = 720.0, Action? onClose = null)
+	public static Layer Panel(string title, UIElement body, double width = 720.0, Action? onClose = null, bool dismissable = true)
 	{
 		System.Windows.Controls.Button button = Ui.IconBtn("\ue711", I18n.L("关闭"));
 		Grid grid = Ui.G(null, "*,Auto");
@@ -356,7 +356,7 @@ public static class Dlg
 		border2.SetResourceReference(Border.BackgroundProperty, "B.GlassStrong");
 		border2.SetResourceReference(Border.BorderBrushProperty, "B.GlassBorder");
 		Motion.Shadow(border2, 40.0, 0.28, 10.0);
-		Layer layer = Push(border2, onClose);
+		Layer layer = Push(border2, onClose, dismissable);
 		button.Click += delegate
 		{
 			onClose?.Invoke();
