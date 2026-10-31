@@ -33,7 +33,7 @@ public static class Defaults
 
 	public const string DEFAULT_MODEL = "deepseek-v4-flash";
 
-	public const string CLIENT_HEADER = "TipCL/1.0.6";
+	public const string CLIENT_HEADER = "TipCL/1.0.7";
 
 	public const int MAX_TOOL_ROUNDS_MAIN = 20;
 
