@@ -300,6 +300,17 @@ public partial class MainWindow : Window
 		base.Closing += OnClosing;
 		base.Closed += delegate
 		{
+			if (_stagedUpdate != null)
+			{
+				try
+				{
+					TipCL.Core.Launcher.Updater.ApplyStaged(_stagedUpdate, restart: false);
+				}
+				catch (Exception)
+				{
+				}
+				_stagedUpdate = null;
+			}
 			Wallpaper.Shutdown();
 			AppServices.Host?.Dispose();
 		};
@@ -400,6 +411,10 @@ public partial class MainWindow : Window
 				await FeedbackConsent.MaybeAskAsync();
 			}
 			WarmUpAsync();
+			if (!Smoke.Active)
+			{
+				Run(AutoCheckUpdateAsync);
+			}
 		}
 		catch (Exception ex)
 		{
@@ -600,6 +615,86 @@ public partial class MainWindow : Window
 		BridgeDot.SetResourceReference(Shape.FillProperty, brushKey);
 	}
 
+	private static string? _stagedUpdate;
+
+	private static bool _autoUpdateChecked;
+
+	/// <summary>启动后按「自动检查更新」设置静默检查一次，有新版就问一句。</summary>
+	private async Task AutoCheckUpdateAsync()
+	{
+		if (_autoUpdateChecked)
+		{
+			return;
+		}
+		_autoUpdateChecked = true;
+		try
+		{
+			if (!TipCL.Core.Py.Truthy(TipCL.Core.Launcher.Config.CONFIG.Get("auto_check_update", true)))
+			{
+				return;
+			}
+			await Task.Delay(3000);
+			UpdateInfo info = await AppServices.Client.TryCallAsync<UpdateInfo>("check_update");
+			if (info == null || !info.HasUpdate)
+			{
+				return;
+			}
+			string body = (I18n.L("TipCL {0} 已发布。", info.Version) + "\n" + info.Notes).Trim();
+			if (await Dlg.Confirm(I18n.L("发现新版本"), body + I18n.L("\n\n现在下载更新？下载完会提示你重启。"), I18n.L("下载更新"), I18n.L("以后再说")))
+			{
+				await AppServices.Client.StartTaskAsync("start_self_update");
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private async Task OfferRestartForUpdateAsync(BridgeEvent ev)
+	{
+		string package = "";
+		string version = "";
+		try
+		{
+			if (ev.Payload.ValueKind == JsonValueKind.Object)
+			{
+				if (ev.Payload.TryGetProperty("package", out JsonElement p))
+				{
+					package = p.GetString() ?? "";
+				}
+				if (ev.Payload.TryGetProperty("version", out JsonElement v))
+				{
+					version = v.ToString();
+				}
+			}
+		}
+		catch
+		{
+		}
+		if (package.Length == 0)
+		{
+			return;
+		}
+		_stagedUpdate = package;
+		if (await Dlg.Confirm(I18n.L("更新已下载"), I18n.L("重启 TipCL 即可更新到 {0}。", version), I18n.L("立即重启"), I18n.L("关闭时再装")))
+		{
+			try
+			{
+				TipCL.Core.Launcher.Updater.ApplyStaged(package, restart: true);
+				_stagedUpdate = null;
+				Application.Current.Shutdown();
+			}
+			catch (Exception ex)
+			{
+				Toast(I18n.L("更新失败"), ex.Message, ToastKind.Error);
+			}
+		}
+		else
+		{
+			Toast(I18n.L("更新已就绪"), I18n.L("关闭启动器时会自动装好，下次打开就是新版"), ToastKind.Success);
+		}
+	}
+
 	private void OnBridgeEvent(object? sender, BridgeEvent ev)
 	{
 		if (!base.Dispatcher.CheckAccess())
@@ -613,6 +708,9 @@ public partial class MainWindow : Window
 		TaskStore.Handle(ev);
 		switch (ev.Event)
 		{
+		case "update_staged":
+			Run(() => OfferRestartForUpdateAsync(ev));
+			break;
 		case "task_count_changed":
 			SyncTasks();
 			break;
