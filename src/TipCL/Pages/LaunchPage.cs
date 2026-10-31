@@ -1095,6 +1095,16 @@ public sealed class LaunchPage : PageBase
 		}
 	}
 
+	/// <summary>选中指定实例/版本后直接启动（AI 页任务卡「启动游戏」用）。</summary>
+	public async Task LaunchNowAsync(string name, string? version = null)
+	{
+		await EnsureLoadedAsync();
+		_preferredInstance = name;
+		_preferredVersion = version;
+		await FillCardData();
+		await LaunchAsync();
+	}
+
 	private async Task ApplyPreferenceAsync()
 	{
 		string name = _preferredInstance;
