@@ -25,9 +25,17 @@ public sealed class CatalogPage : PageBase
 		Favorites
 	}
 
-	private static readonly string[] GameVersions = new string[13]
+	private static readonly string[] GameVersions = new string[21]
 	{
 		I18n.L("全部"),
+		"26.3",
+		"26.2",
+		"26.1.2",
+		"26.1",
+		"1.21.11",
+		"1.21.10",
+		"1.21.8",
+		"1.21.5",
 		"1.21.4",
 		"1.21.1",
 		"1.20.6",
