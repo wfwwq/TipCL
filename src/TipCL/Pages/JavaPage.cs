@@ -13,12 +13,13 @@ namespace TipCL.Pages;
 
 public sealed class JavaPage : PageBase
 {
-	private static readonly (string Major, string Note)[] Majors = new(string, string)[4]
+	private static readonly (string Major, string Note)[] Majors = new(string, string)[5]
 	{
 		("8", I18n.L("1.16 及以下旧版本")),
 		("11", I18n.L("部分旧模组环境")),
 		("17", I18n.L("1.18 – 1.20.4 推荐")),
-		("21", I18n.L("1.20.5+ 新版本"))
+		("21", I18n.L("1.20.5 – 1.21.11")),
+		("25", I18n.L("26.1+ 新版本"))
 	};
 
 	private readonly SPanel _list = Ui.V(8.0);
@@ -56,7 +57,7 @@ public sealed class JavaPage : PageBase
 		{
 			PageBase.Run(LoadAsync);
 		});
-		Grid grid = Ui.Section("Java", I18n.L("游戏按版本挑 Java：1.20.5+ 要 21，1.18+ 要 17，老版本用 8"), Ui.H(8.0, _count.VCenter(), button2, button));
+		Grid grid = Ui.Section("Java", I18n.L("游戏按版本挑 Java：26.1+ 要 25，1.20.5+ 要 21，1.18+ 要 17，老版本用 8"), Ui.H(8.0, _count.VCenter(), button2, button));
 		WrapPanel wrapPanel = new WrapPanel();
 		(string, string)[] majors = Majors;
 		for (int num = 0; num < majors.Length; num++)
