@@ -123,7 +123,7 @@ public static class Feedback
 
 	private static Dictionary<string, string> _headers()
 	{
-		return new Dictionary<string, string> { { "X-TipCL-Client", "TipCL/1.0.6" } };
+		return new Dictionary<string, string> { { "X-TipCL-Client", "TipCL/1.0.7" } };
 	}
 
 	public static PyDict _post(string path, PyDict payload, double timeout = 20.0)
@@ -137,7 +137,7 @@ public static class Feedback
 		AuthResponse authResponse;
 		try
 		{
-			authResponse = AuthHttp.Send("POST", url, null, payload, hasJson: true, _headers(), timeout, "TipCL/1.0.6");
+			authResponse = AuthHttp.Send("POST", url, null, payload, hasJson: true, _headers(), timeout, "TipCL/1.0.7");
 		}
 		catch (AuthHttpException ex)
 		{
@@ -224,7 +224,7 @@ public static class Feedback
 		{
 			text = CpSlice((text2.Length > 0) ? Py.SplitLines(text2)[0] : "未命名反馈", 80);
 		}
-		PyDict pyDict = PyDict.Of("device_id", DeviceId(), "category", cat, "title", text, "body", text2, "contact", text3, "app_version", "1.0.6", "crash", (crash is PyDict) ? crash : null);
+		PyDict pyDict = PyDict.Of("device_id", DeviceId(), "category", cat, "title", text, "body", text2, "contact", text3, "app_version", "1.0.7", "crash", (crash is PyDict) ? crash : null);
 		if (Py.Truthy(include_sysinfo))
 		{
 			pyDict["sysinfo"] = Sysinfo.Collect(force: true, scan_system_java);
