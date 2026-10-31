@@ -32,6 +32,22 @@ internal sealed class Bubble : Border
 
 	private readonly Button? _retryBtn;
 
+	private readonly Button? _editBtn;
+
+	private readonly Border? _userBody;
+
+	private readonly SPanel? _editor;
+
+	private readonly TextBox? _editBox;
+
+	/// <summary>发给后端的原文（不含"附图"等显示用后缀），编辑后重发时用来在对话里定位。</summary>
+	internal string OrigText { get; set; }
+
+	/// <summary>回复中插队发的消息，撤回逻辑不把它当一轮。</summary>
+	internal bool IsSteer { get; set; }
+
+	internal bool Editing => _editor != null && _editor.Visibility == Visibility.Visible;
+
 	private string _plain;
 
 	private string _answer;
@@ -66,6 +82,23 @@ internal sealed class Bubble : Border
 			{
 				_rewindBtn.Tag = value;
 				_rewindBtn.Visibility = ((value == null) ? Visibility.Collapsed : Visibility.Visible);
+			}
+		}
+	}
+
+	/// <summary>设置后显示「编辑」按钮；确认编辑时用新内容回调。</summary>
+	internal Action<Bubble, string>? Edit
+	{
+		set
+		{
+			if (_editBtn != null)
+			{
+				_editBtn.Tag = value;
+				_editBtn.Visibility = ((value == null) ? Visibility.Collapsed : Visibility.Visible);
+				if (value == null)
+				{
+					CancelEdit();
+				}
 			}
 		}
 	}
@@ -130,6 +163,7 @@ internal sealed class Bubble : Border
 		Bubble bubble = this;
 		_plain = text ?? "";
 		_answer = _plain;
+		OrigText = _plain;
 		_mine = role == "user";
 		_error = role == "error";
 		_thinkingLabel = Ui.Txt("", 12.5, bold: false, "B.InkMuted");
@@ -155,6 +189,35 @@ internal sealed class Bubble : Border
 			};
 			border.SetResourceReference(Border.BackgroundProperty, "B.AccentSoft");
 			border.ContextMenu = CopyMenu();
+			_userBody = border;
+			_editBox = Ui.Multi("", "", 72.0);
+			_editBox.AcceptsReturn = true;
+			_editBox.MinWidth = 320.0;
+			_editBox.PreviewKeyDown += delegate(object _, System.Windows.Input.KeyEventArgs e)
+			{
+				if (e.Key == System.Windows.Input.Key.Escape)
+				{
+					bubble.CancelEdit();
+					e.Handled = true;
+				}
+				else if (e.Key == System.Windows.Input.Key.Return && (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == 0 && e.ImeProcessedKey == System.Windows.Input.Key.None)
+				{
+					bubble.ConfirmEdit();
+					e.Handled = true;
+				}
+			};
+			Button ok = Ui.Btn(I18n.L("发送"), BtnKind.Primary, delegate
+			{
+				bubble.ConfirmEdit();
+			});
+			Button cancel = Ui.Btn(I18n.L("取消"), BtnKind.Ghost, delegate
+			{
+				bubble.CancelEdit();
+			});
+			SPanel editBtns = Ui.H(6.0, Ui.Small(I18n.L("会撤回到这句话之前再重新发送")).VCenter(), cancel, ok);
+			editBtns.HorizontalAlignment = HorizontalAlignment.Right;
+			_editor = Ui.V(6.0, _editBox, editBtns);
+			_editor.Visibility = Visibility.Collapsed;
 			_actions.Children.Add(AiIcons.Flat("M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5", I18n.L("重新发送"), I18n.L("把这句话再发一次"), delegate
 			{
 				resend(bubble._plain);
@@ -165,13 +228,19 @@ internal sealed class Bubble : Border
 			}, "B.Warn", 12.0, pill: true);
 			_rewindBtn.Visibility = Visibility.Collapsed;
 			_actions.Children.Add(_rewindBtn);
+			_editBtn = AiIcons.Flat("M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z", I18n.L("编辑"), I18n.L("改这句话，撤回到它之前再重新发送"), delegate
+			{
+				bubble.BeginEdit();
+			}, "B.InkMuted", 12.0, pill: true);
+			_editBtn.Visibility = Visibility.Collapsed;
+			_actions.Children.Insert(0, _editBtn);
 			_actions.HorizontalAlignment = HorizontalAlignment.Right;
 			_actions.Opacity = 0.0;
 			_actions.Margin = new Thickness(0.0, 4.0, 0.0, 0.0);
 			base.HorizontalAlignment = HorizontalAlignment.Right;
 			base.MaxWidth = 600.0;
 			base.Background = Brushes.Transparent;
-			Child = Ui.V(0.0, border, _actions);
+			Child = Ui.V(0.0, border, _editor, _actions);
 			base.MouseEnter += delegate
 			{
 				bubble._actions.Opacity = 1.0;
@@ -225,6 +294,47 @@ internal sealed class Bubble : Border
 		base.HorizontalAlignment = HorizontalAlignment.Stretch;
 		base.MaxWidth = 760.0;
 		Render(live: false);
+	}
+
+	internal void BeginEdit()
+	{
+		if (_editor == null || _editBox == null || _userBody == null)
+		{
+			return;
+		}
+		_editBox.Text = OrigText;
+		_userBody.Visibility = Visibility.Collapsed;
+		_actions.Visibility = Visibility.Collapsed;
+		_editor.Visibility = Visibility.Visible;
+		base.MaxWidth = 760.0;
+		base.HorizontalAlignment = HorizontalAlignment.Stretch;
+		_editBox.Focus();
+		_editBox.CaretIndex = _editBox.Text.Length;
+	}
+
+	internal void CancelEdit()
+	{
+		if (_editor == null || _userBody == null || _editor.Visibility != Visibility.Visible)
+		{
+			return;
+		}
+		_editor.Visibility = Visibility.Collapsed;
+		_userBody.Visibility = Visibility.Visible;
+		_actions.Visibility = Visibility.Visible;
+		base.MaxWidth = 600.0;
+		base.HorizontalAlignment = HorizontalAlignment.Right;
+	}
+
+	private void ConfirmEdit()
+	{
+		string text = _editBox?.Text?.Trim() ?? "";
+		Action<Bubble, string> action = _editBtn?.Tag as Action<Bubble, string>;
+		if (text.Length == 0 || action == null)
+		{
+			return;
+		}
+		CancelEdit();
+		action(this, text);
 	}
 
 	private Button Vote(string icon, string tip)
