@@ -134,9 +134,16 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 
 启动器默认读取本仓库的 [`update.json`](update.json) 检查更新。发布新版本时修改其中的 `version`、`url`（下载地址）和 `sha256` 即可。
 
+## 🛡️ 安全说明
+
+exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，点「更多信息 → 仍要运行」即可。个别杀软会对未签名的单文件程序报启发式误报，源码完全公开，也可以自己编译。
+
+- v1.0.10 SHA-256：`615b2165bf1529f6cf538cda63a44aeb8edc896f5e9a05ade605f7edfccad7a8`
+- [VirusTotal 扫描结果](https://www.virustotal.com/gui/file/615b2165bf1529f6cf538cda63a44aeb8edc896f5e9a05ade605f7edfccad7a8)：1/71（仅 MaxSecure 启发式 `susgen` 报出，其余 70 家未检出）
+
 ## 💬 社区建议
 
-来自 [LINUX DO](https://linux.do) 等社区的每一条建议都会在这里登记，并标出处理状态。
+来自 [LINUX DO](https://linux.do) 等社区的每一条建议都会在这里登记，并标出处理状态。也可以直接 [提 Issue](https://github.com/wfwwq/TipCL/issues/new/choose)。
 
 | 建议 | 来源 | 状态 | 说明 |
 |---|---|---|---|
@@ -144,10 +151,15 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 
 状态说明：✅ 已完成 · 🚧 开发中 · 📋 已采纳待排期 · ⏸️ 暂不考虑（附原因）
 
----
-
-<div align="center"><sub>Made with ❤️ for Minecraft players · 感谢 <a href="https://linux.do">LINUX DO</a> 社区的支持</sub></div>
 
 ## 🙏 致谢
 
 - QQ `368****168`：帮忙测试了正版（微软）验证
+
+## 📄 许可证
+
+[MIT](LICENSE)
+
+---
+
+<div align="center"><sub>Made with ❤️ for Minecraft players · 感谢 <a href="https://linux.do">LINUX DO</a> 社区的支持</sub></div>
