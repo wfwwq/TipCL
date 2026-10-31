@@ -116,15 +116,19 @@ public static class Thumbs
 				{
 					return (BitmapSource)null;
 				}
-				BitmapImage bitmapImage = new BitmapImage();
-				bitmapImage.BeginInit();
-				bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-				bitmapImage.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-				bitmapImage.DecodePixelWidth = Math.Max(16, px * 2);
-				bitmapImage.StreamSource = new MemoryStream(array);
-				bitmapImage.EndInit();
-				bitmapImage.Freeze();
-				return bitmapImage;
+				// Win7 没有 WebP 解码器：失败时转 PNG 重试（见 WebpFallback）
+				return (BitmapSource)WebpFallback.Decode(array, delegate(byte[] bytes)
+				{
+					BitmapImage bitmapImage = new BitmapImage();
+					bitmapImage.BeginInit();
+					bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+					bitmapImage.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+					bitmapImage.DecodePixelWidth = Math.Max(16, px * 2);
+					bitmapImage.StreamSource = new MemoryStream(bytes);
+					bitmapImage.EndInit();
+					bitmapImage.Freeze();
+					return bitmapImage;
+				});
 			}
 			catch
 			{

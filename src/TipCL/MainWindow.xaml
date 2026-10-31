@@ -78,7 +78,7 @@
         <Border Name="DropVeil" Grid.Row="1" Visibility="Collapsed" IsHitTestVisible="False" Background="{DynamicResource B.Mask}" Margin="0">
           <Border CornerRadius="14" Padding="26,20,26,22" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{DynamicResource B.GlassStrong}" BorderBrush="{DynamicResource B.GlassBorder}">
             <StackPanel>
-              <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="30" HorizontalAlignment="Center" Foreground="{DynamicResource B.Accent}" />
+              <TextBlock Text="" FontFamily="{StaticResource F.Icon}" FontSize="30" HorizontalAlignment="Center" Foreground="{DynamicResource B.Accent}" />
               <TextBlock Name="DropVeilTitle" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
               <TextBlock Name="DropVeilHint" FontSize="12" Margin="0,3,0,0" MaxWidth="360" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource B.InkMuted}" />
             </StackPanel>

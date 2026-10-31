@@ -156,6 +156,7 @@ exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，
 
 - QQ 368****168：帮忙测试了正版（微软）验证
 - xbly666        ：发现并且反馈了图标的bug
+- 界面图标字形来自 [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)（MIT），打包为内置字体 TipCL Icons
 
 ## 📄 许可证
 

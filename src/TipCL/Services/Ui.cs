@@ -37,7 +37,8 @@ public static class Ui
 		}
 	}
 
-	internal static readonly FontFamily GlyphFont = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets");
+	// 内置图标字体优先，系统字体兜底：Win7/8.1、精简版 Win10、Wine 等缺 Segoe 图标字体的环境也能显示
+	internal static readonly FontFamily GlyphFont = new FontFamily(new Uri("pack://application:,,,/TipCL;component/"), "./Resources/fonts/#TipCL Icons, Segoe Fluent Icons, Segoe MDL2 Assets");
 
 	public static Style S(string key)
 	{

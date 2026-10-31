@@ -363,15 +363,20 @@ public static class Wallpaper
 	{
 		try
 		{
-			BitmapImage bitmapImage = new BitmapImage();
-			bitmapImage.BeginInit();
-			bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-			bitmapImage.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-			bitmapImage.DecodePixelWidth = 1920;
-			bitmapImage.UriSource = new Uri(System.IO.Path.GetFullPath(path));
-			bitmapImage.EndInit();
-			bitmapImage.Freeze();
-			return bitmapImage;
+			// 读成字节再解码：Win7 没有 WebP 解码器时转 PNG 重试（见 WebpFallback）
+			byte[] data = File.ReadAllBytes(System.IO.Path.GetFullPath(path));
+			return WebpFallback.Decode(data, delegate(byte[] bytes)
+			{
+				BitmapImage bitmapImage = new BitmapImage();
+				bitmapImage.BeginInit();
+				bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+				bitmapImage.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+				bitmapImage.DecodePixelWidth = 1920;
+				bitmapImage.StreamSource = new MemoryStream(bytes);
+				bitmapImage.EndInit();
+				bitmapImage.Freeze();
+				return bitmapImage;
+			});
 		}
 		catch
 		{

@@ -40,6 +40,12 @@ public sealed class WpfImageCodec : IImageCodec
 		{
 			throw new ArgumentNullException("data");
 		}
+		// Win7 没有 WebP 解码器：失败时转 PNG 重试（见 TipCL.Services.WebpFallback）
+		return TipCL.Services.WebpFallback.Decode(data, (byte[] bytes) => DecodeWic(bytes));
+	}
+
+	private IDecodedImage DecodeWic(byte[] data)
+	{
 		return RunSta((Func<IDecodedImage>)delegate
 		{
 			ushort o = 1;

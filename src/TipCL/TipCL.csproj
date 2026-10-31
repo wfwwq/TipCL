@@ -32,6 +32,8 @@
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <!-- Win7/8.1 的 WIC 不支持 WebP：用纯托管解码兜底（2.x 为 Apache-2.0，支持 .NET Framework） -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <!-- 把依赖 DLL 打进单个 exe -->
     <PackageReference Include="Costura.Fody" Version="6.0.0" PrivateAssets="all" />
@@ -39,6 +41,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 内置图标字体：替代系统 Segoe MDL2 / Fluent Icons -->
+    <Resource Include="Resources\fonts\TipCLIcons.ttf" />
     <!-- 内置资源：词表与 AI 模型规则（CoreResources 以 TipCL.Core.<路径> 读取） -->
     <EmbeddedResource Include="Resources\locales\en.json" LogicalName="TipCL.Core.locales.en.json" />
     <EmbeddedResource Include="Resources\locales\zh_CN.json" LogicalName="TipCL.Core.locales.zh_CN.json" />

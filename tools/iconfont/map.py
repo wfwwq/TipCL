@@ -1,0 +1,21 @@
+# MDL2 codepoint -> (style, fluent name base)
+M = {
+"E701":("r","wifi_1"),"E706":("r","brightness_high"),"E708":("r","weather_moon"),
+"E70D":("r","chevron_down"),"E70E":("r","chevron_up"),"E70F":("r","edit"),"E710":("r","add"),
+"E711":("r","dismiss"),"E712":("r","more_horizontal"),"E713":("r","settings"),"E718":("r","pin"),
+"E71A":("r","stop"),"E71B":("r","link"),"E71C":("r","filter"),"E721":("r","search"),"E722":("r","camera"),
+"E724":("r","send"),"E72B":("r","arrow_left"),"E72C":("r","arrow_clockwise"),"E734":("r","star"),
+"E735":("f","star"),"E737":("r","window"),"E73E":("r","checkmark"),"E74D":("r","delete"),"E74E":("r","save"),
+"E753":("r","cloud"),"E768":("r","play"),"E76B":("r","chevron_left"),"E76C":("r","chevron_right"),
+"E77A":("r","pin_off"),"E77B":("r","person"),"E790":("r","color"),"E7B3":("r","eye"),"E7B8":("r","box"),
+"E7BA":("r","warning"),"E7C1":("r","flag"),"E7FC":("r","games"),"E80A":("r","layer"),"E80F":("r","home"),
+"E823":("r","history"),"E838":("r","folder_open"),"E896":("r","arrow_download"),"E8A7":("r","open"),
+"E8A9":("r","grid"),"E8AB":("r","arrow_swap"),"E8B5":("r","arrow_import"),"E8B7":("r","folder"),
+"E8BB":("r","dismiss"),"E8BD":("r","chat"),"E8C8":("r","copy"),"E8CB":("r","arrow_sort"),"E8F1":("r","library"),
+"E8F4":("r","folder_add"),"E8FD":("r","text_bullet_list_ltr"),"E909":("r","globe"),"E90F":("r","wrench"),
+"E921":("r","subtract"),"E922":("r","maximize"),"E923":("r","square_multiple"),"E945":("r","flash"),
+"E946":("r","info"),"E968":("r","server"),"E99A":("r","bot"),"E9D5":("r","task_list_ltr"),"EA18":("r","shield"),
+"EA39":("f","dismiss_circle"),"EA86":("r","puzzle_piece"),"EA99":("r","broom"),"EB51":("r","heart"),
+"EB9F":("r","image"),"EBE8":("r","bug"),"EC32":("r","drink_coffee"),"EC61":("f","checkmark_circle"),"ED1A":("r","eye_off"),
+"EDE1":("r","arrow_export_ltr"),"F5B0":("f","play"),
+}
