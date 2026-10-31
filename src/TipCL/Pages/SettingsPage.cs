@@ -207,7 +207,6 @@ public sealed partial class SettingsPage : PageBase
 
 	private readonly CheckBox _autoUpdate = Ui.Switch(value: true);
 
-	private readonly TextBox _updateUrl = Ui.Input(I18n.L("留空用默认更新源"));
 
 	private readonly ComboBox _lang = KeyCombo(Array.Empty<(string, string)>());
 
@@ -241,7 +240,6 @@ public sealed partial class SettingsPage : PageBase
 
 	private readonly CheckBox _aiConfirm = Ui.Switch(value: true);
 
-	private readonly TextBox _msClient = Ui.Input(I18n.L("微软登录 Client ID（留空用内置）"));
 
 	private readonly TextBox _cfKey = Ui.Input(I18n.L("CurseForge API Key（留空用内置）"));
 
@@ -655,7 +653,7 @@ public sealed partial class SettingsPage : PageBase
 		Border border5 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("游戏目录"), grid2, I18n.L("所有实例的落脚处；切换会校验可写性")), Ui.Field(I18n.L("默认内存"), SliderRow(_mem, _memLbl), I18n.L("新实例的默认 JVM 内存")), Ui.Field("", Ui.H(8.0, _rec, Ui.Small(I18n.L("按本机内存 / CPU 给一组推荐值")).VCenter())), Ui.Field(I18n.L("默认分辨率"), Ui.H(6.0, _w, Ui.Txt("×").VCenter(), _h), I18n.L("游戏窗口的默认宽高")), Ui.Field(I18n.L("默认实例"), _inst, I18n.L("安装与启动缺省使用的实例")), Ui.Field(I18n.L("新版本默认隔离"), _iso, I18n.L("安装新版本时写入，可在版本设置里改")), Ui.Field(I18n.L("内存回收器"), _gc, I18n.L("启动时写入 JVM，版本设置可覆盖")), Ui.Field(I18n.L("默认游戏窗口"), _win, I18n.L("可被版本设置覆盖")), Ui.Field(I18n.L("默认 JVM 参数"), _jvm, I18n.L("所有版本都会带上，版本设置可再追加")), Ui.Field(I18n.L("允许多开"), _multi, I18n.L("关掉则游戏已在运行时不再启动第二个"))));
 		Border border6 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("共享 libraries"), _shareLib, I18n.L("所有实例共享依赖库（节省空间，降低隔离性）")), Ui.Field(I18n.L("共享 assets 资源"), _shareAssets, I18n.L("所有实例共享资源文件（节省空间，降低隔离性）")), Ui.Field(I18n.L("空间清理"), Ui.H(8.0, _clean, _cleanInfo.VCenter()), I18n.L("扫描未引用的依赖库、残留 .part 与更新缓存，确认后再删"))));
 		Border border7 = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("AI 助手"), I18n.L("对话里下游戏、装模组、读崩溃日志")), Ui.Field(I18n.L("接入方式"), _aiMode), Ui.Field(I18n.L("网关地址"), _aiGateway, I18n.L("公共网关模式下生效")), Ui.Field(I18n.L("端点地址"), _aiBase, I18n.L("自定义模式下的 OpenAI 兼容 base_url")), Ui.Field("API Key", SecretRow(_aiKey, _aiKeyReset), I18n.L("留空保存不修改；不填用内置令牌")), Ui.Field(I18n.L("模型"), Ui.H(8.0, _aiModel, _aiModelFetch.VCenter()), I18n.L("自动拉取可用模型；拉不到可直接手填")), Ui.Field(I18n.L("上下文窗口（token）"), _aiCtx, I18n.L("模型真实窗口未知时按 128k 保守压缩；实测后可改大")), Ui.Field(I18n.L("备用模型（可选）"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它；留空不启用")), Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildVisionField(), BuildMcpField(), Ui.Field("", _testAi.Left())));
-		Border border8 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("启动器可见性"), _vis, I18n.L("游戏启动后启动器窗口怎么处理")), Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")), Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html 文件路径")), Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")), Ui.Field(I18n.L("更新地址"), _updateUrl, I18n.L("留空用默认更新源")), Ui.Field(I18n.L("微软 Client ID"), _msClient, I18n.L("自建 Azure 应用时填")), Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")), Ui.Field("", _langPreview), Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
+		Border border8 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("启动器可见性"), _vis, I18n.L("游戏启动后启动器窗口怎么处理")), Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")), Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html 文件路径")), Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")), Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")), Ui.Field("", _langPreview), Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
 		{
 			PageBase.Run(FirstRunWizard.ShowAsync, I18n.L("向导没能打开"));
 		}, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));
@@ -1095,8 +1093,6 @@ public sealed partial class SettingsPage : PageBase
 				_shareLib.IsChecked = GetBool(dictionary, "share_libraries");
 				_shareAssets.IsChecked = GetBool(dictionary, "share_assets");
 				_autoUpdate.IsChecked = GetBool(dictionary, "auto_check_update", def: true);
-				_updateUrl.Text = GetStr(dictionary, "update_url");
-				_msClient.Text = GetStr(dictionary, "ms_client_id");
 				ApplySecretState(dictionary);
 				SelectKey(_aiMode, AiModeFromBackend(dictionary));
 				SelectKey(_aiPerm, GetStr(dictionary, "ai_permission_mode", "default"));
@@ -1237,11 +1233,9 @@ public sealed partial class SettingsPage : PageBase
 		dictionary["custom_homepage"] = _homePath.Text?.Trim() ?? "";
 		dictionary["window_mode"] = KeyOf(_win);
 		dictionary["auto_check_update"] = _autoUpdate.IsChecked == true;
-		dictionary["update_url"] = _updateUrl.Text?.Trim() ?? "";
 		dictionary["share_libraries"] = _shareLib.IsChecked == true;
 		dictionary["share_assets"] = _shareAssets.IsChecked == true;
 		dictionary["default_instance"] = _inst.Str();
-		dictionary["ms_client_id"] = _msClient.Text?.Trim() ?? "";
 		dictionary["ai_mode"] = AiModeWire();
 		dictionary["ai_gateway_url"] = _aiGateway.Text?.Trim() ?? "";
 		dictionary["ai_base_url"] = (IsBuiltinAi ? "" : (_aiBase.Text?.Trim() ?? ""));
