@@ -37,7 +37,17 @@ public static class Java
 
 	private static readonly Regex _VER_RE = new Regex("version \"([^\"]+)\"", RegexOptions.CultureInvariant);
 
-	private static readonly string[] _JAVA_HINTS = new string[7] { "java", "jdk", "jre", "zulu", "jbr", "temurin", "adoptium" };
+	private static readonly string[] _JAVA_HINTS = new string[17]
+	{
+		"java", "jdk", "jre", "zulu", "jbr", "temurin", "adoptium", "corretto", "graal", "semeru",
+		"bellsoft", "liberica", "dragonwell", "openjdk", "ojdkbuild", "sapmachine", "konajdk"
+	};
+
+	public const double SCAN_BUDGET_SEC = 8.0;
+
+	private static double _scan_deadline = double.MaxValue;
+
+	private static readonly string[] _VENDOR_WRAPPERS = new string[10] { "microsoft", "eclipse adoptium", "eclipse foundation", "bellsoft", "liberica", "amazon corretto", "semeru", "sapmachine", "graalvm", "jetbrains" };
 
 	public static List<object> JavaVendorList()
 	{
@@ -396,7 +406,7 @@ public static class Java
 
 	private static void _WalkJavas(string root, List<string> results, HashSet<string> seen, int depth = 0)
 	{
-		if (depth > 6 || string.IsNullOrEmpty(root) || !new PPath(root).IsDir())
+		if (depth > 6 || string.IsNullOrEmpty(root) || !new PPath(root).IsDir() || (depth > 0 && Py.Time() > _scan_deadline))
 		{
 			return;
 		}
@@ -496,6 +506,177 @@ public static class Java
 		return null;
 	}
 
+	private static bool _Hinted(string name)
+	{
+		string low = Py.Lower(name);
+		if (low.Length == 0 || low.StartsWith("."))
+		{
+			return false;
+		}
+		return _JAVA_HINTS.Any((string t) => low.Contains(t));
+	}
+
+	private static void _AddRoot(List<string> roots, HashSet<string> seen, string dir)
+	{
+		if (!string.IsNullOrEmpty(dir))
+		{
+			string text = PPath.Norm(dir);
+			if (seen.Add(Py.Lower(text)) && new PPath(text).IsDir())
+			{
+				roots.Add(text);
+			}
+		}
+	}
+
+	private static List<string> _Dirs(string dir, int limit = 1200)
+	{
+		try
+		{
+			return Directory.EnumerateDirectories(Utils.AbsPath(dir)).Take(limit).ToList();
+		}
+		catch (Exception)
+		{
+			return new List<string>();
+		}
+	}
+
+	private static void _AddInstallRoot(string baseDir, List<string> roots, HashSet<string> seen)
+	{
+		if (string.IsNullOrEmpty(baseDir) || !new PPath(baseDir).IsDir())
+		{
+			return;
+		}
+		foreach (string item in _Dirs(baseDir))
+		{
+			string name = new PPath(item).Name;
+			if (_Hinted(name))
+			{
+				_AddRoot(roots, seen, item);
+				continue;
+			}
+			string low = Py.Lower(name);
+			if (!_VENDOR_WRAPPERS.Any((string t) => low.Contains(t)))
+			{
+				continue;
+			}
+			foreach (string item2 in _Dirs(item, 400))
+			{
+				if (_Hinted(new PPath(item2).Name))
+				{
+					_AddRoot(roots, seen, item2);
+				}
+			}
+		}
+	}
+
+	private static void _AddDataRoot(string dir, List<string> roots, HashSet<string> seen)
+	{
+		if (string.IsNullOrEmpty(dir) || !new PPath(dir).IsDir())
+		{
+			return;
+		}
+		foreach (string item in _Dirs(dir))
+		{
+			string text = Py.Lower(new PPath(item).Name);
+			switch (text)
+			{
+			default:
+				if (!_Hinted(text))
+				{
+					continue;
+				}
+				break;
+			case "java":
+			case "runtime":
+			case "jvm":
+			case "jbr":
+				break;
+			}
+			_AddRoot(roots, seen, item);
+		}
+	}
+
+	private static List<string> _WindowsJavaRoots()
+	{
+		List<string> list = new List<string>();
+		HashSet<string> seen = new HashSet<string>();
+		string text = Environment.GetEnvironmentVariable("ProgramFiles") ?? "C:\\Program Files";
+		string text2 = Environment.GetEnvironmentVariable("ProgramFiles(x86)") ?? "C:\\Program Files (x86)";
+		string text3 = Environment.GetEnvironmentVariable("APPDATA") ?? "";
+		string text4 = Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "";
+		string text5 = Environment.GetEnvironmentVariable("USERPROFILE") ?? "";
+		string text6 = Environment.GetEnvironmentVariable("ProgramData") ?? "";
+		string[] array = new string[6]
+		{
+			text,
+			text2,
+			PPath.Join(text4, "Programs"),
+			text6,
+			text4,
+			text3
+		};
+		for (int i = 0; i < array.Length; i++)
+		{
+			_AddInstallRoot(array[i], list, seen);
+		}
+		_AddRoot(list, seen, PPath.Join(text5, ".jdks"));
+		_AddRoot(list, seen, PPath.Join(text5, ".gradle", "jdks"));
+		_AddRoot(list, seen, PPath.Join(text6, "Oracle", "Java"));
+		_AddDataRoot(PPath.Join(text3, ".hmcl"), list, seen);
+		_AddDataRoot(PPath.Join(text3, "HMCL"), list, seen);
+		_AddDataRoot(PPath.Join(text3, ".minecraft"), list, seen);
+		_AddDataRoot(PPath.Join(text3, "PCL"), list, seen);
+		_AddDataRoot(PPath.Join(text3, "PrismLauncher"), list, seen);
+		_AddDataRoot(PPath.Join(text4, "Programs", "Prism Launcher"), list, seen);
+		_AddDataRoot(PPath.Join(text3, "MultiMC"), list, seen);
+		_AddDataRoot(PPath.Join(text4, "Programs", "MultiMC"), list, seen);
+		_AddDataRoot(PPath.Join(text3, "Modrinth"), list, seen);
+		_AddDataRoot(PPath.Join(text4, "Programs", "com.modrinth.theseus"), list, seen);
+		_AddDataRoot(PPath.Join(text3, "xmcl"), list, seen);
+		_AddDataRoot(PPath.Join(text4, "xmcl"), list, seen);
+		_AddInstallRoot(PPath.Join(text4, "Programs", "JetBrains"), list, seen);
+		_AddInstallRoot(PPath.Join(text, "JetBrains"), list, seen);
+		_AddInstallRoot(Path.GetTempPath(), list, seen);
+		DriveInfo[] drives = DriveInfo.GetDrives();
+		foreach (DriveInfo driveInfo in drives)
+		{
+			if (driveInfo.DriveType != DriveType.Fixed)
+			{
+				continue;
+			}
+			string name;
+			try
+			{
+				if (!driveInfo.IsReady)
+				{
+					continue;
+				}
+				name = driveInfo.RootDirectory.Name;
+				goto IL_036d;
+			}
+			catch (Exception)
+			{
+			}
+			continue;
+			IL_036d:
+			_AddInstallRoot(name, list, seen);
+			_AddDataRoot(PPath.Join(name, ".hmcl"), list, seen);
+			_AddDataRoot(PPath.Join(name, ".minecraft"), list, seen);
+			_AddDataRoot(PPath.Join(name, "PCL"), list, seen);
+		}
+		try
+		{
+			foreach (object item in Instances.ListInstances())
+			{
+				_AddDataRoot(Instances.GetInstancePath(item), list, seen);
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return list;
+	}
+
 	public static List<object> FindSystemJavas()
 	{
 		double num = Py.Time();
@@ -524,59 +705,65 @@ public static class Java
 			}
 			if (Utils.IS_WINDOWS)
 			{
-				array = new string[3]
-				{
-					Environment.GetEnvironmentVariable("ProgramFiles") ?? "C:\\Program Files",
-					Environment.GetEnvironmentVariable("ProgramFiles(x86)") ?? "C:\\Program Files (x86)",
-					Py.Truthy(Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "") ? Environment.GetEnvironmentVariable("LOCALAPPDATA") : "C:/Users/Public"
-				};
-				for (int j = 0; j < array.Length; j++)
-				{
-					string text2 = PPath.Norm(array[j]);
-					if (!new PPath(text2).IsDir())
-					{
-						continue;
-					}
-					IEnumerable<string> enumerable;
-					try
-					{
-						enumerable = Directory.EnumerateFileSystemEntries(Utils.AbsPath(text2)).Select(Path.GetFileName).ToList();
-					}
-					catch (Exception)
-					{
-						continue;
-					}
-					foreach (string item in enumerable)
-					{
-						string text3 = Py.Lower(item);
-						if (text3.Contains("java") || text3.Contains("jdk") || text3.Contains("jre") || text3.Contains("zulu") || text3.Contains("jbr"))
-						{
-							list2.Add(PPath.Join(text2, item));
-						}
-					}
-				}
+				_scan_deadline = Py.Time() + 8.0;
+				list2.AddRange(_WindowsJavaRoots());
 			}
 			else if (Utils.IS_MAC)
 			{
 				list2.Add("/Library/Java/JavaVirtualMachines");
 				list2.Add("/opt/homebrew/opt");
 				list2.Add("/usr/local/opt");
+				list2.Add(PPath.Join(Environment.GetEnvironmentVariable("HOME") ?? "", "Library/Java/JavaVirtualMachines"));
+				list2.Add(PPath.Join(Environment.GetEnvironmentVariable("HOME") ?? "", ".sdkman/candidates/java"));
+				list2.Add(PPath.Join(Environment.GetEnvironmentVariable("HOME") ?? "", ".gradle/jdks"));
+				string text2 = Environment.GetEnvironmentVariable("HOME") ?? "";
+				list2.Add(PPath.Join(text2, "Library/Application Support/hmcl"));
+				list2.Add(PPath.Join(text2, "Library/Application Support/xmcl"));
+				list2.Add(PPath.Join(text2, "Library/Application Support/PrismLauncher"));
+				list2.Add(PPath.Join(text2, "Library/Application Support/modrinth"));
 			}
 			else
 			{
 				list2.Add("/usr/lib/jvm");
+				list2.Add("/usr/java");
+				list2.Add("/opt/java");
+				list2.Add(PPath.Join(Environment.GetEnvironmentVariable("HOME") ?? "", ".sdkman/candidates/java"));
+				list2.Add(PPath.Join(Environment.GetEnvironmentVariable("HOME") ?? "", ".jdks"));
+				list2.Add(PPath.Join(Environment.GetEnvironmentVariable("HOME") ?? "", ".gradle/jdks"));
 			}
-			foreach (string item2 in list2)
+			foreach (string item in list2)
 			{
-				_WalkJavas(item2, list, seen);
+				_WalkJavas(item, list, seen);
 			}
 			List<object> list3 = new List<object>();
-			foreach (string item3 in list.Take(50))
+			double num2 = Py.Time() + 15.0;
+			foreach (string item2 in list.Take(50))
 			{
-				long? javaMajor = GetJavaMajor(item3);
-				list3.Add(PyDict.Of("name", "Java " + Py.Str(Py.Or(MajorObj(javaMajor), "?")) + " (" + item3 + ")", "exe", item3, "major", MajorObj(javaMajor)));
+				if (Py.Time() > num2)
+				{
+					break;
+				}
+				long? javaMajor = GetJavaMajor(item2);
+				list3.Add(PyDict.Of("name", "Java " + Py.Str(Py.Or(MajorObj(javaMajor), "?")) + " (" + item2 + ")", "exe", item2, "major", MajorObj(javaMajor)));
 			}
 			list3 = Py.Sorted(list3, (object x) => Py.L(((PyDict)x)["major"] == null, Py.Or(((PyDict)x)["major"], 0L)), reverse: true);
+			string tempPath = Path.GetTempPath();
+			if (!string.IsNullOrEmpty(tempPath))
+			{
+				string value = Py.Lower(PPath.Norm(tempPath));
+				List<object> list4 = new List<object>();
+				for (int num3 = list3.Count - 1; num3 >= 0; num3--)
+				{
+					PyDict pyDict = list3[num3] as PyDict;
+					string text3 = Py.Str(Py.Or(pyDict?.Get("exe"), ""));
+					if (text3.Length > 0 && Py.Lower(PPath.Norm(text3)).StartsWith(value, StringComparison.Ordinal))
+					{
+						list4.Insert(0, pyDict);
+						list3.RemoveAt(num3);
+					}
+				}
+				list3.AddRange(list4);
+			}
 			_SYS_JAVA_T = Py.Time();
 			_SYS_JAVA_DATA = list3;
 			return list3;
