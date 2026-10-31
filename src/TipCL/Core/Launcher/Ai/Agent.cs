@@ -1172,7 +1172,12 @@ public static class Agent
 							{
 							}
 						}
-						_status("tool_done", PyDict.Of("name", toolCall2.name, "label", text18, "result", Py.Slice(Py.Str(o), null, 400)));
+						PyDict donePayload = PyDict.Of("name", toolCall2.name, "label", text18, "result", Py.Slice(Py.Str(o), null, 400));
+						if (toolCall2.name.StartsWith("install_", StringComparison.Ordinal))
+						{
+							donePayload["instance"] = Tools._inst_name(backend, toolCall2.args ?? new PyDict());
+						}
+						_status("tool_done", donePayload);
 						turn.SetToolStatus(toolCall2.id, "completed", Py.Str(o));
 						Store.LogEvent(sessionId, "ToolCompleted", PyDict.Of("turn_id", turn.id, "round", roundNo, "tool", toolCall2.name, "tool_call_id", toolCall2.id, "result_len", (long)Py.Str(o).Length));
 						return Py.Str(o);
