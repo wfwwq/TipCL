@@ -148,7 +148,7 @@ public class BackendApi
 
 	private object _microsoft_login_impl(TaskContext ctx)
 	{
-		MicrosoftAuthenticator microsoftAuthenticator = new MicrosoftAuthenticator(Py.Str(Py.Or(CONFIG.Get("microsoft_client_id"), "00000000402b5328")));
+		MicrosoftAuthenticator microsoftAuthenticator = new MicrosoftAuthenticator(Config.MsClientId());
 		TaskContext worker = TaskContext.Current ?? ctx;
 		PyDict pyDict = microsoftAuthenticator.Login(on_code, on_status);
 		accounts.AddAccount(pyDict);
