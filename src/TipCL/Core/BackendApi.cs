@@ -142,6 +142,7 @@ public class BackendApi
 
 	public object start_microsoft_login()
 	{
+		AuthHttp.Warmup("https://login.live.com/");
 		return StartTask("微软登录", _microsoft_login_impl);
 	}
 
@@ -1683,6 +1684,12 @@ public class BackendApi
 		_bus = bus ?? new EventBus();
 		InitAccounts();
 		EnsureDefaultInstance();
+		// 启动后在后台预热微软登录域名（系统代理探测 + DNS + TLS），点「微软登录」时验证码能更快出来
+		ThreadPool.QueueUserWorkItem(delegate
+		{
+			Thread.Sleep(1500);
+			AuthHttp.Warmup("https://login.live.com/");
+		});
 	}
 
 	private void InitAccounts()
