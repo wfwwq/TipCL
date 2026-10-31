@@ -230,6 +230,7 @@ public partial class MainWindow : Window
 	public MainWindow()
 	{
 		InitializeComponent();
+		FitToWorkArea();
 		SetResourceReference(Control.ForegroundProperty, "B.Ink");
 		base.Title = I18n.L("TipCL 启动器");
 		PageTitle.Text = I18n.L("启动");
@@ -904,6 +905,20 @@ public partial class MainWindow : Window
 	{
 		SetDark(!App.IsDark);
 		Motion.Pulse(ThemeBtn, 1.14);
+	}
+
+	// 默认 1180×740 在 1366×768（Win7 笔记本常见）上减掉任务栏就放不下：按工作区最多占 92%
+	private void FitToWorkArea()
+	{
+		Rect work = SystemParameters.WorkArea;
+		if (work.Width <= 0.0 || work.Height <= 0.0)
+		{
+			return;
+		}
+		base.MinWidth = Math.Min(base.MinWidth, Math.Floor(work.Width * 0.92));
+		base.MinHeight = Math.Min(base.MinHeight, Math.Floor(work.Height * 0.92));
+		base.Width = Math.Max(base.MinWidth, Math.Min(base.Width, Math.Floor(work.Width * 0.92)));
+		base.Height = Math.Max(base.MinHeight, Math.Min(base.Height, Math.Floor(work.Height * 0.92)));
 	}
 
 	protected override void OnSourceInitialized(EventArgs e)

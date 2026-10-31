@@ -273,12 +273,22 @@ public sealed class LaunchPage : PageBase
 		Button button = Ui.Btn(I18n.L("恢复默认"), BtnKind.Chip, null, "\ue72c");
 		TextBlock hint = Ui.Small(I18n.L("拖动卡片移动，边角八向缩放；布局按比例自适应窗口"));
 		hint.Visibility = Visibility.Collapsed;
+		// 平时只显示「编辑布局」，其余布局工具进入编辑模式才出现，主页不再顶着一排按钮
+		UIElement[] editOnly = new UIElement[5] { add, snap, scheme, io, button };
+		foreach (UIElement el in editOnly)
+		{
+			el.Visibility = Visibility.Collapsed;
+		}
 		edit.Click += delegate
 		{
 			_editMode = !_editMode;
 			_dash.EditMode = _editMode;
 			edit.Content = Ui.H(6.0, Ui.Glyph(_editMode ? "\ue73e" : "\ue70f", 12.5), Ui.Txt(_editMode ? I18n.L("完成编辑") : I18n.L("编辑布局")));
 			hint.Visibility = ((!_editMode) ? Visibility.Collapsed : Visibility.Visible);
+			foreach (UIElement el in editOnly)
+			{
+				el.Visibility = (_editMode ? Visibility.Visible : Visibility.Collapsed);
+			}
 			Button button3 = add;
 			bool flag3 = (snap.IsEnabled = _editMode);
 			bool isEnabled2 = flag3;
@@ -352,8 +362,9 @@ public sealed class LaunchPage : PageBase
 				}
 			});
 		};
-		SPanel sPanel = Ui.H(8.0, edit, add, snap, scheme, io, button, hint);
-		sPanel.Margin = new Thickness(18.0, 14.0, 18.0, 0.0);
+		SPanel sPanel = Ui.H(8.0, hint, add, snap, scheme, io, button, edit);
+		sPanel.HorizontalAlignment = HorizontalAlignment.Right;
+		sPanel.Margin = new Thickness(18.0, 8.0, 18.0, 0.0);
 		foreach (UIElement child in sPanel.Children)
 		{
 			child.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
@@ -672,13 +683,13 @@ public sealed class LaunchPage : PageBase
 			IsHitTestVisible = false,
 			Opacity = 0.0
 		};
-		Motion.Shine(border, new TranslateTransform(-200.0, 0.0));
+		// 不再播放扫光动画（玩家反馈“AI 味”太重）
 		SPanel el = Ui.H(10.0, _launchBtn, _stopBtn);
 		_launchBtn.Style = Ui.S("Btn.OnBanner");
 		_launchBtn.Padding = new Thickness(26.0, 10.0, 26.0, 11.0);
 		_launchBtn.Content = Ui.H(8.0, Ui.Glyph("\ue768", 15.0), Ui.Txt(I18n.L("启动游戏"), 15.0, bold: true));
 		_stopBtn.Padding = new Thickness(16.0, 10.0, 16.0, 11.0);
-		Motion.HoverLift(_launchBtn, 1.05, 1.0, 16.0);
+		Motion.HoverLift(_launchBtn, 1.02, 1.0, 8.0);
 		_prog.Height = 5.0;
 		_prog.SetResourceReference(Control.ForegroundProperty, "B.OnBanner");
 		_prog.Opacity = 0.92;
@@ -721,19 +732,22 @@ public sealed class LaunchPage : PageBase
 		{
 			PageBase.Run(AuthlibLoginAsync);
 		});
-		Button button3 = Ui.Btn(I18n.L("版本设置"), BtnKind.Chip, delegate
-		{
-			PageBase.Run(VersionSettingsAsync);
-		}, "\ue713");
-		Button button4 = Ui.Btn(I18n.L("刷新新闻"), BtnKind.Chip, delegate
-		{
-			PageBase.Run(LoadNewsAsync);
-		}, "\ue72c");
 		Button button5 = Ui.IconBtn("\ue712", I18n.L("更多操作"), delegate(object s, RoutedEventArgs _)
 		{
 			ShowMoreMenu((FrameworkElement)s);
 		});
-		return Ui.Scroll(Ui.V(9.0, Field(I18n.L("实例"), _inst), Field(I18n.L("版本"), _ver), Field(I18n.L("用户"), _acc), Field("Java", _java), Field(I18n.L("内存"), grid), Field(I18n.L("分辨率"), control), Field(I18n.L("直连"), _server), Ui.Sep().M(0.0, 4.0, 0.0, 2.0), Ui.H(7.0, button, button2, button3, button4, button5)));
+		// 常用的只有实例/版本/用户；Java、内存、分辨率、直连收进「更多设置」，默认折叠
+		SPanel advanced = Ui.V(9.0, Field("Java", _java), Field(I18n.L("内存"), grid), Field(I18n.L("分辨率"), control), Field(I18n.L("直连"), _server));
+		advanced.Visibility = Visibility.Collapsed;
+		Button toggle = Ui.Btn(I18n.L("更多设置"), BtnKind.Ghost, null, "\ue70d");
+		toggle.HorizontalAlignment = HorizontalAlignment.Left;
+		toggle.Click += delegate
+		{
+			bool open = advanced.Visibility != Visibility.Visible;
+			advanced.Visibility = (open ? Visibility.Visible : Visibility.Collapsed);
+			toggle.Content = Ui.H(6.0, Ui.Glyph(open ? "\ue70e" : "\ue70d", 12.0), Ui.Txt(open ? I18n.L("收起") : I18n.L("更多设置")));
+		};
+		return Ui.Scroll(Ui.V(9.0, Field(I18n.L("实例"), _inst), Field(I18n.L("版本"), _ver), Field(I18n.L("用户"), _acc), toggle, advanced, Ui.Sep().M(0.0, 4.0, 0.0, 2.0), Ui.H(7.0, button, button2, button5)));
 	}
 
 	private static UIElement Field(string label, UIElement control)
@@ -748,6 +762,17 @@ public sealed class LaunchPage : PageBase
 	private void ShowMoreMenu(FrameworkElement anchor)
 	{
 		ContextMenu menu = new ContextMenu();
+		Item(I18n.L("版本设置"), VersionSettingsAsync);
+		Item(I18n.L("刷新新闻"), LoadNewsAsync);
+		if (!_dash.Has("log"))
+		{
+			// 日志卡默认不在主页上（没启动时是一大块空白），需要时一键加回来
+			Item(I18n.L("显示实时日志"), async delegate
+			{
+				_dash.AddCard("log");
+				await FillCardData();
+			});
+		}
 		Item(I18n.L("查看启动命令"), ShowLaunchCommandAsync);
 		Item(I18n.L("导出启动脚本 (.bat)"), ExportScriptAsync);
 		Item(I18n.L("创建桌面快捷方式"), ShortcutAsync);

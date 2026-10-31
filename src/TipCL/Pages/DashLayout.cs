@@ -149,6 +149,7 @@ public sealed class DashLayout
 		return dashLayout;
 	}
 
+	// 必须与 UiLayout.DefaultDoc() 完全一致（LayoutDefaultTests 会检查）
 	public static DashLayout Default()
 	{
 		return new DashLayout
@@ -156,66 +157,10 @@ public sealed class DashLayout
 			Grid = 8,
 			Items = new List<DashCard>
 			{
-				new DashCard
-				{
-					Id = "banner-main",
-					Type = "banner",
-					X = 0.0,
-					Y = 0.0,
-					W = 1.0,
-					H = 0.3,
-					Z = 0
-				},
-				new DashCard
-				{
-					Id = "config-main",
-					Type = "config",
-					X = 0.0,
-					Y = 0.315,
-					W = 0.315,
-					H = 0.685,
-					Z = 1
-				},
-				new DashCard
-				{
-					Id = "log-main",
-					Type = "log",
-					X = 0.33,
-					Y = 0.315,
-					W = 0.405,
-					H = 0.405,
-					Z = 2
-				},
-				new DashCard
-				{
-					Id = "quick-main",
-					Type = "quick",
-					X = 0.33,
-					Y = 0.735,
-					W = 0.405,
-					H = 0.265,
-					Z = 3
-				},
-				new DashCard
-				{
-					Id = "playtime-main",
-					Type = "playtime",
-					X = 0.75,
-					Y = 0.315,
-					W = 0.25,
-					H = 0.19,
-					Z = 4
-				},
-				new DashCard
-				{
-					Id = "news-main",
-					Type = "news",
-					X = 0.75,
-					Y = 0.52,
-					W = 0.25,
-					H = 0.48,
-					Z = 5
-				}
+				new DashCard { Id = "banner-main", Type = "banner", X = 0.0, Y = 0.0, W = 1.0, H = 0.26, Z = 0 },
+				new DashCard { Id = "config-main", Type = "config", X = 0.0, Y = 0.28, W = 0.42, H = 0.72, Z = 1 },
+				new DashCard { Id = "quick-main", Type = "quick", X = 0.435, Y = 0.28, W = 0.565, H = 0.3, Z = 2 },
+				new DashCard { Id = "news-main", Type = "news", X = 0.435, Y = 0.595, W = 0.565, H = 0.405, Z = 3 }
 			}
 		};
 	}

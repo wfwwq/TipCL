@@ -49,6 +49,19 @@ public static class UiLayout
 		return new LayoutDoc(new List<LayoutItem>
 		{
 			// 必须与界面端 DashLayout.Default() 完全一致，否则「恢复默认布局」只会剩下两张卡片
+			// 主页只放常用的 4 张：启动横幅 / 启动配置 / 快捷入口 / 新闻。日志、时长、便签等在「编辑布局 → 添加卡片」里
+			new LayoutItem("banner", 0.0, 0.0, 1.0, 0.26, "banner-main", 0L),
+			new LayoutItem("config", 0.0, 0.28, 0.42, 0.72, "config-main", 1L),
+			new LayoutItem("quick", 0.435, 0.28, 0.565, 0.3, "quick-main", 2L),
+			new LayoutItem("news", 0.435, 0.595, 0.565, 0.405, "news-main", 3L)
+		}, 8L);
+	}
+
+	// 1.x 的旧默认布局（6 张卡片，玩家反馈主页太挤）。存档里原样是它的，视为“没改过”，自动换成新默认。
+	public static LayoutDoc LegacyDefaultDoc()
+	{
+		return new LayoutDoc(new List<LayoutItem>
+		{
 			new LayoutItem("banner", 0.0, 0.0, 1.0, 0.3, "banner-main", 0L),
 			new LayoutItem("config", 0.0, 0.315, 0.315, 0.685, "config-main", 1L),
 			new LayoutItem("log", 0.33, 0.315, 0.405, 0.405, "log-main", 2L),
@@ -325,7 +338,8 @@ public static class UiLayout
 		}
 		string text = PyJson.Dumps(layoutDoc.ToDict());
 		string text2 = PyJson.Dumps(DefaultDoc().ToDict());
-		if (text != text2)
+		string text3 = PyJson.Dumps(LegacyDefaultDoc().ToDict());
+		if (text != text2 && text != text3)
 		{
 			Patch_WriteLocked(cONFIG, layoutDoc.ToDict(), "");
 		}
