@@ -40,9 +40,18 @@
     <!-- 把依赖 DLL 打进单个 exe -->
     <PackageReference Include="Costura.Fody" Version="6.0.0" PrivateAssets="all" />
     <PackageReference Include="Fody" Version="6.9.2" PrivateAssets="all" />
-    <!-- 插件界面：WebView2（托管 DLL 由 Costura 打进 exe；原生 WebView2Loader.dll 作为内嵌资源，运行时释放，见 Services/WebViewHost.Loader.cs） -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3912.50" GeneratePathProperty="true" />
+    <!-- 插件界面：WebView2（托管 DLL 由 Costura 打进 exe；原生 WebView2Loader.dll 作为内嵌资源，运行时释放，见 Services/WebViewHost.Loader.cs）
+         PrivateAssets=all：不向引用本项目的测试工程流动，避免测试输出目录混入 WebView2.Wpf（其 ThemeInfoAttribute 依赖 net48 WPF 程序集）
+         NeverCopyLoaderDllToOutputDirectory=true：loader 由我们自己内嵌+释放，不需要包把它作为 Content 拷到输出目录。
+         WPF 会把 Content 项生成 [assembly: AssemblyAssociatedContentFile]（属性类型在 PresentationFramework），
+         而 xunit 的 VSTest 适配器计算测试 UniqueID 时会枚举 TipCL.exe 的程序集属性，
+         net8 测试宿主加载不到 net48 的 PresentationCore/PresentationFramework → 测试全过后运行仍 FATAL -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3912.50" GeneratePathProperty="true" PrivateAssets="all" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <WebView2NeverCopyLoaderDllToOutputDirectory>true</WebView2NeverCopyLoaderDllToOutputDirectory>
+  </PropertyGroup>
 
   <!-- WebView2Loader.dll（x64/x86/arm64）内嵌进 exe，启动 WebView 前按当前进程架构释放到 %TIPCL_HOME%/runtime/webview2/loader/<arch>/ -->
   <ItemGroup Condition="'$(PkgMicrosoft_Web_WebView2)' != ''">
