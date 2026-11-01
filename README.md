@@ -156,7 +156,7 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 
 exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，点「更多信息 → 仍要运行」即可。个别杀软会对未签名的单文件程序报启发式误报，源码完全公开，也可以自己编译。
 
-- v1.0.13 SHA-256：`8a08b23eecf9bbc2c889ef5b57345c05d26cb24df84cb1e1105f733b7f517524`（每个 Release 附件都带 `.sha256` 文件，可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描）
+- v1.0.14 SHA-256：`52b9cd83057c11de0ca1f6dba7b02314e91938c52c043e3d27b37ee89d1d08a9`（每个 Release 附件都带 `.sha256` 文件，可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描）
 
 ## 💬 社区建议
 
