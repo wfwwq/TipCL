@@ -1,0 +1,12 @@
+{
+  "id": "hello-consumer",
+  "name": "Hello 消费者（示例）",
+  "version": "0.1.0",
+  "author": "TipCL",
+  "description": "演示跨插件服务：用 ctx.get / ctx.inject 拿 hello-plugin 提供的 hello 服务（CommonJS 写法）。",
+  "engines": { "tipcl": ">=3.3.0", "node": ">=22" },
+  "runtime": "node",
+  "main": "index.cjs",
+  "permissions": ["ui", "system"],
+  "optionalDependencies": { "hello-plugin": ">=0.1.0" }
+}

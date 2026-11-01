@@ -1,0 +1,9 @@
+{
+  "id": "dsh-compat",
+  "name": "dsh-game host code patterns",
+  "version": "0.0.1",
+  "runtime": "node",
+  "main": ["lib/index.js", "lib/agent.js"],
+  "permissions": ["ai.tools", "ai.sessions", "ai.llm", "credentials"],
+  "config": { "voice": { "type": "string", "default": "zh_female" } }
+}

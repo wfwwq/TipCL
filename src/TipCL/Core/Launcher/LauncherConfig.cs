@@ -99,15 +99,10 @@ public sealed class LauncherConfig
 			data["curseforge_api_key"] = "";
 			result = true;
 		}
-		(string, string[])[] array = new(string, string[])[3]
+		(string, string[])[] array = new(string, string[])[2]
 		{
 			("ai_api_key", new string[1] { Defaults.DEFAULT_API_KEY }),
 			("ai_base_url", new string[2]
-			{
-				Defaults.DEFAULT_API_BASE,
-				Defaults.DEFAULT_GATEWAY_URL
-			}),
-			("ai_gateway_url", new string[2]
 			{
 				Defaults.DEFAULT_API_BASE,
 				Defaults.DEFAULT_GATEWAY_URL
@@ -161,17 +156,21 @@ public sealed class LauncherConfig
 		return true;
 	}
 
+	/// <summary>AI 接入收成两种模式：builtin / custom。
+	/// 旧的 public（自建网关）和没填地址的 custom 都改成 builtin；填过自己地址的保持 custom。
+	/// 等于内置网关的地址当作没填（ScrubBuiltinSecrets 随后会清掉）。</summary>
 	internal bool MigrateAiGatewayMode()
 	{
-		if (Py.Eq(data.Get("ai_gateway_defaults"), "2026.10-builtin-newapi"))
+		if (Py.Eq(data.Get("ai_gateway_defaults"), Config.AI_GATEWAY_DEFAULTS_VERSION))
 		{
 			return false;
 		}
-		if (!new string[3] { "ai_gateway_url", "ai_base_url", "ai_api_key" }.Any((string k) => Py.Strip(Py.S(data.Get(k))).Length > 0) && Py.S(data.Get("ai_mode")) == "public")
-		{
-			data["ai_mode"] = "custom";
-		}
-		data["ai_gateway_defaults"] = "2026.10-builtin-newapi";
+		string text = Norm(data.Get("ai_base_url"));
+		bool flag = text.Length > 0 && text != Defaults.DEFAULT_API_BASE.TrimEnd('/') && text != Defaults.DEFAULT_GATEWAY_URL.TrimEnd('/');
+		string text2 = Py.Lower(Py.Strip(Py.S(data.Get("ai_mode"))));
+		data["ai_mode"] = ((text2 == "custom" || text2 == "newapi" || text2 == "自定义") && flag) ? "custom" : "builtin";
+		data.Pop("ai_gateway_url");
+		data["ai_gateway_defaults"] = Config.AI_GATEWAY_DEFAULTS_VERSION;
 		return true;
 	}
 

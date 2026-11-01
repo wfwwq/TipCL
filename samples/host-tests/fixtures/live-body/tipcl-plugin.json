@@ -1,0 +1,1 @@
+{ "id": "live-body", "name": "provides liveBody like dsh-livestream", "version": "0.0.1", "runtime": "node", "main": "index.mjs", "permissions": [] }

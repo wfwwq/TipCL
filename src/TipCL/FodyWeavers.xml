@@ -1,3 +1,4 @@
 <Weavers xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FodyWeavers.xsd">
-  <Costura />
+  <!-- WebView2Loader.dll 是原生库：不让 Costura 处理，由 WebViewHost 自己从内嵌资源释放 -->
+  <Costura ExcludeAssemblies="WebView2Loader" />
 </Weavers>

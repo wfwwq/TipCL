@@ -27,7 +27,7 @@ public static class Config
 
 	internal const string _LEGACY_DEFAULT_ISOLATION = "none";
 
-	public const string AI_GATEWAY_DEFAULTS_VERSION = "2026.10-builtin-newapi";
+	public const string AI_GATEWAY_DEFAULTS_VERSION = "2026.11-two-modes";
 
 	private const int _CF_MASK = 77;
 
@@ -108,11 +108,10 @@ public static class Config
 		pyDict["download_source"] = "auto";
 		pyDict["community_source"] = "auto";
 		pyDict["use_system_proxy"] = true;
-		pyDict["ai_mode"] = "custom";
-		pyDict["ai_gateway_url"] = "";
+		pyDict["ai_mode"] = "builtin";
 		pyDict["ai_base_url"] = "";
 		pyDict["ai_api_key"] = "";
-		pyDict["ai_model"] = "deepseek-v4-flash";
+		pyDict["ai_model"] = "";
 		pyDict["ai_confirm_writes"] = true;
 		pyDict["ai_permission_mode"] = "default";
 		pyDict["ai_permission_rules"] = new List<object>();
@@ -175,6 +174,9 @@ public static class Config
 		pyDict["allow_multi_instance"] = false;
 		pyDict["export_dir"] = "";
 		pyDict["language"] = "zh_CN";
+		// 插件市场：索引地址（默认空，由项目方自建）、是否允许安装未审核插件
+		pyDict["plugin_market_indexes"] = new List<object>();
+		pyDict["plugin_allow_unverified"] = false;
 		return pyDict;
 	}
 

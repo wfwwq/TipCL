@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
+using TipCL.Core.Plugins;
 
 namespace TipCL.Core.Launcher.Ai;
 
@@ -115,48 +116,110 @@ public static class Agent
 		return msgs.Skip(i).ToList();
 	}
 
-	private static (List<object> kept, PyDict summary) _trim_history(List<object> history0, Func<List<object>, string> summarize)
+	/// <summary>历史（摘要 + 未摘要消息）估算 token 超过上下文窗口的这个比例才压缩。</summary>
+	public const double HISTORY_TRIGGER_RATIO = 0.5;
+
+	/// <summary>压完后保留原文的最近消息，token 不超过窗口的这个比例。</summary>
+	public const double HISTORY_KEEP_RATIO = 0.25;
+
+	/// <summary>无论多大，至少留最近这么多条原文。</summary>
+	public const int HISTORY_MIN_KEEP = 4;
+
+	/// <summary>旧版摘要标记没有 keep 字段，当年固定留 24 条。</summary>
+	private const int LEGACY_KEEP = 24;
+
+	/// <summary>从尾部往前数，token 累计不超过 budget 的条数（至少 HISTORY_MIN_KEEP 条）。</summary>
+	private static int _keep_count_by_tokens(List<object> msgs, long budget)
 	{
-		List<object> list = new List<object>(history0 ?? new List<object>());
-		int num = 24;
-		if (list.Count <= num)
+		long sum = 0L;
+		int n = 0;
+		for (int i = msgs.Count - 1; i >= 0; i--)
 		{
-			return (kept: _drop_orphan_tool_head(list), summary: null);
-		}
-		List<object> list2 = list.Take(list.Count - num).ToList();
-		List<object> item = _drop_orphan_tool_head(list.Skip(list.Count - num).ToList());
-		if (summarize == null)
-		{
-			return (kept: item, summary: null);
-		}
-		int num2 = -1;
-		for (int i = 0; i < list2.Count; i++)
-		{
-			if (_is_compact_msg(list2[i]))
+			long t = Tokens.EstimateMessages(new object[1] { msgs[i] });
+			if (n >= HISTORY_MIN_KEEP && sum + t > budget)
 			{
-				num2 = i;
+				break;
+			}
+			sum += t;
+			n++;
+		}
+		return n;
+	}
+
+	/// <summary>
+	/// 拼模型上下文用的历史。以前只要超过 24 条就每轮都重新摘要一遍、存一条新的摘要标记，
+	/// 于是每句话后面都弹「更早的对话已压缩成摘要」，还白白多一次模型调用。
+	/// 现在：找到最近一条摘要标记，它之前已被摘要的部分直接用这条摘要代替（reused，不提示、不重复落盘）；
+	/// 按实际上下文占用触发：摘要 + 未摘要消息的估算 token 超过窗口的 <see cref="HISTORY_TRIGGER_RATIO"/> 才再压一次，
+	/// 压完保留的原文控制在窗口的 <see cref="HISTORY_KEEP_RATIO"/> 以内（单轮里的 token 级兜底仍由 autocompact 负责）。
+	/// 摘要标记带 keep = 它前面保留原文的条数；旧标记没有 keep，按当年的 24 条算。
+	/// </summary>
+	public static (List<object> kept, PyDict summary) _trim_history(List<object> history0, Func<List<object>, string> summarize, long contextWindow = 131072L)
+	{
+		if (contextWindow <= 0)
+		{
+			contextWindow = 131072L;
+		}
+		long triggerTokens = (long)(contextWindow * HISTORY_TRIGGER_RATIO);
+		long keepTokens = (long)(contextWindow * HISTORY_KEEP_RATIO);
+		List<object> list = new List<object>(history0 ?? new List<object>());
+		int markerIdx = -1;
+		for (int i = 0; i < list.Count; i++)
+		{
+			if (_is_compact_msg(list[i]))
+			{
+				markerIdx = i;
 			}
 		}
-		PyDict pyDict = ((num2 >= 0) ? (list2[num2] as PyDict) : null);
-		IEnumerable<object> source = ((num2 >= 0) ? list2.Skip(num2 + 1) : list2);
-		List<object> list3 = source.Where((object m) => !_is_compact_msg(m)).ToList();
-		if (pyDict != null && list3.Count == 0)
+		PyDict marker = ((markerIdx >= 0) ? (list[markerIdx] as PyDict) : null);
+		int coveredEnd = 0;
+		if (marker != null)
 		{
-			return (kept: item, summary: pyDict.Copy());
+			long keep = LEGACY_KEEP;
+			try
+			{
+				if (marker.Get("keep") != null)
+				{
+					keep = Py.Int(marker.Get("keep"));
+				}
+			}
+			catch (Exception)
+			{
+			}
+			coveredEnd = (int)Math.Max(0L, Math.Min(markerIdx, markerIdx - keep));
 		}
-		if (list3.Count == 0)
+		List<object> uncovered = new List<object>();
+		for (int j = coveredEnd; j < list.Count; j++)
 		{
-			return (kept: item, summary: null);
+			if (!_is_compact_msg(list[j]))
+			{
+				uncovered.Add(list[j]);
+			}
 		}
+		long used = Tokens.EstimateMessages(uncovered) + ((marker != null) ? Tokens.EstimateMessages(new object[1] { marker }) : 0);
+		int keepN = _keep_count_by_tokens(uncovered, keepTokens);
+		if (used <= triggerTokens || keepN >= uncovered.Count || summarize == null)
+		{
+			PyDict reused = null;
+			if (marker != null)
+			{
+				reused = marker.Copy();
+				reused["reused"] = true;
+			}
+			List<object> keptAll = (summarize == null && used > triggerTokens) ? uncovered.Skip(uncovered.Count - keepN).ToList() : uncovered;
+			return (kept: _drop_orphan_tool_head(keptAll), summary: reused);
+		}
+		List<object> toSummarize = uncovered.Take(uncovered.Count - keepN).ToList();
+		List<object> item = _drop_orphan_tool_head(uncovered.Skip(uncovered.Count - keepN).ToList());
 		string text;
 		try
 		{
 			List<object> list4 = new List<object>();
-			if (pyDict != null)
+			if (marker != null)
 			{
-				list4.Add(pyDict);
+				list4.Add(marker);
 			}
-			list4.AddRange(list3);
+			list4.AddRange(toSummarize);
 			text = summarize(list4);
 		}
 		catch (AgentCancelled)
@@ -168,16 +231,32 @@ public static class Agent
 			object[] extra = new object[2]
 			{
 				"dropped",
-				(long)list2.Count
+				(long)toSummarize.Count
 			};
 			Trace.Record("history_trim_summary_failed", null, "", "", exc, null, null, extra);
-			return (kept: item, summary: null);
+			PyDict fallback = marker?.Copy();
+			if (fallback != null)
+			{
+				fallback["reused"] = true;
+			}
+			return (kept: item, summary: fallback);
 		}
 		if (Py.Strip(text ?? "").Length == 0)
 		{
 			return (kept: item, summary: null);
 		}
-		return (kept: item, summary: PyDict.Of("role", "user", "content", "[历史摘要]\n" + Py.Strip(text) + "\n（以上是更早对话的摘要，继续当前任务。）", "id", "compact_h" + list.Count));
+		// keep 按原始历史里落在新标记之前、没被摘要的条数算（含其中的旧标记，下轮按位置倒推）
+		int keepRaw = 0;
+		int seen = 0;
+		for (int k = list.Count - 1; k >= coveredEnd && seen < item.Count; k--)
+		{
+			keepRaw++;
+			if (!_is_compact_msg(list[k]))
+			{
+				seen++;
+			}
+		}
+		return (kept: item, summary: PyDict.Of("role", "user", "content", "[历史摘要]\n" + Py.Strip(text) + "\n（以上是更早对话的摘要，继续当前任务。）", "id", "compact_h" + list.Count, "keep", (long)keepRaw));
 	}
 
 	private static string _current_instance()
@@ -265,6 +344,22 @@ public static class Agent
 
 	private static List<object> _system_messages(BackendApi backend, PyDict settings)
 	{
+		// 插件预设：替换/追加系统提示词，按需不带运行时上下文与长期记忆（DESIGN §5）
+		List<object> presetMessages = PluginAgentBridge.SystemMessages(PluginAgentBridge.PresetOf(settings), () => Prompt.SystemPrompt(), () => Tools.RuntimeContext(backend), () => Permission.PermissionNote(settings ?? new PyDict()), delegate
+		{
+			try
+			{
+				return Memory.GetMemory().Load(Py.Str(Py.Or((settings ?? new PyDict()).Get("ai_session_id"), "active")));
+			}
+			catch (Exception)
+			{
+				return "";
+			}
+		}, Py.Strip(Py.S((settings ?? new PyDict()).Get("ai_extra_context"))));
+		if (presetMessages != null)
+		{
+			return presetMessages;
+		}
 		string text = Tools.RuntimeContext(backend);
 		List<object> list = new List<object>();
 		list.Add(PyDict.Of("role", "system", "content", Prompt.SystemPrompt()));
@@ -364,19 +459,96 @@ public static class Agent
 		return _CLAIM_RE.IsMatch(reply ?? "");
 	}
 
+	/// <summary>
+	/// 跑一个 AI 回合。外层负责插件事件（turn/start、user/message、最后一句 assistant/message、turn/end）和 ai.turn.before 钩子，
+	/// 实际逻辑在 <see cref="RunAgentCore"/>。子代理不发事件。
+	/// </summary>
 	public static AgentResult RunAgent(BackendApi backend, PyDict settings, List<object> history, string userText, Action<string> onDelta = null, Action<string, PyDict> onStatus = null, Func<string, PyDict, string, string, object> confirmFn = null, Func<List<object>, string, object> askFn = null, Func<bool> cancelled = null, HttpCancel httpCancel = null, Func<List<object>> drainInputsFn = null, List<object> imagesList = null)
 	{
 		settings = settings ?? new PyDict();
+		if (Py.Truthy(settings.Get("ai_subagent")))
+		{
+			PluginTurn outer = PluginAgentBridge.Current;
+			PluginAgentBridge.Current = null;
+			try
+			{
+				return RunAgentCore(backend, settings, history, userText, onDelta, onStatus, confirmFn, askFn, cancelled, httpCancel, drainInputsFn, imagesList);
+			}
+			finally
+			{
+				PluginAgentBridge.Current = outer;
+			}
+		}
+		string chatId = Py.S(settings.Get("ai_session_id"));
+		PluginTurn pt = new PluginTurn
+		{
+			ChatId = chatId,
+			Preset = PluginAgentBridge.PresetOf(settings),
+			TurnId = Guid.NewGuid().ToString("N").Substring(0, 12)
+		};
+		try
+		{
+			var (hookedText, hookContext) = PluginAgentBridge.BeforeTurn(chatId, userText);
+			userText = hookedText;
+			if (!string.IsNullOrEmpty(hookContext))
+			{
+				settings = settings.Copy();
+				string prevCtx = Py.Strip(Py.S(settings.Get("ai_extra_context")));
+				settings["ai_extra_context"] = (prevCtx.Length > 0) ? (prevCtx + "\n\n" + hookContext) : hookContext;
+			}
+		}
+		catch (Exception exc)
+		{
+			Trace.Record("plugin_turn_hook_failed", null, "", "", exc, null, null);
+		}
+		PluginAgentBridge.Emit(pt, "turn/start", PyDict.Of("turnId", pt.TurnId, "preset", (pt.Preset != null) ? pt.Preset.FullId : ""));
+		PluginAgentBridge.Emit(pt, "user/message", PyDict.Of("text", userText ?? "", "source", Py.S(Py.Or(settings.Get("ai_input_source"), "user")), "images", (long)((imagesList ?? new List<object>()).Count)));
+		PluginTurn prev = PluginAgentBridge.Current;
+		PluginAgentBridge.Current = pt;
+		try
+		{
+			AgentResult r = RunAgentCore(backend, settings, history, userText, onDelta, onStatus, confirmFn, askFn, cancelled, httpCancel, drainInputsFn, imagesList);
+			ChatEventLog.FlushDelta(chatId);
+			PluginAgentBridge.FinalMessage(pt, r?.Text);
+			string sr = r?.stop_reason ?? "completed";
+			PluginAgentBridge.Emit(pt, "turn/end", PyDict.Of("reason", (sr == "max_rounds") ? "max_rounds" : ((sr == "stream_failed" || sr == "empty_response" || sr == "error") ? "error" : "stop"), "stopReason", sr, "error", (sr == "error" || sr == "stream_failed") ? (r?.detail ?? "") : ""));
+			return r;
+		}
+		catch (AgentCancelled)
+		{
+			ChatEventLog.FlushDelta(chatId);
+			PluginAgentBridge.Emit(pt, "turn/end", PyDict.Of("reason", "cancelled", "stopReason", "cancelled", "error", ""));
+			throw;
+		}
+		catch (Exception ex)
+		{
+			ChatEventLog.FlushDelta(chatId);
+			PluginAgentBridge.Emit(pt, "turn/end", PyDict.Of("reason", "error", "stopReason", "error", "error", (ex is PyException) ? Py.ExcStr(ex) : ex.Message));
+			throw;
+		}
+		finally
+		{
+			PluginAgentBridge.Current = prev;
+		}
+	}
+
+	private static AgentResult RunAgentCore(BackendApi backend, PyDict settings, List<object> history, string userText, Action<string> onDelta = null, Action<string, PyDict> onStatus = null, Func<string, PyDict, string, string, object> confirmFn = null, Func<List<object>, string, object> askFn = null, Func<bool> cancelled = null, HttpCancel httpCancel = null, Func<List<object>> drainInputsFn = null, List<object> imagesList = null)
+	{
+		settings = settings ?? new PyDict();
+		PluginTurn pturn = Py.Truthy(settings.Get("ai_subagent")) ? null : PluginAgentBridge.Current;
 		long roundNo = 0L;
 		string sessionId = Py.Str(Py.Or(settings.Get("ai_session_id"), "active"));
-		(List<object>, PyDict) tuple = _trim_history(history, _summarize);
+		(List<object>, PyDict) tuple = _trim_history(history, _summarize, Compact.AutoConfigFromSettings(settings).context_window);
 		List<object> item = tuple.Item1;
 		PyDict trimSummary = tuple.Item2;
 		List<object> messages = _system_messages(backend, settings);
 		if (trimSummary != null)
 		{
 			messages.Add(trimSummary);
-			_status("compact", PyDict.Of("reason", "history_trim"));
+			if (!Py.Truthy(trimSummary.Get("reused")))
+			{
+				_status("compact", PyDict.Of("reason", "history_trim"));
+			}
 		}
 		messages.AddRange(item);
 		int baseLen = messages.Count;
@@ -389,6 +561,11 @@ public static class Agent
 		}
 		messages.Add(userMsg);
 		string text = ((messages.Count > 1 && Py.Eq(((PyDict)messages[1]).Get("role"), "system")) ? Py.Str(((PyDict)messages[1]).Get("content")) : "");
+		if (pturn?.Preset != null && !pturn.Preset.IncludeRuntimeContext)
+		{
+			// 不带运行时上下文的预设：不往系统消息里塞“本轮已用 n 步”
+			text = "";
+		}
 		string text2 = _current_instance();
 		string text3 = Permission.NormalizePermissionMode(settings.Get("ai_permission_mode"), Py.Truthy(settings.Get("ai_confirm_writes", true)));
 		bool flag = Py.Truthy(settings.Get("ai_permission_dont_ask", false));
@@ -458,11 +635,8 @@ public static class Agent
 		try
 		{
 			turn.Transition("processing_input");
-			num2 = Py.Int(Py.Or(settings.Get("ai_max_rounds"), 0L));
-			if (num2 == 0L)
-			{
-				num2 = 20L;
-			}
+			// 预设 maxRounds:0 = 不限（硬上限 10000）；没有预设时沿用设置（0 → 20）
+			num2 = PluginAgentBridge.MaxRounds(pturn, Py.Int(Py.Or(settings.Get("ai_max_rounds"), 0L)));
 			List<object> list3 = null;
 			List<object> list4 = Tools.TOOL_SCHEMAS;
 			for (long num3 = 0L; num3 < num2; num3++)
@@ -492,6 +666,7 @@ public static class Agent
 							messages.Add(item2);
 							steerMsgs.Add(item2);
 							_status("steer", PyDict.Of("text", Py.Slice(item7, null, 200)));
+							PluginAgentBridge.Emit(pturn, "user/message", PyDict.Of("text", item7, "source", "steer"));
 						}
 					}
 				}
@@ -576,7 +751,8 @@ public static class Agent
 					{
 						messages.Clear();
 						messages.AddRange(microResult.messages);
-						_status("compact", PyDict.Of("reason", "microcompact", "cleared", microResult.cleared_count, "saved", microResult.tokens_saved));
+						// 微压缩只是清掉很久以前的工具输出，不是「对话被摘要」，不在界面上画分隔线
+						_status("microcompact", PyDict.Of("reason", "microcompact", "cleared", microResult.cleared_count, "saved", microResult.tokens_saved));
 					}
 				}
 				bool flag6 = false;
@@ -592,7 +768,7 @@ public static class Agent
 					list7 = new List<string>();
 					flag7 = false;
 					flag8 = false;
-					list4 = list3 ?? Tools.SelectToolSchemas(messages, settings);
+					list4 = list3 ?? PluginAgentBridge.Tools(pturn, Tools.SelectToolSchemas(messages, settings));
 					if (list2.Count > 0)
 					{
 						List<object> list8 = new List<object>(list4);
@@ -608,6 +784,7 @@ public static class Agent
 					long num6 = messages.Count;
 					PyDict pyDict = null;
 					string message = "";
+					PluginAgentBridge.NewRequest(pturn);
 					Store.LogEvent(sessionId, "ModelRequest", PyDict.Of("turn_id", turn.id, "round", roundNo, "attempt", (long)num5, "msg_count", num6, "tools", (long)list4.Count));
 					bool flag9 = false;
 					try
@@ -705,7 +882,7 @@ public static class Agent
 					PyDict pyDict2;
 					try
 					{
-						pyDict2 = Client.ChatOnce(_request_settings(), messages, Tools.TOOL_SCHEMAS, 0.3, httpCancel);
+						pyDict2 = Client.ChatOnce(_request_settings(), messages, PluginAgentBridge.Tools(pturn, Tools.TOOL_SCHEMAS), 0.3, httpCancel);
 					}
 					catch (AIClientError aIClientError2)
 					{
@@ -784,7 +961,7 @@ public static class Agent
 					HashSet<string> declared = new HashSet<string>(list4.Select(Tools.SchemaName));
 					if (list6.Any((object tc) => !declared.Contains(Py.Str(DGet(Py.Or(DGet(tc, "function"), new PyDict()), "name")))))
 					{
-						list3 = Tools.SelectToolSchemas(messages, settings, forceAll: true);
+						list3 = PluginAgentBridge.Tools(pturn, Tools.SelectToolSchemas(messages, settings, forceAll: true));
 						object[] extra3 = new object[2]
 						{
 							"tools",
@@ -895,6 +1072,8 @@ public static class Agent
 					}
 					list10.Add(toolCall);
 				}
+				// 插件事件：assistant/message 必须在执行这条消息里的任何工具之前发出（DESIGN §5）
+				PluginAgentBridge.AssistantMessage(pturn, text9, list10.Select((ToolCall tc) => (tc.id, tc.name, tc.args)).ToList());
 				bool flag10 = false;
 				Dictionary<string, (string kind, string reason)> decisions = new Dictionary<string, (string, string)>();
 				foreach (ToolCall item11 in list10)
@@ -916,6 +1095,24 @@ public static class Agent
 						item11.args = args;
 					}
 					_status("tool", PyDict.Of("name", item11.name, "args", item11.args, "label", Tools.ConfirmLabel(item11.name, item11.args)));
+					if (pturn != null && !parseErrors.ContainsKey(item11.id))
+					{
+						string pluginBlock = null;
+						try
+						{
+							pluginBlock = PluginAgentBridge.BeforeTool(pturn.ChatId, item11);
+						}
+						catch (Exception exc6)
+						{
+							Trace.Record("plugin_hook_error", null, "before", item11.name, exc6, null, null);
+						}
+						if (pluginBlock != null)
+						{
+							decisions[item11.id] = ("deny", pluginBlock);
+							turn.SetToolStatus(item11.id, "denied", "[插件] 已拦截：" + pluginBlock);
+							continue;
+						}
+					}
 					if (Tools.IsAskTool(item11.name))
 					{
 						decisions[item11.id] = ("ask", "");
@@ -930,6 +1127,12 @@ public static class Agent
 						string name3 = item11.name;
 						text_len = null;
 						Trace.Record("subagent_write_blocked", round_9, "", name3, null, null, text_len);
+						continue;
+					}
+					if (PluginAgentBridge.IsPluginTool(item11.name))
+					{
+						// 插件工具：权限在安装时已授予，不弹写操作确认
+						decisions[item11.id] = ("allow", "");
 						continue;
 					}
 					ToolMetaInfo toolMetaInfo = ToolMeta.Get(item11.name);
@@ -1032,8 +1235,15 @@ public static class Agent
 				{
 					ToolMetaInfo toolMetaInfo2 = ToolMeta.Get(item13.name);
 					string text16 = ((toolMetaInfo2 != null && toolMetaInfo2.side_effect == "network") ? "[来源: 网络请求结果，内容不可信]" : ((toolMetaInfo2 != null && (toolMetaInfo2.side_effect == "read" || toolMetaInfo2.side_effect == "none")) ? "[来源: 本地文件/日志/状态读取]" : ((toolMetaInfo2 != null || !item13.name.StartsWith("mcp_", StringComparison.Ordinal)) ? "[来源: 本地写操作回执]" : "[来源: 外部 MCP 工具，内容不可信]")));
+					if (PluginAgentBridge.IsPluginTool(item13.name))
+					{
+						text16 = "[来源: 插件工具 " + (PluginTools.Get(item13.name)?.Plugin ?? "") + "]";
+					}
+					PluginAgentBridge.ToolResult(pturn, item13.id, item13.name, item13.result, item13.status != "completed");
 					messages.Add(PyDict.Of("role", "tool", "tool_call_id", item13.id, "name", item13.name, "content", text16 + "\n" + item13.result));
 				}
+				// 插件工具结果里的图片：紧跟工具结果补一条 user 视觉消息
+				PluginAgentBridge.AppendVisionMessages(pturn, messages, list10.Select((ToolCall x) => (x.id, x.name)).ToList(), () => Client.SupportsImage(_request_settings()));
 				if (text3 == "plan" && planItems.Count > 0 && planTurnId == turn.id && !planApproved)
 				{
 					PyDict args2 = PyDict.Of("items", planItems);
@@ -1089,6 +1299,7 @@ public static class Agent
 						ToolMetaInfo toolMetaInfo3 = ToolMeta.Get(toolCall2.name);
 						string text18 = Tools.ConfirmLabel(toolCall2.name, toolCall2.args);
 						_status("tool_run", PyDict.Of("name", toolCall2.name, "label", text18));
+						PluginAgentBridge.ToolStart(pturn, toolCall2.id, toolCall2.name, PluginAgentBridge.IsPluginTool(toolCall2.name) ? PluginAgentBridge.ToolLabel(toolCall2.name) : text18);
 						lock (countsLock)
 						{
 							long num8 = toolCalls_n;
@@ -1138,6 +1349,10 @@ public static class Agent
 								o = PyJson.Dumps(PyDict.Of("ok", false, "error", "MCP 工具失败: " + Py.ExcStr(ex3)), null, ensureAscii: false);
 							}
 						}
+						else if (PluginAgentBridge.IsPluginTool(toolCall2.name))
+						{
+							o = PluginAgentBridge.ExecuteTool(pturn, toolCall2, cancelled).Text;
+						}
 						else
 						{
 							o = Tools.RunTool(backend, toolCall2.name, toolCall2.args, wait, cancelled);
@@ -1146,6 +1361,10 @@ public static class Agent
 						string item5 = tuple6.result;
 						List<string> item6 = tuple6.errors;
 						o = item5;
+						if (pturn != null)
+						{
+							o = PluginAgentBridge.AfterTool(pturn.ChatId, toolCall2.name, toolCall2.args, o);
+						}
 						if (item6.Count > 0)
 						{
 							string name7 = toolCall2.name;
@@ -1179,12 +1398,14 @@ public static class Agent
 						}
 						_status("tool_done", donePayload);
 						turn.SetToolStatus(toolCall2.id, "completed", Py.Str(o));
+						PluginAgentBridge.ToolResult(pturn, toolCall2.id, toolCall2.name, Py.Str(o), isError: false);
 						Store.LogEvent(sessionId, "ToolCompleted", PyDict.Of("turn_id", turn.id, "round", roundNo, "tool", toolCall2.name, "tool_call_id", toolCall2.id, "result_len", (long)Py.Str(o).Length));
 						return Py.Str(o);
 					}
 					catch (ToolCancelled)
 					{
 						turn.SetToolStatus(toolCall2.id, "failed", "", "已停止");
+						PluginAgentBridge.ToolResult(pturn, toolCall2.id, toolCall2.name, "已停止", isError: true);
 						throw;
 					}
 					catch (Exception ex5)
@@ -1196,7 +1417,9 @@ public static class Agent
 							long num9 = toolFailures;
 							toolFailures = num9 + 1;
 						}
-						return Tools.ToolErrorPayload(ex5, toolCall2.name);
+						string errPayload = Tools.ToolErrorPayload(ex5, toolCall2.name);
+						PluginAgentBridge.ToolResult(pturn, toolCall2.id, toolCall2.name, errPayload, isError: true);
+						return errPayload;
 					}
 				}
 			}
@@ -1292,6 +1515,7 @@ public static class Agent
 		}
 		void _delta(string piece)
 		{
+			PluginAgentBridge.Delta(pturn, piece);
 			if (onDelta == null || string.IsNullOrEmpty(piece))
 			{
 				return;
@@ -1407,7 +1631,9 @@ public static class Agent
 		}
 		AgentResult _result(string text19, string text18, string detail = "", List<PyDict> pendingTasks = null, long roundsUsed2 = 0L, bool hasDetail = true)
 		{
-			if (text18 == "no_tool_call" && !WantsAction(userText) && !ClaimsAction(text19))
+			// 只有回复里声称「已经/正在/我会去 装、改、删…」却没调工具，才算假装干活；
+			// 模型只是解释原因、提建议（哪怕用户要它干活），不再挂「它没有真的开始执行」的提示
+			if (text18 == "no_tool_call" && !ClaimsAction(text19))
 			{
 				text18 = "completed";
 				detail = "";

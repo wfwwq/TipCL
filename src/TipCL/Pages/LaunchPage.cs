@@ -176,7 +176,7 @@ public sealed class LaunchPage : PageBase
 		_bTitle.SetResourceReference(TextBlock.ForegroundProperty, "B.OnBanner");
 		_bSub.SetResourceReference(TextBlock.ForegroundProperty, "B.OnBanner");
 		_dash.ContentFactory = BuildCard;
-		_dash.TitleFactory = (string t) => CardTypes.FirstOrDefault(((string Key, string Title) c) => c.Key == t).Title ?? t;
+		_dash.TitleFactory = (string t) => TipCL.Pages.Plugins.PluginDashCards.Title(t) ?? CardTypes.FirstOrDefault(((string Key, string Title) c) => c.Key == t).Title ?? t;
 		_dash.Changed += PersistLayout;
 		_layoutSaveTimer.Tick += delegate
 		{
@@ -319,6 +319,30 @@ public sealed class LaunchPage : PageBase
 					contextMenu.Items.Add(menuItem);
 				}
 			}
+			// 插件提供的首页卡片（kind "dashCard"）
+			foreach (var (ptype, ptitle, pw, ph) in TipCL.Pages.Plugins.PluginDashCards.Available())
+			{
+				if (_dash.Has(ptype))
+				{
+					continue;
+				}
+				string addType = ptype;
+				(int, int) minSize = (pw, ph);
+				MenuItem pluginItem = new MenuItem
+				{
+					Header = ptitle,
+					Icon = Ui.Glyph("\uea86", 13.0),
+					ToolTip = I18n.L("插件卡片")
+				};
+				pluginItem.Click += delegate
+				{
+					// 新卡片按插件声明的 defaultW/defaultH 放置，放好后最小尺寸放宽，方便用户缩小
+					_dash.MinSizes[addType] = minSize;
+					_dash.AddCard(addType);
+					_dash.MinSizes[addType] = (160, 120);
+				};
+				contextMenu.Items.Add(pluginItem);
+			}
 			if (contextMenu.Items.Count == 0)
 			{
 				contextMenu.Items.Add(new MenuItem
@@ -362,7 +386,13 @@ public sealed class LaunchPage : PageBase
 				}
 			});
 		};
-		SPanel sPanel = Ui.H(8.0, hint, add, snap, scheme, io, button, edit);
+		// 插件动作按钮（kind "action"，where "launch"）：带上当前选中的实例 / 版本
+		TipCL.Pages.Plugins.PluginActionBar pluginActions = new TipCL.Pages.Plugins.PluginActionBar("launch", () => new Dictionary<string, object?>
+		{
+			["instance"] = _inst.Str(),
+			["version"] = _ver.Str()
+		});
+		SPanel sPanel = Ui.H(8.0, pluginActions, hint, add, snap, scheme, io, button, edit);
 		sPanel.HorizontalAlignment = HorizontalAlignment.Right;
 		sPanel.Margin = new Thickness(18.0, 8.0, 18.0, 0.0);
 		foreach (UIElement child in sPanel.Children)
@@ -664,7 +694,7 @@ public sealed class LaunchPage : PageBase
 			"notes" => _notes, 
 			"playtime" => Ui.V(4.0, _playTotal, Ui.Muted(I18n.L("累计游玩时间"))), 
 			"tasks" => Ui.Scroll(_taskHost), 
-			_ => null, 
+			_ => TipCL.Pages.Plugins.PluginDashCards.Create(type), 
 		};
 	}
 

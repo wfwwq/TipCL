@@ -1,0 +1,36 @@
+{
+  "id": "hello-plugin",
+  "name": "Hello 插件（示例）",
+  "version": "0.1.0",
+  "author": "TipCL",
+  "description": "演示 Node 插件的全部能力：页面、AI 标签、浮层、首页卡片、设置与凭据、agent 预设与阻塞工具（带图片）、SSE 路由、llm.stream、启动钩子、跨插件服务。",
+  "icon": "assets/icon.png",
+  "homepage": "https://github.com/wfwwq/TipCL",
+  "engines": { "tipcl": ">=3.3.0", "node": ">=22" },
+  "runtime": "node",
+  "main": ["lib/index.js", "lib/agent.js"],
+  "client": "lib/client.js",
+  "permissions": ["launcher", "ai.tools", "ai.presets", "ai.sessions", "ai.llm", "credentials", "ui", "ui.overlay", "system"],
+  "config": {
+    "greeting":       { "type": "string",  "default": "Hello", "label": "问候语", "description": "钩子加的 JVM 参数、服务 greet() 和页面里都会用它" },
+    "maxWaitSeconds": { "type": "integer", "default": 30, "min": 1, "max": 600, "label": "hello_wait 最长等待秒数" },
+    "showOverlay":    { "type": "boolean", "default": true, "label": "显示浮层" },
+    "haikuModel":     { "type": "string",  "default": "", "label": "写俳句用的模型", "description": "provider/model；不填就用第一个供应商的第一个模型" },
+    "mood":           { "type": "string",  "enum": ["calm", "happy"], "enumLabels": ["平静", "开心"], "default": "calm", "label": "心情" }
+  },
+  "contributes": {
+    "credentials": [ { "name": "HELLO_API_KEY", "label": "Hello API Key", "description": "示例凭据：只检查有没有配置，不会显示出来" } ],
+    "agentPresets": [ {
+      "id": "hello",
+      "name": "Hello 演示",
+      "description": "只带 hello_* 工具的演示预设",
+      "order": 90,
+      "systemPromptFile": "prompts/hello.md",
+      "replaceSystemPrompt": true,
+      "includeRuntimeContext": false,
+      "tools": { "include": ["hello_*"], "builtin": false },
+      "maxRounds": 0,
+      "view": "watch"
+    } ]
+  }
+}

@@ -29,6 +29,11 @@ public static class UiLayout
 
 	public static bool IsKnownCard(string t)
 	{
+		// 插件首页卡片：plugin:<插件>:<卡片 id>（插件被卸载时卡片保留，界面显示“不可用”）
+		if (t != null && t.StartsWith("plugin:", StringComparison.Ordinal) && t.Length > 7)
+		{
+			return true;
+		}
 		return CARD_MIN_SIZE.Any((KeyValuePair<string, (long w, long h)> kv) => kv.Key == t);
 	}
 

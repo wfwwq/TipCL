@@ -232,7 +232,7 @@ public static class Compact
 			object obj = ((range2[j] is PyDict pyDict) ? pyDict.Get("id") : null);
 			text2 = Py.Str(Py.Truthy(obj) ? obj : ("idx_" + (i + j)));
 		}
-		PyDict item = PyDict.Of("role", "user", "content", "[历史摘要]\n" + Py.Strip(text) + "\n（以上是更早对话的摘要，继续当前任务。）", "id", "compact_" + text2);
+		PyDict item = PyDict.Of("role", "user", "content", "[历史摘要]\n" + Py.Strip(text) + "\n（以上是更早对话的摘要，继续当前任务。）", "id", "compact_" + text2, "keep", (long)range3.Count);
 		List<object> range4 = list.GetRange(0, i);
 		range4.Add(item);
 		range4.AddRange(range3);

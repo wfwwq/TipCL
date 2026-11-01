@@ -12,7 +12,7 @@ public static class Store
 
 	public const int MAX_MESSAGES = 200;
 
-	private static readonly string[] _KEEP_FIELDS = new string[6] { "tool_calls", "tool_call_id", "name", "id", "note", "images" };
+	private static readonly string[] _KEEP_FIELDS = new string[7] { "tool_calls", "tool_call_id", "name", "id", "note", "images", "keep" };
 
 	public const string STEER_ID_PREFIX = "steer_";
 
@@ -104,6 +104,15 @@ public static class Store
 			{
 				pyDict5["plan"] = pyDict3["plan"];
 			}
+			// 插件预设对话：preset（plugin:<id>/<预设>）和默认打开的 aiView 标签
+			if (Py.S(pyDict3.Get("preset")).Length > 0)
+			{
+				pyDict5["preset"] = Py.S(pyDict3["preset"]);
+			}
+			if (Py.S(pyDict3.Get("view")).Length > 0)
+			{
+				pyDict5["view"] = Py.S(pyDict3["view"]);
+			}
 			list2.Add(pyDict5);
 		}
 		if (list2.Count == 0)
@@ -171,17 +180,30 @@ public static class Store
 	public static List<object> ApiMessages(List<object> messages)
 	{
 		List<object> list = new List<object>();
-		foreach (object item in messages ?? new List<object>())
+		// 失败回合（接口 401、断网、手动停止…）只给用户看，不进模型上下文：
+		// 以前把报错当 assistant 发回去，改好设置后模型还会照着旧报错复读「401 Invalid token」。
+		// 同时去掉紧挨着报错的那条用户消息——那一轮没有答复，用户会重发。
+		List<object> src = messages ?? new List<object>();
+		HashSet<int> skip = new HashSet<int>();
+		for (int i = 0; i < src.Count; i++)
 		{
-			if (!(item is PyDict pyDict))
+			if (src[i] is PyDict e && Py.Eq(e.Get("role"), "error"))
+			{
+				skip.Add(i);
+				if (i > 0 && src[i - 1] is PyDict u && Py.Eq(u.Get("role"), "user"))
+				{
+					skip.Add(i - 1);
+				}
+			}
+		}
+		for (int idx = 0; idx < src.Count; idx++)
+		{
+			object item = src[idx];
+			if (skip.Contains(idx) || !(item is PyDict pyDict))
 			{
 				continue;
 			}
 			object a = pyDict.Get("role");
-			if (Py.Eq(a, "error"))
-			{
-				a = "assistant";
-			}
 			if (Py.Eq(a, "tool"))
 			{
 				PyDict pyDict2 = PyDict.Of("role", "tool", "content", Py.Or(pyDict.Get("content"), ""));
@@ -207,6 +229,15 @@ public static class Store
 			else if (Py.Eq(a, "user"))
 			{
 				PyDict pyDict4 = PyDict.Of("role", "user", "content", Py.Or(pyDict.Get("content"), ""));
+				// 摘要标记要带着 id / keep 进历史，否则 Agent 认不出来，每轮都会从头再摘要一遍
+				if (Py.S(pyDict.Get("id")).StartsWith("compact_", StringComparison.Ordinal))
+				{
+					pyDict4["id"] = pyDict["id"];
+					if (pyDict.Get("keep") != null)
+					{
+						pyDict4["keep"] = pyDict["keep"];
+					}
+				}
 				if (Py.Truthy(pyDict.Get("images")))
 				{
 					pyDict4["images"] = Py.ListCtor(pyDict["images"]);

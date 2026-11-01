@@ -131,14 +131,10 @@ internal sealed class AiFixWindow : Window
 	{
 		Dictionary<string, JsonElement> dictionary = (await AppServices.Client.TryCallAsync("get_settings", null, new Dictionary<string, JsonElement>())) ?? new Dictionary<string, JsonElement>();
 		JsonElement value;
-		string text = ((dictionary.TryGetValue("ai_mode", out value) && value.ValueKind == JsonValueKind.String) ? (value.GetString() ?? "public") : "public");
-		JsonElement value3;
-		string value2 = ((dictionary.TryGetValue("ai_base_url", out value3) && value3.ValueKind == JsonValueKind.String) ? (value3.GetString() ?? "") : "");
-		JsonElement value4;
-		bool flag = dictionary.TryGetValue("ai_api_key_set", out value4) && value4.ValueKind == JsonValueKind.True;
-		if (text != "custom" || (string.IsNullOrWhiteSpace(value2) && !flag))
+		string text = ((dictionary.TryGetValue("ai_mode", out value) && value.ValueKind == JsonValueKind.String) ? (value.GetString() ?? "builtin") : "builtin");
+		if (text != "custom")
 		{
-			return I18n.L("公益接口（免费网关）");
+			return I18n.L("内置网关");
 		}
 		JsonElement value5;
 		string text2 = ((dictionary.TryGetValue("ai_model", out value5) && value5.ValueKind == JsonValueKind.String) ? (value5.GetString() ?? "") : "");

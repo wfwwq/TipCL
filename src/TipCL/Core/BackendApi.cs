@@ -13,7 +13,7 @@ using TipCL.Core.Launcher.Ai;
 
 namespace TipCL.Core;
 
-public class BackendApi
+public partial class BackendApi
 {
 	internal AccountManager accounts;
 
@@ -452,10 +452,24 @@ public class BackendApi
 		return pyDict.Copy();
 	}
 
-	public object ai_new_chat()
+	public object ai_new_chat([Def("")] object preset = null, [Def("")] object view = null)
 	{
 		PyDict data = Store.Load();
-		Store.NewChat(data);
+		PyDict chat = Store.NewChat(data);
+		// 插件预设：对话记录带 preset / view（DESIGN §5）
+		string presetId = TipCL.Core.Plugins.PluginSessions.ResolvePresetLenient(Py.S(preset));
+		string viewId = Py.S(view);
+		if (presetId.Length > 0 && viewId.Length == 0)
+		{
+			viewId = TipCL.Core.Plugins.AgentPresets.Get(presetId)?.View ?? "";
+		}
+		if (presetId.Length > 0 || viewId.Length > 0)
+		{
+			chat["preset"] = presetId;
+			chat["view"] = viewId;
+			Store.Save(data);
+		}
+		_bus.Emit("ai.chat.created", PyDict.Of("chatId", chat["id"], "preset", presetId, "view", viewId, "plugin", ""));
 		return _localize_chats(data);
 	}
 
@@ -463,6 +477,8 @@ public class BackendApi
 	{
 		PyDict data = Store.Load();
 		Store.DeleteChat(data, chat_id);
+		TipCL.Core.Plugins.ChatEventLog.Forget(Py.S(chat_id));
+		_bus.Emit("ai.chat.deleted", PyDict.Of("chatId", Py.S(chat_id)));
 		return _localize_chats(data);
 	}
 
@@ -524,7 +540,7 @@ public class BackendApi
 		return I18nCore.Tr("（提示：") + text3 + I18nCore.Tr("）");
 	}
 
-	public object ai_send(object text, [Def("")] object chat_id = null, object launch = null, object context = null, object images = null)
+	public object ai_send(object text, [Def("")] object chat_id = null, object launch = null, object context = null, object images = null, [Def("user")] object source = null)
 	{
 		lock (_ai_lock)
 		{
@@ -539,7 +555,7 @@ public class BackendApi
 		_ui_launch = Py.DictCtor(Py.Truthy(launch) ? launch : new PyDict());
 		Thread thread = new Thread((ThreadStart)delegate
 		{
-			_ai_run(text, chat_id, context, images);
+			_ai_run(text, chat_id, context, images, source);
 		});
 		thread.IsBackground = true;
 		thread.Name = "ai-send";
@@ -547,7 +563,7 @@ public class BackendApi
 		return PyDict.Of("ok", true, "started", true);
 	}
 
-	private void _ai_run(object text0, object chat_id, object context, object images = null)
+	private void _ai_run(object text0, object chat_id, object context, object images = null, object source = null)
 	{
 		string text1 = ((text0 == null) ? null : ((text0 as string) ?? Py.Str(text0)));
 		PyDict pyDict = Store.Load();
@@ -556,6 +572,7 @@ public class BackendApi
 			Store.SetActive(pyDict, chat_id);
 		}
 		string runCid = Py.S(pyDict.Get("active_id"));
+		_ai_running_chat = runCid;
 		List<object> history = Store.ApiMessages(Py.ListOr(Py.Or((Store.GetChat(pyDict, runCid) ?? new PyDict()).Get("messages"), new List<object>())));
 		HttpCancel httpCancel = new HttpCancel();
 		_ai_http_abort = httpCancel.Abort;
@@ -568,6 +585,13 @@ public class BackendApi
 		bool released = false;
 		PyDict pyDict2 = _settings_full().Copy();
 		pyDict2["ai_session_id"] = ((runCid.Length > 0) ? runCid : "active");
+		// 插件：对话用的预设、这条消息的来源（user / plugin）
+		string chatPreset = Py.S((Store.GetChat(pyDict, runCid) ?? new PyDict()).Get("preset"));
+		if (chatPreset.Length > 0)
+		{
+			pyDict2["ai_preset"] = chatPreset;
+		}
+		pyDict2["ai_input_source"] = Py.Truthy(source) ? Py.Str(source) : "user";
 		if (Py.Truthy(context))
 		{
 			pyDict2["ai_extra_context"] = Py.Str(context);
@@ -838,7 +862,7 @@ public class BackendApi
 					{
 						list5.Add(pyDict5.Copy());
 					}
-					else if (Py.Eq(a, "user") && Py.S(pyDict5.Get("id")).StartsWith("compact_", StringComparison.Ordinal))
+					else if (Py.Eq(a, "user") && Py.S(pyDict5.Get("id")).StartsWith("compact_", StringComparison.Ordinal) && !Py.Truthy(pyDict5.Get("reused")))
 					{
 						list4.Add(pyDict5.Copy());
 					}
@@ -1940,6 +1964,13 @@ public class BackendApi
 		try
 		{
 			TerracottaStop();
+		}
+		catch (Exception)
+		{
+		}
+		try
+		{
+			TipCL.Core.Plugins.PluginManager.Instance?.Shutdown(TimeSpan.FromMilliseconds(Math.Max(300.0, Math.Min(3000.0, (num - Py.Monotonic()) * 1000.0 + 1500.0))));
 		}
 		catch (Exception)
 		{
@@ -3077,15 +3108,42 @@ public class BackendApi
 		object[] array = LaunchFlow.ResolveResolution(pyDict3, width, height);
 		McLauncher.LaunchCommand launchCommand = McLauncher.BuildLaunchCommand(inst, text, pyDict2, text6, memory_mb, array[0], array[1], extra_game_args2, pyDict3["jvm_args"], text5, pyDict2.Get("authlib_api"));
 		text5 = launchCommand.game_dir;
+		// 插件 launch.before 钩子：可以改 Java、JVM/游戏参数和环境变量（DESIGN §4 钩子）
+		PyDict pluginEnv = null;
+		try
+		{
+			(List<string> cmd, PyDict env) hooked = TipCL.Core.Plugins.LaunchHooks.Before(launchCommand.cmd, Py.S(version_json.Get("mainClass")), inst.name, text, PyDict.Of("name", Py.S(pyDict2.Get("name")), "type", Py.S(Py.Or(pyDict2.Get("user_type"), "offline"))), action);
+			launchCommand.cmd = hooked.cmd;
+			pluginEnv = hooked.env;
+		}
+		catch (Exception exHook)
+		{
+			action("[插件] 启动前钩子出错，已忽略：" + exHook.Message);
+		}
 		action("实际启动: " + launchCommand.cmd[0]);
 		action(I18nCore.Tr("正在启动游戏进程…"));
 		ctx.Progress(3L, 4L, I18nCore.Tr("游戏启动中"));
-		GameProcess gameProcess = new GameProcess(launchCommand.cmd, text5, action, null, Py.Str(pyDict3["priority"]), Py.Str(Py.Or(pyDict3.Get("window_title"), "")), start_readers: false);
+		string pluginInst = inst.name;
+		Action<string> gameLine = delegate(string line)
+		{
+			action(line);
+			TipCL.Core.Plugins.PluginManager.GameLog(pluginInst, line);
+		};
+		GameProcess gameProcess = new GameProcess(launchCommand.cmd, text5, gameLine, pluginEnv, Py.Str(pyDict3["priority"]), Py.Str(Py.Or(pyDict3.Get("window_title"), "")), start_readers: false);
 		lock (_game_lock)
 		{
 			_game_proc = gameProcess.proc;
 		}
-		Emit("game_started", new PyDict());
+		long gamePid = 0L;
+		try
+		{
+			gamePid = gameProcess.proc.Id;
+		}
+		catch (Exception)
+		{
+		}
+		Emit("game_started", PyDict.Of("instance", inst.name, "version", text, "pid", gamePid));
+		TipCL.Core.Plugins.PluginHooks.Fire("launch.after", PyDict.Of("instance", inst.name, "version", text, "pid", gamePid));
 		gameProcess.StartReaders();
 		object obj5 = null;
 		PlaytimeTracker playtimeTracker = null;
@@ -3125,7 +3183,7 @@ public class BackendApi
 					_game_proc = null;
 				}
 			}
-			Emit("game_exited", PyDict.Of("code", obj5));
+			Emit("game_exited", PyDict.Of("code", obj5, "instance", inst.name, "version", text, "pid", gamePid));
 		}
 		if (ctx.Cancelled)
 		{
@@ -3135,6 +3193,7 @@ public class BackendApi
 		action("游戏已退出，退出码 " + Py.Str(obj5));
 		LaunchFlow.RunHook(Py.Str(Py.Or(pyDict4.Get("post_launch"), "")), text5, action);
 		PyDict pyDict7 = Crash.AnalyzeLaunch(inst, obj5, gameProcess.LastLines(), gameProcess.started_at, cancelled: false, text, new object[1] { text5 });
+		TipCL.Core.Plugins.PluginHooks.Fire("game.exit", PyDict.Of("instance", inst.name, "version", text, "code", obj5, "crashed", Py.Truthy(pyDict7.Get("is_crash"))));
 		if (Py.Truthy(pyDict7.Get("is_crash")))
 		{
 			action("[崩溃分析] " + Py.Str(Py.Or(pyDict7.Get("summary"), pyDict7.Get("headline"))));
@@ -4007,8 +4066,6 @@ public class BackendApi
 			pyDict[text + "_set"] = text2.Length > 0;
 			pyDict[text + "_hint"] = _secret_hint(text2);
 		}
-		pyDict["ai_gateway_url"] = Py.Strip(Py.S(CONFIG.Get("ai_gateway_url")));
-		pyDict["ai_base_url"] = Py.Strip(Py.S(CONFIG.Get("ai_base_url")));
 		return pyDict;
 	}
 
@@ -4055,11 +4112,11 @@ public class BackendApi
 		pyDict["default_resolution"] = Py.L(Py.Int(GD("width", 854L)), Py.Int(GD("height", 480L)));
 		pyDict["ms_client_id"] = Py.Or(G("microsoft_client_id"), "");
 		pyDict["curseforge_api_key"] = Py.Or(G("curseforge_api_key"), "");
-		pyDict["ai_mode"] = Py.Or(G("ai_mode"), "public");
-		pyDict["ai_gateway_url"] = Py.Or(StripAttr(Py.Or(G("ai_gateway_url"), "")), Defaults.DEFAULT_GATEWAY_URL, "");
-		pyDict["ai_base_url"] = Py.Or(StripAttr(Py.Or(G("ai_base_url"), "")), Defaults.DEFAULT_API_BASE, "");
-		pyDict["ai_api_key"] = Py.Or(StripAttr(Py.Or(G("ai_api_key"), "")), Defaults.DEFAULT_API_KEY, "");
-		pyDict["ai_model"] = Py.Or(G("ai_model"), "deepseek-v4-flash");
+		// 内置网关的地址和令牌只在 Client.ResolveEndpoint 里用，不往设置里填，界面和导出都看不到
+		pyDict["ai_base_url"] = StripAttr(Py.Or(G("ai_base_url"), ""));
+		pyDict["ai_api_key"] = StripAttr(Py.Or(G("ai_api_key"), ""));
+		pyDict["ai_mode"] = Client.Mode(PyDict.Of("ai_mode", G("ai_mode"), "ai_base_url", pyDict["ai_base_url"]));
+		pyDict["ai_model"] = Py.S(G("ai_model"));
 		pyDict["ai_confirm_writes"] = Py.Truthy(GD("ai_confirm_writes", true));
 		pyDict["ai_permission_mode"] = Permission.NormalizePermissionMode(G("ai_permission_mode"), Py.Truthy(GD("ai_confirm_writes", true)));
 		pyDict["ai_permission_rules"] = Py.ListCtor(Py.Or(G("ai_permission_rules"), new List<object>()));
@@ -4131,6 +4188,9 @@ public class BackendApi
 		pyDict["ui_nav_groups"] = _nav_groups(G("ui_nav_groups"));
 		pyDict["ui_section_members"] = _nav_members(G("ui_section_members"));
 		pyDict["ui_sidebar_width"] = Py.Int(Py.Or(G("ui_sidebar_width"), 0L));
+		// 插件市场（DESIGN §9）
+		pyDict["plugin_market_indexes"] = Py.ListOr(G("plugin_market_indexes")).Select(Py.S).Where((string u) => u.Trim().Length > 0).Cast<object>().ToList();
+		pyDict["plugin_allow_unverified"] = Py.Truthy(GD("plugin_allow_unverified", false));
 		return pyDict;
 		object G(string k)
 		{
@@ -4311,11 +4371,7 @@ public class BackendApi
 		}
 		if (Has("ai_mode"))
 		{
-			pyDict["ai_mode"] = Py.Or(G("ai_mode"), "public");
-		}
-		if (Has("ai_gateway_url"))
-		{
-			pyDict["ai_gateway_url"] = StripOrEmpty(G("ai_gateway_url"));
+			pyDict["ai_mode"] = (Py.Lower(Py.Strip(Py.S(G("ai_mode")))) == "custom") ? "custom" : "builtin";
 		}
 		if (Has("ai_base_url"))
 		{
@@ -4323,7 +4379,7 @@ public class BackendApi
 		}
 		if (Has("ai_model"))
 		{
-			pyDict["ai_model"] = Py.Or(G("ai_model"), CONFIG.Get("ai_model"), "deepseek-v4-flash");
+			pyDict["ai_model"] = StripOrEmpty(G("ai_model"));
 		}
 		if (Has("ai_permission_mode"))
 		{
@@ -4539,8 +4595,24 @@ public class BackendApi
 			}
 			pyDict["ui_sidebar_width"] = ((num2 != 0L) ? ((object)num2) : null);
 		}
+		// 插件市场（DESIGN §9）：索引地址列表、是否允许安装未审核插件
+		if (Has("plugin_market_indexes"))
+		{
+			object raw = G("plugin_market_indexes");
+			List<object> urls = ((raw is string rawText) ? Py.SplitLines(rawText).Cast<object>().ToList() : Py.ListOr(raw)).Select(Py.S).Select((string u) => u.Trim()).Where((string u) => u.Length > 0).Distinct().Cast<object>().ToList();
+			pyDict["plugin_market_indexes"] = urls;
+		}
+		if (Has("plugin_allow_unverified"))
+		{
+			pyDict["plugin_allow_unverified"] = Py.Truthy(G("plugin_allow_unverified"));
+		}
 		CONFIG.Update(pyDict);
 		CONFIG.Save();
+		if (pyDict.ContainsKey("ui_dark") || pyDict.ContainsKey("theme_color"))
+		{
+			// 插件网页端跟随主题（DESIGN §4 theme.changed）
+			_bus.Emit("theme.changed", TipCL.Core.Plugins.PluginManager.Theme());
+		}
 		if (pyDict.ContainsKey("instances_dir"))
 		{
 			_inst_cache = null;

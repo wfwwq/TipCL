@@ -143,7 +143,8 @@ public partial class MainWindow : Window
 		new NavDef("playtime", I18n.L("游戏时长"), "\ue823", () => new PlaytimePage()),
 		new NavDef("feedback", I18n.L("反馈与帮助"), "\ue8bd", () => new FeedbackPage()),
 		new NavDef("settings", I18n.L("设置"), "\ue713", () => new SettingsPage()),
-		new NavDef("tasks", I18n.L("下载任务"), "\ue9d5", () => new TasksPage())
+		new NavDef("tasks", I18n.L("下载任务"), "\ue9d5", () => new TasksPage()),
+		new NavDef("plugins", I18n.L("插件"), "\uea86", () => new TipCL.Pages.Plugins.PluginsPage())
 	};
 
 	private static readonly Dictionary<string, string> NavGlyphs = new Dictionary<string, string>
@@ -168,7 +169,8 @@ public partial class MainWindow : Window
 		["servers"] = "\ue968",
 		["playtime"] = "\ue823",
 		["feedback"] = "\ue8bd",
-		["settings"] = "\ue713"
+		["settings"] = "\ue713",
+		["plugins"] = "\uea86"
 	};
 
 	private readonly Dictionary<string, NavRow> _navRows = new Dictionary<string, NavRow>();
@@ -399,6 +401,7 @@ public partial class MainWindow : Window
 			SetBridgeState(host.Backend, "B.Accent");
 			await SyncAppearanceFromBridgeAsync();
 			await LoadNavFromBridgeAsync();
+			LoadPluginsAfterConnect();
 			await Wallpaper.ReloadAsync();
 			await ReconcileTasksAsync();
 			await ReloadCurrentAsync();
@@ -707,6 +710,10 @@ public partial class MainWindow : Window
 			return;
 		}
 		TaskStore.Handle(ev);
+		if (ev.Event.StartsWith("plugins.", StringComparison.Ordinal))
+		{
+			TipCL.Pages.Plugins.PluginEvents.Handle(ev);
+		}
 		switch (ev.Event)
 		{
 		case "update_staged":
@@ -829,7 +836,12 @@ public partial class MainWindow : Window
 		NavDef navDef = NavDefs.FirstOrDefault((NavDef d) => d.Id == id);
 		if ((object)navDef == null)
 		{
-			return null;
+			value = CreatePluginPage(id);
+			if (value != null)
+			{
+				_pages[id] = value;
+			}
+			return value;
 		}
 		value = navDef.Create();
 		value.Id = id;
@@ -1471,6 +1483,8 @@ public partial class MainWindow : Window
 		_groupPanels.Clear();
 		_taskBadge = null;
 		_taskBadgeText = null;
+		_pluginNavRows.Clear();
+		_pluginMoreRendered = false;
 		Dictionary<string, List<string>> dictionary = NavModel.SectionMembersFromConfig(_navCfg);
 		Panel panel = NavHost;
 		foreach (NavEntry item in NavModel.NavItemsFromConfig(_navCfg))
@@ -1496,6 +1510,7 @@ public partial class MainWindow : Window
 				break;
 			}
 		}
+		AppendPluginTopRows();
 		SideFooter.Visibility = ((PinnedHost.Children.Count <= 0) ? Visibility.Collapsed : Visibility.Visible);
 		SyncNavSelection();
 		SyncTasks();
@@ -1539,6 +1554,10 @@ public partial class MainWindow : Window
 		foreach (string memberKey in memberKeys)
 		{
 			panel.Children.Add(MakeRow(memberKey, NavModel.NavLabel(memberKey), sec, draggable: true));
+		}
+		if (sec == "more")
+		{
+			AppendPluginMoreRows(panel);
 		}
 		panel.Visibility = ((!flag) ? Visibility.Collapsed : Visibility.Visible);
 		header.Click += delegate
@@ -1938,6 +1957,7 @@ public partial class MainWindow : Window
 		{
 			value.Button.IsChecked = !value.IsSectionHeader && PageOf(value.Key) == _currentId;
 		}
+		SyncPluginNavSelection();
 	}
 
 	private void SyncTasks()

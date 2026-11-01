@@ -26,7 +26,7 @@ public static class NavModel
 	public static readonly IReadOnlyDictionary<string, string[]> SubDefaultMembers = new Dictionary<string, string[]>
 	{
 		["download"] = new string[8] { "version", "mod", "modpack", "datapack", "resource", "shader", "world", "java" },
-		["more"] = new string[8] { "instance", "mods", "account", "multiplayer", "servers", "playtime", "feedback", "settings" }
+		["more"] = new string[9] { "instance", "mods", "account", "multiplayer", "servers", "playtime", "feedback", "settings", "plugins" }
 	};
 
 	public static readonly HashSet<string> AllSubKeys = new HashSet<string>(SectionIds.SelectMany((string sec) => SubDefaultMembers[sec]));
@@ -50,7 +50,8 @@ public static class NavModel
 		["servers"] = I18n.L("服务器"),
 		["playtime"] = I18n.L("时长"),
 		["feedback"] = I18n.L("反馈"),
-		["settings"] = I18n.L("设置")
+		["settings"] = I18n.L("设置"),
+		["plugins"] = I18n.L("插件")
 	};
 
 	public static readonly IReadOnlyDictionary<string, string> NavSpecs = new Dictionary<string, string>
@@ -115,7 +116,8 @@ public static class NavModel
 		["servers"] = "servers",
 		["playtime"] = "playtime",
 		["feedback"] = "feedback",
-		["settings"] = "settings"
+		["settings"] = "settings",
+		["plugins"] = "plugins"
 	};
 
 	public static bool IsTop(string key)

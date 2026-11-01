@@ -16,10 +16,6 @@ public static class Client
 		public string arguments = "";
 	}
 
-	public static string _BUILTIN_BASE = Defaults.DEFAULT_API_BASE;
-
-	public static string _BUILTIN_KEY = Defaults.DEFAULT_API_KEY;
-
 	private static readonly string[] _OVERFLOW_KEYS = new string[11]
 	{
 		"maximum context length", "context length exceeded", "context_length_exceeded", "prompt too long", "too many input tokens", "input length exceeds", "上下文长度", "上下文过长", "输入过长", "请求过长",
@@ -93,18 +89,26 @@ public static class Client
 		return text + "/v1";
 	}
 
-	private static string Mode(PyDict s)
+	/// <summary>AI 接入只有两种模式：builtin（内置网关，什么都不让用户改）和 custom（自定义 OpenAI 兼容端点）。
+	/// 旧值 public（自建网关）并入 builtin；newapi / 自定义 并入 custom；custom 但没填地址也按 builtin 走。</summary>
+	public static string Mode(PyDict s)
 	{
-		return Py.Lower(Py.Strip(Py.Str(Py.Or(s.Get("ai_mode"), "public"))));
+		string text = Py.Lower(Py.Strip(Py.S(s?.Get("ai_mode"))));
+		if (text == "custom" || text == "newapi" || text == "自定义")
+		{
+			return (Py.Strip(Py.S(s.Get("ai_base_url"))).Length > 0) ? "custom" : "builtin";
+		}
+		return "builtin";
 	}
 
 	private static bool IsCustom(string mode)
 	{
-		if (!(mode == "custom") && !(mode == "newapi"))
-		{
-			return mode == "自定义";
-		}
-		return true;
+		return mode == "custom";
+	}
+
+	private static string CustomModel(PyDict settings)
+	{
+		return Py.Strip(Py.S(settings.Get("ai_model")));
 	}
 
 	public static PyDict ModelCaps(PyDict settings)
@@ -114,17 +118,13 @@ public static class Client
 		string baseUrl;
 		if (IsCustom(mode))
 		{
-			text = Py.Strip(Py.Str(Py.Or(settings.Get("ai_model"), "deepseek-v4-flash")));
-			if (text.Length == 0)
-			{
-				text = "deepseek-v4-flash";
-			}
-			baseUrl = Py.Str(Py.Or(settings.Get("ai_base_url"), ""));
+			text = CustomModel(settings);
+			baseUrl = NormalizeBase(Py.S(settings.Get("ai_base_url")));
 		}
 		else
 		{
-			text = Py.Str(Py.Or(Builtin.PublicModel(), "deepseek-v4-flash"));
-			baseUrl = Py.Str(Py.Or(settings.Get("ai_gateway_url"), Py.Or(Defaults.DEFAULT_GATEWAY_URL, "")));
+			text = Defaults.DEFAULT_MODEL;
+			baseUrl = Defaults.DEFAULT_API_BASE;
 		}
 		return TipCL.Core.Launcher.Ai.ModelCaps.Resolve(text, TipCL.Core.Launcher.Ai.ModelCaps.ApiTypeForMode(mode), baseUrl, settings);
 	}
@@ -133,14 +133,9 @@ public static class Client
 	{
 		if (IsCustom(Mode(settings)))
 		{
-			string text = Py.Strip(Py.Str(Py.Or(settings.Get("ai_model"), "deepseek-v4-flash")));
-			if (text.Length != 0)
-			{
-				return text;
-			}
-			return "deepseek-v4-flash";
+			return CustomModel(settings);
 		}
-		return Py.Str(Py.Or(Builtin.PublicModel(), "deepseek-v4-flash"));
+		return Defaults.DEFAULT_MODEL;
 	}
 
 	public static bool SupportsImage(PyDict settings)
@@ -157,37 +152,33 @@ public static class Client
 
 	public static PyDict ResolveEndpoint(PyDict settings)
 	{
-		string mode = Mode(settings);
-		string text = Py.Strip(Py.Str(Py.Or(settings.Get("ai_model"), "deepseek-v4-flash")));
-		if (text.Length == 0)
+		if (IsCustom(Mode(settings)))
 		{
-			text = "deepseek-v4-flash";
-		}
-		if (IsCustom(mode))
-		{
-			string text2 = NormalizeBase(Py.Str(Py.Or(settings.Get("ai_base_url"), _BUILTIN_BASE)));
-			string text3 = Py.Strip(Py.Str(Py.Or(settings.Get("ai_api_key"), "")));
-			if (text3.Length == 0)
-			{
-				text3 = _BUILTIN_KEY;
-			}
-			if (string.IsNullOrEmpty(text2))
+			string text = NormalizeBase(Py.S(settings.Get("ai_base_url")));
+			string text2 = Py.Strip(Py.S(settings.Get("ai_api_key")));
+			if (string.IsNullOrEmpty(text))
 			{
 				throw new AIClientError("请在设置里填写「自定义 OpenAI 兼容端点」的地址（到 /v1 为止）");
 			}
-			if (string.IsNullOrEmpty(text3))
+			// 不再拿内置令牌兜底：用户填的是别人的地址，令牌不能发过去。本地端点（如 Ollama）不需要令牌时可以留空。
+			PyDict headers = PyDict.Of("Content-Type", "application/json");
+			if (text2.Length > 0)
 			{
-				throw new AIClientError("请在设置里填写「自定义 OpenAI 兼容端点」的令牌");
+				headers["Authorization"] = "Bearer " + text2;
 			}
-			return PyDict.Of("mode", "custom", "url", text2 + "/chat/completions", "models_url", text2 + "/models", "headers", PyDict.Of("Authorization", "Bearer " + text3, "Content-Type", "application/json"), "model", text, "public", false, "builtin", text2 == _BUILTIN_BASE);
+			return PyDict.Of("mode", "custom", "url", text + "/chat/completions", "models_url", text + "/models", "headers", headers, "model", CustomModel(settings), "public", false, "builtin", false);
 		}
-		PyDict pyDict = Builtin.PublicEndpoint();
-		string text4 = Py.RStrip(Py.Strip(Py.Str(Py.Or(settings.Get("ai_gateway_url"), Py.Or(Defaults.DEFAULT_GATEWAY_URL, "")))), "/");
-		if (text4.Length > 0)
+		string text3 = Defaults.DEFAULT_API_BASE;
+		if (string.IsNullOrEmpty(text3))
 		{
-			return PyDict.Of("mode", "public", "url", text4 + "/tipcl/chat", "models_url", text4 + "/tipcl/models", "headers", PyDict.Of("Content-Type", "application/json", "X-TipCL-Client", "TipCL/1.0.10"), "model", pyDict["model"], "public", true);
+			throw new AIClientError("这个版本没有内置 AI 网关，请到「设置 → AI 助手」切到「自定义 OpenAI 兼容端点」");
 		}
-		throw new AIClientError("还没有配置 AI 网关：请到「设置 → AI 助手」填入自建公益网关地址，或切到「自定义 OpenAI 兼容端点」模式填地址与令牌。搭建自建网关的方法请查看启动器安装目录下的说明文档，或访问项目主页。");
+		PyDict headers2 = PyDict.Of("Content-Type", "application/json", "X-TipCL-Client", Defaults.CLIENT_HEADER);
+		if (!string.IsNullOrEmpty(Defaults.DEFAULT_API_KEY))
+		{
+			headers2["Authorization"] = "Bearer " + Defaults.DEFAULT_API_KEY;
+		}
+		return PyDict.Of("mode", "builtin", "url", text3 + "/chat/completions", "models_url", text3 + "/models", "headers", headers2, "model", Defaults.DEFAULT_MODEL, "public", false, "builtin", true);
 	}
 
 	public static AiSession _Session()
@@ -235,19 +226,9 @@ public static class Client
 		{
 			return "已连通";
 		}
-		if ((bool)pyDict["public"])
+		if ((bool)pyDict["builtin"])
 		{
-			if (Py.Truthy(DGet(d, "service")))
-			{
-				return "公益接口正常（" + Py.Str(DGet(d, "service")) + "）";
-			}
-			List<string> list = ModelNames(Py.Or(DGet(d, "data"), new List<object>()));
-			string text = Py.Str(Py.Or(pyDict.Get("model"), "deepseek-v4-flash"));
-			if (list.Contains(text) || list.Count == 0)
-			{
-				return "公益接口正常，模型 " + text;
-			}
-			return "公益接口已连通，但列表里没有 " + text + "（当前有 " + list[0] + "）";
+			return "内置网关正常，模型 " + Py.Str(pyDict["model"]);
 		}
 		List<string> list2 = ModelNames(Py.Or(DGet(d, "data"), new List<object>()));
 		if (list2.Count > 0)
@@ -742,6 +723,22 @@ public static class Client
 		{
 			return messages;
 		}
+		// 摘要标记的内部字段（keep / reused / id）不发给上游，严格的 OpenAI 兼容端点会因为未知字段报 400
+		if (messages.Any((object m) => m is PyDict d && Py.Eq(d.Get("role"), "user") && (d.Get("keep") != null || d.Get("reused") != null || d.Get("id") != null)))
+		{
+			messages = messages.Select(delegate(object m)
+			{
+				if (m is PyDict d && Py.Eq(d.Get("role"), "user") && (d.Get("keep") != null || d.Get("reused") != null || d.Get("id") != null))
+				{
+					PyDict c = d.Copy();
+					c.Remove("keep");
+					c.Remove("reused");
+					c.Remove("id");
+					return c;
+				}
+				return m;
+			}).ToList();
+		}
 		if (!messages.Any((object m) => m is PyDict pyDict3 && Py.Truthy(pyDict3.Get("images"))))
 		{
 			return messages;
@@ -812,11 +809,23 @@ public static class Client
 
 	private static PyDict Body(PyDict ep, PyDict settings, List<object> messages, List<object> tools, double temperature, bool stream)
 	{
+		if (Py.S(ep["model"]).Length == 0)
+		{
+			throw new AIClientError("还没选模型：到「设置 → AI 助手」刷新模型列表后选一个");
+		}
 		PyDict pyDict = PyDict.Of("model", ep["model"], "messages", PrepareMessages(settings, messages), "temperature", temperature, "stream", stream, "max_tokens", MaxOutputTokens(settings));
 		if (tools != null && tools.Count > 0)
 		{
 			pyDict["tools"] = tools;
 			pyDict["tool_choice"] = "auto";
+		}
+		// 插件 LLM 服务用：额外请求字段（如 reasoning_effort / thinking），覆盖进请求体
+		if ((settings ?? new PyDict()).Get("ai_extra_body") is PyDict extraBody)
+		{
+			foreach (KeyValuePair<string, object> kv in extraBody)
+			{
+				pyDict[kv.Key] = kv.Value;
+			}
 		}
 		return pyDict;
 	}
@@ -825,12 +834,8 @@ public static class Client
 	{
 		PyDict pyDict = ResolveEndpoint(settings);
 		PyDict pyDict2 = Body(pyDict, settings, messages, tools, temperature, stream: true);
-		bool expectUsage = false;
-		if (!(bool)pyDict["public"])
-		{
-			pyDict2["stream_options"] = PyDict.Of("include_usage", true);
-			expectUsage = true;
-		}
+		pyDict2["stream_options"] = PyDict.Of("include_usage", true);
+		bool expectUsage = true;
 		AiSession aiSession = _Session();
 		if (httpCancel != null)
 		{

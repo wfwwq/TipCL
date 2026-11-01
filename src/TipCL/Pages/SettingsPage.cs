@@ -120,11 +120,10 @@ public sealed partial class SettingsPage : PageBase
 		("mist", I18n.L("雾蓝"))
 	};
 
-	private static readonly (string Key, string Label)[] AiModeOpts = new(string, string)[3]
+	private static readonly (string Key, string Label)[] AiModeOpts = new(string, string)[2]
 	{
-		("builtin", I18n.L("内置公益网关（免配置）")),
-		("custom", I18n.L("自定义 OpenAI 兼容端点")),
-		("public", I18n.L("自建 AI 网关"))
+		("builtin", I18n.L("内置网关（免配置）")),
+		("custom", I18n.L("自定义 OpenAI 兼容端点"))
 	};
 
 	private static readonly (string Key, string Label)[] AiPermOpts = new(string, string)[4]
@@ -224,8 +223,6 @@ public sealed partial class SettingsPage : PageBase
 
 	private readonly ComboBox _aiPerm = KeyCombo(AiPermOpts);
 
-	private readonly TextBox _aiGateway = Ui.Input(I18n.L("https://…（公共网关地址）"));
-
 	private readonly TextBox _aiBase = Ui.Input("https://api.openai.com/v1");
 
 	private readonly TextBox _aiKey = Ui.Input("sk-…");
@@ -233,6 +230,12 @@ public sealed partial class SettingsPage : PageBase
 	private readonly ComboBox _aiModel = Ui.Combo(null, null, 220.0, I18n.L("模型名"), editable: true);
 
 	private readonly Button _aiModelFetch;
+
+	/// <summary>只在自定义模式下显示的行：地址、令牌、模型、上下文窗口、备用模型。</summary>
+	private readonly List<UIElement> _aiCustomRows = new List<UIElement>();
+
+	/// <summary>上次自动拉模型用的「地址 + 令牌」，没变就不重复拉。</summary>
+	private string _aiFetchedFor = "";
 
 	private readonly TextBox _aiCtx = Ui.Input("131072");
 
@@ -499,19 +502,28 @@ public sealed partial class SettingsPage : PageBase
 			SyncAiRows();
 		};
 		_aiKey.Tag = "sk-…";
-		_aiGateway.Tag = I18n.L("留空用内置网关");
-		_aiBase.Tag = I18n.L("留空用内置网关");
+		_aiBase.Tag = "https://api.openai.com/v1";
+		_aiBase.LostFocus += delegate
+		{
+			AutoFetchAiModels();
+		};
+		_aiKey.LostFocus += delegate
+		{
+			AutoFetchAiModels();
+		};
 		_cfReset = Ui.Btn(I18n.L("恢复内置"), BtnKind.Chip, delegate
 		{
 			_cfClear = true;
 			_cfKey.Text = "";
 			SyncSecretBoxes();
+			QueueSave();
 		});
-		_aiKeyReset = Ui.Btn(I18n.L("恢复内置"), BtnKind.Chip, delegate
+		_aiKeyReset = Ui.Btn(I18n.L("清除"), BtnKind.Chip, delegate
 		{
 			_aiKeyClear = true;
 			_aiKey.Text = "";
 			SyncSecretBoxes();
+			QueueSave();
 		});
 		_cfKey.TextChanged += delegate
 		{
@@ -551,11 +563,6 @@ public sealed partial class SettingsPage : PageBase
 		{
 			PageBase.Run(CheckUpdateAsync, I18n.L("检查更新失败"));
 		}, "\ue72c");
-		Button button2 = Ui.Btn(I18n.L("保存设置"), BtnKind.Primary, delegate
-		{
-			PageBase.Run(SaveAsync, I18n.L("保存失败"));
-		}, "\ue74e");
-		button2.Padding = new Thickness(24.0, 9.0, 24.0, 10.0);
 		_clean = Ui.Btn(I18n.L("扫描并清理"), BtnKind.Chip, delegate
 		{
 			PageBase.Run(CleanAsync, I18n.L("清理失败"));
@@ -572,7 +579,7 @@ public sealed partial class SettingsPage : PageBase
 		{
 			PageBase.Run(RecommendAsync, I18n.L("检测失败"));
 		}, "\ue945");
-		Border border = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("深色模式"), _dark, I18n.L("立即生效")), Ui.Field(I18n.L("主题色"), _swatches, I18n.L("点击圆圈即时预览，保存后记住")), Ui.Field(I18n.L("界面背景"), _bg, I18n.L("预设色调，立即预览")), Ui.Field(I18n.L("界面动画"), _motion, I18n.L("换页过渡、进度条、悬浮等动效；关闭则全部瞬时")), Ui.Field(I18n.L("下载飞入动画"), _fly, I18n.L("点安装时图标抛物线飞入侧栏「下载任务」")), Ui.Field(I18n.L("飞入动画时长"), SliderRow(_flyDur, _flyDurLbl), I18n.L("毫秒，建议 400–800；越小越快"))));
+		Border border = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("深色模式"), _dark, I18n.L("立即生效")), Ui.Field(I18n.L("主题色"), _swatches, I18n.L("点一下就换")), Ui.Field(I18n.L("界面背景"), _bg, I18n.L("预设色调，立即生效")), Ui.Field(I18n.L("界面动画"), _motion, I18n.L("换页过渡、进度条、悬浮等动效；关闭则全部瞬时")), Ui.Field(I18n.L("下载飞入动画"), _fly, I18n.L("点安装时图标抛物线飞入侧栏「下载任务」")), Ui.Field(I18n.L("飞入动画时长"), SliderRow(_flyDur, _flyDurLbl), I18n.L("毫秒，建议 400–800；越小越快"))));
 		_bgInterval.ValueChanged += delegate(object _, RoutedPropertyChangedEventArgs<double> e)
 		{
 			_bgIntervalLbl.Text = I18n.L("{0} 分钟", (int)e.NewValue);
@@ -649,16 +656,23 @@ public sealed partial class SettingsPage : PageBase
 		{
 			PageBase.Run(ExportThemeAsync, I18n.L("导出失败"));
 		}, "\uede1"))), _themeInfo));
-		Border border4 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("下载并发线程数"), SliderRow(_threads, _threadsLbl), I18n.L("同时下载的文件数量")), Ui.Field(I18n.L("单文件分片数"), SliderRow(_segs, _segsLbl), I18n.L("8MB 以上的大文件拆成几段同时下；1 为关闭")), Ui.Field(I18n.L("文件下载源"), _src, I18n.L("自动测速，官方慢于 4 秒改走 BMCLAPI")), Ui.Field(I18n.L("社区资源源"), _comm, I18n.L("模组 / 整合包：MCIM 国内镜像，挂了可改官方")), Ui.Field(I18n.L("跟随系统代理"), _proxy, I18n.L("默认开。关掉才强制直连")), Ui.Field(I18n.L("下载限速 (KB/s)"), _limit.Left(), I18n.L("0 表示不限制")), Ui.Field("CurseForge Key", SecretRow(_cfKey, _cfReset), I18n.L("留空保存不修改；不填用内置 Key"))));
+		Border border4 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("下载并发线程数"), SliderRow(_threads, _threadsLbl), I18n.L("同时下载的文件数量")), Ui.Field(I18n.L("单文件分片数"), SliderRow(_segs, _segsLbl), I18n.L("8MB 以上的大文件拆成几段同时下；1 为关闭")), Ui.Field(I18n.L("文件下载源"), _src, I18n.L("自动测速，官方慢于 4 秒改走 BMCLAPI")), Ui.Field(I18n.L("社区资源源"), _comm, I18n.L("模组 / 整合包：MCIM 国内镜像，挂了可改官方")), Ui.Field(I18n.L("跟随系统代理"), _proxy, I18n.L("默认开。关掉才强制直连")), Ui.Field(I18n.L("下载限速 (KB/s)"), _limit.Left(), I18n.L("0 表示不限制")), Ui.Field("CurseForge Key", SecretRow(_cfKey, _cfReset), I18n.L("留空不修改；不填用内置 Key"))));
 		Border border5 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("游戏目录"), grid2, I18n.L("所有实例的落脚处；切换会校验可写性")), Ui.Field(I18n.L("默认内存"), SliderRow(_mem, _memLbl), I18n.L("新实例的默认 JVM 内存")), Ui.Field("", Ui.H(8.0, _rec, Ui.Small(I18n.L("按本机内存 / CPU 给一组推荐值")).VCenter())), Ui.Field(I18n.L("默认分辨率"), Ui.H(6.0, _w, Ui.Txt("×").VCenter(), _h), I18n.L("游戏窗口的默认宽高")), Ui.Field(I18n.L("默认实例"), _inst, I18n.L("安装与启动缺省使用的实例")), Ui.Field(I18n.L("新版本默认隔离"), _iso, I18n.L("安装新版本时写入，可在版本设置里改")), Ui.Field(I18n.L("内存回收器"), _gc, I18n.L("启动时写入 JVM，版本设置可覆盖")), Ui.Field(I18n.L("默认游戏窗口"), _win, I18n.L("可被版本设置覆盖")), Ui.Field(I18n.L("默认 JVM 参数"), _jvm, I18n.L("所有版本都会带上，版本设置可再追加")), Ui.Field(I18n.L("允许多开"), _multi, I18n.L("关掉则游戏已在运行时不再启动第二个"))));
 		Border border6 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("共享 libraries"), _shareLib, I18n.L("所有实例共享依赖库（节省空间，降低隔离性）")), Ui.Field(I18n.L("共享 assets 资源"), _shareAssets, I18n.L("所有实例共享资源文件（节省空间，降低隔离性）")), Ui.Field(I18n.L("空间清理"), Ui.H(8.0, _clean, _cleanInfo.VCenter()), I18n.L("扫描未引用的依赖库、残留 .part 与更新缓存，确认后再删"))));
-		Border border7 = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("AI 助手"), I18n.L("对话里下游戏、装模组、读崩溃日志")), Ui.Field(I18n.L("接入方式"), _aiMode), Ui.Field(I18n.L("网关地址"), _aiGateway, I18n.L("公共网关模式下生效")), Ui.Field(I18n.L("端点地址"), _aiBase, I18n.L("自定义模式下的 OpenAI 兼容 base_url")), Ui.Field("API Key", SecretRow(_aiKey, _aiKeyReset), I18n.L("留空保存不修改；不填用内置令牌")), Ui.Field(I18n.L("模型"), Ui.H(8.0, _aiModel, _aiModelFetch.VCenter()), I18n.L("自动拉取可用模型；拉不到可直接手填")), Ui.Field(I18n.L("上下文窗口（token）"), _aiCtx, I18n.L("模型真实窗口未知时按 128k 保守压缩；实测后可改大")), Ui.Field(I18n.L("备用模型（可选）"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它；留空不启用")), Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildVisionField(), BuildMcpField(), Ui.Field("", _testAi.Left())));
+		Grid aiBaseRow = Ui.Field(I18n.L("端点地址"), _aiBase, I18n.L("OpenAI 兼容的 base_url，到 /v1 为止"));
+		Grid aiKeyRow = Ui.Field("API Key", SecretRow(_aiKey, _aiKeyReset), I18n.L("留空不修改；本地端点不需要可不填"));
+		Grid aiModelRow = Ui.Field(I18n.L("模型"), Ui.H(8.0, _aiModel, _aiModelFetch.VCenter()), I18n.L("填好地址和令牌后自动拉取；拉不到可直接手填"));
+		Grid aiCtxRow = Ui.Field(I18n.L("上下文窗口（token）"), _aiCtx, I18n.L("模型真实窗口未知时按 128k 保守压缩；实测后可改大"));
+		Grid aiFallbackRow = Ui.Field(I18n.L("备用模型（可选）"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它；留空不启用"));
+		_aiCustomRows.AddRange(new UIElement[5] { aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow });
+		Border border7 = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("AI 助手"), I18n.L("对话里下游戏、装模组、读崩溃日志")), Ui.Field(I18n.L("接入方式"), _aiMode), aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow, Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildVisionField(), BuildMcpField(), Ui.Field("", _testAi.Left())));
 		Border border8 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("启动器可见性"), _vis, I18n.L("游戏启动后启动器窗口怎么处理")), Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")), Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html 文件路径")), Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")), Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")), Ui.Field("", _langPreview), Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
 		{
 			PageBase.Run(FirstRunWizard.ShowAsync, I18n.L("向导没能打开"));
 		}, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));
-		SPanel sPanel = Ui.H(10.0, button, button2).Right();
-		base.Content = PageBase.ScrollBody(Ui.Section(I18n.L("设置"), I18n.L("改动在点「保存设置」后一次性写入后端；外观项随点随看")), border, border2, border3, border4, border5, border6, BuildPhoneSyncCard(), border7, BuildMemoryCard(), border8, BuildAboutCard(), sPanel);
+		SPanel sPanel = Ui.H(10.0, _saveState.VCenter(), button).Right();
+		WireAutoSave();
+		base.Content = PageBase.ScrollBody(Ui.Section(I18n.L("设置"), I18n.L("改了就生效，自动保存")), border, border2, border3, border4, border5, border6, BuildPhoneSyncCard(), border7, BuildMemoryCard(), TipCL.Pages.Plugins.PluginSettingsCard.Build(), border8, BuildAboutCard(), sPanel);
 	}
 
 	private static UIElement SliderRow(Slider s, TextBlock label)
@@ -693,8 +707,8 @@ public sealed partial class SettingsPage : PageBase
 
 	private void SyncSecretBoxes()
 	{
-		_cfKey.Tag = (_cfClear ? I18n.L("保存后恢复为内置 Key") : (_cfSet ? string.Format(I18n.L("已保存自己的 Key（{0}），留空不修改"), _cfHint) : I18n.L("CurseForge API Key（留空用内置）")));
-		_aiKey.Tag = (_aiKeyClear ? I18n.L("保存后恢复为内置令牌") : (_aiKeySet ? string.Format(I18n.L("已保存自己的令牌（{0}），留空不修改"), _aiKeyHint) : "sk-…"));
+		_cfKey.Tag = (_cfClear ? I18n.L("已恢复为内置 Key") : (_cfSet ? string.Format(I18n.L("已保存自己的 Key（{0}），留空不修改"), _cfHint) : I18n.L("CurseForge API Key（留空用内置）")));
+		_aiKey.Tag = (_aiKeyClear ? I18n.L("令牌已清除") : (_aiKeySet ? string.Format(I18n.L("已保存自己的令牌（{0}），留空不修改"), _aiKeyHint) : "sk-…"));
 		_cfReset.Visibility = ((!_cfSet || _cfClear) ? Visibility.Collapsed : Visibility.Visible);
 		_aiKeyReset.Visibility = ((!_aiKeySet || _aiKeyClear) ? Visibility.Collapsed : Visibility.Visible);
 	}
@@ -715,14 +729,7 @@ public sealed partial class SettingsPage : PageBase
 			try
 			{
 				Dictionary<string, object> dictionary = ((await PageBase.Api.TryCallAsync("get_settings", null, new Dictionary<string, JsonElement>())) ?? new Dictionary<string, JsonElement>()).ToDictionary<KeyValuePair<string, JsonElement>, string, object>((KeyValuePair<string, JsonElement> kv) => kv.Key, (KeyValuePair<string, JsonElement> kv) => kv.Value);
-				dictionary["ai_mode"] = AiModeWire();
-				dictionary["ai_gateway_url"] = _aiGateway.Text?.Trim() ?? "";
-				dictionary["ai_base_url"] = (IsBuiltinAi ? "" : (_aiBase.Text?.Trim() ?? ""));
-				if (!IsBuiltinAi && !string.IsNullOrEmpty(_aiKey.Text?.Trim()))
-				{
-					dictionary["ai_api_key"] = _aiKey.Text.Trim();
-				}
-				dictionary["ai_model"] = AiModelValue();
+				FillAiSettings(dictionary);
 				JsonElement r = await PageBase.Api.CallAsync<JsonElement>("ai_vision_status", new
 				{
 					settings = dictionary,
@@ -903,6 +910,7 @@ public sealed partial class SettingsPage : PageBase
 				_color = pick;
 				BuildSwatches();
 				ApplyVisuals(_color, KeyOf(_bg));
+				QueueSave();
 			};
 			_swatches.Children.Add(border);
 		}
@@ -936,42 +944,62 @@ public sealed partial class SettingsPage : PageBase
 
 	private void SyncAiRows()
 	{
-		string text = KeyOf(_aiMode);
-		TextBox aiBase = _aiBase;
-		TextBox aiKey = _aiKey;
-		bool flag = (_aiKeyReset.IsEnabled = text == "custom");
-		bool flag3 = flag;
-		flag = (aiKey.IsEnabled = flag3);
-		bool isEnabled = flag;
-		aiBase.IsEnabled = isEnabled;
-		_aiGateway.IsEnabled = text == "public";
+		Visibility visibility = (IsBuiltinAi ? Visibility.Collapsed : Visibility.Visible);
+		foreach (UIElement aiCustomRow in _aiCustomRows)
+		{
+			aiCustomRow.Visibility = visibility;
+		}
+		if (!_sync)
+		{
+			AutoFetchAiModels();
+		}
 	}
 
 	private string AiModeWire()
 	{
 		if (!IsBuiltinAi)
 		{
-			return KeyOf(_aiMode);
+			return "custom";
 		}
-		return "custom";
+		return "builtin";
+	}
+
+	/// <summary>把界面上的 AI 接入设置写进要发给后端的设置字典（测试连接、拉模型、视觉检测共用）。</summary>
+	private void FillAiSettings(Dictionary<string, object> dictionary)
+	{
+		dictionary["ai_mode"] = AiModeWire();
+		dictionary["ai_base_url"] = _aiBase.Text?.Trim() ?? "";
+		dictionary["ai_api_key"] = _aiKey.Text?.Trim() ?? "";
+		dictionary["ai_model"] = AiModelValue();
 	}
 
 	private static string AiModeFromBackend(Dictionary<string, JsonElement> s)
 	{
-		string text = GetStr(s, "ai_mode", "custom").Trim().ToLowerInvariant();
-		if (text == "newapi" || text == "自定义")
-		{
-			text = "custom";
-		}
-		if (text == "custom" && string.IsNullOrWhiteSpace(GetStr(s, "ai_base_url")) && !GetBool(s, "ai_api_key_set"))
+		if (!(GetStr(s, "ai_mode", "builtin").Trim().ToLowerInvariant() == "custom"))
 		{
 			return "builtin";
 		}
-		if (!(text == "public"))
+		return "custom";
+	}
+
+	/// <summary>自定义模式下地址或令牌变了就自动拉一次模型列表；内置模式模型固定，不拉。</summary>
+	private void AutoFetchAiModels()
+	{
+		if (IsBuiltinAi)
 		{
-			return "custom";
+			return;
 		}
-		return "public";
+		string text = _aiBase.Text?.Trim() ?? "";
+		if (text.Length == 0)
+		{
+			return;
+		}
+		string text2 = text + "\n" + (_aiKey.Text?.Trim() ?? "");
+		if (!(text2 == _aiFetchedFor))
+		{
+			_aiFetchedFor = text2;
+			PageBase.Run(() => FetchAiModelsAsync(manual: false));
+		}
 	}
 
 	private string AiModelValue()
@@ -1000,19 +1028,24 @@ public sealed partial class SettingsPage : PageBase
 
 	private async Task FetchAiModelsAsync()
 	{
+		await FetchAiModelsAsync(manual: true);
+	}
+
+	private async Task FetchAiModelsAsync(bool manual)
+	{
+		if (IsBuiltinAi)
+		{
+			return;
+		}
 		Dictionary<string, JsonElement> obj = (await PageBase.Api.TryCallAsync("get_settings", null, new Dictionary<string, JsonElement>())) ?? new Dictionary<string, JsonElement>();
 		Dictionary<string, object> dictionary = new Dictionary<string, object>();
 		foreach (KeyValuePair<string, JsonElement> item in obj)
 		{
 			dictionary[item.Key] = item.Value;
 		}
-		dictionary["ai_mode"] = AiModeWire();
-		dictionary["ai_gateway_url"] = _aiGateway.Text?.Trim() ?? "";
-		dictionary["ai_base_url"] = (IsBuiltinAi ? "" : (_aiBase.Text?.Trim() ?? ""));
-		dictionary["ai_api_key"] = (IsBuiltinAi ? "" : (_aiKey.Text?.Trim() ?? ""));
-		dictionary["ai_model"] = AiModelValue();
+		FillAiSettings(dictionary);
 		AiModelList aiModelList;
-		using (Dlg.Busy(I18n.L("正在拉取模型列表…")))
+		using (manual ? Dlg.Busy(I18n.L("正在拉取模型列表…")) : null)
 		{
 			aiModelList = await PageBase.Api.TryCallAsync<AiModelList>("ai_list_models", new
 			{
@@ -1043,6 +1076,10 @@ public sealed partial class SettingsPage : PageBase
 		}
 		if (aiModelList.Ok && aiModelList.Models.Count > 0)
 		{
+			if (!manual)
+			{
+				return;
+			}
 			PageBase.Toast(I18n.L("模型列表已刷新"), I18n.L("共 {0} 个可用模型", aiModelList.Models.Count), ToastKind.Success);
 		}
 		else
@@ -1096,7 +1133,6 @@ public sealed partial class SettingsPage : PageBase
 				ApplySecretState(dictionary);
 				SelectKey(_aiMode, AiModeFromBackend(dictionary));
 				SelectKey(_aiPerm, GetStr(dictionary, "ai_permission_mode", "default"));
-				_aiGateway.Text = GetStr(dictionary, "ai_gateway_url");
 				_aiBase.Text = GetStr(dictionary, "ai_base_url");
 				SetAiModel(GetStr(dictionary, "ai_model"));
 				_aiCtx.Text = GetStr(dictionary, "ai_context_window", "131072");
@@ -1126,7 +1162,7 @@ public sealed partial class SettingsPage : PageBase
 			}
 			SyncWallpaperInfo();
 			SyncAiRows();
-			PageBase.Run(FetchAiModelsAsync);
+			AutoFetchAiModels();
 			List<InstanceInfo> source = (await PageBase.Api.TryCallAsync("get_instances", null, new List<InstanceInfo>())) ?? new List<InstanceInfo>();
 			_inst.Fill(source.Select((InstanceInfo i) => i.Name));
 			string text = await PageBase.Api.TryCallAsync("get_setting", new Dictionary<string, object>
@@ -1186,10 +1222,128 @@ public sealed partial class SettingsPage : PageBase
 		{
 			_sync = false;
 		}
+		_loaded = true;
+		_wallpaperSig = WallpaperSig();
 		await ReloadThemesAsync();
 	}
 
-	private async Task SaveAsync()
+	// ── 自动保存：控件一改就排一次保存（500ms 防抖，拖滑块不会狂写），保存即生效 ──
+
+	private readonly TextBlock _saveState = Ui.Small("");
+
+	private System.Windows.Threading.DispatcherTimer? _saveTimer;
+
+	private bool _loaded;
+
+	private bool _saving;
+
+	private bool _savePending;
+
+	private string _wallpaperSig = "";
+
+	private void WireAutoSave()
+	{
+		foreach (CheckBox item in new CheckBox[10] { _dark, _motion, _fly, _proxy, _shareLib, _shareAssets, _multi, _autoUpdate, _aiConfirm, _bgShuffle })
+		{
+			item.Checked += delegate { QueueSave(); };
+			item.Unchecked += delegate { QueueSave(); };
+		}
+		foreach (ComboBox item2 in new ComboBox[13] { _bg, _src, _comm, _inst, _iso, _gc, _win, _vis, _home, _lang, _aiMode, _aiPerm, _aiModel })
+		{
+			item2.SelectionChanged += delegate { QueueSave(); };
+		}
+		_aiModel.LostFocus += delegate { QueueSave(); };
+		foreach (Slider item3 in new Slider[7] { _flyDur, _threads, _segs, _mem, _bgInterval, _bgBlur, _bgDim })
+		{
+			item3.ValueChanged += delegate { QueueSave(); };
+		}
+		// 文本框打字时不存，离开输入框（或回车）再存，免得存进半截路径
+		foreach (TextBox item4 in new TextBox[13] { _limit, _w, _h, _jvm, _homePath, _gameDir, _aiBase, _aiKey, _aiCtx, _aiFallback, _cfKey, _bgPath, _bgFolder })
+		{
+			item4.LostFocus += delegate { QueueSave(); };
+			item4.KeyDown += delegate(object _, System.Windows.Input.KeyEventArgs e)
+			{
+				if (e.Key == System.Windows.Input.Key.Return)
+				{
+					QueueSave();
+				}
+			};
+		}
+		base.Unloaded += delegate
+		{
+			// 离开设置页时把还没落盘的改动立刻存掉
+			if (_saveTimer != null && _saveTimer.IsEnabled)
+			{
+				_saveTimer.Stop();
+				PageBase.Run(AutoSaveAsync, I18n.L("保存失败"));
+			}
+		};
+	}
+
+	/// <summary>界面有改动时调用：防抖后自动保存。加载中（_sync）或页面还没加载完不触发。</summary>
+	private void QueueSave()
+	{
+		if (_sync || !_loaded)
+		{
+			return;
+		}
+		if (_saveTimer == null)
+		{
+			_saveTimer = new System.Windows.Threading.DispatcherTimer
+			{
+				Interval = TimeSpan.FromMilliseconds(500.0)
+			};
+			_saveTimer.Tick += delegate
+			{
+				_saveTimer.Stop();
+				PageBase.Run(AutoSaveAsync, I18n.L("保存失败"));
+			};
+		}
+		_saveTimer.Stop();
+		_saveTimer.Start();
+		_saveState.Text = I18n.L("保存中…");
+	}
+
+	private async Task AutoSaveAsync()
+	{
+		if (_saving)
+		{
+			_savePending = true;
+			return;
+		}
+		_saving = true;
+		try
+		{
+			do
+			{
+				_savePending = false;
+				await SaveAsync(auto: true);
+			}
+			while (_savePending);
+			_saveState.Text = I18n.L("已自动保存");
+		}
+		catch
+		{
+			_saveState.Text = I18n.L("保存失败");
+			throw;
+		}
+		finally
+		{
+			_saving = false;
+		}
+	}
+
+	private string WallpaperSig()
+	{
+		return string.Join("|", _bgPath.Text?.Trim() ?? "", _bgFolder.Text?.Trim() ?? "", _bgShuffle.IsChecked == true, (int)_bgInterval.Value);
+	}
+
+	private Task SaveAsync()
+	{
+		return SaveAsync(auto: false);
+	}
+
+	private async Task SaveAsync(bool auto)
 	{
 		string typed = _gameDir.Text?.Trim() ?? "";
 		if (typed.Length > 0 && typed != _gameDir0)
@@ -1237,8 +1391,7 @@ public sealed partial class SettingsPage : PageBase
 		dictionary["share_assets"] = _shareAssets.IsChecked == true;
 		dictionary["default_instance"] = _inst.Str();
 		dictionary["ai_mode"] = AiModeWire();
-		dictionary["ai_gateway_url"] = _aiGateway.Text?.Trim() ?? "";
-		dictionary["ai_base_url"] = (IsBuiltinAi ? "" : (_aiBase.Text?.Trim() ?? ""));
+		dictionary["ai_base_url"] = _aiBase.Text?.Trim() ?? "";
 		dictionary["ai_model"] = AiModelValue();
 		dictionary["ai_context_window"] = (int.TryParse(_aiCtx.Text?.Trim(), out var result) ? Clamp.Of(result, 8192, 2000000) : 131072);
 		dictionary["ai_fallback_model"] = _aiFallback.Text?.Trim() ?? "";
@@ -1263,15 +1416,9 @@ public sealed partial class SettingsPage : PageBase
 		{
 			dictionary2["curseforge_api_key_clear"] = true;
 		}
+		// 切回内置网关时保留自定义地址和令牌，下次切回来不用重填
 		string text2 = _aiKey.Text?.Trim() ?? "";
-		if (IsBuiltinAi)
-		{
-			if (_aiKeySet)
-			{
-				dictionary2["ai_api_key_clear"] = true;
-			}
-		}
-		else if (text2.Length > 0)
+		if (text2.Length > 0)
 		{
 			dictionary2["ai_api_key"] = text2;
 		}
@@ -1315,10 +1462,19 @@ public sealed partial class SettingsPage : PageBase
 		}
 		Motion.Enabled = _motion.IsChecked == true;
 		ApplyVisuals();
-		await Wallpaper.ReloadAsync();
-		SyncWallpaperInfo();
+		// 只有壁纸文件 / 文件夹 / 轮播参数变了才重载，免得每次自动保存都让视频壁纸闪一下
+		string sig = WallpaperSig();
+		if (!auto || sig != _wallpaperSig)
+		{
+			_wallpaperSig = sig;
+			await Wallpaper.ReloadAsync();
+			SyncWallpaperInfo();
+		}
 		PageBase.Win?.SaveUiPrefs();
-		AppServices.Window?.Toast(I18n.L("设置已保存"), I18n.L("外观与动效已立即生效"), ToastKind.Success);
+		if (!auto)
+		{
+			AppServices.Window?.Toast(I18n.L("设置已保存"), I18n.L("外观与动效已立即生效"), ToastKind.Success);
+		}
 		if (langChanged)
 		{
 			await OfferLanguageRestartAsync();
@@ -1572,11 +1728,7 @@ public sealed partial class SettingsPage : PageBase
 		try
 		{
 			Dictionary<string, object> dictionary = ((await PageBase.Api.TryCallAsync("get_settings", null, new Dictionary<string, JsonElement>())) ?? new Dictionary<string, JsonElement>()).ToDictionary<KeyValuePair<string, JsonElement>, string, object>((KeyValuePair<string, JsonElement> kv) => kv.Key, (KeyValuePair<string, JsonElement> kv) => kv.Value);
-			dictionary["ai_mode"] = AiModeWire();
-			dictionary["ai_gateway_url"] = _aiGateway.Text?.Trim() ?? "";
-			dictionary["ai_base_url"] = (IsBuiltinAi ? "" : (_aiBase.Text?.Trim() ?? ""));
-			dictionary["ai_api_key"] = (IsBuiltinAi ? "" : (_aiKey.Text?.Trim() ?? ""));
-			dictionary["ai_model"] = AiModelValue();
+			FillAiSettings(dictionary);
 			string text = await PageBase.Api.CallAsync<string>("test_ai_connection", new
 			{
 				settings = dictionary

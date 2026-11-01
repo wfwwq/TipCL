@@ -28,6 +28,8 @@
     <Reference Include="System.Management" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
+    <!-- 插件凭据：DPAPI（ProtectedData） -->
+    <Reference Include="System.Security" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,6 +40,15 @@
     <!-- 把依赖 DLL 打进单个 exe -->
     <PackageReference Include="Costura.Fody" Version="6.0.0" PrivateAssets="all" />
     <PackageReference Include="Fody" Version="6.9.2" PrivateAssets="all" />
+    <!-- 插件界面：WebView2（托管 DLL 由 Costura 打进 exe；原生 WebView2Loader.dll 作为内嵌资源，运行时释放，见 Services/WebViewHost.Loader.cs） -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3912.50" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!-- WebView2Loader.dll（x64/x86/arm64）内嵌进 exe，启动 WebView 前按当前进程架构释放到 %TIPCL_HOME%/runtime/webview2/loader/<arch>/ -->
+  <ItemGroup Condition="'$(PkgMicrosoft_Web_WebView2)' != ''">
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)/runtimes/win-x64/native/WebView2Loader.dll" LogicalName="TipCL.WebView2Loader.x64.dll" Visible="false" />
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)/runtimes/win-x86/native/WebView2Loader.dll" LogicalName="TipCL.WebView2Loader.x86.dll" Visible="false" />
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)/runtimes/win-arm64/native/WebView2Loader.dll" LogicalName="TipCL.WebView2Loader.arm64.dll" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -47,6 +58,8 @@
     <EmbeddedResource Include="Resources\locales\en.json" LogicalName="TipCL.Core.locales.en.json" />
     <EmbeddedResource Include="Resources\locales\zh_CN.json" LogicalName="TipCL.Core.locales.zh_CN.json" />
     <EmbeddedResource Include="Resources\ai\model_rules.json" LogicalName="TipCL.Core.ai.model_rules.json" />
+    <!-- 插件 Node 宿主脚本（node-host 维护；运行时释放到 runtime/plugin-host，见 Core/Plugins/NodeRuntime.cs） -->
+    <EmbeddedResource Include="Resources\plugin-host\**\*" LogicalName="TipCL.Core.plugin-host.%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

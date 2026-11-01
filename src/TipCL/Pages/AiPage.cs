@@ -44,6 +44,8 @@ public sealed class AiPage : PageBase
 
 	private readonly Button _modelFetch;
 
+	private bool _customModel;
+
 	private readonly Button _send;
 
 	private readonly Button _stop;
@@ -149,6 +151,9 @@ public sealed class AiPage : PageBase
 	private long _contextWindow = 131072L;
 
 	private bool _histOpen = true;
+
+	// 插件：对话上方的 aiView 标签条（dsh-game 的「游戏」标签等）
+	private readonly TipCL.Pages.Plugins.AiViewStrip _pluginViews = new TipCL.Pages.Plugins.AiViewStrip();
 
 	public override string Title => I18n.L("AI 助手");
 
@@ -309,7 +314,16 @@ public sealed class AiPage : PageBase
 			RenderChats();
 		};
 		Grid grid = Ui.G("Auto,Auto,Auto,*");
-		grid.Add(button, 0);
+		// 「新对话」右边的小箭头：用插件提供的 AI 预设新建对话
+		Button presetPick = Ui.IconBtn("\ue70d", I18n.L("用预设新建对话"));
+		presetPick.Click += delegate
+		{
+			TipCL.Pages.Plugins.PresetCatalog.OpenMenu(presetPick, (string preset, string view) => NewChatWithPresetAsync(preset, view));
+		};
+		Grid newRow = Ui.G(null, "*,Auto");
+		newRow.Add(button, 0);
+		newRow.Add(presetPick.M(4.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
+		grid.Add(newRow, 0);
 		grid.Add(_histSearch.M(0.0, 8.0), 1);
 		grid.Add(Ui.Txt(I18n.L("最近"), 11.0, bold: false, "B.InkFaint").M(8.0, 12.0, 0.0, 4.0), 2);
 		grid.Add(Ui.Scroll(_chatList), 3);
@@ -469,13 +483,23 @@ public sealed class AiPage : PageBase
 		slashCard.SetResourceReference(Border.BorderBrushProperty, "B.Line");
 		_slashPop.Child = slashCard;
 		_slashPop.PlacementTarget = _composer;
-		SPanel sPanel = Ui.V(8.0, _dock, _instPill, _composer, grid5.M(4.0, 0.0, 4.0));
+		TipCL.Pages.Plugins.PluginActionBar aiActions = new TipCL.Pages.Plugins.PluginActionBar("ai.input", () => new Dictionary<string, object?> { ["chatId"] = _store.ActiveId });
+		SPanel sPanel = Ui.V(8.0, _dock, _instPill, aiActions, _composer, grid5.M(4.0, 0.0, 4.0));
 		sPanel.MaxWidth = 760.0;
 		sPanel.Margin = new Thickness(28.0, 4.0, 28.0, 14.0);
-		Grid grid6 = Ui.G("Auto,*,Auto");
+		Grid grid6 = Ui.G("Auto,Auto,*,Auto");
 		grid6.Add(border, 0);
-		grid6.Add(_scroll, 1);
-		grid6.Add(sPanel, 2);
+		grid6.Add(_pluginViews.Bar, 1);
+		grid6.Add(_scroll, 2);
+		grid6.Add(sPanel, 3);
+		// 插件视图选中时盖住消息列表和输入框（视图自己带终端 / 输入 / 停止）
+		grid6.Add(_pluginViews.Host, 2, 0, 2);
+		_pluginViews.ModeChanged += delegate(bool on)
+		{
+			_scroll.Visibility = ((!on) ? Visibility.Visible : Visibility.Collapsed);
+			sPanel.Visibility = ((!on) ? Visibility.Visible : Visibility.Collapsed);
+		};
+		_pluginViews.PresetsChanged += RenderChats;
 		Grid grid7 = Ui.G(null, "Auto,*");
 		grid7.Add(_hist, 0);
 		grid7.Add(grid6, 0, 1);
@@ -890,10 +914,15 @@ public sealed class AiPage : PageBase
 
 	private async Task SyncModelAsync()
 	{
+		Dictionary<string, JsonElement> settings = (await PageBase.Api.TryCallAsync("get_settings", null, new Dictionary<string, JsonElement>())) ?? new Dictionary<string, JsonElement>();
+		// 内置网关模式模型固定，不给选
+		_customModel = settings.TryGetValue("ai_mode", out JsonElement mode) && mode.ValueKind == JsonValueKind.String && mode.GetString() == "custom";
+		_model.Visibility = (_customModel ? Visibility.Visible : Visibility.Collapsed);
+		_modelFetch.Visibility = _model.Visibility;
 		if (!_model.IsKeyboardFocusWithin)
 		{
 			JsonElement value;
-			string text = ((((await PageBase.Api.TryCallAsync("get_settings", null, new Dictionary<string, JsonElement>())) ?? new Dictionary<string, JsonElement>()).TryGetValue("ai_model", out value) && value.ValueKind == JsonValueKind.String) ? (value.GetString() ?? "") : "");
+			string text = ((settings.TryGetValue("ai_model", out value) && value.ValueKind == JsonValueKind.String) ? (value.GetString() ?? "") : "");
 			SetModel(text);
 			_modelSaved = text.Trim();
 		}
@@ -928,7 +957,7 @@ public sealed class AiPage : PageBase
 
 	private async Task FetchModelsAsync(bool manual = false)
 	{
-		if (_modelFetching)
+		if (_modelFetching || !_customModel)
 		{
 			return;
 		}
@@ -1010,7 +1039,7 @@ public sealed class AiPage : PageBase
 		_store = (await PageBase.Api.TryCallAsync("ai_list_chats", null, new AiStoreDto())) ?? new AiStoreDto();
 		await SyncPermissionAsync();
 		await SyncModelAsync();
-		if (!_modelFetched)
+		if (!_modelFetched && _customModel)
 		{
 			_modelFetched = true;
 			PageBase.Run(() => FetchModelsAsync());
@@ -1094,7 +1123,15 @@ public sealed class AiPage : PageBase
 			bool num2 = _busy && id == _runChatId;
 			TextBlock textBlock = Ui.Txt(text2, 12.5, flag, flag ? "B.AccentText" : "B.InkSoft");
 			textBlock.TextTrimming = TextTrimming.CharacterEllipsis;
-			Grid grid = Ui.G(null, "Auto,*");
+			Grid grid = Ui.G(null, "Auto,*,Auto");
+			if (!string.IsNullOrEmpty(chat.Preset))
+			{
+				string presetName = TipCL.Pages.Plugins.PresetCatalog.Name(chat.Preset);
+				Border presetTag = Ui.Tag(presetName, "B.AccentText", "B.AccentSoft");
+				presetTag.MaxWidth = 76.0;
+				presetTag.ToolTip = I18n.L("预设：{0}", presetName);
+				grid.Add(presetTag.M(6.0, 0.0, 0.0, 0.0).VCenter(), 0, 2);
+			}
 			if (num2)
 			{
 				Border border = new Border
@@ -1159,6 +1196,7 @@ public sealed class AiPage : PageBase
 		AiChatDto activeChat = ActiveChat;
 		_titleText.Text = ((activeChat == null || string.IsNullOrWhiteSpace(activeChat.Title)) ? I18n.L("新对话") : activeChat.Title);
 		SyncInstChip();
+		_pluginViews.SetChat(activeChat?.Id ?? "", activeChat?.Preset ?? "", activeChat?.View ?? "");
 	}
 
 	private ContextMenu DelMenu(string id)
@@ -1325,11 +1363,16 @@ public sealed class AiPage : PageBase
 			return;
 		}
 		Bubble lastAssistant = null;
+		// 只画最后一条摘要分隔线：旧版本每轮都存一条摘要标记，老对话里会一句一条
+		AiMsgDto lastCompact = activeChat.Messages.LastOrDefault((AiMsgDto m) => m.Role == "user" && (m.Id ?? "").StartsWith("compact_", StringComparison.Ordinal));
 		foreach (AiMsgDto message in activeChat.Messages)
 		{
-			if (message.Role == "user" && message.Id.StartsWith("compact_", StringComparison.Ordinal))
+			if (message.Role == "user" && (message.Id ?? "").StartsWith("compact_", StringComparison.Ordinal))
 			{
-				_messages.Children.Add(Divider(I18n.L("更早的对话已压缩成摘要")));
+				if (message == lastCompact)
+				{
+					_messages.Children.Add(Divider(I18n.L("更早的对话已压缩成摘要")));
+				}
 				continue;
 			}
 			bool flag;
@@ -2781,8 +2824,42 @@ public sealed class AiPage : PageBase
 		_scroll.ScrollToEnd();
 	}
 
+	private Task NewChatWithPresetAsync(string preset, string view)
+	{
+		if (string.IsNullOrEmpty(preset))
+		{
+			return NewChatAsync();
+		}
+		return SwitchChatAsync(() => PageBase.Api.TryCallAsync("ai_new_chat", new { preset, view }, _store));
+	}
+
+	/// <summary>插件请求打开某个对话（plugins.ui_request kind "openChat"），可指定标签（aiView id）。</summary>
+	public async Task OpenChatAsync(string chatId, string view, string plugin = "")
+	{
+		if (!string.IsNullOrEmpty(chatId) && chatId != _store.ActiveId)
+		{
+			// 插件刚建的对话列表里可能还没有：先刷新再切
+			if (!_store.Chats.Any((AiChatDto c) => c.Id == chatId))
+			{
+				_store = (await PageBase.Api.TryCallAsync("ai_list_chats", null, _store)) ?? _store;
+			}
+			await SwitchChatAsync(() => PageBase.Api.TryCallAsync("ai_set_active", new
+			{
+				chat_id = chatId
+			}, _store));
+		}
+		if (!string.IsNullOrEmpty(view))
+		{
+			_pluginViews.Select(view);
+		}
+	}
+
 	public override void OnShown()
 	{
+		if (_pluginViews.PluginViewActive)
+		{
+			return;
+		}
 		_input.Focus();
 	}
 }

@@ -1,0 +1,8 @@
+{
+  "id": "probe",
+  "name": "test probe",
+  "version": "0.0.1",
+  "runtime": "node",
+  "main": "index.mjs",
+  "permissions": ["ai.sessions", "launcher"]
+}

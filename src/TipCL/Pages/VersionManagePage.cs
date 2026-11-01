@@ -147,7 +147,13 @@ public sealed class VersionManagePage : PageBase
 		{
 			RenderGroups();
 		};
-		Grid val6 = Ui.Section(I18n.L("版本选择"), I18n.L("双击版本直接启动；卡片右侧：收藏 / 卸载 / 设置"), (UIElement?)(object)Ui.H(8.0, (UIElement)_count.VCenter<TextBlock>(), (UIElement)_search.VCenter<TextBox>(), (UIElement)val5));
+		// 插件动作按钮（kind "action"，where "instance"）：带上当前游戏文件夹和默认实例
+		TipCL.Pages.Plugins.PluginActionBar pluginActions = new TipCL.Pages.Plugins.PluginActionBar("instance", () => new Dictionary<string, object?>
+		{
+			["folder"] = _folder,
+			["instance"] = _defaultInstance
+		});
+		Grid val6 = Ui.Section(I18n.L("版本选择"), I18n.L("双击版本直接启动；卡片右侧：收藏 / 卸载 / 设置"), (UIElement?)(object)Ui.H(8.0, (UIElement)pluginActions, (UIElement)_count.VCenter<TextBlock>(), (UIElement)_search.VCenter<TextBox>(), (UIElement)val5));
 		_empty.Show<SPanel>(shown: false);
 		SPanel el2 = Ui.V(12.0, (UIElement)val6, (UIElement)_groupsHost, (UIElement)_empty);
 		// 左右两栏之间留 18px 间距（与其他页面卡片间距一致），两栏都顶对齐
