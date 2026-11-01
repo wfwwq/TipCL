@@ -12,14 +12,14 @@
 
 <br/>
 
-<img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows" />
+<img src="https://img.shields.io/badge/Windows-7%20%2F%208.1%20%2F%2010%20%2F%2011-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows" />
 <img src="https://img.shields.io/badge/.NET%20Framework-4.8-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET Framework 4.8" />
 <img src="https://img.shields.io/badge/UI-WPF-6CB33E?style=flat-square" alt="WPF" />
 <img src="https://img.shields.io/badge/MCP-Server-000000?style=flat-square" alt="MCP Server" />
 <img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E4%B8%AD%E6%96%87%20%7C%20English-F4A93B?style=flat-square" alt="中文 | English" />
 <a href="https://github.com/wfwwq/TipCL/actions/workflows/ci.yml"><img src="https://github.com/wfwwq/TipCL/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 
-[AI 助手](#-ai-助手) · [功能](#-功能) · [下载与构建](#-下载与构建) · [MCP Server](#-mcp-server) · [目录结构](#-目录结构) · [开发者选项](#-开发者选项)
+[AI 助手](#-ai-助手) · [功能](#-功能) · [下载与构建](#-下载与构建) · [MCP Server](#-mcp-server) · [插件系统](#-插件系统) · [目录结构](#-目录结构) · [开发者选项](#-开发者选项)
 
 </div>
 
@@ -55,8 +55,11 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 | 🌐 **联机** | 内置 Terracotta 局域网联机 |
 | 📱 **手机同步** | 同一 Wi-Fi 或 USB 数据线和手机启动器互传存档，配对码连接，谁改了传谁，覆盖前自动备份 |
 | 🤖 **AI 助手** | 崩溃诊断、卡顿优化、看图、长期记忆、MCP Server，见[上文](#-ai-助手) |
-| 🏠 **仪表盘首页** | 启动配置、实时日志、快捷入口、游戏时长、新闻，布局随心拖拽 |
+| 🔌 **插件系统** | 插件市场一键安装，插件可加页面、AI 工具、启动钩子和首页卡片，见[下文](#-插件系统) |
+| 🏠 **仪表盘首页** | 默认呈现启动横幅、启动配置、快捷入口和新闻；日志、时长、便签等卡片按需添加，布局随心拖拽，支持方案与导入导出 |
 | 🎨 **外观** | 浅色 / 深色主题，中英双语界面 |
+
+> Win7 / 8.1 同样可用：图标用内置字体渲染、图片走纯托管解码，不依赖系统里不存在的新组件（插件的 Web 界面在 Win7 / 8.1 上会自动改用浏览器打开）。
 
 ## 📦 下载与构建
 
@@ -81,13 +84,17 @@ dotnet test tests/TipCL.Tests
 src/TipCL/
 ├─ App.xaml / MainWindow.xaml   应用入口与主窗口
 ├─ Themes/                      浅色、深色调色板与控件样式
-├─ Pages/                       各功能页面（含 AI 页）
-├─ Services/                    动画、对话框、壁纸、输入法守卫等界面服务
+├─ Pages/                       各功能页面（含 AI 页、插件页）
+├─ Services/                    动画、对话框、壁纸、WebView、输入法守卫等界面服务
 ├─ Models/                      界面数据模型
 ├─ Core/                        启动器内核：下载、安装、启动、账号、模组、联机
-│  └─ Launcher/Ai/              AI 工具、记忆、看图、MCP Server
-└─ Resources/                   内置词表与 AI 模型规则
+│  ├─ Launcher/Ai/              AI 工具、记忆、看图、MCP Server
+│  └─ Plugins/                  插件系统：宿主、市场、会话、钩子、SDK
+└─ Resources/                   内置词表、AI 模型规则、图标字体、插件宿主脚本
 tests/TipCL.Tests/              单元测试（xUnit）
+samples/                        示例插件（Node）与宿主测试
+docs/plugins/DESIGN.md          插件系统接口契约文档
+tools/iconfont/                 内置图标字体的映射表与生成脚本
 ```
 
 ## 🔌 MCP Server
@@ -119,6 +126,17 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 - 被覆盖的一边一定会先备份到电脑的备份目录，可以随时回滚
 - 两边游戏版本要一致，旧版本打开新存档会损坏
 
+## 🔌 插件系统
+
+侧栏「更多 → 插件」进入插件页，分市场 / 已安装 / 开发 / 设置四块：
+
+- **安装**：在设置里填一个或多个插件市场索引地址（`index.json`）即可浏览安装，也可以直接把插件 zip 拖进页面；本地开发中的插件文件夹可直接加载，文件变更自动重载
+- **运行**：Node 插件使用内置便携 Node（系统没有 Node ≥ 22 时自动下载到数据目录），也可安装 .NET 插件
+- **能做什么**：给侧栏加页面（WebView2，Win7 / 8.1 上自动改用浏览器）、主窗口浮层、AI 页标签、首页卡片；向 AI 注册工具和人设预设（让模型直接调插件能力）；挂钩启动流程（改参数、启动后、退出、崩溃）和游戏日志事件
+- **安全**：插件拥有完整电脑权限（不做沙箱），安装时会明示；插件的密钥用 DPAPI 按插件隔离加密存储；权限按项授予（启动器操作、AI 工具等）
+
+对开发者：清单 `tipcl-plugin.json` + Node SDK，契约文档见 [docs/plugins/DESIGN.md](docs/plugins/DESIGN.md)，示例插件和宿主测试在 [samples/](samples/)。
+
 ## 🛠️ 开发者选项
 
 | 启动参数 | 作用 |
@@ -138,8 +156,7 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 
 exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，点「更多信息 → 仍要运行」即可。个别杀软会对未签名的单文件程序报启发式误报，源码完全公开，也可以自己编译。
 
-- v1.0.10 SHA-256：`615b2165bf1529f6cf538cda63a44aeb8edc896f5e9a05ade605f7edfccad7a8`
-- [VirusTotal 扫描结果](https://www.virustotal.com/gui/file/615b2165bf1529f6cf538cda63a44aeb8edc896f5e9a05ade605f7edfccad7a8)：1/71（仅 MaxSecure 启发式 `susgen` 报出，其余 70 家未检出）
+- v1.0.13 SHA-256：`8a08b23eecf9bbc2c889ef5b57345c05d26cb24df84cb1e1105f733b7f517524`（每个 Release 附件都带 `.sha256` 文件，可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描）
 
 ## 💬 社区建议
 
