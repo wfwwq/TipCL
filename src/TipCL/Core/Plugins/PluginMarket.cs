@@ -19,6 +19,29 @@ public sealed class PluginMarket
 
 	public const string SettingAllowUnverified = "plugin_allow_unverified";
 
+	/// <summary>官方市场索引。用户未配置时内置使用，并附带几个加速镜像（同一索引，按 id 合并去重）。</summary>
+	public const string OfficialIndexUrl = "https://raw.githubusercontent.com/wfwwq/TipCL-market/main/index.json";
+
+	public static readonly string[] DefaultIndexUrls = new string[4] { OfficialIndexUrl, "https://ghfast.top/" + OfficialIndexUrl, "https://gh-proxy.com/" + OfficialIndexUrl, "https://ghproxy.net/" + OfficialIndexUrl };
+
+	/// <summary>GitHub 下载加速镜像（前缀代理）。仅用于 github.com 的 Release 附件等直链。</summary>
+	public static readonly string[] GhDownloadMirrors = new string[3] { "https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/" };
+
+	/// <summary>插件包的下载候选地址：原始地址优先，GitHub 直链附加加速镜像。</summary>
+	public static List<string> DownloadCandidates(string url)
+	{
+		List<string> list = new List<string> { url };
+		if (url.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
+		{
+			string[] ghDownloadMirrors = GhDownloadMirrors;
+			foreach (string mirror in ghDownloadMirrors)
+			{
+				list.Add(mirror + url);
+			}
+		}
+		return list;
+	}
+
 	private readonly PluginManager _mgr;
 
 	private readonly object _cacheLock = new object();
@@ -41,11 +64,12 @@ public sealed class PluginMarket
 	{
 		try
 		{
-			return Py.ListOr(Config.CONFIG.Get(SettingIndexes)).Select(Py.S).Select((string s) => s.Trim()).Where((string s) => s.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || s.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || File.Exists(s)).Distinct().ToList();
+			List<string> list = Py.ListOr(Config.CONFIG.Get(SettingIndexes)).Select(Py.S).Select((string s) => s.Trim()).Where((string s) => s.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || s.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || File.Exists(s)).Distinct().ToList();
+			return list.Count > 0 ? list : new List<string>(DefaultIndexUrls);
 		}
 		catch (Exception)
 		{
-			return new List<string>();
+			return new List<string>(DefaultIndexUrls);
 		}
 	}
 
@@ -230,24 +254,51 @@ public sealed class PluginMarket
 		string zip = Path.Combine(_mgr.Dirs.StagingRoot, id + "-" + Py.S(e.Get("version")) + ".zip");
 		Directory.CreateDirectory(_mgr.Dirs.StagingRoot);
 		ctx?.Progress(1L, 5L, I18nCore.Tr("下载插件"));
-		ctx?.Log("下载 " + Py.S(dl.Get("url")));
+		List<string> candidates = DownloadCandidates(Py.S(dl.Get("url")));
 		try
 		{
-			if (_mgr.Backend != null && ctx != null)
+			Exception lastErr = null;
+			bool downloaded = false;
+			foreach (string candidate in candidates)
 			{
-				DownloadManager dm = _mgr.Backend._dm(ctx);
-				long? size = (dl.Get("size") != null) ? new long?(Py.IntOr(dl.Get("size"), 0L)) : null;
-				if (size == 0)
+				try
 				{
-					size = null;
+					try
+					{
+						File.Delete(zip);
+					}
+					catch
+					{
+					}
+					ctx?.Log("下载 " + candidate);
+					if (_mgr.Backend != null && ctx != null)
+					{
+						DownloadManager dm = _mgr.Backend._dm(ctx);
+						long? size = (dl.Get("size") != null) ? new long?(Py.IntOr(dl.Get("size"), 0L)) : null;
+						if (size == 0)
+						{
+							size = null;
+						}
+						dm.Download(candidate, zip, null, size, force: true, null, null, sha, null, expand: false);
+					}
+					else
+					{
+						using NetResponse r = Net.Get(candidate, 8.0, 300.0);
+						r.RaiseForStatus();
+						File.WriteAllBytes(zip, r.Content());
+					}
+					downloaded = true;
+					break;
 				}
-				dm.Download(Py.S(dl.Get("url")), zip, null, size, force: true, null, null, sha, null, expand: false);
+				catch (Exception ex) when (!(ex is TaskCancelled))
+				{
+					lastErr = ex;
+					ctx?.Log(I18nCore.Tr("下载失败，尝试其它源：") + ex.Message);
+				}
 			}
-			else
+			if (!downloaded)
 			{
-				using NetResponse r = Net.Get(Py.S(dl.Get("url")), 8.0, 300.0);
-				r.RaiseForStatus();
-				File.WriteAllBytes(zip, r.Content());
+				throw lastErr ?? new ValueError(I18nCore.Tr("插件包下载失败"));
 			}
 			if (!Sha256Matches(zip, sha))
 			{

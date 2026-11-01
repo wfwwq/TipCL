@@ -4188,8 +4188,9 @@ public partial class BackendApi
 		pyDict["ui_nav_groups"] = _nav_groups(G("ui_nav_groups"));
 		pyDict["ui_section_members"] = _nav_members(G("ui_section_members"));
 		pyDict["ui_sidebar_width"] = Py.Int(Py.Or(G("ui_sidebar_width"), 0L));
-		// 插件市场（DESIGN §9）
-		pyDict["plugin_market_indexes"] = Py.ListOr(G("plugin_market_indexes")).Select(Py.S).Where((string u) => u.Trim().Length > 0).Cast<object>().ToList();
+		// 插件市场（DESIGN §9）：未配置时下发内置默认索引（官方 + 加速镜像）
+		List<string> marketIndexes = Py.ListOr(G("plugin_market_indexes")).Select(Py.S).Where((string u) => u.Trim().Length > 0).ToList();
+		pyDict["plugin_market_indexes"] = (marketIndexes.Count > 0) ? marketIndexes.Cast<object>().ToList() : Plugins.PluginMarket.DefaultIndexUrls.Cast<object>().ToList();
 		pyDict["plugin_allow_unverified"] = Py.Truthy(GD("plugin_allow_unverified", false));
 		return pyDict;
 		object G(string k)
