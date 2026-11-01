@@ -6,7 +6,7 @@
   "description": "演示 Node 插件的全部能力：页面、AI 标签、浮层、首页卡片、设置与凭据、agent 预设与阻塞工具（带图片）、SSE 路由、llm.stream、启动钩子、跨插件服务。",
   "icon": "assets/icon.png",
   "homepage": "https://github.com/wfwwq/TipCL",
-  "engines": { "tipcl": ">=3.3.0", "node": ">=22" },
+  "engines": { "tipcl": ">=1.0.13", "node": ">=22" },
   "runtime": "node",
   "main": ["lib/index.js", "lib/agent.js"],
   "client": "lib/client.js",
