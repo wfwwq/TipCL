@@ -177,6 +177,11 @@ public partial class App : Application
 
 	private static bool NeedsElevation(string[] args)
 	{
+		// dev-only：UI 自动化验收用，跳过运行期自提权（正常启动仍按 manifest requireAdministrator 提权）
+		if (args.Contains<string>("--no-elevate"))
+		{
+			return false;
+		}
 		string[] selfCheckArgs = SelfCheckArgs;
 		foreach (string value in selfCheckArgs)
 		{
