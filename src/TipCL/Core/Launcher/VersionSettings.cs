@@ -51,18 +51,23 @@ public static class VersionSettings
 	public static PyDict Load(Instance instance, object version_id)
 	{
 		PyDict dEFAULTS = DEFAULTS;
+		object fileIso = null;
 		if (Utils.ReadJson(_file(instance, version_id)) is PyDict other)
 		{
+			// 先记下版本文件自己的 isolation 再合并；合并后 DEFAULTS 里 truthy 的
+			// "none" 会永远压住全局 default_isolation（隔离默认失效 bug）。
+			fileIso = other.Get("isolation");
 			dEFAULTS.Update(other);
 		}
-		object obj = Py.Or(dEFAULTS["isolation"], Config.CONFIG.Get("default_isolation"), "none");
+		object obj = Py.Or(fileIso, Config.CONFIG.Get("default_isolation"), ISOLATION_NONE);
 		if (!IsIsoLabel(obj))
 		{
-			obj = "none";
+			obj = ISOLATION_NONE;
 		}
 		dEFAULTS["isolation"] = obj;
 		return dEFAULTS;
 	}
+
 
 	public static PyDict Save(Instance instance, object version_id, object data)
 	{
@@ -75,13 +80,16 @@ public static class VersionSettings
 			}
 			pyDict.Update(other);
 		}
+		// 空/非法值 = 「跟随全局」：把键从文件里删掉回落到全局默认，
+		// 而不是写成显式 "none" 盖住全局设置（版本设置对话框保存会发空值）。
 		if (!IsIsoLabel(pyDict["isolation"]))
 		{
-			pyDict["isolation"] = "none";
+			pyDict.Remove("isolation");
 		}
 		Utils.WriteJson(_file(instance, version_id), pyDict);
 		return pyDict;
 	}
+
 
 	public static bool IsIsolated(PyDict settings)
 	{
