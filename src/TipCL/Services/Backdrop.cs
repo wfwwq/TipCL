@@ -52,6 +52,49 @@ public static class Backdrop
 
 	private const int DwmwaSystemBackdropType = 38;
 
+	private const int DwmwaWindowCornerPreference = 33;
+
+	private const int DwmwcpRound = 2;
+
+	/// <summary>Win11 (build ≥ 22000)：系统级圆角窗口；调用失败（旧系统/无 DWM）返回 false 由调用方回退自绘。</summary>
+	public static bool TryRoundWin11(IntPtr hwnd)
+	{
+		try
+		{
+			int value = DwmwcpRound;
+			return DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref value, 4) == 0;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	/// <summary>系统大圆角能力：Win11 走 DWM，Win10 由窗口层自绘，Win7 直角。</summary>
+	public static int RootCornerRadius
+	{
+		get
+		{
+			try
+			{
+				Version v = Environment.OSVersion.Version;
+				if (v.Build >= 22000)
+				{
+					return 0;
+				}
+				if (v.Build >= 10240)
+				{
+					return 8;
+				}
+				return 0;
+			}
+			catch
+			{
+				return 0;
+			}
+		}
+	}
+
 	private static int _pmAccentState = 4;
 
 	private static bool _pmLegacyUsed;

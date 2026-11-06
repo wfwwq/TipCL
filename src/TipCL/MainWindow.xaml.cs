@@ -262,6 +262,7 @@ public partial class MainWindow : Window
 		base.SourceInitialized += delegate
 		{
 			Backdrop.Apply(this);
+			ApplyWindowCorner();
 		};
 		Wallpaper.Attach(WallHost, TopBar, null, PageWash);
 		TabLaunch.Click += delegate
@@ -891,11 +892,60 @@ public partial class MainWindow : Window
 		base.WindowState = ((base.WindowState != WindowState.Maximized) ? WindowState.Maximized : WindowState.Normal);
 	}
 
+	// Win11 (build≥22000)：DWMWA_WINDOW_CORNER_PREFERENCE=33 系统圆角；
+	// Win10：RootBorder 自绘 8px 圆角 + 内层 Grid 圆角裁剪；Win7：直角。
+	// 最大化一律回直角。WindowChrome 拖拽/6px resize 不受 CornerRadius 影响。
+	private double _rootRadius = -1.0;
+
+	private void ApplyWindowCorner()
+	{
+		try
+		{
+			IntPtr handle = new WindowInteropHelper(this).Handle;
+			if (handle == IntPtr.Zero)
+			{
+				return;
+			}
+			_rootRadius = Math.Max(0.0, Backdrop.RootCornerRadius);
+			if (Environment.OSVersion.Version.Build >= 22000)
+			{
+				// Win11：系统圆角优先；失败也不回退自绘（Win11 上自绘意义不大，保持直角可接受）
+				Backdrop.TryRoundWin11(handle);
+			}
+			RootBorder.SizeChanged += delegate
+			{
+				ApplyRootCorner();
+			};
+			ApplyRootCorner();
+		}
+		catch
+		{
+		}
+	}
+
+	private void ApplyRootCorner()
+	{
+		if (_rootRadius < 0.0 || RootBorder == null)
+		{
+			return;
+		}
+		bool maximized = base.WindowState == WindowState.Maximized;
+		double r = (maximized ? 0.0 : _rootRadius);
+		RootBorder.CornerRadius = new CornerRadius(r);
+		if (RootBorder.Child is UIElement el)
+		{
+			double w = el.RenderSize.Width;
+			double h = el.RenderSize.Height;
+			el.Clip = ((r > 0.0 && w > 0.0 && h > 0.0) ? new RectangleGeometry(new Rect(0.0, 0.0, w, h), r, r) : null);
+		}
+	}
+
 	private void SyncMaxGlyph()
 	{
 		bool flag = base.WindowState == WindowState.Maximized;
 		MaxBtn.Content = (flag ? "\ue923" : "\ue922");
 		RootBorder.BorderThickness = new Thickness((!flag) ? 1 : 0);
+		ApplyRootCorner();
 	}
 
 	internal void SyncThemeIndicator()

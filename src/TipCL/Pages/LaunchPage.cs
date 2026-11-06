@@ -152,6 +152,10 @@ public sealed class LaunchPage : PageBase
 
 	private SPanel? _titleRow;
 
+	private Border? _morePill;
+
+	private Popup? _morePopup;
+
 	private Popup? _configPopup;
 
 	private Popup? _switchPopup;
@@ -340,26 +344,18 @@ public sealed class LaunchPage : PageBase
 		main.VerticalAlignment = VerticalAlignment.Center;
 		main.Margin = new Thickness(56.0, 0.0, 0.0, 0.0);
 		// 右上安静区：账号 / 启动配置 / AI / 联机 / 插件
-		_configPill = Pill("\ue713", I18n.L("启动配置"), OpenConfigPopup, out _);
-		Border accountPill = Pill("\ue77b", I18n.L("登录"), delegate
-		{
-			PageBase.Win?.Navigate("account");
-		}, out _accountPillText);
-		SPanel quiet = Ui.H(8.0,
-			accountPill,
-			_configPill,
-			Pill("\ue99a", I18n.L("AI 助手"), delegate
+			_configPill = Pill("\ue713", I18n.L("启动配置"), OpenConfigPopup, out _);
+			Border accountPill = Pill("\ue77b", I18n.L("登录"), delegate
 			{
-				PageBase.Win?.Navigate("ai");
-			}, out _),
-			Pill("\ue701", I18n.L("联机"), delegate
-			{
-				PageBase.Win?.Navigate("multiplayer");
-			}, out _),
-			Pill("\uea86", I18n.L("插件"), delegate
-			{
-				PageBase.Win?.Navigate("plugins");
-			}, out _));
+				PageBase.Win?.Navigate("account");
+			}, out _accountPillText);
+			// 右上安静区收纳（用户实测反馈太挤）：AI / 联机 / 插件收进「更多」浮层，
+			// 首页默认可见按钮（不含窗口钮）收敛为 3 个，全部功能仍 ≤2 击可达
+			_morePill = Pill("\ue712", I18n.L("更多"), OpenMorePopup, out _);
+			SPanel quiet = Ui.H(8.0,
+				accountPill,
+				_configPill,
+				_morePill);
 		quiet.HorizontalAlignment = HorizontalAlignment.Right;
 		quiet.VerticalAlignment = VerticalAlignment.Top;
 		quiet.Margin = new Thickness(0.0, 18.0, 20.0, 0.0);
@@ -492,6 +488,49 @@ public sealed class LaunchPage : PageBase
 	}
 
 	// ————— 配置浮层 —————
+
+	// 「更多」药丸溢出菜单：AI 助手 / 联机 / 插件（导航到既有页面，不造数据）
+	private void OpenMorePopup()
+	{
+		if (_morePopup == null)
+		{
+			SPanel list = Ui.V(3.0,
+				MoreRow("\ue99a", I18n.L("AI 助手"), "ai"),
+				MoreRow("\ue701", I18n.L("联机"), "multiplayer"),
+				MoreRow("\uea86", I18n.L("插件"), "plugins"));
+			_morePopup = MakePopup(_morePill ?? (FrameworkElement?)_configPill ?? (FrameworkElement?)_titleRow ?? this, PlacementMode.Bottom,
+				PopShell(list, 176.0, 240.0, new Thickness(0.0, 6.0, 14.0, 14.0)));
+		}
+		_morePopup.IsOpen = true;
+	}
+
+	private UIElement MoreRow(string glyph, string label, string pageId)
+	{
+		Border row = new Border
+		{
+			CornerRadius = new CornerRadius(6.0),
+			Padding = new Thickness(10.0, 7.0, 10.0, 8.0),
+			Cursor = Cursors.Hand,
+			Child = Ui.H(9.0, Ui.Glyph(glyph, 14.0, "B.InkSoft"), Ui.Txt(label, 12.5, bold: false, "B.Ink").VCenter())
+		};
+		row.MouseEnter += delegate
+		{
+			row.SetResourceReference(Border.BackgroundProperty, "B.Hover");
+		};
+		row.MouseLeave += delegate
+		{
+			row.Background = Brushes.Transparent;
+		};
+		row.MouseLeftButtonUp += delegate
+		{
+			if (_morePopup != null)
+			{
+				_morePopup.IsOpen = false;
+			}
+			PageBase.Win?.Navigate(pageId);
+		};
+		return row;
+	}
 
 	private void OpenConfigPopup()
 	{

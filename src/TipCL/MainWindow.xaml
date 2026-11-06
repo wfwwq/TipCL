@@ -42,10 +42,10 @@
                   <TextBlock Name="BridgeText" FontSize="11" Margin="5,0,0,0" Foreground="{DynamicResource B.AccentText}" VerticalAlignment="Center" />
                 </StackPanel>
               </Border>
-              <Button Name="ThemeBtn" Style="{StaticResource Btn.Caption}" FontSize="13" Content="" />
-              <Button Name="MinBtn" Style="{StaticResource Btn.Caption}" Content="" />
-              <Button Name="MaxBtn" Style="{StaticResource Btn.Caption}" Content="" />
-              <Button Name="CloseBtn" Style="{StaticResource Btn.CaptionClose}" Content="" />
+              <Button Name="ThemeBtn" Style="{StaticResource Btn.Caption}" FontSize="13" Content="&#xE718;" />
+              <Button Name="MinBtn" Style="{StaticResource Btn.Caption}" Content="&#xE921;" />
+              <Button Name="MaxBtn" Style="{StaticResource Btn.Caption}" Content="&#xE922;" />
+              <Button Name="CloseBtn" Style="{StaticResource Btn.CaptionClose}" Content="&#xE8BB;" />
             </StackPanel>
           </Grid>
         </Border>
