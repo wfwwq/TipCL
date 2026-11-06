@@ -129,6 +129,9 @@ public sealed class LaunchPage : PageBase
 
 	private TextBlock _accountPillText = Ui.Txt("", 12.0, bold: false, "B.InkSoft");
 
+	// 主操作行外壳：运行中隐藏、显示同尺寸红「停止」，保证该行始终只有一个 52 高按钮
+	private Border? _launchShell;
+
 	private readonly TextBlock _newsTicker = new TextBlock
 	{
 		FontSize = 12.5,
@@ -306,27 +309,29 @@ public sealed class LaunchPage : PageBase
 		};
 		_configBody = (FrameworkElement)BuildConfig();
 		_configBody.MaxHeight = 372.0;
-		// 主操作行：52 高大按钮（模板圆角固定 6，用外壳 Border 提供 12 圆角）
+		// 主操作行：52 高大按钮（模板圆角固定 6，用外壳 Border 提供 12 圆角）；
+		// 规格要求 16 SemiBold 白字，故 Foreground 钉为 B.OnAccentStrong
 		_launchBtn.Style = Ui.S("Btn.Ghost");
 		_launchBtn.Padding = new Thickness(0.0);
 		_launchBtn.FontSize = 16.0;
+		_launchBtn.SetResourceReference(Control.ForegroundProperty, "B.OnAccentStrong");
 		_launchBtn.Content = Ui.H(9.0, Ui.Glyph("\ue768", 17.0), Ui.Txt(I18n.L("启动游戏"), 16.0, bold: true));
-		Border launchShell = new Border
+		_launchShell = new Border
 		{
 			CornerRadius = new CornerRadius(12.0),
 			Height = 52.0,
 			Padding = new Thickness(34.0, 0.0, 34.0, 0.0),
 			Child = _launchBtn
 		};
-		launchShell.SetResourceReference(Border.BackgroundProperty, "B.AccentStrong");
-		Motion.HoverLift(launchShell, 1.02, 1.0, 8.0);
+		_launchShell.SetResourceReference(Border.BackgroundProperty, "B.AccentStrong");
+		Motion.HoverLift(_launchShell, 1.02, 1.0, 8.0);
 		_stopBtn.Style = Ui.S("Btn.Ghost");
 		_stopBtn.Padding = new Thickness(0.0);
 		_stopBtn.Content = Ui.H(8.0, Ui.Glyph("\ue71a", 15.0), Ui.Txt(I18n.L("停止"), 15.0, bold: true));
 		_stopShell.Child = _stopBtn;
 		_stopShell.SetResourceReference(Border.BackgroundProperty, "B.DangerSoft");
 		_stopBtn.SetResourceReference(Control.ForegroundProperty, "B.Danger");
-		SPanel launchRow = Ui.H(10.0, launchShell, _stopShell);
+		SPanel launchRow = Ui.H(10.0, _launchShell, _stopShell);
 		SPanel statusRow = Ui.H(10.0, _prog.VCenter(), _status.VCenter());
 		statusRow.Margin = new Thickness(0.0, 4.0, 0.0, 0.0);
 		SPanel main = Ui.V(12.0, kicker, _titleRow, _meta, launchRow, statusRow);
@@ -1167,6 +1172,7 @@ public sealed class LaunchPage : PageBase
 		_status.Text = I18n.L("准备启动…");
 		_launchBtn.IsEnabled = false;
 		_stopBtn.IsEnabled = true;
+		_launchShell.Visibility = Visibility.Collapsed;
 		_stopShell.Visibility = Visibility.Visible;
 		_crashShown = false;
 		Motion.Pulse(_launchBtn);
@@ -1195,6 +1201,7 @@ public sealed class LaunchPage : PageBase
 		{
 			_launchBtn.IsEnabled = true;
 			_stopBtn.IsEnabled = false;
+			_launchShell.Visibility = Visibility.Visible;
 			_stopShell.Visibility = Visibility.Collapsed;
 			PageBase.Toast(I18n.L("启动失败"), ex.Message, ToastKind.Error);
 		}
@@ -1625,6 +1632,7 @@ public sealed class LaunchPage : PageBase
 		case "finished":
 			_launchBtn.IsEnabled = true;
 			_stopBtn.IsEnabled = false;
+			_launchShell.Visibility = Visibility.Visible;
 			_stopShell.Visibility = Visibility.Collapsed;
 			_status.Text = ((!string.IsNullOrEmpty(ev.Message)) ? ev.Message : (ev.Success ? I18n.L("已完成") : I18n.L("✘ 失败")));
 			if (ev.Success)
