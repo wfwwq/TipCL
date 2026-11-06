@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="3.2.0.0" name="TipCL" />
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
@@ -16,20 +16,14 @@
     </windowsSettings>
   </application>
   <!--
-    强制管理员运行。启动器要往安装目录写文件、装/删整合包、调用需要提权的桥接进程，
-    所以以 requireAdministrator 声明：Windows 在进程创建前先弹 UAC，用户在 UAC 窗口点
-    "否"时由系统直接拒绝创建进程（进程根本不会起来），语义上就是"不同意就退出"。
-
-    一点必要的取舍：这个声明对进程整体生效，连无界面的自检入口（nav-dump / i18n-check /
-    ime-check / consent-check / smoke）也会一起被要求提权，这会影响主仓的自动化测试
-    （tests/ 下用 subprocess 直接跑 exe，非提权上下文会以 740 / CreateProcess 失败）。
-    因此 App.xaml.cs 里保留了一层运行期自我提权：自检开关会跳过 UAC，进程以自身 manifest
-    的 requireAdministrator 被操作系统接管时依旧弹窗；正常带界面启动走运行期 runas。
-  -->
+    寮哄埗绠＄悊鍛樿繍琛屻€傚惎鍔ㄥ櫒瑕佸線瀹夎鐩綍鍐欐枃浠躲€佽/鍒犳暣鍚堝寘銆佽皟鐢ㄩ渶瑕佹彁鏉冪殑妗ユ帴杩涚▼锛?    鎵€浠ヤ互 asInvoker 澹版槑锛歐indows 鍦ㄨ繘绋嬪垱寤哄墠鍏堝脊 UAC锛岀敤鎴峰湪 UAC 绐楀彛鐐?    "鍚?鏃剁敱绯荤粺鐩存帴鎷掔粷鍒涘缓杩涚▼锛堣繘绋嬫牴鏈笉浼氳捣鏉ワ級锛岃涔変笂灏辨槸"涓嶅悓鎰忓氨閫€鍑?銆?
+    涓€鐐瑰繀瑕佺殑鍙栬垗锛氳繖涓０鏄庡杩涚▼鏁翠綋鐢熸晥锛岃繛鏃犵晫闈㈢殑鑷鍏ュ彛锛坣av-dump / i18n-check /
+    ime-check / consent-check / smoke锛変篃浼氫竴璧疯瑕佹眰鎻愭潈锛岃繖浼氬奖鍝嶄富浠撶殑鑷姩鍖栨祴璇?    锛坱ests/ 涓嬬敤 subprocess 鐩存帴璺?exe锛岄潪鎻愭潈涓婁笅鏂囦細浠?740 / CreateProcess 澶辫触锛夈€?    鍥犳 App.xaml.cs 閲屼繚鐣欎簡涓€灞傝繍琛屾湡鑷垜鎻愭潈锛氳嚜妫€寮€鍏充細璺宠繃 UAC锛岃繘绋嬩互鑷韩 manifest
+    鐨?asInvoker 琚搷浣滅郴缁熸帴绠℃椂渚濇棫寮圭獥锛涙甯稿甫鐣岄潰鍚姩璧拌繍琛屾湡 runas銆?  -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
       </requestedPrivileges>
     </security>
   </trustInfo>

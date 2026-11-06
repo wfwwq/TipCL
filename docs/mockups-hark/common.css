@@ -1,0 +1,28 @@
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#d9dde3;font-family:"Segoe UI","WenQuanYi Zen Hei",sans-serif;color:#1d1f21;padding:28px;width:956px}
+.win{width:900px;height:550px;background:#f7f7f5;border:1px solid #d6d8db;border-radius:8px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.tb{height:44px;background:#fff;border-bottom:1px solid #ececea;display:flex;align-items:center;flex:none}
+.logo{display:flex;align-items:center;gap:8px;padding:0 18px 0 14px;font-weight:600;font-size:13.5px}
+.logo i{width:20px;height:20px;border-radius:5px;background:#2f8f63;color:#fff;font-style:normal;font-size:12px;display:grid;place-items:center;font-weight:700}
+.tabs{display:flex;height:100%}
+.tab{padding:0 14px;display:flex;align-items:center;font-size:13px;color:#6b6f73;position:relative}
+.tab.on{color:#1d1f21;font-weight:600}
+.tab.on:after{content:"";position:absolute;left:14px;right:14px;bottom:0;height:2px;border-radius:2px;background:#2f8f63}
+.sp{flex:1}
+.tbr{display:flex;align-items:center;height:100%}
+.ib{width:32px;height:32px;border-radius:6px;display:grid;place-items:center;color:#5d6166}
+.ib svg{width:16px;height:16px}
+.av{display:flex;align-items:center;gap:7px;padding:0 10px 0 4px;height:30px;border-radius:6px;font-size:12.5px;color:#3a3d40;margin-right:4px}
+.av b{width:22px;height:22px;border-radius:50%;background:#dff1e7;color:#2f8f63;display:grid;place-items:center;font-size:11px;font-weight:600}
+.sep{width:1px;height:16px;background:#e2e3e1;margin:0 6px}
+.cap{width:46px;height:44px;display:grid;place-items:center;color:#4a4d50}
+.cap svg{width:10px;height:10px;stroke:currentColor;stroke-width:1.1;fill:none;stroke-linecap:round}
+.cap.x.hot{background:#c42b1c;color:#fff}
+.body{flex:1;position:relative;display:flex;flex-direction:column;min-height:0}
+.muted{color:#7a7e82}
+.btn{height:36px;border-radius:6px;padding:0 14px;display:inline-flex;align-items:center;gap:7px;font-size:13px;border:1px solid #dcdedb;background:#fff;color:#2a2d30}
+.btn svg{width:15px;height:15px}
+.btn.pri{background:#2f8f63;border-color:#2f8f63;color:#fff;font-weight:600;padding:0 22px;height:40px;font-size:14px}
+.btn.sq{width:40px;height:40px;padding:0;justify-content:center}
+svg.i{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.note{position:absolute;font-size:11px;background:#fffbe6;border:1px solid #f0d97a;color:#6b5a12;padding:3px 7px;border-radius:4px}
