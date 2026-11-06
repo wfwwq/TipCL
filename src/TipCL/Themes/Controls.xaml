@@ -3,9 +3,13 @@
   <FontFamily x:Key="F.Icon">pack://application:,,,/TipCL;component/Resources/fonts/#TipCL Icons, Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
   <FontFamily x:Key="F.Ui">Microsoft YaHei UI, Microsoft YaHei, Segoe UI, Segoe UI Variable, sans-serif</FontFamily>
   <FontFamily x:Key="F.Mono">Cascadia Mono, Consolas, Microsoft YaHei UI, monospace</FontFamily>
-  <system:Double x:Key="R.Card" xmlns:system="clr-namespace:System;assembly=mscorlib">10</system:Double>
-  <CornerRadius x:Key="CR.Card">10</CornerRadius>
-  <CornerRadius x:Key="CR.Ctl">6</CornerRadius>
+  <!-- WP-A v2 圆角 token：控件 8 / 卡片 12 / 窗口 8；胶囊 999 只给数字角标 -->
+  <system:Double x:Key="R.Card" xmlns:system="clr-namespace:System;assembly=mscorlib">12</system:Double>
+  <system:Double x:Key="R.Ctl" xmlns:system="clr-namespace:System;assembly=mscorlib">8</system:Double>
+  <system:Double x:Key="R.Window" xmlns:system="clr-namespace:System;assembly=mscorlib">8</system:Double>
+  <CornerRadius x:Key="CR.Card">12</CornerRadius>
+  <CornerRadius x:Key="CR.Ctl">8</CornerRadius>
+  <CornerRadius x:Key="CR.Window">8</CornerRadius>
   <CornerRadius x:Key="CR.Small">8</CornerRadius>
   <CornerRadius x:Key="CR.Pill">999</CornerRadius>
   <Duration x:Key="D.Fast">0:0:0.13</Duration>
@@ -24,6 +28,21 @@
     <Setter Property="FontSize" Value="20" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+  <!-- v2 页面标题：21px ExtraBold -->
+  <Style x:Key="T.PageTitle" TargetType="{x:Type TextBlock}">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="21" />
+    <Setter Property="FontWeight" Value="ExtraBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+  <!-- v2 分组标题：卡片外上方的灰色小字 -->
+  <Style x:Key="T.GroupTitle" TargetType="{x:Type TextBlock}">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="Margin" Value="4,0,0,6" />
   </Style>
   <Style x:Key="T.H2" TargetType="{x:Type TextBlock}">
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
@@ -53,12 +72,28 @@
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
   </Style>
+  <!-- v2 卡片：白底无边框（保留 1px 透明边避免布局位移）、圆角 12；需要极淡阴影用 Card.Shadow -->
   <Style x:Key="Card" TargetType="{x:Type Border}">
-    <Setter Property="Background" Value="{DynamicResource B.Paper}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
+    <Setter Property="Background" Value="{DynamicResource B.Card}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.CardBorder}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="Border.CornerRadius" Value="{StaticResource CR.Card}" />
     <Setter Property="Border.Padding" Value="12" />
+    <Setter Property="UIElement.SnapsToDevicePixels" Value="True" />
+  </Style>
+  <!-- 极淡阴影（0 1px 3px rgba(0,0,0,.04)）。DropShadowEffect 有渲染成本，长列表里的卡片请用 Card -->
+  <Style x:Key="Card.Shadow" TargetType="{x:Type Border}" BasedOn="{StaticResource Card}">
+    <Setter Property="UIElement.Effect">
+      <Setter.Value>
+        <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="1" Direction="270" Opacity="0.06" RenderingBias="Performance" />
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <!-- 分段控件的灰色轨道：里面放若干 Seg.Item -->
+  <Style x:Key="Seg.Rail" TargetType="{x:Type Border}">
+    <Setter Property="Background" Value="{DynamicResource B.SegRail}" />
+    <Setter Property="Border.CornerRadius" Value="10" />
+    <Setter Property="Border.Padding" Value="3" />
     <Setter Property="UIElement.SnapsToDevicePixels" Value="True" />
   </Style>
   <Style x:Key="CardFlat" TargetType="{x:Type Border}" BasedOn="{StaticResource Card}">
@@ -238,6 +273,12 @@
     <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
   </Style>
+  <!-- v2 灰色“管理”按钮 -->
+  <Style x:Key="Btn.Gray" TargetType="{x:Type ButtonBase}" BasedOn="{StaticResource Btn.Base}">
+    <Setter Property="Background" Value="{DynamicResource B.BtnGray}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.BtnGrayBorder}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.BtnGrayInk}" />
+  </Style>
   <Style x:Key="Btn.Ghost" TargetType="{x:Type ButtonBase}" BasedOn="{StaticResource Btn.Base}">
     <Setter Property="Background" Value="#00FFFFFF" />
     <Setter Property="BorderBrush" Value="#00FFFFFF" />
@@ -293,45 +334,105 @@
   <Style x:Key="{x:Type TabItem}" TargetType="{x:Type TabItem}" BasedOn="{StaticResource {x:Type TabItem}}">
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
   </Style>
+  <!-- v2 窗口按钮：46 宽、高度随标题栏拉伸贴边；内容为 10×10 矢量 Path（线宽 1.1、圆头）。
+       旧用法传图标字体字符串也能显示（ContentPresenter + F.Icon）。 -->
   <Style x:Key="Btn.Caption" TargetType="{x:Type Button}">
-    <Setter Property="Width" Value="44" />
-    <Setter Property="Height" Value="34" />
+    <Setter Property="Width" Value="46" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
     <Setter Property="Background" Value="#00FFFFFF" />
-    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.CaptionInk}" />
     <Setter Property="FontFamily" Value="{StaticResource F.Icon}" />
     <Setter Property="FontSize" Value="10" />
+    <Setter Property="IsTabStop" Value="False" />
     <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type Button}">
-          <Grid Background="#00FFFFFF">
-            <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="6" Margin="2" />
-            <TextBlock Text="{TemplateBinding ContentControl.Content}" FontFamily="{StaticResource F.Icon}" FontSize="{TemplateBinding Control.FontSize}" Foreground="{TemplateBinding Control.Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          <Grid Background="{TemplateBinding Control.Background}">
+            <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" />
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.FontFamily="{TemplateBinding Control.FontFamily}" TextElement.FontSize="{TemplateBinding Control.FontSize}" TextElement.Foreground="{TemplateBinding Control.Foreground}" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="UIElement.IsMouseOver" Value="True">
-              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.08" />
+              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.07" />
             </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.15" />
+            <Trigger Property="ButtonBase.IsPressed" Value="True">
+              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.13" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
   </Style>
+  <!-- 关闭：模板自带矢量 X（忽略 Content，旧调用方传 "\ue8bb" 也无妨）；悬停 #C42B1C 满高 + 白色 -->
   <Style x:Key="Btn.CaptionClose" TargetType="{x:Type Button}" BasedOn="{StaticResource Btn.Caption}">
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type Button}">
-          <Grid Background="#00FFFFFF">
-            <Border Name="Ov" Background="#E81123" Opacity="0" CornerRadius="6" Margin="2" />
-            <TextBlock Text="{TemplateBinding ContentControl.Content}" FontFamily="{StaticResource F.Icon}" FontSize="{TemplateBinding Control.FontSize}" Foreground="{TemplateBinding Control.Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          <Grid Background="{TemplateBinding Control.Background}">
+            <Border Name="Ov" Background="{DynamicResource B.CaptionHot}" Opacity="0" />
+            <Path Name="Gl" Width="10" Height="10" Stretch="None" Data="M0.5,0.5 L9.5,9.5 M9.5,0.5 L0.5,9.5" Stroke="{TemplateBinding Control.Foreground}" StrokeThickness="1.1" StrokeStartLineCap="Round" StrokeEndLineCap="Round" HorizontalAlignment="Center" VerticalAlignment="Center" SnapsToDevicePixels="False" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="UIElement.IsMouseOver" Value="True">
               <Setter TargetName="Ov" Property="UIElement.Opacity" Value="1" />
-              <Setter Property="Foreground" Value="#FFFFFFFF" />
+              <Setter TargetName="Gl" Property="Shape.Stroke" Value="{DynamicResource B.OnCaptionHot}" />
+            </Trigger>
+            <Trigger Property="ButtonBase.IsPressed" Value="True">
+              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.82" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <!-- 标题栏图标按钮（AI、主题切换）：32×32、圆角 8、悬停淡底；内容放 16×16 线条 Path -->
+  <Style x:Key="Btn.TitleIcon" TargetType="{x:Type Button}">
+    <Setter Property="Width" Value="32" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="Background" Value="#00FFFFFF" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="FrameworkElement.Cursor" Value="Hand" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type Button}">
+          <Grid Background="#00FFFFFF">
+            <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="{StaticResource CR.Ctl}" />
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Control.Foreground}" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="UIElement.IsMouseOver" Value="True">
+              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.07" />
+              <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
+            </Trigger>
+            <Trigger Property="ButtonBase.IsPressed" Value="True">
+              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.13" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <!-- 标题栏账号胶囊：头像首字母圆 + 名称，悬停淡底 -->
+  <Style x:Key="Btn.TitleChip" TargetType="{x:Type Button}" BasedOn="{StaticResource Btn.TitleIcon}">
+    <Setter Property="Width" Value="Auto" />
+    <Setter Property="Padding" Value="4,0,10,0" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type Button}">
+          <Grid Background="#00FFFFFF">
+            <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="{StaticResource CR.Ctl}" />
+            <ContentPresenter Margin="{TemplateBinding Control.Padding}" HorizontalAlignment="Left" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Control.Foreground}" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="UIElement.IsMouseOver" Value="True">
+              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.06" />
+            </Trigger>
+            <Trigger Property="ButtonBase.IsPressed" Value="True">
+              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.12" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -437,19 +538,22 @@
       </Setter.Value>
     </Setter>
   </Style>
+  <!-- v2 顶部页签：13.5px、左右 13；选中 = 粗体 + 底部 2.5px 主题色圆角条（左右各缩 13） -->
   <Style x:Key="Tab.Top" TargetType="{x:Type ToggleButton}">
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
     <Setter Property="FontSize" Value="13.5" />
+    <Setter Property="FontWeight" Value="Medium" />
     <Setter Property="FrameworkElement.Cursor" Value="Hand" />
     <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
-    <Setter Property="Padding" Value="18,0" />
+    <Setter Property="Padding" Value="13,0" />
+    <Setter Property="IsTabStop" Value="False" />
     <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ToggleButton}">
           <Grid Background="#00FFFFFF">
             <ContentPresenter Margin="{TemplateBinding Control.Padding}" VerticalAlignment="Center" RecognizesAccessKey="True" />
-            <Border Name="Bar" Height="2" VerticalAlignment="Bottom" Background="{DynamicResource B.Accent}" Opacity="0" />
+            <Border Name="Bar" Height="2.5" CornerRadius="1.25" Margin="13,0" VerticalAlignment="Bottom" Background="{DynamicResource B.Accent}" Opacity="0" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="UIElement.IsMouseOver" Value="True">
@@ -457,8 +561,43 @@
             </Trigger>
             <Trigger Property="ToggleButton.IsChecked" Value="True">
               <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
-              <Setter Property="Control.FontWeight" Value="SemiBold" />
+              <Setter Property="Control.FontWeight" Value="Bold" />
               <Setter TargetName="Bar" Property="UIElement.Opacity" Value="1" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <!-- v2 分段控件项（放在 Seg.Rail 里）：选中白底 + 粗体 + 淡阴影 -->
+  <Style x:Key="Seg.Item" TargetType="{x:Type ToggleButton}">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13.5" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="FrameworkElement.Cursor" Value="Hand" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="Padding" Value="13,6" />
+    <Setter Property="Margin" Value="0,0,4,0" />
+    <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ToggleButton}">
+          <Border Name="Bd" Background="#00FFFFFF" CornerRadius="{StaticResource CR.Ctl}" SnapsToDevicePixels="True">
+            <ContentPresenter Margin="{TemplateBinding Control.Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="UIElement.IsMouseOver" Value="True">
+              <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
+            </Trigger>
+            <Trigger Property="ToggleButton.IsChecked" Value="True">
+              <Setter TargetName="Bd" Property="Border.Background" Value="{DynamicResource B.SegOn}" />
+              <Setter TargetName="Bd" Property="UIElement.Effect">
+                <Setter.Value>
+                  <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Direction="270" Opacity="0.08" RenderingBias="Performance" />
+                </Setter.Value>
+              </Setter>
+              <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
+              <Setter Property="Control.FontWeight" Value="Bold" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>

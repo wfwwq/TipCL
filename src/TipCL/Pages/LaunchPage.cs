@@ -111,50 +111,48 @@ public sealed class LaunchPage : PageBase
 
 	private bool _layoutLoaded;
 
-	// —— 启动屏 UI ——
-	private readonly TextBlock _kickerText = Ui.Txt("", 12.0, bold: false, "B.InkMuted");
+	// —— 启动屏 UI（v2：左对齐 + 截图背景） ——
+	private readonly TextBlock _kickerText = Ui.Txt("", 12.5, bold: false, "B.InkMuted");
 
 	private readonly TextBlock _heroTitle = new TextBlock
 	{
-		FontSize = 30.0,
-		FontWeight = FontWeights.SemiBold,
+		FontSize = 34.0,
+		FontWeight = FontWeights.ExtraBold,
 		TextTrimming = TextTrimming.CharacterEllipsis
 	};
 
+	// 旧版元信息行：v2 改为小标签行，字段保留（不挂可视树）
 	private readonly TextBlock _meta = new TextBlock
 	{
 		FontSize = 12.5,
 		TextTrimming = TextTrimming.CharacterEllipsis
 	};
 
-	private TextBlock _accountPillText = Ui.Txt("", 12.0, bold: false, "B.InkSoft");
-
-	// 主操作行外壳：运行中隐藏、显示同尺寸红「停止」，保证该行始终只有一个 52 高按钮
+	// 主操作行外壳：运行中隐藏、显示同尺寸「停止」，保证该行始终只有一个 48 高主按钮
 	private Border? _launchShell;
 
 	private readonly TextBlock _newsTicker = new TextBlock
 	{
 		FontSize = 12.5,
-		TextTrimming = TextTrimming.CharacterEllipsis
+		MaxWidth = 520.0,
+		TextTrimming = TextTrimming.CharacterEllipsis,
+		VerticalAlignment = VerticalAlignment.Center
 	};
 
 	private readonly Border _stopShell = new Border
 	{
 		CornerRadius = new CornerRadius(12.0),
-		Height = 52.0,
+		Height = 48.0,
 		Padding = new Thickness(26.0, 0.0, 26.0, 0.0),
 		Visibility = Visibility.Collapsed
 	};
 
 	private FrameworkElement? _configBody;
 
+	// v2：48×48 启动配置图标钮（沿用字段名，弹层锚点）
 	private Border? _configPill;
 
 	private SPanel? _titleRow;
-
-	private Border? _morePill;
-
-	private Popup? _morePopup;
 
 	private Popup? _configPopup;
 
@@ -166,9 +164,60 @@ public sealed class LaunchPage : PageBase
 
 	private TextBox? _switchSearch;
 
-	private Ellipse? _glow1;
+	// v2 新增：截图背景 / 遮罩 / 小标签 / 毛玻璃按钮 / 新闻卡
+	private readonly Image _bgImage = new Image
+	{
+		Stretch = Stretch.UniformToFill,
+		HorizontalAlignment = HorizontalAlignment.Center,
+		VerticalAlignment = VerticalAlignment.Center,
+		IsHitTestVisible = false,
+		Visibility = Visibility.Collapsed
+	};
 
-	private Ellipse? _glow2;
+	private readonly Grid _bgShade = new Grid
+	{
+		IsHitTestVisible = false,
+		Visibility = Visibility.Collapsed
+	};
+
+	private readonly SPanel _chipRow = Ui.H(6.0);
+
+	private readonly Ellipse _readyDot = new Ellipse
+	{
+		Width = 7.0,
+		Height = 7.0,
+		VerticalAlignment = VerticalAlignment.Center
+	};
+
+	private TextBlock? _titleChevron;
+
+	private Border? _netBtn;
+
+	private Border? _newsCard;
+
+	private Border? _newsTag;
+
+	private TextBlock? _newsArrow;
+
+	private SPanel? _statusRow;
+
+	private readonly System.Windows.Media.Effects.DropShadowEffect _launchGlow = new System.Windows.Media.Effects.DropShadowEffect
+	{
+		BlurRadius = 20.0,
+		ShadowDepth = 6.0,
+		Direction = 270.0,
+		Opacity = 0.45
+	};
+
+	private bool _onImage;
+
+	private string _bgKey = "";
+
+	private int _bgGen;
+
+	private int _modCount = -1;
+
+	private string _modKey = "";
 
 	private string _loaderName = "";
 
@@ -265,67 +314,113 @@ public sealed class LaunchPage : PageBase
 		BuildHero();
 	}
 
-	// ————— 启动屏布局 —————
+	// ————— 启动屏布局（v2） —————
+
+	private static SolidColorBrush White(byte alpha)
+	{
+		SolidColorBrush b = new SolidColorBrush(Color.FromArgb(alpha, byte.MaxValue, byte.MaxValue, byte.MaxValue));
+		b.Freeze();
+		return b;
+	}
+
+	private static readonly SolidColorBrush WText = White(byte.MaxValue);
+
+	private static readonly SolidColorBrush WText80 = White(204);
+
+	private static readonly SolidColorBrush WText70 = White(179);
+
+	private static readonly SolidColorBrush WFill12 = White(31);
+
+	private static readonly SolidColorBrush WFill14 = White(36);
+
+	private static readonly SolidColorBrush WFill22 = White(56);
+
+	private static readonly SolidColorBrush WLine18 = White(46);
+
+	private static readonly SolidColorBrush WLine22 = White(56);
+
+	private static readonly SolidColorBrush ReadyGreen = Frozen(new SolidColorBrush(Color.FromRgb(74, 222, 128)));
+
+	private static T Frozen<T>(T f) where T : Freezable
+	{
+		f.Freeze();
+		return f;
+	}
 
 	private void BuildHero()
 	{
-		// 氛围光 + 方块网格纹理（颜色走色板令牌，深浅色自动切换）
-		_glow1 = new Ellipse
+		// —— 背景层：截图（异步加载）+ 左→右深色渐变 + 底部渐变 ——
+		Color shadeC = Color.FromRgb(10, 14, 22);
+		LinearGradientBrush leftShade = new LinearGradientBrush
 		{
-			Width = 560.0,
-			Height = 320.0,
-			IsHitTestVisible = false
+			StartPoint = new Point(0.0, 0.5),
+			EndPoint = new Point(1.0, 0.5)
 		};
-		_glow1.SetResourceReference(Shape.FillProperty, "B.HeroGlow1");
-		_glow2 = new Ellipse
+		leftShade.GradientStops.Add(new GradientStop(Color.FromArgb(199, shadeC.R, shadeC.G, shadeC.B), 0.0));
+		leftShade.GradientStops.Add(new GradientStop(Color.FromArgb(115, shadeC.R, shadeC.G, shadeC.B), 0.42));
+		leftShade.GradientStops.Add(new GradientStop(Color.FromArgb(0, shadeC.R, shadeC.G, shadeC.B), 0.75));
+		leftShade.Freeze();
+		LinearGradientBrush bottomShade = new LinearGradientBrush
 		{
-			Width = 700.0,
-			Height = 420.0,
-			IsHitTestVisible = false
+			StartPoint = new Point(0.5, 1.0),
+			EndPoint = new Point(0.5, 0.0)
 		};
-		_glow2.SetResourceReference(Shape.FillProperty, "B.HeroGlow2");
-		Rectangle tex = new Rectangle
+		bottomShade.GradientStops.Add(new GradientStop(Color.FromArgb(140, shadeC.R, shadeC.G, shadeC.B), 0.0));
+		bottomShade.GradientStops.Add(new GradientStop(Color.FromArgb(0, shadeC.R, shadeC.G, shadeC.B), 0.35));
+		bottomShade.Freeze();
+		_bgShade.Children.Add(new Rectangle
 		{
+			Fill = leftShade,
 			IsHitTestVisible = false
-		};
-		tex.SetResourceReference(Shape.FillProperty, "B.HeroGrid");
-		Canvas glow = new Canvas
+		});
+		_bgShade.Children.Add(new Rectangle
 		{
+			Fill = bottomShade,
 			IsHitTestVisible = false
-		};
-		glow.Children.Add(tex);
-		glow.Children.Add(_glow2);
-		glow.Children.Add(_glow1);
-		// 主内容块：kicker / 大标题 / 元信息 / 主按钮 / 进度行
+		});
+		// —— 状态行：绿点 就绪 · 游戏目录 ——
 		_prog.Height = 4.0;
 		_prog.Width = 320.0;
 		_prog.SetResourceReference(Control.ForegroundProperty, "B.Accent");
 		_prog.Opacity = 0.92;
 		_prog.Visibility = Visibility.Collapsed;
-		_status.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
-		SPanel kicker = Ui.H(6.0, Ui.Glyph("\ue823", 12.0, "B.InkMuted"), _kickerText);
-		_titleRow = Ui.H(9.0, _heroTitle.VCenter(), Ui.Glyph("\ue70d", 18.0, "B.InkFaint"));
+		_kickerText.TextTrimming = TextTrimming.CharacterEllipsis;
+		_kickerText.MaxWidth = 560.0;
+		_kickerText.VerticalAlignment = VerticalAlignment.Center;
+		SPanel kicker = Ui.H(7.0, _readyDot, _kickerText);
+		// —— 大标题：实例名 + 下拉箭头，点击打开原有实例切换浮层 ——
+		_heroTitle.MaxWidth = 620.0;
+		_titleChevron = Ui.Glyph("\ue70d", 18.0);
+		_titleChevron.Margin = new Thickness(0.0, 4.0, 0.0, 0.0);
+		_titleRow = Ui.H(10.0, _heroTitle.VCenter(), _titleChevron);
 		_titleRow.Cursor = Cursors.Hand;
 		_titleRow.Background = Brushes.Transparent;
+		_titleRow.HorizontalAlignment = HorizontalAlignment.Left;
+		_titleRow.Margin = new Thickness(0.0, 6.0, 0.0, 2.0);
 		_titleRow.MouseLeftButtonUp += delegate
 		{
 			OpenSwitchPopup();
 		};
+		// —— 小标签行（Java / 内存 / 模组数，SyncHero 填充）——
+		_chipRow.Margin = new Thickness(0.0, 10.0, 0.0, 24.0);
 		_configBody = (FrameworkElement)BuildConfig();
 		_configBody.MaxHeight = 372.0;
-		// 主操作行：52 高大按钮（模板圆角固定 6，用外壳 Border 提供 12 圆角）；
-		// 规格要求 16 SemiBold 白字，故 Foreground 钉为 B.OnAccentStrong
+		// —— 按钮行：主色「启动游戏」48 高圆角 12 + 主色柔光；模板圆角固定，故用外壳 Border 提供圆角 ——
 		_launchBtn.Style = Ui.S("Btn.Ghost");
 		_launchBtn.Padding = new Thickness(0.0);
 		_launchBtn.FontSize = 16.0;
 		_launchBtn.SetResourceReference(Control.ForegroundProperty, "B.OnAccentStrong");
-		_launchBtn.Content = Ui.H(9.0, Ui.Glyph("\ue768", 17.0), Ui.Txt(I18n.L("启动游戏"), 16.0, bold: true));
+		TextBlock goText = Ui.Txt(I18n.L("启动游戏"), 16.0);
+		goText.FontWeight = FontWeights.ExtraBold;
+		goText.VerticalAlignment = VerticalAlignment.Center;
+		_launchBtn.Content = Ui.H(10.0, Ui.Glyph("\ue768", 17.0), goText);
 		_launchShell = new Border
 		{
 			CornerRadius = new CornerRadius(12.0),
-			Height = 52.0,
-			Padding = new Thickness(34.0, 0.0, 34.0, 0.0),
-			Child = _launchBtn
+			Height = 48.0,
+			Padding = new Thickness(30.0, 0.0, 30.0, 0.0),
+			Child = _launchBtn,
+			Effect = _launchGlow
 		};
 		_launchShell.SetResourceReference(Border.BackgroundProperty, "B.AccentStrong");
 		Motion.HoverLift(_launchShell, 1.02, 1.0, 8.0);
@@ -335,133 +430,371 @@ public sealed class LaunchPage : PageBase
 		_stopShell.Child = _stopBtn;
 		_stopShell.SetResourceReference(Border.BackgroundProperty, "B.DangerSoft");
 		_stopBtn.SetResourceReference(Control.ForegroundProperty, "B.Danger");
-		SPanel launchRow = Ui.H(10.0, _launchShell, _stopShell);
-		SPanel statusRow = Ui.H(10.0, _prog.VCenter(), _status.VCenter());
-		statusRow.Margin = new Thickness(0.0, 4.0, 0.0, 0.0);
-		SPanel main = Ui.V(12.0, kicker, _titleRow, _meta, launchRow, statusRow);
-		main.MaxWidth = 620.0;
+		_configPill = GlassButton("\ue713", null, OpenConfigPopup);
+		_configPill.ToolTip = I18n.L("启动配置");
+		_netBtn = GlassButton("\ue701", I18n.L("联机"), delegate
+		{
+			PageBase.Win?.Navigate("multiplayer");
+		});
+		SPanel launchRow = Ui.H(10.0, _launchShell, _stopShell, _configPill, _netBtn);
+		_statusRow = Ui.H(10.0, _prog.VCenter(), _status.VCenter());
+		_statusRow.Margin = new Thickness(0.0, 14.0, 0.0, 0.0);
+		// 「就绪」且无进度时状态行与顶部状态重复，收起；启动/下载过程中再显示
+		System.ComponentModel.DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock))?.AddValueChanged(_status, delegate
+		{
+			SyncStatusRow();
+		});
+		System.ComponentModel.DependencyPropertyDescriptor.FromProperty(UIElement.VisibilityProperty, typeof(UIElement))?.AddValueChanged(_prog, delegate
+		{
+			SyncStatusRow();
+		});
+		SyncStatusRow();
+		SPanel main = Ui.V(0.0, kicker, _titleRow, _chipRow, launchRow, _statusRow);
+		main.MaxWidth = 680.0;
 		main.HorizontalAlignment = HorizontalAlignment.Left;
 		main.VerticalAlignment = VerticalAlignment.Center;
-		main.Margin = new Thickness(56.0, 0.0, 0.0, 0.0);
-		// 右上安静区：账号 / 启动配置 / AI / 联机 / 插件
-			_configPill = Pill("\ue713", I18n.L("启动配置"), OpenConfigPopup, out _);
-			Border accountPill = Pill("\ue77b", I18n.L("登录"), delegate
-			{
-				PageBase.Win?.Navigate("account");
-			}, out _accountPillText);
-			// 右上安静区收纳（用户实测反馈太挤）：AI / 联机 / 插件收进「更多」浮层，
-			// 首页默认可见按钮（不含窗口钮）收敛为 3 个，全部功能仍 ≤2 击可达
-			_morePill = Pill("\ue712", I18n.L("更多"), OpenMorePopup, out _);
-			SPanel quiet = Ui.H(8.0,
-				accountPill,
-				_configPill,
-				_morePill);
-		quiet.HorizontalAlignment = HorizontalAlignment.Right;
-		quiet.VerticalAlignment = VerticalAlignment.Top;
-		quiet.Margin = new Thickness(0.0, 18.0, 20.0, 0.0);
-		// 底部公告条
-		_newsTicker.SetResourceReference(TextBlock.ForegroundProperty, "B.InkSoft");
-		_newsTicker.Cursor = Cursors.Hand;
-		Border chip = new Border
+		main.Margin = new Thickness(56.0, 0.0, 24.0, 0.0);
+		// —— 底部新闻卡：圆角 12，主色「新闻」小标签 + 标题 + 箭头；点击打开原公告浮层 ——
+		_newsTag = new Border
 		{
-			CornerRadius = new CornerRadius(5.0),
-			Padding = new Thickness(7.0, 1.0, 8.0, 2.0),
+			CornerRadius = new CornerRadius(6.0),
+			Padding = new Thickness(8.0, 2.0, 8.0, 3.0),
 			VerticalAlignment = VerticalAlignment.Center
 		};
-		chip.SetResourceReference(Border.BackgroundProperty, "B.AccentSoft");
-		chip.Child = Ui.Txt(I18n.L("公告"), 10.0, bold: false, "B.AccentText");
-		TextBlock more = Ui.Txt(I18n.L("更多"), 12.0, bold: false, "B.AccentText").VCenter();
-		SPanel moreRow = Ui.H(4.0, more, Ui.Glyph("\ue70d", 11.0, "B.AccentText"));
-		moreRow.Cursor = Cursors.Hand;
-		moreRow.Background = Brushes.Transparent;
-		moreRow.MouseLeftButtonUp += delegate
+		_newsTag.SetResourceReference(Border.BackgroundProperty, "B.Accent");
+		_newsTag.Child = Ui.Txt(I18n.L("新闻"), 11.0, bold: true, "B.OnAccent");
+		_newsArrow = Ui.Glyph("\ue76c", 10.0);
+		_newsCard = new Border
+		{
+			CornerRadius = new CornerRadius(12.0),
+			BorderThickness = new Thickness(1.0),
+			Padding = new Thickness(8.0, 8.0, 14.0, 8.0),
+			Margin = new Thickness(56.0, 0.0, 0.0, 18.0),
+			HorizontalAlignment = HorizontalAlignment.Left,
+			VerticalAlignment = VerticalAlignment.Bottom,
+			Cursor = Cursors.Hand,
+			Child = Ui.H(10.0, _newsTag, _newsTicker, _newsArrow)
+		};
+		_newsCard.MouseEnter += delegate
+		{
+			ToneNewsCard(hover: true);
+		};
+		_newsCard.MouseLeave += delegate
+		{
+			ToneNewsCard(hover: false);
+		};
+		_newsCard.MouseLeftButtonUp += delegate
 		{
 			OpenNewsPopup();
 		};
-		_newsTicker.MouseLeftButtonUp += delegate
-		{
-			OpenNewsPopup();
-		};
-		Grid barGrid = Ui.G(null, "Auto,*,Auto");
-		barGrid.Margin = new Thickness(14.0, 0.0, 14.0, 0.0);
-		barGrid.Add(chip, 0);
-		barGrid.Add(_newsTicker.VCenter().M(10.0, 0.0, 10.0, 0.0), 0, 1);
-		barGrid.Add(moreRow, 0, 2);
-		Border bar = new Border
-		{
-			Height = 38.0,
-			BorderThickness = new Thickness(0.0, 1.0, 0.0, 0.0),
-			Child = barGrid
-		};
-		bar.SetResourceReference(Border.BackgroundProperty, "B.Paper");
-		bar.SetResourceReference(Border.BorderBrushProperty, "B.Line");
-		// 根布局：hero 区 * / 公告条 Auto
-		Grid hero = new Grid
-		{
-			ClipToBounds = true
-		};
-		hero.Children.Add(glow);
-		hero.Children.Add(main);
-		hero.Children.Add(quiet);
-		hero.SizeChanged += delegate
-		{
-			double w = hero.ActualWidth;
-			double h = hero.ActualHeight;
-			if (_glow1 != null)
-			{
-				Canvas.SetLeft(_glow1, w * 0.82 - 280.0);
-				Canvas.SetTop(_glow1, -h * 0.10 - 160.0);
-			}
-			if (_glow2 != null)
-			{
-				Canvas.SetLeft(_glow2, w * 1.08 - 350.0);
-				Canvas.SetTop(_glow2, h * 0.82 - 210.0);
-			}
-			tex.Width = w;
-			tex.Height = h;
-		};
+		// —— 根布局：背景层铺满两行；内容 * / 新闻 Auto ——
 		Grid root = Ui.G("*,Auto");
-		root.Add(hero, 0);
-		root.Add(bar, 1);
+		root.ClipToBounds = true;
+		Grid.SetRowSpan(_bgImage, 2);
+		Grid.SetRowSpan(_bgShade, 2);
+		root.Children.Add(_bgImage);
+		root.Children.Add(_bgShade);
+		root.Add(main, 0);
+		root.Add(_newsCard, 1);
 		base.Content = root;
+		ApplyHeroTone(onImage: false);
 		SyncHero();
 	}
 
-	private static Border Pill(string glyph, string text, Action click, out TextBlock label)
+	// 半透明毛玻璃风格按钮（48 高，圆角 12）；label 为空即 48×48 图标钮
+	private Border GlassButton(string glyph, string? label, Action click)
 	{
-		TextBlock t = Ui.Txt(text, 12.0, bold: false, "B.InkSoft").VCenter();
+		TextBlock g = Ui.Glyph(glyph, 17.0);
+		UIElement content = g;
+		if (!string.IsNullOrEmpty(label))
+		{
+			TextBlock t = Ui.Txt(label, 14.0, bold: true);
+			t.VerticalAlignment = VerticalAlignment.Center;
+			content = Ui.H(8.0, g, t);
+		}
 		Border b = new Border
 		{
-			Height = 30.0,
-			CornerRadius = new CornerRadius(999.0),
-			Padding = new Thickness(12.0, 0.0, 14.0, 1.0),
-			Cursor = Cursors.Hand,
+			Height = 48.0,
+			MinWidth = 48.0,
+			CornerRadius = new CornerRadius(12.0),
 			BorderThickness = new Thickness(1.0),
-			Child = Ui.H(6.0, Ui.Glyph(glyph, 13.0, "B.InkMuted"), t)
+			Padding = (string.IsNullOrEmpty(label) ? new Thickness(0.0) : new Thickness(16.0, 0.0, 16.0, 0.0)),
+			Cursor = Cursors.Hand,
+			Child = content
 		};
-		b.SetResourceReference(Border.BackgroundProperty, "B.Paper");
-		b.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		if (string.IsNullOrEmpty(label))
+		{
+			b.Width = 48.0;
+			g.HorizontalAlignment = HorizontalAlignment.Center;
+		}
 		b.MouseEnter += delegate
 		{
-			b.SetResourceReference(Border.BackgroundProperty, "B.Hover");
+			ToneGlass(b, hover: true);
 		};
 		b.MouseLeave += delegate
 		{
-			b.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+			ToneGlass(b, hover: false);
 		};
 		b.MouseLeftButtonUp += delegate
 		{
 			click();
 		};
-		label = t;
 		return b;
+	}
+
+	private void ToneGlass(Border b, bool hover)
+	{
+		if (_onImage)
+		{
+			b.Background = (hover ? WFill22 : WFill14);
+			b.BorderBrush = WLine22;
+			b.SetValue(System.Windows.Documents.TextElement.ForegroundProperty, WText);
+		}
+		else
+		{
+			b.SetResourceReference(Border.BackgroundProperty, hover ? "B.Hover" : "B.Paper");
+			b.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+			b.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "B.Ink");
+		}
+	}
+
+	private void ToneNewsCard(bool hover)
+	{
+		if (_newsCard == null)
+		{
+			return;
+		}
+		if (_onImage)
+		{
+			_newsCard.Background = (hover ? WFill22 : WFill12);
+			_newsCard.BorderBrush = WLine18;
+			_newsTicker.Foreground = WText;
+			if (_newsArrow != null)
+			{
+				_newsArrow.Foreground = WText80;
+			}
+		}
+		else
+		{
+			_newsCard.SetResourceReference(Border.BackgroundProperty, hover ? "B.Hover" : "B.Paper");
+			_newsCard.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+			_newsTicker.SetResourceReference(TextBlock.ForegroundProperty, "B.InkSoft");
+			_newsArrow?.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
+		}
+	}
+
+	// 有截图背景 → 白字 + 半透明白块；无截图 → 原主题浅色渐变底 + 深色字
+	private void ApplyHeroTone(bool onImage)
+	{
+		_onImage = onImage;
+		_bgImage.Visibility = (onImage ? Visibility.Visible : Visibility.Collapsed);
+		_bgShade.Visibility = (onImage ? Visibility.Visible : Visibility.Collapsed);
+		if (onImage)
+		{
+			_readyDot.Fill = ReadyGreen;
+			_readyDot.Effect = new System.Windows.Media.Effects.DropShadowEffect
+			{
+				Color = Color.FromRgb(74, 222, 128),
+				BlurRadius = 8.0,
+				ShadowDepth = 0.0,
+				Opacity = 0.9
+			};
+			_kickerText.Foreground = WText80;
+			_heroTitle.Foreground = WText;
+			_heroTitle.Effect = new System.Windows.Media.Effects.DropShadowEffect
+			{
+				Color = Colors.Black,
+				BlurRadius = 12.0,
+				ShadowDepth = 2.0,
+				Direction = 270.0,
+				Opacity = 0.3
+			};
+			if (_titleChevron != null)
+			{
+				_titleChevron.Foreground = WText70;
+			}
+			_status.Foreground = WText80;
+		}
+		else
+		{
+			_readyDot.SetResourceReference(Shape.FillProperty, "B.Ok");
+			_readyDot.Effect = null;
+			_kickerText.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
+			_heroTitle.SetResourceReference(TextBlock.ForegroundProperty, "B.Ink");
+			_heroTitle.Effect = null;
+			_titleChevron?.SetResourceReference(TextBlock.ForegroundProperty, "B.InkFaint");
+			_status.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
+		}
+		if (_configPill != null)
+		{
+			ToneGlass(_configPill, hover: false);
+		}
+		if (_netBtn != null)
+		{
+			ToneGlass(_netBtn, hover: false);
+		}
+		ToneNewsCard(hover: false);
+		foreach (UIElement c in _chipRow.Children)
+		{
+			if (c is Border chip)
+			{
+				ToneChip(chip);
+			}
+		}
+		SyncAccentGlow();
+	}
+
+	// 主按钮柔光取当前主题主色（主题切换后在 OnShown 重新取）
+	private void SyncAccentGlow()
+	{
+		Color c = Color.FromRgb(201, 64, 63);
+		if (TryFindResource("B.AccentStrong") is SolidColorBrush sb)
+		{
+			c = sb.Color;
+		}
+		else if (TryFindResource("B.Accent") is SolidColorBrush sa)
+		{
+			c = sa.Color;
+		}
+		_launchGlow.Color = c;
+		_launchGlow.Opacity = (_onImage ? 0.45 : 0.3);
+	}
+
+	private void ToneChip(Border chip)
+	{
+		if (_onImage)
+		{
+			chip.Background = WFill14;
+			chip.BorderBrush = WLine18;
+			chip.SetValue(System.Windows.Documents.TextElement.ForegroundProperty, WText);
+		}
+		else
+		{
+			chip.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+			chip.SetResourceReference(Border.BorderBrushProperty, "B.LineSoft");
+			chip.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "B.InkSoft");
+		}
+	}
+
+	private Border Chip(string text)
+	{
+		Border chip = new Border
+		{
+			CornerRadius = new CornerRadius(7.0),
+			BorderThickness = new Thickness(1.0),
+			Padding = new Thickness(10.0, 3.0, 10.0, 4.0),
+			Child = new TextBlock
+			{
+				Text = text,
+				FontSize = 12.0
+			}
+		};
+		ToneChip(chip);
+		return chip;
+	}
+
+	private void SyncStatusRow()
+	{
+		if (_statusRow != null)
+		{
+			bool idle = _prog.Visibility != Visibility.Visible && (string.IsNullOrEmpty(_status.Text) || _status.Text == I18n.L("就绪"));
+			_statusRow.Visibility = (idle ? Visibility.Collapsed : Visibility.Visible);
+		}
+	}
+
+	// 背景：当前游戏目录（含版本隔离目录）screenshots 最新一张；同一张不重复解码；失败静默回退
+	private async void RefreshBackground()
+	{
+		int gen = ++_bgGen;
+		try
+		{
+			if (Wallpaper.Active)
+			{
+				// 用户在设置里自定义了壁纸：尊重用户选择，不再叠截图
+				_bgKey = "";
+				_bgImage.Source = null;
+				ApplyHeroTone(onImage: false);
+				return;
+			}
+			string instance = _inst.Str();
+			string version = _ver.Str();
+			InstanceInfo info = _instances.FirstOrDefault((InstanceInfo x) => x.Name == instance);
+			string root = info?.Path ?? "";
+			if (string.IsNullOrEmpty(root))
+			{
+				return;
+			}
+			List<string> dirs = new List<string> { System.IO.Path.Combine(root, "screenshots") };
+			if (!string.IsNullOrEmpty(version))
+			{
+				dirs.Add(System.IO.Path.Combine(root, "versions", version, "screenshots"));
+			}
+			Tuple<string, long>? latest = await LaunchBackground.FindLatestAsync(dirs);
+			if (gen != _bgGen)
+			{
+				return;
+			}
+			if (latest == null)
+			{
+				_bgKey = "";
+				_bgImage.Source = null;
+				ApplyHeroTone(onImage: false);
+				return;
+			}
+			string key = latest.Item1 + "|" + latest.Item2;
+			if (key == _bgKey && _bgImage.Source != null)
+			{
+				return;
+			}
+			System.Windows.Media.Imaging.BitmapSource? bmp = await LaunchBackground.DecodeAsync(latest.Item1, 1600);
+			if (gen != _bgGen)
+			{
+				return;
+			}
+			if (bmp == null)
+			{
+				_bgKey = "";
+				_bgImage.Source = null;
+				ApplyHeroTone(onImage: false);
+				return;
+			}
+			_bgKey = key;
+			_bgImage.Source = bmp;
+			ApplyHeroTone(onImage: true);
+		}
+		catch
+		{
+			// 背景只是装饰，任何异常都不影响启动页
+		}
+	}
+
+	// 模组数小标签：沿用实例库同源 API，同一实例/版本只查一次
+	private async Task CountModsAsync(string instance, string version)
+	{
+		string key = instance + "|" + version;
+		if (key == _modKey)
+		{
+			return;
+		}
+		_modKey = key;
+		_modCount = -1;
+		List<ModEntry> list = await PageBase.Api.TryCallAsync("get_installed_mod_entries", new
+		{
+			instance = instance,
+			version = version
+		}, new List<ModEntry>());
+		if (key == _modKey)
+		{
+			_modCount = list?.Count ?? 0;
+			SyncHero();
+		}
 	}
 
 	private static Border PopShell(UIElement content, double width, double maxHeight, Thickness margin)
 	{
 		Border b = new Border
 		{
-			CornerRadius = new CornerRadius(10.0),
+			CornerRadius = new CornerRadius(12.0),
 			BorderThickness = new Thickness(1.0),
 			Padding = new Thickness(12.0),
 			Width = width,
@@ -488,49 +821,6 @@ public sealed class LaunchPage : PageBase
 	}
 
 	// ————— 配置浮层 —————
-
-	// 「更多」药丸溢出菜单：AI 助手 / 联机 / 插件（导航到既有页面，不造数据）
-	private void OpenMorePopup()
-	{
-		if (_morePopup == null)
-		{
-			SPanel list = Ui.V(3.0,
-				MoreRow("\ue99a", I18n.L("AI 助手"), "ai"),
-				MoreRow("\ue701", I18n.L("联机"), "multiplayer"),
-				MoreRow("\uea86", I18n.L("插件"), "plugins"));
-			_morePopup = MakePopup(_morePill ?? (FrameworkElement?)_configPill ?? (FrameworkElement?)_titleRow ?? this, PlacementMode.Bottom,
-				PopShell(list, 176.0, 240.0, new Thickness(0.0, 6.0, 14.0, 14.0)));
-		}
-		_morePopup.IsOpen = true;
-	}
-
-	private UIElement MoreRow(string glyph, string label, string pageId)
-	{
-		Border row = new Border
-		{
-			CornerRadius = new CornerRadius(6.0),
-			Padding = new Thickness(10.0, 7.0, 10.0, 8.0),
-			Cursor = Cursors.Hand,
-			Child = Ui.H(9.0, Ui.Glyph(glyph, 14.0, "B.InkSoft"), Ui.Txt(label, 12.5, bold: false, "B.Ink").VCenter())
-		};
-		row.MouseEnter += delegate
-		{
-			row.SetResourceReference(Border.BackgroundProperty, "B.Hover");
-		};
-		row.MouseLeave += delegate
-		{
-			row.Background = Brushes.Transparent;
-		};
-		row.MouseLeftButtonUp += delegate
-		{
-			if (_morePopup != null)
-			{
-				_morePopup.IsOpen = false;
-			}
-			PageBase.Win?.Navigate(pageId);
-		};
-		return row;
-	}
 
 	private void OpenConfigPopup()
 	{
@@ -697,7 +987,7 @@ public sealed class LaunchPage : PageBase
 	{
 		if (_newsPopup == null)
 		{
-			_newsPopup = MakePopup(this, PlacementMode.Top,
+			_newsPopup = MakePopup((FrameworkElement?)_newsCard ?? this, PlacementMode.Top,
 				PopShell(Ui.Scroll(_newsHost), 420.0, 360.0, new Thickness(0.0, 14.0, 14.0, 6.0)));
 		}
 		_newsPopup.IsOpen = true;
@@ -976,17 +1266,22 @@ public sealed class LaunchPage : PageBase
 		{
 			PageBase.Run(() => TagLoaderAsync(version));
 		}
+		if (!string.IsNullOrEmpty(instance))
+		{
+			PageBase.Run(() => CountModsAsync(instance, version ?? ""));
+		}
 		SyncHero();
+		RefreshBackground();
 	}
 
-	// 启动屏大标题 / 元信息 / 药丸文案；数据全来自现有字段，缺什么省什么
+	// 启动屏大标题 / 状态行 / 小标签；数据全来自现有字段，缺什么省什么
 	private void SyncHero()
 	{
 		string instance = _inst.Str();
 		InstanceInfo info = _instances.FirstOrDefault((InstanceInfo x) => x.Name == instance);
 		_heroTitle.Text = (string.IsNullOrEmpty(instance) ? I18n.L("选择实例") : instance);
 		string dir = info?.Path ?? "";
-		_kickerText.Text = ((string.IsNullOrEmpty(instance) ? I18n.L("就绪") : I18n.L("就绪 · {0}", instance)) + ((string.IsNullOrEmpty(dir) || dir == instance) ? "" : (" · " + dir)));
+		_kickerText.Text = (string.IsNullOrEmpty(dir) ? I18n.L("就绪") : (I18n.L("就绪") + " · " + dir));
 		List<string> meta = new List<string>();
 		if (!string.IsNullOrEmpty(_loaderName))
 		{
@@ -1008,7 +1303,54 @@ public sealed class LaunchPage : PageBase
 			meta.Add(I18n.L("玩家 {0}", user));
 		}
 		_meta.Text = string.Join(" · ", meta);
-		_accountPillText.Text = (string.IsNullOrEmpty(user) ? I18n.L("登录") : user);
+		// v2 小标签：Java 版本 / 内存 / 模组数
+		_chipRow.Children.Clear();
+		string javaChip = JavaChipText(java);
+		if (javaChip.Length > 0)
+		{
+			_chipRow.Children.Add(Chip(javaChip));
+		}
+		int mb = (int)_mem.Value;
+		_chipRow.Children.Add(Chip((mb >= 1024) ? ((mb % 1024 == 0) ? $"{mb / 1024} GB" : $"{mb / 1024.0:0.#} GB") : $"{mb} MB"));
+		if (_modCount > 0)
+		{
+			_chipRow.Children.Add(Chip(I18n.L("{0} 个模组", _modCount)));
+		}
+	}
+
+	// 「Java 17 (C:\...)」之类的下拉标签 → 「Java 17」；自动选择 → 「Java 自动」
+	private static string JavaChipText(string label)
+	{
+		if (string.IsNullOrWhiteSpace(label))
+		{
+			return "";
+		}
+		if (label.StartsWith("自动", StringComparison.Ordinal) || label.IndexOf(I18n.L("自动"), StringComparison.Ordinal) == 0)
+		{
+			return I18n.L("Java 自动");
+		}
+		System.Text.RegularExpressions.Match m = System.Text.RegularExpressions.Regex.Match(label, "(?:java|jdk|jre)?\\s*-?\\s*(\\d+(?:\\.\\d+)*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+		if (m.Success)
+		{
+			string v = m.Groups[1].Value;
+			// 1.8.0_xxx → 8
+			if (v.StartsWith("1.", StringComparison.Ordinal) && v.Length > 2)
+			{
+				string rest = v.Substring(2);
+				int dot = rest.IndexOf('.');
+				v = (dot > 0) ? rest.Substring(0, dot) : rest;
+			}
+			else
+			{
+				int dot2 = v.IndexOf('.');
+				if (dot2 > 0)
+				{
+					v = v.Substring(0, dot2);
+				}
+			}
+			return "Java " + v;
+		}
+		return (label.Length > 16) ? (label.Substring(0, 16) + "…") : label;
 	}
 
 	private async Task TagLoaderAsync(string version)
@@ -1728,5 +2070,8 @@ public sealed class LaunchPage : PageBase
 		SyncTaskCard();
 		SyncHero();
 		_dash.RefreshThemeVisuals();
+		// 主题可能已切换（主色柔光重取）；刚玩完可能有新截图
+		SyncAccentGlow();
+		RefreshBackground();
 	}
 }

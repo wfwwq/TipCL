@@ -59,10 +59,27 @@
     <GradientStop Color="#195F42" Offset="1" />
   </LinearGradientBrush>
   <SolidColorBrush x:Key="B.OnLogo" Color="#FFFFFF" />
-  <LinearGradientBrush x:Key="B.PageWash" StartPoint="0,0" EndPoint="0.9,1">
-    <GradientStop Color="#F7F7F7" Offset="0" />
-    <GradientStop Color="#F2F2F2" Offset="0.55" />
-    <GradientStop Color="#F7F7F7" Offset="1" />
+  <!-- WP-A v2 token（2026-11-06）：卡片 / 标题栏 / 窗口按钮 / 灰按钮 / 分段控件 / 行分隔 -->
+  <SolidColorBrush x:Key="B.Card" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="B.CardBorder" Color="#00FFFFFF" />
+  <Color x:Key="C.CardShadow">#000000</Color>
+  <SolidColorBrush x:Key="B.TitleBar" Color="#FFFFFF" Opacity="0.92" />
+  <SolidColorBrush x:Key="B.TitleBarLine" Color="#000000" Opacity="0.06" />
+  <SolidColorBrush x:Key="B.TitleSep" Color="#000000" Opacity="0.10" />
+  <SolidColorBrush x:Key="B.CaptionInk" Color="#555555" />
+  <SolidColorBrush x:Key="B.CaptionHot" Color="#C42B1C" />
+  <SolidColorBrush x:Key="B.OnCaptionHot" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="B.BtnGray" Color="#E2E2E2" />
+  <SolidColorBrush x:Key="B.BtnGrayBorder" Color="#C8C8C8" />
+  <SolidColorBrush x:Key="B.BtnGrayInk" Color="#333333" />
+  <SolidColorBrush x:Key="B.SegRail" Color="#000000" Opacity="0.05" />
+  <SolidColorBrush x:Key="B.SegOn" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="B.RowLine" Color="#F2F2F2" />
+  <SolidColorBrush x:Key="B.RowHover" Color="#FAFAFA" />
+  <LinearGradientBrush x:Key="B.PageWash" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#EDEDED" Offset="0" />
+    <GradientStop Color="#F7F7F7" Offset="0.6" />
+    <GradientStop Color="#F3F3F3" Offset="1" />
   </LinearGradientBrush>
   <RadialGradientBrush x:Key="B.HeroGlow1">
     <GradientStop Color="#1F2E9B6B" Offset="0" />
