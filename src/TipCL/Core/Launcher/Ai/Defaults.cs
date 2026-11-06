@@ -7,9 +7,9 @@ public static class Defaults
 {
 	private const int _GW_MASK = 90;
 
-	private static readonly byte[] _GW_BYTES = new byte[19]
+	private static readonly byte[] _GW_BYTES = new byte[18]
 	{
-		50, 46, 46, 42, 41, 96, 117, 117, 52, 63,
+		50, 46, 46, 42, 96, 117, 117, 52, 63,
 		45, 116, 105, 43, 116, 50, 59, 51, 40
 	};
 
