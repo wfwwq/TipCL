@@ -16,6 +16,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
     <!-- CI 上把失败的测试显示成 GitHub 注解 -->
     <PackageReference Include="GitHubActionsTestLogger" Version="2.4.1" PrivateAssets="all" />
+    <!-- 与主工程 net48 的 STJ 8.0.5 对齐：测试直接调用 NavConfig.FromJson(JsonElement) 时版本必须一致，否则 CS1705 -->
   </ItemGroup>
 
   <ItemGroup>

@@ -74,6 +74,15 @@ public sealed class LaunchPage : PageBase
 
 	private readonly DashHost _dash = new DashHost();
 
+	// 固定启动头（GOAL WP4.2）：默认布局 3 卡（config/quick/news），启动头移出画布；
+	// 旧存档带 banner 卡时头部内容搬进画布卡片，_headerHost 折叠
+	private readonly Border _headerHost = new Border
+	{
+		Margin = new Thickness(18.0, 10.0, 18.0, 2.0)
+	};
+
+	private Grid? _headerContent;
+
 	private readonly List<string> _logLines = new List<string>();
 
 	private List<JavaOption> _javaOpts = new List<JavaOption>();
@@ -184,14 +193,17 @@ public sealed class LaunchPage : PageBase
 			Task pending = (_saveInFlight = SaveLayoutNowAsync());
 			PageBase.Run(() => pending, I18n.L("布局未能保存"));
 		};
-		Grid grid = Ui.G("Auto,*");
-		grid.Add(BuildToolbar(), 0);
+		Grid grid = Ui.G("Auto,Auto,*");
+		_headerHost.Child = HeaderContent();
+		grid.Add(_headerHost, 0);
+		grid.Add(BuildToolbar(), 1);
 		grid.Add(new Border
 		{
 			Child = _dash,
 			Margin = new Thickness(18.0, 4.0, 18.0, 16.0)
-		}, 1);
+		}, 2);
 		base.Content = grid;
+		_dash.Changed += SyncHeaderMount;
 		_stopBtn.IsEnabled = false;
 		_launchBtn.Click += delegate
 		{
@@ -700,7 +712,40 @@ public sealed class LaunchPage : PageBase
 
 	private UIElement BuildBanner()
 	{
-		// 紧凑启动头：普通卡片外观，单行标题+按钮（玩家反馈大渐变横幅“AI 味”太重、空白太多）
+		// 紧凑启动头（GOAL WP4.2）：默认布局已把启动头移出画布（见 _headerHost）。
+		// 旧存档若仍带 banner 卡，则把同一段头部内容挂进画布卡片，避免出现两个启动头。
+		Border border2 = new Border();
+		border2.CornerRadius = (CornerRadius)Application.Current.FindResource("CR.Card");
+		border2.ClipToBounds = true;
+		border2.BorderThickness = new Thickness(1.0);
+		border2.Padding = new Thickness(12.0, 10.0, 12.0, 10.0);
+		border2.SetResourceReference(Control.BackgroundProperty, "B.Paper");
+		border2.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		MountHeader(border2);
+		SyncHeaderMount();
+		return border2;
+	}
+
+	// WPF 的 Border.Child 不会自动断开旧逻辑父级，重挂前必须手动摘下来
+	private void MountHeader(Border host)
+	{
+		Grid content = HeaderContent();
+		if (content.Parent is Border pb && pb != host)
+		{
+			pb.Child = null;
+		}
+		if (!ReferenceEquals(host.Child, content))
+		{
+			host.Child = content;
+		}
+	}
+
+	private Grid HeaderContent()
+	{
+		if (_headerContent != null)
+		{
+			return _headerContent;
+		}
 		SPanel el = Ui.H(8.0, _launchBtn, _stopBtn);
 		_launchBtn.Style = Ui.S("Btn.Primary");
 		_launchBtn.Padding = new Thickness(18.0, 7.0, 18.0, 8.0);
@@ -721,15 +766,20 @@ public sealed class LaunchPage : PageBase
 		Grid grid2 = Ui.G("Auto,Auto", null);
 		grid2.Add(grid, 0);
 		grid2.Add(sPanel, 1);
-		Border border2 = new Border();
-		border2.CornerRadius = (CornerRadius)Application.Current.FindResource("CR.Card");
-		border2.ClipToBounds = true;
-		border2.BorderThickness = new Thickness(1.0);
-		border2.Padding = new Thickness(12.0, 10.0, 12.0, 10.0);
-		border2.SetResourceReference(Control.BackgroundProperty, "B.Paper");
-		border2.SetResourceReference(Border.BorderBrushProperty, "B.Line");
-		border2.Child = grid2;
-		return border2;
+		_headerContent = grid2;
+		return grid2;
+	}
+
+	// 启动头挂在固定行（默认布局无 banner 卡）还是画布内（旧存档有 banner 卡），
+	// 两处互斥：内容只有一份，靠重新挂父级切换。
+	private void SyncHeaderMount()
+	{
+		bool hasBanner = _dash.Layout.VisibleItems().Any((DashCard c) => c.Type == "banner");
+		_headerHost.Visibility = (hasBanner ? Visibility.Collapsed : Visibility.Visible);
+		if (!hasBanner)
+		{
+			MountHeader(_headerHost);
+		}
 	}
 
 	private UIElement BuildConfig()

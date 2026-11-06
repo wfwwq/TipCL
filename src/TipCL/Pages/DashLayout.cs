@@ -150,6 +150,7 @@ public sealed class DashLayout
 	}
 
 	// 必须与 UiLayout.DefaultDoc() 完全一致（LayoutDefaultTests 会检查）
+	// GOAL WP4.2：渐变横幅卡移出画布（固定启动头，见 LaunchPage._headerHost），默认 3 卡
 	public static DashLayout Default()
 	{
 		return new DashLayout
@@ -157,10 +158,9 @@ public sealed class DashLayout
 			Grid = 8,
 			Items = new List<DashCard>
 			{
-				new DashCard { Id = "banner-main", Type = "banner", X = 0.0, Y = 0.0, W = 1.0, H = 0.14, Z = 0 },
-				new DashCard { Id = "config-main", Type = "config", X = 0.0, Y = 0.16, W = 0.42, H = 0.84, Z = 1 },
-				new DashCard { Id = "quick-main", Type = "quick", X = 0.435, Y = 0.16, W = 0.565, H = 0.34, Z = 2 },
-				new DashCard { Id = "news-main", Type = "news", X = 0.435, Y = 0.52, W = 0.565, H = 0.48, Z = 3 }
+				new DashCard { Id = "config-main", Type = "config", X = 0.0, Y = 0.0, W = 0.42, H = 1.0, Z = 0 },
+				new DashCard { Id = "quick-main", Type = "quick", X = 0.435, Y = 0.0, W = 0.565, H = 0.52, Z = 1 },
+				new DashCard { Id = "news-main", Type = "news", X = 0.435, Y = 0.53, W = 0.565, H = 0.47, Z = 2 }
 			}
 		};
 	}

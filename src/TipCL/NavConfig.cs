@@ -20,6 +20,13 @@ public sealed class NavConfig
 
 	public int SidebarWidth { get; set; }
 
+	// 测试与脚本便捷入口：从 JSON 文本解析（避免 net8 测试宿主与 net48 的 STJ 程序集版本差异触发 CS1705）
+	public static NavConfig FromJsonString(string json)
+	{
+		using JsonDocument doc = JsonDocument.Parse(json);
+		return FromJson(doc.RootElement.Clone());
+	}
+
 	public static NavConfig FromJson(JsonElement settings)
 	{
 		NavConfig navConfig = new NavConfig();

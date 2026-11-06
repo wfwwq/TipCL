@@ -5,10 +5,11 @@ using Xunit;
 public class LayoutDefaultTests
 {
 	[Fact]
-	public void BackendDefaultIsTheCompactFourCardHome()
+	public void BackendDefaultIsTheCompactThreeCardHome()
 	{
+		// GOAL WP4.2：横幅移出画布（固定启动头），默认 3 卡：配置 / 快捷入口 / 新闻
 		var types = UiLayout.DefaultDoc().items.Select(i => i.type).ToArray();
-		Assert.Equal(new[] { "banner", "config", "quick", "news" }, types);
+		Assert.Equal(new[] { "config", "quick", "news" }, types);
 	}
 
 	// 防止前后端默认布局再次分叉（否则「恢复默认布局」会丢卡片或错位）

@@ -54,11 +54,11 @@ public static class UiLayout
 		return new LayoutDoc(new List<LayoutItem>
 		{
 			// 必须与界面端 DashLayout.Default() 完全一致，否则「恢复默认布局」只会剩下两张卡片
-			// 主页只放常用的 4 张：紧凑启动头 / 启动配置 / 快捷入口 / 新闻。日志、时长、便签等在「编辑布局 → 添加卡片」里
-			new LayoutItem("banner", 0.0, 0.0, 1.0, 0.14, "banner-main", 0L),
-			new LayoutItem("config", 0.0, 0.16, 0.42, 0.84, "config-main", 1L),
-			new LayoutItem("quick", 0.435, 0.16, 0.565, 0.34, "quick-main", 2L),
-			new LayoutItem("news", 0.435, 0.52, 0.565, 0.48, "news-main", 3L)
+			// GOAL WP4.2：渐变横幅卡移出画布（固定启动头，见 LaunchPage._headerHost），默认 3 卡。
+			// 旧存档里的 banner 卡仍可渲染（LaunchPage.BuildBanner 兼容路径）
+			new LayoutItem("config", 0.0, 0.0, 0.42, 1.0, "config-main", 0L),
+			new LayoutItem("quick", 0.435, 0.0, 0.565, 0.52, "quick-main", 1L),
+			new LayoutItem("news", 0.435, 0.53, 0.565, 0.47, "news-main", 2L)
 		}, 8L);
 	}
 

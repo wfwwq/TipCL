@@ -199,6 +199,14 @@ public partial class MainWindow : Window
 
 	private static readonly Dictionary<string, string> HeaderGlyphs = new Dictionary<string, string>
 	{
+		[I18n.L("启动")] = "\ue7c1",
+		[I18n.L("库")] = "\ue80a",
+		[I18n.L("社区")] = "\ue77b",
+		[I18n.L("AI 助手")] = "\ue99a",
+		[I18n.L("工具")] = "\ue712",
+		[I18n.L("反馈")] = "\ue8bd",
+		[I18n.L("设置")] = "\ue713",
+		// 旧默认分组标题（老用户存档仍可能引用）
 		[I18n.L("账户")] = "\ue77b",
 		[I18n.L("游戏")] = "\ue7fc",
 		[I18n.L("通用")] = "\ue713"

@@ -83,11 +83,18 @@ public static class NavModel
 
 	public static readonly string[] BottomKeys = new string[4] { "ai", "more", "settings", "tasks" };
 
-	public static readonly (string Title, string[] Keys)[] GroupedNav = new(string, string[])[3]
+	// WP4 信息架构：14+ 平级入口 → 7 个分组顶级项。
+	// 分组里直接点名的子页（instance/multiplayer/servers/account/feedback/settings）不再进
+	// download/more 分区（PinnedFromConfig 去重）；mods/playtime/plugins 留在「更多」分区，挂在「工具」组下。
+	public static readonly (string Title, string[] Keys)[] GroupedNav = new(string, string[])[7]
 	{
-		(I18n.L("账户"), new string[1] { "account" }),
-		(I18n.L("游戏"), new string[3] { "launch", "instance", "download" }),
-		(I18n.L("通用"), new string[5] { "settings", "multiplayer", "ai", "more", "tasks" })
+		(I18n.L("启动"), new string[1] { "launch" }),
+		(I18n.L("库"), new string[4] { "instance", "download", "multiplayer", "servers" }),
+		(I18n.L("社区"), new string[1] { "account" }),
+		(I18n.L("AI 助手"), new string[1] { "ai" }),
+		(I18n.L("工具"), new string[2] { "tasks", "more" }),
+		(I18n.L("反馈"), new string[1] { "feedback" }),
+		(I18n.L("设置"), new string[1] { "settings" })
 	};
 
 	public static readonly IReadOnlyDictionary<string, string> GroupedLabels = new Dictionary<string, string>
