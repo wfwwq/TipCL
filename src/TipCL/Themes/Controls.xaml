@@ -437,6 +437,34 @@
       </Setter.Value>
     </Setter>
   </Style>
+  <Style x:Key="Tab.Top" TargetType="{x:Type ToggleButton}">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13.5" />
+    <Setter Property="FrameworkElement.Cursor" Value="Hand" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="Padding" Value="18,0" />
+    <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ToggleButton}">
+          <Grid Background="#00FFFFFF">
+            <ContentPresenter Margin="{TemplateBinding Control.Padding}" VerticalAlignment="Center" RecognizesAccessKey="True" />
+            <Border Name="Bar" Height="2" VerticalAlignment="Bottom" Background="{DynamicResource B.Accent}" Opacity="0" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="UIElement.IsMouseOver" Value="True">
+              <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
+            </Trigger>
+            <Trigger Property="ToggleButton.IsChecked" Value="True">
+              <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
+              <Setter Property="Control.FontWeight" Value="SemiBold" />
+              <Setter TargetName="Bar" Property="UIElement.Opacity" Value="1" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
   <Style x:Key="Input" TargetType="{x:Type TextBox}">
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
     <Setter Property="FontSize" Value="13" />

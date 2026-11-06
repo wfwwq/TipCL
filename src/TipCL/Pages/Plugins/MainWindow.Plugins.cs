@@ -62,10 +62,6 @@ public partial class MainWindow
 				}
 			}
 		}
-		if (_current is PluginHostPage cur)
-		{
-			PageTitle.Text = cur.Title;
-		}
 	}
 
 	/// <summary>NavDefs 里没有的页面 id：插件页面 plugin:&lt;plugin&gt;:&lt;id&gt;。</summary>

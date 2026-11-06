@@ -123,9 +123,18 @@ public partial class MainWindow : Window
 
 	private const double SideDefaultWidth = 196.0;
 
+	// 顶栏页签壳（action-first）：侧栏不再挂可视树，但导航数据结构与行缓存保留，
+	// NavHost / PinnedHost / SideFooter 改为离屏容器，BuildNav 逻辑零改动继续工作
+	private readonly StackPanel NavHost = new StackPanel();
+
+	private readonly StackPanel PinnedHost = new StackPanel();
+
+	private readonly Border SideFooter = new Border();
+
 	public static readonly List<NavDef> NavDefs = new List<NavDef>
 	{
 		new NavDef("launch", I18n.L("启动"), "\ue7c1", () => new LaunchPage()),
+		new NavDef("library", I18n.L("实例库"), "\ue80a", () => new LibraryPage()),
 		new NavDef("instance", I18n.L("版本管理"), "\ue80a", () => new VersionManagePage()),
 		new NavDef("version", I18n.L("原版游戏"), "\ue7fc", () => new VersionPage()),
 		new NavDef("mod", "Mod", "\uea86", () => new CatalogPage(CatalogKind.Mod)),
@@ -243,7 +252,6 @@ public partial class MainWindow : Window
 		FitToWorkArea();
 		SetResourceReference(Control.ForegroundProperty, "B.Ink");
 		base.Title = I18n.L("TipCL 启动器");
-		PageTitle.Text = I18n.L("启动");
 		BridgeText.Text = I18n.L("连接中");
 		ThemeBtn.ToolTip = I18n.L("切换深色 / 浅色");
 		DropVeilTitle.Text = I18n.L("松手就装");
@@ -255,8 +263,23 @@ public partial class MainWindow : Window
 		{
 			Backdrop.Apply(this);
 		};
-		Wallpaper.Attach(WallHost, ChromeBar, SideBar, PageWash);
-		SideFrost.Attach(WallHost, SideBar, _prefs.SideFrost, _prefs.SideFrostRadius);
+		Wallpaper.Attach(WallHost, TopBar, null, PageWash);
+		TabLaunch.Click += delegate
+		{
+			Navigate("launch");
+		};
+		TabLibrary.Click += delegate
+		{
+			Navigate("library");
+		};
+		TabTasks.Click += delegate
+		{
+			Navigate("tasks");
+		};
+		TabSettings.Click += delegate
+		{
+			Navigate("settings");
+		};
 		MinBtn.Click += delegate
 		{
 			base.WindowState = WindowState.Minimized;
@@ -305,8 +328,6 @@ public partial class MainWindow : Window
 		base.DragEnter += OnDragOver;
 		base.DragOver += OnDragOver;
 		base.Drop += OnDrop;
-		SideGrip.DragDelta += SideGrip_DragDelta;
-		SideGrip.DragCompleted += SideGrip_DragCompleted;
 		base.PreviewKeyDown += OnShortcut;
 		base.Closing += OnClosing;
 		base.Closed += delegate
@@ -338,8 +359,6 @@ public partial class MainWindow : Window
 			base.Dispatcher.Invoke(SyncTasks);
 		};
 		LoadUiPrefs();
-		SideFrost.SetRadius(_prefs.SideFrostRadius);
-		SideFrost.SetEnabled(_prefs.SideFrost);
 		BuildNav();
 		BuildDock();
 		Navigate("launch", instant: true);
@@ -809,7 +828,7 @@ public partial class MainWindow : Window
 		_current?.OnHidden();
 		_currentId = id;
 		_current = page;
-		PageTitle.Text = page.Title;
+		SyncTabs();
 		SyncNavSelection();
 		if (instant || !Motion.Enabled)
 		{
@@ -1364,7 +1383,6 @@ public partial class MainWindow : Window
 		}
 		_prefs.Expanded.TryAdd("download", value: true);
 		_prefs.Expanded.TryAdd("more", value: false);
-		SideCol.Width = new GridLength(ClampSide(_prefs.SideWidth));
 		Motion.Enabled = _prefs.Anim;
 		Motion.Scale = Clamp.Of(_prefs.AnimScale, 0.4, 2.2);
 		ApplyThemeState(_prefs.Dark, persistLocal: false);
@@ -1372,7 +1390,6 @@ public partial class MainWindow : Window
 
 	public void SaveUiPrefs()
 	{
-		_prefs.SideWidth = SideCol.Width.Value;
 		_prefs.Dark = App.IsDark;
 		_prefs.Anim = Motion.UserEnabled;
 		_prefs.AnimScale = Motion.Scale;
@@ -1386,15 +1403,6 @@ public partial class MainWindow : Window
 		catch
 		{
 		}
-	}
-
-	private static double ClampSide(double w)
-	{
-		if (!(w >= 140.0) || !(w <= 320.0))
-		{
-			return 196.0;
-		}
-		return w;
 	}
 
 	public async Task LoadNavFromBridgeAsync()
@@ -1415,12 +1423,7 @@ public partial class MainWindow : Window
 	public void ApplyNavSettings(JsonElement settings)
 	{
 		_navCfg = TipCL.NavConfig.FromJson(settings);
-		int sidebarWidth = _navCfg.SidebarWidth;
-		if (sidebarWidth >= 140 && sidebarWidth <= 320)
-		{
-			SideCol.Width = new GridLength(_navCfg.SidebarWidth);
-			_prefs.SideWidth = _navCfg.SidebarWidth;
-		}
+		// 侧栏已移除：ui_sidebar_width 恢复逻辑短路跳过，只保留分组/隐藏数据的应用
 		BuildNav();
 	}
 
@@ -1456,41 +1459,6 @@ public partial class MainWindow : Window
 		{
 			Run(() => ApplyNavPatchAsync(new Dictionary<string, object> { ["ui_nav_style"] = style }));
 		}
-	}
-
-	private void SideGrip_DragDelta(object sender, DragDeltaEventArgs e)
-	{
-		double num = Clamp.Of(SideCol.Width.Value + e.HorizontalChange, 140.0, 320.0);
-		SideCol.Width = new GridLength(num);
-		_prefs.SideWidth = num;
-	}
-
-	private void SideGrip_DragCompleted(object sender, DragCompletedEventArgs e)
-	{
-		int w = (int)Math.Round(SideCol.Width.Value);
-		SaveUiPrefs();
-		if (w == _navCfg.SidebarWidth)
-		{
-			return;
-		}
-		_navCfg.SidebarWidth = w;
-		if (!AppServices.Ready)
-		{
-			return;
-		}
-		Run(async delegate
-		{
-			try
-			{
-				await AppServices.Client.CallAsync<object>("update_settings", new
-				{
-					settings = new Dictionary<string, object> { ["ui_sidebar_width"] = w }
-				});
-			}
-			catch
-			{
-			}
-		});
 	}
 
 	private void BuildNav()
@@ -1595,7 +1563,7 @@ public partial class MainWindow : Window
 				panel.Visibility = Visibility.Visible;
 				panel.BeginAnimation(FrameworkElement.HeightProperty, null);
 				panel.Height = double.NaN;
-				panel.Measure(new Size(SideCol.Width.Value, double.PositiveInfinity));
+				panel.Measure(new Size(196.0, double.PositiveInfinity));
 				double height = panel.DesiredSize.Height;
 				panel.Height = 0.0;
 				Motion.AnimateHeight(panel, height, 200.0, delegate
@@ -1976,6 +1944,15 @@ public partial class MainWindow : Window
 			value.Button.IsChecked = !value.IsSectionHeader && PageOf(value.Key) == _currentId;
 		}
 		SyncPluginNavSelection();
+	}
+
+	// 顶栏 4 页签的激活态与当前页联动（launch/library/tasks/settings 之外的高亮全部清掉）
+	private void SyncTabs()
+	{
+		TabLaunch.IsChecked = (_currentId == "launch");
+		TabLibrary.IsChecked = (_currentId == "library");
+		TabTasks.IsChecked = (_currentId == "tasks");
+		TabSettings.IsChecked = (_currentId == "settings");
 	}
 
 	private void SyncTasks()

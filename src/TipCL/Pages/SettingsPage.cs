@@ -672,7 +672,24 @@ public sealed partial class SettingsPage : PageBase
 		}, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));
 		SPanel sPanel = Ui.H(10.0, _saveState.VCenter(), button).Right();
 		WireAutoSave();
-		base.Content = PageBase.ScrollBody(Ui.Section(I18n.L("设置"), I18n.L("改了就生效，自动保存")), border, border2, border3, border4, border5, border6, BuildPhoneSyncCard(), border7, BuildMemoryCard(), TipCL.Pages.Plugins.PluginSettingsCard.Build(), border8, BuildAboutCard(), sPanel);
+		base.Content = PageBase.ScrollBody(BuildMoreLinks(), Ui.Section(I18n.L("设置"), I18n.L("改了就生效，自动保存")), border, border2, border3, border4, border5, border6, BuildPhoneSyncCard(), border7, BuildMemoryCard(), TipCL.Pages.Plugins.PluginSettingsCard.Build(), border8, BuildAboutCard(), sPanel);
+	}
+
+	// 顶栏页签壳下旧页面入口收敛：设置页顶部一行 Ghost 链接，保证账号/Java/时长/服务器/反馈仍一键可达
+	private static UIElement BuildMoreLinks()
+	{
+		return Ui.H(8.0, Ui.Muted(I18n.L("更多页面")).VCenter(), MoreLink(I18n.L("账号"), "account"), MoreLink("Java", "java"), MoreLink(I18n.L("游戏时长"), "playtime"), MoreLink(I18n.L("服务器"), "servers"), MoreLink(I18n.L("反馈与帮助"), "feedback"));
+	}
+
+	private static Button MoreLink(string label, string pageId)
+	{
+		Button b = Ui.Btn(label, BtnKind.Ghost, delegate
+		{
+			PageBase.Win?.Navigate(pageId);
+		});
+		b.FontSize = 12.5;
+		b.Padding = new Thickness(10.0, 3.0, 10.0, 4.0);
+		return b;
 	}
 
 	private static UIElement SliderRow(Slider s, TextBlock label)

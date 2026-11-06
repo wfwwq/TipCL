@@ -53,7 +53,7 @@ public static class DevShot
 			int code = 0;
 			try
 			{
-				await DriveAsync(win, pageId, dark, outPath, w, h);
+				await DriveAsync(win, pageId, dark, outPath, w, h, ArgVal(args, "--pop") ?? "");
 			}
 			catch (Exception ex)
 			{
@@ -66,7 +66,7 @@ public static class DevShot
 		return 0;
 	}
 
-	private static async Task DriveAsync(MainWindow win, string pageId, bool dark, string outPath, double w, double h)
+	private static async Task DriveAsync(MainWindow win, string pageId, bool dark, string outPath, double w, double h, string pop)
 	{
 		try
 		{
@@ -103,6 +103,45 @@ public static class DevShot
 			{
 				page.OnShown();
 			}, DispatcherPriority.ContextIdle);
+		}
+		// --pop <config|instances|news>：浮层打开态。Popup 是独立 HWND，RenderTargetBitmap 拍不到，
+		// 把浮层内容临时挂进页面根 Grid 模拟浮层位置后再渲染。
+		if (pop.Length > 0 && page is LaunchPage lp)
+		{
+			await win.Dispatcher.InvokeAsync(delegate
+			{
+				lp.OpenPopupForDevShot(pop);
+			}, DispatcherPriority.ContextIdle);
+			await Task.Delay(500);
+			await win.Dispatcher.InvokeAsync(delegate
+			{
+				FrameworkElement? el = lp.DetachPopupForShot(pop);
+				if (el != null && lp.Content is Grid root)
+				{
+					Grid host = new Grid();
+					switch (pop)
+					{
+					case "config":
+						host.HorizontalAlignment = HorizontalAlignment.Right;
+						host.VerticalAlignment = VerticalAlignment.Top;
+						host.Margin = new Thickness(0.0, 56.0, 16.0, 0.0);
+						break;
+					case "instances":
+						host.HorizontalAlignment = HorizontalAlignment.Left;
+						host.VerticalAlignment = VerticalAlignment.Center;
+						host.Margin = new Thickness(56.0, 0.0, 0.0, 24.0);
+						break;
+					default:
+						host.HorizontalAlignment = HorizontalAlignment.Center;
+						host.VerticalAlignment = VerticalAlignment.Bottom;
+						host.Margin = new Thickness(0.0, 0.0, 0.0, 44.0);
+						break;
+					}
+					host.Children.Add(el);
+					root.Children.Add(host);
+				}
+			}, DispatcherPriority.ContextIdle);
+			await Task.Delay(250);
 		}
 		// 后端主题同步可能晚到，渲染前再钉一次主题
 		await win.Dispatcher.InvokeAsync(delegate

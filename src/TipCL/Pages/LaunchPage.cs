@@ -7,13 +7,17 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using TipCL.Models;
 using TipCL.Services;
 
 namespace TipCL.Pages;
 
+// action-first 启动屏：大实例标题 + 单一「启动游戏」主按钮 + 右上安静区药丸 + 底部公告条。
+// 旧卡片画布（DashHost/DashLayout）不再挂可视树，字段与数据逻辑全部保留。
 public sealed class LaunchPage : PageBase
 {
 	private readonly ComboBox _inst = Ui.Combo();
@@ -74,27 +78,11 @@ public sealed class LaunchPage : PageBase
 
 	private readonly DashHost _dash = new DashHost();
 
-	// 固定启动头（GOAL WP4.2）：默认布局 3 卡（config/quick/news），启动头移出画布；
-	// 旧存档带 banner 卡时头部内容搬进画布卡片，_headerHost 折叠
-	private readonly Border _headerHost = new Border
-	{
-		Margin = new Thickness(18.0, 10.0, 18.0, 2.0)
-	};
-
-	private Grid? _headerContent;
-
 	private readonly List<string> _logLines = new List<string>();
 
 	private List<JavaOption> _javaOpts = new List<JavaOption>();
 
 	private List<InstanceInfo> _instances = new List<InstanceInfo>();
-
-	private LayoutState _layoutState = new LayoutState();
-
-	private readonly DispatcherTimer _layoutSaveTimer = new DispatcherTimer
-	{
-		Interval = TimeSpan.FromMilliseconds(300.0)
-	};
 
 	private string? _taskId;
 
@@ -103,8 +91,6 @@ public sealed class LaunchPage : PageBase
 	private bool _syncing;
 
 	private bool _crashShown;
-
-	private bool _editMode;
 
 	private TextBlock? _loginHint;
 
@@ -123,47 +109,61 @@ public sealed class LaunchPage : PageBase
 		Interval = TimeSpan.FromMilliseconds(650.0)
 	};
 
-	private static readonly (string Key, string Title)[] CardTypes = new(string, string)[8]
-	{
-		("banner", I18n.L("启动横幅")),
-		("config", I18n.L("启动配置")),
-		("log", I18n.L("实时日志")),
-		("news", I18n.L("新闻主页")),
-		("quick", I18n.L("快捷入口")),
-		("notes", I18n.L("便签")),
-		("playtime", I18n.L("游戏时长")),
-		("tasks", I18n.L("任务摘要"))
-	};
-
-	private static readonly (string Key, string Glyph, string Label)[] QuickTargets = new(string, string, string)[12]
-	{
-		("version", "\ue7b8", I18n.L("下载游戏")),
-		("mod", "\uea86", I18n.L("装模组")),
-		("modpack", "\ue7b8", I18n.L("整合包")),
-		("instance", "\ue80a", I18n.L("实例")),
-		("account", "\ue77b", I18n.L("账号")),
-		("ai", "\ue99a", I18n.L("问 AI")),
-		("multiplayer", "\ue701", I18n.L("联机")),
-		("settings", "\ue713", I18n.L("设置")),
-		("tasks", "\ue896", I18n.L("下载任务")),
-		("saves", "\ue74e", I18n.L("存档管理")),
-		("folder", "\ue8b7", I18n.L("实例目录")),
-		("playtime", "\ue823", I18n.L("游戏时长"))
-	};
-
-	private static readonly string[] QuickDefault = new string[6] { "mod", "modpack", "saves", "multiplayer", "ai", "playtime" };
-
-	private readonly SPanel _quickHost = Ui.V(0.0);
-
 	private bool _layoutLoaded;
 
-	private int _layoutGen;
+	// —— 启动屏 UI ——
+	private readonly TextBlock _kickerText = Ui.Txt("", 12.0, bold: false, "B.InkMuted");
 
-	private bool _layoutReady;
+	private readonly TextBlock _heroTitle = new TextBlock
+	{
+		FontSize = 30.0,
+		FontWeight = FontWeights.SemiBold,
+		TextTrimming = TextTrimming.CharacterEllipsis
+	};
 
-	private Task _saveInFlight = Task.CompletedTask;
+	private readonly TextBlock _meta = new TextBlock
+	{
+		FontSize = 12.5,
+		TextTrimming = TextTrimming.CharacterEllipsis
+	};
 
-	private const int MaxLines = 2500;
+	private TextBlock _accountPillText = Ui.Txt("", 12.0, bold: false, "B.InkSoft");
+
+	private readonly TextBlock _newsTicker = new TextBlock
+	{
+		FontSize = 12.5,
+		TextTrimming = TextTrimming.CharacterEllipsis
+	};
+
+	private readonly Border _stopShell = new Border
+	{
+		CornerRadius = new CornerRadius(12.0),
+		Height = 52.0,
+		Padding = new Thickness(26.0, 0.0, 26.0, 0.0),
+		Visibility = Visibility.Collapsed
+	};
+
+	private FrameworkElement? _configBody;
+
+	private Border? _configPill;
+
+	private SPanel? _titleRow;
+
+	private Popup? _configPopup;
+
+	private Popup? _switchPopup;
+
+	private Popup? _newsPopup;
+
+	private StackPanel? _switchList;
+
+	private TextBox? _switchSearch;
+
+	private Ellipse? _glow1;
+
+	private Ellipse? _glow2;
+
+	private string _loaderName = "";
 
 	public override string Title => I18n.L("启动");
 
@@ -184,26 +184,8 @@ public sealed class LaunchPage : PageBase
 	{
 		_bTitle.SetResourceReference(TextBlock.ForegroundProperty, "B.Ink");
 		_bSub.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
-		_dash.ContentFactory = BuildCard;
-		_dash.TitleFactory = (string t) => TipCL.Pages.Plugins.PluginDashCards.Title(t) ?? CardTypes.FirstOrDefault(((string Key, string Title) c) => c.Key == t).Title ?? t;
-		_dash.Changed += PersistLayout;
-		_layoutSaveTimer.Tick += delegate
-		{
-			_layoutSaveTimer.Stop();
-			Task pending = (_saveInFlight = SaveLayoutNowAsync());
-			PageBase.Run(() => pending, I18n.L("布局未能保存"));
-		};
-		Grid grid = Ui.G("Auto,Auto,*");
-		_headerHost.Child = HeaderContent();
-		grid.Add(_headerHost, 0);
-		grid.Add(BuildToolbar(), 1);
-		grid.Add(new Border
-		{
-			Child = _dash,
-			Margin = new Thickness(18.0, 4.0, 18.0, 16.0)
-		}, 2);
-		base.Content = grid;
-		_dash.Changed += SyncHeaderMount;
+		_meta.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
+		_heroTitle.SetResourceReference(TextBlock.ForegroundProperty, "B.Ink");
 		_stopBtn.IsEnabled = false;
 		_launchBtn.Click += delegate
 		{
@@ -273,769 +255,453 @@ public sealed class LaunchPage : PageBase
 				PageBase.Win.SaveUiPrefs();
 			}
 		};
+		BuildHero();
 	}
 
-	private UIElement BuildToolbar()
-	{
-		Button edit = Ui.Btn(I18n.L("编辑布局"), BtnKind.Chip, null, "\ue70f");
-		Button add = Ui.Btn(I18n.L("添加卡片"), BtnKind.Chip, null, "\ue710");
-		Button snap = Ui.Btn(I18n.L("网格吸附"), BtnKind.Chip, null, "\ue80a");
-		Button scheme = Ui.Btn(I18n.L("方案"), BtnKind.Chip, null, "\ue8fd");
-		Button io = Ui.Btn(I18n.L("导入 / 导出"), BtnKind.Chip, null, "\uede1");
-		Button button = Ui.Btn(I18n.L("恢复默认"), BtnKind.Chip, null, "\ue72c");
-		TextBlock hint = Ui.Small(I18n.L("拖动卡片移动，边角八向缩放；布局按比例自适应窗口"));
-		hint.Visibility = Visibility.Collapsed;
-		// 平时只显示「编辑布局」，其余布局工具进入编辑模式才出现，主页不再顶着一排按钮
-		UIElement[] editOnly = new UIElement[5] { add, snap, scheme, io, button };
-		foreach (UIElement el in editOnly)
-		{
-			el.Visibility = Visibility.Collapsed;
-		}
-		edit.Click += delegate
-		{
-			_editMode = !_editMode;
-			_dash.EditMode = _editMode;
-			edit.Content = Ui.H(6.0, Ui.Glyph(_editMode ? "\ue73e" : "\ue70f", 12.5), Ui.Txt(_editMode ? I18n.L("完成编辑") : I18n.L("编辑布局")));
-			hint.Visibility = ((!_editMode) ? Visibility.Collapsed : Visibility.Visible);
-			foreach (UIElement el in editOnly)
-			{
-				el.Visibility = (_editMode ? Visibility.Visible : Visibility.Collapsed);
-			}
-			Button button3 = add;
-			bool flag3 = (snap.IsEnabled = _editMode);
-			bool isEnabled2 = flag3;
-			button3.IsEnabled = isEnabled2;
-		};
-		Button button2 = add;
-		bool flag = (snap.IsEnabled = false);
-		bool isEnabled = flag;
-		button2.IsEnabled = isEnabled;
-		add.Click += delegate
-		{
-			ContextMenu contextMenu = new ContextMenu();
-			(string, string)[] cardTypes = CardTypes;
-			for (int i = 0; i < cardTypes.Length; i++)
-			{
-				var (key, header) = cardTypes[i];
-				if (!_dash.Has(key))
-				{
-					MenuItem menuItem = new MenuItem
-					{
-						Header = header
-					};
-					menuItem.Click += delegate
-					{
-						_dash.AddCard(key);
-						PageBase.Run(FillCardData);
-					};
-					contextMenu.Items.Add(menuItem);
-				}
-			}
-			// 插件提供的首页卡片（kind "dashCard"）
-			foreach (var (ptype, ptitle, pw, ph) in TipCL.Pages.Plugins.PluginDashCards.Available())
-			{
-				if (_dash.Has(ptype))
-				{
-					continue;
-				}
-				string addType = ptype;
-				(int, int) minSize = (pw, ph);
-				MenuItem pluginItem = new MenuItem
-				{
-					Header = ptitle,
-					Icon = Ui.Glyph("\uea86", 13.0),
-					ToolTip = I18n.L("插件卡片")
-				};
-				pluginItem.Click += delegate
-				{
-					// 新卡片按插件声明的 defaultW/defaultH 放置，放好后最小尺寸放宽，方便用户缩小
-					_dash.MinSizes[addType] = minSize;
-					_dash.AddCard(addType);
-					_dash.MinSizes[addType] = (160, 120);
-				};
-				contextMenu.Items.Add(pluginItem);
-			}
-			if (contextMenu.Items.Count == 0)
-			{
-				contextMenu.Items.Add(new MenuItem
-				{
-					Header = I18n.L("卡片都在画布上了"),
-					IsEnabled = false
-				});
-			}
-			contextMenu.PlacementTarget = add;
-			contextMenu.IsOpen = true;
-		};
-		snap.Click += delegate
-		{
-			DashLayout layout = _dash.Layout;
-			layout.Grid = ((!layout.Snap) ? 8 : 0);
-			_dash.EditMode = false;
-			_dash.EditMode = _editMode;
-			PersistLayout();
-			PageBase.Toast(I18n.L("网格吸附"), layout.Snap ? I18n.L("已开启（{0}px）", layout.Grid) : I18n.L("已关闭"));
-		};
-		scheme.Click += delegate
-		{
-			ShowSchemeMenu(scheme);
-		};
-		io.Click += delegate
-		{
-			ShowIoMenu(io);
-		};
-		button.Click += delegate
-		{
-			PageBase.Run(async delegate
-			{
-				string body = (string.IsNullOrEmpty(_layoutState.Profile) ? I18n.L("回到内置默认布局。") : I18n.L("退出方案「{0}」，回到内置默认布局（方案本身保留）。", _layoutState.Profile));
-				if (await Dlg.Confirm(I18n.L("恢复默认布局"), body))
-				{
-					await FlushLayoutAsync();
-					JsonElement state = await PageBase.Api.CallAsync("reset_layout");
-					ApplyLayoutState(state);
-					await FillCardData();
-					PageBase.Toast(I18n.L("已恢复默认布局"), I18n.L("{0} 张卡片已回到默认位置", _dash.Layout.VisibleItems().Count()), ToastKind.Success);
-				}
-			});
-		};
-		// 插件动作按钮（kind "action"，where "launch"）：带上当前选中的实例 / 版本
-		TipCL.Pages.Plugins.PluginActionBar pluginActions = new TipCL.Pages.Plugins.PluginActionBar("launch", () => new Dictionary<string, object?>
-		{
-			["instance"] = _inst.Str(),
-			["version"] = _ver.Str()
-		});
-		SPanel sPanel = Ui.H(8.0, pluginActions, hint, add, snap, scheme, io, button, edit);
-		sPanel.HorizontalAlignment = HorizontalAlignment.Right;
-		sPanel.Margin = new Thickness(18.0, 8.0, 18.0, 0.0);
-		foreach (UIElement child in sPanel.Children)
-		{
-			child.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-		}
-		return sPanel;
-	}
+	// ————— 启动屏布局 —————
 
-	private void ShowSchemeMenu(FrameworkElement anchor)
+	private void BuildHero()
 	{
-		ContextMenu contextMenu = new ContextMenu();
-		string active = _layoutState.Profile;
-		MenuItem menuItem = new MenuItem
+		// 氛围光 + 方块网格纹理（颜色走色板令牌，深浅色自动切换）
+		_glow1 = new Ellipse
 		{
-			Header = ((active.Length == 0) ? "● " : I18n.L("\u3000")) + I18n.L("默认布局")
+			Width = 560.0,
+			Height = 320.0,
+			IsHitTestVisible = false
 		};
-		menuItem.Click += delegate
+		_glow1.SetResourceReference(Shape.FillProperty, "B.HeroGlow1");
+		_glow2 = new Ellipse
 		{
-			PageBase.Run(() => SwitchProfileAsync(""));
+			Width = 700.0,
+			Height = 420.0,
+			IsHitTestVisible = false
 		};
-		contextMenu.Items.Add(menuItem);
-		foreach (string name in _layoutState.Profiles)
+		_glow2.SetResourceReference(Shape.FillProperty, "B.HeroGlow2");
+		Rectangle tex = new Rectangle
 		{
-			MenuItem menuItem2 = new MenuItem
-			{
-				Header = ((name == active) ? "● " : I18n.L("\u3000")) + name
-			};
-			menuItem2.Click += delegate
-			{
-				PageBase.Run(() => SwitchProfileAsync(name));
-			};
-			contextMenu.Items.Add(menuItem2);
-		}
-		contextMenu.Items.Add(new Separator());
-		MenuItem menuItem3 = new MenuItem
-		{
-			Header = I18n.L("把当前布局存为方案…")
+			IsHitTestVisible = false
 		};
-		menuItem3.Click += delegate
+		tex.SetResourceReference(Shape.FillProperty, "B.HeroGrid");
+		Canvas glow = new Canvas
 		{
-			PageBase.Run(async delegate
-			{
-				string name3 = (await Dlg.Prompt(I18n.L("新建布局方案"), I18n.L("方案名称"), I18n.L("方案 {0}", _layoutState.Profiles.Count + 1)))?.Trim();
-				if (!string.IsNullOrEmpty(name3))
-				{
-					bool flag = _layoutState.Profiles.Contains(name3);
-					if (flag)
-					{
-						flag = !(await Dlg.Confirm(I18n.L("覆盖方案"), I18n.L("已有同名方案「{0}」，覆盖它？", name3), I18n.L("覆盖"), I18n.L("取消"), danger: true));
-					}
-					if (!flag)
-					{
-						await FlushLayoutAsync();
-						JsonElement state = await PageBase.Api.CallAsync("save_layout_profile", new
-						{
-							name = name3,
-							doc = _dash.Layout.ToDict()
-						});
-						ApplyLayoutState(state);
-						await FillCardData();
-						PageBase.Toast(I18n.L("已保存方案"), name3, ToastKind.Success);
-					}
-				}
-			});
+			IsHitTestVisible = false
 		};
-		contextMenu.Items.Add(menuItem3);
-		MenuItem menuItem4 = new MenuItem
-		{
-			Header = I18n.L("重命名当前方案…"),
-			IsEnabled = (active.Length > 0)
-		};
-		menuItem4.Click += delegate
-		{
-			PageBase.Run(async delegate
-			{
-				string name2 = (await Dlg.Prompt(I18n.L("重命名方案"), I18n.L("方案名称"), active))?.Trim();
-				if (!string.IsNullOrEmpty(name2) && !(name2 == active))
-				{
-					await FlushLayoutAsync();
-					await PageBase.Api.CallAsync("save_layout_profile", new
-					{
-						name = name2,
-						doc = _dash.Layout.ToDict()
-					});
-					JsonElement state = await PageBase.Api.CallAsync("delete_layout_profile", new
-					{
-						name = active
-					});
-					ApplyLayoutState(state);
-					if (_layoutState.Profile != name2)
-					{
-						state = await PageBase.Api.CallAsync("activate_layout_profile", new
-						{
-							name = name2
-						});
-						ApplyLayoutState(state);
-					}
-					await FillCardData();
-				}
-			});
-		};
-		contextMenu.Items.Add(menuItem4);
-		MenuItem menuItem5 = new MenuItem
-		{
-			Header = I18n.L("删除当前方案"),
-			IsEnabled = (active.Length > 0)
-		};
-		menuItem5.Click += delegate
-		{
-			PageBase.Run(async delegate
-			{
-				if (await Dlg.Confirm(I18n.L("删除方案"), I18n.L("删除「{0}」？画布会回到内置默认布局。", active), I18n.L("删除"), I18n.L("取消"), danger: true))
-				{
-					await FlushLayoutAsync();
-					JsonElement state = await PageBase.Api.CallAsync("delete_layout_profile", new
-					{
-						name = active
-					});
-					ApplyLayoutState(state);
-					await FillCardData();
-				}
-			});
-		};
-		contextMenu.Items.Add(menuItem5);
-		contextMenu.PlacementTarget = anchor;
-		contextMenu.IsOpen = true;
-	}
-
-	private async Task SwitchProfileAsync(string name)
-	{
-		if (!(name == _layoutState.Profile))
-		{
-			await FlushLayoutAsync();
-			ApplyLayoutState(await PageBase.Api.CallAsync("activate_layout_profile", new { name }));
-			await FillCardData();
-		}
-	}
-
-	private void ShowIoMenu(FrameworkElement anchor)
-	{
-		ContextMenu contextMenu = new ContextMenu();
-		MenuItem menuItem = new MenuItem
-		{
-			Header = I18n.L("导出布局 JSON…")
-		};
-		menuItem.Click += delegate
-		{
-			string text = Dlg.SaveFile(I18n.L("布局 (*.json)|*.json"), "tipcl-layout.json", I18n.L("导出布局"));
-			if (text == null)
-			{
-				return;
-			}
-			try
-			{
-				File.WriteAllText(text, _dash.Layout.ToJson());
-				PageBase.Toast(I18n.L("已导出"), text, ToastKind.Success);
-			}
-			catch (Exception ex)
-			{
-				PageBase.Toast(I18n.L("导出失败"), ex.Message, ToastKind.Error);
-			}
-		};
-		contextMenu.Items.Add(menuItem);
-		MenuItem menuItem2 = new MenuItem
-		{
-			Header = I18n.L("导入布局 JSON…")
-		};
-		menuItem2.Click += delegate
-		{
-			PageBase.Run(async delegate
-			{
-				string text = Dlg.PickFile(I18n.L("布局 (*.json)|*.json"), I18n.L("导入布局"));
-				if (text != null)
-				{
-					JsonElement doc;
-					try
-					{
-						using JsonDocument jsonDocument = JsonDocument.Parse(File.ReadAllText(text));
-						doc = jsonDocument.RootElement.Clone();
-					}
-					catch (Exception ex)
-					{
-						PageBase.Toast(I18n.L("导入失败"), I18n.L("不是有效的 JSON：") + ex.Message, ToastKind.Error);
-						return;
-					}
-					await FlushLayoutAsync();
-					ApplyLayoutState(await PageBase.Api.CallAsync("import_layout", new { doc }));
-					await FillCardData();
-					PageBase.Toast(I18n.L("已导入"), I18n.L("{0} 张卡片", _dash.Layout.Items.Count), ToastKind.Success);
-				}
-			}, I18n.L("导入失败"));
-		};
-		contextMenu.Items.Add(menuItem2);
-		MenuItem menuItem3 = new MenuItem
-		{
-			Header = I18n.L("吸附网格")
-		};
-		int[] gridChoices = DashLayout.GridChoices;
-		foreach (int step in gridChoices)
-		{
-			MenuItem menuItem4 = new MenuItem
-			{
-				Header = ((step == 0) ? I18n.L("自由") : $"{step}px"),
-				IsCheckable = true,
-				IsChecked = (_dash.Layout.Grid == step)
-			};
-			menuItem4.Click += delegate
-			{
-				_dash.Layout.Grid = step;
-				_dash.EditMode = false;
-				_dash.EditMode = _editMode;
-				_dash.Rebuild();
-				PageBase.Run(FillCardData);
-				PersistLayout();
-			};
-			menuItem3.Items.Add(menuItem4);
-		}
-		contextMenu.Items.Add(menuItem3);
-		contextMenu.PlacementTarget = anchor;
-		contextMenu.IsOpen = true;
-	}
-
-	private void ApplyLayoutState(JsonElement state)
-	{
-		_layoutSaveTimer.Stop();
-		_layoutGen++;
-		_layoutReady = false;
-		_layoutState = LayoutState.FromJson(state);
-		_dash.MinSizes = _layoutState.MinSizes;
-		_dash.Load(_layoutState.Doc);
-		_layoutSaveTimer.Stop();
-		_layoutReady = true;
-	}
-
-	private void PersistLayout()
-	{
-		if (_layoutReady)
-		{
-			_layoutSaveTimer.Stop();
-			_layoutSaveTimer.Start();
-		}
-	}
-
-	private async Task FlushLayoutAsync()
-	{
-		if (_layoutSaveTimer.IsEnabled)
-		{
-			_layoutSaveTimer.Stop();
-			await (_saveInFlight = SaveLayoutNowAsync());
-			return;
-		}
-		try
-		{
-			await _saveInFlight;
-		}
-		catch
-		{
-		}
-	}
-
-	private async Task SaveLayoutNowAsync()
-	{
-		if (!AppServices.Ready || !_layoutReady)
-		{
-			return;
-		}
-		int gen = _layoutGen;
-		JsonElement jsonElement = await PageBase.Api.CallAsync("save_layout", new
-		{
-			doc = _dash.Layout.ToDict(),
-			profile = _layoutState.Profile
-		});
-		if (gen == _layoutGen && jsonElement.ValueKind == JsonValueKind.Object)
-		{
-			JsonElement value2;
-			if (jsonElement.TryGetProperty("saved", out var value) && value.ValueKind == JsonValueKind.False)
-			{
-				ApplyLayoutState(await PageBase.Api.CallAsync("get_layout"));
-				await FillCardData();
-				PageBase.Toast(I18n.L("布局方案已变更"), I18n.L("已同步为当前方案，未覆盖"), ToastKind.Warning);
-			}
-			else if (jsonElement.TryGetProperty("profile", out value2) && value2.ValueKind == JsonValueKind.String)
-			{
-				_layoutState.Profile = value2.GetString() ?? "";
-			}
-		}
-	}
-
-	private UIElement? BuildCard(string type)
-	{
-		return type switch
-		{
-			"banner" => BuildBanner(), 
-			"config" => BuildConfig(), 
-			"log" => BuildLog(), 
-			"news" => Ui.Scroll(_newsHost), 
-			"quick" => BuildQuick(), 
-			"notes" => _notes, 
-			"playtime" => Ui.V(4.0, _playTotal, Ui.Muted(I18n.L("累计游玩时间"))), 
-			"tasks" => Ui.Scroll(_taskHost), 
-			_ => TipCL.Pages.Plugins.PluginDashCards.Create(type), 
-		};
-	}
-
-	private UIElement BuildBanner()
-	{
-		// 紧凑启动头（GOAL WP4.2）：默认布局已把启动头移出画布（见 _headerHost）。
-		// 旧存档若仍带 banner 卡，则把同一段头部内容挂进画布卡片，避免出现两个启动头。
-		Border border2 = new Border();
-		border2.CornerRadius = (CornerRadius)Application.Current.FindResource("CR.Card");
-		border2.ClipToBounds = true;
-		border2.BorderThickness = new Thickness(1.0);
-		border2.Padding = new Thickness(12.0, 10.0, 12.0, 10.0);
-		border2.SetResourceReference(Control.BackgroundProperty, "B.Paper");
-		border2.SetResourceReference(Border.BorderBrushProperty, "B.Line");
-		MountHeader(border2);
-		SyncHeaderMount();
-		return border2;
-	}
-
-	// WPF 的 Border.Child 不会自动断开旧逻辑父级，重挂前必须手动摘下来
-	private void MountHeader(Border host)
-	{
-		Grid content = HeaderContent();
-		if (content.Parent is Border pb && pb != host)
-		{
-			pb.Child = null;
-		}
-		if (!ReferenceEquals(host.Child, content))
-		{
-			host.Child = content;
-		}
-	}
-
-	private Grid HeaderContent()
-	{
-		if (_headerContent != null)
-		{
-			return _headerContent;
-		}
-		SPanel el = Ui.H(8.0, _launchBtn, _stopBtn);
-		_launchBtn.Style = Ui.S("Btn.Primary");
-		_launchBtn.Padding = new Thickness(18.0, 7.0, 18.0, 8.0);
-		_launchBtn.Content = Ui.H(7.0, Ui.Glyph("\ue768", 14.0), Ui.Txt(I18n.L("启动游戏"), 14.0, bold: true));
-		_stopBtn.Padding = new Thickness(12.0, 7.0, 12.0, 8.0);
-		Motion.HoverLift(_launchBtn, 1.02, 1.0, 8.0);
+		glow.Children.Add(tex);
+		glow.Children.Add(_glow2);
+		glow.Children.Add(_glow1);
+		// 主内容块：kicker / 大标题 / 元信息 / 主按钮 / 进度行
 		_prog.Height = 4.0;
+		_prog.Width = 320.0;
 		_prog.SetResourceReference(Control.ForegroundProperty, "B.Accent");
 		_prog.Opacity = 0.92;
 		_prog.Visibility = Visibility.Collapsed;
-		SPanel el2 = Ui.H(10.0, _bTitle, _bSub.VCenter());
-		Grid grid = Ui.G(null, "*,Auto");
-		grid.Add(el2.VCenter(), 0);
-		grid.Add(el.VCenter(), 0, 1);
-		SPanel sPanel = Ui.H(10.0, _prog.VCenter(), _status.VCenter());
 		_status.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
-		sPanel.Margin = new Thickness(0.0, 2.0, 0.0, 0.0);
-		Grid grid2 = Ui.G("Auto,Auto", null);
-		grid2.Add(grid, 0);
-		grid2.Add(sPanel, 1);
-		_headerContent = grid2;
-		return grid2;
-	}
-
-	// 启动头挂在固定行（默认布局无 banner 卡）还是画布内（旧存档有 banner 卡），
-	// 两处互斥：内容只有一份，靠重新挂父级切换。
-	private void SyncHeaderMount()
-	{
-		bool hasBanner = _dash.Layout.VisibleItems().Any((DashCard c) => c.Type == "banner");
-		_headerHost.Visibility = (hasBanner ? Visibility.Collapsed : Visibility.Visible);
-		if (!hasBanner)
+		SPanel kicker = Ui.H(6.0, Ui.Glyph("\ue823", 12.0, "B.InkMuted"), _kickerText);
+		_titleRow = Ui.H(9.0, _heroTitle.VCenter(), Ui.Glyph("\ue70d", 18.0, "B.InkFaint"));
+		_titleRow.Cursor = Cursors.Hand;
+		_titleRow.Background = Brushes.Transparent;
+		_titleRow.MouseLeftButtonUp += delegate
 		{
-			MountHeader(_headerHost);
-		}
-	}
-
-	private UIElement BuildConfig()
-	{
-		SPanel control = Ui.H(6.0, _wBox, Ui.Txt("×").VCenter(), _hBox);
-		Grid grid = Ui.G(null, "*,Auto");
-		grid.Add(_mem.VCenter(), 0);
-		grid.Add(_memLbl.M(10.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
-		Button button = Ui.Btn(I18n.L("微软登录"), BtnKind.Soft, delegate
-		{
-			PageBase.Run(MicrosoftLoginAsync);
-		}, "\ue77b");
-		Button button2 = Ui.Btn(I18n.L("皮肤站"), BtnKind.Chip, delegate
-		{
-			PageBase.Run(AuthlibLoginAsync);
-		});
-		Button button5 = Ui.IconBtn("\ue712", I18n.L("更多操作"), delegate(object s, RoutedEventArgs _)
-		{
-			ShowMoreMenu((FrameworkElement)s);
-		});
-		// 常用的只有实例/版本/用户；Java、内存、分辨率、直连收进「更多设置」，默认折叠
-		SPanel advanced = Ui.V(9.0, Field("Java", _java), Field(I18n.L("内存"), grid), Field(I18n.L("分辨率"), control), Field(I18n.L("直连"), _server));
-		advanced.Visibility = Visibility.Collapsed;
-		Button toggle = Ui.Btn(I18n.L("更多设置"), BtnKind.Ghost, null, "\ue70d");
-		toggle.HorizontalAlignment = HorizontalAlignment.Left;
-		toggle.Click += delegate
-		{
-			bool open = advanced.Visibility != Visibility.Visible;
-			advanced.Visibility = (open ? Visibility.Visible : Visibility.Collapsed);
-			toggle.Content = Ui.H(6.0, Ui.Glyph(open ? "\ue70e" : "\ue70d", 12.0), Ui.Txt(open ? I18n.L("收起") : I18n.L("更多设置")));
+			OpenSwitchPopup();
 		};
-		return Ui.Scroll(Ui.V(9.0, Field(I18n.L("实例"), _inst), Field(I18n.L("版本"), _ver), Field(I18n.L("用户"), _acc), toggle, advanced, Ui.Sep().M(0.0, 4.0, 0.0, 2.0), Ui.H(7.0, button, button2, button5)));
-	}
-
-	private static UIElement Field(string label, UIElement control)
-	{
-		Grid grid = Ui.G(null, "58,*");
-		grid.Add(Ui.Txt(label, 12.0, bold: false, "B.InkMuted").VCenter(), 0);
-		control.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-		grid.Add(control, 0, 1);
-		return grid;
-	}
-
-	private void ShowMoreMenu(FrameworkElement anchor)
-	{
-		ContextMenu menu = new ContextMenu();
-		Item(I18n.L("版本设置"), VersionSettingsAsync);
-		Item(I18n.L("刷新新闻"), LoadNewsAsync);
-		if (!_dash.Has("log"))
+		_configBody = (FrameworkElement)BuildConfig();
+		_configBody.MaxHeight = 372.0;
+		// 主操作行：52 高大按钮（模板圆角固定 6，用外壳 Border 提供 12 圆角）
+		_launchBtn.Style = Ui.S("Btn.Ghost");
+		_launchBtn.Padding = new Thickness(0.0);
+		_launchBtn.FontSize = 16.0;
+		_launchBtn.Content = Ui.H(9.0, Ui.Glyph("\ue768", 17.0), Ui.Txt(I18n.L("启动游戏"), 16.0, bold: true));
+		Border launchShell = new Border
 		{
-			// 日志卡默认不在主页上（没启动时是一大块空白），需要时一键加回来
-			Item(I18n.L("显示实时日志"), async delegate
-			{
-				_dash.AddCard("log");
-				await FillCardData();
-			});
-		}
-		Item(I18n.L("查看启动命令"), ShowLaunchCommandAsync);
-		Item(I18n.L("导出启动脚本 (.bat)"), ExportScriptAsync);
-		Item(I18n.L("创建桌面快捷方式"), ShortcutAsync);
-		Item(I18n.L("修复当前版本"), RepairAsync);
-		Item(I18n.L("打开实例文件夹"), async delegate
+			CornerRadius = new CornerRadius(12.0),
+			Height = 52.0,
+			Padding = new Thickness(34.0, 0.0, 34.0, 0.0),
+			Child = _launchBtn
+		};
+		launchShell.SetResourceReference(Border.BackgroundProperty, "B.AccentStrong");
+		Motion.HoverLift(launchShell, 1.02, 1.0, 8.0);
+		_stopBtn.Style = Ui.S("Btn.Ghost");
+		_stopBtn.Padding = new Thickness(0.0);
+		_stopBtn.Content = Ui.H(8.0, Ui.Glyph("\ue71a", 15.0), Ui.Txt(I18n.L("停止"), 15.0, bold: true));
+		_stopShell.Child = _stopBtn;
+		_stopShell.SetResourceReference(Border.BackgroundProperty, "B.DangerSoft");
+		_stopBtn.SetResourceReference(Control.ForegroundProperty, "B.Danger");
+		SPanel launchRow = Ui.H(10.0, launchShell, _stopShell);
+		SPanel statusRow = Ui.H(10.0, _prog.VCenter(), _status.VCenter());
+		statusRow.Margin = new Thickness(0.0, 4.0, 0.0, 0.0);
+		SPanel main = Ui.V(12.0, kicker, _titleRow, _meta, launchRow, statusRow);
+		main.MaxWidth = 620.0;
+		main.HorizontalAlignment = HorizontalAlignment.Left;
+		main.VerticalAlignment = VerticalAlignment.Center;
+		main.Margin = new Thickness(56.0, 0.0, 0.0, 0.0);
+		// 右上安静区：账号 / 启动配置 / AI / 联机 / 插件
+		_configPill = Pill("\ue713", I18n.L("启动配置"), OpenConfigPopup, out _);
+		Border accountPill = Pill("\ue77b", I18n.L("登录"), delegate
 		{
-			await PageBase.Api.CallAsync("open_instance_folder", new
+			PageBase.Win?.Navigate("account");
+		}, out _accountPillText);
+		SPanel quiet = Ui.H(8.0,
+			accountPill,
+			_configPill,
+			Pill("\ue99a", I18n.L("AI 助手"), delegate
 			{
-				name = _inst.Str()
-			});
-		});
-		menu.PlacementTarget = anchor;
-		menu.IsOpen = true;
-		void Item(string head, Func<Task> act)
+				PageBase.Win?.Navigate("ai");
+			}, out _),
+			Pill("\ue701", I18n.L("联机"), delegate
+			{
+				PageBase.Win?.Navigate("multiplayer");
+			}, out _),
+			Pill("\uea86", I18n.L("插件"), delegate
+			{
+				PageBase.Win?.Navigate("plugins");
+			}, out _));
+		quiet.HorizontalAlignment = HorizontalAlignment.Right;
+		quiet.VerticalAlignment = VerticalAlignment.Top;
+		quiet.Margin = new Thickness(0.0, 18.0, 20.0, 0.0);
+		// 底部公告条
+		_newsTicker.SetResourceReference(TextBlock.ForegroundProperty, "B.InkSoft");
+		_newsTicker.Cursor = Cursors.Hand;
+		Border chip = new Border
 		{
-			MenuItem menuItem = new MenuItem
-			{
-				Header = head
-			};
-			menuItem.Click += delegate
-			{
-				PageBase.Run(act);
-			};
-			menu.Items.Add(menuItem);
-		}
-	}
-
-	private UIElement BuildLog()
-	{
-		SPanel el = Ui.H(6.0, Ui.Btn(I18n.L("复制启动命令"), BtnKind.Chip, delegate
+			CornerRadius = new CornerRadius(5.0),
+			Padding = new Thickness(7.0, 1.0, 8.0, 2.0),
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		chip.SetResourceReference(Border.BackgroundProperty, "B.AccentSoft");
+		chip.Child = Ui.Txt(I18n.L("公告"), 10.0, bold: false, "B.AccentText");
+		TextBlock more = Ui.Txt(I18n.L("更多"), 12.0, bold: false, "B.AccentText").VCenter();
+		SPanel moreRow = Ui.H(4.0, more, Ui.Glyph("\ue70d", 11.0, "B.AccentText"));
+		moreRow.Cursor = Cursors.Hand;
+		moreRow.Background = Brushes.Transparent;
+		moreRow.MouseLeftButtonUp += delegate
 		{
-			PageBase.Run(ShowLaunchCommandAsync, I18n.L("生成失败"));
-		}, "\ue8c8"), Ui.IconBtn("\ue8fd", I18n.L("复制日志"), delegate
+			OpenNewsPopup();
+		};
+		_newsTicker.MouseLeftButtonUp += delegate
 		{
-			try
+			OpenNewsPopup();
+		};
+		Grid barGrid = Ui.G(null, "Auto,*,Auto");
+		barGrid.Margin = new Thickness(14.0, 0.0, 14.0, 0.0);
+		barGrid.Add(chip, 0);
+		barGrid.Add(_newsTicker.VCenter().M(10.0, 0.0, 10.0, 0.0), 0, 1);
+		barGrid.Add(moreRow, 0, 2);
+		Border bar = new Border
+		{
+			Height = 38.0,
+			BorderThickness = new Thickness(0.0, 1.0, 0.0, 0.0),
+			Child = barGrid
+		};
+		bar.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+		bar.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		// 根布局：hero 区 * / 公告条 Auto
+		Grid hero = new Grid
+		{
+			ClipToBounds = true
+		};
+		hero.Children.Add(glow);
+		hero.Children.Add(main);
+		hero.Children.Add(quiet);
+		hero.SizeChanged += delegate
+		{
+			double w = hero.ActualWidth;
+			double h = hero.ActualHeight;
+			if (_glow1 != null)
 			{
-				Clipboard.SetText(_log.Text);
-				PageBase.Toast(I18n.L("已复制"), I18n.L("日志已放进剪贴板"), ToastKind.Success);
+				Canvas.SetLeft(_glow1, w * 0.82 - 280.0);
+				Canvas.SetTop(_glow1, -h * 0.10 - 160.0);
 			}
-			catch
+			if (_glow2 != null)
 			{
+				Canvas.SetLeft(_glow2, w * 1.08 - 350.0);
+				Canvas.SetTop(_glow2, h * 0.82 - 210.0);
 			}
-		}), Ui.IconBtn("\ue74d", I18n.L("清空"), delegate
-		{
-			_logLines.Clear();
-			_log.Clear();
-		})).Right();
-		Grid grid = Ui.G("Auto,*");
-		grid.Add(el, 0);
-		grid.Add(_log.M(0.0, 4.0), 1);
-		_log.BorderThickness = new Thickness(0.0);
-		_log.Background = Brushes.Transparent;
-		_log.Padding = new Thickness(0.0);
-		return grid;
+			tex.Width = w;
+			tex.Height = h;
+		};
+		Grid root = Ui.G("*,Auto");
+		root.Add(hero, 0);
+		root.Add(bar, 1);
+		base.Content = root;
+		SyncHero();
 	}
 
-	private UIElement BuildQuick()
+	private static Border Pill(string glyph, string text, Action click, out TextBlock label)
 	{
-		RenderQuick();
-		return _quickHost;
+		TextBlock t = Ui.Txt(text, 12.0, bold: false, "B.InkSoft").VCenter();
+		Border b = new Border
+		{
+			Height = 30.0,
+			CornerRadius = new CornerRadius(999.0),
+			Padding = new Thickness(12.0, 0.0, 14.0, 1.0),
+			Cursor = Cursors.Hand,
+			BorderThickness = new Thickness(1.0),
+			Child = Ui.H(6.0, Ui.Glyph(glyph, 13.0, "B.InkMuted"), t)
+		};
+		b.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+		b.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		b.MouseEnter += delegate
+		{
+			b.SetResourceReference(Border.BackgroundProperty, "B.Hover");
+		};
+		b.MouseLeave += delegate
+		{
+			b.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+		};
+		b.MouseLeftButtonUp += delegate
+		{
+			click();
+		};
+		label = t;
+		return b;
 	}
 
-	private List<string> QuickPicked()
+	private static Border PopShell(UIElement content, double width, double maxHeight, Thickness margin)
 	{
-		JsonElement? jsonElement = _dash.Layout.Items.FirstOrDefault((DashCard c) => c.Type == "quick")?.Settings;
-		if (jsonElement.HasValue)
+		Border b = new Border
 		{
-			JsonElement valueOrDefault = jsonElement.GetValueOrDefault();
-			if (valueOrDefault.ValueKind == JsonValueKind.Object && valueOrDefault.TryGetProperty("targets", out var value) && value.ValueKind == JsonValueKind.Array)
+			CornerRadius = new CornerRadius(10.0),
+			BorderThickness = new Thickness(1.0),
+			Padding = new Thickness(12.0),
+			Width = width,
+			MaxHeight = maxHeight,
+			Margin = margin,
+			Child = content
+		};
+		b.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+		b.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		Motion.Shadow(b, 22.0, 0.16, 4.0);
+		return b;
+	}
+
+	private static Popup MakePopup(FrameworkElement target, PlacementMode mode, Border shell)
+	{
+		return new Popup
+		{
+			PlacementTarget = target,
+			Placement = mode,
+			StaysOpen = false,
+			AllowsTransparency = true,
+			Child = shell
+		};
+	}
+
+	// ————— 配置浮层 —————
+
+	private void OpenConfigPopup()
+	{
+		if (_configPopup == null)
+		{
+			TextBlock head = Ui.Txt(I18n.L("启动配置"), 15.0, bold: true);
+			Button close = Ui.IconBtn("\ue711", I18n.L("关闭"), delegate
 			{
-				List<string> list = (from k in value.EnumerateArray().Where(delegate(JsonElement x)
-					{
-						JsonElement jsonElement2 = x;
-						return jsonElement2.ValueKind == JsonValueKind.String;
-					}).Select(delegate(JsonElement x)
-					{
-						JsonElement jsonElement2 = x;
-						return jsonElement2.GetString() ?? "";
-					})
-					where QuickTargets.Any(((string Key, string Glyph, string Label) q) => q.Key == k)
-					select k).ToList();
-				if (list.Count > 0)
+				if (_configPopup != null)
 				{
-					return list;
+					_configPopup.IsOpen = false;
 				}
-			}
-		}
-		return QuickDefault.ToList();
-	}
-
-	private void RenderQuick()
-	{
-		_quickHost.Children.Clear();
-		WrapPanel wrapPanel = new WrapPanel();
-		foreach (string key in QuickPicked())
-		{
-			(string, string, string) tuple = QuickTargets.FirstOrDefault(((string Key, string Glyph, string Label) q) => q.Key == key);
-			if (tuple.Item1 != null)
-			{
-				string i = tuple.Item1;
-				Button button = Ui.Btn(tuple.Item3, BtnKind.Chip, delegate
-				{
-					QuickGo(i);
-				}, tuple.Item2);
-				button.Margin = new Thickness(0.0, 0.0, 7.0, 7.0);
-				wrapPanel.Children.Add(button);
-			}
-		}
-		Button button2 = Ui.Btn(I18n.L("选择入口…"), BtnKind.Ghost, delegate
-		{
-			PageBase.Run(PickQuickAsync);
-		}, "\ue70f");
-		button2.Margin = new Thickness(0.0, 0.0, 7.0, 7.0);
-		wrapPanel.Children.Add(button2);
-		_quickHost.Children.Add(wrapPanel);
-	}
-
-	private void QuickGo(string key)
-	{
-		if (!(key == "saves"))
-		{
-			if (key == "folder")
-			{
-				PageBase.Run(async delegate
-				{
-					await PageBase.Api.CallAsync("open_instance_folder", new
-					{
-						name = _inst.Str()
-					});
-				});
-			}
-			else
-			{
-				PageBase.Win?.Navigate(key);
-			}
-		}
-		else
-		{
-			PageBase.Run(async delegate
-			{
-				await SavesDialog.ShowAsync(_inst.Str(), _ver.Str());
 			});
+			Grid g = Ui.G(null, "*,Auto");
+			g.Add(head.VCenter(), 0);
+			g.Add(close, 0, 1);
+			_configPopup = MakePopup(_configPill ?? (FrameworkElement?)_titleRow ?? this, PlacementMode.Bottom,
+				PopShell(Ui.V(10.0, g, _configBody ?? Ui.Empty("\ue713", I18n.L("配置加载中"))), 360.0, 440.0, new Thickness(0.0, 6.0, 14.0, 14.0)));
+		}
+		_configPopup.IsOpen = true;
+	}
+
+	// ————— 实例切换浮层 —————
+
+	private void OpenSwitchPopup()
+	{
+		if (_switchPopup == null)
+		{
+			_switchSearch = Ui.Input(I18n.L("搜索实例…"));
+			_switchSearch.Height = 30.0;
+			_switchSearch.Padding = new Thickness(6.0, 5.0, 6.0, 5.0);
+			_switchSearch.TextChanged += delegate
+			{
+				RenderSwitchRows();
+			};
+			Grid search = Ui.G(null, "Auto,*");
+			search.Add(Ui.Glyph("\ue721", 12.0, "B.InkFaint").M(2.0, 0.0, 6.0, 0.0).VCenter(), 0);
+			search.Add(_switchSearch, 0, 1);
+			_switchList = new StackPanel();
+			SmoothScroll listScroll = Ui.Scroll(_switchList);
+			listScroll.MaxHeight = 300.0;
+			Button openLib = Ui.Btn(I18n.L("打开实例库"), BtnKind.Ghost, delegate
+			{
+				_switchPopup.IsOpen = false;
+				PageBase.Win?.Navigate("library");
+			}, "\ue80a");
+			openLib.FontSize = 12.0;
+			openLib.HorizontalAlignment = HorizontalAlignment.Left;
+			_switchPopup = MakePopup((FrameworkElement?)_titleRow ?? this, PlacementMode.Bottom,
+				PopShell(Ui.V(8.0, search, Ui.Sep(), listScroll, Ui.Sep(), openLib), 400.0, 430.0, new Thickness(0.0, 6.0, 14.0, 14.0)));
+		}
+		_switchSearch.Text = "";
+		RenderSwitchRows();
+		_switchPopup.IsOpen = true;
+	}
+
+	private void RenderSwitchRows()
+	{
+		if (_switchList == null)
+		{
+			return;
+		}
+		_switchList.Children.Clear();
+		string q = (_switchSearch?.Text?.Trim() ?? "");
+		string current = _inst.Str();
+		int shown = 0;
+		foreach (InstanceInfo i in _instances)
+		{
+			if (q.Length > 0 && i.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0)
+			{
+				continue;
+			}
+			shown++;
+			bool isCurrent = (i.Name == current);
+			SPanel subParts = Ui.V(1.0, Ui.Txt(i.Name, 13.5, bold: isCurrent, "B.Ink").Trim(), InstanceSub(i, 11.0, "B.InkFaint"));
+			FrameworkElement right = (isCurrent ? CurrentMark() : ManageLink(i.Name));
+			right.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+			Grid row = Ui.G(null, "*,Auto");
+			row.Add(subParts, 0);
+			row.Add(right.M(8.0, 0.0, 0.0, 0.0), 0, 1);
+			Border wrap = new Border
+			{
+				CornerRadius = new CornerRadius(6.0),
+				Padding = new Thickness(8.0, 6.0, 8.0, 7.0),
+				Cursor = (isCurrent ? Cursors.Arrow : Cursors.Hand),
+				Child = row
+			};
+			string instName = i.Name;
+			wrap.MouseEnter += delegate
+			{
+				wrap.SetResourceReference(Border.BackgroundProperty, "B.Hover");
+			};
+			wrap.MouseLeave += delegate
+			{
+				wrap.Background = Brushes.Transparent;
+			};
+			if (!isCurrent)
+			{
+				wrap.MouseLeftButtonUp += delegate
+				{
+					if (_switchPopup != null)
+					{
+						_switchPopup.IsOpen = false;
+					}
+					if (_inst.Str() != instName)
+					{
+						_inst.SelectedItem = instName;
+					}
+				};
+			}
+			_switchList.Children.Add(wrap);
+		}
+		if (shown == 0)
+		{
+			_switchList.Children.Add(Ui.Muted(I18n.L("没有匹配的实例")).M(4.0, 6.0, 4.0, 6.0));
 		}
 	}
 
-	private async Task PickQuickAsync()
+	private static SPanel CurrentMark()
 	{
-		HashSet<string> hashSet = QuickPicked().ToHashSet<string>(StringComparer.Ordinal);
-		List<(CheckBox Box, string Key)> boxes = new List<(CheckBox, string)>();
-		SPanel sPanel = Ui.V(4.0, Ui.Muted(I18n.L("勾选要显示在卡片上的入口：")));
-		(string, string, string)[] quickTargets = QuickTargets;
-		for (int i = 0; i < quickTargets.Length; i++)
+		Ellipse dot = new Ellipse
 		{
-			(string, string, string) tuple = quickTargets[i];
-			string item = tuple.Item1;
-			CheckBox checkBox = Ui.Check(tuple.Item3, hashSet.Contains(item));
-			boxes.Add((checkBox, item));
-			sPanel.Children.Add(checkBox);
-		}
-		if (!(await Dlg.Ask(I18n.L("选择快捷入口"), sPanel, I18n.L("确定"), I18n.L("取消"), danger: false, 380.0)))
-		{
-			return;
-		}
-		List<string> list = (from b in boxes
-			where b.Box.IsChecked == true
-			select b.Key).ToList();
-		if (list.Count == 0)
-		{
-			return;
-		}
-		DashCard dashCard = _dash.Layout.Items.FirstOrDefault((DashCard c) => c.Type == "quick");
-		if (dashCard != null)
-		{
-			using JsonDocument jsonDocument = JsonDocument.Parse(JsonSerializer.Serialize(new
-			{
-				targets = list
-			}));
-			dashCard.Settings = jsonDocument.RootElement.Clone();
-			PersistLayout();
-		}
-		RenderQuick();
+			Width = 7.0,
+			Height = 7.0
+		};
+		dot.SetResourceReference(Shape.FillProperty, "B.Accent");
+		SPanel p = Ui.H(5.0, dot, Ui.Txt(I18n.L("当前"), 11.5, bold: false, "B.InkMuted"));
+		return p;
 	}
+
+	private Button ManageLink(string instName)
+	{
+		Button b = Ui.Btn(I18n.L("管理"), BtnKind.Ghost, delegate
+		{
+			if (_switchPopup != null)
+			{
+				_switchPopup.IsOpen = false;
+			}
+			PageBase.Win?.Navigate("instance");
+		});
+		b.FontSize = 11.5;
+		b.Padding = new Thickness(8.0, 2.0, 8.0, 3.0);
+		return b;
+	}
+
+	private static TextBlock InstanceSub(InstanceInfo i, double size, string fg)
+	{
+		List<string> parts = new List<string>();
+		if (!string.IsNullOrEmpty(i.Pack))
+		{
+			parts.Add(i.Pack);
+		}
+		if (!string.IsNullOrEmpty(i.Mc))
+		{
+			parts.Add("Minecraft " + i.Mc);
+		}
+		TextBlock t = Ui.Txt(string.Join(" · ", parts), size, bold: false, fg).Trim();
+		return t;
+	}
+
+	// ————— 公告浮层 —————
+
+	private void OpenNewsPopup()
+	{
+		if (_newsPopup == null)
+		{
+			_newsPopup = MakePopup(this, PlacementMode.Top,
+				PopShell(Ui.Scroll(_newsHost), 420.0, 360.0, new Thickness(0.0, 14.0, 14.0, 6.0)));
+		}
+		_newsPopup.IsOpen = true;
+	}
+
+	// dev-only：按名字打开对应浮层（--pop 截图用）
+	public void OpenPopupForDevShot(string what)
+	{
+		switch (what)
+		{
+		case "config":
+			OpenConfigPopup();
+			break;
+		case "instances":
+			OpenSwitchPopup();
+			break;
+		case "news":
+			OpenNewsPopup();
+			break;
+		}
+	}
+
+	// dev-only：把浮层内容摘出来交给 DevShot 挂进窗口渲染（Popup 是独立 HWND，RenderTargetBitmap 拍不到）
+	public FrameworkElement? DetachPopupForShot(string what)
+	{
+		Popup? p = (what switch
+		{
+			"config" => _configPopup,
+			"instances" => _switchPopup,
+			"news" => _newsPopup,
+			_ => null,
+		});
+		if (p?.Child is Border b)
+		{
+			p.Child = null;
+			p.IsOpen = false;
+			return b;
+		}
+		return null;
+	}
+
+	// ————— 数据填充 —————
 
 	protected override async Task LoadAsync()
 	{
 		if (!_layoutLoaded)
 		{
 			_layoutLoaded = true;
-			try
-			{
-				ApplyLayoutState(await PageBase.Api.CallAsync("get_layout"));
-			}
-			catch (Exception ex)
-			{
-				_layoutLoaded = false;
-				_layoutReady = false;
-				_dash.Load(DashLayout.Default());
-				PageBase.Toast(I18n.L("布局读取失败"), ex.Message, ToastKind.Warning);
-			}
 			if (PageBase.Win != null)
 			{
 				_notes.Text = PageBase.Win.Prefs.Notes;
@@ -1115,7 +781,6 @@ public sealed class LaunchPage : PageBase
 			if (list.Count == 0)
 			{
 				_status.Text = I18n.L("这个实例还没有版本，先去「原版游戏」装一个");
-				_bSub.Text = I18n.L("还没有可启动的版本 · 去下载页安装");
 			}
 		}
 	}
@@ -1143,6 +808,7 @@ public sealed class LaunchPage : PageBase
 			_javaOpts = opts;
 			_java.Fill(opts.Select((JavaOption o) => o.Label), keep);
 			_syncing = false;
+			SyncHero();
 		}
 	}
 
@@ -1256,14 +922,49 @@ public sealed class LaunchPage : PageBase
 			list.Add(I18n.L("实例 ") + instance);
 			_bTitle.Text = instanceInfo.Pack;
 			_bSub.Text = string.Join(" · ", list);
-			return;
 		}
-		_bTitle.Text = (string.IsNullOrEmpty(version) ? I18n.L("未选择版本") : version);
-		_bSub.Text = (string.IsNullOrEmpty(version) ? I18n.L("先到「原版游戏」安装一个版本") : I18n.L("实例 {0} · 点「启动游戏」进入世界", instance));
+		else
+		{
+			_bTitle.Text = (string.IsNullOrEmpty(version) ? I18n.L("未选择版本") : version);
+			_bSub.Text = (string.IsNullOrEmpty(version) ? I18n.L("先到「原版游戏」安装一个版本") : I18n.L("实例 {0} · 点「启动游戏」进入世界", instance));
+		}
 		if (!string.IsNullOrEmpty(version))
 		{
 			PageBase.Run(() => TagLoaderAsync(version));
 		}
+		SyncHero();
+	}
+
+	// 启动屏大标题 / 元信息 / 药丸文案；数据全来自现有字段，缺什么省什么
+	private void SyncHero()
+	{
+		string instance = _inst.Str();
+		InstanceInfo info = _instances.FirstOrDefault((InstanceInfo x) => x.Name == instance);
+		_heroTitle.Text = (string.IsNullOrEmpty(instance) ? I18n.L("选择实例") : instance);
+		string dir = info?.Path ?? "";
+		_kickerText.Text = ((string.IsNullOrEmpty(instance) ? I18n.L("就绪") : I18n.L("就绪 · {0}", instance)) + ((string.IsNullOrEmpty(dir) || dir == instance) ? "" : (" · " + dir)));
+		List<string> meta = new List<string>();
+		if (!string.IsNullOrEmpty(_loaderName))
+		{
+			meta.Add(_loaderName);
+		}
+		string java = _java.Str();
+		if (!string.IsNullOrEmpty(java))
+		{
+			meta.Add(I18n.L("Java {0}", java));
+		}
+		meta.Add(I18n.L("内存 {0} MB", (int)_mem.Value));
+		string user = _acc.Str();
+		if (string.IsNullOrEmpty(user))
+		{
+			user = PageBase.Win?.Prefs.LastUser ?? "";
+		}
+		if (!string.IsNullOrEmpty(user))
+		{
+			meta.Add(I18n.L("玩家 {0}", user));
+		}
+		_meta.Text = string.Join(" · ", meta);
+		_accountPillText.Text = (string.IsNullOrEmpty(user) ? I18n.L("登录") : user);
 	}
 
 	private async Task TagLoaderAsync(string version)
@@ -1275,10 +976,8 @@ public sealed class LaunchPage : PageBase
 		if (list != null && list.Count >= 1 && !(_ver.Str() != version))
 		{
 			string text = list[0];
-			if (!string.IsNullOrWhiteSpace(text))
-			{
-				_bSub.Text = text + " · " + _bSub.Text;
-			}
+			_loaderName = (string.IsNullOrWhiteSpace(text) ? "" : text);
+			SyncHero();
 		}
 	}
 
@@ -1296,6 +995,7 @@ public sealed class LaunchPage : PageBase
 		{
 			_newsHost.Children.Clear();
 			_newsHost.Children.Add(Ui.Muted(I18n.L("主页已设为空白")));
+			_newsTicker.Text = I18n.L("主页已设为空白");
 			return;
 		}
 		if (text == "custom")
@@ -1311,11 +1011,13 @@ public sealed class LaunchPage : PageBase
 				string text2 = ((string.IsNullOrWhiteSpace(path) || !File.Exists(path)) ? I18n.L("未设置自定义主页。到设置 → 启动页主页 填本地 HTML 路径。") : (await Task.Run(() => File.ReadAllText(path))));
 				string text3 = text2;
 				_newsHost.Children.Add(Ui.Muted((text3.Length > 2000) ? (text3.Substring(0, 2000) + "…") : text3));
+				_newsTicker.Text = (text3.Length > 60) ? (text3.Substring(0, 60) + "…") : text3;
 				return;
 			}
 			catch (Exception ex)
 			{
 				_newsHost.Children.Add(Ui.Muted(I18n.L("读不了自定义主页：") + ex.Message));
+				_newsTicker.Text = I18n.L("读不了自定义主页");
 				return;
 			}
 		}
@@ -1334,6 +1036,7 @@ public sealed class LaunchPage : PageBase
 		if (rows.Count == 0)
 		{
 			_newsHost.Children.Add(Ui.Muted(I18n.L("暂无新闻")));
+			_newsTicker.Text = I18n.L("暂无新闻");
 			return;
 		}
 		foreach (NewsRow item in rows.Take(6))
@@ -1344,6 +1047,7 @@ public sealed class LaunchPage : PageBase
 				_newsHost.Children.Add(Ui.Small(item.Body).Wrap());
 			}
 		}
+		_newsTicker.Text = rows[0].Title;
 		Motion.Stagger(_newsHost, 20.0, 200.0, 8.0);
 	}
 
@@ -1463,6 +1167,7 @@ public sealed class LaunchPage : PageBase
 		_status.Text = I18n.L("准备启动…");
 		_launchBtn.IsEnabled = false;
 		_stopBtn.IsEnabled = true;
+		_stopShell.Visibility = Visibility.Visible;
 		_crashShown = false;
 		Motion.Pulse(_launchBtn);
 		if (PageBase.Win != null)
@@ -1490,6 +1195,7 @@ public sealed class LaunchPage : PageBase
 		{
 			_launchBtn.IsEnabled = true;
 			_stopBtn.IsEnabled = false;
+			_stopShell.Visibility = Visibility.Collapsed;
 			PageBase.Toast(I18n.L("启动失败"), ex.Message, ToastKind.Error);
 		}
 	}
@@ -1558,6 +1264,79 @@ public sealed class LaunchPage : PageBase
 			{
 				task_id = _taskId
 			});
+		}
+	}
+
+	private UIElement BuildConfig()
+	{
+		SPanel control = Ui.H(6.0, _wBox, Ui.Txt("×").VCenter(), _hBox);
+		Grid grid = Ui.G(null, "*,Auto");
+		grid.Add(_mem.VCenter(), 0);
+		grid.Add(_memLbl.M(10.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
+		Button button = Ui.Btn(I18n.L("微软登录"), BtnKind.Soft, delegate
+		{
+			PageBase.Run(MicrosoftLoginAsync);
+		}, "\ue77b");
+		Button button2 = Ui.Btn(I18n.L("皮肤站"), BtnKind.Chip, delegate
+		{
+			PageBase.Run(AuthlibLoginAsync);
+		});
+		Button button5 = Ui.IconBtn("\ue712", I18n.L("更多操作"), delegate(object s, RoutedEventArgs _)
+		{
+			ShowMoreMenu((FrameworkElement)s);
+		});
+		// 常用的只有实例/版本/用户；Java、内存、分辨率、直连收进「更多设置」，默认折叠
+		SPanel advanced = Ui.V(9.0, Field("Java", _java), Field(I18n.L("内存"), grid), Field(I18n.L("分辨率"), control), Field(I18n.L("直连"), _server));
+		advanced.Visibility = Visibility.Collapsed;
+		Button toggle = Ui.Btn(I18n.L("更多设置"), BtnKind.Ghost, null, "\ue70d");
+		toggle.HorizontalAlignment = HorizontalAlignment.Left;
+		toggle.Click += delegate
+		{
+			bool open = advanced.Visibility != Visibility.Visible;
+			advanced.Visibility = (open ? Visibility.Visible : Visibility.Collapsed);
+			toggle.Content = Ui.H(6.0, Ui.Glyph(open ? "\ue70e" : "\ue70d", 12.0), Ui.Txt(open ? I18n.L("收起") : I18n.L("更多设置")));
+		};
+		return Ui.Scroll(Ui.V(9.0, Field(I18n.L("实例"), _inst), Field(I18n.L("版本"), _ver), Field(I18n.L("用户"), _acc), toggle, advanced, Ui.Sep().M(0.0, 4.0, 0.0, 2.0), Ui.H(7.0, button, button2, button5)));
+	}
+
+	private static UIElement Field(string label, UIElement control)
+	{
+		Grid grid = Ui.G(null, "58,*");
+		grid.Add(Ui.Txt(label, 12.0, bold: false, "B.InkMuted").VCenter(), 0);
+		control.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+		grid.Add(control, 0, 1);
+		return grid;
+	}
+
+	private void ShowMoreMenu(FrameworkElement anchor)
+	{
+		ContextMenu menu = new ContextMenu();
+		Item(I18n.L("版本设置"), VersionSettingsAsync);
+		Item(I18n.L("刷新新闻"), LoadNewsAsync);
+		Item(I18n.L("查看启动命令"), ShowLaunchCommandAsync);
+		Item(I18n.L("导出启动脚本 (.bat)"), ExportScriptAsync);
+		Item(I18n.L("创建桌面快捷方式"), ShortcutAsync);
+		Item(I18n.L("修复当前版本"), RepairAsync);
+		Item(I18n.L("打开实例文件夹"), async delegate
+		{
+			await PageBase.Api.CallAsync("open_instance_folder", new
+			{
+				name = _inst.Str()
+			});
+		});
+		menu.PlacementTarget = anchor;
+		menu.IsOpen = true;
+		void Item(string head, Func<Task> act)
+		{
+			MenuItem menuItem = new MenuItem
+			{
+				Header = head
+			};
+			menuItem.Click += delegate
+			{
+				PageBase.Run(act);
+			};
+			menu.Items.Add(menuItem);
 		}
 	}
 
@@ -1846,6 +1625,7 @@ public sealed class LaunchPage : PageBase
 		case "finished":
 			_launchBtn.IsEnabled = true;
 			_stopBtn.IsEnabled = false;
+			_stopShell.Visibility = Visibility.Collapsed;
 			_status.Text = ((!string.IsNullOrEmpty(ev.Message)) ? ev.Message : (ev.Success ? I18n.L("已完成") : I18n.L("✘ 失败")));
 			if (ev.Success)
 			{
@@ -1899,6 +1679,7 @@ public sealed class LaunchPage : PageBase
 	public override void OnShown()
 	{
 		SyncTaskCard();
+		SyncHero();
 		_dash.RefreshThemeVisuals();
 	}
 }
