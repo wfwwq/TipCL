@@ -184,7 +184,7 @@ internal static class AiIcons
 		{
 			Width = 24.0,
 			Height = 24.0,
-			CornerRadius = new CornerRadius(7.0),
+			CornerRadius = new CornerRadius(6.0),
 			Child = icon.Mid()
 		};
 		border.SetResourceReference(Border.BackgroundProperty, state switch

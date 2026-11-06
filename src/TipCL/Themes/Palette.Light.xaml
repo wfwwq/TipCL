@@ -16,6 +16,7 @@
   <SolidColorBrush x:Key="B.AccentLite" Color="#4FBE8B" />
   <SolidColorBrush x:Key="B.AccentSoft" Color="#E7F5EE" />
   <SolidColorBrush x:Key="B.AccentSoft2" Color="#D7EEE2" />
+  <SolidColorBrush x:Key="B.AccentBorder" Color="#BFE3D2" />
   <SolidColorBrush x:Key="B.OnAccent" Color="#FFFFFF" />
   <SolidColorBrush x:Key="B.Canvas" Color="#F5F5F5" />
   <SolidColorBrush x:Key="B.Paper" Color="#FFFFFF" />
@@ -29,13 +30,16 @@
   <SolidColorBrush x:Key="B.Ink" Color="#262626" />
   <SolidColorBrush x:Key="B.InkSoft" Color="#565656" />
   <SolidColorBrush x:Key="B.InkMuted" Color="#888888" />
-  <SolidColorBrush x:Key="B.InkFaint" Color="#B0B0B0" />
+  <SolidColorBrush x:Key="B.InkFaint" Color="#8A8A8A" />
   <SolidColorBrush x:Key="B.Danger" Color="#D64545" />
   <SolidColorBrush x:Key="B.DangerSoft" Color="#FCEBEA" />
+  <SolidColorBrush x:Key="B.DangerBorder" Color="#F3C6C4" />
   <SolidColorBrush x:Key="B.Warn" Color="#D68A17" />
   <SolidColorBrush x:Key="B.WarnSoft" Color="#FDF3E2" />
+  <SolidColorBrush x:Key="B.WarnBorder" Color="#F0DCB4" />
   <SolidColorBrush x:Key="B.Info" Color="#2F72C4" />
   <SolidColorBrush x:Key="B.InfoSoft" Color="#EAF2FC" />
+  <SolidColorBrush x:Key="B.InfoBorder" Color="#C9DCF2" />
   <SolidColorBrush x:Key="B.Ok" Color="#2E9B6B" />
   <SolidColorBrush x:Key="B.OnOk" Color="#000000" />
   <SolidColorBrush x:Key="B.Scroll" Color="#CFCFCF" />

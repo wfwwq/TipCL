@@ -128,7 +128,7 @@ internal sealed class ConfirmCard : Border
 		};
 		border3.SetResourceReference(Border.BorderBrushProperty, "B.LineSoft");
 		border3.SetResourceReference(Border.BackgroundProperty, "B.Paper2");
-		base.CornerRadius = new CornerRadius(13.0);
+		base.CornerRadius = new CornerRadius(10.0);
 		base.BorderThickness = new Thickness(1.0);
 		base.HorizontalAlignment = HorizontalAlignment.Stretch;
 		base.MaxWidth = 760.0;

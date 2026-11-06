@@ -182,7 +182,7 @@ internal sealed class Bubble : Border
 			_plainBody.SetResourceReference(TextBlock.ForegroundProperty, "B.Ink");
 			Border border = new Border
 			{
-				CornerRadius = new CornerRadius(14.0, 14.0, 4.0, 14.0),
+				CornerRadius = new CornerRadius(10.0, 10.0, 4.0, 10.0),
 				Padding = new Thickness(13.0, 8.0, 13.0, 9.0),
 				Child = _plainBody,
 				HorizontalAlignment = HorizontalAlignment.Right

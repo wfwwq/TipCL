@@ -433,7 +433,7 @@ internal sealed class MdView : RichTextBox
 		Grid grid = Ui.G(null, "*,Auto").Add(textBlock.VCenter(), 0).Add(button2, 0, 1);
 		Border border = new Border();
 		border.Background = new SolidColorBrush(Color.FromRgb(31, 42, 37));
-		border.CornerRadius = new CornerRadius(9.0);
+		border.CornerRadius = new CornerRadius(8.0);
 		border.Padding = new Thickness(12.0, 7.0, 12.0, 10.0);
 		border.Child = Ui.V(4.0, grid, textBox);
 		return border;

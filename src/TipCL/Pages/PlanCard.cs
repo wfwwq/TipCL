@@ -35,7 +35,7 @@ internal sealed class PlanCard : Border
 		Child = sPanel;
 		base.Padding = new Thickness(13.0, 10.0, 13.0, 10.0);
 		base.BorderThickness = new Thickness(1.0);
-		base.CornerRadius = new CornerRadius(11.0);
+		base.CornerRadius = new CornerRadius(10.0);
 		base.MaxWidth = 760.0;
 		base.HorizontalAlignment = HorizontalAlignment.Stretch;
 		SetResourceReference(Border.BorderBrushProperty, "B.AccentSoft2");

@@ -449,7 +449,7 @@ public sealed class AiPage : PageBase
 		grid4.Add(_sendStop.VCenter(), 0, 6);
 		_composer = new Border
 		{
-			CornerRadius = new CornerRadius(14.0),
+			CornerRadius = new CornerRadius(10.0),
 			BorderThickness = new Thickness(1.0),
 			Padding = new Thickness(12.0, 8.0, 10.0, 8.0),
 			Child = Ui.V(6.0, grid3, grid4)
@@ -473,7 +473,7 @@ public sealed class AiPage : PageBase
 		grid5.Add(_status.VCenter(), 0, 2);
 		Border slashCard = new Border
 		{
-			CornerRadius = new CornerRadius(10.0),
+			CornerRadius = new CornerRadius(8.0),
 			BorderThickness = new Thickness(1.0),
 			Padding = new Thickness(4.0),
 			Margin = new Thickness(0.0, 0.0, 0.0, 6.0),
@@ -505,7 +505,7 @@ public sealed class AiPage : PageBase
 		grid7.Add(grid6, 0, 1);
 		Border border2 = new Border
 		{
-			CornerRadius = new CornerRadius(14.0),
+			CornerRadius = new CornerRadius(10.0),
 			BorderThickness = new Thickness(1.0),
 			ClipToBounds = true,
 			Child = grid7,
@@ -1480,7 +1480,7 @@ public sealed class AiPage : PageBase
 		{
 			Width = 52.0,
 			Height = 52.0,
-			CornerRadius = new CornerRadius(16.0),
+			CornerRadius = new CornerRadius(10.0),
 			Child = AiIcons.Icon("M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z", 26.0, "B.OnAccentStrong").Mid(),
 			HorizontalAlignment = HorizontalAlignment.Center
 		};
@@ -1510,7 +1510,7 @@ public sealed class AiPage : PageBase
 			{
 				Width = 30.0,
 				Height = 30.0,
-				CornerRadius = new CornerRadius(9.0),
+				CornerRadius = new CornerRadius(8.0),
 				Child = AiIcons.Icon(item3, 16.0, "B.AccentText").Mid()
 			};
 			border2.SetResourceReference(Border.BackgroundProperty, "B.AccentSoft");
@@ -1593,7 +1593,7 @@ public sealed class AiPage : PageBase
 			{
 				Width = 22.0,
 				Height = 22.0,
-				CornerRadius = new CornerRadius(7.0),
+				CornerRadius = new CornerRadius(6.0),
 				Child = AiIcons.Icon("M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z", 12.0, "B.OnAccentStrong").Mid()
 			};
 			border.SetResourceReference(Border.BackgroundProperty, "B.AccentStrong");

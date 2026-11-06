@@ -62,7 +62,7 @@ internal sealed class ToolLine : Border
 		grid.Add(_arg.VCenter(), 0, 3);
 		grid.Add(_result.VCenter(), 0, 4);
 		base.Padding = new Thickness(6.0, 4.0, 6.0, 4.0);
-		base.CornerRadius = new CornerRadius(7.0);
+		base.CornerRadius = new CornerRadius(6.0);
 		base.HorizontalAlignment = HorizontalAlignment.Stretch;
 		base.Background = Brushes.Transparent;
 		Child = Ui.V(0.0, grid, _bar);

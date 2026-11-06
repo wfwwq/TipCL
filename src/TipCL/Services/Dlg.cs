@@ -166,7 +166,7 @@ public static class Dlg
 			sPanel.Children.Add(footer);
 		}
 		Border border = new Border();
-		border.CornerRadius = new CornerRadius(14.0);
+		border.CornerRadius = new CornerRadius(10.0);
 		border.Padding = new Thickness(22.0, 18.0, 22.0, 18.0);
 		border.BorderThickness = new Thickness(1.0);
 		border.MaxWidth = width;
@@ -346,7 +346,7 @@ public static class Dlg
 		grid.Add(Ui.H2(title).VCenter(), 0);
 		grid.Add(button, 0, 1);
 		Border border = new Border();
-		border.CornerRadius = new CornerRadius(14.0);
+		border.CornerRadius = new CornerRadius(10.0);
 		border.Padding = new Thickness(20.0, 16.0, 20.0, 18.0);
 		border.BorderThickness = new Thickness(1.0);
 		border.MaxWidth = width;
@@ -375,7 +375,7 @@ public static class Dlg
 		progressBar.IsIndeterminate = true;
 		progressBar.Width = 220.0;
 		Border border = new Border();
-		border.CornerRadius = new CornerRadius(12.0);
+		border.CornerRadius = new CornerRadius(10.0);
 		border.Padding = new Thickness(24.0, 20.0, 24.0, 20.0);
 		border.Child = Ui.V(12.0, Ui.Txt(text).Center(), progressBar);
 		border.SetResourceReference(Border.BackgroundProperty, "B.Paper");

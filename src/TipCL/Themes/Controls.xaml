@@ -5,7 +5,8 @@
   <FontFamily x:Key="F.Mono">Cascadia Mono, Consolas, Microsoft YaHei UI, monospace</FontFamily>
   <system:Double x:Key="R.Card" xmlns:system="clr-namespace:System;assembly=mscorlib">10</system:Double>
   <CornerRadius x:Key="CR.Card">10</CornerRadius>
-  <CornerRadius x:Key="CR.Ctl">8</CornerRadius>
+  <CornerRadius x:Key="CR.Ctl">6</CornerRadius>
+  <CornerRadius x:Key="CR.Small">8</CornerRadius>
   <CornerRadius x:Key="CR.Pill">999</CornerRadius>
   <Duration x:Key="D.Fast">0:0:0.13</Duration>
   <Duration x:Key="D.Med">0:0:0.22</Duration>
@@ -32,7 +33,7 @@
   </Style>
   <Style x:Key="T.H3" TargetType="{x:Type TextBlock}">
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
-    <Setter Property="FontSize" Value="14" />
+    <Setter Property="FontSize" Value="15" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
   </Style>
@@ -653,8 +654,8 @@
         <ControlTemplate TargetType="{x:Type CheckBox}">
           <StackPanel Orientation="Horizontal" Background="#00FFFFFF">
             <Grid Width="18" Height="18" VerticalAlignment="Center">
-              <Border Name="Bx" CornerRadius="5" Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1.4" />
-              <Border Name="Fill" CornerRadius="5" Background="{DynamicResource B.AccentStrong}" Opacity="0" RenderTransformOrigin="0.5,0.5">
+              <Border Name="Bx" CornerRadius="6" Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1.4" />
+              <Border Name="Fill" CornerRadius="6" Background="{DynamicResource B.AccentStrong}" Opacity="0" RenderTransformOrigin="0.5,0.5">
                 <UIElement.RenderTransform>
                   <ScaleTransform x:Name="FSc" ScaleX="0.5" ScaleY="0.5" />
                 </UIElement.RenderTransform>
@@ -914,8 +915,8 @@
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ListBoxItem}">
           <Grid Margin="0,2">
-            <Border Name="Bd" Background="#00FFFFFF" CornerRadius="9" />
-            <Border Name="Sel" Background="{DynamicResource B.AccentSoft}" CornerRadius="9" Opacity="0" />
+            <Border Name="Bd" Background="#00FFFFFF" CornerRadius="8" />
+            <Border Name="Sel" Background="{DynamicResource B.AccentSoft}" CornerRadius="8" Opacity="0" />
             <ContentPresenter Margin="{TemplateBinding Control.Padding}" />
           </Grid>
           <ControlTemplate.Triggers>
@@ -949,7 +950,7 @@
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
       <TextBlock Grid.Column="0" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding Version}" />
-      <Border Grid.Column="1" Background="{DynamicResource B.LineSoft}" CornerRadius="5" Padding="6,1,6,2" VerticalAlignment="Center">
+      <Border Grid.Column="1" Background="{DynamicResource B.LineSoft}" CornerRadius="6" Padding="6,1,6,2" VerticalAlignment="Center">
         <TextBlock FontSize="11" Foreground="{DynamicResource B.InkMuted}" Text="{Binding TypeLabel}" />
       </Border>
       <TextBlock Grid.Column="2" FontSize="11" Margin="10,0,0,0" Foreground="{DynamicResource B.InkFaint}" VerticalAlignment="Center" MinWidth="72" TextAlignment="Right" Text="{Binding Date}" />
@@ -972,7 +973,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ToolTip}">
-          <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="7" Padding="9,6" Margin="6">
+          <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="6" Padding="9,6" Margin="6">
             <UIElement.Effect>
               <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.13" Color="#101820" />
             </UIElement.Effect>

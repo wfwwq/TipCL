@@ -223,7 +223,7 @@ public static class Ui
 		return border;
 	}
 
-	public static Border Pane(UIElement? content, string bg = "B.Paper2", double radius = 10.0, double padding = 12.0)
+	public static Border Pane(UIElement? content, string bg = "B.Paper2", double radius = 8.0, double padding = 10.0)
 	{
 		Border border = new Border
 		{
@@ -560,7 +560,7 @@ public static class Ui
 		SPanel sPanel = V(8.0, Glyph(glyph, 24.0, "B.InkFaint"), new TextBlock
 		{
 			Text = title,
-			FontSize = 14.0,
+			FontSize = 13.0,
 			HorizontalAlignment = HorizontalAlignment.Center
 		}.Dyn(TextBlock.ForegroundProperty, "B.InkMuted"), (hint == null) ? null : new TextBlock
 		{
@@ -621,11 +621,11 @@ public static class Ui
 		return b;
 	}
 
-	public static Border RowCard(UIElement content, MouseButtonEventHandler? click = null, double padding = 12.0)
+	public static Border RowCard(UIElement content, MouseButtonEventHandler? click = null, double padding = 10.0)
 	{
 		Border border = new Border
 		{
-			CornerRadius = new CornerRadius(10.0),
+			CornerRadius = new CornerRadius(8.0),
 			Padding = new Thickness(padding),
 			BorderThickness = new Thickness(1.0),
 			Child = content,

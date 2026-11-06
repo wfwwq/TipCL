@@ -64,7 +64,7 @@ internal sealed class StepGroup : Border
 			Child = _body
 		};
 		_bodyHost.SetResourceReference(Border.BorderBrushProperty, "B.LineSoft");
-		base.CornerRadius = new CornerRadius(11.0);
+		base.CornerRadius = new CornerRadius(8.0);
 		base.BorderThickness = new Thickness(1.0);
 		base.HorizontalAlignment = HorizontalAlignment.Stretch;
 		SetResourceReference(Border.BorderBrushProperty, "B.Line");
@@ -93,7 +93,7 @@ internal sealed class StepGroup : Border
 		SPanel sPanel = Ui.V(0.0);
 		Border border = new Border();
 		border.BorderThickness = new Thickness(1.0);
-		border.CornerRadius = new CornerRadius(9.0);
+		border.CornerRadius = new CornerRadius(8.0);
 		border.Padding = new Thickness(4.0);
 		border.Margin = new Thickness(35.0, 2.0, 0.0, 4.0);
 		border.Child = Ui.V(2.0, Ui.H(6.0, AiIcons.Icon("M6 3a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M6 15a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M18 5a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M6 9v6 M18 11a6 6 0 0 1-6 6H9", 13.0).VCenter(), Ui.Txt(title, 11.5, bold: false, "B.InkMuted").VCenter()).M(6.0, 3.0, 0.0, 3.0), sPanel);

@@ -892,7 +892,7 @@ public sealed partial class SettingsPage : PageBase
 			{
 				Width = 26.0,
 				Height = 26.0,
-				CornerRadius = new CornerRadius(13.0),
+				CornerRadius = new CornerRadius(10.0),
 				Padding = new Thickness(3.0),
 				BorderThickness = new Thickness(flag ? 2 : 0),
 				Cursor = Cursors.Hand,
@@ -901,7 +901,7 @@ public sealed partial class SettingsPage : PageBase
 			border.SetResourceReference(Border.BorderBrushProperty, "B.AccentDeep");
 			border.Child = new Border
 			{
-				CornerRadius = new CornerRadius(10.0),
+				CornerRadius = new CornerRadius(8.0),
 				Background = new SolidColorBrush(Parse(item2))
 			};
 			string pick = item2;

@@ -1122,7 +1122,7 @@ public partial class MainWindow : Window
 		sPanel.MaxWidth = 300.0;
 		Border card = new Border
 		{
-			CornerRadius = new CornerRadius(10.0),
+			CornerRadius = new CornerRadius(8.0),
 			Padding = new Thickness(12.0, 10.0, 14.0, 11.0),
 			BorderThickness = new Thickness(1.0),
 			Margin = new Thickness(0.0, 0.0, 0.0, 8.0),
@@ -1185,7 +1185,7 @@ public partial class MainWindow : Window
 		grid.Add(button.M(12.0, 0.0, 0.0, 0.0).VCenter(), 0, 2);
 		_dockCard = new Border
 		{
-			CornerRadius = new CornerRadius(12.0),
+			CornerRadius = new CornerRadius(10.0),
 			Padding = new Thickness(14.0, 10.0, 12.0, 11.0),
 			BorderThickness = new Thickness(1.0),
 			Child = grid

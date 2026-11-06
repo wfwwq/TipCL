@@ -60,7 +60,7 @@ public sealed class DashHost : Panel
 			Card = card;
 			_shell = new Border
 			{
-				CornerRadius = new CornerRadius(12.0),
+				CornerRadius = new CornerRadius(10.0),
 				BorderThickness = new Thickness(1.0),
 				ClipToBounds = true
 			};
@@ -86,7 +86,7 @@ public sealed class DashHost : Panel
 			_shell.Child = grid2;
 			_editMask = new Border
 			{
-				CornerRadius = new CornerRadius(12.0),
+				CornerRadius = new CornerRadius(10.0),
 				BorderThickness = new Thickness(1.4),
 				Visibility = Visibility.Collapsed,
 				Cursor = Cursors.SizeAll

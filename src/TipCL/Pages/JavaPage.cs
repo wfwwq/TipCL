@@ -287,7 +287,7 @@ public sealed class JavaPage : PageBase
 		{
 			Width = 42.0,
 			Height = 42.0,
-			CornerRadius = new CornerRadius(10.0),
+			CornerRadius = new CornerRadius(8.0),
 			Child = Ui.Txt(j.Major, 14.0, bold: true, "B.AccentText").Center()
 		};
 		border.SetResourceReference(Border.BackgroundProperty, "B.AccentSoft");
