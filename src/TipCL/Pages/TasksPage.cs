@@ -57,7 +57,7 @@ public sealed class TasksPage : PageBase
 			Rebuild();
 		}, "\uea99");
 		Grid grid = Ui.Section(I18n.L("下载任务"), I18n.L("安装、下载、启动都在这里排队"), Ui.H(8.0, _summary.VCenter(), button));
-		base.Content = PageBase.ScrollBody(grid, _list);
+		base.Content = PageBase.ScrollBody(HubRow(), grid, _list);
 		EnableDrop(() => FileDrop.DropContext.None);
 		TaskStore.Added += delegate
 		{
@@ -80,6 +80,38 @@ public sealed class TasksPage : PageBase
 	{
 		Rebuild();
 		return Task.CompletedTask;
+	}
+
+	// 下载枢纽：顶栏 4 页签壳砍掉了旧侧栏「下载」分区，这里把该分区的全部子页
+	// （原版游戏 / Mod / 模组管理 / 整合包 / 数据包 / 资源包 / 光影包 / 世界 / Java）
+	// 做成一行 chip，保证旧版每个入口在页签内 1 击可达、功能零缺失。
+	// 不造数据：只是导航到既有页面，页面内容仍走各自的数据源。
+	private static UIElement HubRow()
+	{
+		(string Id, string Label, string Glyph)[] items = new(string, string, string)[9]
+		{
+			("version", I18n.L("原版游戏"), "\ue7fc"),
+			("mod", "Mod", "\uea86"),
+			("mods", I18n.L("模组管理"), "\ue8fd"),
+			("modpack", I18n.L("整合包"), "\ue7b8"),
+			("datapack", I18n.L("数据包"), "\ue8f1"),
+			("resourcepack", I18n.L("资源包"), "\ueb9f"),
+			("shader", I18n.L("光影包"), "\ue706"),
+			("world", I18n.L("世界"), "\ue909"),
+			("java", "Java", "\uec32"),
+		};
+		WrapPanel wrap = new WrapPanel();
+		foreach ((string id, string label, string glyph) in items)
+		{
+			Button b = Ui.Btn(label, BtnKind.Chip, delegate
+			{
+				PageBase.Win?.Navigate(id);
+			}, glyph);
+			b.Padding = new Thickness(12.0, 4.0, 13.0, 5.0);
+			b.Margin = new Thickness(0.0, 0.0, 8.0, 8.0);
+			wrap.Children.Add(b);
+		}
+		return wrap;
 	}
 
 	public override void OnShown()
