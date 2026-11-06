@@ -209,7 +209,7 @@ public static class Ui
 		}
 	}
 
-	public static Border Card(UIElement? content = null, double padding = 16.0, string style = "Card")
+	public static Border Card(UIElement? content = null, double padding = 12.0, string style = "Card")
 	{
 		Border border = new Border
 		{
@@ -247,7 +247,7 @@ public static class Ui
 		};
 	}
 
-	public static ListBox VirtualList<T>(Func<T, UIElement> row, double rowSpacing = 10.0)
+	public static ListBox VirtualList<T>(Func<T, UIElement> row, double rowSpacing = 8.0)
 	{
 		ListBox obj = new ListBox
 		{
@@ -523,16 +523,16 @@ public static class Ui
 		return border;
 	}
 
-	public static Grid Field(string label, UIElement control, string? hint = null, double labelWidth = 170.0)
+	public static Grid Field(string label, UIElement control, string? hint = null, double labelWidth = 140.0)
 	{
 		Grid grid = G(null, $"{labelWidth},*");
 		SPanel sPanel = V(2.0, Txt(label), (hint == null) ? null : Small(hint).Wrap());
 		sPanel.VerticalAlignment = VerticalAlignment.Center;
-		sPanel.Margin = new Thickness(0.0, 0.0, 14.0, 0.0);
+		sPanel.Margin = new Thickness(0.0, 0.0, 10.0, 0.0);
 		control.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
 		grid.Add(sPanel, 0);
 		grid.Add(control, 0, 1);
-		grid.Margin = new Thickness(0.0, 5.0, 0.0, 5.0);
+		grid.Margin = new Thickness(0.0, 4.0, 0.0, 4.0);
 		return grid;
 	}
 
@@ -557,7 +557,7 @@ public static class Ui
 
 	public static SPanel Empty(string glyph, string title, string? hint = null)
 	{
-		SPanel sPanel = V(8.0, Glyph(glyph, 34.0, "B.InkFaint"), new TextBlock
+		SPanel sPanel = V(8.0, Glyph(glyph, 24.0, "B.InkFaint"), new TextBlock
 		{
 			Text = title,
 			FontSize = 14.0,
@@ -573,7 +573,7 @@ public static class Ui
 		}.Dyn(TextBlock.ForegroundProperty, "B.InkFaint"));
 		sPanel.HorizontalAlignment = HorizontalAlignment.Center;
 		sPanel.VerticalAlignment = VerticalAlignment.Center;
-		sPanel.Margin = new Thickness(0.0, 46.0, 0.0, 46.0);
+		sPanel.Margin = new Thickness(0.0, 24.0, 0.0, 24.0);
 		foreach (UIElement child in sPanel.Children)
 		{
 			child.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);

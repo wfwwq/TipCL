@@ -31,7 +31,7 @@ public partial class App : Application
 		Declined
 	}
 
-	private static readonly string[] SelfCheckArgs = new string[5] { "--nav-dump", "--ime-check", "--i18n-check", "--consent-check", "--smoke" };
+	private static readonly string[] SelfCheckArgs = new string[6] { "--nav-dump", "--ime-check", "--i18n-check", "--consent-check", "--smoke", "--shot" };
 
 	private const int DeclineExitCode = 1223;
 
@@ -105,6 +105,11 @@ public partial class App : Application
 		else if (e.Args.Contains("--smoke"))
 		{
 			Smoke.Run(e.Args);
+		}
+		else if (e.Args.Contains("--shot") || e.Args.Contains("--design-sheet"))
+		{
+			// dev-only：单页截图（WP1 样张 / WP3 逐页回归矩阵）
+			Environment.ExitCode = DevShot.Run(e.Args);
 		}
 		else
 		{

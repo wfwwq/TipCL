@@ -3,8 +3,8 @@
   <FontFamily x:Key="F.Icon">pack://application:,,,/TipCL;component/Resources/fonts/#TipCL Icons, Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
   <FontFamily x:Key="F.Ui">Microsoft YaHei UI, Microsoft YaHei, Segoe UI, Segoe UI Variable, sans-serif</FontFamily>
   <FontFamily x:Key="F.Mono">Cascadia Mono, Consolas, Microsoft YaHei UI, monospace</FontFamily>
-  <system:Double x:Key="R.Card" xmlns:system="clr-namespace:System;assembly=mscorlib">12</system:Double>
-  <CornerRadius x:Key="CR.Card">12</CornerRadius>
+  <system:Double x:Key="R.Card" xmlns:system="clr-namespace:System;assembly=mscorlib">10</system:Double>
+  <CornerRadius x:Key="CR.Card">10</CornerRadius>
   <CornerRadius x:Key="CR.Ctl">8</CornerRadius>
   <CornerRadius x:Key="CR.Pill">999</CornerRadius>
   <Duration x:Key="D.Fast">0:0:0.13</Duration>
@@ -20,7 +20,7 @@
   </Style>
   <Style x:Key="T.H1" TargetType="{x:Type TextBlock}">
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
-    <Setter Property="FontSize" Value="24" />
+    <Setter Property="FontSize" Value="20" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
   </Style>
@@ -57,7 +57,7 @@
     <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="Border.CornerRadius" Value="{StaticResource CR.Card}" />
-    <Setter Property="Border.Padding" Value="16" />
+    <Setter Property="Border.Padding" Value="12" />
     <Setter Property="UIElement.SnapsToDevicePixels" Value="True" />
   </Style>
   <Style x:Key="CardFlat" TargetType="{x:Type Border}" BasedOn="{StaticResource Card}">
@@ -212,7 +212,7 @@
   <Style x:Key="Btn.Base" TargetType="{x:Type ButtonBase}">
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
     <Setter Property="FontSize" Value="13" />
-    <Setter Property="Padding" Value="14,7" />
+    <Setter Property="Padding" Value="12,6" />
     <Setter Property="FrameworkElement.Cursor" Value="Hand" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />

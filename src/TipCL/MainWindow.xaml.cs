@@ -833,6 +833,16 @@ public partial class MainWindow : Window
 		{
 			return value;
 		}
+		if (id == "design-sheet")
+		{
+			// dev-only 样张页，不在导航注册
+			value = new DesignSheetPage
+			{
+				Id = id
+			};
+			_pages[id] = value;
+			return value;
+		}
 		NavDef navDef = NavDefs.FirstOrDefault((NavDef d) => d.Id == id);
 		if ((object)navDef == null)
 		{

@@ -138,15 +138,15 @@ public abstract class PageBase : UserControl
 
 	protected static Panel Body(params UIElement?[] kids)
 	{
-		SPanel sPanel = Ui.V(14.0, kids);
-		sPanel.Margin = new Thickness(26.0, 20.0, 26.0, 20.0);
+		SPanel sPanel = Ui.V(10.0, kids);
+		sPanel.Margin = new Thickness(18.0, 14.0, 18.0, 14.0);
 		return sPanel;
 	}
 
 	protected static SmoothScroll ScrollBody(params UIElement?[] kids)
 	{
-		SPanel sPanel = Ui.V(14.0, kids);
-		sPanel.Margin = new Thickness(26.0, 20.0, 26.0, 22.0);
+		SPanel sPanel = Ui.V(10.0, kids);
+		sPanel.Margin = new Thickness(18.0, 14.0, 18.0, 16.0);
 		return Ui.Scroll(sPanel);
 	}
 }

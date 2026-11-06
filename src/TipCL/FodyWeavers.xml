@@ -1,4 +1,5 @@
 <Weavers xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FodyWeavers.xsd">
-  <!-- WebView2Loader.dll 是原生库：不让 Costura 处理，由 WebViewHost 自己从内嵌资源释放 -->
-  <Costura ExcludeAssemblies="WebView2Loader" />
+  <!-- WebView2Loader.dll 不让 Costura 处理，由 WebViewHost 自己从内嵌资源释放 -->
+  <!-- IncludeDebugSymbols=false：依赖 pdb 不进单 exe；WinForms 托管层全库零引用（WPF 用 WebView2.Wpf），一并排除 -->
+  <Costura ExcludeAssemblies="WebView2Loader" IncludeDebugSymbols="false" />
 </Weavers>

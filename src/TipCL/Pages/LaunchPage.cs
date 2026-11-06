@@ -50,13 +50,13 @@ public sealed class LaunchPage : PageBase
 
 	private readonly TextBlock _bTitle = new TextBlock
 	{
-		FontSize = 27.0,
-		FontWeight = FontWeights.Bold
+		FontSize = 17.0,
+		FontWeight = FontWeights.SemiBold
 	};
 
 	private readonly TextBlock _bSub = new TextBlock
 	{
-		FontSize = 12.5,
+		FontSize = 12.0,
 		Opacity = 0.82
 	};
 
@@ -66,8 +66,8 @@ public sealed class LaunchPage : PageBase
 
 	private readonly TextBlock _playTotal = new TextBlock
 	{
-		FontSize = 26.0,
-		FontWeight = FontWeights.Bold
+		FontSize = 20.0,
+		FontWeight = FontWeights.SemiBold
 	};
 
 	private readonly TextBox _notes = Ui.Multi(I18n.L("随手记点什么…"));
@@ -173,8 +173,8 @@ public sealed class LaunchPage : PageBase
 
 	public LaunchPage()
 	{
-		_bTitle.SetResourceReference(TextBlock.ForegroundProperty, "B.OnBanner");
-		_bSub.SetResourceReference(TextBlock.ForegroundProperty, "B.OnBanner");
+		_bTitle.SetResourceReference(TextBlock.ForegroundProperty, "B.Ink");
+		_bSub.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
 		_dash.ContentFactory = BuildCard;
 		_dash.TitleFactory = (string t) => TipCL.Pages.Plugins.PluginDashCards.Title(t) ?? CardTypes.FirstOrDefault(((string Key, string Title) c) => c.Key == t).Title ?? t;
 		_dash.Changed += PersistLayout;
@@ -700,51 +700,35 @@ public sealed class LaunchPage : PageBase
 
 	private UIElement BuildBanner()
 	{
-		Border border = new Border
-		{
-			Width = 180.0,
-			HorizontalAlignment = HorizontalAlignment.Left,
-			Background = new LinearGradientBrush(new GradientStopCollection
-			{
-				new GradientStop(Color.FromArgb(0, byte.MaxValue, byte.MaxValue, byte.MaxValue), 0.0),
-				new GradientStop(Color.FromArgb(90, byte.MaxValue, byte.MaxValue, byte.MaxValue), 0.5),
-				new GradientStop(Color.FromArgb(0, byte.MaxValue, byte.MaxValue, byte.MaxValue), 1.0)
-			}, 0.0),
-			IsHitTestVisible = false,
-			Opacity = 0.0
-		};
-		// 不再播放扫光动画（玩家反馈“AI 味”太重）
-		SPanel el = Ui.H(10.0, _launchBtn, _stopBtn);
-		_launchBtn.Style = Ui.S("Btn.OnBanner");
-		_launchBtn.Padding = new Thickness(26.0, 10.0, 26.0, 11.0);
-		_launchBtn.Content = Ui.H(8.0, Ui.Glyph("\ue768", 15.0), Ui.Txt(I18n.L("启动游戏"), 15.0, bold: true));
-		_stopBtn.Padding = new Thickness(16.0, 10.0, 16.0, 11.0);
+		// 紧凑启动头：普通卡片外观，单行标题+按钮（玩家反馈大渐变横幅“AI 味”太重、空白太多）
+		SPanel el = Ui.H(8.0, _launchBtn, _stopBtn);
+		_launchBtn.Style = Ui.S("Btn.Primary");
+		_launchBtn.Padding = new Thickness(18.0, 7.0, 18.0, 8.0);
+		_launchBtn.Content = Ui.H(7.0, Ui.Glyph("\ue768", 14.0), Ui.Txt(I18n.L("启动游戏"), 14.0, bold: true));
+		_stopBtn.Padding = new Thickness(12.0, 7.0, 12.0, 8.0);
 		Motion.HoverLift(_launchBtn, 1.02, 1.0, 8.0);
-		_prog.Height = 5.0;
-		_prog.SetResourceReference(Control.ForegroundProperty, "B.OnBanner");
+		_prog.Height = 4.0;
+		_prog.SetResourceReference(Control.ForegroundProperty, "B.Accent");
 		_prog.Opacity = 0.92;
 		_prog.Visibility = Visibility.Collapsed;
-		SPanel el2 = Ui.V(4.0, _bTitle, _bSub);
+		SPanel el2 = Ui.H(10.0, _bTitle, _bSub.VCenter());
 		Grid grid = Ui.G(null, "*,Auto");
 		grid.Add(el2.VCenter(), 0);
 		grid.Add(el.VCenter(), 0, 1);
-		SPanel sPanel = Ui.V(5.0, _prog, _status);
-		_status.SetResourceReference(TextBlock.ForegroundProperty, "B.OnBanner");
-		_status.Opacity = 0.84;
-		SPanel sPanel2 = Ui.V(12.0, grid, sPanel);
-		sPanel2.Margin = new Thickness(24.0, 18.0, 24.0, 18.0);
+		SPanel sPanel = Ui.H(10.0, _prog.VCenter(), _status.VCenter());
+		_status.SetResourceReference(TextBlock.ForegroundProperty, "B.InkMuted");
+		sPanel.Margin = new Thickness(0.0, 2.0, 0.0, 0.0);
+		Grid grid2 = Ui.G("Auto,Auto", null);
+		grid2.Add(grid, 0);
+		grid2.Add(sPanel, 1);
 		Border border2 = new Border();
-		border2.CornerRadius = new CornerRadius(12.0);
+		border2.CornerRadius = (CornerRadius)Application.Current.FindResource("CR.Card");
 		border2.ClipToBounds = true;
-		border2.SetResourceReference(Control.BackgroundProperty, "B.BannerFill");
-		border2.Child = new Grid
-		{
-			Children = 
-			{
-				(UIElement)border,
-				(UIElement)sPanel2
-			}
-		};
+		border2.BorderThickness = new Thickness(1.0);
+		border2.Padding = new Thickness(12.0, 10.0, 12.0, 10.0);
+		border2.SetResourceReference(Control.BackgroundProperty, "B.Paper");
+		border2.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		border2.Child = grid2;
 		return border2;
 	}
 

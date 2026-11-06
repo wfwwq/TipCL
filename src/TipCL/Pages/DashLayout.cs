@@ -157,10 +157,10 @@ public sealed class DashLayout
 			Grid = 8,
 			Items = new List<DashCard>
 			{
-				new DashCard { Id = "banner-main", Type = "banner", X = 0.0, Y = 0.0, W = 1.0, H = 0.26, Z = 0 },
-				new DashCard { Id = "config-main", Type = "config", X = 0.0, Y = 0.28, W = 0.42, H = 0.72, Z = 1 },
-				new DashCard { Id = "quick-main", Type = "quick", X = 0.435, Y = 0.28, W = 0.565, H = 0.3, Z = 2 },
-				new DashCard { Id = "news-main", Type = "news", X = 0.435, Y = 0.595, W = 0.565, H = 0.405, Z = 3 }
+				new DashCard { Id = "banner-main", Type = "banner", X = 0.0, Y = 0.0, W = 1.0, H = 0.14, Z = 0 },
+				new DashCard { Id = "config-main", Type = "config", X = 0.0, Y = 0.16, W = 0.42, H = 0.84, Z = 1 },
+				new DashCard { Id = "quick-main", Type = "quick", X = 0.435, Y = 0.16, W = 0.565, H = 0.34, Z = 2 },
+				new DashCard { Id = "news-main", Type = "news", X = 0.435, Y = 0.52, W = 0.565, H = 0.48, Z = 3 }
 			}
 		};
 	}
