@@ -127,7 +127,7 @@ public sealed class TasksPage : PageBase
 		_summary.Text = ((list.Count == 0) ? "" : I18n.L("进行中 {0} · 共 {1}", TaskStore.RunningCount, list.Count));
 		if (list.Count == 0)
 		{
-			_list.Children.Add(Ui.Empty("\ue896", I18n.L("还没有任务"), I18n.L("去下载页装个版本或模组试试")));
+			_list.Children.Add(Ui.Empty("\ue896", I18n.L("还没有任务"), I18n.L("点上方入口装个版本或模组试试")));
 			return;
 		}
 		foreach (TaskRow item in list)
