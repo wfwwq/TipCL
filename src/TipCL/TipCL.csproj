@@ -74,6 +74,8 @@
     <EmbeddedResource Include="Resources\ai\model_rules.json" LogicalName="TipCL.Core.ai.model_rules.json" />
     <!-- 插件 Node 宿主脚本（node-host 维护；运行时释放到 runtime/plugin-host，见 Core/Plugins/NodeRuntime.cs） -->
     <EmbeddedResource Include="Resources\plugin-host\**\*" LogicalName="TipCL.Core.plugin-host.%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- 内置默认背景（设置 → 壁纸 → 预设背景；点击释放到数据目录 wallpapers/ 再走 ui_background 管线） -->
+    <Resource Include="Resources\wallpapers\*.jpg" />
   </ItemGroup>
 
   <!-- premium 专属嵌入资源（compact 不嵌入，走运行时下载，见 Services/LoaderIcons.cs 与 Pages/LaunchPage.cs）。

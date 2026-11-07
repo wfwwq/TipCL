@@ -629,7 +629,61 @@ public sealed partial class SettingsPage : PageBase
 		Grid grid4 = Ui.G(null, "*,Auto");
 		grid4.Add(_bgFolder, 0);
 		grid4.Add(el4.M(8.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
-		Border border2 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("图片或 mp4 动态壁纸；也可以直接把文件拖进窗口")).Wrap(), Rows(Ui.Field(I18n.L("壁纸文件"), grid3, I18n.L("留空就不用壁纸。视频会静音循环播放")), Ui.Field(I18n.L("轮播文件夹"), grid4, I18n.L("设了文件夹就按间隔换图，优先于上面那张单图")), Ui.Field(I18n.L("随机顺序"), _bgShuffle, I18n.L("关掉则按文件名顺序轮")), Ui.Field(I18n.L("轮播间隔"), SliderRow(_bgInterval, _bgIntervalLbl), I18n.L("分钟")), Ui.Field(I18n.L("模糊"), SliderRow(_bgBlur, _bgBlurLbl), I18n.L("把壁纸推远一点，文字更好读；随拖随看")), Ui.Field(I18n.L("遮罩浓度"), SliderRow(_bgDim, _bgDimLbl), I18n.L("按当前主题压淡 / 压暗壁纸；随拖随看")), Ui.Field("", Ui.H(8.0, button3, _bgUndo, button4, _bgInfo.VCenter())))));
+		// 内置默认背景（Resources/wallpapers）：点缩略图释放到数据目录 wallpapers/ 再走既有 ui_background 管线，
+		// 因此撤销 / 恢复出厂 / 轮播等行为与手动选文件完全一致
+		SPanel bgThumbs = Ui.H(8.0);
+		foreach ((string bgFile, string bgLabel) in new (string, string)[4]
+		{
+			("preset-morning", "晨雾"),
+			("preset-dusk", "暮色"),
+			("preset-night", "星夜"),
+			("preset-sakura", "樱粉")
+		})
+		{
+			string packUri = "pack://application:,,,/TipCL;component/Resources/wallpapers/" + bgFile + ".jpg";
+			Image thumbImg = new Image
+			{
+				Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(packUri)),
+				Width = 64.0,
+				Height = 40.0,
+				Stretch = Stretch.UniformToFill,
+				Cursor = Cursors.Hand
+			};
+			Border thumb = new Border
+			{
+				CornerRadius = new CornerRadius(6.0),
+				Child = thumbImg,
+				ToolTip = I18n.L(bgLabel),
+				Tag = packUri,
+				Margin = new Thickness(0.0, 0.0, 2.0, 0.0)
+			};
+			thumb.MouseLeftButtonUp += delegate
+			{
+				try
+				{
+					string dst = System.IO.Path.Combine(BridgeHost.FindRoot(), "wallpapers", bgFile + ".jpg");
+					Directory.CreateDirectory(System.IO.Path.GetDirectoryName(dst)!);
+					if (!File.Exists(dst))
+					{
+						System.IO.Stream src = Application.GetResourceStream(new Uri((string)thumb.Tag)).Stream;
+						using (System.IO.Stream dstFs = File.Create(dst))
+						{
+							src.CopyTo(dstFs);
+						}
+						src.Dispose();
+					}
+					_bgPath.Text = dst;
+					_bgFolder.Clear();
+					PageBase.Run(ApplyWallpaperAsync, I18n.L("壁纸没能应用"));
+				}
+				catch (Exception ex)
+				{
+					_bgInfo.Text = I18n.L("预设背景应用失败：") + ex.Message;
+				}
+			};
+			bgThumbs.Children.Add(thumb);
+		}
+		Border border2 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("图片或 mp4 动态壁纸；也可以直接把文件拖进窗口")).Wrap(), Rows(Ui.Field(I18n.L("预设背景"), bgThumbs, I18n.L("点一下就换，可再叠加模糊与遮罩")), Ui.Field(I18n.L("壁纸文件"), grid3, I18n.L("留空就不用壁纸。视频会静音循环播放")), Ui.Field(I18n.L("轮播文件夹"), grid4, I18n.L("设了文件夹就按间隔换图，优先于上面那张单图")), Ui.Field(I18n.L("随机顺序"), _bgShuffle, I18n.L("关掉则按文件名顺序轮")), Ui.Field(I18n.L("轮播间隔"), SliderRow(_bgInterval, _bgIntervalLbl), I18n.L("分钟")), Ui.Field(I18n.L("模糊"), SliderRow(_bgBlur, _bgBlurLbl), I18n.L("把壁纸推远一点，文字更好读；随拖随看")), Ui.Field(I18n.L("遮罩浓度"), SliderRow(_bgDim, _bgDimLbl), I18n.L("按当前主题压淡 / 压暗壁纸；随拖随看")), Ui.Field("", Ui.H(8.0, button3, _bgUndo, button4, _bgInfo.VCenter())))));
 		Border border3 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("把当前配色、背景、窗口与主页设置整包存下来，随时切回")).Wrap(), Rows(Ui.Field(I18n.L("已保存"), _themePack, I18n.L("从这里挑一个加载或删除")), Ui.Field("", Ui.H(7.0, Ui.Btn(I18n.L("保存为主题包"), BtnKind.Soft, delegate
 		{
 			PageBase.Run(SaveThemeAsync, I18n.L("保存失败"));
