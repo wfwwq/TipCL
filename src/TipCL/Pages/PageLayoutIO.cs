@@ -25,7 +25,11 @@ public static class PageLayoutIO
 			{
 				return;
 			}
-			Dictionary<string, PageLayoutDoc> dictionary = new Dictionary<string, PageLayoutDoc>(PageLayoutStore.LoadAll());
+			Dictionary<string, PageLayoutDoc> dictionary = new Dictionary<string, PageLayoutDoc>();
+			foreach (KeyValuePair<string, PageLayoutDoc> kv in PageLayoutStore.LoadAll())
+			{
+				dictionary[kv.Key] = kv.Value;
+			}
 			if (!string.IsNullOrEmpty(preferredName))
 			{
 				PageLayoutDoc? pageLayoutDoc = PageLayoutStore.Load(preferredName);
@@ -47,7 +51,7 @@ public static class PageLayoutIO
 	// 用户取消返回 null，不提示。
 	public static int? ImportFromFileDialog()
 	{
-		Dictionary<string, PageLayoutDoc> dictionary;
+		IReadOnlyDictionary<string, PageLayoutDoc> dictionary;
 		try
 		{
 			string? path = Dlg.PickFile(Filter, I18n.L("导入布局"));

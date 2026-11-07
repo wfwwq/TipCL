@@ -563,7 +563,7 @@ public sealed class BlockHost : UserControl
 
 	// 单个区块卡：常态零装饰（厚度 0 的透明描边 + 无底色），仅承载内容；
 	// 编辑态出现操作条（拖拽手柄 + 块标题 + 显隐按钮），主题色描边 + 10 透明度蒙版（对齐 DashHost.CardView）。
-	private sealed class BlockCard : Border
+	internal sealed class BlockCard : Border
 	{
 		private readonly BlockHost _host;
 

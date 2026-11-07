@@ -12,6 +12,7 @@
 | WP-G | **premium 版**（交接必读 §2.5）：csproj 加 Premium 开关；嵌入加载器官方图标/草方块/hero.jpg；启动页无截图时用 hero.jpg；真毛玻璃；去掉为体积做的删减 | src/TipCL/TipCL.csproj、LoaderIcons.cs、LaunchPage.cs（#if PREMIUM 分支） | 未开始（排在 WP-F 之后，下一轮开工即做） |
 | WP-H | 双版本测试与交付：两版各自 build/test、GOAL §6 测试全跑、compact 体积检查、产出 TipCL-compact.exe / TipCL-premium.exe（需用户 Windows 环境） | — | 未开始 |
 | WP-F | 收尾：删“更多”抽屉、统一圆角、全局一致性审查、DECISIONS 追加 | 全局 | **已验收**（2026-11-07，commit 6ebc26e）：5254d8f 删除审查通过、无悬空引用；\uec7a→\uebe8；SyncTabs 设置子页点亮；账号芯片即时刷新。0 错误、127/128、5,705,216 B。详见 progress/WP-F.md |
+| WP-V | **页面布局自定义**（用户新需求 2026-11-07，插队；编号 WP-U 已被启动页贴图包占用故顺延）：大多数页面右键「自定义布局…」→ 区块拖拽重排 + 显隐 + 布局 JSON 导出/导入分享。新建框架 4 件（PageBlock/PageLayoutStore/BlockHost/PageLayoutIO，约 1100 行）+ 15 个单测；接入 11 页：设置(3 子页)/下载/任务/账号/Java/时长/服务器/联机/反馈 套 BlockHost，启动页英雄区固定+新闻/任务/时长/便签/日志块，实例库双栏 Store 直写实现文件夹栏显隐。默认布局逐像素等价于现状 | Pages/PageBlock.cs、PageLayoutStore.cs、BlockHost.cs、PageLayoutIO.cs、tests/PageLayoutTests.cs、11 个页面文件 | **已验收**（2026-11-07，三代理并行交付）：快照构建 0 错误 + PageLayout 测试 15/15；全量集成构建 0 错误、测试 143/144（唯一失败=基线 PhoneLinkTests.FullFlow）。用户明确本功能不受 compact 体积红线约束，实测 5,743,616 B。详见 progress/WP-V.md |
 
 ## 中断记录
 - 2026-11-06 13:52（UTC-10）：日额度达到 80%，用户叫停。WP-A/B/C 三个子代理被取消，均**未写 progress/WP-X.md**。已落盘的半成品改动已提交为一个 commit（"WIP 中断"），未经验收、未编译。

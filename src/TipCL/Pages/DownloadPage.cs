@@ -107,8 +107,8 @@ public sealed class DownloadPage : PageBase
 		}
 		bar.Add(_search, 0);
 		bar.Add(fs.M(8.0, 0.0, 0.0, 0.0), 0, 1);
-		// 筛选行与列表卡之间的间距改由 BlockHost 的区块间距接管，行自身不再带下边距
-		bar.Margin = new Thickness(22.0, 0.0, 22.0, 0.0);
+		// 筛选行与列表卡的旧间距 12 = BlockHost 区块间距 10 + 行自留下边距 2，默认视觉与旧版逐像素一致
+		bar.Margin = new Thickness(22.0, 0.0, 22.0, 2.0);
 		_list = Ui.VirtualList<VersionRow>(RowUi, 0.0);
 		Border card = Ui.Card(_list, 0.0);
 		card.Padding = new Thickness(0.0, 4.0, 0.0, 4.0);
