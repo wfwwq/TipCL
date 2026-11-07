@@ -207,6 +207,13 @@ public sealed class LaunchPage : PageBase
 
 	private int _bgGen;
 
+#if PREMIUM
+	// premium（WP-G）：嵌入 hero.jpg 只解码一次；_immersive = 当前处于标题栏沉浸态（背景已搬进 WallHost）
+	private static System.Windows.Media.Imaging.BitmapSource? _heroCache;
+
+	private bool _immersive;
+#endif
+
 	private int _modCount = -1;
 
 	private string _modKey = "";
@@ -551,7 +558,94 @@ public sealed class LaunchPage : PageBase
 			_launchGlow.Color = accent.Color;
 		}
 		_launchGlow.Opacity = (onImage ? 0.45 : 0.3);
+#if PREMIUM
+		SyncImmersive(onImage);
+#endif
 	}
+
+#if PREMIUM
+	// —— premium 标题栏沉浸（交接必读 §2.5：「启动页背景铺到标题栏下，标题栏半透明」；compact 无此代码） ——
+	// 有全幅背景（截图或 hero，且用户没设壁纸）时：把 _bgImage/_bgShade 从页面根搬到 MainWindow.WallHost
+	//（RowSpan=2，位于 TopBar 之后的非命中层；排在 Wallpaper 自带元素之后，天然压在其上），PageWash 置透明，
+	// TopBar 换玻璃底 + 白字（元素级资源覆盖，模拟效果图 .tb.glass）。
+	// 还原路径：背景消失（截图没了 / 设了壁纸）或离开启动页（OnHidden）→ 搬回页面根、PageWash 恢复、
+	// TopBar 资源字典清空即回落主题画刷。回到启动页时 OnShown→ApplyHeroTone 会自动重新进入沉浸态。
+	private void SyncImmersive(bool onImage)
+	{
+		try
+		{
+			MainWindow? win = PageBase.Win;
+			bool want = onImage && win != null && !Wallpaper.Active && _bgImage.Source != null;
+			if (want == _immersive)
+			{
+				return;
+			}
+			_immersive = want;
+			Grid root = (Grid)base.Content;
+			if (want)
+			{
+				// 先从两个可能的父容器都摘一遍（Remove 对非子元素是无害空操作），避免“已有逻辑父级”异常
+				root.Children.Remove(_bgImage);
+				root.Children.Remove(_bgShade);
+				win.WallHost.Children.Remove(_bgImage);
+				win.WallHost.Children.Remove(_bgShade);
+				win.WallHost.Children.Add(_bgImage);
+				win.WallHost.Children.Add(_bgShade);
+				win.PageWash.Opacity = 0.0;
+				GlassTopBar(win.TopBar, on: true);
+			}
+			else
+			{
+				win.WallHost.Children.Remove(_bgImage);
+				win.WallHost.Children.Remove(_bgShade);
+				root.Children.Remove(_bgImage);
+				root.Children.Remove(_bgShade);
+				root.Children.Insert(0, _bgImage);
+				root.Children.Insert(1, _bgShade);
+				win.PageWash.Opacity = 1.0;
+				GlassTopBar(win.TopBar, on: false);
+			}
+		}
+		catch
+		{
+			// 沉浸只是观感增强：任何异常都放弃沉浸（元素加回页面根由下次调用兜底，Remove 对非子元素是无害空操作）
+			_immersive = false;
+		}
+	}
+
+	// 效果图 .tb.glass：低透明度深色底 + 白系文字（scrim 与 _bgShade 同色系 rgba(10,14,22,·)）。
+	// 用元素级 ResourceDictionary 覆盖，不碰样式与 Palette；还原 = 清空字典，DynamicResource 全部回落主题值。
+	// 页签下划线 B.Accent 保持主题色（刻意偏离效果图的白色，跟随用户主题）。
+	// 另对 TopBar 设 TextElement.Foreground 附加属性（Inherits）：资源字典覆盖管不住「属性继承值」——
+	// 「TipCL」标题继承的是 Window 解析好的 B.Ink 画刷（浅色主题下是深色），只有让最近祖先（TopBar）
+	// 自己带 Foreground 值才能盖过它；ClearValue 后回落 Window 的继承链。
+	private static void GlassTopBar(Border bar, bool on)
+	{
+		if (!on)
+		{
+			bar.Resources = new ResourceDictionary();
+			bar.ClearValue(System.Windows.Documents.TextElement.ForegroundProperty);
+			return;
+		}
+		ResourceDictionary rd = new ResourceDictionary();
+		rd["B.TitleBar"] = Sc(46, 10, 14, 22);
+		rd["B.TitleBarLine"] = Sc(46, 255, 255, 255);
+		rd["B.Ink"] = Brushes.White;
+		rd["B.InkMuted"] = Sc(191, 255, 255, 255);
+		rd["B.InkSoft"] = Sc(217, 255, 255, 255);
+		rd["B.CaptionInk"] = Sc(230, 255, 255, 255);
+		rd["B.TitleSep"] = Sc(64, 255, 255, 255);
+		bar.Resources = rd;
+		bar.SetValue(System.Windows.Documents.TextElement.ForegroundProperty, Brushes.White);
+	}
+
+	private static SolidColorBrush Sc(byte a, byte r, byte g, byte b)
+	{
+		SolidColorBrush brush = new SolidColorBrush(Color.FromArgb(a, r, g, b));
+		brush.Freeze();
+		return brush;
+	}
+#endif
 
 	private Border Chip(string text)
 	{
@@ -591,6 +685,25 @@ public sealed class LaunchPage : PageBase
 			{
 				return;
 			}
+#if PREMIUM
+			// premium：没有截图（且用户没设自定义壁纸）时用嵌入 hero.jpg（launch2 效果图同款全景）做背景，
+			// 不再回退纯渐变底；截图存在时仍截图优先（两版一致）。换壁纸后下次刷新会走 ApplyHeroTone(false) 还原。
+			if (shot == null && !Wallpaper.Active)
+			{
+				System.Windows.Media.Imaging.BitmapSource? hero = await Task.Run(HeroSource);
+				if (gen != _bgGen)
+				{
+					return;
+				}
+				if (hero != null)
+				{
+					_bgKey = "";
+					_bgImage.Source = hero;
+					ApplyHeroTone(onImage: true);
+					return;
+				}
+			}
+#endif
 			_bgKey = shot?.Item1 ?? "";
 			_bgImage.Source = shot?.Item2;
 			ApplyHeroTone(shot != null);
@@ -650,6 +763,34 @@ public sealed class LaunchPage : PageBase
 			return null;
 		}
 	}
+
+#if PREMIUM
+	// premium 专属：解码嵌入 hero.jpg（pack URI，后台线程可解码，Freeze 后跨线程用），只解码一次。
+	// 视觉基准 launch2.png 的背景是清晰全景，不加 BlurEffect（毛玻璃只给标题栏与半透明块）。
+	private static System.Windows.Media.Imaging.BitmapSource? HeroSource()
+	{
+		if (_heroCache == null)
+		{
+			try
+			{
+				System.Windows.Media.Imaging.BitmapImage bmp = new System.Windows.Media.Imaging.BitmapImage();
+				bmp.BeginInit();
+				bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+				bmp.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreColorProfile;
+				bmp.DecodePixelWidth = 1600;
+				bmp.UriSource = new Uri("pack://application:,,,/TipCL;component/PremiumAssets/hero.jpg");
+				bmp.EndInit();
+				bmp.Freeze();
+				_heroCache = bmp;
+			}
+			catch
+			{
+				return null;
+			}
+		}
+		return _heroCache;
+	}
+#endif
 
 	// 模组数小标签：沿用实例库同源 API，同一实例/版本只查一次
 	private async Task CountModsAsync(string instance, string version)
@@ -1882,4 +2023,13 @@ public sealed class LaunchPage : PageBase
 		ApplyHeroTone(_onImage);
 		RefreshBackground();
 	}
+
+#if PREMIUM
+	// 离开启动页必须退出沉浸：背景搬回页面根（随页面一起离屏）、TopBar 回主题底色、PageWash 恢复。
+	// 再次回到启动页时 OnShown → ApplyHeroTone → SyncImmersive 会自动重新进入。
+	public override void OnHidden()
+	{
+		SyncImmersive(false);
+	}
+#endif
 }

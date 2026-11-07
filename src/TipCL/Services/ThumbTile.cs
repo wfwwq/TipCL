@@ -57,6 +57,15 @@ public sealed class ThumbTile : Border
 		LoadAsync(url, px, token);
 	}
 
+#if PREMIUM
+	// premium（WP-G）：直接注入已解码的嵌入位图（LoaderIcons 用），不走 URL 下载
+	public void SetImage(BitmapSource? bmp)
+	{
+		_token++;
+		Show(bmp);
+	}
+#endif
+
 	private async Task LoadAsync(string url, int px, int token)
 	{
 		BitmapSource bmp = await Thumbs.LoadAsync(url, px);

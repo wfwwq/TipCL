@@ -43,10 +43,11 @@ public class Win7CompatTests
 
 	// 防止复发：新写的图片解码（new BitmapImage）必须走 WebpFallback；
 	// 只解码内置 PNG 的地方列在白名单里。
+	// LoaderIcons.cs：仅 premium（#if PREMIUM）解码程序集内嵌的官方图标/hero（永远不是外部 WebP），compact 不编译这段。
 	[Fact]
 	public void EveryBitmapDecodeGoesThroughWebpFallback()
 	{
-		string[] pngOnly = { "Lucide.cs", "SkinPng.cs" };
+		string[] pngOnly = { "Lucide.cs", "SkinPng.cs", "LoaderIcons.cs" };
 		var d = new DirectoryInfo(AppContext.BaseDirectory);
 		while (d != null && !File.Exists(Path.Combine(d.FullName, "TipCL.sln"))) d = d.Parent;
 		Assert.NotNull(d);

@@ -19,6 +19,11 @@
     <Company>TipCL</Company>
     <!-- 反编译还原的代码会有大量风格类警告，这里不当成错误 -->
     <NoWarn>$(NoWarn);CS0168;CS0219;CS0162;CS0649;CS0414;CS8981</NoWarn>
+
+    <!-- 双版本交付（交接必读 §2.5 / DECISIONS D-6）：
+         dotnet build TipCL.sln -c Release               → compact（体积红线版，行为与基线一致）
+         dotnet build TipCL.sln -c Release -p:Premium=true → premium（嵌入官方图标/hero，不受体积限制） -->
+    <DefineConstants Condition="'$(Premium)'=='true'">$(DefineConstants);PREMIUM</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -69,6 +74,18 @@
     <EmbeddedResource Include="Resources\ai\model_rules.json" LogicalName="TipCL.Core.ai.model_rules.json" />
     <!-- 插件 Node 宿主脚本（node-host 维护；运行时释放到 runtime/plugin-host，见 Core/Plugins/NodeRuntime.cs） -->
     <EmbeddedResource Include="Resources\plugin-host\**\*" LogicalName="TipCL.Core.plugin-host.%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- premium 专属嵌入资源（compact 不嵌入，走运行时下载，见 Services/LoaderIcons.cs 与 Pages/LaunchPage.cs）。
+       forge_gh.png 实为 JPEG 内容，WIC 解码按文件内容识别，扩展名不影响；素材来自 docs/mockups-hark/v2/，
+       quilt 图标为 QuiltMC 官方头像（https://github.com/QuiltMC.png?size=64，64×64）。 -->
+  <ItemGroup Condition="'$(Premium)'=='true'">
+    <Resource Include="PremiumAssets\grass.png" />
+    <Resource Include="PremiumAssets\fabric_gh.png" />
+    <Resource Include="PremiumAssets\forge_gh.png" />
+    <Resource Include="PremiumAssets\neoforge_gh.png" />
+    <Resource Include="PremiumAssets\quilt_gh.png" />
+    <Resource Include="PremiumAssets\hero.jpg" />
   </ItemGroup>
 
 </Project>
