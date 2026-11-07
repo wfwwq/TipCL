@@ -5,3 +5,7 @@ obj/
 *.suo
 *.pdb
 publish/
+
+# 测试/截图产物（监工统一放仓库外 _wph_run）
+_wph_run/
+shot-*.png
