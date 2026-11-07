@@ -48,3 +48,25 @@
 - 额度监控按用户 2026-11-07 指示**停用**；子代理并发上限 2 → 后放宽（实测 3 并行可行）。
 - 构建标准参数（D-14）：`dotnet build-server shutdown && dotnet build TipCL.sln -c Release -p:UseSharedCompilation=false -p:DebugType=none -p:DebugSymbols=false -m:1`（premium 加 `-p:Premium=true`）。
 - 待办：WP-T/U/V 验收 → 全部落定后重切 dist（D-18）→ 总结报告。
+
+## 2026-11-07 第四轮（WP-S2 记录）
+本轮 10 个工作包实修并验收（详见交接必读.md §5）：
+
+| 包 | 内容 | commit | 状态 |
+|---|---|---|---|
+| WP-F | 半成品审查+补完（删抽屉/死代码、字形、页签点亮、账号刷新） | 6ebc26e | 已验收 |
+| WP-G | premium 版（PREMIUM 开关+嵌入图标/hero+毛玻璃） | ceb7061 | 已验收 |
+| WP-K | 启动页实例内版本选择 | 2ae6221 | 已验收 |
+| WP-T | AI 入口右侧玻璃药丸钮 ✳AI + Ctrl+K（D-16） | ebacae5 | 已验收 |
+| WP-U | 启动页贴 launch2（按钮内嵌版本/▶/联机图标） | 99aec85 | 已验收 |
+| WP-V | 四页贴图实修（实例卡 v2/标题 21 ExtraBold/圆点） | 486071d | 已验收 |
+| WP-W | 窗口按钮规格复核+Win10 Region 防闪烁 | b539c19 | 已验收 |
+| WP-X | 安装页贴图实修（头部/加载器卡/底栏） | 853a296 | 已验收 |
+| WP-Y | 设置页分组卡片贴图实修 | 97a4c8a | 已验收 |
+| WP-Z | 插件页卡片细部贴图实修 | 4518a56 | 已验收 |
+| WP-N | premium 完整化（Fabric API 版本号/路径提示/加载器卡视觉/模组行增强） | — | 进行中（以 git log 为准） |
+
+额度监控按用户 2026-11-07 指示停用，本轮不再记录百分比。
+
+### 下一轮接手顺序
+WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选真窗验收）。
