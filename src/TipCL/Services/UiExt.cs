@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -148,9 +149,12 @@ public static class UiExt
 
 	public static void Fill(this ComboBox c, IEnumerable<string> items, string? keep = null)
 	{
-		string text = keep ?? (c.SelectedItem as string);
+		// 先快照再 Clear：items 若是 c.Items 的活视图（如 _inst.Items.Cast<string>()），
+		// 迭代中 Clear 会丢内容；PlaytimePage:139 等处同样受益
+		var list = (items == null) ? new List<string>() : new List<string>(items);
+		string? text = keep ?? (c.SelectedItem as string);
 		c.Items.Clear();
-		foreach (string item in items)
+		foreach (string item in list)
 		{
 			c.Items.Add(item);
 		}

@@ -1201,15 +1201,32 @@ public sealed class LaunchPage : PageBase
 		SyncBanner();
 	}
 
+	private int _verGen;
+
 	private async Task ReloadVersionsAsync()
 	{
 		string text = _inst.Str();
 		if (!string.IsNullOrEmpty(text))
 		{
-			List<string> list = (await PageBase.Api.TryCallAsync("get_installed_versions", new
+			int gen = ++_verGen;
+			List<string> list;
+			try
 			{
-				instance = text
-			}, new List<string>())) ?? new List<string>();
+				list = await PageBase.Api.CallAsync<List<string>>("get_installed_versions", new
+				{
+					instance = text
+				}) ?? new List<string>();
+			}
+			catch (BridgeCallException)
+			{
+				// 后端出错 ≠ 实例没有版本：保留现有列表，不误显「还没有版本」
+				_launchBtn.IsEnabled = _ver.Items.Count > 0 && _taskId == null;
+				return;
+			}
+			if (gen != _verGen || _inst.Str() != text)
+			{
+				return; // 过期结果丢弃：期间实例已切换或有更新的一次重载
+			}
 			_syncing = true;
 			_ver.Fill(list);
 			_syncing = false;
@@ -1330,8 +1347,15 @@ public sealed class LaunchPage : PageBase
 		{
 			_preferredVersion = null;
 			_syncing = true;
-			_ver.Fill(_ver.Items.Cast<string>(), preferredVersion);
-			_syncing = false;
+			try
+			{
+				// 直接选中，不用自身 Items 重填（Fill 迭代活视图 + SelectedIndex=0 回落会丢选中）
+				_ver.SelectedItem = preferredVersion;
+			}
+			finally
+			{
+				_syncing = false;
+			}
 		}
 		else if (_ver.Items.Count > 0)
 		{
@@ -1540,6 +1564,12 @@ public sealed class LaunchPage : PageBase
 	private async Task LaunchAsync()
 	{
 		string version = _ver.Str();
+		if (string.IsNullOrEmpty(version))
+		{
+			// 显示为空可能是过期状态（如刚从实例库带版本回来）——重拉一次再判
+			await ReloadVersionsAsync();
+			version = _ver.Str();
+		}
 		if (string.IsNullOrEmpty(version))
 		{
 			PageBase.Toast(I18n.L("没有版本"), I18n.L("请先到「下载」安装"), ToastKind.Warning);
@@ -2129,6 +2159,15 @@ public sealed class LaunchPage : PageBase
 		// 主题可能已切换（主色柔光重取）；刚玩完可能有新截图
 		ApplyHeroTone(_onImage);
 		RefreshBackground();
+		// 页面隐藏期间收不到 ui_changed 刷新（如实例库改了默认实例/版本）——显示时补拉
+		if (!string.IsNullOrEmpty(_inst.Str()))
+		{
+			PageBase.Run(async delegate
+			{
+				await ReloadVersionsAsync();
+				SyncBanner();
+			});
+		}
 	}
 
 #if PREMIUM

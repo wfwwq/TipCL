@@ -53,7 +53,7 @@ public static class DevShot
 			int code = 0;
 			try
 			{
-				await DriveAsync(win, pageId, dark, outPath, w, h, ArgVal(args, "--pop") ?? "");
+				await DriveAsync(win, pageId, dark, outPath, w, h, ArgVal(args, "--pop") ?? "", args);
 			}
 			catch (Exception ex)
 			{
@@ -66,7 +66,7 @@ public static class DevShot
 		return 0;
 	}
 
-	private static async Task DriveAsync(MainWindow win, string pageId, bool dark, string outPath, double w, double h, string pop)
+	private static async Task DriveAsync(MainWindow win, string pageId, bool dark, string outPath, double w, double h, string pop, string[] args)
 	{
 		try
 		{
@@ -76,6 +76,10 @@ public static class DevShot
 		{
 		}
 		await DismissWizard(win);
+		if (args?.Contains("--probe") == true)
+		{
+			await ProbeAsync();
+		}
 		await win.Dispatcher.InvokeAsync(delegate
 		{
 			if (w > 0.0)
@@ -103,6 +107,36 @@ public static class DevShot
 			{
 				page.OnShown();
 			}, DispatcherPriority.ContextIdle);
+		}
+		// --prefer <inst>|<ver>：模拟实例库「设为默认/双击版本」跳启动页的用户路径（ver 可空）
+		string prefer = ArgVal(args, "--prefer") ?? "";
+		if (prefer.Length > 0 && page is LaunchPage lp2)
+		{
+			string[] pp = prefer.Split('|');
+			System.Reflection.FieldInfo? verFld = typeof(LaunchPage).GetField("_ver", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+			var cb = (System.Windows.Controls.ComboBox?)verFld?.GetValue(lp2);
+			lp2.PreferInstance(pp[0], (pp.Length > 1 && pp[1].Length > 0) ? pp[1] : null);
+			int last = -1;
+			for (int i = 0; i < 45; i++)
+			{
+				await Task.Delay(100);
+				int n = -2;
+				string th = "";
+				await win.Dispatcher.InvokeAsync(delegate
+				{
+					n = cb?.Items.Count ?? -3;
+					th = Environment.CurrentManagedThreadId.ToString();
+				}, DispatcherPriority.Send);
+				if (n != last)
+				{
+					Console.WriteLine("DBG POLL t=" + i + " count=" + n + " thread=" + th);
+					if (n == 0 && last > 0)
+					{
+						Console.WriteLine("DROP STACK:\n" + Environment.StackTrace);
+					}
+					last = n;
+				}
+			}
 		}
 		// --pop <config|instances|news>：浮层打开态。Popup 是独立 HWND，RenderTargetBitmap 拍不到，
 		// 把浮层内容临时挂进页面根 Grid 模拟浮层位置后再渲染。
@@ -151,6 +185,42 @@ public static class DevShot
 		await Task.Delay(250);
 		Render(win, outPath);
 		Console.WriteLine("DevShot OK: " + outPath);
+	}
+
+	// dev-only：桥实测——对比 get_installed_versions 与 get_version_rows 的返回（只读）
+	private static async Task ProbeAsync()
+	{
+		var client = AppServices.Client;
+		for (int i = 0; i < 50 && client == null; i++)
+		{
+			await Task.Delay(200);
+			client = AppServices.Client;
+		}
+		if (client == null)
+		{
+			Console.Error.WriteLine("PROBE: bridge client 未就绪");
+			return;
+		}
+		try
+		{
+			var insts = await client.TryCallAsync<System.Collections.Generic.List<System.Text.Json.JsonElement>>("get_instances", null, new System.Collections.Generic.List<System.Text.Json.JsonElement>());
+			Console.WriteLine("PROBE get_instances = " + System.Text.Json.JsonSerializer.Serialize(insts));
+			var cfg = await client.TryCallAsync<System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>>("get_settings", null, new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>());
+			Console.WriteLine("PROBE default_instance = " + ((cfg != null && cfg.TryGetValue("default_instance", out var di)) ? di.ToString() : "<missing>"));
+			string instName = (cfg != null && cfg.TryGetValue("default_instance", out var di2) && di2.ValueKind == System.Text.Json.JsonValueKind.String && di2.GetString()!.Length > 0)
+				? di2.GetString()!
+				: ".minecraft";
+			var iv = await client.TryCallAsync<System.Collections.Generic.List<System.Text.Json.JsonElement>>("get_installed_versions", new { instance = instName }, new System.Collections.Generic.List<System.Text.Json.JsonElement>());
+			Console.WriteLine($"PROBE get_installed_versions(instance={instName}) = " + System.Text.Json.JsonSerializer.Serialize(iv));
+			var ivAll = await client.TryCallAsync<System.Collections.Generic.List<System.Text.Json.JsonElement>>("get_installed_versions", new { }, new System.Collections.Generic.List<System.Text.Json.JsonElement>());
+			Console.WriteLine("PROBE get_installed_versions() = " + System.Text.Json.JsonSerializer.Serialize(ivAll));
+			var vr = await client.TryCallAsync<System.Collections.Generic.List<System.Text.Json.JsonElement>>("get_version_rows", null, new System.Collections.Generic.List<System.Text.Json.JsonElement>());
+			Console.WriteLine("PROBE get_version_rows = " + System.Text.Json.JsonSerializer.Serialize(vr));
+		}
+		catch (Exception ex)
+		{
+			Console.Error.WriteLine("PROBE FAIL: " + ex);
+		}
 	}
 
 	// 首启向导会盖住截图：找到「跳过向导」按钮以程序方式点掉（等价用户点击，不碰业务代码）
