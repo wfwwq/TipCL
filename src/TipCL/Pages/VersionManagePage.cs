@@ -107,6 +107,13 @@ public sealed class VersionManagePage : PageBase
 
 	private string _folder = "";
 
+	// 实例详情页「设置」分段内嵌时置位：隐藏文件夹列表栏（与实例库重复），只留版本选择
+	private bool _folderPreset;
+
+	private Grid? _embeddedGrid;
+
+	private Border? _folderCard;
+
 	private string _defaultInstance = "";
 
 	private string _rootPath = "";
@@ -115,10 +122,10 @@ public sealed class VersionManagePage : PageBase
 
 	public override string Title => I18n.L("版本管理");
 
-	// 实例详情页「设置」分段内嵌本页时预选该实例
+	// 实例详情页「设置」分段内嵌本页时预选该实例；预选即视为嵌入态
 	public string Folder
 	{
-		set { _folder = value; }
+		set { _folder = value; _folderPreset = true; }
 	}
 
 	public VersionManagePage()
@@ -168,6 +175,8 @@ public sealed class VersionManagePage : PageBase
 		Grid val7 = Ui.G(null, "272,18,*");
 		val7.Add((UIElement)(object)el, 0);
 		val7.Add((UIElement)(object)el2, 0, 2);
+		_embeddedGrid = val7;
+		_folderCard = el;
 		((ContentControl)this).Content = PageBase.ScrollBody((UIElement)val7);
 		EnableDrop(() => new FileDrop.DropContext
 		{
@@ -188,6 +197,15 @@ public sealed class VersionManagePage : PageBase
 		if (!_instances.Any((InstanceInfo i) => i.Name == _folder))
 		{
 			_folder = (_instances.Any((InstanceInfo i) => i.Name == _defaultInstance) ? _defaultInstance : (_instances.FirstOrDefault()?.Name ?? ""));
+		}
+		// 嵌入态（实例详情「设置」分段）：文件夹已由详情页定死，隐藏文件夹列表栏（与实例库重复）；
+		// 若预选实例失效被回落，说明不是有效嵌入，恢复双栏
+		bool embedded = _folderPreset && _instances.Any((InstanceInfo i) => i.Name == _folder);
+		if (_embeddedGrid != null && _folderCard != null)
+		{
+			_embeddedGrid.ColumnDefinitions[0].Width = new GridLength(embedded ? 0.0 : 272.0);
+			_embeddedGrid.ColumnDefinitions[1].Width = new GridLength(embedded ? 0.0 : 18.0);
+			_folderCard.Visibility = (embedded ? Visibility.Collapsed : Visibility.Visible);
 		}
 		await EnsureCurrentAsync();
 		await ReloadVersionsAsync();
