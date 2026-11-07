@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -137,6 +138,16 @@ public static class DevShot
 					last = n;
 				}
 			}
+		}
+		// --pop plugin-install：插件安装权限确认弹窗（WP-S11）。Dlg 是窗口内浮层，RenderTargetBitmap 拍得到
+		if (pop == "plugin-install")
+		{
+			await win.Dispatcher.InvokeAsync(delegate
+			{
+				JsonElement p = JsonDocument.Parse("""{"plugin":"fat-fish","name":"大肥鱼玩 Minecraft","version":"1.4.2","action":"install","runtime":"node","verified":false,"permissions":["launcher","ai.tools","ai.llm","credentials","ui","ui.overlay"],"newPermissions":["ai.llm","ui.overlay"]}""").RootElement;
+				_ = TipCL.Pages.Plugins.PluginConfirm.ShowAsync(p);
+			}, DispatcherPriority.ContextIdle);
+			await Task.Delay(600);
 		}
 		// --pop <config|instances|news>：浮层打开态。Popup 是独立 HWND，RenderTargetBitmap 拍不到，
 		// 把浮层内容临时挂进页面根 Grid 模拟浮层位置后再渲染。

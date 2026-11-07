@@ -343,14 +343,14 @@ public sealed partial class PluginsPage
 				Ui.OpenUrl(m.Homepage);
 			}, "\ue8a7"));
 		}
-		body.Children.Add(actions.Right());
+		// WP-S11：操作按钮行放滚动区外，钉在弹窗底部，矮窗口下不再被卷走
 		ScrollViewer sv = new ScrollViewer
 		{
 			Content = body,
 			MaxHeight = 560.0,
 			VerticalScrollBarVisibility = ScrollBarVisibility.Auto
 		};
-		Dlg.Layer layer = Dlg.Panel(m.DisplayName, sv, 760.0);
+		Dlg.Layer layer = Dlg.Panel(m.DisplayName, Ui.V(12.0, sv, actions.Right()), 760.0);
 		install.Click += delegate
 		{
 			layer.Close();

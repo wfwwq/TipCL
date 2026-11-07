@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
 using System.Windows.Input;
+using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using Microsoft.Win32;
@@ -14,6 +15,20 @@ namespace TipCL.Services;
 
 public static class Dlg
 {
+	/// <summary>窗口实际高度 × 0.9：卡片 MaxHeight 上限（WP-S11）。</summary>
+	private sealed class WindowPctConverter : IValueConverter
+	{
+		public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+		{
+			return (value is double h && h > 0.0) ? h * 0.9 : System.Windows.Data.Binding.DoNothing;
+		}
+
+		public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+		{
+			throw new NotSupportedException();
+		}
+	}
+
 	public sealed class Layer
 	{
 		public required Grid Root { get; init; }
@@ -83,6 +98,15 @@ public static class Dlg
 		};
 		holder.Children.Add(card);
 		wrap.Children.Add(holder);
+		if (card is FrameworkElement fe)
+		{
+			// 卡片最高不超过窗口高度的 90%（扣掉 holder 24px 边距），防止矮窗口下按钮被裁掉（WP-S11）
+			fe.SetBinding(FrameworkElement.MaxHeightProperty, new System.Windows.Data.Binding("ActualHeight")
+			{
+				Source = Window.GetWindow(host) ?? (object)host,
+				Converter = new WindowPctConverter()
+			});
+		}
 		host.Children.Add(wrap);
 		host.Visibility = Visibility.Visible;
 		if (BlurTarget != null && host.Children.Count == 1)
@@ -156,14 +180,24 @@ public static class Dlg
 		}
 	}
 
+	// 行结构 Auto,*,Auto：按钮行（footer）钉在卡片底部，body 行吃剩余高度并在超出时滚动，
+	// 避免高内容把 footer 挤出窗口（WP-S11）。
 	private static Border Shell(string title, UIElement body, UIElement? footer, double width)
 	{
-		Grid grid = Ui.G(null, "*,Auto");
+		Grid grid = Ui.G("Auto,*,Auto");
 		grid.Add(Ui.H2(title).VCenter(), 0);
-		SPanel sPanel = Ui.V(14.0, grid, body);
-		if (footer != null)
+		ScrollViewer bodyScroll = new ScrollViewer
 		{
-			sPanel.Children.Add(footer);
+			Content = body,
+			Margin = new Thickness(0.0, 14.0, 0.0, 0.0),
+			VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+			HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+		};
+		grid.Add(bodyScroll, 1);
+		if (footer is FrameworkElement ffe)
+		{
+			ffe.Margin = new Thickness(0.0, 14.0, 0.0, 0.0);
+			grid.Add(footer, 2);
 		}
 		Border border = new Border();
 		border.CornerRadius = new CornerRadius(10.0);
@@ -171,7 +205,7 @@ public static class Dlg
 		border.BorderThickness = new Thickness(1.0);
 		border.MaxWidth = width;
 		border.MinWidth = Math.Min(width, 380.0);
-		border.Child = sPanel;
+		border.Child = grid;
 		border.SetResourceReference(Border.BackgroundProperty, "B.GlassStrong");
 		border.SetResourceReference(Border.BorderBrushProperty, "B.GlassBorder");
 		Motion.Shadow(border, 40.0, 0.28, 10.0);
@@ -345,13 +379,21 @@ public static class Dlg
 		Grid grid = Ui.G(null, "*,Auto");
 		grid.Add(Ui.H2(title).VCenter(), 0);
 		grid.Add(button, 0, 1);
+		// body 超出时滚动（WP-S11）：Panel 的 body 不再直接撑高卡片，配合 Push 里的窗口高度上限
+		ScrollViewer bodyScroll = new ScrollViewer
+		{
+			Content = body,
+			Margin = new Thickness(0.0, 12.0, 0.0, 0.0),
+			VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+			HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+		};
 		Border border = new Border();
 		border.CornerRadius = new CornerRadius(10.0);
 		border.Padding = new Thickness(20.0, 16.0, 20.0, 18.0);
 		border.BorderThickness = new Thickness(1.0);
 		border.MaxWidth = width;
 		border.MinWidth = Math.Min(width, 420.0);
-		border.Child = Ui.V(12.0, grid, body);
+		border.Child = Ui.V(12.0, grid, bodyScroll);
 		Border border2 = border;
 		border2.SetResourceReference(Border.BackgroundProperty, "B.GlassStrong");
 		border2.SetResourceReference(Border.BorderBrushProperty, "B.GlassBorder");
