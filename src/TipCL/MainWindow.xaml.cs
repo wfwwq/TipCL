@@ -842,10 +842,16 @@ public partial class MainWindow : Window
 
 	private int _rgnR = -1;
 
+	// WP-W：拖拽/缩放中不重设窗口区域（防闪烁），WM_EXITSIZEMOVE 结束时补设
+	private static bool _inSizeMove;
+
+	private static MainWindow? _wnd;
+
 	private void ApplyWindowCorner()
 	{
 		try
 		{
+			_wnd = this;
 			IntPtr handle = new WindowInteropHelper(this).Handle;
 			if (handle == IntPtr.Zero)
 			{
@@ -896,6 +902,11 @@ public partial class MainWindow : Window
 		int rr = (int)Math.Round(r * VisualTreeHelper.GetDpi(this).DpiScaleX);
 		if (rw != _rgnW || rh != _rgnH || rr != _rgnR)
 		{
+			if (_inSizeMove)
+			{
+				// 拖拽/缩放中区域保持旧值（缓存字段不更新），结束补设
+				return;
+			}
 			_rgnW = rw;
 			_rgnH = rh;
 			_rgnR = rr;
@@ -1064,6 +1075,15 @@ public partial class MainWindow : Window
 
 	private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
 	{
+		if (msg == 0x0231)
+		{
+			_inSizeMove = true;
+		}
+		if (msg == 0x0232)
+		{
+			_inSizeMove = false;
+			_wnd?.ApplyRootCorner();
+		}
 		if (msg == 561)
 		{
 			Backdrop.PmSetMoving(hwnd, moving: true);
