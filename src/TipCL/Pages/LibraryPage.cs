@@ -138,9 +138,11 @@ public sealed class LibraryPage : PageBase
 		TextBlock h = Ui.Txt(I18n.L("文件夹列表"), 18.0, bold: true);
 		h.FontWeight = FontWeights.ExtraBold;
 		Border left = Ui.Card(Ui.V(10.0, h, _folderPath, _folders, Ui.Sep(), Ui.Txt(I18n.L("添加或导入"), 13.0, bold: true), add, pack, create, migrate), 14.0);
-		left.Width = 420.0;
+		// 左栏随窗口比例伸缩，窄窗不挤右栏（2026-11-07 用户反馈：420 固定宽在窄窗占比过大）
+		left.MinWidth = 300.0;
+		left.MaxWidth = 380.0;
 		left.VerticalAlignment = VerticalAlignment.Top;
-		// 右栏头部
+		// 右栏头部两行：第一行 标题+计数+搜索+刷新；第二行 副说明完整换行显示
 		TextBlock h2 = Ui.Txt(I18n.L("版本选择"), 21.0, bold: true);
 		h2.FontWeight = FontWeights.ExtraBold;
 		Button refresh = Ui.Btn(I18n.L("刷新"), BtnKind.Chip, delegate
@@ -151,17 +153,18 @@ public sealed class LibraryPage : PageBase
 		{
 			RenderGroups();
 		};
-		Grid head = Ui.G(null, "*,Auto,Auto,Auto");
-		TextBlock subHead = Ui.Small(I18n.L("双击版本直接启动；行尾可收藏/删除/设置"));
-		subHead.SetResourceReference(TextBlock.ForegroundProperty, (object)"B.InkMuted");
-		head.Add(Ui.V(1.0, h2, subHead).VCenter(), 0);
-		head.Add(_count.VCenter().M(0.0, 0.0, 10.0, 0.0), 0, 1);
-		head.Add(_search.VCenter().M(0.0, 0.0, 8.0), 0, 2);
-		head.Add(refresh.VCenter(), 0, 3);
+		Grid head = Ui.G("Auto,Auto", "Auto,Auto,*,Auto,Auto");
+		TextBlock subHead = Ui.Txt(I18n.L("双击版本直接启动；行尾可收藏/删除/设置"), 12.5, bold: false, "B.InkMuted");
+		subHead.TextWrapping = TextWrapping.Wrap;
+		head.Add(h2.VCenter(), 0, 0);
+		head.Add(_count.VCenter().M(10.0, 0.0, 10.0, 0.0), 0, 1);
+		head.Add(_search.VCenter(), 0, 3);
+		head.Add(refresh.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 4);
+		head.Add(subHead, 1, 0, 1, 5);
 		_empty.Show(shown: false);
 		SPanel right = Ui.V(12.0, head, _groupsHost, _empty);
 		right.VerticalAlignment = VerticalAlignment.Top;
-		Grid body = Ui.G(null, "420,18,*");
+		Grid body = Ui.G(null, "*,18,2*");
 		body.Add(left, 0);
 		body.Add(right, 0, 2);
 		base.Content = PageBase.ScrollBody(body);

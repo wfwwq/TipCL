@@ -188,6 +188,54 @@ public static class DevShot
 			}, DispatcherPriority.ContextIdle);
 			await Task.Delay(250);
 		}
+		// --detail：实例详情页未注册导航（实例库「管理」走对话框），dev-shot 专用入口（WP-S8b）
+		if (args?.Contains("--detail") == true)
+		{
+			var dclient = AppServices.Client;
+			for (int i = 0; i < 50 && dclient == null; i++)
+			{
+				await Task.Delay(200);
+				dclient = AppServices.Client;
+			}
+			var insts = dclient != null ? await dclient.TryCallAsync<System.Collections.Generic.List<TipCL.Models.InstanceInfo>>("get_instances", null, new System.Collections.Generic.List<TipCL.Models.InstanceInfo>()) : null;
+			string dname = ArgVal(args, "--inst") ?? insts?.FirstOrDefault()?.Name ?? "";
+			await win.Dispatcher.InvokeAsync(delegate
+			{
+				var host = (System.Windows.Controls.ContentControl?)typeof(MainWindow).GetField("PageHost", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(win);
+				if (host != null && dname.Length > 0)
+				{
+					host.Content = new TipCL.Pages.InstanceDetailPage(new TipCL.Models.InstanceInfo
+					{
+						Name = dname
+					}, delegate
+					{
+					});
+				}
+			}, DispatcherPriority.ContextIdle);
+			await Task.Delay(1500);
+			// --forceshared：注入一条 isolated=false 的假版本行，拍共享模式分段隐藏 + 灰字说明（WP-S8b）
+			if (args.Contains("--forceshared"))
+			{
+				await win.Dispatcher.InvokeAsync(delegate
+				{
+					var phost = (System.Windows.Controls.ContentControl?)typeof(MainWindow).GetField("PageHost", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(win);
+					var det = phost?.Content as TipCL.Pages.InstanceDetailPage;
+					var vfld = typeof(TipCL.Pages.InstanceDetailPage).GetField("_vers", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+					var cfld = typeof(TipCL.Pages.InstanceDetailPage).GetField("_verBox", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+					if (det != null && vfld?.GetValue(det) is System.Collections.Generic.List<TipCL.Models.VersionRowDto> lst && cfld?.GetValue(det) is System.Windows.Controls.ComboBox cb2)
+					{
+						lst.Insert(0, new TipCL.Models.VersionRowDto { Id = "26.3", IsolationLabel = "共用", Isolated = false });
+						cb2.Items.Clear();
+						foreach (var r in lst)
+						{
+							cb2.Items.Add(string.IsNullOrEmpty(r.IsolationLabel) ? r.Id : (r.Id + " · " + r.IsolationLabel));
+						}
+						cb2.SelectedIndex = 0;
+					}
+				}, DispatcherPriority.ContextIdle);
+				await Task.Delay(1200);
+			}
+		}
 		// 后端主题同步可能晚到，渲染前再钉一次主题
 		await win.Dispatcher.InvokeAsync(delegate
 		{

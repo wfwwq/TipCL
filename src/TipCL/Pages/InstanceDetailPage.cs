@@ -32,6 +32,13 @@ public sealed class InstanceDetailPage : PageBase
 
 	private int _seg;
 
+	// 版本选择器：共享（大锅饭）模式下隐藏自有资源分段（2026-11-07）
+	private readonly ComboBox _verBox = new ComboBox();
+
+	private readonly List<VersionRowDto> _vers = new List<VersionRowDto>();
+
+	private readonly TextBlock _sharedNote;
+
 	public override string Title => _inst;
 
 	public InstanceDetailPage(InstanceInfo info, Action back)
@@ -61,6 +68,17 @@ public sealed class InstanceDetailPage : PageBase
 		head.Add(Ui.V(2.0, title, meta.Length == 0 ? null : Ui.Txt(meta, 12.0, bold: false, "B.InkMuted").Trim()).VCenter(), 0, 1);
 		head.Add(launch.VCenter(), 0, 2);
 
+		_sharedNote = Ui.Txt(I18n.L("该版本为共享（大锅饭）模式，模组/存档使用实例共享目录；开启独立隔离请见版本管理页"), 12.5, bold: false, "B.InkMuted");
+		_sharedNote.TextWrapping = TextWrapping.Wrap;
+		_sharedNote.VerticalAlignment = VerticalAlignment.Center;
+		_sharedNote.MaxWidth = 420.0;
+		_sharedNote.Show(shown: false);
+		_verBox.MinWidth = 200.0;
+		_verBox.SelectionChanged += delegate
+		{
+			ApplyVersionSegs();
+		};
+
 		SPanel rail = Ui.H(0.0);
 		for (int i = 0; i < 5; i++)
 		{
@@ -82,7 +100,7 @@ public sealed class InstanceDetailPage : PageBase
 		{
 			Run(() => (_seg == 0) ? ModsDialog.ShowAsync(_inst) : SavesDialog.ShowAsync(_inst, ""));
 		});
-		Grid bar = Ui.G(null, "*,Auto");
+		Grid bar = Ui.G(null, "Auto,*,Auto,Auto");
 		bar.Margin = new Thickness(22.0, 0.0, 22.0, 12.0);
 		bar.Add(new Border
 		{
@@ -90,7 +108,9 @@ public sealed class InstanceDetailPage : PageBase
 			Child = rail,
 			HorizontalAlignment = HorizontalAlignment.Left
 		}, 0);
-		bar.Add(_more.VCenter(), 0, 1);
+		bar.Add(_sharedNote, 0, 1);
+		bar.Add(_verBox.VCenter().M(12.0, 0.0, 0.0, 0.0), 0, 2);
+		bar.Add(_more.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 3);
 
 		Border card = Ui.Card(_rows, 0.0);
 		card.Padding = new Thickness(0.0, 4.0, 0.0, 4.0);
@@ -104,6 +124,47 @@ public sealed class InstanceDetailPage : PageBase
 		shell.Add(_host, 2);
 		base.Content = shell;
 		ShowSeg(0);
+		Run(LoadVersionsAsync);
+	}
+
+	// get_version_rows 返回当前（默认）实例的版本；详情页由实例库「管理」进入，目标实例即默认实例
+	private async Task LoadVersionsAsync()
+	{
+		_vers.Clear();
+		foreach (VersionRowDto r in (await Api.TryCallAsync("get_version_rows", new { include_hidden = false }, new List<VersionRowDto>())) ?? new List<VersionRowDto>())
+		{
+			_vers.Add(r);
+		}
+		if (_vers.Count == 0)
+		{
+			_verBox.Show(shown: false);
+			ApplyVersionSegs();
+			return;
+		}
+		string keep = _verBox.SelectedItem as string;
+		_verBox.Items.Clear();
+		foreach (VersionRowDto r in _vers)
+		{
+			_verBox.Items.Add(string.IsNullOrEmpty(r.IsolationLabel) ? r.Id : (r.Id + " · " + r.IsolationLabel));
+		}
+		int idx = _vers.FindIndex((VersionRowDto r) => r.Id == keep);
+		_verBox.SelectedIndex = (idx >= 0) ? idx : 0;
+	}
+
+	// 选中版本 isolated=false（共享/大锅饭）：隐藏模组/存档/资源包/光影分段，只留设置并显示灰字说明
+	private void ApplyVersionSegs()
+	{
+		VersionRowDto cur = ((_verBox.SelectedIndex >= 0) && (_verBox.SelectedIndex < _vers.Count)) ? _vers[_verBox.SelectedIndex] : null;
+		bool shared = cur != null && !cur.Isolated;
+		for (int i = 0; i < 4; i++)
+		{
+			_segBtns[i].Show(!shared);
+		}
+		_sharedNote.Show(shared);
+		if (shared && _seg < 4)
+		{
+			ShowSeg(4);
+		}
 	}
 
 	private void ShowSeg(int k)
