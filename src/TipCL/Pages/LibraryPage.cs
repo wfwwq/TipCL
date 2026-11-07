@@ -109,6 +109,9 @@ public sealed class LibraryPage : PageBase
 
 	private static readonly List<string> _noFavs = new List<string>();
 
+	// 页内切换前的原始内容（进入实例详情后返回时恢复；PageBase.Content 是 object）
+	private object? _shell;
+
 	public override string Title => I18n.L("实例库");
 
 	public LibraryPage()
@@ -153,18 +156,25 @@ public sealed class LibraryPage : PageBase
 		{
 			RenderGroups();
 		};
-		Grid head = Ui.G("Auto,Auto", "Auto,Auto,*,Auto,Auto");
+		// 「实例详情」入口（2026-11-07 拍板）：版本选择区头部动作簇，刷新钮左侧
+		Button detail = Ui.Btn(I18n.L("实例详情"), BtnKind.Chip, delegate
+		{
+			Run(OpenDetailAsync, I18n.L("打开失败"));
+		}, "\ue946");
+		Grid head = Ui.G("Auto,Auto", "Auto,Auto,*,Auto,Auto,Auto");
 		TextBlock subHead = Ui.Txt(I18n.L("双击版本直接启动；行尾可收藏/删除/设置"), 12.5, bold: false, "B.InkMuted");
 		subHead.TextWrapping = TextWrapping.Wrap;
 		head.Add(h2.VCenter(), 0, 0);
 		head.Add(_count.VCenter().M(10.0, 0.0, 10.0, 0.0), 0, 1);
 		head.Add(_search.VCenter(), 0, 3);
-		head.Add(refresh.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 4);
-		head.Add(subHead, 1, 0, 1, 5);
+		head.Add(detail.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 4);
+		head.Add(refresh.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 5);
+		head.Add(subHead, 1, 0, 1, 6);
 		_empty.Show(shown: false);
 		SPanel right = Ui.V(12.0, head, _groupsHost, _empty);
 		right.VerticalAlignment = VerticalAlignment.Top;
-		Grid body = Ui.G(null, "*,18,2*");
+		// 行高显式 Auto：网格自身高度恒等于内容，杜绝隐式 * 行被外层余量撑高（左栏卡片随之拉伸的根因向量）
+		Grid body = Ui.G("Auto", "*,18,2*");
 		body.Add(left, 0);
 		body.Add(right, 0, 2);
 		base.Content = PageBase.ScrollBody(body);
@@ -658,6 +668,34 @@ public sealed class LibraryPage : PageBase
 			launchPage.PreferInstance(inst, ver);
 		}
 		Win?.Navigate("launch");
+	}
+
+	// 页内切换到实例详情：get_version_rows 只认当前默认实例，进入前把选中文件夹设为默认（与双击启动同模式），返回后不回滚
+	private async Task OpenDetailAsync()
+	{
+		if (string.IsNullOrEmpty(_folder))
+		{
+			return;
+		}
+		if (_folder != _defaultInstance)
+		{
+			await InstancePage.SetDefaultAsync(_folder);
+			_defaultInstance = _folder;
+		}
+		InstanceInfo info = _instances.FirstOrDefault((InstanceInfo i) => i.Name == _folder) ?? new InstanceInfo
+		{
+			Name = _folder,
+			Path = FolderPathFor(_folder)
+		};
+		_shell ??= base.Content;
+		base.Content = new InstanceDetailPage(info, delegate
+		{
+			if (_shell is UIElement shell)
+			{
+				base.Content = shell;
+			}
+			Run(LoadAsync);
+		});
 	}
 
 	private async Task UninstallAsync(string inst, string ver)
