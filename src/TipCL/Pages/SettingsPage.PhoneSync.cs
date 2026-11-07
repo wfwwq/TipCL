@@ -71,6 +71,6 @@ public sealed partial class SettingsPage
 			PageBase.Run(PhoneSyncPanel.ShowAsync, I18n.L("同步失败"));
 		});
 		Refresh();
-		return Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("手机同步"), I18n.L("和手机启动器互传存档：同一个 Wi-Fi，或 USB 数据线")), Ui.Field(I18n.L("连接手机"), Ui.H(8.0, addr.VCenter(), code.VCenter(), connect.VCenter(), scan.VCenter(), usb.VCenter()), I18n.L("手机启动器 → 存档管理 → 从 zip 导入 → 启动同步服务，填上显示的地址和配对码；USB 需打开手机的 USB 调试，并把 adb.exe 放在 TipCL 同目录")), Ui.Field("", Ui.H(8.0, open.VCenter(), status.VCenter()))));
+		return Ui.Card(Rows(Ui.Field(I18n.L("连接手机"), Ui.H(8.0, addr.VCenter(), code.VCenter(), connect.VCenter(), scan.VCenter(), usb.VCenter()), I18n.L("手机启动器 → 存档管理 → 从 zip 导入 → 启动同步服务，填上显示的地址和配对码；USB 需打开手机的 USB 调试，并把 adb.exe 放在 TipCL 同目录")), Ui.Field("", Ui.H(8.0, open.VCenter(), status.VCenter()))));
 	}
 }

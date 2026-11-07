@@ -126,14 +126,6 @@ public sealed partial class SettingsPage : PageBase
 		("custom", I18n.L("自定义 OpenAI 兼容端点"))
 	};
 
-	private static readonly (string Key, string Label)[] AiPermOpts = new(string, string)[4]
-	{
-		("default", I18n.L("标准（写操作先问）")),
-		("acceptEdits", I18n.L("少打扰（写操作直接执行）")),
-		("plan", I18n.L("只看不动（禁止写操作）")),
-		("yolo", I18n.L("全自动"))
-	};
-
 	private static readonly (string Name, string Hex)[] Palette = new(string, string)[6]
 	{
 		(I18n.L("松绿"), "#2E9B6B"),
@@ -220,8 +212,6 @@ public sealed partial class SettingsPage : PageBase
 	private readonly TextBlock _themeInfo = Ui.Small("");
 
 	private readonly ComboBox _aiMode = KeyCombo(AiModeOpts);
-
-	private readonly ComboBox _aiPerm = KeyCombo(AiPermOpts);
 
 	private readonly TextBox _aiBase = Ui.Input("https://api.openai.com/v1");
 
@@ -579,7 +569,7 @@ public sealed partial class SettingsPage : PageBase
 		{
 			PageBase.Run(RecommendAsync, I18n.L("检测失败"));
 		}, "\ue945");
-		Border border = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("深色模式"), _dark, I18n.L("立即生效")), Ui.Field(I18n.L("主题色"), _swatches, I18n.L("点一下就换")), Ui.Field(I18n.L("界面背景"), _bg, I18n.L("预设色调，立即生效")), Ui.Field(I18n.L("界面动画"), _motion, I18n.L("换页过渡、进度条、悬浮等动效；关闭则全部瞬时")), Ui.Field(I18n.L("下载飞入动画"), _fly, I18n.L("点安装时图标抛物线飞入侧栏「下载任务」")), Ui.Field(I18n.L("飞入动画时长"), SliderRow(_flyDur, _flyDurLbl), I18n.L("毫秒，建议 400–800；越小越快"))));
+		Border border = Ui.Card(Rows(Ui.Field(I18n.L("深色模式"), _dark, I18n.L("立即生效")), Ui.Field(I18n.L("主题色"), _swatches, I18n.L("点一下就换")), Ui.Field(I18n.L("界面背景"), _bg, I18n.L("预设色调，立即生效")), Ui.Field(I18n.L("界面动画"), _motion, I18n.L("换页过渡、进度条、悬浮等动效；关闭则全部瞬时")), Ui.Field(I18n.L("下载飞入动画"), _fly, I18n.L("点安装时图标抛物线飞入侧栏「下载任务」")), Ui.Field(I18n.L("飞入动画时长"), SliderRow(_flyDur, _flyDurLbl), I18n.L("毫秒，建议 400–800；越小越快"))));
 		_bgInterval.ValueChanged += delegate(object _, RoutedPropertyChangedEventArgs<double> e)
 		{
 			_bgIntervalLbl.Text = I18n.L("{0} 分钟", (int)e.NewValue);
@@ -639,8 +629,8 @@ public sealed partial class SettingsPage : PageBase
 		Grid grid4 = Ui.G(null, "*,Auto");
 		grid4.Add(_bgFolder, 0);
 		grid4.Add(el4.M(8.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
-		Border border2 = Ui.Card(Ui.V(2.0, Ui.Small(I18n.L("图片或 mp4 动态壁纸；也可以直接把文件拖进窗口")).Wrap(), Ui.Field(I18n.L("壁纸文件"), grid3, I18n.L("留空就不用壁纸。视频会静音循环播放")), Ui.Field(I18n.L("轮播文件夹"), grid4, I18n.L("设了文件夹就按间隔换图，优先于上面那张单图")), Ui.Field(I18n.L("随机顺序"), _bgShuffle, I18n.L("关掉则按文件名顺序轮")), Ui.Field(I18n.L("轮播间隔"), SliderRow(_bgInterval, _bgIntervalLbl), I18n.L("分钟")), Ui.Field(I18n.L("模糊"), SliderRow(_bgBlur, _bgBlurLbl), I18n.L("把壁纸推远一点，文字更好读；随拖随看")), Ui.Field(I18n.L("遮罩浓度"), SliderRow(_bgDim, _bgDimLbl), I18n.L("按当前主题压淡 / 压暗壁纸；随拖随看")), Ui.Field("", Ui.H(8.0, button3, _bgUndo, button4, _bgInfo.VCenter()))));
-		Border border3 = Ui.Card(Ui.V(2.0, Ui.Small(I18n.L("把当前配色、背景、窗口与主页设置整包存下来，随时切回")).Wrap(), Ui.Field(I18n.L("已保存"), _themePack, I18n.L("从这里挑一个加载或删除")), Ui.Field("", Ui.H(7.0, Ui.Btn(I18n.L("保存为主题包"), BtnKind.Soft, delegate
+		Border border2 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("图片或 mp4 动态壁纸；也可以直接把文件拖进窗口")).Wrap(), Rows(Ui.Field(I18n.L("壁纸文件"), grid3, I18n.L("留空就不用壁纸。视频会静音循环播放")), Ui.Field(I18n.L("轮播文件夹"), grid4, I18n.L("设了文件夹就按间隔换图，优先于上面那张单图")), Ui.Field(I18n.L("随机顺序"), _bgShuffle, I18n.L("关掉则按文件名顺序轮")), Ui.Field(I18n.L("轮播间隔"), SliderRow(_bgInterval, _bgIntervalLbl), I18n.L("分钟")), Ui.Field(I18n.L("模糊"), SliderRow(_bgBlur, _bgBlurLbl), I18n.L("把壁纸推远一点，文字更好读；随拖随看")), Ui.Field(I18n.L("遮罩浓度"), SliderRow(_bgDim, _bgDimLbl), I18n.L("按当前主题压淡 / 压暗壁纸；随拖随看")), Ui.Field("", Ui.H(8.0, button3, _bgUndo, button4, _bgInfo.VCenter())))));
+		Border border3 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("把当前配色、背景、窗口与主页设置整包存下来，随时切回")).Wrap(), Rows(Ui.Field(I18n.L("已保存"), _themePack, I18n.L("从这里挑一个加载或删除")), Ui.Field("", Ui.H(7.0, Ui.Btn(I18n.L("保存为主题包"), BtnKind.Soft, delegate
 		{
 			PageBase.Run(SaveThemeAsync, I18n.L("保存失败"));
 		}, "\ue74e"), Ui.Btn(I18n.L("加载"), BtnKind.Chip, delegate
@@ -655,23 +645,23 @@ public sealed partial class SettingsPage : PageBase
 		}, "\ue8b5"), Ui.Btn(I18n.L("导出"), BtnKind.Chip, delegate
 		{
 			PageBase.Run(ExportThemeAsync, I18n.L("导出失败"));
-		}, "\uede1"))), _themeInfo));
-		Border border4 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("下载并发线程数"), SliderRow(_threads, _threadsLbl), I18n.L("同时下载的文件数量")), Ui.Field(I18n.L("单文件分片数"), SliderRow(_segs, _segsLbl), I18n.L("8MB 以上的大文件拆成几段同时下；1 为关闭")), Ui.Field(I18n.L("文件下载源"), _src, I18n.L("自动测速，官方慢于 4 秒改走 BMCLAPI")), Ui.Field(I18n.L("社区资源源"), _comm, I18n.L("模组 / 整合包：MCIM 国内镜像，挂了可改官方")), Ui.Field(I18n.L("跟随系统代理"), _proxy, I18n.L("默认开。关掉才强制直连")), Ui.Field(I18n.L("下载限速 (KB/s)"), _limit.Left(), I18n.L("0 表示不限制")), Ui.Field("CurseForge Key", SecretRow(_cfKey, _cfReset), I18n.L("留空不修改；不填用内置 Key"))));
-		Border border5 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("游戏目录"), grid2, I18n.L("所有实例的落脚处；切换会校验可写性")), Ui.Field(I18n.L("默认内存"), SliderRow(_mem, _memLbl), I18n.L("新实例的默认 JVM 内存")), Ui.Field("", Ui.H(8.0, _rec, Ui.Small(I18n.L("按本机内存 / CPU 给一组推荐值")).VCenter())), Ui.Field(I18n.L("默认分辨率"), Ui.H(6.0, _w, Ui.Txt("×").VCenter(), _h), I18n.L("游戏窗口的默认宽高")), Ui.Field(I18n.L("默认实例"), _inst, I18n.L("安装与启动缺省使用的实例")), Ui.Field(I18n.L("新版本默认隔离"), _iso, I18n.L("安装新版本时写入，可在版本设置里改")), Ui.Field(I18n.L("内存回收器"), _gc, I18n.L("启动时写入 JVM，版本设置可覆盖")), Ui.Field(I18n.L("默认游戏窗口"), _win, I18n.L("可被版本设置覆盖")), Ui.Field(I18n.L("默认 JVM 参数"), _jvm, I18n.L("所有版本都会带上，版本设置可再追加")), Ui.Field(I18n.L("允许多开"), _multi, I18n.L("关掉则游戏已在运行时不再启动第二个"))));
-		Border border6 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("共享 libraries"), _shareLib, I18n.L("所有实例共享依赖库（节省空间，降低隔离性）")), Ui.Field(I18n.L("共享 assets 资源"), _shareAssets, I18n.L("所有实例共享资源文件（节省空间，降低隔离性）")), Ui.Field(I18n.L("空间清理"), Ui.H(8.0, _clean, _cleanInfo.VCenter()), I18n.L("扫描未引用的依赖库、残留 .part 与更新缓存，确认后再删"))));
+		}, "\uede1")))), _themeInfo));
+		Border border4 = Ui.Card(Rows(Ui.Field(I18n.L("下载并发线程数"), SliderRow(_threads, _threadsLbl), I18n.L("同时下载的文件数量")), Ui.Field(I18n.L("单文件分片数"), SliderRow(_segs, _segsLbl), I18n.L("8MB 以上的大文件拆成几段同时下；1 为关闭")), Ui.Field(I18n.L("文件下载源"), _src, I18n.L("自动测速，官方慢于 4 秒改走 BMCLAPI")), Ui.Field(I18n.L("社区资源源"), _comm, I18n.L("模组 / 整合包：MCIM 国内镜像，挂了可改官方")), Ui.Field(I18n.L("跟随系统代理"), _proxy, I18n.L("默认开。关掉才强制直连")), Ui.Field(I18n.L("下载限速 (KB/s)"), _limit.Left(), I18n.L("0 表示不限制")), Ui.Field("CurseForge Key", SecretRow(_cfKey, _cfReset), I18n.L("留空不修改；不填用内置 Key"))));
+		Border border5 = Ui.Card(Rows(Ui.Field(I18n.L("游戏目录"), grid2, I18n.L("所有实例的落脚处；切换会校验可写性")), Ui.Field(I18n.L("默认内存"), SliderRow(_mem, _memLbl), I18n.L("新实例的默认 JVM 内存")), Ui.Field("", Ui.H(8.0, _rec, Ui.Small(I18n.L("按本机内存 / CPU 给一组推荐值")).VCenter())), Ui.Field(I18n.L("默认分辨率"), Ui.H(6.0, _w, Ui.Txt("×").VCenter(), _h), I18n.L("游戏窗口的默认宽高")), Ui.Field(I18n.L("默认实例"), _inst, I18n.L("安装与启动缺省使用的实例")), Ui.Field(I18n.L("新版本默认隔离"), _iso, I18n.L("安装新版本时写入，可在版本设置里改")), Ui.Field(I18n.L("内存回收器"), _gc, I18n.L("启动时写入 JVM，版本设置可覆盖")), Ui.Field(I18n.L("默认游戏窗口"), _win, I18n.L("可被版本设置覆盖")), Ui.Field(I18n.L("默认 JVM 参数"), _jvm, I18n.L("所有版本都会带上，版本设置可再追加")), Ui.Field(I18n.L("允许多开"), _multi, I18n.L("关掉则游戏已在运行时不再启动第二个"))));
+		Border border6 = Ui.Card(Rows(Ui.Field(I18n.L("共享 libraries"), _shareLib, I18n.L("所有实例共享依赖库（节省空间，降低隔离性）")), Ui.Field(I18n.L("共享 assets 资源"), _shareAssets, I18n.L("所有实例共享资源文件（节省空间，降低隔离性）")), Ui.Field(I18n.L("空间清理"), Ui.H(8.0, _clean, _cleanInfo.VCenter()), I18n.L("扫描未引用的依赖库、残留 .part 与更新缓存，确认后再删"))));
 		Grid aiBaseRow = Ui.Field(I18n.L("端点地址"), _aiBase, I18n.L("OpenAI 兼容的 base_url，到 /v1 为止"));
 		Grid aiKeyRow = Ui.Field("API Key", SecretRow(_aiKey, _aiKeyReset), I18n.L("留空不修改；本地端点不需要可不填"));
 		Grid aiModelRow = Ui.Field(I18n.L("模型"), Ui.H(8.0, _aiModel, _aiModelFetch.VCenter()), I18n.L("填好地址和令牌后自动拉取；拉不到可直接手填"));
 		Grid aiCtxRow = Ui.Field(I18n.L("上下文窗口（token）"), _aiCtx, I18n.L("模型真实窗口未知时按 128k 保守压缩；实测后可改大"));
 		Grid aiFallbackRow = Ui.Field(I18n.L("备用模型（可选）"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它；留空不启用"));
 		_aiCustomRows.AddRange(new UIElement[5] { aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow });
-		Border border7 = Ui.Card(Ui.V(2.0, Ui.Small(I18n.L("对话里下游戏、装模组、读崩溃日志")).Wrap(), Ui.Field(I18n.L("接入方式"), _aiMode), aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow, Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildVisionField(), BuildMcpField(), Ui.Field("", _testAi.Left())));
-		Border border8 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("启动器可见性"), _vis, I18n.L("游戏启动后启动器窗口怎么处理")), Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")), Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html 文件路径")), Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")), Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")), Ui.Field("", _langPreview), Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
+		Border border7 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("对话里下游戏、装模组、读崩溃日志")).Wrap(), Rows(Ui.Field(I18n.L("接入方式"), _aiMode), aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow, Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildVisionField(), BuildMcpField(), Ui.Field("", _testAi.Left()))));
+		Border border8 = Ui.Card(Rows(Ui.Field(I18n.L("启动器可见性"), _vis, I18n.L("游戏启动后启动器窗口怎么处理")), Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")), Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html 文件路径")), Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")), Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")), Ui.Field("", _langPreview), Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
 		{
 			PageBase.Run(FirstRunWizard.ShowAsync, I18n.L("向导没能打开"));
 		}, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));
 		WireAutoSave();
-		_views[0] = PageBase.ScrollBody(PTitle(I18n.L("通用")), Gt(I18n.L("外观")), border, Gt(I18n.L("壁纸")), border2, Gt(I18n.L("主题包")), border3, Gt(I18n.L("启动器")), border8, Gt(I18n.L("游戏")), border5, Gt(I18n.L("存储")), border6, Gt(I18n.L("AI 助手")), border7, BuildMemoryCard(), BuildPhoneSyncCard());
+		_views[0] = PageBase.ScrollBody(PTitle(I18n.L("通用")), Gt(I18n.L("外观")), border, Gt(I18n.L("壁纸")), border2, Gt(I18n.L("主题包")), border3, Gt(I18n.L("启动器")), border8, Gt(I18n.L("游戏")), border5, Gt(I18n.L("存储")), border6, Gt(I18n.L("AI 助手")), border7, Gt(I18n.L("记忆")), BuildMemoryCard(), Gt(I18n.L("手机同步")), BuildPhoneSyncCard());
 		_views[3] = PageBase.ScrollBody(PTitle(I18n.L("下载与网络")), Gt(I18n.L("下载")), border4);
 		Grid about = Ui.G("Auto,*");
 		about.Add(Ui.V(10.0, PTitle(I18n.L("反馈与关于")), BuildAboutCard(), button.Right()).M(18.0, 14.0, 18.0, 0.0), 0);
@@ -790,6 +780,28 @@ public sealed partial class SettingsPage : PageBase
 			Text = t,
 			Style = Ui.S("T.GroupTitle")
 		};
+	}
+
+	// settings2 贴图：设置行 = 48px 高、上下行之间一条通到卡片两端的分隔线
+	private static SPanel Rows(params FrameworkElement[] rows)
+	{
+		SPanel panel = Ui.V(0.0);
+		for (int i = 0; i < rows.Length; i++)
+		{
+			if (i > 0)
+			{
+				Border sep = new Border
+				{
+					Height = 1.0,
+					Margin = new Thickness(-12.0, 1.0, -12.0, 1.0)
+				};
+				sep.SetResourceReference(Border.BackgroundProperty, "B.SegRail");
+				panel.Children.Add(sep);
+			}
+			rows[i].MinHeight = 40.0;
+			panel.Children.Add(rows[i]);
+		}
+		return panel;
 	}
 
 	private static UIElement SliderRow(Slider s, TextBlock label)
@@ -960,7 +972,7 @@ public sealed partial class SettingsPage : PageBase
 		{
 			Render();
 		};
-		return Ui.Card(Ui.V(6.0, Ui.Section(I18n.L("记忆"), I18n.L("AI 助手跨对话记住的偏好和配置（数据目录 ai_memory.md，一行一条）"), Ui.H(8.0, refresh, clear)), count, list));
+		return Ui.Card(Rows(Ui.Field(I18n.L("记忆"), Ui.H(8.0, refresh, clear), I18n.L("AI 助手跨对话记住的偏好和配置（数据目录 ai_memory.md，一行一条）")), count, list));
 	}
 
 	private Grid BuildMcpField()
@@ -1249,7 +1261,6 @@ public sealed partial class SettingsPage : PageBase
 				_autoUpdate.IsChecked = GetBool(dictionary, "auto_check_update", def: true);
 				ApplySecretState(dictionary);
 				SelectKey(_aiMode, AiModeFromBackend(dictionary));
-				SelectKey(_aiPerm, GetStr(dictionary, "ai_permission_mode", "default"));
 				_aiBase.Text = GetStr(dictionary, "ai_base_url");
 				SetAiModel(GetStr(dictionary, "ai_model"));
 				_aiCtx.Text = GetStr(dictionary, "ai_context_window", "131072");
@@ -1365,7 +1376,7 @@ public sealed partial class SettingsPage : PageBase
 			item.Checked += delegate { QueueSave(); };
 			item.Unchecked += delegate { QueueSave(); };
 		}
-		foreach (ComboBox item2 in new ComboBox[13] { _bg, _src, _comm, _inst, _iso, _gc, _win, _vis, _home, _lang, _aiMode, _aiPerm, _aiModel })
+		foreach (ComboBox item2 in new ComboBox[12] { _bg, _src, _comm, _inst, _iso, _gc, _win, _vis, _home, _lang, _aiMode, _aiModel })
 		{
 			item2.SelectionChanged += delegate { QueueSave(); };
 		}
