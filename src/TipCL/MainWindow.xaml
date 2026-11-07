@@ -38,8 +38,14 @@
               <ToggleButton Name="TabSettings" Style="{StaticResource Tab.Top}" Content="设置" />
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
-              <Button Name="AiBtn" Style="{StaticResource Btn.TitleIcon}" VerticalAlignment="Center">
-                <Path Style="{StaticResource Ico.Line}" Data="M8,1.5 V4.5 M8,11.5 V14.5 M1.5,8 H4.5 M11.5,8 H14.5 M3.4,3.4 L5.4,5.4 M10.6,10.6 L12.6,12.6 M3.4,12.6 L5.4,10.6 M10.6,5.4 L12.6,3.4" />
+              <Button Name="AiBtn" Style="{StaticResource Btn.TitleChip}" Height="26" Padding="0" VerticalAlignment="Center" Margin="0,0,2,0">
+                <Grid>
+                  <Border CornerRadius="13" Background="{DynamicResource B.GlassStrong}" BorderBrush="{DynamicResource B.GlassBorder}" BorderThickness="1" />
+                  <StackPanel Orientation="Horizontal" Margin="8,0,9,0">
+                    <Path Style="{StaticResource Ico.Line}" Data="M8,1.5 V4.5 M8,11.5 V14.5 M1.5,8 H4.5 M11.5,8 H14.5 M3.4,3.4 L5.4,5.4 M10.6,10.6 L12.6,12.6 M3.4,12.6 L5.4,10.6 M10.6,5.4 L12.6,3.4" />
+                    <TextBlock Text="AI" FontSize="11.5" FontWeight="SemiBold" Margin="5,0,0,0" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Grid>
               </Button>
               <Button Name="ThemeBtn" Style="{StaticResource Btn.TitleIcon}" VerticalAlignment="Center">
                 <Path Name="ThemeIco" Style="{StaticResource Ico.Line}" />

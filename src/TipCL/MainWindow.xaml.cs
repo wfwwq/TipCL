@@ -165,7 +165,7 @@ public partial class MainWindow : Window
 		SetResourceReference(Control.ForegroundProperty, "B.Ink");
 		base.Title = I18n.L("TipCL 启动器");
 		ThemeBtn.ToolTip = I18n.L("切换深色 / 浅色");
-		AiBtn.ToolTip = I18n.L("AI 助手");
+		AiBtn.ToolTip = I18n.L("AI 助手") + " Ctrl+K";
 		AccName.Text = I18n.L("未登录");
 		AccInitial.Text = AccName.Text.Substring(0, 1);
 		SyncThemeIndicator();
@@ -1048,6 +1048,16 @@ public partial class MainWindow : Window
 			{
 				Navigate("settings");
 				e.Handled = true;
+			}
+			else if (e.Key == Key.K)
+			{
+				// Ctrl+K → AI 页；对话框打开或文本框（含密码框）聚焦时不抢键
+				DependencyObject focus = Keyboard.FocusedElement as DependencyObject;
+				if (DialogHost.Visibility != Visibility.Visible && !(focus is TextBoxBase) && !(focus is PasswordBox))
+				{
+					Navigate("ai");
+					e.Handled = true;
+				}
 			}
 		}
 	}
