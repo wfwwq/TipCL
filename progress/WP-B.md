@@ -32,3 +32,4 @@
 
 ## 未完成
 - 无功能性未完成项；待 Windows 编译 + 截图验收。未 commit。
+- 2026-11-06 追加：按用户决定，启动页大按钮圆角 8→12（`_launchShell`、`_stopShell`、`GlassButton`，后者覆盖 48×48 启动配置钮与「联机」钮），与 launch2 效果图一致；标签/新闻卡未动。`LaunchAsync` 无版本时的跳转由 `Navigate("version")` 改为 `Navigate("download")`（该处为“请先安装版本”的下载/安装入口；`download` 路由已由 WP-C 注册为 DownloadPage）。未编译、未 commit。

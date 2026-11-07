@@ -141,7 +141,7 @@ public sealed class LaunchPage : PageBase
 
 	private readonly Border _stopShell = new Border
 	{
-		CornerRadius = new CornerRadius(8.0),
+		CornerRadius = new CornerRadius(12.0),
 		Height = 48.0,
 		Padding = new Thickness(26.0, 0.0, 26.0, 0.0),
 		Visibility = Visibility.Collapsed
@@ -384,7 +384,7 @@ public sealed class LaunchPage : PageBase
 		_launchBtn.Content = Ui.H(10.0, Ui.Glyph("\ue768", 17.0), goText);
 		_launchShell = new Border
 		{
-			CornerRadius = new CornerRadius(8.0),
+			CornerRadius = new CornerRadius(12.0),
 			Height = 48.0,
 			Padding = new Thickness(30.0, 0.0, 30.0, 0.0),
 			Child = _launchBtn,
@@ -461,7 +461,7 @@ public sealed class LaunchPage : PageBase
 		SyncHero();
 	}
 
-	// 半透明按钮（48 高，圆角 8）；label 为 null 即 48×48 图标钮
+	// 半透明按钮（48 高，圆角 12）；label 为 null 即 48×48 图标钮
 	private Border GlassButton(string glyph, string? label, Action click)
 	{
 		TextBlock g = Ui.Glyph(glyph, 17.0);
@@ -470,7 +470,7 @@ public sealed class LaunchPage : PageBase
 		{
 			Height = 48.0,
 			MinWidth = 48.0,
-			CornerRadius = new CornerRadius(8.0),
+			CornerRadius = new CornerRadius(12.0),
 			BorderThickness = new Thickness(1.0),
 			Padding = ((label == null) ? new Thickness(0.0) : new Thickness(16.0, 0.0, 16.0, 0.0)),
 			Cursor = Cursors.Hand,
@@ -1295,7 +1295,7 @@ public sealed class LaunchPage : PageBase
 		if (string.IsNullOrEmpty(version))
 		{
 			PageBase.Toast(I18n.L("没有版本"), I18n.L("请先到「原版游戏」安装"), ToastKind.Warning);
-			PageBase.Win?.Navigate("version");
+			PageBase.Win?.Navigate("download");
 			return;
 		}
 		string account = await EnsureLaunchAccountAsync();
