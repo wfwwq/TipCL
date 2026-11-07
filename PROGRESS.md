@@ -82,3 +82,10 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - **终版交付物（dist）**：TipCL-compact.exe **5,729,280 B** SHA256 9568debf…2b78；TipCL-premium.exe **6,026,240 B** SHA256 6e668d43…2f29f。两哈希不同（脚本修复生效）。
 - 终验：dotnet test 127/128（PhoneLink 既有）；dist compact --smoke 全绿（27/27 页 ok，0 异常；coverage 提示因 S4 删页后 17 点击/9 弹窗低于旧阈值 20/10——页数从 22 减到 10 所致，非回归，阈值需按新 IA 调整）。
 - 遗留：真窗验收待用户；深清理（VersionPage 392 行）留体积回收。
+
+## 2026-11-07 第六轮收口（反馈修复全落定）
+- WP-S8b 27045cf：T1 头部两行+左栏 300~380 自适应（修正参数序 bug）；T2 详情页版本下拉+isolated=false 隐藏资源分段（含 DevShot --detail/--forceshared）。
+- 全部已推送 GitHub main（9f56aaf→27045cf，远端核对一致；分支由 master 改名 main）。
+- 终版交付物（dist）：TipCL-compact-20261107-1308-头部共享修复.exe 5,741,568 B SHA 580a71fb…；TipCL-premium-20261107-1308-头部共享修复.exe 6,038,528 B SHA e23ad3f4…。compact 余量 15,696 B。
+- 终验：128/129（PhoneLink 环境性）；dist compact --smoke 27/27 页全 ok、0 异常（coverage 17/9 低于旧阈值 20/10 为 S4 删页后页数变化所致，非回归）。
+- 待拍板：InstanceDetailPage 无真实 UI 入口（「管理」走对话框 vs 详情页）；PhoneLink 环境复跑；真窗验收。
