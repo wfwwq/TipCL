@@ -794,44 +794,62 @@ public static class Utils
 		byte[] bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(PyJson.Dumps(data, 2, ensureAscii: false));
 		lock (JsonFileLock(pPath))
 		{
-			string text = MkStemp("." + pPath.Name + ".", ".tmp", pPath.Parent);
-			try
+			// tmp 写入阶段也要重试：杀软/Defender 可能在 tmp 刚建好时短暂独占句柄，
+			// 此时 FileStream 构造/写入抛 UnauthorizedAccessException/IOException，
+			// 不在下面 OsReplace 的重试循环覆盖范围内；换新 tmp 名整个重来。
+			Exception lastError = null;
+			for (int round = 0; round < 3; round++)
 			{
-				using (FileStream fileStream = new FileStream(text, FileMode.Create, FileAccess.Write, FileShare.None))
-				{
-					fileStream.Write(bytes, 0, bytes.Length);
-					fileStream.Flush(flushToDisk: true);
-				}
-				for (int i = 0; i < 12; i++)
+				string text = MkStemp("." + pPath.Name + ".", ".tmp", pPath.Parent);
+				try
 				{
 					try
 					{
-						OsReplace(text, pPath);
-						break;
-					}
-					catch (Exception ex) when (ex is PermissionError || ex is UnauthorizedAccessException || (ex is IOException && IS_WINDOWS))
-					{
-						if (i == 11)
+						using (FileStream fileStream = new FileStream(text, FileMode.Create, FileAccess.Write, FileShare.None))
 						{
-							throw;
+							fileStream.Write(bytes, 0, bytes.Length);
+							fileStream.Flush(flushToDisk: true);
 						}
-						Thread.Sleep((int)(Math.Min(0.2, 0.03 * (double)(i + 1)) * 1000.0));
 					}
-				}
-			}
-			finally
-			{
-				try
-				{
-					if (File.Exists(text))
+					catch (Exception ex2) when (ex2 is UnauthorizedAccessException || ex2 is IOException)
 					{
-						File.Delete(text);
+						lastError = ex2;
+						continue;
+					}
+					for (int i = 0; i < 12; i++)
+					{
+						try
+						{
+							OsReplace(text, pPath);
+							return;
+						}
+						catch (Exception ex) when (ex is PermissionError || ex is UnauthorizedAccessException || (ex is IOException && IS_WINDOWS))
+						{
+							lastError = ex;
+							if (i == 11)
+							{
+								break;
+							}
+							Thread.Sleep((int)(Math.Min(0.2, 0.03 * (double)(i + 1)) * 1000.0));
+						}
+					}
+					break;
+				}
+				finally
+				{
+					try
+					{
+						if (File.Exists(text))
+						{
+							File.Delete(text);
+						}
+					}
+					catch (Exception)
+					{
 					}
 				}
-				catch (Exception)
-				{
-				}
 			}
+			throw lastError ?? new IOException("WriteJson failed: " + Py.ReprStr(path));
 		}
 	}
 

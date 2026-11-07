@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using TipCL.Core.Launcher.Ai;
 
 namespace TipCL.Core.Launcher;
@@ -178,7 +181,28 @@ public sealed class LauncherConfig
 	{
 		lock (_lock)
 		{
-			Utils.WriteJson(Config.CONFIG_FILE, data);
+			try
+			{
+				Utils.WriteJson(Config.CONFIG_FILE, data);
+			}
+			catch (Exception ex)
+			{
+				// 配置存盘失败（多实例并发 / 杀软锁文件偶发）不能打断启动或连接流程：
+				// 内存配置照用，2 秒后后台再试一次，仍失败只记日志。
+				Utils.log.Warning("配置写入失败 %s: %s（稍后重试）", Config.CONFIG_FILE, Py.ExcStr(ex));
+				Task.Run(delegate
+				{
+					Thread.Sleep(2000);
+					try
+					{
+						Utils.WriteJson(Config.CONFIG_FILE, data);
+					}
+					catch (Exception ex2)
+					{
+						Utils.log.Warning("配置重试写入仍失败 %s: %s", Config.CONFIG_FILE, Py.ExcStr(ex2));
+					}
+				});
+			}
 		}
 	}
 
