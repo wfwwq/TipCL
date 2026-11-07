@@ -83,7 +83,7 @@ public sealed class AccountPage : PageBase
 		{
 			new BlockSpec { Id = "header", Title = I18n.L("账号操作"), Content = grid },
 			new BlockSpec { Id = "list", Title = I18n.L("账号卡"), Content = grid3 }
-		});
+		}).Root;
 	}
 
 	protected override async Task LoadAsync()

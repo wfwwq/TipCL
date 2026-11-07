@@ -62,7 +62,7 @@ public sealed class TasksPage : PageBase
 		{
 			new BlockSpec { Id = "header", Title = I18n.L("概览"), Content = grid },
 			new BlockSpec { Id = "list", Title = I18n.L("任务列表"), Content = _list }
-		});
+		}).Root;
 		EnableDrop(() => FileDrop.DropContext.None);
 		TaskStore.Added += delegate
 		{

@@ -240,6 +240,11 @@ public sealed class LibraryPage : PageBase
 	{
 		bool folders = FoldersVisible();
 		_body.ColumnDefinitions.Clear();
+		// 右栏（版本选择）是页面本体，任何布局下都必须挂在 _body 里
+		if (!_body.Children.Contains(_rightCol))
+		{
+			_body.Children.Add(_rightCol);
+		}
 		if (folders)
 		{
 			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
@@ -302,8 +307,11 @@ public sealed class LibraryPage : PageBase
 		};
 		importItem.Click += delegate
 		{
-			PageLayoutIO.ImportFromFileDialog();
-			ApplyFolderLayout();
+			// 取消（null）不动布局；导入成功后 PageLayoutIO 已落盘，重读文档立即生效
+			if (PageLayoutIO.ImportFromFileDialog().HasValue)
+			{
+				ApplyFolderLayout();
+			}
 		};
 		root.Items.Add(foldersItem);
 		root.Items.Add(exportItem);
