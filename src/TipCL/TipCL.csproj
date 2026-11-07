@@ -13,7 +13,7 @@
     <ApplicationIcon>TipCL.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
 
-    <Version>3.2.0</Version>
+    <Version>1.1.0</Version>
     <Product>TipCL 启动器</Product>
     <AssemblyTitle>TipCL 启动器</AssemblyTitle>
     <Company>TipCL</Company>

@@ -224,7 +224,7 @@ public static class Feedback
 		{
 			text = CpSlice((text2.Length > 0) ? Py.SplitLines(text2)[0] : "未命名反馈", 80);
 		}
-		PyDict pyDict = PyDict.Of("device_id", DeviceId(), "category", cat, "title", text, "body", text2, "contact", text3, "app_version", "1.0.10", "crash", (crash is PyDict) ? crash : null);
+		PyDict pyDict = PyDict.Of("device_id", DeviceId(), "category", cat, "title", text, "body", text2, "contact", text3, "app_version", AppInfo.APP_VERSION, "crash", (crash is PyDict) ? crash : null);
 		if (Py.Truthy(include_sysinfo))
 		{
 			pyDict["sysinfo"] = Sysinfo.Collect(force: true, scan_system_java);
