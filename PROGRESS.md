@@ -76,3 +76,9 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - 收口：R1 终版 smoke 回归全绿 f05e79a；dist 终版重切 f8e0a06（progress/dist-final.md 有哈希）。
 - **交付物**：dist\TipCL-compact.exe 5,707,264 B（余量 50,000）/ TipCL-premium.exe 6,003,712 B。
 - 待拍板遗留：WP-S4 中清理（12 死入口+Ctrl 数字键复活路径+WarmUp，约 120-165 行，需同步 NavCompatTests）；深清理 500+ 行留体积回收弹药；build-both.ps1 -Dist 覆盖 bug；真窗验收（Ctrl+K 实按/安装页实拍/主题切换实走）待用户放行。
+
+## 2026-11-07 第五轮追加（实例库重做 + 隔离恢复 + 清理）
+- WP-S5 77bdb0e（build-both 覆盖修复）/ WP-S4 d89d142（12 死入口清理，-2048B）/ WP-S6 198e00a（实例库双栏重做贴图2）/ WP-S4续 a7c08d1（版本管理页恢复隔离开关+大锅饭标签，根因见 WP-S7 调查：S4 删 version NavDef 致 VersionPage 孤儿化）。
+- **终版交付物（dist）**：TipCL-compact.exe **5,729,280 B** SHA256 9568debf…2b78；TipCL-premium.exe **6,026,240 B** SHA256 6e668d43…2f29f。两哈希不同（脚本修复生效）。
+- 终验：dotnet test 127/128（PhoneLink 既有）；dist compact --smoke 全绿（27/27 页 ok，0 异常；coverage 提示因 S4 删页后 17 点击/9 弹窗低于旧阈值 20/10——页数从 22 减到 10 所致，非回归，阈值需按新 IA 调整）。
+- 遗留：真窗验收待用户；深清理（VersionPage 392 行）留体积回收。
