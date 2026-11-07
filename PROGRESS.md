@@ -11,7 +11,7 @@
 | WP-E | 实例详情页（分段 模组/存档/资源包/光影/设置，模组行开关），实例库“管理”进入 | 实例相关页面 | 完成待验（未编译）。新建 InstanceDetailPage，LibraryPage 管理内部切换，VersionManagePage 加 Folder 属性。体积估计 +4–6 KB 大概率超红线，需实测。详见 progress/WP-E.md |
 | WP-G | **premium 版**（交接必读 §2.5）：csproj 加 Premium 开关；嵌入加载器官方图标/草方块/hero.jpg；启动页无截图时用 hero.jpg；真毛玻璃；去掉为体积做的删减 | src/TipCL/TipCL.csproj、LoaderIcons.cs、LaunchPage.cs（#if PREMIUM 分支） | 未开始（排在 WP-F 之后，下一轮开工即做） |
 | WP-H | 双版本测试与交付：两版各自 build/test、GOAL §6 测试全跑、compact 体积检查、产出 TipCL-compact.exe / TipCL-premium.exe（需用户 Windows 环境） | — | 未开始 |
-| WP-F | 收尾：删“更多”抽屉、统一圆角、全局一致性审查、DECISIONS 追加 | 全局 | 未开始 |
+| WP-F | 收尾：删“更多”抽屉、统一圆角、全局一致性审查、DECISIONS 追加 | 全局 | **中断（半成品）**：子代理被叫停，未写 progress/WP-F.md、未写 DECISIONS D-11+。已落盘改动（约 −1000 行：MainWindow.xaml.cs、MainWindow.Plugins.cs、Controls.xaml、Palette 两套）提交为 WIP。接手先 `git show` 审这次删除：确认没删掉仍被引用的代码/键（grep 全仓库），保留 multiplayer/instance/tasks/version NavDef；再补 DECISIONS（启动大按钮圆角 12、LaunchBackground 并入、插件设置移到插件页 ⋯、设置页嵌入子页独立实例、实例详情/安装页页内切换、C 桥改 Logo 红点）。 |
 
 ## 中断记录
 - 2026-11-06 13:52（UTC-10）：日额度达到 80%，用户叫停。WP-A/B/C 三个子代理被取消，均**未写 progress/WP-X.md**。已落盘的半成品改动已提交为一个 commit（"WIP 中断"），未经验收、未编译。
@@ -27,3 +27,11 @@
 - 2026-11-06T14:10-10:00 日额度 54%（WP-A 完成；接下来单派 WP-D）
 - 2026-11-06T14:15-10:00 日额度 61%（WP-D 完成，耗约 7%；单派 WP-E）
 - 2026-11-06T14:20-10:00 日额度 67%。用户追加双版本交付（交接必读 §2.5），登记为 WP-G/WP-H。
+- 2026-11-06T14:23-10:00 日额度 74%，用户叫停。WP-F 子代理取消，半成品提交为 WIP，打包交接 TipCL-handoff-2026-11-06-02.zip。
+
+## 下一轮接手顺序（2026-11-06 第二轮结束时）
+1. 审 WP-F 半成品 → 补完 WP-F（含 DECISIONS D-11+）。
+2. WP-G premium 版（交接必读 §2.5）。
+3. 请用户在 Windows 上编译两版、跑测试、量体积；compact 若超红线，按 progress/WP-*.md 里各包给出的“超了先删什么”回收。
+4. WP-H 双版本测试与交付。
+已知整体风险：本轮全部未编译；compact 体积大概率超 5,707,264 B（WP-A/D/E 各自估计增加数 KB，WP-F 删除约 1000 行可能抵消）。

@@ -6,7 +6,6 @@
   <Color x:Key="C.AccentLite">#4FBE8B</Color>
   <Color x:Key="C.Canvas">#F5F5F5</Color>
   <Color x:Key="C.Paper">#FFFFFF</Color>
-  <Color x:Key="C.Shadow">#1A2B3A</Color>
   <SolidColorBrush x:Key="B.Accent" Color="#2E9B6B" />
   <SolidColorBrush x:Key="B.AccentStrong" Color="#1F7A52" />
   <SolidColorBrush x:Key="B.OnAccentStrong" Color="#FFFFFF" />
@@ -26,20 +25,16 @@
   <SolidColorBrush x:Key="B.Line" Color="#E6E6E6" />
   <SolidColorBrush x:Key="B.LineSoft" Color="#F0F0F0" />
   <SolidColorBrush x:Key="B.Hover" Color="#F2F2F2" />
-  <SolidColorBrush x:Key="B.Pressed" Color="#E8E8E8" />
   <SolidColorBrush x:Key="B.Ink" Color="#262626" />
   <SolidColorBrush x:Key="B.InkSoft" Color="#565656" />
   <SolidColorBrush x:Key="B.InkMuted" Color="#888888" />
   <SolidColorBrush x:Key="B.InkFaint" Color="#8A8A8A" />
   <SolidColorBrush x:Key="B.Danger" Color="#D64545" />
   <SolidColorBrush x:Key="B.DangerSoft" Color="#FCEBEA" />
-  <SolidColorBrush x:Key="B.DangerBorder" Color="#F3C6C4" />
   <SolidColorBrush x:Key="B.Warn" Color="#D68A17" />
   <SolidColorBrush x:Key="B.WarnSoft" Color="#FDF3E2" />
-  <SolidColorBrush x:Key="B.WarnBorder" Color="#F0DCB4" />
   <SolidColorBrush x:Key="B.Info" Color="#2F72C4" />
   <SolidColorBrush x:Key="B.InfoSoft" Color="#EAF2FC" />
-  <SolidColorBrush x:Key="B.InfoBorder" Color="#C9DCF2" />
   <SolidColorBrush x:Key="B.Ok" Color="#2E9B6B" />
   <SolidColorBrush x:Key="B.OnOk" Color="#000000" />
   <SolidColorBrush x:Key="B.Scroll" Color="#CFCFCF" />
@@ -68,9 +63,6 @@
   <SolidColorBrush x:Key="B.CaptionInk" Color="#555555" />
   <SolidColorBrush x:Key="B.CaptionHot" Color="#C42B1C" />
   <SolidColorBrush x:Key="B.OnCaptionHot" Color="#FFFFFF" />
-  <SolidColorBrush x:Key="B.BtnGray" Color="#E2E2E2" />
-  <SolidColorBrush x:Key="B.BtnGrayBorder" Color="#C8C8C8" />
-  <SolidColorBrush x:Key="B.BtnGrayInk" Color="#333333" />
   <SolidColorBrush x:Key="B.SegRail" Color="#000000" Opacity="0.05" />
   <SolidColorBrush x:Key="B.SegOn" Color="#FFFFFF" />
   <SolidColorBrush x:Key="B.RowLine" Color="#F2F2F2" />

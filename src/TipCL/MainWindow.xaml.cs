@@ -68,27 +68,6 @@ public partial class MainWindow : Window
 		public int dwFlags;
 	}
 
-	private sealed class NavRow
-	{
-		public required string Key { get; init; }
-
-		public required ToggleButton Button { get; init; }
-
-		public string? Section { get; init; }
-
-		public bool IsSectionHeader
-		{
-			get
-			{
-				if (NavModel.IsSection(Key))
-				{
-					return Section == null;
-				}
-				return false;
-			}
-		}
-	}
-
 	private readonly Dictionary<string, PageBase> _pages = new Dictionary<string, PageBase>();
 
 	private PageBase? _current;
@@ -124,13 +103,6 @@ public partial class MainWindow : Window
 	private const double SideDefaultWidth = 196.0;
 
 	// 顶栏页签壳（action-first）：侧栏不再挂可视树，但导航数据结构与行缓存保留，
-	// NavHost / PinnedHost / SideFooter 改为离屏容器，BuildNav 逻辑零改动继续工作
-	private readonly StackPanel NavHost = new StackPanel();
-
-	private readonly StackPanel PinnedHost = new StackPanel();
-
-	private readonly Border SideFooter = new Border();
-
 	public static readonly List<NavDef> NavDefs = new List<NavDef>
 	{
 		new NavDef("launch", I18n.L("启动"), "\ue7c1", () => new LaunchPage()),
@@ -157,70 +129,9 @@ public partial class MainWindow : Window
 		new NavDef("plugins", I18n.L("插件"), "\uea86", () => new TipCL.Pages.Plugins.PluginsPage())
 	};
 
-	private static readonly Dictionary<string, string> NavGlyphs = new Dictionary<string, string>
-	{
-		["launch"] = "\ue7c1",
-		["download"] = "\ue896",
-		["ai"] = "\ue99a",
-		["more"] = "\ue712",
-		["tasks"] = "\ue9d5",
-		["version"] = "\ue7fc",
-		["mod"] = "\uea86",
-		["modpack"] = "\ue7b8",
-		["datapack"] = "\ue8f1",
-		["resource"] = "\ueb9f",
-		["shader"] = "\ue706",
-		["world"] = "\ue909",
-		["java"] = "\uec32",
-		["instance"] = "\ue80a",
-		["mods"] = "\ue8fd",
-		["account"] = "\ue77b",
-		["multiplayer"] = "\ue701",
-		["servers"] = "\ue968",
-		["playtime"] = "\ue823",
-		["feedback"] = "\ue8bd",
-		["settings"] = "\ue713",
-		["plugins"] = "\uea86"
-	};
-
-	private readonly Dictionary<string, NavRow> _navRows = new Dictionary<string, NavRow>();
-
-	private readonly Dictionary<string, StackPanel> _groupPanels = new Dictionary<string, StackPanel>();
-
 	private UiPrefs _prefs = new UiPrefs();
 
 	private NavConfig _navCfg = new NavConfig();
-
-	private Border? _taskBadge;
-
-	private TextBlock? _taskBadgeText;
-
-	private Point _dragStart;
-
-	private NavRow? _dragRow;
-
-	private bool _dragging;
-
-	private Border? _dropLine;
-
-	private NavRow? _dropTarget;
-
-	private bool _dropBefore;
-
-	private static readonly Dictionary<string, string> HeaderGlyphs = new Dictionary<string, string>
-	{
-		[I18n.L("启动")] = "\ue7c1",
-		[I18n.L("库")] = "\ue80a",
-		[I18n.L("社区")] = "\ue77b",
-		[I18n.L("AI 助手")] = "\ue99a",
-		[I18n.L("工具")] = "\ue712",
-		[I18n.L("反馈")] = "\ue8bd",
-		[I18n.L("设置")] = "\ue713",
-		// 旧默认分组标题（老用户存档仍可能引用）
-		[I18n.L("账户")] = "\ue77b",
-		[I18n.L("游戏")] = "\ue7fc",
-		[I18n.L("通用")] = "\ue713"
-	};
 
 	public string CurrentPageId => _currentId;
 
@@ -376,7 +287,6 @@ public partial class MainWindow : Window
 			base.Dispatcher.Invoke(SyncTasks);
 		};
 		LoadUiPrefs();
-		BuildNav();
 		BuildDock();
 		Navigate("launch", instant: true);
 		base.Loaded += delegate
@@ -860,7 +770,6 @@ public partial class MainWindow : Window
 		_currentId = id;
 		_current = page;
 		SyncTabs();
-		SyncNavSelection();
 		if (instant || !Motion.Enabled)
 		{
 			PageHost.Content = page;
@@ -1397,8 +1306,7 @@ public partial class MainWindow : Window
 		{
 			return;
 		}
-		NavRow value;
-		ToggleButton target = (_navRows.TryGetValue("tasks", out value) ? value.Button : null);
+		ToggleButton target = TabTasks;
 		if (target == null || !source.IsVisible || !target.IsVisible)
 		{
 			return;
@@ -1493,13 +1401,6 @@ public partial class MainWindow : Window
 		{
 			_prefs = new UiPrefs();
 		}
-		foreach (string item in _prefs.Expanded.Keys.Where((string k) => k.StartsWith('#')).ToList())
-		{
-			_prefs.Expanded[item.Substring(1)] = _prefs.Expanded[item];
-			_prefs.Expanded.Remove(item);
-		}
-		_prefs.Expanded.TryAdd("download", value: true);
-		_prefs.Expanded.TryAdd("more", value: false);
 		Motion.Enabled = _prefs.Anim;
 		Motion.Scale = Clamp.Of(_prefs.AnimScale, 0.4, 2.2);
 		ApplyThemeState(_prefs.Dark, persistLocal: false);
@@ -1540,432 +1441,6 @@ public partial class MainWindow : Window
 	public void ApplyNavSettings(JsonElement settings)
 	{
 		_navCfg = TipCL.NavConfig.FromJson(settings);
-		// 侧栏已移除：ui_sidebar_width 恢复逻辑短路跳过，只保留分组/隐藏数据的应用
-		BuildNav();
-	}
-
-	private async Task ApplyNavPatchAsync(IReadOnlyDictionary<string, object?> patch)
-	{
-		_navCfg = _navCfg.With(patch);
-		BuildNav();
-		if (!AppServices.Ready)
-		{
-			return;
-		}
-		try
-		{
-			await AppServices.Client.CallAsync<object>("update_settings", new
-			{
-				settings = NavModel.ToRpcArgs(patch)
-			});
-		}
-		catch (Exception ex)
-		{
-			Toast(I18n.L("侧栏设置未能保存"), ex.Message, ToastKind.Warning);
-		}
-	}
-
-	public void ResetNavLayout()
-	{
-		Run(() => ApplyNavPatchAsync(NavModel.DefaultNavPatch()));
-	}
-
-	public void SetNavStyle(string style)
-	{
-		if (NavModel.StyleLabels.ContainsKey(style) && !(style == NavModel.NavStyle(_navCfg)))
-		{
-			Run(() => ApplyNavPatchAsync(new Dictionary<string, object> { ["ui_nav_style"] = style }));
-		}
-	}
-
-	private void BuildNav()
-	{
-		NavHost.Children.Clear();
-		PinnedHost.Children.Clear();
-		_navRows.Clear();
-		_groupPanels.Clear();
-		_taskBadge = null;
-		_taskBadgeText = null;
-		_pluginNavRows.Clear();
-		_pluginMoreRendered = false;
-		Dictionary<string, List<string>> dictionary = NavModel.SectionMembersFromConfig(_navCfg);
-		Panel panel = NavHost;
-		foreach (NavEntry item in NavModel.NavItemsFromConfig(_navCfg))
-		{
-			switch (item.Kind)
-			{
-			case NavEntryKind.Header:
-				panel.Children.Add(MakeHeader(item.Label));
-				break;
-			case NavEntryKind.Stretch:
-				PinnedHost.Children.Add(Ui.Sep().M(14.0, 0.0, 14.0, 6.0));
-				panel = PinnedHost;
-				break;
-			case NavEntryKind.Item:
-				if (NavModel.IsSection(item.Key))
-				{
-					panel.Children.Add(BuildGroup(item.Key, item.Label, dictionary[item.Key]));
-				}
-				else
-				{
-					panel.Children.Add(MakeRow(item.Key, item.Label, null, draggable: true));
-				}
-				break;
-			}
-		}
-		AppendPluginTopRows();
-		SideFooter.Visibility = ((PinnedHost.Children.Count <= 0) ? Visibility.Collapsed : Visibility.Visible);
-		SyncNavSelection();
-		SyncTasks();
-	}
-
-	private static UIElement MakeHeader(string label)
-	{
-		TextBlock textBlock = Ui.Txt(label, 11.0, bold: false, "B.InkFaint");
-		if (!HeaderGlyphs.TryGetValue(label, out string value))
-		{
-			textBlock.Margin = new Thickness(22.0, 10.0, 8.0, 3.0);
-			return textBlock;
-		}
-		textBlock.VerticalAlignment = VerticalAlignment.Center;
-		StackPanel obj = new StackPanel
-		{
-			Orientation = Orientation.Horizontal,
-			Margin = new Thickness(22.0, 10.0, 8.0, 3.0)
-		};
-		TextBlock textBlock2 = Ui.Glyph(value, 10.0, "B.InkFaint");
-		textBlock2.Margin = new Thickness(0.0, 0.0, 6.0, 0.0);
-		obj.Children.Add(textBlock2);
-		obj.Children.Add(textBlock);
-		return obj;
-	}
-
-	private UIElement BuildGroup(string sec, string label, List<string> memberKeys)
-	{
-		bool value;
-		bool flag = _prefs.Expanded.TryGetValue(sec, out value) && value;
-		TextBlock textBlock = Ui.Glyph("\ue76c", 10.0, "B.InkFaint");
-		RotateTransform rot = new RotateTransform(flag ? 90 : 0);
-		textBlock.RenderTransform = rot;
-		textBlock.RenderTransformOrigin = new Point(0.5, 0.5);
-		ToggleButton header = MakeRow(sec, label, null, draggable: true, textBlock);
-		StackPanel panel = new StackPanel
-		{
-			ClipToBounds = true
-		};
-		_groupPanels[sec] = panel;
-		foreach (string memberKey in memberKeys)
-		{
-			panel.Children.Add(MakeRow(memberKey, NavModel.NavLabel(memberKey), sec, draggable: true));
-		}
-		if (sec == "more")
-		{
-			AppendPluginMoreRows(panel);
-		}
-		panel.Visibility = ((!flag) ? Visibility.Collapsed : Visibility.Visible);
-		header.Click += delegate
-		{
-			header.IsChecked = false;
-			SyncNavSelection();
-			bool flag2 = panel.Visibility != Visibility.Visible;
-			_prefs.Expanded[sec] = flag2;
-			SaveUiPrefs();
-			DoubleAnimation animation = new DoubleAnimation(flag2 ? 90 : 0, TimeSpan.FromMilliseconds((!Motion.Enabled) ? 1 : 180))
-			{
-				EasingFunction = new CubicEase()
-			};
-			rot.BeginAnimation(RotateTransform.AngleProperty, animation);
-			if (flag2)
-			{
-				panel.Visibility = Visibility.Visible;
-				panel.BeginAnimation(FrameworkElement.HeightProperty, null);
-				panel.Height = double.NaN;
-				panel.Measure(new Size(196.0, double.PositiveInfinity));
-				double height = panel.DesiredSize.Height;
-				panel.Height = 0.0;
-				Motion.AnimateHeight(panel, height, 200.0, delegate
-				{
-					panel.Height = double.NaN;
-				});
-			}
-			else
-			{
-				panel.Height = panel.ActualHeight;
-				Motion.AnimateHeight(panel, 0.0, 170.0, delegate
-				{
-					panel.Visibility = Visibility.Collapsed;
-					panel.Height = double.NaN;
-				});
-			}
-		};
-		return new StackPanel
-		{
-			Tag = sec,
-			Children = 
-			{
-				(UIElement)header,
-				(UIElement)panel
-			}
-		};
-	}
-
-	private ToggleButton MakeRow(string key, string label, string? section, bool draggable, FrameworkElement? trailing = null)
-	{
-		bool flag = section != null;
-		TextBlock textBlock = Ui.Glyph(NavGlyphs.GetValueOrDefault(key, "\ue80a"));
-		TextBlock textBlock2 = Ui.Txt(label).VCenter();
-		textBlock2.TextTrimming = TextTrimming.CharacterEllipsis;
-		Grid grid = Ui.G(null, "18,*,Auto");
-		grid.Add(textBlock, 0);
-		grid.Add(textBlock2.M(10.0, 0.0, 0.0, 0.0), 0, 1);
-		if (key == "tasks")
-		{
-			_taskBadgeText = new TextBlock
-			{
-				Text = "0",
-				FontSize = 11.0,
-				FontWeight = FontWeights.SemiBold,
-				HorizontalAlignment = HorizontalAlignment.Center,
-				VerticalAlignment = VerticalAlignment.Center
-			};
-			_taskBadge = new Border
-			{
-				CornerRadius = new CornerRadius(999.0),
-				MinWidth = 18.0,
-				Height = 17.0,
-				Padding = new Thickness(5.0, 0.0, 5.0, 1.0),
-				Visibility = Visibility.Collapsed,
-				VerticalAlignment = VerticalAlignment.Center,
-				Child = _taskBadgeText
-			};
-			_taskBadge.SetResourceReference(Border.BackgroundProperty, "B.AccentStrong");
-			_taskBadgeText.SetResourceReference(TextBlock.ForegroundProperty, "B.OnAccentStrong");
-			grid.Add(_taskBadge, 0, 2);
-		}
-		else if (trailing != null)
-		{
-			grid.Add(trailing.VCenter(), 0, 2);
-		}
-		ToggleButton btn = new ToggleButton
-		{
-			Style = Ui.S("NavItem"),
-			Content = grid,
-			Tag = key,
-			Margin = new Thickness(flag ? 12 : 0, 0.0, 0.0, 0.0),
-			HorizontalContentAlignment = HorizontalAlignment.Stretch
-		};
-		if (flag)
-		{
-			textBlock.Opacity = 0.85;
-		}
-		NavRow navRow = new NavRow
-		{
-			Key = key,
-			Button = btn,
-			Section = section
-		};
-		if (!navRow.IsSectionHeader)
-		{
-			btn.Click += delegate
-			{
-				btn.IsChecked = true;
-				if (NavModel.PageForNavKey.TryGetValue(key, out string value))
-				{
-					Navigate(value);
-				}
-			};
-		}
-		btn.ContextMenu = RowMenu(navRow);
-		if (draggable)
-		{
-			AttachDrag(navRow);
-		}
-		_navRows[key] = navRow;
-		return btn;
-	}
-
-	private ContextMenu RowMenu(NavRow row)
-	{
-		ContextMenu contextMenu = new ContextMenu();
-		bool flag = NavModel.NavStyle(_navCfg) == "grouped";
-		string title = NavModel.NavLabel(row.Key);
-		if (row.Section != null)
-		{
-			Item(contextMenu, I18n.L("固定到侧栏"), delegate
-			{
-				NavModel.PinResult res2 = NavModel.PinNavConfig(_navCfg, row.Key);
-				if ((object)res2 != null)
-				{
-					if (res2.Error != null)
-					{
-						Toast(I18n.L("无法移出"), res2.Error, ToastKind.Warning);
-					}
-					else
-					{
-						Run(() => ApplyNavPatchAsync(res2.Patch));
-					}
-				}
-			});
-			foreach (string other in NavModel.SectionIds.Where((string s) => s != row.Section))
-			{
-				Item(contextMenu, I18n.L("移到「{0}」分区", NavModel.NavLabel(other)), delegate
-				{
-					MoveMember(row.Key, row.Section, other, -1);
-				});
-			}
-		}
-		else if (NavModel.AllSubKeys.Contains(row.Key))
-		{
-			foreach (string sec in NavModel.VisibleSections(_navCfg))
-			{
-				Item(contextMenu, I18n.L("放回「{0}」分区", NavModel.NavLabel(sec)), delegate
-				{
-					(Dictionary<string, object?> Patch, string Section)? res = NavModel.UnpinNavConfig(_navCfg, row.Key, sec);
-					if (res.HasValue)
-					{
-						Run(() => ApplyNavPatchAsync(res.Value.Patch));
-						Toast(I18n.L("已取消固定"), I18n.L("「{0}」放回了「{1}」", title, NavModel.NavLabel(res.Value.Section)));
-					}
-				});
-			}
-		}
-		if (row.Section == null && (NavModel.IsTop(row.Key) || flag))
-		{
-			Item(contextMenu, row.IsSectionHeader ? I18n.L("隐藏此分区") : I18n.L("隐藏此入口"), delegate
-			{
-				List<string> hidden = _navCfg.Hidden.Where((string k) => k != row.Key).ToList();
-				hidden.Add(row.Key);
-				Run(() => ApplyNavPatchAsync(new Dictionary<string, object> { ["ui_nav_hidden"] = hidden }));
-				if (PageOf(row.Key) == _currentId)
-				{
-					Navigate("launch");
-				}
-				Toast(I18n.L("已隐藏"), I18n.L("「{0}」可在侧栏右键菜单或设置里恢复", title));
-			});
-		}
-		if (_navCfg.Hidden.Count > 0)
-		{
-			MenuItem menuItem = new MenuItem
-			{
-				Header = I18n.L("恢复隐藏的入口"),
-				Icon = Ui.Glyph("\ue7b3", 13.0)
-			};
-			foreach (string item in _navCfg.Hidden.Where((string k) => NavModel.IsTop(k) || NavModel.AllSubKeys.Contains(k)))
-			{
-				string key = item;
-				Item(menuItem, NavModel.NavLabel(key), delegate
-				{
-					ShowNavItem(key, visible: true);
-				});
-			}
-			if (menuItem.Items.Count > 0)
-			{
-				contextMenu.Items.Add(menuItem);
-			}
-		}
-		contextMenu.Items.Add(new Separator());
-		if (row.IsSectionHeader)
-		{
-			Item(contextMenu, I18n.L("全部展开 / 收起"), delegate
-			{
-				bool value = !_prefs.Expanded.GetValueOrDefault(row.Key);
-				string[] sectionIds = NavModel.SectionIds;
-				foreach (string key2 in sectionIds)
-				{
-					_prefs.Expanded[key2] = value;
-				}
-				SaveUiPrefs();
-				BuildNav();
-			});
-		}
-		string otherStyle = (flag ? "compact" : "grouped");
-		Item(contextMenu, I18n.L("切换排法：") + NavModel.StyleLabels[otherStyle], delegate
-		{
-			SetNavStyle(otherStyle);
-		});
-		MenuItem frost = new MenuItem
-		{
-			Header = I18n.L("侧栏毛玻璃"),
-			IsCheckable = true,
-			IsChecked = SideFrost.Enabled,
-			Icon = Ui.Glyph("\ue790", 13.0)
-		};
-		frost.Click += delegate
-		{
-			SideFrost.SetEnabled(frost.IsChecked);
-			_prefs.SideFrost = frost.IsChecked;
-			SaveUiPrefs();
-		};
-		contextMenu.Items.Add(frost);
-		Item(contextMenu, I18n.L("恢复默认侧栏"), ResetNavLayout);
-		return contextMenu;
-	}
-
-	private static void Item(ItemsControl menu, string header, Action act)
-	{
-		MenuItem menuItem = new MenuItem
-		{
-			Header = header
-		};
-		string text = MenuGlyph(header);
-		if (text == "\ued1a")
-		{
-			menuItem.Icon = Lucide.Icon("M9.88 9.88a3 3 0 1 0 4.24 4.24 M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68 M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61 M2 2l20 20", 13.0, "B.InkSoft");
-		}
-		else if (text != null)
-		{
-			menuItem.Icon = Ui.Glyph(text, 13.0);
-		}
-		menuItem.Click += delegate
-		{
-			act();
-		};
-		menu.Items.Add(menuItem);
-	}
-
-	private static string? MenuGlyph(string header)
-	{
-		if (header == I18n.L("固定到侧栏"))
-		{
-			return "\ue718";
-		}
-		if (header == I18n.L("隐藏此分区") || header == I18n.L("隐藏此入口"))
-		{
-			return "\ued1a";
-		}
-		if (header == I18n.L("全部展开 / 收起"))
-		{
-			return "\ue70d";
-		}
-		if (header.StartsWith(I18n.L("切换排法："), StringComparison.Ordinal))
-		{
-			return "\ue8a9";
-		}
-		if (header == I18n.L("恢复默认侧栏"))
-		{
-			return "\ue72c";
-		}
-		string[] sectionIds = NavModel.SectionIds;
-		for (int i = 0; i < sectionIds.Length; i++)
-		{
-			string text = NavModel.NavLabel(sectionIds[i]);
-			if (header == I18n.L("移到「{0}」分区", text))
-			{
-				return "\ue8ab";
-			}
-			if (header == I18n.L("放回「{0}」分区", text))
-			{
-				return "\ue77a";
-			}
-		}
-		foreach (KeyValuePair<string, string> navGlyph in NavGlyphs)
-		{
-			if (NavModel.NavLabel(navGlyph.Key) == header)
-			{
-				return navGlyph.Value;
-			}
-		}
-		return null;
 	}
 
 	private static string? PageOf(string navKey)
@@ -1975,40 +1450,6 @@ public partial class MainWindow : Window
 			return null;
 		}
 		return value;
-	}
-
-	private void MoveMember(string key, string from, string to, int index)
-	{
-		Dictionary<string, List<string>> members = NavModel.SectionMembersFromConfig(_navCfg);
-		if (!members[from].Remove(key) && !members[to].Contains(key))
-		{
-			return;
-		}
-		members[to].Remove(key);
-		List<string> list = members[to];
-		list.Insert((index >= 0 && index <= list.Count) ? index : list.Count, key);
-		if (members[from].Count == 0 && from != to)
-		{
-			Toast(I18n.L("无法移出"), I18n.L("该分区只剩这一个子页，移走会变空栏"), ToastKind.Warning);
-			return;
-		}
-		_prefs.Expanded[to] = true;
-		Run(() => ApplyNavPatchAsync(new Dictionary<string, object> { ["ui_section_members"] = members }));
-	}
-
-	public void ShowNavItem(string navKey, bool visible)
-	{
-		List<string> hidden = _navCfg.Hidden.Where((string k) => k != navKey).ToList();
-		if (!visible)
-		{
-			hidden.Add(navKey);
-		}
-		Run(() => ApplyNavPatchAsync(new Dictionary<string, object> { ["ui_nav_hidden"] = hidden }));
-	}
-
-	public bool IsNavHidden(string navKey)
-	{
-		return _navCfg.Hidden.Contains(navKey);
 	}
 
 	private List<string> VisibleFlatOrder()
@@ -2054,15 +1495,6 @@ public partial class MainWindow : Window
 		return 99;
 	}
 
-	private void SyncNavSelection()
-	{
-		foreach (NavRow value in _navRows.Values)
-		{
-			value.Button.IsChecked = !value.IsSectionHeader && PageOf(value.Key) == _currentId;
-		}
-		SyncPluginNavSelection();
-	}
-
 	// 顶栏 5 页签的激活态与当前页联动（launch/library/tasks/plugins/settings 之外的高亮全部清掉）
 	private void SyncTabs()
 	{
@@ -2073,189 +1505,10 @@ public partial class MainWindow : Window
 		TabSettings.IsChecked = (_currentId == "settings");
 	}
 
+	// 任务数变化只需刷新底部任务条（侧栏角标已随离屏侧栏删除）
 	private void SyncTasks()
 	{
-		int runningCount = TaskStore.RunningCount;
-		if (_taskBadge != null && _taskBadgeText != null)
-		{
-			_taskBadgeText.Text = ((runningCount > 99) ? "99+" : runningCount.ToString());
-			bool flag = runningCount > 0;
-			if (flag && _taskBadge.Visibility != Visibility.Visible)
-			{
-				_taskBadge.Visibility = Visibility.Visible;
-				Motion.Pulse(_taskBadge, 1.25);
-			}
-			else if (!flag)
-			{
-				_taskBadge.Visibility = Visibility.Collapsed;
-			}
-			SyncDock();
-		}
-	}
-
-	private void AttachDrag(NavRow row)
-	{
-		ToggleButton btn = row.Button;
-		btn.PreviewMouseLeftButtonDown += delegate(object _, MouseButtonEventArgs e)
-		{
-			_dragStart = e.GetPosition(this);
-			_dragRow = row;
-			_dragging = false;
-		};
-		btn.PreviewMouseMove += delegate(object _, MouseEventArgs e)
-		{
-			if (_dragRow == row && e.LeftButton == MouseButtonState.Pressed)
-			{
-				Point position = e.GetPosition(this);
-				if (!_dragging && (Math.Abs(position.Y - _dragStart.Y) > 14.0 || Math.Abs(position.X - _dragStart.X) > 20.0))
-				{
-					_dragging = true;
-					btn.Opacity = 0.45;
-					btn.CaptureMouse();
-					if (_dropLine == null)
-					{
-						_dropLine = new Border
-						{
-							Height = 2.0,
-							CornerRadius = new CornerRadius(1.0),
-							Margin = new Thickness(14.0, 1.0, 14.0, 1.0)
-						};
-					}
-					_dropLine.SetResourceReference(Border.BackgroundProperty, "B.Accent");
-				}
-				if (_dragging)
-				{
-					UpdateDrop(position);
-				}
-			}
-		};
-		btn.PreviewMouseLeftButtonUp += delegate(object _, MouseButtonEventArgs e)
-		{
-			if (_dragRow == row && _dragging)
-			{
-				btn.ReleaseMouseCapture();
-				btn.Opacity = 1.0;
-				RemoveDropLine();
-				bool num = _dropTarget != null && _dropTarget.Key != row.Key;
-				if (_dropTarget != null)
-				{
-					CommitDrop(row, _dropTarget, _dropBefore);
-				}
-				if (num)
-				{
-					e.Handled = true;
-				}
-			}
-			_dragRow = null;
-			_dragging = false;
-			_dropTarget = null;
-		};
-	}
-
-	private void RemoveDropLine()
-	{
-		if (_dropLine?.Parent is Panel panel)
-		{
-			panel.Children.Remove(_dropLine);
-		}
-	}
-
-	private void UpdateDrop(Point mouse)
-	{
-		RemoveDropLine();
-		_dropTarget = null;
-		Point point = PointToScreen(mouse);
-		foreach (NavRow value in _navRows.Values)
-		{
-			if (value == _dragRow || !value.Button.IsVisible)
-			{
-				continue;
-			}
-			Point point2 = value.Button.PointFromScreen(point);
-			double actualHeight = value.Button.ActualHeight;
-			if (!(point2.Y < -3.0) && !(point2.Y > actualHeight + 3.0))
-			{
-				_dropTarget = value;
-				_dropBefore = point2.Y < actualHeight / 2.0;
-				if (value.Button.Parent is Panel panel)
-				{
-					int val = panel.Children.IndexOf(value.Button) + ((!_dropBefore) ? 1 : 0);
-					panel.Children.Insert(Math.Min(val, panel.Children.Count), _dropLine);
-				}
-				break;
-			}
-		}
-	}
-
-	private void CommitDrop(NavRow dragged, NavRow target, bool before)
-	{
-		if (dragged.Key == target.Key)
-		{
-			return;
-		}
-		Dictionary<string, object?> patch = null;
-		if (dragged.Section != null)
-		{
-			if (target.Section != null)
-			{
-				Dictionary<string, List<string>> dictionary = NavModel.SectionMembersFromConfig(_navCfg);
-				int num = dictionary[target.Section].IndexOf(target.Key);
-				if (num >= 0)
-				{
-					if (dragged.Section == target.Section && dictionary[target.Section].IndexOf(dragged.Key) < num)
-					{
-						num--;
-					}
-					MoveMember(dragged.Key, dragged.Section, target.Section, num + ((!before) ? 1 : 0));
-				}
-				return;
-			}
-			if (target.IsSectionHeader)
-			{
-				if (target.Key != dragged.Section)
-				{
-					MoveMember(dragged.Key, dragged.Section, target.Key, -1);
-				}
-				return;
-			}
-			NavModel.PinResult pinResult = NavModel.PinNavConfig(_navCfg, dragged.Key, target.Key, before);
-			if ((object)pinResult == null)
-			{
-				return;
-			}
-			if (pinResult.Error != null)
-			{
-				Toast(I18n.L("无法移出"), pinResult.Error, ToastKind.Warning);
-				return;
-			}
-			patch = pinResult.Patch;
-		}
-		else if (NavModel.AllSubKeys.Contains(dragged.Key) && (target.IsSectionHeader || target.Section != null))
-		{
-			string text = target.Section ?? target.Key;
-			int index = -1;
-			if (target.Section != null)
-			{
-				int num2 = NavModel.SectionMembersFromConfig(_navCfg)[text].IndexOf(target.Key);
-				index = ((num2 < 0) ? (-1) : (num2 + ((!before) ? 1 : 0)));
-			}
-			(Dictionary<string, object>, string)? tuple = NavModel.UnpinNavConfig(_navCfg, dragged.Key, text, index);
-			if (!tuple.HasValue)
-			{
-				return;
-			}
-			patch = tuple.Value.Item1;
-			_prefs.Expanded[tuple.Value.Item2] = true;
-			Toast(I18n.L("已取消固定"), I18n.L("「{0}」放回了「{1}」", NavModel.NavLabel(dragged.Key), NavModel.NavLabel(tuple.Value.Item2)));
-		}
-		else if (target.Section == null)
-		{
-			patch = NavModel.ReorderNavConfig(_navCfg, dragged.Key, target.Key, before);
-		}
-		if (patch != null)
-		{
-			Run(() => ApplyNavPatchAsync(patch));
-		}
+		SyncDock();
 	}
 
 }

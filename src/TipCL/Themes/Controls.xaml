@@ -4,15 +4,12 @@
   <FontFamily x:Key="F.Ui">Microsoft YaHei UI, Microsoft YaHei, Segoe UI, Segoe UI Variable, sans-serif</FontFamily>
   <FontFamily x:Key="F.Mono">Cascadia Mono, Consolas, Microsoft YaHei UI, monospace</FontFamily>
   <!-- v2 圆角：控件 8 / 卡片 12 / 窗口 8（Backdrop.RootCornerRadius）；CR.Pill 只给数字角标 -->
-  <system:Double x:Key="R.Card" xmlns:system="clr-namespace:System;assembly=mscorlib">12</system:Double>
   <CornerRadius x:Key="CR.Card">12</CornerRadius>
   <CornerRadius x:Key="CR.Ctl">8</CornerRadius>
-  <CornerRadius x:Key="CR.Small">8</CornerRadius>
   <CornerRadius x:Key="CR.Pill">999</CornerRadius>
   <Duration x:Key="D.Fast">0:0:0.13</Duration>
   <Duration x:Key="D.Med">0:0:0.22</Duration>
   <CubicEase x:Key="E.Out" EasingMode="EaseOut" />
-  <QuadraticEase x:Key="E.InOut" EasingMode="EaseInOut" />
   <Style x:Key="{x:Type TextBlock}" TargetType="{x:Type TextBlock}">
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
     <Setter Property="FontSize" Value="13" />
@@ -92,10 +89,6 @@
     <Setter Property="Border.CornerRadius" Value="10" />
     <Setter Property="Border.Padding" Value="3" />
     <Setter Property="UIElement.SnapsToDevicePixels" Value="True" />
-  </Style>
-  <Style x:Key="CardFlat" TargetType="{x:Type Border}" BasedOn="{StaticResource Card}">
-    <Setter Property="Background" Value="{DynamicResource B.Paper2}" />
-    <Setter Property="Border.Padding" Value="12" />
   </Style>
   <Style x:Key="ScrollThumb" TargetType="{x:Type Thumb}">
     <Setter Property="FrameworkElement.OverridesDefaultStyle" Value="True" />
@@ -271,11 +264,6 @@
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
   </Style>
   <!-- v2 灰色“管理”按钮 -->
-  <Style x:Key="Btn.Gray" TargetType="{x:Type ButtonBase}" BasedOn="{StaticResource Btn.Base}">
-    <Setter Property="Background" Value="{DynamicResource B.BtnGray}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource B.BtnGrayBorder}" />
-    <Setter Property="Foreground" Value="{DynamicResource B.BtnGrayInk}" />
-  </Style>
   <Style x:Key="Btn.Ghost" TargetType="{x:Type ButtonBase}" BasedOn="{StaticResource Btn.Base}">
     <Setter Property="Background" Value="#00FFFFFF" />
     <Setter Property="BorderBrush" Value="#00FFFFFF" />
@@ -297,12 +285,6 @@
     <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
     <Setter Property="Padding" Value="11,5" />
     <Setter Property="FontSize" Value="12" />
-  </Style>
-  <Style x:Key="Btn.OnBanner" TargetType="{x:Type ButtonBase}" BasedOn="{StaticResource Btn.Base}">
-    <Setter Property="Background" Value="{DynamicResource B.OnBanner}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource B.OnBanner}" />
-    <Setter Property="Foreground" Value="{DynamicResource B.AccentStrong}" />
-    <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
   <Style x:Key="{x:Type CheckBox}" TargetType="{x:Type CheckBox}" BasedOn="{StaticResource {x:Type CheckBox}}">
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
@@ -433,58 +415,6 @@
     <Setter Property="Width" Value="10" />
     <Setter Property="Height" Value="10" />
     <Setter Property="StrokeThickness" Value="1.1" />
-  </Style>
-  <Style x:Key="NavItem" TargetType="{x:Type ToggleButton}">
-    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
-    <Setter Property="FontSize" Value="13" />
-    <Setter Property="Height" Value="36" />
-    <Setter Property="FrameworkElement.Cursor" Value="Hand" />
-    <Setter Property="HorizontalContentAlignment" Value="Left" />
-    <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
-    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="{x:Type ToggleButton}">
-          <Grid Margin="8,1">
-            <Border Name="Sel" Background="{DynamicResource B.AccentSoft}" CornerRadius="8" Opacity="0" />
-            <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="8" />
-            <Border Name="Bar" Width="3" Height="16" CornerRadius="2" HorizontalAlignment="Left" Margin="1,0,0,0" Background="{DynamicResource B.Accent}" Opacity="0" RenderTransformOrigin="0.5,0.5">
-              <UIElement.RenderTransform>
-                <ScaleTransform x:Name="BarSc" ScaleY="0.2" />
-              </UIElement.RenderTransform>
-            </Border>
-            <ContentPresenter Name="Cp" Margin="14,0,10,0" VerticalAlignment="Center" HorizontalAlignment="Left" />
-          </Grid>
-          <ControlTemplate.Triggers>
-            <Trigger Property="UIElement.IsMouseOver" Value="True">
-              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.05" />
-            </Trigger>
-            <Trigger Property="ToggleButton.IsChecked" Value="True">
-              <Setter Value="{DynamicResource B.AccentText}" Property="Foreground" />
-              <Setter Property="FontWeight" Value="SemiBold" />
-              <TriggerBase.EnterActions>
-                <BeginStoryboard>
-                  <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="Sel" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource D.Fast}" />
-                    <DoubleAnimation Storyboard.TargetName="Bar" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource D.Fast}" />
-                    <DoubleAnimation Storyboard.TargetName="BarSc" Storyboard.TargetProperty="ScaleY" To="1" Duration="{StaticResource D.Med}" EasingFunction="{StaticResource E.Out}" />
-                  </Storyboard>
-                </BeginStoryboard>
-              </TriggerBase.EnterActions>
-              <TriggerBase.ExitActions>
-                <BeginStoryboard>
-                  <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="Sel" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource D.Fast}" />
-                    <DoubleAnimation Storyboard.TargetName="Bar" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.08" />
-                    <DoubleAnimation Storyboard.TargetName="BarSc" Storyboard.TargetProperty="ScaleY" To="0.2" Duration="0:0:0.08" />
-                  </Storyboard>
-                </BeginStoryboard>
-              </TriggerBase.ExitActions>
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
   </Style>
   <Style x:Key="TabItemBtn" TargetType="{x:Type ToggleButton}">
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
@@ -906,51 +836,6 @@
       </Setter.Value>
     </Setter>
   </Style>
-  <Style x:Key="Radio" TargetType="{x:Type RadioButton}">
-    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
-    <Setter Property="FontSize" Value="13" />
-    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
-    <Setter Property="FrameworkElement.Cursor" Value="Hand" />
-    <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="{x:Type RadioButton}">
-          <StackPanel Orientation="Horizontal" Background="#00FFFFFF">
-            <Grid Width="18" Height="18" VerticalAlignment="Center">
-              <Ellipse Name="Bx" Stroke="{DynamicResource B.Line}" StrokeThickness="1.4" Fill="{DynamicResource B.Paper}" />
-              <Ellipse Name="Dot" Width="9" Height="9" Fill="{DynamicResource B.Accent}" Opacity="0" RenderTransformOrigin="0.5,0.5">
-                <UIElement.RenderTransform>
-                  <ScaleTransform x:Name="DSc" ScaleX="0.4" ScaleY="0.4" />
-                </UIElement.RenderTransform>
-              </Ellipse>
-            </Grid>
-            <ContentPresenter Margin="9,0,0,0" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Control.Foreground}" TextElement.FontSize="{TemplateBinding Control.FontSize}" TextElement.FontFamily="{StaticResource F.Ui}" />
-          </StackPanel>
-          <ControlTemplate.Triggers>
-            <Trigger Property="ToggleButton.IsChecked" Value="True">
-              <Setter TargetName="Bx" Value="{DynamicResource B.Accent}" Property="Shape.Stroke" />
-              <TriggerBase.EnterActions>
-                <BeginStoryboard>
-                  <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="Dot" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.08" />
-                    <DoubleAnimation Storyboard.TargetName="DSc" Storyboard.TargetProperty="ScaleX" To="1" Duration="{StaticResource D.Med}" EasingFunction="{StaticResource E.Out}" />
-                    <DoubleAnimation Storyboard.TargetName="DSc" Storyboard.TargetProperty="ScaleY" To="1" Duration="{StaticResource D.Med}" EasingFunction="{StaticResource E.Out}" />
-                  </Storyboard>
-                </BeginStoryboard>
-              </TriggerBase.EnterActions>
-              <TriggerBase.ExitActions>
-                <BeginStoryboard>
-                  <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="Dot" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.08" />
-                  </Storyboard>
-                </BeginStoryboard>
-              </TriggerBase.ExitActions>
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
-  </Style>
   <Style x:Key="Sld" TargetType="{x:Type Slider}">
     <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Height" Value="24" />
@@ -1104,30 +989,6 @@
     <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
     <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
   </Style>
-  <DataTemplate x:Key="Tpl.Version">
-    <Grid Margin="12,8,12,8">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" />
-        <ColumnDefinition Width="Auto" />
-        <ColumnDefinition Width="Auto" />
-      </Grid.ColumnDefinitions>
-      <TextBlock Grid.Column="0" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding Version}" />
-      <Border Grid.Column="1" Background="{DynamicResource B.LineSoft}" CornerRadius="6" Padding="6,1,6,2" VerticalAlignment="Center">
-        <TextBlock FontSize="11" Foreground="{DynamicResource B.InkMuted}" Text="{Binding TypeLabel}" />
-      </Border>
-      <TextBlock Grid.Column="2" FontSize="11" Margin="10,0,0,0" Foreground="{DynamicResource B.InkFaint}" VerticalAlignment="Center" MinWidth="72" TextAlignment="Right" Text="{Binding Date}" />
-    </Grid>
-  </DataTemplate>
-  <DataTemplate x:Key="Tpl.Installed">
-    <Grid Margin="12,8,12,8">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="Auto" />
-        <ColumnDefinition Width="*" />
-      </Grid.ColumnDefinitions>
-      <TextBlock Grid.Column="0" Text="" FontFamily="{StaticResource F.Icon}" FontSize="13" Foreground="{DynamicResource B.Accent}" VerticalAlignment="Center" Margin="0,0,10,0" />
-      <TextBlock Grid.Column="1" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding}" />
-    </Grid>
-  </DataTemplate>
   <Style x:Key="{x:Type ToolTip}" TargetType="{x:Type ToolTip}">
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
