@@ -181,6 +181,10 @@ public sealed class LaunchPage : PageBase
 
 	private readonly SPanel _chipRow = Ui.H(6.0);
 
+	// 主按钮内嵌版本（SyncHero 填充）：细竖线分隔 + 所选版本全名
+	private readonly Border _goSep = new Border { Width = 1.0, Height = 20.0, Opacity = 0.45, Margin = new Thickness(2.0, 0.0, 2.0, 0.0) };
+	private readonly TextBlock _goVer = Ui.Txt("").VCenter();
+
 	// 随背景切换配色的半透明块（配置钮 / 联机钮 / 新闻卡）
 	private readonly List<Border> _glass = new List<Border>();
 
@@ -388,7 +392,11 @@ public sealed class LaunchPage : PageBase
 		_launchBtn.SetResourceReference(Control.ForegroundProperty, "B.OnAccentStrong");
 		TextBlock goText = Ui.Txt(I18n.L("启动游戏"), 16.0).VCenter();
 		goText.FontWeight = FontWeights.ExtraBold;
-		_launchBtn.Content = Ui.H(10.0, Ui.Glyph("\ue768", 17.0), goText);
+		_goVer.FontSize = 13.0;
+		_goVer.Opacity = 0.85;
+		_goVer.Visibility = _goSep.Visibility = Visibility.Collapsed;
+		_goSep.SetResourceReference(Border.BackgroundProperty, "B.OnAccentStrong");
+		_launchBtn.Content = Ui.H(10.0, Ui.Glyph("\ue768", 17.0), goText, _goSep, _goVer);
 		_launchShell = new Border
 		{
 			CornerRadius = new CornerRadius(12.0),
@@ -630,6 +638,9 @@ public sealed class LaunchPage : PageBase
 		ResourceDictionary rd = new ResourceDictionary();
 		rd["B.TitleBar"] = Sc(46, 10, 14, 22);
 		rd["B.TitleBarLine"] = Sc(46, 255, 255, 255);
+		// 标题栏 AI 玻璃药丸（MainWindow AiBtn）：沉浸下跟随 .tb.glass 深色 scrim，白字才可读
+		rd["B.GlassStrong"] = Sc(56, 10, 14, 22);
+		rd["B.GlassBorder"] = Sc(46, 255, 255, 255);
 		rd["B.Ink"] = Brushes.White;
 		rd["B.InkMuted"] = Sc(191, 255, 255, 255);
 		rd["B.InkSoft"] = Sc(217, 255, 255, 255);
@@ -1369,12 +1380,17 @@ public sealed class LaunchPage : PageBase
 		_heroTitle.Text = (string.IsNullOrEmpty(instance) ? I18n.L("选择实例") : instance);
 		string dir = info?.Path ?? "";
 		_kickerText.Text = I18n.L("就绪") + (string.IsNullOrEmpty(dir) ? "" : (" · " + dir));
-		// 小标签：版本 / Java / 内存 / 模组数（「Java 17 (…)」「jdk1.8.0_301」→ Java 17 / Java 8）
+		// 小标签：加载器版本 / Java / 内存 / 模组数（「Java 17 (…)」「jdk1.8.0_301」→ Java 17 / Java 8）
 		_chipRow.Children.Clear();
 		string ver = _ver.Str();
-		if (!string.IsNullOrEmpty(ver))
+		// 主按钮内嵌版本全名（fabric-loader-0.20.1-26.3 / 1.20.1）；小标签首位显示加载器名+版本
+		_goVer.Text = ver;
+		bool hasVer = !string.IsNullOrEmpty(ver);
+		_goVer.Visibility = _goSep.Visibility = (hasVer ? Visibility.Visible : Visibility.Collapsed);
+		if (hasVer)
 		{
-			_chipRow.Children.Add(Chip(ver));
+			string[] p = ver.Split('-');
+			_chipRow.Children.Add(Chip(p.Length > 2 && p[0] == "fabric" ? ("Fabric " + p[2]) : ver));
 		}
 		string java = _java.Str();
 		if (!string.IsNullOrEmpty(java))
