@@ -150,7 +150,13 @@ public sealed class InstanceDetailPage : PageBase
 				{
 					Run(() => Api.TryCallAsync<object>("disable_mod", new { instance = _inst, filename = file, version = ver }));
 				};
+#if PREMIUM
+				// premium：副行显示版本号（后端 ModEntry 无作者字段，作者无法显示）；compact 保持文件名
+				string sub = string.Join(" · ", new[] { m.Version, file }.Where((string x) => !string.IsNullOrWhiteSpace(x)).Distinct());
+				rows.Add(Row(string.IsNullOrWhiteSpace(m.Name) ? file : m.Name, sub, sw));
+#else
 				rows.Add(Row(string.IsNullOrWhiteSpace(m.Name) ? file : m.Name, file, sw));
+#endif
 			}
 		}
 		else if (seg == 1)

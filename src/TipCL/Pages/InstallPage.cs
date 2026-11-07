@@ -50,6 +50,9 @@ public sealed class InstallPage : UserControl
 	// premium（install2 效果图）：输入框下 12px 灰字「安装到 <实例目录>」；compact 不加（省余量）
 	private readonly TextBlock _pathHint = Ui.Small("");
 
+	// Fabric API 具体版本号（Modrinth list_catalog_files），失败/离线静默留空；compact 不发请求
+	private readonly TextBlock _apiVer = Ui.Small("");
+
 	private List<InstanceInfo> _infos = new List<InstanceInfo>();
 #endif
 
@@ -146,7 +149,18 @@ public sealed class InstallPage : UserControl
 		_lite.Checked += Changed;
 		_lite.Unchecked += Changed;
 		_verRow = Row(_verLabel, null, _loaderVer);
+#if PREMIUM
+		// install2：Fabric API 行名称下带具体版本号（如 0.92.2+1.21.1），替代 compact 的固定提示
+		_apiVer.Margin = new Thickness(0.0, 1.0, 0.0, 0.0);
+		Grid apiG = Ui.G(null, "Auto,*,Auto");
+		apiG.Height = 46.0;
+		apiG.Margin = new Thickness(16.0, 0.0, 16.0, 0.0);
+		apiG.Add(Ui.V(1.0, Ui.Txt("Fabric API", 13.5), _apiVer).VCenter(), 0);
+		apiG.Add(_api.VCenter(), 0, 2);
+		_apiRow = SepRow(apiG);
+#else
 		_apiRow = SepRow(Row(Ui.Txt("Fabric API", 13.5), I18n.L("大多数 Fabric 模组都需要"), _api));
+#endif
 		FrameworkElement ofGrid = Row(_ofName, null, _of);
 		((Grid)ofGrid).Add(_ofWhy.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 1);
 		_liteRow = SepRow(Row(Ui.Txt("LiteLoader", 13.5), I18n.L("仅老版本可用"), _lite));
@@ -259,7 +273,31 @@ public sealed class InstallPage : UserControl
 		_hasOf = (res[4]?.Count ?? 0) > 0;
 		_liteRow.Visibility = ((res[5]?.Count ?? 0) > 0) ? Visibility.Visible : Visibility.Collapsed;
 		Select(_sel);
+#if PREMIUM
+		_ = LoadFabricApiVersionAsync();
+#endif
 	}
+
+#if PREMIUM
+	// Fabric API 具体版本号：走既有 Modrinth 通道（list_catalog_files，slug 定位），
+	// 取该 MC 版本下最新 release 的 version_number；任何失败静默留空（离线不显示）
+	private async Task LoadFabricApiVersionAsync()
+	{
+		string ver = _ver;
+		List<CatalogFile> files = (await AppServices.Client.TryCallAsync("list_catalog_files", new
+		{
+			extra = new Dictionary<string, object>
+			{
+				["name"] = "Fabric API",
+				["source"] = "Modrinth",
+				["slug"] = "fabric-api",
+				["game_version"] = ver
+			}
+		}, new List<CatalogFile>())) ?? new List<CatalogFile>();
+		CatalogFile f = files.FirstOrDefault((CatalogFile x) => x.ReleaseType == "release") ?? files.FirstOrDefault();
+		_apiVer.Text = f?.VersionNumber ?? "";
+	}
+#endif
 
 	private static LoaderVer Best(List<LoaderVer> l)
 	{
