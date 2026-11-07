@@ -909,15 +909,30 @@ public sealed class LaunchPage : PageBase
 		_switchList.Children.Clear();
 		string q = (_switchSearch?.Text?.Trim() ?? "");
 		string current = _inst.Str();
+		string curVer = _ver.Str();
+		List<string> vers = _ver.Items.Cast<string>().ToList();
 		int shown = 0;
 		foreach (InstanceInfo i in _instances)
 		{
-			if (q.Length > 0 && i.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0)
+			bool isCurrent = (i.Name == current);
+			bool nameHit = (q.Length == 0 || i.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0);
+			// 当前实例行下方展开版本子列表（数据 = ReloadVersionsAsync 灌好的 _ver.Items，不另调后端）
+			List<string> subs = new List<string>();
+			if (isCurrent && vers.Count > 0)
+			{
+				foreach (string v in vers)
+				{
+					if (nameHit || q.Length == 0 || v.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+					{
+						subs.Add(v);
+					}
+				}
+			}
+			if (!nameHit && subs.Count == 0)
 			{
 				continue;
 			}
 			shown++;
-			bool isCurrent = (i.Name == current);
 			SPanel subParts = Ui.V(1.0, Ui.Txt(i.Name, 13.5, bold: isCurrent, "B.Ink").Trim(), InstanceSub(i, 11.0, "B.InkFaint"));
 			FrameworkElement right = (isCurrent ? CurrentMark() : ManageLink(i.Name));
 			right.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
@@ -955,11 +970,64 @@ public sealed class LaunchPage : PageBase
 				};
 			}
 			_switchList.Children.Add(wrap);
+			if (!isCurrent)
+			{
+				continue;
+			}
+			if (vers.Count == 0)
+			{
+				_switchList.Children.Add(Ui.Muted(I18n.L("这个实例还没有版本，先去「原版游戏」装一个")).M(24.0, 4.0, 4.0, 8.0));
+				continue;
+			}
+			foreach (string v in subs)
+			{
+				_switchList.Children.Add(VerRow(v, v == curVer));
+			}
 		}
 		if (shown == 0)
 		{
 			_switchList.Children.Add(Ui.Muted(I18n.L("没有匹配的实例")).M(4.0, 6.0, 4.0, 6.0));
 		}
+	}
+
+	// 实例切换浮层里的版本子行：行高 46，选中 = 主题色 + 勾；点击即选为启动版本
+	private Border VerRow(string v, bool sel)
+	{
+		Grid g = Ui.G(null, "*,Auto");
+		g.Add(Ui.Txt(v, 13.0, bold: sel, sel ? "B.AccentText" : "B.Ink").Trim().VCenter(), 0);
+		if (sel)
+		{
+			g.Add(Ui.Glyph(Ico.Check, 13.0, "B.Accent").VCenter(), 0, 1);
+		}
+		Border row = new Border
+		{
+			MinHeight = 46.0,
+			CornerRadius = new CornerRadius(6.0),
+			Padding = new Thickness(26.0, 4.0, 12.0, 4.0),
+			Background = Brushes.Transparent,
+			Cursor = Cursors.Hand,
+			Child = g
+		};
+		row.MouseEnter += delegate
+		{
+			row.SetResourceReference(Border.BackgroundProperty, "B.RowHover");
+		};
+		row.MouseLeave += delegate
+		{
+			row.Background = Brushes.Transparent;
+		};
+		row.MouseLeftButtonUp += delegate
+		{
+			if (_switchPopup != null)
+			{
+				_switchPopup.IsOpen = false;
+			}
+			if (_ver.Str() != v)
+			{
+				_ver.SelectedItem = v;
+			}
+		};
+		return row;
 	}
 
 	private static SPanel CurrentMark()
@@ -1301,8 +1369,13 @@ public sealed class LaunchPage : PageBase
 		_heroTitle.Text = (string.IsNullOrEmpty(instance) ? I18n.L("选择实例") : instance);
 		string dir = info?.Path ?? "";
 		_kickerText.Text = I18n.L("就绪") + (string.IsNullOrEmpty(dir) ? "" : (" · " + dir));
-		// 小标签：Java 版本 / 内存 / 模组数（「Java 17 (…)」「jdk1.8.0_301」→ Java 17 / Java 8）
+		// 小标签：版本 / Java / 内存 / 模组数（「Java 17 (…)」「jdk1.8.0_301」→ Java 17 / Java 8）
 		_chipRow.Children.Clear();
+		string ver = _ver.Str();
+		if (!string.IsNullOrEmpty(ver))
+		{
+			_chipRow.Children.Add(Chip(ver));
+		}
 		string java = _java.Str();
 		if (!string.IsNullOrEmpty(java))
 		{
