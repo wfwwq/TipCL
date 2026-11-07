@@ -1518,7 +1518,7 @@ public partial class MainWindow : Window
 		return 99;
 	}
 
-	// 顶栏 5 页签的激活态与当前页联动（launch/library/tasks/plugins/settings 之外的高亮全部清掉）
+	// 顶栏 5 页签 + 插件动态页签的激活态与当前页联动（其余高亮全部清掉）
 	private void SyncTabs()
 	{
 		TabLaunch.IsChecked = (_currentId == "launch");
@@ -1526,6 +1526,10 @@ public partial class MainWindow : Window
 		TabTasks.IsChecked = (_currentId == "download" || _currentId == "tasks");
 		TabPlugins.IsChecked = (_currentId == "plugins");
 		TabSettings.IsChecked = (_currentId == "settings" || _currentId == "account");
+		foreach (ToggleButton t in _pluginTabs)
+		{
+			t.IsChecked = ((string)t.Tag == _currentId);
+		}
 	}
 
 	// 任务数变化只需刷新底部任务条（侧栏角标已随离屏侧栏删除）

@@ -56,6 +56,53 @@ public partial class MainWindow
 				}
 			}
 		}
+		RebuildPluginTabs();
+	}
+
+	private readonly List<ToggleButton> _pluginTabs = new List<ToggleButton>();
+
+	// 旧侧栏删除后（WP-F），group "top" 的插件页面（老版渲染为侧栏一级入口）在壳上唯一的落脚点：
+	// 追加为顶部页签（设置之后），按 Order 稳定排序；插件卸载 / 页面注销时由 OnPluginUiChanged 重建。
+	internal void RebuildPluginTabs()
+	{
+		if (TopTabPanel == null)
+		{
+			return;
+		}
+		foreach (ToggleButton t in _pluginTabs)
+		{
+			TopTabPanel.Children.Remove(t);
+		}
+		_pluginTabs.Clear();
+		foreach (UiContribution c in PluginUi.OfKind("page")
+			.Where((UiContribution p) => p.Group == "top")
+			.OrderBy((UiContribution p) => p.Order)
+			.ThenBy((UiContribution p) => p.Plugin, StringComparer.Ordinal)
+			.ToList())
+		{
+			string pageId = c.PageId;
+			string label = (string.IsNullOrEmpty(c.Icon) ? "" : c.Icon + " ") + c.Label;
+			TextBlock text = new TextBlock
+			{
+				Text = label,
+				MaxWidth = 128.0,
+				TextTrimming = TextTrimming.CharacterEllipsis
+			};
+			ToggleButton tab = new ToggleButton
+			{
+				Style = (Style)FindResource("Tab.Top"),
+				Content = text,
+				Tag = pageId,
+				ToolTip = c.Label
+			};
+			tab.Click += delegate
+			{
+				Navigate(pageId);
+			};
+			TopTabPanel.Children.Add(tab);
+			_pluginTabs.Add(tab);
+		}
+		SyncTabs();
 	}
 
 	/// <summary>NavDefs 里没有的页面 id：插件页面 plugin:&lt;plugin&gt;:&lt;id&gt;。</summary>

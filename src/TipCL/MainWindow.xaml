@@ -30,7 +30,7 @@
               </Grid>
               <TextBlock Text="TipCL" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0" />
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+            <StackPanel x:Name="TopTabPanel" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left" shell:WindowChrome.IsHitTestVisibleInChrome="True">
               <ToggleButton Name="TabLaunch" Style="{StaticResource Tab.Top}" Content="启动" />
               <ToggleButton Name="TabLibrary" Style="{StaticResource Tab.Top}" Content="实例库" />
               <ToggleButton Name="TabTasks" Style="{StaticResource Tab.Top}" Content="下载" />
