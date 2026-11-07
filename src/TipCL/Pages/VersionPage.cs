@@ -29,62 +29,7 @@ public sealed class VersionPage : PageBase
 		public string IsolationLabel = "";
 	}
 
-	private sealed class Row
-	{
-		public string Version { get; init; } = "";
-
-		public string Type { get; init; } = "";
-
-		public string Date { get; init; } = "";
-
-		public string TypeLabel => Type switch
-		{
-			"release" => I18n.L("正式版"), 
-			"snapshot" => I18n.L("快照"), 
-			"old_beta" => I18n.L("旧测试"), 
-			"old_alpha" => I18n.L("旧阿尔法"), 
-			_ => string.IsNullOrEmpty(Type) ? I18n.L("未知") : Type, 
-		};
-	}
-
-	private static readonly string[] Loaders = new string[5]
-	{
-		I18n.L("无"),
-		"Fabric",
-		"Forge",
-		"Quilt",
-		"NeoForge"
-	};
-
-	private readonly TextBox _search = Ui.Input(I18n.L("过滤版本号，例如 1.20"));
-
-	private readonly ListBox _list = new ListBox
-	{
-		Style = Ui.S("PlainList"),
-		ItemTemplate = (DataTemplate)Application.Current.FindResource("Tpl.Version")
-	};
-
 	private readonly ComboBox _inst = Ui.Combo();
-
-	private readonly ComboBox _loader = Ui.Combo(Loaders);
-
-	private readonly ComboBox _loaderVer = Ui.Combo(new string[1] { I18n.L("最新") });
-
-	private readonly CheckBox _release = Ui.Check(I18n.L("正式版"), value: true);
-
-	private readonly CheckBox _snapshot = Ui.Check(I18n.L("快照"));
-
-	private readonly CheckBox _oldBeta = Ui.Check(I18n.L("旧测试"));
-
-	private readonly CheckBox _oldAlpha = Ui.Check(I18n.L("旧阿尔法"));
-
-	private readonly CheckBox _optifine = Ui.Check("OptiFine");
-
-	private readonly CheckBox _lite = Ui.Check("LiteLoader");
-
-	private readonly Button _install;
-
-	private readonly TextBlock _count = Ui.Muted("");
 
 	private readonly TextBlock _instCount = Ui.Muted("");
 
@@ -94,102 +39,18 @@ public sealed class VersionPage : PageBase
 
 	private readonly CheckBox _showHidden = Ui.Switch();
 
-	private readonly SPanel _installedEmpty = Ui.Empty("\ue7b8", I18n.L("这个实例还没有版本"), I18n.L("在左边挑一个装上"));
-
-	private List<Row> _all = new List<Row>();
+	private readonly SPanel _installedEmpty = Ui.Empty("\ue7b8", I18n.L("这个实例还没有版本"), I18n.L("到「下载」页挑一个装上"));
 
 	private List<Installed> _mine = new List<Installed>();
 
+	// 版本清单拉取超时（DownloadPage 使用；Smoke 会改写）
 	public static int FetchTimeoutMs = 9000;
-
-	private CancellationTokenSource? _fetchCts;
-
-	private bool _fetchInFlight;
-
-	private bool _fetchInterrupted;
-
-	private readonly TextBlock _fetchErrorText = Ui.Muted("");
-
-	private readonly Border _fetchError;
 
 	public override string Title => I18n.L("原版游戏");
 
-	private static Row Map(VersionRow r)
-	{
-		return new Row
-		{
-			Version = r.Version,
-			Type = r.Type,
-			Date = r.Date
-		};
-	}
-
+	// WP-C：远程版本列表与安装设置已迁到 DownloadPage / InstallPage，本页只保留已安装版本管理
 	public VersionPage()
 	{
-		_install = Ui.Btn(I18n.L("安装所选版本"), BtnKind.Primary, delegate
-		{
-			PageBase.Run(InstallAsync);
-		}, "\ue896");
-		_install.IsEnabled = false;
-		Button button = Ui.Btn(I18n.L("刷新清单"), BtnKind.Chip, delegate
-		{
-			PageBase.Run(FetchAsync);
-		}, "\ue72c");
-		Grid grid = Ui.Section(I18n.L("原版游戏"), I18n.L("Mojang 全量版本 + Fabric / Forge / Quilt / NeoForge 加载器"), Ui.H(8.0, _count.VCenter(), button));
-		_search.TextChanged += delegate
-		{
-			ApplyFilter();
-		};
-		CheckBox[] array = new CheckBox[4] { _release, _snapshot, _oldBeta, _oldAlpha };
-		foreach (CheckBox obj in array)
-		{
-			obj.Checked += delegate
-			{
-				ApplyFilter();
-			};
-			obj.Unchecked += delegate
-			{
-				ApplyFilter();
-			};
-		}
-		_list.SelectionChanged += delegate
-		{
-			_install.IsEnabled = _list.SelectedItem is Row;
-			if (_loader.Str() != I18n.L("无"))
-			{
-				PageBase.Run(LoadLoaderVersionsAsync);
-			}
-		};
-		_list.MouseDoubleClick += delegate
-		{
-			PageBase.Run(InstallAsync);
-		};
-		_loader.SelectionChanged += delegate
-		{
-			string text = _loader.Str();
-			_loaderVer.IsEnabled = text != I18n.L("无");
-			_optifine.IsEnabled = text == I18n.L("无") || text == "Forge";
-			if (!_optifine.IsEnabled)
-			{
-				_optifine.IsChecked = false;
-			}
-			PageBase.Run(LoadLoaderVersionsAsync);
-		};
-		SPanel el = Ui.H(14.0, _release, _snapshot, _oldBeta, _oldAlpha);
-		Button el2 = Ui.Btn(I18n.L("重试"), BtnKind.Soft, delegate
-		{
-			PageBase.Run(FetchAsync, I18n.L("版本清单刷新失败"));
-		}, "\ue72c");
-		Grid grid2 = Ui.G(null, "Auto,*,Auto");
-		grid2.Add(Ui.Glyph("\ue7ba", 14.0, "B.Warn").VCenter().M(0.0, 0.0, 8.0), 0);
-		grid2.Add(_fetchErrorText.Wrap().VCenter(), 0, 1);
-		grid2.Add(el2.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 2);
-		_fetchError = Ui.RowCard(grid2, null, 10.0);
-		_fetchError.Visibility = Visibility.Collapsed;
-		Border border = Ui.Card(Ui.V(10.0, Ui.H(10.0, _search, el.VCenter()), _fetchError, _list), 14.0);
-		_search.MinWidth = 240.0;
-		_list.Height = 330.0;
-		Border border2 = Ui.Card(Ui.V(10.0, Ui.H3(I18n.L("安装设置")), Ui.Field(I18n.L("目标实例"), _inst, null, 88.0), Ui.Field(I18n.L("加载器"), _loader, null, 88.0), Ui.Field(I18n.L("加载器版本"), _loaderVer, null, 88.0), Ui.H(16.0, _optifine, _lite), _install.Stretch()), 14.0);
 		_mineSearch.TextChanged += delegate
 		{
 			RenderInstalled();
@@ -214,12 +75,12 @@ public sealed class VersionPage : PageBase
 				});
 			}, I18n.L("打开失败"));
 		}, "\ue8b7");
-		Grid grid3 = Ui.Section(I18n.L("已安装"), I18n.L("每个版本一张卡：启动、模组、设置都在卡上，「更多」里是重命名 / 复制 / 快捷方式 / 卸载"), Ui.H(8.0, _instCount.VCenter(), _mineSearch.VCenter(), Ui.H(6.0, Ui.Txt(I18n.L("显示隐藏"), 12.0, bold: false, "B.InkMuted").VCenter(), _showHidden).VCenter(), button2));
-		Border border3 = Ui.Card(Ui.V(10.0, grid3, _cards, _installedEmpty), 14.0);
-		Grid grid4 = Ui.G(null, "*,320");
-		grid4.Add(Ui.V(14.0, border, border3), 0);
-		grid4.Add(Ui.V(14.0, border2).M(14.0, 0.0, 0.0, 0.0), 0, 1);
-		base.Content = PageBase.ScrollBody(grid, grid4);
+		Button dl = Ui.Btn(I18n.L("下载新版本"), BtnKind.Primary, delegate
+		{
+			PageBase.Win?.Navigate("download");
+		}, "\ue896");
+		Grid grid3 = Ui.Section(I18n.L("已安装"), I18n.L("每个版本一张卡：启动、模组、设置都在卡上，「更多」里是重命名 / 复制 / 快捷方式 / 卸载"), Ui.H(8.0, _instCount.VCenter(), _inst.W(150.0).VCenter(), _mineSearch.VCenter(), Ui.H(6.0, Ui.Txt(I18n.L("显示隐藏"), 12.0, bold: false, "B.InkMuted").VCenter(), _showHidden).VCenter(), button2, dl));
+		base.Content = PageBase.ScrollBody(Ui.Card(Ui.V(10.0, grid3, _cards, _installedEmpty), 14.0));
 		EnableDrop(() => new FileDrop.DropContext
 		{
 			Instance = _inst.Str(),
@@ -231,126 +92,7 @@ public sealed class VersionPage : PageBase
 	{
 		List<InstanceInfo> source = (await PageBase.Api.TryCallAsync("get_instances", null, new List<InstanceInfo>())) ?? new List<InstanceInfo>();
 		_inst.Fill(source.Select((InstanceInfo i) => i.Name));
-		List<VersionRow> list = (await PageBase.Api.TryCallAsync("get_version_list", null, new List<VersionRow>())) ?? new List<VersionRow>();
-		if (list.Count > 0)
-		{
-			_all = list.Select(Map).ToList();
-			ApplyFilter();
-		}
 		await ReloadInstalledAsync();
-		PageBase.Run(FetchAsync, I18n.L("版本清单刷新失败"));
-	}
-
-	private async Task FetchAsync()
-	{
-		CancelFetch();
-		CancellationTokenSource cts = (_fetchCts = new CancellationTokenSource(FetchTimeoutMs));
-		_fetchInterrupted = false;
-		_fetchInFlight = true;
-		_fetchError.Visibility = Visibility.Collapsed;
-		_count.Text = I18n.L("正在拉取版本清单…");
-		try
-		{
-			List<VersionRow> list = (await PageBase.Api.CallAsync<List<VersionRow>>("fetch_version_list", null, cts.Token)) ?? new List<VersionRow>();
-			if (cts == _fetchCts)
-			{
-				if (list.Count > 0)
-				{
-					_all = list.Select(Map).ToList();
-					ApplyFilter();
-				}
-				else
-				{
-					ShowFetchFailure(I18n.L("版本清单刷新失败"), I18n.L("拉取失败，检查网络后点刷新"));
-				}
-			}
-		}
-		catch (OperationCanceledException)
-		{
-			if (cts == _fetchCts && !_fetchInterrupted)
-			{
-				ShowFetchFailure(I18n.L("拉取超时"), I18n.L("{0} 秒内没等到版本清单。检查网络后重试。", Math.Max(1, (FetchTimeoutMs + 999) / 1000)));
-			}
-		}
-		catch (Exception ex2)
-		{
-			if (cts == _fetchCts)
-			{
-				ShowFetchFailure(I18n.L("版本清单刷新失败"), ex2.Message);
-			}
-		}
-		finally
-		{
-			if (cts == _fetchCts)
-			{
-				_fetchInFlight = false;
-			}
-		}
-	}
-
-	private void CancelFetch()
-	{
-		_fetchInFlight = false;
-		CancellationTokenSource fetchCts = _fetchCts;
-		_fetchCts = null;
-		if (fetchCts != null)
-		{
-			try
-			{
-				fetchCts.Cancel();
-			}
-			catch (ObjectDisposedException)
-			{
-			}
-			fetchCts.Dispose();
-		}
-	}
-
-	private void ShowFetchFailure(string title, string detail)
-	{
-		_fetchErrorText.Text = title + " · " + detail;
-		_fetchError.Visibility = Visibility.Visible;
-		if (_all.Count == 0)
-		{
-			_count.Text = I18n.L("拉取失败，检查网络后点刷新");
-			return;
-		}
-		ApplyFilter();
-		PageBase.Toast(I18n.L("版本清单刷新失败"), I18n.L("沿用已缓存的清单"), ToastKind.Warning);
-	}
-
-	private void ApplyFilter()
-	{
-		string q = _search.Text?.Trim() ?? "";
-		HashSet<string> want = new HashSet<string>();
-		if (_release.IsChecked == true)
-		{
-			want.Add("release");
-		}
-		if (_snapshot.IsChecked == true)
-		{
-			want.Add("snapshot");
-		}
-		if (_oldBeta.IsChecked == true)
-		{
-			want.Add("old_beta");
-		}
-		if (_oldAlpha.IsChecked == true)
-		{
-			want.Add("old_alpha");
-		}
-		IEnumerable<Row> source = _all.Where((Row r) => want.Contains(r.Type));
-		if (q.Length > 0)
-		{
-			source = source.Where((Row r) => r.Version.Contains(q, StringComparison.OrdinalIgnoreCase));
-		}
-		List<Row> list = source.ToList();
-		_list.ItemsSource = list;
-		_count.Text = I18n.L("{0} / {1} 个版本", list.Count, _all.Count);
-		if (list.Count > 0 && _list.SelectedIndex < 0)
-		{
-			_list.SelectedIndex = 0;
-		}
 	}
 
 	private async Task ReloadInstalledAsync()
@@ -631,63 +373,6 @@ public sealed class VersionPage : PageBase
 		}
 	}
 
-	private async Task LoadLoaderVersionsAsync()
-	{
-		string text = _loader.Str();
-		if (text == I18n.L("无") || !(_list.SelectedItem is Row row))
-		{
-			_loaderVer.Fill(new string[1] { I18n.L("最新") });
-			return;
-		}
-		_loaderVer.Fill(new string[1] { I18n.L("最新（加载中…）") });
-		List<LoaderVer> list = (await PageBase.Api.TryCallAsync("list_loader_versions", new
-		{
-			mc_version = row.Version,
-			loader = text.ToLowerInvariant()
-		}, new List<LoaderVer>())) ?? new List<LoaderVer>();
-		List<string> list2 = new List<string> { I18n.L("最新") };
-		list2.AddRange(list.Select((LoaderVer r) => (!string.IsNullOrEmpty(r.Label)) ? r.Label : r.Id));
-		_loaderVer.Fill(list2, I18n.L("最新"));
-		_loaderVer.Tag = list;
-	}
-
-	private async Task InstallAsync()
-	{
-		object selectedItem = _list.SelectedItem;
-		if (!(selectedItem is Row row))
-		{
-			PageBase.Toast(I18n.L("先选一个版本"), "", ToastKind.Warning);
-			return;
-		}
-		string loader = _loader.Str();
-		bool none = loader == I18n.L("无");
-		string loader_version = "";
-		if (!none && _loaderVer.SelectedIndex > 0 && _loaderVer.Tag is List<LoaderVer> list)
-		{
-			int num = _loaderVer.SelectedIndex - 1;
-			if (num >= 0 && num < list.Count)
-			{
-				loader_version = list[num].Id;
-			}
-		}
-		Dictionary<string, object> extra = new Dictionary<string, object>
-		{
-			["optifine"] = _optifine.IsChecked == true,
-			["liteloader"] = _lite.IsChecked == true
-		};
-		await PageBase.Api.StartTaskAsync("install_game", new
-		{
-			version = row.Version,
-			loader = (none ? "" : loader),
-			loader_version = loader_version,
-			instance = _inst.Str(),
-			extra = extra
-		});
-		PageBase.Win?.FlyToTasks(_install, row.Version);
-		PageBase.Toast(I18n.L("已加入队列"), row.Version + (none ? "" : (" + " + loader)), ToastKind.Success);
-		PageBase.Win?.Navigate("tasks");
-	}
-
 	public override async Task RefreshAsync()
 	{
 		await ReloadInstalledAsync();
@@ -697,20 +382,8 @@ public sealed class VersionPage : PageBase
 	{
 		_inst.SelectionChanged -= InstChanged;
 		_inst.SelectionChanged += InstChanged;
-		if (_fetchInterrupted)
-		{
-			PageBase.Run(FetchAsync, I18n.L("版本清单刷新失败"));
-		}
 	}
 
-	public override void OnHidden()
-	{
-		if (_fetchInFlight)
-		{
-			_fetchInterrupted = true;
-			CancelFetch();
-		}
-	}
 
 	private void InstChanged(object? s, SelectionChangedEventArgs e)
 	{
