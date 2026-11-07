@@ -514,7 +514,7 @@ public sealed class VersionManagePage : PageBase
 		}
 		if (v.Isolated && !string.IsNullOrEmpty(v.IsolationLabel))
 		{
-			((Panel)sPanel).Children.Add((UIElement)(object)Ui.Tag(v.IsolationLabel));
+			((Panel)sPanel).Children.Add((UIElement)(object)Ui.Tag(v.IsolationLabel, "B.AccentDeep", "B.AccentSoft"));
 		}
 		SPanel sPanel2 = Ui.H(6.0, (UIElement)Ui.Txt(id, 13.0, bold: true).Trim<TextBlock>());
 		if (((Panel)sPanel).Children.Count > 0)
@@ -549,6 +549,19 @@ public sealed class VersionManagePage : PageBase
 		{
 			Orientation = (Orientation)0
 		};
+		// WP-S4 追加：行尾隔离标签（隔离=主题色，共享=灰「大锅饭」）+ 独立开关
+		((Panel)val5).Children.Add((UIElement)(object)IsolationTag(v).VCenter<Border>());
+		CheckBox isolationSwitch = Ui.Switch(v.Isolated);
+		isolationSwitch.ToolTip = I18n.L("开：这个版本用自己的 mods / config；关：与实例里其它版本共用那一份");
+		isolationSwitch.Checked += delegate
+		{
+			PageBase.Run(() => ToggleIsolationVerAsync(id, isolated: true), I18n.L("切换失败"));
+		};
+		isolationSwitch.Unchecked += delegate
+		{
+			PageBase.Run(() => ToggleIsolationVerAsync(id, isolated: false), I18n.L("切换失败"));
+		};
+		((Panel)val5).Children.Add((UIElement)(object)isolationSwitch);
 		((Panel)val5).Children.Add((UIElement)(object)val2);
 		((Panel)val5).Children.Add((UIElement)(object)val3);
 		((Panel)val5).Children.Add((UIElement)(object)val4);
@@ -593,9 +606,44 @@ public sealed class VersionManagePage : PageBase
 		return (UIElement)(object)border;
 	}
 
-	private static string SubLine(Ver v)
+	private static Border IsolationTag(Ver v)
 	{
-		string text = v.Type switch
+		if (v.Isolated)
+		{
+			string label = string.IsNullOrEmpty(v.IsolationLabel)
+				? I18n.L("完全独立")
+				: v.IsolationLabel;
+			return Ui.Tag(label, "B.AccentDeep", "B.AccentSoft");
+		}
+		return Ui.Tag(I18n.L("大锅饭（与其他版本共用）"));
+	}
+
+	// WP-S4 追加：从 VersionPage.ToggleIsolationAsync 独立移植（非引用），恢复隔离交互
+	private async Task ToggleIsolationVerAsync(string version, bool isolated)
+	{
+		bool seed = false;
+		if (isolated)
+		{
+			int num = await Dlg.Choose(I18n.L("转为独立模组"), Ui.Muted(I18n.L("「{0}」将拥有自己的 mods / config 目录。\n\n", version) + I18n.L("要把游戏目录里现有的共享模组复制一份过去吗？\n") + I18n.L("选「复制一份」保持现在能玩的样子；选「留空」从零开始装。")).Wrap().MinW(380.0), new string[3]
+			{
+				I18n.L("取消"),
+				I18n.L("留空"),
+				I18n.L("复制一份")
+			}, 540.0);
+			if (num <= 0)
+			{
+				await LoadAsync();
+				return;
+			}
+			seed = num == 2;
+		}
+		await PageBase.Api.CallAsync("toggle_version_isolation", new { version, isolated, seed });
+		PageBase.Toast(isolated ? I18n.L("已转为独立模组") : I18n.L("已改回共用"), isolated ? (I18n.L("「{0}」以后用自己的 mods / config", version) + (seed ? I18n.L("，已复制一份现有模组") : "")) : I18n.L("「{0}」与实例里其它版本共用 mods", version), ToastKind.Success);
+		await LoadAsync();
+	}
+
+	private static string SubLine(Ver v)
+	{		string text = v.Type switch
 		{
 			"release" => I18n.L("正式版"), 
 			"snapshot" => I18n.L("快照"), 

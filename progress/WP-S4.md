@@ -37,3 +37,14 @@
 ## 提交
 
 只 add 本任务 4 文件 + 本文件；LibraryPage.cs 的并行改动（WP-S6）未纳入本提交。
+
+## S4 追加：恢复版本隔离交互（WP-S7 结论落地，方案 A）
+
+用户报"隔离模式丢失"：唯一 UI 入口在被 S4 孤立的 VersionPage。已在 VersionManagePage.cs BuildVerRow 恢复：
+
+1. 每行行尾加 `Ui.Switch(v.Isolated)` 开关（Checked/Unchecked → `ToggleIsolationVerAsync`），带 tooltip「开：这个版本用自己的 mods / config；关：与实例里其它版本共用那一份」。
+2. `ToggleIsolationVerAsync`：从 VersionPage.ToggleIsolationAsync **独立移植**（约 30 行，非引用）：隔离开启时 Dlg.Choose 三选（取消/留空/复制一份，选复制 seed=true），`toggle_version_isolation` API，Toast 成功提示，完成后 LoadAsync 刷新。
+3. 隔离标签：隔离行 = 主题色 Tag（IsolationLabel，如「完全独立」，fg=B.AccentDeep/bg=B.AccentSoft）；共享行 = 灰 Tag「大锅饭（与其他版本共用）」（ISOLATION_LABELS none 文案原样）。标签放行尾按钮区（对齐效果图2）。
+4. VersionPage.cs 本体未动（深清理留给监工）。
+
+验证：compact 5,729,280 B（较追加前 +24 KB，仍低于红线 5,757,264 约 28 KB）；premium 构建通过；测试 127/128（唯一失败仍为 PhoneLink 基线项）；`--shot instance --theme dark` 确认行内主题色「完全独立」标签 + 开关渲染正常（_wph_run/wps4/shot-instance-dark.png）。commit 注明"S4 追加：恢复版本隔离交互"。
