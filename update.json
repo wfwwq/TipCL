@@ -1,6 +1,6 @@
 {
-  "version": "1.0.10",
-  "notes": "设置页移除更新地址与微软 Client ID，统一用内置值",
-  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.0.10/TipCL.exe",
-  "sha256": "615b2165bf1529f6cf538cda63a44aeb8edc896f5e9a05ade605f7edfccad7a8"
+  "version": "1.1.0",
+  "notes": "页面布局自定义：大多数页面右键「自定义布局」即可拖拽重排、显隐区块，支持布局导出/导入分享；设置→壁纸新增 4 张内置预设背景；实例详情设置页去除与实例库重复的文件夹列表",
+  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.1.0/TipCL.exe",
+  "sha256": "fc4feea23cb0ea5397f95f2324af767674c43ce6dab52602f52dc558083d7d3b"
 }
