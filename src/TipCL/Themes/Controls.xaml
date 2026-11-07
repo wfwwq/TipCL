@@ -66,7 +66,7 @@
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
   </Style>
-  <!-- v2 卡片：白底无边框（保留 1px 透明边避免布局位移）、圆角 12；需要极淡阴影用 Card.Shadow -->
+  <!-- v2 卡片：白底无边框（保留 1px 透明边避免布局位移）、圆角 12。DropShadowEffect 有渲染成本且伤 ClearType，长列表里的卡片请用 Card -->
   <Style x:Key="Card" TargetType="{x:Type Border}">
     <Setter Property="Background" Value="{DynamicResource B.Card}" />
     <Setter Property="BorderBrush" Value="{DynamicResource B.CardBorder}" />
@@ -74,14 +74,6 @@
     <Setter Property="Border.CornerRadius" Value="{StaticResource CR.Card}" />
     <Setter Property="Border.Padding" Value="12" />
     <Setter Property="UIElement.SnapsToDevicePixels" Value="True" />
-  </Style>
-  <!-- 极淡阴影（0 1px 3px rgba(0,0,0,.04)）。DropShadowEffect 有渲染成本，长列表里的卡片请用 Card -->
-  <Style x:Key="Card.Shadow" TargetType="{x:Type Border}" BasedOn="{StaticResource Card}">
-    <Setter Property="UIElement.Effect">
-      <Setter.Value>
-        <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="1" Direction="270" Opacity="0.06" RenderingBias="Performance" />
-      </Setter.Value>
-    </Setter>
   </Style>
   <!-- 分段控件的灰色轨道：里面放若干 Seg.Item -->
   <Style x:Key="Seg.Rail" TargetType="{x:Type Border}">
@@ -516,11 +508,6 @@
             </Trigger>
             <Trigger Property="ToggleButton.IsChecked" Value="True">
               <Setter TargetName="Bd" Property="Border.Background" Value="{DynamicResource B.SegOn}" />
-              <Setter TargetName="Bd" Property="UIElement.Effect">
-                <Setter.Value>
-                  <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Direction="270" Opacity="0.08" RenderingBias="Performance" />
-                </Setter.Value>
-              </Setter>
               <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
               <Setter Property="Control.FontWeight" Value="Bold" />
             </Trigger>

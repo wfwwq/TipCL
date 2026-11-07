@@ -44,7 +44,10 @@ public sealed class LibraryPage : PageBase
 		newBtn.Height = 32.0;
 		newBtn.FontSize = 13.0;
 		Grid head = Ui.G(null, "*,Auto,Auto");
-		head.Add(Ui.H1(I18n.L("实例库")).VCenter(), 0);
+		TextBlock h1 = Ui.H1(I18n.L("实例库"));
+		h1.FontSize = 21.0;
+		h1.FontWeight = FontWeights.ExtraBold;
+		head.Add(h1.VCenter(), 0);
 		head.Add(_search.VCenter().M(12.0, 0.0, 10.0, 0.0), 0, 1);
 		head.Add(newBtn.VCenter(), 0, 2);
 		_empty.Show(shown: false);
@@ -121,17 +124,14 @@ public sealed class LibraryPage : PageBase
 	{
 		bool isCurrent = (i.Name == _defaultInstance);
 		SPanel row1 = Ui.H(6.0);
-		if (isCurrent)
+		Ellipse dot = new Ellipse
 		{
-			Ellipse dot = new Ellipse
-			{
-				Width = 7.0,
-				Height = 7.0
-			};
-			dot.SetResourceReference(Shape.FillProperty, "B.Accent");
-			dot.VerticalAlignment = VerticalAlignment.Center;
-			row1.Children.Add(dot);
-		}
+			Width = 7.0,
+			Height = 7.0
+		};
+		dot.SetResourceReference(Shape.FillProperty, isCurrent ? "B.Accent" : "B.InkFaint");
+		dot.VerticalAlignment = VerticalAlignment.Center;
+		row1.Children.Add(dot);
 		row1.Children.Add(Ui.Txt(i.Name, 14.0, bold: true, "B.Ink").Trim().VCenter());
 		// 行2：诚实数据——整合包名 / MC 版本 / 版本数 / Java，缺什么省什么
 		List<string> meta = new List<string>();
@@ -180,14 +180,14 @@ public sealed class LibraryPage : PageBase
 		SPanel cardBody = Ui.V(8.0, row1, row2, row4);
 		Border card = new Border
 		{
-			CornerRadius = new CornerRadius(10.0),
+			CornerRadius = new CornerRadius(12.0),
 			Padding = new Thickness(14.0, 12.0, 14.0, 12.0),
 			Margin = new Thickness(0.0, 0.0, 10.0, 10.0),
 			VerticalAlignment = VerticalAlignment.Top,
 			Child = cardBody
 		};
-		card.SetResourceReference(Border.BackgroundProperty, "B.Paper");
-		card.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		card.SetResourceReference(Border.BackgroundProperty, "B.Card");
+		card.SetResourceReference(Border.BorderBrushProperty, "B.CardBorder");
 		return card;
 	}
 
