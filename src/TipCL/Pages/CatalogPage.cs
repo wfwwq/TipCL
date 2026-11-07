@@ -91,8 +91,6 @@ public sealed class CatalogPage : PageBase
 
 	private Mode _mode;
 
-	private readonly bool _installedFirst;
-
 	private int _searchToken;
 
 	public static int SearchTimeoutMs = 9000;
@@ -111,19 +109,14 @@ public sealed class CatalogPage : PageBase
 	{
 		get
 		{
-			if (!_installedFirst)
-			{
-				return _kind.Title;
-			}
-			return I18n.L("模组");
+			return _kind.Title;
 		}
 	}
 
-	public CatalogPage(CatalogKind kind, bool installedFirst = false)
+	public CatalogPage(CatalogKind kind)
 	{
 		_kind = kind;
-		_installedFirst = installedFirst && kind.InstalledMethod.Length > 0;
-		_mode = (_installedFirst ? Mode.Installed : Mode.Search);
+		_mode = Mode.Search;
 		_search.Tag = I18n.L("搜索{0}，留空看热门", kind.Title);
 		string[] array = new string[3]
 		{
@@ -137,13 +130,12 @@ public sealed class CatalogPage : PageBase
 		{
 			Content = I18n.L("搜索下载"),
 			Style = Ui.S("TabItemBtn"),
-			IsChecked = !_installedFirst
+			IsChecked = true
 		};
 		_modeInstalled = new ToggleButton
 		{
 			Content = I18n.L("已安装"),
 			Style = Ui.S("TabItemBtn"),
-			IsChecked = _installedFirst
 		};
 		_modeFav = new ToggleButton
 		{
@@ -317,10 +309,6 @@ public sealed class CatalogPage : PageBase
 
 	private string SubTitle()
 	{
-		if (_installedFirst)
-		{
-			return I18n.L("管理所选实例里已装的模组；要装新的切到「搜索下载」");
-		}
 		return _kind.Key switch
 		{
 			"mod" => I18n.L("从 Modrinth / CurseForge 搜模组，装进所选实例"), 

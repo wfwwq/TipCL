@@ -108,21 +108,9 @@ public partial class MainWindow : Window
 		new NavDef("launch", I18n.L("启动"), "\ue7c1", () => new LaunchPage()),
 		new NavDef("library", I18n.L("实例库"), "\ue80a", () => new LibraryPage()),
 		new NavDef("instance", I18n.L("版本管理"), "\ue80a", () => new VersionManagePage()),
-		new NavDef("version", I18n.L("原版游戏"), "\ue7fc", () => new VersionPage()),
-		new NavDef("mod", "Mod", "\uea86", () => new CatalogPage(CatalogKind.Mod)),
-		new NavDef("mods", I18n.L("模组"), "\ue8fd", () => new CatalogPage(CatalogKind.Mod, installedFirst: true)),
-		new NavDef("modpack", I18n.L("整合包"), "\ue7b8", () => new CatalogPage(CatalogKind.Modpack)),
-		new NavDef("datapack", I18n.L("数据包"), "\ue8f1", () => new CatalogPage(CatalogKind.Datapack)),
-		new NavDef("resourcepack", I18n.L("资源包"), "\ueb9f", () => new CatalogPage(CatalogKind.ResourcePack)),
-		new NavDef("shader", I18n.L("光影包"), "\ue706", () => new CatalogPage(CatalogKind.Shader)),
-		new NavDef("world", I18n.L("世界"), "\ue909", () => new CatalogPage(CatalogKind.World)),
 		new NavDef("account", I18n.L("账号"), "\ue77b", () => new AccountPage()),
-		new NavDef("java", "Java", "\uec32", () => new JavaPage()),
 		new NavDef("ai", I18n.L("AI 助手"), "\ue99a", () => new AiPage()),
 		new NavDef("multiplayer", I18n.L("联机"), "\ue701", () => new MultiplayerPage()),
-		new NavDef("servers", I18n.L("服务器"), "\ue968", () => new ServersPage()),
-		new NavDef("playtime", I18n.L("游戏时长"), "\ue823", () => new PlaytimePage()),
-		new NavDef("feedback", I18n.L("反馈与帮助"), "\ue8bd", () => new FeedbackPage()),
 		new NavDef("settings", I18n.L("设置"), "\ue713", () => new SettingsPage()),
 		new NavDef("tasks", I18n.L("下载任务"), "\ue9d5", () => new TasksPage()),
 		new NavDef("download", I18n.L("下载"), "\ue896", () => new DownloadPage()),
@@ -552,7 +540,7 @@ public partial class MainWindow : Window
 	private async Task WarmUpAsync()
 	{
 		await Task.Delay(900);
-		string[] array = new string[3] { "instance", "version", "tasks" };
+		string[] array = new string[2] { "instance", "tasks" };
 		string[] array2 = array;
 		foreach (string text in array2)
 		{
@@ -1532,7 +1520,7 @@ public partial class MainWindow : Window
 		TabLibrary.IsChecked = (_currentId == "library");
 		TabTasks.IsChecked = (_currentId == "download" || _currentId == "tasks");
 		TabPlugins.IsChecked = (_currentId == "plugins");
-		TabSettings.IsChecked = (_currentId == "settings" || _currentId == "account" || _currentId == "java" || _currentId == "servers" || _currentId == "playtime" || _currentId == "feedback");
+		TabSettings.IsChecked = (_currentId == "settings" || _currentId == "account");
 	}
 
 	// 任务数变化只需刷新底部任务条（侧栏角标已随离屏侧栏删除）

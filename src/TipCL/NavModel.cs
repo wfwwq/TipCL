@@ -25,8 +25,8 @@ public static class NavModel
 
 	public static readonly IReadOnlyDictionary<string, string[]> SubDefaultMembers = new Dictionary<string, string[]>
 	{
-		["download"] = new string[8] { "version", "mod", "modpack", "datapack", "resource", "shader", "world", "java" },
-		["more"] = new string[9] { "instance", "mods", "account", "multiplayer", "servers", "playtime", "feedback", "settings", "plugins" }
+		["download"] = Array.Empty<string>(),
+		["more"] = new string[5] { "instance", "account", "multiplayer", "settings", "plugins" }
 	};
 
 	public static readonly HashSet<string> AllSubKeys = new HashSet<string>(SectionIds.SelectMany((string sec) => SubDefaultMembers[sec]));
@@ -35,21 +35,9 @@ public static class NavModel
 
 	public static readonly IReadOnlyDictionary<string, string> SubTitles = new Dictionary<string, string>
 	{
-		["version"] = I18n.L("原版游戏"),
-		["mod"] = I18n.L("Mod"),
-		["modpack"] = I18n.L("整合包"),
-		["datapack"] = I18n.L("数据包"),
-		["resource"] = I18n.L("资源包"),
-		["shader"] = I18n.L("光影包"),
-		["world"] = I18n.L("世界"),
-		["java"] = I18n.L("Java"),
 		["instance"] = I18n.L("版本管理"),
-		["mods"] = I18n.L("模组"),
 		["account"] = I18n.L("账号"),
 		["multiplayer"] = I18n.L("联机"),
-		["servers"] = I18n.L("服务器"),
-		["playtime"] = I18n.L("时长"),
-		["feedback"] = I18n.L("反馈"),
 		["settings"] = I18n.L("设置"),
 		["plugins"] = I18n.L("插件")
 	};
@@ -83,17 +71,16 @@ public static class NavModel
 
 	public static readonly string[] BottomKeys = new string[4] { "ai", "more", "settings", "tasks" };
 
-	// WP4 信息架构：14+ 平级入口 → 7 个分组顶级项。
-	// 分组里直接点名的子页（instance/multiplayer/servers/account/feedback/settings）不再进
-	// download/more 分区（PinnedFromConfig 去重）；mods/playtime/plugins 留在「更多」分区，挂在「工具」组下。
-	public static readonly (string Title, string[] Keys)[] GroupedNav = new(string, string[])[7]
+	// WP4 信息架构：平级入口 → 6 个分组顶级项（WP-S4 删除空「反馈」组）。
+	// 分组里直接点名的子页（instance/multiplayer/account/settings）不再进
+	// download/more 分区（PinnedFromConfig 去重）；plugins 留在「更多」分区，挂在「工具」组下。
+	public static readonly (string Title, string[] Keys)[] GroupedNav = new(string, string[])[6]
 	{
 		(I18n.L("启动"), new string[1] { "launch" }),
-		(I18n.L("库"), new string[4] { "instance", "download", "multiplayer", "servers" }),
+		(I18n.L("库"), new string[3] { "instance", "download", "multiplayer" }),
 		(I18n.L("社区"), new string[1] { "account" }),
 		(I18n.L("AI 助手"), new string[1] { "ai" }),
 		(I18n.L("工具"), new string[2] { "tasks", "more" }),
-		(I18n.L("反馈"), new string[1] { "feedback" }),
 		(I18n.L("设置"), new string[1] { "settings" })
 	};
 
@@ -108,21 +95,9 @@ public static class NavModel
 		["launch"] = "launch",
 		["ai"] = "ai",
 		["tasks"] = "tasks",
-		["version"] = "version",
-		["mod"] = "mod",
-		["modpack"] = "modpack",
-		["datapack"] = "datapack",
-		["resource"] = "resourcepack",
-		["shader"] = "shader",
-		["world"] = "world",
-		["java"] = "java",
 		["instance"] = "instance",
-		["mods"] = "mods",
 		["account"] = "account",
 		["multiplayer"] = "multiplayer",
-		["servers"] = "servers",
-		["playtime"] = "playtime",
-		["feedback"] = "feedback",
 		["settings"] = "settings",
 		["plugins"] = "plugins"
 	};

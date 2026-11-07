@@ -49,7 +49,9 @@ public class NavCompatTests
 		var items = NavModel.NavItemsFromConfig(cfg);
 		Assert.NotEmpty(items);
 		Assert.DoesNotContain(items, i => i.Kind == NavEntryKind.Item && i.Key == "ai");
-		Assert.Contains(items, i => i.Kind == NavEntryKind.Item && i.Key == "java");
+		// WP-S4：java/version/mod/playtime 已删除导航键，旧存档里的残留引用被安全忽略
+		Assert.DoesNotContain(items, i => i.Kind == NavEntryKind.Item && i.Key == "java");
+		Assert.DoesNotContain(items, i => i.Kind == NavEntryKind.Item && i.Key == "playtime");
 	}
 
 	[Fact]
@@ -66,8 +68,8 @@ public class NavCompatTests
 	public void NewDefaultGroupsCoverAllEntriesAndRender()
 	{
 		var items = NavModel.NavItemsFromConfig(new NavConfig());
-		// 7 个分组头（GOAL WP4：6-7 个顶级分组）
-		Assert.Equal(7, items.Count(i => i.Kind == NavEntryKind.Header));
+		// 6 个分组头（WP-S4 删除空的「反馈」组后：启动/库/社区/AI/工具/设置）
+		Assert.Equal(6, items.Count(i => i.Kind == NavEntryKind.Header));
 		// 每个 item 要么映射到页面，要么是可折叠分区头（download/more）
 		Assert.All(items.Where(i => i.Kind == NavEntryKind.Item),
 			i => Assert.True(NavModel.PageForNavKey.ContainsKey(i.Key) || NavModel.IsSection(i.Key), i.Key));
