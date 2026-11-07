@@ -19,7 +19,7 @@
 <img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E4%B8%AD%E6%96%87%20%7C%20English-F4A93B?style=flat-square" alt="中文 | English" />
 <a href="https://github.com/wfwwq/TipCL/actions/workflows/ci.yml"><img src="https://github.com/wfwwq/TipCL/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 
-[AI 助手](#-ai-助手) · [功能](#-功能) · [下载与构建](#-下载与构建) · [MCP Server](#-mcp-server) · [插件系统](#-插件系统) · [目录结构](#-目录结构) · [开发者选项](#-开发者选项)
+[AI 助手](#-ai-助手) · [功能](#-功能) · [下载与构建](#-下载与构建) · [MCP Server](#-mcp-server) · [插件系统](#-插件系统) · [目录结构](#-目录结构) · [开发者选项](#-开发者选项) · [致谢](#-致谢)
 
 </div>
 
@@ -60,6 +60,12 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 | 🎨 **外观** | 浅色 / 深色主题，中英双语界面 |
 
 > Win7 / 8.1 同样可用：图标用内置字体渲染、图片走纯托管解码，不依赖系统里不存在的新组件（插件的 Web 界面在 Win7 / 8.1 上会自动改用浏览器打开）。
+
+## 🙏 致谢
+
+- QQ `368****168`：帮忙测试了正版（微软）验证
+- xbly666        ：发现并且反馈了图标的bug
+- 界面图标字形来自 [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)（MIT），打包为内置字体 TipCL Icons
 
 ## 📦 下载与构建
 
@@ -168,12 +174,6 @@ exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，
 
 状态说明：✅ 已完成 · 🚧 开发中 · 📋 已采纳待排期 · ⏸️ 暂不考虑（附原因）
 
-
-## 🙏 致谢
-
-- QQ `368****168`：帮忙测试了正版（微软）验证
-- xbly666        ：发现并且反馈了图标的bug
-- 界面图标字形来自 [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)（MIT），打包为内置字体 TipCL Icons
 
 ## 📄 许可证
 
