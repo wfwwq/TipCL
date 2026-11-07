@@ -115,6 +115,12 @@ public sealed class VersionManagePage : PageBase
 
 	public override string Title => I18n.L("版本管理");
 
+	// 实例详情页「设置」分段内嵌本页时预选该实例
+	public string Folder
+	{
+		set { _folder = value; }
+	}
+
 	public VersionManagePage()
 	{
 		Button val = Ui.Btn(I18n.L("添加已有文件夹"), BtnKind.Soft, (RoutedEventHandler)delegate

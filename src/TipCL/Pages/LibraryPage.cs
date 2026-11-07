@@ -25,6 +25,8 @@ public sealed class LibraryPage : PageBase
 
 	private string _defaultInstance = "";
 
+	private readonly SmoothScroll _shell;
+
 	public override string Title => I18n.L("实例库");
 
 	public LibraryPage()
@@ -49,7 +51,8 @@ public sealed class LibraryPage : PageBase
 		_grid.Show(shown: false);
 		_grid.HorizontalAlignment = HorizontalAlignment.Stretch;
 		SPanel body = Ui.V(12.0, head, _grid, _empty);
-		base.Content = PageBase.ScrollBody(body);
+		_shell = PageBase.ScrollBody(body);
+		base.Content = _shell;
 		base.SizeChanged += delegate
 		{
 			LayoutCards();
@@ -164,7 +167,11 @@ public sealed class LibraryPage : PageBase
 		};
 		Button manage = Ui.Btn(I18n.L("管理"), BtnKind.Chip, delegate
 		{
-			PageBase.Win?.Navigate("instance");
+			// 页内切到实例详情（同 DownloadPage→InstallPage），返回时恢复列表
+			base.Content = new InstanceDetailPage(i, delegate
+			{
+				base.Content = _shell;
+			});
 		});
 		manage.Height = 26.0;
 		manage.FontSize = 12.0;
