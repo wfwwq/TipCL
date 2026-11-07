@@ -11,7 +11,7 @@
 | WP-E | 实例详情页（分段 模组/存档/资源包/光影/设置，模组行开关），实例库“管理”进入 | 实例相关页面 | 完成待验（未编译）。新建 InstanceDetailPage，LibraryPage 管理内部切换，VersionManagePage 加 Folder 属性。体积估计 +4–6 KB 大概率超红线，需实测。详见 progress/WP-E.md |
 | WP-G | **premium 版**（交接必读 §2.5）：csproj 加 Premium 开关；嵌入加载器官方图标/草方块/hero.jpg；启动页无截图时用 hero.jpg；真毛玻璃；去掉为体积做的删减 | src/TipCL/TipCL.csproj、LoaderIcons.cs、LaunchPage.cs（#if PREMIUM 分支） | 未开始（排在 WP-F 之后，下一轮开工即做） |
 | WP-H | 双版本测试与交付：两版各自 build/test、GOAL §6 测试全跑、compact 体积检查、产出 TipCL-compact.exe / TipCL-premium.exe（需用户 Windows 环境） | — | 未开始 |
-| WP-F | 收尾：删“更多”抽屉、统一圆角、全局一致性审查、DECISIONS 追加 | 全局 | **中断（半成品）**：子代理被叫停，未写 progress/WP-F.md、未写 DECISIONS D-11+。已落盘改动（约 −1000 行：MainWindow.xaml.cs、MainWindow.Plugins.cs、Controls.xaml、Palette 两套）提交为 WIP。接手先 `git show` 审这次删除：确认没删掉仍被引用的代码/键（grep 全仓库），保留 multiplayer/instance/tasks/version NavDef；再补 DECISIONS（启动大按钮圆角 12、LaunchBackground 并入、插件设置移到插件页 ⋯、设置页嵌入子页独立实例、实例详情/安装页页内切换、C 桥改 Logo 红点）。 |
+| WP-F | 收尾：删“更多”抽屉、统一圆角、全局一致性审查、DECISIONS 追加 | 全局 | **已验收**（2026-11-07，commit 6ebc26e）：5254d8f 删除审查通过、无悬空引用；\uec7a→\uebe8；SyncTabs 设置子页点亮；账号芯片即时刷新。0 错误、127/128、5,705,216 B。详见 progress/WP-F.md |
 
 ## 中断记录
 - 2026-11-06 13:52（UTC-10）：日额度达到 80%，用户叫停。WP-A/B/C 三个子代理被取消，均**未写 progress/WP-X.md**。已落盘的半成品改动已提交为一个 commit（"WIP 中断"），未经验收、未编译。
@@ -35,3 +35,16 @@
 3. 请用户在 Windows 上编译两版、跑测试、量体积；compact 若超红线，按 progress/WP-*.md 里各包给出的“超了先删什么”回收。
 4. WP-H 双版本测试与交付。
 已知整体风险：本轮全部未编译；compact 体积大概率超 5,707,264 B（WP-A/D/E 各自估计增加数 KB，WP-F 删除约 1000 行可能抵消）。
+
+## 2026-11-07 第三轮（用户 Windows 机接手，环境：本机可编译）
+- 环境：zip 解包到 `windos\tipcl`（git 完整）。dotnet SDK 10.0.403 可用——本轮起所有改动真编译验证。zip 内陈旧 obj 曾造成 68 个假 CS0103，净 obj 后 HEAD 编译通过。
+- WP-F 审查+补完（**commit 6ebc26e**）：删除安全；字形修复；SyncTabs/账号芯片补完。compact 5,705,216 B、127/128。
+- WP-G premium（**commit ceb7061**）：PREMIUM 开关 + PremiumAssets 6 件嵌入 + hero 回退 + WallHost 标题栏沉浸。compact 字节不变，premium 6,000,128 B。
+- WP-H/WP-I 双版 --smoke 全绿（22 页/44 控件/19 弹窗/0 异常，两版一致）；交付物首切 `windos\dist\`。
+- WP-K 启动页实例内版本选择（**commit 2ae6221**）：实例浮层展开版本子行，选中即按该版本启动。compact 5,706,240 B（**余量 1,024 B**）。
+- WP-N premium 完整化：用户两次叫停，**停置未完成**（Fabric API 版本号/路径提示/加载器卡视觉/模组行增强）——留待后续。
+- WP-J/WP-L（视觉对照报告、交互 E2E）：按用户指示撤下（"写文档的换下来"）。磁盘产物：`_wph_run\shots\` 20 张矩阵 + `shell\` 真窗截图，可供后续实修对照。
+- 进行中（实修，2026-11-07）：WP-T = AI 入口改右侧玻璃药丸钮「✳ AI」+Ctrl+K（D-16）；WP-U = 启动页贴 launch2 实修（按钮内嵌版本/▶/联机图标）；WP-V = 实例库/下载/插件/设置四页贴图实修。三者文件不重叠。
+- 额度监控按用户 2026-11-07 指示**停用**；子代理并发上限 2 → 后放宽（实测 3 并行可行）。
+- 构建标准参数（D-14）：`dotnet build-server shutdown && dotnet build TipCL.sln -c Release -p:UseSharedCompilation=false -p:DebugType=none -p:DebugSymbols=false -m:1`（premium 加 `-p:Premium=true`）。
+- 待办：WP-T/U/V 验收 → 全部落定后重切 dist（D-18）→ 总结报告。

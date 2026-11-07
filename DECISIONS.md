@@ -87,3 +87,52 @@
 - 可回滚：是（`git config --unset`）。
 - 偏离提示：若用户希望以本人身份提交，回来后可 `git rebase --reset-author`。
 
+### D-11 · WP-F 半成品审查结论与补完（commit 6ebc26e）
+- 时间：2026-11-07（第三轮，环境已换到用户 Windows 机 + dotnet SDK 10，可真编译）
+- 处境：HEAD=5254d8f 是被叫停的 WP-F 半成品（删"更多"抽屉/死代码约 1000 行），未审查未编译；交接必读要求接手先审。
+- 决定与结论：逐文件审查 + 全仓库 grep（含 FindResource/字符串键）证实删除安全、无悬空引用；multiplayer/instance/version/tasks/download NavDef 齐全。补完三项：① 插件页 \uec7a 缺字形 → \uebe8（字体实测存在；提示的 \ue943 不在字体，弃用）；② SyncTabs 扩展——account/java/servers/playtime/feedback 子页点亮"设置"页签；③ SyncAccountChipAsync 改 internal 并在 AccountPage.LoadAsync 挂钩，设置内切账号后标题栏即时刷新。
+- 数据：compact 0 错误、测试 127/128（唯一失败=基线既有 PhoneLinkTests.FullFlow）、exe 5,705,216 B。
+- 偏离提示：无。
+
+### D-12 · premium 版落地（WP-G，commit ceb7061）
+- 时间：2026-11-07
+- 处境：交接必读 §2.5 双版本交付，D-6 只定了方向未实现。
+- 决定：csproj 主 PropertyGroup 尾加 `<DefineConstants Condition="'$(Premium)'=='true'">$(DefineConstants);PREMIUM</DefineConstants>`；新增条件 ItemGroup 嵌入 `src/TipCL/PremiumAssets/` 6 件（fabric/forge/neoforge/quilt_gh.png、grass.png、hero.jpg；quilt 从官方头像 CDN 抓取）。LoaderIcons premium 走 pack URI 免下载；LaunchPage premium：无截图回退 hero.jpg、背景搬 WallHost 实现标题栏沉浸+玻璃 TopBar、OnHidden 还原。compact 路径零改动（字节不变）。
+- 数据：premium 6,000,128 B（初版）；--shot 冒烟确认 hero+沉浸生效、还原可靠。
+- 可回滚：是（#if 隔离）。
+
+### D-13 · 验收方式：预构建隔离运行目录 + 自检参数
+- 时间：2026-11-07
+- 处境：并行子代理各建两版会互抢 obj；应用数据目录 %LOCALAPPDATA%\TipCL 无隔离机制。
+- 决定：监工统一构建两版并复制到 `_wph_run\compact\`、`_wph_run\premium\`，测试类子代理只运行不构建；应用自检用仓库自带 `--smoke`（22 页/44 控件/19 弹窗自动走查）与 `--shot`（离屏截图）；共享数据目录偶发异常先等 30 秒重跑一次再定性。测试产物留 `_wph_run\`（仓库外）。
+- 数据：两版 --smoke 全绿（0 未预期异常/0 错误 Toast），首切交付物 `D:\项目\tipcl\windos\dist\TipCL-compact.exe`(5,704,704 B, SHA256 0897a3ba…) / `TipCL-premium.exe`(5,999,616 B, SHA256 4e1d45dd…)。
+- 偏离提示：dist 在代码再变动后需重切（WP-K 后已过期）。
+
+### D-14 · 本机构建防锁标准参数
+- 时间：2026-11-07
+- 处境：VBCSCompiler/悬空 dotnet host 反复锁 obj 的 exe/pdb（CS2012），shutdown 后仍复发；zip 内陈旧 obj 曾造成 68 个假 CS0103。
+- 决定：标准构建命令 = `dotnet build-server shutdown` 后 `dotnet build TipCL.sln -c Release -p:UseSharedCompilation=false -p:DebugType=none -p:DebugSymbols=false -m:1`（premium 加 `-p:Premium=true`）；构建前 rm 净 bin/obj。DebugType=none 使 exe 再 −512 B（compact 5,704,704 B）。所有子代理一律带全参数。
+- 偏离提示：DebugType=none 只影响 pdb，不影响交付 exe 功能。
+
+### D-15 · 启动页实例内版本选择（WP-K，commit 2ae6221）
+- 时间：2026-11-07，用户报障："启动时无法选择一个实例内的多个版本"
+- 根因：版本下拉 `_ver` 藏在"启动配置"浮层不可见，启动默认取列表第一项；实例切换浮层只能切实例。
+- 决定：实例切换浮层在当前实例行下展开该实例版本子行（数据用既有 `_ver.Items`/`get_installed_versions`，零新增后端调用），选中行=设 `_ver`+关浮层，启动链路不变；chip 行首位加当前版本 chip（后被 WP-U 按效果图改为按钮内嵌版本）。实例详情页启动因共用 `_ver` 顺带生效。
+- 数据：compact 5,706,240 B（余量降至 1,024 B，本改动耗 1,536 B）；127/128。
+- 偏离提示：版本子列表只展开在当前实例下（省体积）；浮层 MaxHeight 300 内滚动。
+
+### D-16 · AI 入口布局改版（2026-11-07 用户拍板，以 AI 助手效果图为准）
+- 时间：2026-11-07
+- 处境：用户先指示"挪到顶部那一堆"，随后给出效果图明确：AI 入口在标题栏**右侧簇**（月亮左边）做**玻璃药丸钮「✳ AI」**（星芒图标+小字 AI），ToolTip「AI 助手 Ctrl+K」。
+- 决定：推翻"进页签排"的中间方案；最终 = 右侧簇玻璃药丸钮 + Ctrl+K 快捷键直开 AI 页；顶部页签保持 5 个。实施中（WP-T）。
+- 可回滚：是（MainWindow.xaml/.xaml.cs 单点）。
+
+### D-17 · 子代理工作模式（2026-11-07 用户追加）
+- 决定：① 并发上限先定 2，后放宽实测 3 并行；② **写文档/报告的子代理全部撤下，换成实修**（写代码、构建、验证、提交）；测试产物以 `_wph_run\` 目录留档即可，progress/WP-*.md 只做简短记录；③ 子代理允许按文件分工并行（互不重叠），git 只 add 自己的文件。
+- 偏离提示：无。
+
+### D-18 · 交付物重切规则
+- 时间：2026-11-07
+- 决定：任何代码合入（WP-K/NI/T/U/V…）后，`dist\TipCL-compact.exe` / `TipCL-premium.exe` 由监工在全部代码落定后统一重建重切，并记录字节+SHA256；子代理不许碰 dist。
+- 偏离提示：无。
+
