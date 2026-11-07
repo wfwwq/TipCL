@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -45,6 +46,13 @@ public sealed class InstallPage : UserControl
 
 	private readonly TextBlock _ofName = Ui.Txt("OptiFine", 13.5);
 
+#if PREMIUM
+	// premium（install2 效果图）：输入框下 12px 灰字「安装到 <实例目录>」；compact 不加（省余量）
+	private readonly TextBlock _pathHint = Ui.Small("");
+
+	private List<InstanceInfo> _infos = new List<InstanceInfo>();
+#endif
+
 	private readonly FrameworkElement _verRow;
 
 	private readonly FrameworkElement _apiRow;
@@ -70,6 +78,7 @@ public sealed class InstallPage : UserControl
 		_ver = version;
 		_name = Ui.Input("", version);
 		_name.Height = 38.0;
+		_name.Padding = new Thickness(10.0, 3.0, 10.0, 3.0);
 		_name.FontWeight = FontWeights.SemiBold;
 		_name.TextChanged += delegate
 		{
@@ -88,7 +97,7 @@ public sealed class InstallPage : UserControl
 		TextBlock title = Ui.H1(I18n.L("安装 Minecraft {0}", version));
 		title.FontSize = 20.0;
 		title.FontWeight = FontWeights.ExtraBold;
-		SPanel head = Ui.H(10.0, bk, title.VCenter(), Ui.Tag(typeLabel, "B.Ok", "B.LineSoft"));
+		SPanel head = Ui.H(10.0, bk, title.VCenter(), Ui.Tag(typeLabel, "B.Ok", "B.AccentSoft"));
 		head.Margin = new Thickness(22.0, 14.0, 22.0, 10.0);
 
 		Grid lds = Ui.G(null, "*,*,*,*,*");
@@ -103,7 +112,7 @@ public sealed class InstallPage : UserControl
 				CornerRadius = new CornerRadius(8.0),
 				HorizontalAlignment = HorizontalAlignment.Right,
 				VerticalAlignment = VerticalAlignment.Top,
-				Margin = new Thickness(0.0, -2.0, -2.0, 0.0),
+				Margin = new Thickness(0.0, 9.0, 10.0, 0.0),
 				Child = Ui.Glyph("\ue73e", 9.0, "B.OnAccent").Center(),
 				Tag = "chk"
 			};
@@ -137,12 +146,12 @@ public sealed class InstallPage : UserControl
 		_lite.Checked += Changed;
 		_lite.Unchecked += Changed;
 		_verRow = Row(_verLabel, null, _loaderVer);
-		_apiRow = Row(Ui.Txt("Fabric API", 13.5), I18n.L("大多数 Fabric 模组都需要"), _api);
-		FrameworkElement ofRow = Row(_ofName, null, _of);
-		((Grid)ofRow).Add(_ofWhy.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 1);
-		_liteRow = Row(Ui.Txt("LiteLoader", 13.5), I18n.L("仅老版本可用"), _lite);
+		_apiRow = SepRow(Row(Ui.Txt("Fabric API", 13.5), I18n.L("大多数 Fabric 模组都需要"), _api));
+		FrameworkElement ofGrid = Row(_ofName, null, _of);
+		((Grid)ofGrid).Add(_ofWhy.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 1);
+		_liteRow = SepRow(Row(Ui.Txt("LiteLoader", 13.5), I18n.L("仅老版本可用"), _lite));
 		_liteRow.Visibility = Visibility.Collapsed;
-		Border vbox = Ui.Card(Ui.V(0.0, _verRow, _apiRow, ofRow, _liteRow), 0.0);
+		Border vbox = Ui.Card(Ui.V(0.0, _verRow, _apiRow, SepRow(ofGrid), _liteRow), 0.0);
 		vbox.Padding = new Thickness(0.0, 4.0, 0.0, 4.0);
 		vbox.Margin = new Thickness(0.0, 10.0, 0.0, 0.0);
 
@@ -150,7 +159,13 @@ public sealed class InstallPage : UserControl
 		nm.Children.Add(_name);
 		nm.Children.Add(_nameHint.Right().VCenter().M(0.0, 0.0, 14.0, 0.0));
 		_nameHint.IsHitTestVisible = false;
+#if PREMIUM
+		_pathHint.Margin = new Thickness(2.0, 6.0, 0.0, 0.0);
+		_pathHint.IsHitTestVisible = false;
+		SPanel body = Ui.V(0.0, Label(I18n.L("实例名称"), 8.0), nm, _pathHint, Label(I18n.L("模组加载器"), 14.0), lds, vbox);
+#else
 		SPanel body = Ui.V(0.0, Label(I18n.L("实例名称"), 8.0), nm, Label(I18n.L("模组加载器"), 14.0), lds, vbox);
+#endif
 		body.Margin = new Thickness(22.0, 0.0, 22.0, 16.0);
 
 		_go = Ui.Btn(I18n.L("开始安装"), BtnKind.Primary, delegate
@@ -202,6 +217,18 @@ public sealed class InstallPage : UserControl
 		return g;
 	}
 
+	// 行上方 1px 分隔线（install2 .vr，随行一起折叠）
+	private static FrameworkElement SepRow(FrameworkElement row)
+	{
+		Border b = new Border
+		{
+			BorderThickness = new Thickness(0.0, 1.0, 0.0, 0.0),
+			Child = row
+		};
+		b.SetResourceReference(Border.BorderBrushProperty, "B.RowLine");
+		return b;
+	}
+
 	private void Changed(object s, RoutedEventArgs e)
 	{
 		Sync();
@@ -209,7 +236,11 @@ public sealed class InstallPage : UserControl
 
 	private async Task LoadAsync()
 	{
-		_instances = ((await AppServices.Client.TryCallAsync("get_instances", null, new List<InstanceInfo>())) ?? new List<InstanceInfo>()).Select((InstanceInfo i) => i.Name).ToList();
+		List<InstanceInfo> infos = (await AppServices.Client.TryCallAsync("get_instances", null, new List<InstanceInfo>())) ?? new List<InstanceInfo>();
+#if PREMIUM
+		_infos = infos;
+#endif
+		_instances = infos.Select((InstanceInfo i) => i.Name).ToList();
 		SyncName();
 		string[] keys = new string[6] { "fabric", "forge", "neoforge", "quilt", "optifine", "liteloader" };
 		List<LoaderVer>[] res = await Task.WhenAll(keys.Select((string k) => AppServices.Client.TryCallAsync("list_loader_versions", new
@@ -334,7 +365,28 @@ public sealed class InstallPage : UserControl
 	{
 		string n = _name.Text.Trim();
 		_nameHint.Text = (n.Length == 0) ? "" : (_instances.Contains(n) ? I18n.L("装入已有实例") : I18n.L("将新建实例"));
+#if PREMIUM
+		SyncPath(n);
+#endif
 	}
+
+#if PREMIUM
+	// install2：输入框下「安装到 <路径>」——已有实例用其目录，新实例用实例根目录推算；拿不到就藏
+	private void SyncPath(string n)
+	{
+		string? p = _infos.FirstOrDefault((InstanceInfo i) => i.Name == n)?.Path;
+		if (string.IsNullOrEmpty(p) && n.Length > 0)
+		{
+			string? root = Path.GetDirectoryName(_infos.FirstOrDefault()?.Path ?? "");
+			if (!string.IsNullOrEmpty(root))
+			{
+				p = Path.Combine(root, n);
+			}
+		}
+		_pathHint.Text = (p == null) ? "" : I18n.L("安装到 {0}", p);
+		_pathHint.Visibility = (p == null) ? Visibility.Collapsed : Visibility.Visible;
+	}
+#endif
 
 	private async Task InstallAsync()
 	{
