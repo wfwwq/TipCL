@@ -30,7 +30,8 @@ public sealed class DownloadPage : PageBase
 
 	private readonly Grid _shell = Ui.G("Auto,*");
 
-	private readonly Grid _vanilla = Ui.G("Auto,*");
+	/// <summary>原版分段视图：筛选行 + 版本列表卡两个区块，交给 BlockHost 排布与持久化。</summary>
+	private readonly BlockHost _vanillaHost;
 
 	private readonly TextBox _search = Ui.Input(I18n.L("搜索版本"));
 
@@ -106,13 +107,18 @@ public sealed class DownloadPage : PageBase
 		}
 		bar.Add(_search, 0);
 		bar.Add(fs.M(8.0, 0.0, 0.0, 0.0), 0, 1);
-		bar.Margin = new Thickness(22.0, 0.0, 22.0, 12.0);
+		// 筛选行与列表卡之间的间距改由 BlockHost 的区块间距接管，行自身不再带下边距
+		bar.Margin = new Thickness(22.0, 0.0, 22.0, 0.0);
 		_list = Ui.VirtualList<VersionRow>(RowUi, 0.0);
 		Border card = Ui.Card(_list, 0.0);
 		card.Padding = new Thickness(0.0, 4.0, 0.0, 4.0);
 		card.Margin = new Thickness(22.0, 0.0, 22.0, 16.0);
-		_vanilla.Add(bar, 0);
-		_vanilla.Add(card, 1);
+		// 布局自定义：页边距仍由 bar/card 自管，宿主边距传 0 防叠加
+		_vanillaHost = new BlockHost("download", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "filters", Title = I18n.L("筛选"), Content = bar },
+			new BlockSpec { Id = "list", Title = I18n.L("版本列表"), Content = card }
+		}, new Thickness(0.0));
 
 		base.Content = _shell;
 		TaskStore.Added += delegate
@@ -144,7 +150,7 @@ public sealed class DownloadPage : PageBase
 		}
 		if (k == 0)
 		{
-			_host.Content = _vanilla;
+			_host.Content = _vanillaHost.Root;
 			return;
 		}
 		PageBase p = _subs[k] ?? (_subs[k] = new CatalogPage(Kinds[k]));

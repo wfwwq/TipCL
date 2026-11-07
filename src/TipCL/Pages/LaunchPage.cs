@@ -19,6 +19,7 @@ namespace TipCL.Pages;
 
 // 启动屏 v2：左对齐大实例标题 + 小标签 +「启动游戏」/配置/联机 + 底部新闻卡；有截图时以最新截图作背景。
 // 旧卡片画布（DashHost/DashLayout）不再挂可视树，字段与数据逻辑全部保留。
+// WP-U3：背景层与英雄区固定不动；新闻卡及以下的内容区交给 BlockHost（新闻默认可见，任务/时长/便签/日志默认收起）。
 public sealed class LaunchPage : PageBase
 {
 	private readonly ComboBox _inst = Ui.Combo();
@@ -190,6 +191,9 @@ public sealed class LaunchPage : PageBase
 	private readonly List<Border> _glass = new List<Border>();
 
 	private Border? _newsCard;
+
+	// 内容区块宿主（WP-U3）：BuildHero 里构建并放进根 Grid 第 1 行；premium 沉浸搬背景不受影响
+	private BlockHost? _blocks;
 
 	private readonly System.Windows.Media.Effects.DropShadowEffect _launchGlow = new System.Windows.Media.Effects.DropShadowEffect
 	{
@@ -454,7 +458,6 @@ public sealed class LaunchPage : PageBase
 			CornerRadius = new CornerRadius(12.0),
 			BorderThickness = new Thickness(1.0),
 			Padding = new Thickness(8.0, 8.0, 14.0, 8.0),
-			Margin = new Thickness(56.0, 0.0, 0.0, 18.0),
 			HorizontalAlignment = HorizontalAlignment.Left,
 			VerticalAlignment = VerticalAlignment.Bottom,
 			Cursor = Cursors.Hand,
@@ -465,13 +468,31 @@ public sealed class LaunchPage : PageBase
 		{
 			OpenNewsPopup();
 		};
-		// —— 根布局：背景层铺满两行；内容 * / 新闻 Auto ——
+		// —— 内容区块（WP-U3）：新闻卡默认可见，任务/时长/便签/日志默认收起；右键「自定义布局…」由 BlockHost 自带 ——
+		// contentMargin 对齐英雄区：左 56（同 _hero）、右 24（同 _hero）、下 18（原新闻卡底边距），默认渲染与旧布局逐像素等价
+		Border logCard = Ui.Card(_log, 10.0);
+		logCard.Height = 240.0;
+		_blocks = new BlockHost("launch", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "news", Title = I18n.L("新闻"), Content = _newsCard },
+			new BlockSpec { Id = "tasks", Title = I18n.L("下载任务"), Content = Ui.Card(_taskHost), DefaultVisible = false },
+			new BlockSpec { Id = "playtime", Title = I18n.L("游戏时长"), Content = Ui.Card(_playTotal), DefaultVisible = false },
+			new BlockSpec { Id = "notes", Title = I18n.L("便签"), Content = Ui.Card(_notes), DefaultVisible = false },
+			new BlockSpec { Id = "log", Title = I18n.L("日志"), Content = logCard, DefaultVisible = false }
+		}, new Thickness(56.0, 0.0, 24.0, 18.0));
+		// 多块同时展开时限高内滚（约 62% 页高），避免 Auto 行把上方英雄区挤没；默认仅新闻卡时远达不到上限
+		_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, new Binding("ActualHeight")
+		{
+			Source = this,
+			Converter = new Ui.WindowPctConverter(0.62)
+		});
+		// —— 根布局：背景层铺满两行；内容 * / 区块 Auto ——
 		Grid root = Ui.G("*,Auto");
 		root.ClipToBounds = true;
 		root.Add(_bgImage, 0, 0, 2);
 		root.Add(_bgShade, 0, 0, 2);
 		root.Add(_hero, 0);
-		root.Add(_newsCard, 1);
+		root.Add(_blocks.Root, 1);
 		base.Content = root;
 		ApplyHeroTone(onImage: false);
 		SyncHero();

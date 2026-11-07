@@ -104,7 +104,14 @@ public sealed class JavaPage : PageBase
 		grid3.Add(_manual, 0);
 		grid3.Add(el.M(8.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
 		Border border3 = Ui.Card(Ui.V(4.0, Ui.Field(I18n.L("实例"), _inst), Ui.Field(I18n.L("默认 Java"), _java, I18n.L("「自动选择」由启动器按游戏版本匹配")), Ui.Field(I18n.L("自定义路径"), grid3, I18n.L("填绝对路径后点右边按钮，会先做一次规范化")), Ui.Field("", _instJava)), 13.0);
-		base.Content = PageBase.ScrollBody(grid, border2, border3, _list);
+		// 页面布局自定义（WP-U3）：区块 = 说明 / 安装方式 / 实例默认 / 已检测列表；默认全可见、顺序同旧 ScrollBody 实参
+		base.Content = new BlockHost("java", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "intro", Title = I18n.L("说明"), Content = grid },
+			new BlockSpec { Id = "install", Title = I18n.L("安装方式"), Content = border2 },
+			new BlockSpec { Id = "defaults", Title = I18n.L("实例默认"), Content = border3 },
+			new BlockSpec { Id = "list", Title = I18n.L("已检测列表"), Content = _list }
+		}).Root;
 	}
 
 	protected override async Task LoadAsync()

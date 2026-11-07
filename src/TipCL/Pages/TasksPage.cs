@@ -57,7 +57,12 @@ public sealed class TasksPage : PageBase
 			Rebuild();
 		}, "\uea99");
 		Grid grid = Ui.Section(I18n.L("下载任务"), I18n.L("安装、下载、启动都在这里排队"), Ui.H(8.0, _summary.VCenter(), button));
-		base.Content = PageBase.ScrollBody(grid, _list);
+		// 布局自定义：概览与任务列表各成一个区块，默认顺序与可见性和旧版完全一致
+		base.Content = new BlockHost("tasks", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "header", Title = I18n.L("概览"), Content = grid },
+			new BlockSpec { Id = "list", Title = I18n.L("任务列表"), Content = _list }
+		});
 		EnableDrop(() => FileDrop.DropContext.None);
 		TaskStore.Added += delegate
 		{

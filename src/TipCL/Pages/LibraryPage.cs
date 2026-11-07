@@ -16,6 +16,7 @@ namespace TipCL.Pages;
 // 实例库（2026-11 效果图）：左栏文件夹列表（420 宽）+ 右栏版本选择（按加载器分组折叠）。
 // 数据/行为与 VersionManagePage 同源：get_instances / get_version_rows（当前实例）/ 收藏走 Prefs.VmFavorites；
 // 双击版本 = 设默认实例后跳启动页；行尾 收藏 / 卸载 / 版本设置。
+// WP-U3：双栏页不套 BlockHost，右键「自定义布局…」显隐文件夹栏 / 导出导入布局（PageLayoutStore 直读直写 "library"，版本列表恒可见）。
 public sealed class LibraryPage : PageBase
 {
 	private sealed class Ver
@@ -115,6 +116,13 @@ public sealed class LibraryPage : PageBase
 	// 页内切换前的原始内容（进入实例详情后返回时恢复；PageBase.Content 是 object）
 	private object? _shell;
 
+	// WP-U3 页面布局自定义：双栏外壳与左右两栏（文件夹栏可经布局文档收起，字段与数据逻辑不受影响）
+	private readonly Grid _body;
+
+	private readonly Border _leftCard;
+
+	private readonly SPanel _rightCol;
+
 	public override string Title => I18n.L("实例库");
 
 	public LibraryPage()
@@ -176,16 +184,132 @@ public sealed class LibraryPage : PageBase
 		_empty.Show(shown: false);
 		SPanel right = Ui.V(12.0, head, _groupsHost, _empty);
 		right.VerticalAlignment = VerticalAlignment.Top;
+		_leftCard = left;
+		_rightCol = right;
 		// 行高显式 Auto：网格自身高度恒等于内容，杜绝隐式 * 行被外层余量撑高（左栏卡片随之拉伸的根因向量）
-		Grid body = Ui.G("Auto", "*,18,2*");
-		body.Add(left, 0);
-		body.Add(right, 0, 2);
-		base.Content = PageBase.ScrollBody(body);
+		_body = Ui.G("Auto");
+		base.Content = PageBase.ScrollBody(_body);
+		ApplyFolderLayout();
 		EnableDrop(() => new FileDrop.DropContext
 		{
 			Instance = _folder,
 			PreferKind = "modpack"
 		});
+	}
+
+	// ————— 页面布局自定义（WP-U3）：双栏页不套 BlockHost，直接用 PageLayoutStore 读写 "library" 文档 —————
+
+	// 读取布局文档并补全：list 恒可见（Hidden 强制 false），folders 条目缺失时按可见补齐
+	private static PageLayoutDoc LoadLayoutDoc()
+	{
+		PageLayoutDoc doc = PageLayoutStore.Load("library") ?? PageLayoutDoc.Default(new[] { "folders", "list" }, new[] { "folders", "list" });
+		doc.Blocks ??= new List<BlockState>();
+		bool hasFolders = false;
+		foreach (BlockState b in doc.Blocks)
+		{
+			if (b.Id == "folders")
+			{
+				hasFolders = true;
+			}
+			else if (b.Id == "list")
+			{
+				b.Hidden = false; // 版本列表是页面本体，任何情况下不允许隐藏
+			}
+		}
+		if (!hasFolders)
+		{
+			doc.Blocks.Add(new BlockState { Id = "folders", Hidden = false });
+		}
+		return doc;
+	}
+
+	private static bool FoldersVisible()
+	{
+		foreach (BlockState b in LoadLayoutDoc().Blocks)
+		{
+			if (b.Id == "folders")
+			{
+				return !b.Hidden;
+			}
+		}
+		return true;
+	}
+
+	// 按布局文档应用文件夹栏显隐：可见 → 双栏（"*,18,2*"，与现状一致）；隐藏 → 列定义改 "*"、左栏移出可视树（数据逻辑照常），右栏独占
+	private void ApplyFolderLayout()
+	{
+		bool folders = FoldersVisible();
+		_body.ColumnDefinitions.Clear();
+		if (folders)
+		{
+			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
+			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18.0) });
+			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2.0, GridUnitType.Star) });
+			if (!_body.Children.Contains(_leftCard))
+			{
+				_body.Children.Add(_leftCard);
+			}
+			Grid.SetColumn(_rightCol, 2);
+		}
+		else
+		{
+			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
+			_body.Children.Remove(_leftCard);
+			Grid.SetColumn(_rightCol, 0);
+		}
+		_body.ContextMenu = LayoutMenu(folders);
+	}
+
+	// 右键「自定义布局…」：显隐文件夹栏（勾选即时生效并保存）、导出/导入布局（导入由 PageLayoutIO 落盘，重读文档立即生效）
+	private ContextMenu LayoutMenu(bool foldersShown)
+	{
+		ContextMenu menu = new ContextMenu();
+		MenuItem root = new MenuItem
+		{
+			Header = I18n.L("自定义布局…")
+		};
+		MenuItem foldersItem = new MenuItem
+		{
+			Header = I18n.L("显示文件夹栏"),
+			IsCheckable = true,
+			IsChecked = foldersShown
+		};
+		foldersItem.Click += delegate
+		{
+			menu.IsOpen = false; // 勾选项点击默认不收起菜单，这里主动关掉再应用
+			PageLayoutDoc doc = LoadLayoutDoc();
+			foreach (BlockState b in doc.Blocks)
+			{
+				if (b.Id == "folders")
+				{
+					b.Hidden = !(foldersItem.IsChecked == true);
+				}
+			}
+			PageLayoutStore.Save("library", doc);
+			ApplyFolderLayout();
+		};
+		MenuItem exportItem = new MenuItem
+		{
+			Header = I18n.L("导出布局")
+		};
+		exportItem.Click += delegate
+		{
+			PageLayoutIO.ExportToFileDialog("library");
+		};
+		MenuItem importItem = new MenuItem
+		{
+			Header = I18n.L("导入布局")
+		};
+		importItem.Click += delegate
+		{
+			PageLayoutIO.ImportFromFileDialog();
+			ApplyFolderLayout();
+		};
+		root.Items.Add(foldersItem);
+		root.Items.Add(exportItem);
+		root.Items.Add(importItem);
+		menu.Items.Add(root);
+		return menu;
 	}
 
 	protected override async Task LoadAsync()

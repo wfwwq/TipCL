@@ -40,7 +40,13 @@ public sealed class ServersPage : PageBase
 			PageBase.Run(ReloadAsync);
 		};
 		Border border = Ui.Card(Ui.H(10.0, Ui.Txt(I18n.L("实例"), 12.0, bold: false, "B.InkMuted").VCenter(), _inst.W(200.0), _lan.VCenter()), 12.0);
-		base.Content = PageBase.ScrollBody(grid, border, _list);
+		// 页面布局自定义（WP-U3）：区块 = 概览 / 实例行 / 服务器列表；默认全可见、顺序同旧 ScrollBody 实参
+		base.Content = new BlockHost("servers", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "header", Title = I18n.L("概览"), Content = grid },
+			new BlockSpec { Id = "instance", Title = I18n.L("实例行"), Content = border },
+			new BlockSpec { Id = "list", Title = I18n.L("服务器列表"), Content = _list }
+		}).Root;
 	}
 
 	protected override async Task LoadAsync()

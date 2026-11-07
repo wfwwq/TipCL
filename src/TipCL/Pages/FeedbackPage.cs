@@ -66,7 +66,12 @@ public sealed class FeedbackPage : PageBase
 		Grid grid = Ui.G(null, "*,360");
 		grid.Add(Ui.V(14.0, border, border2), 0);
 		grid.Add(el.M(14.0, 0.0, 0.0, 0.0).VTop(), 0, 1);
-		base.Content = PageBase.ScrollBody(Ui.Section(I18n.L("反馈与帮助"), I18n.L("遇到问题先看帮助，解决不了再提反馈")), grid);
+		// 页面布局自定义（WP-U3）：左右双栏 Grid 保持一整块（纵向流会拆散两侧布局），默认与旧 ScrollBody 等价
+		base.Content = new BlockHost("feedback", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "header", Title = I18n.L("说明"), Content = Ui.Section(I18n.L("反馈与帮助"), I18n.L("遇到问题先看帮助，解决不了再提反馈")) },
+			new BlockSpec { Id = "content", Title = I18n.L("反馈与帮助"), Content = grid }
+		}).Root;
 	}
 
 	protected override async Task LoadAsync()

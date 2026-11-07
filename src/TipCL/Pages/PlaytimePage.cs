@@ -55,7 +55,15 @@ public sealed class PlaytimePage : PageBase
 		_total.SetResourceReference(TextBlock.ForegroundProperty, "B.AccentDeep");
 		Border border = Ui.Card(Ui.G(null, "*,Auto").Add(Ui.V(4.0, Ui.Muted(I18n.L("累计游玩")), _total, _sub), 0).Add(Ui.Glyph("\ue823", 44.0, "B.AccentSoft2").VCenter(), 0, 1), 20.0);
 		Border border2 = Ui.Card(Ui.H(10.0, Ui.Txt(I18n.L("范围"), 12.0, bold: false, "B.InkMuted").VCenter(), _inst.VCenter()), 12.0);
-		base.Content = PageBase.ScrollBody(Ui.Section(I18n.L("游戏时长"), I18n.L("按实例与版本统计，每次退出游戏后自动累加"), Ui.H(8.0, button2, button)), border, border2, _list);
+		Grid head = Ui.Section(I18n.L("游戏时长"), I18n.L("按实例与版本统计，每次退出游戏后自动累加"), Ui.H(8.0, button2, button));
+		// 页面布局自定义（WP-U3）：区块 = 概览 / 累计卡 / 范围卡 / 明细列表；默认全可见、顺序同旧 ScrollBody 实参
+		base.Content = new BlockHost("playtime", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "header", Title = I18n.L("概览"), Content = head },
+			new BlockSpec { Id = "total", Title = I18n.L("累计卡"), Content = border },
+			new BlockSpec { Id = "range", Title = I18n.L("范围卡"), Content = border2 },
+			new BlockSpec { Id = "list", Title = I18n.L("明细列表"), Content = _list }
+		}).Root;
 	}
 
 	protected override async Task LoadAsync()

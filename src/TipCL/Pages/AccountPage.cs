@@ -78,7 +78,12 @@ public sealed class AccountPage : PageBase
 		Grid grid3 = Ui.G(null, "Auto,*");
 		grid3.Add(border.M(0.0, 0.0, 14.0).VTop(), 0);
 		grid3.Add(_list, 0, 1);
-		base.Content = PageBase.ScrollBody(grid, grid3);
+		// 布局自定义：账号操作与账号卡各成一个区块，默认顺序与可见性和旧版完全一致
+		base.Content = new BlockHost("account", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "header", Title = I18n.L("账号操作"), Content = grid },
+			new BlockSpec { Id = "list", Title = I18n.L("账号卡"), Content = grid3 }
+		});
 	}
 
 	protected override async Task LoadAsync()

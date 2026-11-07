@@ -661,10 +661,31 @@ public sealed partial class SettingsPage : PageBase
 			PageBase.Run(FirstRunWizard.ShowAsync, I18n.L("向导没能打开"));
 		}, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));
 		WireAutoSave();
-		_views[0] = PageBase.ScrollBody(PTitle(I18n.L("通用")), Gt(I18n.L("外观")), border, Gt(I18n.L("壁纸")), border2, Gt(I18n.L("主题包")), border3, Gt(I18n.L("启动器")), border8, Gt(I18n.L("游戏")), border5, Gt(I18n.L("存储")), border6, Gt(I18n.L("AI 助手")), border7, Gt(I18n.L("记忆")), BuildMemoryCard(), Gt(I18n.L("手机同步")), BuildPhoneSyncCard());
-		_views[3] = PageBase.ScrollBody(PTitle(I18n.L("下载与网络")), Gt(I18n.L("下载")), border4);
+		// 布局自定义：每个「分组小标题 + 卡片」包成一个区块（标题留在块内，重排/显隐时跟着走），
+		// 块内间距对齐原 ScrollBody 的 10，默认顺序与可见性和旧版完全一致
+		_views[0] = new BlockHost("settings:general", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "appearance", Title = I18n.L("外观"), Content = Ui.V(10.0, PTitle(I18n.L("通用")), Gt(I18n.L("外观")), border) },
+			new BlockSpec { Id = "wallpaper", Title = I18n.L("壁纸"), Content = Ui.V(10.0, Gt(I18n.L("壁纸")), border2) },
+			new BlockSpec { Id = "themePack", Title = I18n.L("主题包"), Content = Ui.V(10.0, Gt(I18n.L("主题包")), border3) },
+			new BlockSpec { Id = "launcher", Title = I18n.L("启动器"), Content = Ui.V(10.0, Gt(I18n.L("启动器")), border8) },
+			new BlockSpec { Id = "game", Title = I18n.L("游戏"), Content = Ui.V(10.0, Gt(I18n.L("游戏")), border5) },
+			new BlockSpec { Id = "storage", Title = I18n.L("存储"), Content = Ui.V(10.0, Gt(I18n.L("存储")), border6) },
+			new BlockSpec { Id = "ai", Title = I18n.L("AI 助手"), Content = Ui.V(10.0, Gt(I18n.L("AI 助手")), border7) },
+			new BlockSpec { Id = "memory", Title = I18n.L("记忆"), Content = Ui.V(10.0, Gt(I18n.L("记忆")), BuildMemoryCard()) },
+			new BlockSpec { Id = "phoneSync", Title = I18n.L("手机同步"), Content = Ui.V(10.0, Gt(I18n.L("手机同步")), BuildPhoneSyncCard()) }
+		}).Root;
+		_views[3] = new BlockHost("settings:network", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "network", Title = I18n.L("下载与网络"), Content = Ui.V(10.0, PTitle(I18n.L("下载与网络")), Gt(I18n.L("下载")), border4) }
+		}).Root;
+		// 反馈与关于视图顶层是 Grid 双行（上标题卡 + 下反馈页），不是纵向流：结构保持不动，
+		// 只把纵向可分的标题卡包成区块；边距仍由内部自管，宿主边距传 0 防叠加
 		Grid about = Ui.G("Auto,*");
-		about.Add(Ui.V(10.0, PTitle(I18n.L("反馈与关于")), BuildAboutCard(), button.Right()).M(18.0, 14.0, 18.0, 0.0), 0);
+		about.Add(new BlockHost("settings:about", new List<BlockSpec>
+		{
+			new BlockSpec { Id = "about", Title = I18n.L("反馈与关于"), Content = Ui.V(10.0, PTitle(I18n.L("反馈与关于")), BuildAboutCard(), button.Right()).M(18.0, 14.0, 18.0, 0.0) }
+		}, new Thickness(0.0)).Root, 0);
 		about.Add(_feedback, 1);
 		_views[6] = about;
 		SPanel nav = Ui.V(2.0, NavBtn(0, I18n.L("通用")), NavBtn(1, I18n.L("账号")), NavBtn(2, "Java"), NavBtn(3, I18n.L("下载与网络")), NavBtn(4, I18n.L("服务器")), NavBtn(5, I18n.L("游戏时长")), NavBtn(6, I18n.L("反馈与关于")), _saveState.M(12.0, 10.0, 0.0, 0.0));
