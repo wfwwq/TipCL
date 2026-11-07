@@ -167,7 +167,11 @@ public partial class MainWindow : Window
 			Backdrop.Apply(this);
 			ApplyWindowCorner();
 		};
-		Wallpaper.Attach(WallHost, TopBar, null, PageWash);
+		Wallpaper.Attach(WallHost, RootBorder, TopBar, null, PageWash);
+		Wallpaper.ChromeInvalidated = delegate
+		{
+			SyncMaxGlyph();
+		};
 		TabLaunch.Click += delegate
 		{
 			Navigate("launch");
@@ -918,7 +922,8 @@ public partial class MainWindow : Window
 	{
 		bool flag = base.WindowState == WindowState.Maximized;
 		MaxIco.Data = Geometry.Parse(flag ? GeoRestore : GeoMax);
-		RootBorder.BorderThickness = new Thickness((!flag) ? 1 : 0);
+		// WP-S12：壁纸激活时 RootBorder 自身描边归零（细边交给 DWMWA_BORDER_COLOR，见 Backdrop.Apply），防双线
+		RootBorder.BorderThickness = new Thickness(((!flag && !Wallpaper.Active)) ? 1 : 0);
 		ApplyRootCorner();
 	}
 

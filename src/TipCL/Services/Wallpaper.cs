@@ -95,6 +95,8 @@ public static class Wallpaper
 
 	private static Grid? _host;
 
+	private static Border? _root;
+
 	private static Border? _chromeBar;
 
 	private static Border? _side;
@@ -126,9 +128,13 @@ public static class Wallpaper
 
 	public static bool Active => !string.IsNullOrEmpty(_source);
 
-	public static void Attach(Grid host, Border chromeBar, Border side, Rectangle wash)
+	// WP-S12：壁纸开关/轮换后的窗口级联动（DWM backdrop、边框色、RootBorder 兜底）
+	public static Action? ChromeInvalidated;
+
+	public static void Attach(Grid host, Border root, Border chromeBar, Border side, Rectangle wash)
 	{
 		_host = host;
+		_root = root;
 		_chromeBar = chromeBar;
 		_side = side;
 		_wash = wash;
@@ -202,6 +208,9 @@ public static class Wallpaper
 			}
 			SetEffects(blur, dim);
 			SetSource(source);
+			// WP-S12：壁纸状态可能翻转，DWM backdrop/边框随刷新（SetSource→ApplyChrome 也有一份）
+			Backdrop.Refresh(AppServices.Window);
+			ChromeInvalidated?.Invoke();
 		}
 	}
 
@@ -384,18 +393,54 @@ public static class Wallpaper
 		}
 	}
 
+	private static bool _chromeOn;
+
 	private static void ApplyChrome(bool on)
 	{
-		if (_chromeBar != null && _side != null && _wash != null)
+		// 从未有过壁纸时保持 XAML 默认不动（OnThemeChanged 会带 on=false 进来，
+		// 不能把 premium 沉浸态设置的 PageWash/TopBar 玻璃打回去）
+		if (!on && !_chromeOn)
 		{
-			_dim.Visibility = ((!on || _dimPercent <= 0) ? Visibility.Collapsed : Visibility.Visible);
-			_chromeBar.SetResourceReference(Border.BackgroundProperty, "B.GlassStrong");
-			_chromeBar.SetResourceReference(Border.BorderBrushProperty, "B.GlassBorder");
+			return;
+		}
+		_chromeOn = on;
+		if (_root != null)
+		{
+			// WP-S12：有壁纸时给 RootBorder 不透明兜底（壁纸图片画在它上面；图片缺失/透明区域露出纸底）
+			if (on)
+			{
+				_root.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+			}
+			else
+			{
+				_root.Background = null;
+			}
+		}
+		if (_chromeBar != null)
+		{
+			// 有壁纸：标题栏玻璃让壁纸透上来；无壁纸：回主题实底
+			_chromeBar.SetResourceReference(Border.BackgroundProperty, on ? "B.GlassStrong" : "B.TitleBar");
+			_chromeBar.SetResourceReference(Border.BorderBrushProperty, on ? "B.GlassBorder" : "B.TitleBarLine");
+		}
+		if (_side != null)
+		{
 			_side.SetResourceReference(Border.BackgroundProperty, "B.Glass");
 			_side.SetResourceReference(Border.BorderBrushProperty, "B.GlassBorder");
+		}
+		if (_wash != null)
+		{
 			_wash.SetResourceReference(Shape.FillProperty, "B.PageWash");
 			_wash.Opacity = ((!on) ? 1 : 0);
-			SideFrost.Refresh();
+		}
+		_dim.Visibility = ((!on || _dimPercent <= 0) ? Visibility.Collapsed : Visibility.Visible);
+		SideFrost.Refresh();
+		try
+		{
+			Backdrop.Refresh(AppServices.Window);
+			ChromeInvalidated?.Invoke();
+		}
+		catch
+		{
 		}
 	}
 

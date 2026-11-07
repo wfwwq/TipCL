@@ -54,6 +54,11 @@ public static class Backdrop
 
 	private const int DwmwaWindowCornerPreference = 33;
 
+	// WP-S12：DWM 边框色；0xFFFFFFFE = DWMWA_COLOR_DEFAULT（跟随系统）；壁纸时 0x00262626
+	private const int DwmwaBorderColor = 34;
+
+	private const uint DwmColorDefault = 4294967294u;
+
 	private const int DwmwcpRound = 2;
 
 	/// <summary>Win11 (build ≥ 22000)：系统级圆角窗口；调用失败（旧系统/无 DWM）返回 false 由调用方回退自绘。</summary>
@@ -165,11 +170,16 @@ public static class Backdrop
 				{
 					DwmSetWindowAttribute(handle, 19, ref value, 4);
 				}
-				int value2 = 3;
+				// WP-S12：有壁纸时关闭系统 backdrop（DWMSBT_NONE），壁纸本身就是背景，
+				// 避免 Mica/亚克力在失焦时退成实色盖住壁纸；无壁纸用 Mica
+				int value2 = (Wallpaper.Active ? 1 : 2);
 				if (DwmSetWindowAttribute(handle, 38, ref value2, 4) != 0)
 				{
 					ApplyLegacyBlur(handle, App.IsDark);
 				}
+				// 边框色：壁纸时深灰细线，否则交还系统默认（Win10 上调用失败无副作用）
+				int value3 = unchecked((int)(Wallpaper.Active ? 2500134u : DwmColorDefault));
+				DwmSetWindowAttribute(handle, 34, ref value3, 4);
 			}
 		}
 		catch (DllNotFoundException)
