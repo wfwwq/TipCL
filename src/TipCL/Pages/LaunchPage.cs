@@ -216,10 +216,11 @@ public sealed class LaunchPage : PageBase
 
 	private int _bgGen;
 
-#if PREMIUM
-	// premium（WP-G）：嵌入 hero.jpg 只解码一次；_immersive = 当前处于标题栏沉浸态（背景已搬进 WallHost）
+	// 嵌入 hero.jpg（启动页默认背景）只解码一次（两版通用）
 	private static System.Windows.Media.Imaging.BitmapSource? _heroCache;
 
+#if PREMIUM
+	// _immersive = 当前处于标题栏沉浸态（背景已搬进 WallHost）；compact 无沉浸代码
 	private bool _immersive;
 #endif
 
@@ -718,9 +719,9 @@ public sealed class LaunchPage : PageBase
 			{
 				return;
 			}
-#if PREMIUM
-			// premium：没有截图（且用户没设自定义壁纸）时用嵌入 hero.jpg（launch2 效果图同款全景）做背景，
-			// 不再回退纯渐变底；截图存在时仍截图优先（两版一致）。换壁纸后下次刷新会走 ApplyHeroTone(false) 还原。
+			// 没有截图（且用户没设自定义壁纸）时用嵌入 hero.jpg（launch2 效果图同款全景）做默认背景，
+			// 不再回退纯渐变底；截图存在时仍截图优先。换壁纸后下次刷新会走 ApplyHeroTone(false) 还原。
+			// compact 只做页面内背景；premium 额外经 SyncImmersive 把背景铺到标题栏下。
 			if (shot == null && !Wallpaper.Active)
 			{
 				System.Windows.Media.Imaging.BitmapSource? hero = await Task.Run(HeroSource);
@@ -736,7 +737,6 @@ public sealed class LaunchPage : PageBase
 					return;
 				}
 			}
-#endif
 			_bgKey = shot?.Item1 ?? "";
 			_bgImage.Source = shot?.Item2;
 			ApplyHeroTone(shot != null);
@@ -797,8 +797,7 @@ public sealed class LaunchPage : PageBase
 		}
 	}
 
-#if PREMIUM
-	// premium 专属：解码嵌入 hero.jpg（pack URI，后台线程可解码，Freeze 后跨线程用），只解码一次。
+	// 解码嵌入 hero.jpg（pack URI，后台线程可解码，Freeze 后跨线程用），只解码一次。
 	// 视觉基准 launch2.png 的背景是清晰全景，不加 BlurEffect（毛玻璃只给标题栏与半透明块）。
 	private static System.Windows.Media.Imaging.BitmapSource? HeroSource()
 	{
@@ -823,7 +822,6 @@ public sealed class LaunchPage : PageBase
 		}
 		return _heroCache;
 	}
-#endif
 
 	// 模组数小标签：沿用实例库同源 API，同一实例/版本只查一次
 	private async Task CountModsAsync(string instance, string version)

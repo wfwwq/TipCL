@@ -76,6 +76,8 @@
     <EmbeddedResource Include="Resources\plugin-host\**\*" LogicalName="TipCL.Core.plugin-host.%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- 内置默认背景（设置 → 壁纸 → 预设背景；点击释放到数据目录 wallpapers/ 再走 ui_background 管线） -->
     <Resource Include="Resources\wallpapers\*.jpg" />
+    <!-- 启动页默认背景（无截图时的回退，两版通用；PremiumAssets 组里的同名项已移除避免重复嵌入） -->
+    <Resource Include="PremiumAssets\hero.jpg" />
   </ItemGroup>
 
   <!-- premium 专属嵌入资源（compact 不嵌入，走运行时下载，见 Services/LoaderIcons.cs 与 Pages/LaunchPage.cs）。
@@ -87,7 +89,6 @@
     <Resource Include="PremiumAssets\forge_gh.png" />
     <Resource Include="PremiumAssets\neoforge_gh.png" />
     <Resource Include="PremiumAssets\quilt_gh.png" />
-    <Resource Include="PremiumAssets\hero.jpg" />
   </ItemGroup>
 
 </Project>
