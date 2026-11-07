@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using TipCL.Services;
 
 namespace TipCL.Pages.Plugins;
@@ -70,12 +71,26 @@ public sealed partial class PluginsPage
 		};
 	}
 
+	// 效果图里每个插件 logo 底色不同：按 id 从固定调色板取色（与主题无关，配白字明暗都成立）
+	internal static readonly string[] LogoPalette = new string[6] { "#7C5CFF", "#F59E0B", "#64748B", "#0EA5E9", "#10B981", "#E0559D" };
+
+	private static Brush LogoBrush(string id)
+	{
+		int hash = 0;
+		foreach (char c in id)
+		{
+			hash = hash * 31 + c;
+		}
+		return (SolidColorBrush)new BrushConverter().ConvertFromString(LogoPalette[Math.Abs(hash) % LogoPalette.Length]);
+	}
+
 	private Border InstalledCard(PluginInfo p)
 	{
 		string n = p.DisplayName.Trim();
 		TextBlock letter = Ui.Txt((n.Length > 0) ? char.ToUpperInvariant(n[0]).ToString() : "?", 14.0, bold: true, "B.OnAccentStrong");
 		letter.FontWeight = FontWeights.ExtraBold;
 		Border logo = Ui.Pane(letter.Center().VCenter(), "B.AccentStrong", 9.0, 0.0);
+		logo.Background = LogoBrush(p.Id.Length > 0 ? p.Id : n);
 		logo.Width = 36.0;
 		logo.Height = 36.0;
 		TextBlock name = Ui.Txt(p.DisplayName, 15.0, bold: true).Trim();
@@ -178,7 +193,7 @@ public sealed partial class PluginsPage
 			menu.IsOpen = true;
 		};
 		Grid foot = Ui.G(null, "*,Auto");
-		foot.Add(Ui.H(6.0, Ui.Small((p.Source == "dev") ? I18n.L("开发链接") : ((p.Version.Length > 0) ? ("v" + p.Version) : "")).VCenter(), (p.State == "running" && p.Enabled) ? null : StateBadge(p), (p.Source == "dev") ? Ui.Tag(I18n.L("开发"), "B.Warn", "B.WarnSoft").Tip(p.DevPath) : null, (p.Source == "local") ? Ui.Tag(I18n.L("本地")) : null, (p.Runtime == "dotnet") ? Ui.Tag(".NET") : null, p.UpdateAvailable ? Ui.Tag(I18n.L("有更新"), "B.Warn", "B.WarnSoft") : null).VCenter(), 0);
+		foot.Add(Ui.H(6.0, Ui.Muted((p.Source == "dev") ? I18n.L("开发链接") : ((p.Version.Length > 0) ? ("v" + p.Version) : "")).VCenter(), (p.State == "running" && p.Enabled) ? null : StateBadge(p), (p.Source == "dev") ? Ui.Tag(I18n.L("开发"), "B.Warn", "B.WarnSoft").Tip(p.DevPath) : null, (p.Source == "local") ? Ui.Tag(I18n.L("本地")) : null, (p.Runtime == "dotnet") ? Ui.Tag(".NET") : null, p.UpdateAvailable ? Ui.Tag(I18n.L("有更新"), "B.Warn", "B.WarnSoft") : null).VCenter(), 0);
 		foot.Add(more.VCenter(), 0, 1);
 		SPanel body = Ui.V(0.0, top, desc, foot);
 		if (p.Error.Length > 0)
@@ -196,6 +211,9 @@ public sealed partial class PluginsPage
 		Track(p.Id, bar);
 		body.Children.Add(bar.M(0.0, 6.0, 0.0, 0.0));
 		Border card = Ui.Card(body, 16.0);
+		card.Padding = new Thickness(18.0, 16.0, 18.0, 16.0);
+		// UniformGrid 单元格会把子元素拉满整格高度；卡片要按内容自适应（贴效果图）
+		card.VerticalAlignment = VerticalAlignment.Top;
 		card.Margin = new Thickness(7.0);
 		return card;
 	}
