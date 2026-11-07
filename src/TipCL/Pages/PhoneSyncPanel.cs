@@ -51,7 +51,7 @@ public static class PhoneSyncPanel
 		ComboBox phone = Ui.Combo(roots.Select((PhoneClient.Root r) => r.Label.Length > 0 ? r.Label : r.Id), null, 220.0);
 		SPanel list = Ui.V(6.0);
 		SmoothScroll scroll = Ui.Scroll(list);
-		scroll.MaxHeight = 360.0;
+		scroll.BindWindowMaxHeight(0.45, 200.0);
 		scroll.MinWidth = 640.0;
 		TextBox log = Ui.LogBox();
 		log.Height = 90.0;

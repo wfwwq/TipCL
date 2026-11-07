@@ -767,7 +767,7 @@ public sealed class CatalogPage : PageBase
 		CatalogFile chosen = files[0];
 		SPanel listHost = Ui.V(6.0);
 		SmoothScroll smoothScroll = Ui.Scroll(listHost);
-		smoothScroll.MaxHeight = 340.0;
+		smoothScroll.BindWindowMaxHeight(0.42, 200.0);
 		smoothScroll.MinWidth = 560.0;
 		List<string> list = new List<string> { I18n.L("全部") };
 		List<string> list2 = new List<string> { I18n.L("全部") };

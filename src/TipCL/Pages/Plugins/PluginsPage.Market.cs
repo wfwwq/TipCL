@@ -347,7 +347,7 @@ public sealed partial class PluginsPage
 		ScrollViewer sv = new ScrollViewer
 		{
 			Content = body,
-			MaxHeight = 560.0,
+			MaxHeight = Ui.WindowPctOf(0.62, 300.0),
 			VerticalScrollBarVisibility = ScrollBarVisibility.Auto
 		};
 		Dlg.Layer layer = Dlg.Panel(m.DisplayName, Ui.V(12.0, sv, actions.Right()), 760.0);

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
@@ -384,7 +385,7 @@ public sealed class LaunchPage : PageBase
 		// —— 小标签行（Java / 内存 / 模组数，SyncHero 填充）——
 		_chipRow.Margin = new Thickness(0.0, 10.0, 0.0, 24.0);
 		_configBody = (FrameworkElement)BuildConfig();
-		_configBody.MaxHeight = 372.0;
+		// MaxHeight 由 MakePopup 统一绑窗口百分比，不再写死
 		// —— 按钮行：主色「启动游戏」48 高 + 主色柔光；模板圆角固定，故用外壳 Border 提供圆角 ——
 		_launchBtn.Style = Ui.S("Btn.Ghost");
 		_launchBtn.Padding = new Thickness(0.0);
@@ -844,6 +845,13 @@ public sealed class LaunchPage : PageBase
 
 	private static Popup MakePopup(FrameworkElement target, PlacementMode mode, Border shell)
 	{
+		// 弹层总高不超出窗口（随宿主窗口实时缩放），取代固定 MaxHeight——极矮窗口下按钮不再被裁
+		Binding h = new Binding("ActualHeight")
+		{
+			Source = PageBase.Win,
+			Converter = new Ui.WindowPctConverter(0.86)
+		};
+		shell.SetBinding(FrameworkElement.MaxHeightProperty, h);
 		return new Popup
 		{
 			PlacementTarget = target,
@@ -895,7 +903,7 @@ public sealed class LaunchPage : PageBase
 			search.Add(_switchSearch, 0, 1);
 			_switchList = new StackPanel();
 			SmoothScroll listScroll = Ui.Scroll(_switchList);
-			listScroll.MaxHeight = 300.0;
+			// MaxHeight 由 MakePopup 统一绑窗口百分比，不再写死
 			Button openLib = Ui.Btn(I18n.L("打开实例库"), BtnKind.Ghost, delegate
 			{
 				_switchPopup.IsOpen = false;
@@ -1366,6 +1374,33 @@ public sealed class LaunchPage : PageBase
 		SyncBanner();
 	}
 
+	/// <summary>chip 首位显示「加载器名 版本」：与后端 LOADER_TAGS 同前缀表；不匹配回落版本全名。</summary>
+	private static string LoaderChip(string ver)
+	{
+		string low = ver.ToLowerInvariant();
+		// fabric-loader-0.20.1-26.3 → Fabric 0.20.1；forge-1.20.1-47.x → Forge 1.20.1；neoforge-21.x.x → NeoForge 21.x.x
+		(string prefix, string label)[] tags = new[]
+		{
+			("fabric-loader-", "Fabric"),
+			("neoforge-", "NeoForge"),
+			("optifine-", "OptiFine"),
+			("liteloader-", "LiteLoader"),
+			("quilt-loader-", "Quilt"),
+			("forge-", "Forge"),
+		};
+		foreach (var (prefix, label) in tags)
+		{
+			if (!low.StartsWith(prefix, StringComparison.Ordinal))
+			{
+				continue;
+			}
+			string rest = ver.Substring(prefix.Length);
+			int dash = rest.IndexOf('-');
+			return (dash > 0 ? rest.Substring(0, dash) : rest) is string lv && lv.Length > 0 ? label + " " + lv : ver;
+		}
+		return ver;
+	}
+
 	private string SelectedJava()
 	{
 		string label = _java.Str();
@@ -1431,8 +1466,8 @@ public sealed class LaunchPage : PageBase
 		_goVer.Visibility = _goSep.Visibility = (hasVer ? Visibility.Visible : Visibility.Collapsed);
 		if (hasVer)
 		{
-			string[] p = ver.Split('-');
-			_chipRow.Children.Add(Chip(p.Length > 2 && p[0] == "fabric" ? ("Fabric " + p[2]) : ver));
+			// 加载器名+版本：与后端 LOADER_TAGS 同一套前缀（fabric-loader-x.y.z / forge-x / neoforge-x / optifine-x）
+			_chipRow.Children.Add(Chip(LoaderChip(ver)));
 		}
 		string java = _java.Str();
 		if (!string.IsNullOrEmpty(java))

@@ -13,6 +13,17 @@ public sealed class SmoothScroll : ScrollViewer
 		((SmoothScroll)d).ScrollToVerticalOffset((double)e.NewValue);
 	}));
 
+	/// <summary>MaxHeight = 窗口高 × pct，且不低于 floor：矮窗下内层滚动区收缩而不是留白（S11 外层已钉底，两者配合）。</summary>
+	public void BindWindowMaxHeight(double pct, double floor)
+	{
+		SetBinding(MaxHeightProperty, new System.Windows.Data.Binding("ActualHeight")
+		{
+			Source = PageBase.Win,
+			Converter = new Ui.WindowPctConverter(pct),
+			ConverterParameter = floor
+		});
+	}
+
 	private double _target = -1.0;
 
 	public double Offset

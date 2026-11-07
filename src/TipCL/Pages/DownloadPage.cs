@@ -15,6 +15,9 @@ namespace TipCL.Pages;
 // 原版分段是本页自绘的版本列表，「安装」进入 InstallPage 子视图；其余分段内嵌既有 CatalogPage（业务不动）。
 public sealed class DownloadPage : PageBase
 {
+	// 远程版本列表拉取超时（Smoke --smoke-search-timeout 会同步调整；原属 VersionPage，深清理后迁此）
+	public static int FetchTimeoutMs = 9000;
+
 	private static readonly string[] Segs = new string[7] { I18n.L("原版"), "Mod", I18n.L("整合包"), I18n.L("数据包"), I18n.L("资源包"), I18n.L("光影"), I18n.L("世界") };
 
 	private static readonly CatalogKind[] Kinds = new CatalogKind[7] { null, CatalogKind.Mod, CatalogKind.Modpack, CatalogKind.Datapack, CatalogKind.ResourcePack, CatalogKind.Shader, CatalogKind.World };
@@ -218,7 +221,7 @@ public sealed class DownloadPage : PageBase
 	{
 		try
 		{
-			using CancellationTokenSource cts = new CancellationTokenSource(VersionPage.FetchTimeoutMs);
+			using CancellationTokenSource cts = new CancellationTokenSource(DownloadPage.FetchTimeoutMs);
 			List<VersionRow> l = await Api.CallAsync<List<VersionRow>>("fetch_version_list", null, cts.Token);
 			if (l != null && l.Count > 0)
 			{

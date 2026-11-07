@@ -300,7 +300,7 @@ public sealed partial class PluginsPage
 		Dlg.Panel(I18n.L("「{0}」的权限", p.DisplayName), new ScrollViewer
 		{
 			Content = PluginPerms.List(perms),
-			MaxHeight = 420.0,
+			MaxHeight = Ui.WindowPctOf(0.5, 240.0),
 			VerticalScrollBarVisibility = ScrollBarVisibility.Auto
 		}, 560.0);
 	}

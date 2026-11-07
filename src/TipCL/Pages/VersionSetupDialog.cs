@@ -56,7 +56,7 @@ public static class VersionSetupDialog
 		TextBox nide8 = Ui.Input(I18n.L("统一通行证 ServerId（可空）"), data.Nide8Id ?? "");
 		CheckBox hidden = Ui.Check(I18n.L("在版本列表中隐藏"), data.Hidden);
 		SmoothScroll smoothScroll = Ui.Scroll(Ui.V(4.0, Ui.Field(I18n.L("版本隔离"), iso, I18n.L("存档/配置是否与实例其它版本分开")), Ui.Field(I18n.L("独占内存"), mem, I18n.L("单位 MB")), Ui.Field(I18n.L("JVM 参数"), jvm), Ui.Field(I18n.L("垃圾回收器"), gc), Ui.Field(I18n.L("直连服务器"), server), Ui.Field(I18n.L("端口"), port), Ui.Field(I18n.L("启动前命令"), pre), Ui.Field("", preWait), Ui.Field(I18n.L("退出后命令"), post), Ui.Field(I18n.L("窗口标题"), title), Ui.Field(I18n.L("窗口模式"), winMode), Ui.Field(I18n.L("绑定账号"), acc, I18n.L("启动这个版本时强制用该账号")), Ui.Field(I18n.L("统一通行证"), nide8), Ui.Field("", hidden)));
-		smoothScroll.MaxHeight = 460.0;
+		smoothScroll.BindWindowMaxHeight(0.55, 260.0);
 		smoothScroll.MinWidth = 560.0;
 		if (!(await Dlg.Ask(I18n.L("版本设置 · ") + version, smoothScroll, I18n.L("保存"))))
 		{

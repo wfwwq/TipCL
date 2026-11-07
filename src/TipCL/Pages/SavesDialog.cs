@@ -17,7 +17,7 @@ public static class SavesDialog
 		SPanel list = Ui.V(8.0);
 		SPanel backups = Ui.V(6.0);
 		SmoothScroll smoothScroll = Ui.Scroll(list);
-		smoothScroll.MaxHeight = 320.0;
+		smoothScroll.BindWindowMaxHeight(0.4, 180.0);
 		smoothScroll.MinWidth = 620.0;
 		SmoothScroll smoothScroll2 = Ui.Scroll(backups);
 		smoothScroll2.MaxHeight = 150.0;

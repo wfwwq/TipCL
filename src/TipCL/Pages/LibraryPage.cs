@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
@@ -34,6 +35,8 @@ public sealed class LibraryPage : PageBase
 		public string IsolationLabel = "";
 
 		public string Java = "";
+
+		public long LastPlayed;
 	}
 
 	private sealed class Group
@@ -225,6 +228,24 @@ public sealed class LibraryPage : PageBase
 		{
 			include_hidden = false
 		}, new List<VersionRowDto>())) ?? new List<VersionRowDto>();
+		// 上次游玩：从 get_playtime 的 sessions（start 时间戳 + version）派生每版本最近一次启动，无需新后端
+		Dictionary<string, long> lastPlayed = new Dictionary<string, long>();
+		JsonElement playtime = await Api.TryCallAsync<JsonElement>("get_playtime", new { instance = _defaultInstance });
+		if (playtime.ValueKind == JsonValueKind.Object && playtime.TryGetProperty("sessions", out JsonElement sessions) && sessions.ValueKind == JsonValueKind.Array)
+		{
+			foreach (JsonElement item in sessions.EnumerateArray())
+			{
+				if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("version", out JsonElement vEl) || !item.TryGetProperty("start", out JsonElement sEl) || !sEl.TryGetInt64(out long start))
+				{
+					continue;
+				}
+				string vid = vEl.ToString();
+				if (vid.Length > 0 && (!lastPlayed.TryGetValue(vid, out long prev) || start > prev))
+				{
+					lastPlayed[vid] = start;
+				}
+			}
+		}
 		_vers = source.Select((VersionRowDto r) => new Ver
 		{
 			Id = r.Id,
@@ -234,8 +255,33 @@ public sealed class LibraryPage : PageBase
 			Isolated = r.Isolated,
 			Mods = r.Mods,
 			IsolationLabel = r.IsolationLabel,
-			Java = r.Java
+			Java = r.Java,
+			LastPlayed = lastPlayed.TryGetValue(r.Id, out long lp) ? lp : 0L
 		}).ToList();
+	}
+
+	/// <summary>Unix 秒 → 「今天 14:20 / 3 天前 / 2026-09-15」；0 = 从未游玩。</summary>
+	private static string LastPlayedText(long unixSec)
+	{
+		if (unixSec <= 0)
+		{
+			return "";
+		}
+		DateTime t = DateTimeOffset.FromUnixTimeSeconds(unixSec).LocalDateTime;
+		DateTime today = DateTime.Today;
+		if (t.Date == today)
+		{
+			return I18n.L("上次游玩 今天 {0:H:mm}", t);
+		}
+		if (t.Date == today.AddDays(-1.0))
+		{
+			return I18n.L("上次游玩 昨天 {0:H:mm}", t);
+		}
+		if ((today - t.Date).TotalDays < 30.0)
+		{
+			return I18n.L("上次游玩 {0} 天前", (int)(today - t.Date).TotalDays);
+		}
+		return I18n.L("上次游玩 {0:yyyy-MM-dd}", t);
 	}
 
 	private void SelectFolder(string name)
@@ -596,6 +642,11 @@ public sealed class LibraryPage : PageBase
 		if (!string.IsNullOrWhiteSpace(v.Java))
 		{
 			s = s + " · Java " + v.Java;
+		}
+		string lp = LastPlayedText(v.LastPlayed);
+		if (lp.Length > 0)
+		{
+			s = s + " · " + lp;
 		}
 		return s;
 	}

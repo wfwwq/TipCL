@@ -16,7 +16,7 @@ public static class ModsDialog
 		BridgeClient api = AppServices.Client;
 		SPanel list = Ui.V(6.0);
 		SmoothScroll smoothScroll = Ui.Scroll(list);
-		smoothScroll.MaxHeight = 400.0;
+		smoothScroll.BindWindowMaxHeight(0.5, 220.0);
 		smoothScroll.MinWidth = 620.0;
 		TextBlock count = Ui.Muted("");
 		ComboBox target = Ui.Combo(null, null, 230.0);
@@ -192,7 +192,7 @@ public static class ModsDialog
 		}
 		SPanel sPanel = Ui.V(6.0);
 		SmoothScroll smoothScroll = Ui.Scroll(sPanel);
-		smoothScroll.MaxHeight = 360.0;
+		smoothScroll.BindWindowMaxHeight(0.45, 200.0);
 		smoothScroll.MinWidth = 600.0;
 		List<(CheckBox Box, ModUpdateRow Row)> picks = new List<(CheckBox, ModUpdateRow)>();
 		foreach (ModUpdateRow item in list)

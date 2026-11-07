@@ -265,7 +265,7 @@ public static class Smoke
 		int num = ArgInt(args, "--smoke-search-timeout", CatalogPage.SearchTimeoutMs);
 		bool flag = num != CatalogPage.SearchTimeoutMs;
 		CatalogPage.SearchTimeoutMs = num;
-		VersionPage.FetchTimeoutMs = num;
+		DownloadPage.FetchTimeoutMs = num;
 		bool num2 = _pageBudgetMs != 9000 || _clickBudgetMs != 15000 || flag;
 		string text = ((I18n.Current == "zh_CN") ? "" : (I18n.Current + "-"));
 		_runLabel = ((!num2) ? $"run-{text}{DateTime.Now:yyyyMMdd-HHmmss}" : string.Format("negative-{0}p{1}-c{2}{3}-{4:yyyyMMdd-HHmmss}", text, _pageBudgetMs, _clickBudgetMs, flag ? $"-s{num}" : "", DateTime.Now));
@@ -392,14 +392,17 @@ public static class Smoke
 				_pages.Add(page);
 			}
 		}
-		if (_clicks.Count < 20)
+		// 阈值与 report 里的 required_* 同源：按 NavDefs 页数比例（S4 删页后 22→10）
+		int reqClicks = Math.Max(8, 20 * MainWindow.NavDefs.Count / 22);
+		int reqDialogs = Math.Max(5, 10 * MainWindow.NavDefs.Count / 22);
+		if (_clicks.Count < reqClicks)
 		{
-			Note("coverage", $"只点击了 {_clicks.Count} 个按钮，要求至少 {20} 个");
+			Note("coverage", $"只点击了 {_clicks.Count} 个按钮，要求至少 {reqClicks} 个");
 		}
 		int num = _dialogs.Count((Dictionary<string, object> d) => object.Equals(d.GetValueOrDefault("type"), "in-app"));
-		if (num < 10)
+		if (num < reqDialogs)
 		{
-			Note("coverage", $"只打开了 {num} 个真实 WPF 弹窗，要求至少 {10} 个；系统文件框模拟取消不计入");
+			Note("coverage", $"只打开了 {num} 个真实 WPF 弹窗，要求至少 {reqDialogs} 个；系统文件框模拟取消不计入");
 		}
 		if (I18n.Current != "zh_CN")
 		{
@@ -692,8 +695,9 @@ public static class Smoke
 		dictionary["click_budget_ms"] = _clickBudgetMs;
 		dictionary["search_timeout_ms"] = CatalogPage.SearchTimeoutMs;
 		dictionary["is_negative_control"] = _runLabel.StartsWith("negative-", StringComparison.Ordinal);
-		dictionary["required_clicks"] = 20;
-		dictionary["required_dialogs"] = 10;
+		// S4 死入口清理后 NavDefs 22→10 页，按页数比例收阈值（旧值 20/10 对应删页前的页面量）
+		dictionary["required_clicks"] = Math.Max(8, 20 * MainWindow.NavDefs.Count / 22);
+		dictionary["required_dialogs"] = Math.Max(5, 10 * MainWindow.NavDefs.Count / 22);
 		dictionary["dialog_threshold_kind"] = "in-app-only";
 		dictionary["display_mode"] = "offscreen-no-activate";
 		dictionary["lang"] = I18n.Current;

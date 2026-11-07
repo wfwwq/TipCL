@@ -13,6 +13,30 @@ namespace TipCL.Services;
 
 public static class Ui
 {
+	/// <summary>ActualHeight × pct（可带 floor 下限），浮层/滚动区 MaxHeight 绑窗口百分比的公共转换器。</summary>
+	public sealed class WindowPctConverter : IValueConverter
+	{
+		private readonly double _pct;
+
+		public WindowPctConverter(double pct)
+		{
+			_pct = pct;
+		}
+
+		public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+		{
+			if (value is not double d || d <= 0.0)
+			{
+				return Binding.DoNothing;
+			}
+			double floor = (parameter is double f) ? f : ((parameter is string s && double.TryParse(s, out double parsed)) ? parsed : 0.0);
+			double v = d * _pct;
+			return (v < floor) ? floor : v;
+		}
+
+		public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+	}
+
 	private sealed class RowFactory<T> : IValueConverter
 	{
 		private readonly Func<T, UIElement> _row;
