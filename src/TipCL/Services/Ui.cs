@@ -262,6 +262,14 @@ public static class Ui
 		return border;
 	}
 
+	/// <summary>当前宿主窗口高 × pct（不低于 floor）——给无法用绑定的字面量 MaxHeight 处用。</summary>
+	public static double WindowPctOf(double pct, double floor)
+	{
+		double h = AppServices.Window?.ActualHeight ?? 0.0;
+		double v = (h > 0.0) ? h * pct : floor;
+		return (v < floor) ? floor : v;
+	}
+
 	public static SmoothScroll Scroll(UIElement content, double padding = 0.0)
 	{
 		return new SmoothScroll

@@ -18,7 +18,7 @@ public sealed class SmoothScroll : ScrollViewer
 	{
 		SetBinding(MaxHeightProperty, new System.Windows.Data.Binding("ActualHeight")
 		{
-			Source = PageBase.Win,
+			Source = AppServices.Window,
 			Converter = new Ui.WindowPctConverter(pct),
 			ConverterParameter = floor
 		});
