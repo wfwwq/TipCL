@@ -84,6 +84,7 @@ public sealed class AccountPage : PageBase
 	protected override async Task LoadAsync()
 	{
 		List<AccountRow> list = (await PageBase.Api.TryCallAsync("get_account_rows", null, new List<AccountRow>())) ?? new List<AccountRow>();
+		_ = AppServices.Window?.SyncAccountChipAsync();
 		_list.Children.Clear();
 		_count.Text = I18n.L("共 {0} 个", list.Count);
 		if (list.Count == 0)

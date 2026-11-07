@@ -576,7 +576,7 @@ public partial class MainWindow : Window
 	}
 
 	// 标题栏账号：当前账号（AccountGate 把 active 排第一）的首字母圆 + 名称
-	private async Task SyncAccountChipAsync()
+	internal async Task SyncAccountChipAsync()
 	{
 		string name = (await AccountGate.ListAsync()).FirstOrDefault() ?? I18n.L("未登录");
 		AccName.Text = name;
@@ -1502,7 +1502,7 @@ public partial class MainWindow : Window
 		TabLibrary.IsChecked = (_currentId == "library");
 		TabTasks.IsChecked = (_currentId == "download" || _currentId == "tasks");
 		TabPlugins.IsChecked = (_currentId == "plugins");
-		TabSettings.IsChecked = (_currentId == "settings");
+		TabSettings.IsChecked = (_currentId == "settings" || _currentId == "account" || _currentId == "java" || _currentId == "servers" || _currentId == "playtime" || _currentId == "feedback");
 	}
 
 	// 任务数变化只需刷新底部任务条（侧栏角标已随离屏侧栏删除）

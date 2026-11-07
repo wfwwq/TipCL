@@ -54,7 +54,7 @@ public sealed partial class PluginsPage : PageBase
 		{
 			PageBase.Run(ReloadAllAsync, I18n.L("刷新失败"));
 		});
-		AddItem(menu, I18n.L("开发者"), "\uec7a", delegate
+		AddItem(menu, I18n.L("开发者"), "\uebe8", delegate
 		{
 			SelectTab(Tab.Dev);
 		});
