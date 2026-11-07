@@ -96,7 +96,19 @@ function Invoke-BuildFlavor {
         Write-Host ("compact 合规: 余量 {0} B" -f ($CompactLimit - $bytes)) -ForegroundColor Green
     }
 
-    return @{ Name = $Name; Exe = $exe; Bytes = $bytes }
+    # -Dist 修复（WP-S5）: premium 后构建会覆盖 bin，必须在此处（每个 flavor 构建完立即）
+    # 复制并算哈希，不能等全部构建完再统一复制（否则 compact 副本错拿 premium）
+    $distSha = $null
+    if ($Dist) {
+        $distDir = 'D:\项目\tipcl\windos\dist'
+        New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+        $dest = Join-Path $distDir ("TipCL-{0}.exe" -f $Name)
+        Copy-Item $exe $dest -Force
+        $distSha = (Get-FileHash $dest -Algorithm SHA256).Hash
+        Write-Host ("dist: {0}  {1} B  SHA256 {2}" -f $dest, $bytes, $distSha) -ForegroundColor Green
+    }
+
+    return @{ Name = $Name; Exe = $exe; Bytes = $bytes; DistSha = $distSha }
 }
 
 $results = @()
@@ -108,14 +120,12 @@ foreach ($r in $results) {
 }
 
 if ($Dist) {
-    # D-18: dist 正式重切由监工统一做；本开关只做临时副本+哈希，供自测用
-    $distDir = 'D:\项目\tipcl\windos\dist'
-    New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+    # D-18: dist 正式重切由监工统一做；本开关复制+哈希已在各 flavor 构建完立即完成（WP-S5 修复）
+    # 此处只汇总复核 dist 文件实际哈希，防止再出张冠李戴
     foreach ($r in $results) {
-        $dest = Join-Path $distDir ("TipCL-{0}.exe" -f $r.Name)
-        Copy-Item $r.Exe $dest -Force
+        $dest = Join-Path 'D:\项目\tipcl\windos\dist' ("TipCL-{0}.exe" -f $r.Name)
         $sha = (Get-FileHash $dest -Algorithm SHA256).Hash
-        Write-Host ("dist: {0}  {1} B  SHA256 {2}" -f $dest, $r.Bytes, $sha)
+        Write-Host ("dist 复核: {0}  SHA256 {1}" -f $dest, $sha)
     }
 }
 
