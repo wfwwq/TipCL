@@ -70,3 +70,9 @@
 
 ### 下一轮接手顺序
 WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选真窗验收）。
+
+## 2026-11-07 第四轮收口（终态）
+- 实修 14 包全部验收：WP-F 6ebc26e / WP-G ceb7061 / WP-K 2ae6221 / WP-T ebacae5 / WP-U 99aec85 / WP-V 486071d / WP-W b539c19 / WP-X 853a296 / WP-N 4b3af82 / WP-Y 97a4c8a / WP-Z 4518a56 / WP-S1 28b640e（build-both.ps1）/ WP-S2 0c326d6（第四轮文档+打包预演）/ WP-S3 bdf40bb（可达性调研）。
+- 收口：R1 终版 smoke 回归全绿 f05e79a；dist 终版重切 f8e0a06（progress/dist-final.md 有哈希）。
+- **交付物**：dist\TipCL-compact.exe 5,707,264 B（余量 50,000）/ TipCL-premium.exe 6,003,712 B。
+- 待拍板遗留：WP-S4 中清理（12 死入口+Ctrl 数字键复活路径+WarmUp，约 120-165 行，需同步 NavCompatTests）；深清理 500+ 行留体积回收弹药；build-both.ps1 -Dist 覆盖 bug；真窗验收（Ctrl+K 实按/安装页实拍/主题切换实走）待用户放行。
