@@ -987,7 +987,7 @@ public sealed class LaunchPage : PageBase
 			}
 			if (vers.Count == 0)
 			{
-				_switchList.Children.Add(Ui.Muted(I18n.L("这个实例还没有版本，先去「原版游戏」装一个")).M(24.0, 4.0, 4.0, 8.0));
+				_switchList.Children.Add(Ui.Muted(I18n.L("这个实例还没有版本，先去「下载」装一个")).M(24.0, 4.0, 4.0, 8.0));
 				continue;
 			}
 			foreach (string v in subs)
@@ -1216,7 +1216,7 @@ public sealed class LaunchPage : PageBase
 			_launchBtn.IsEnabled = list.Count > 0 && _taskId == null;
 			if (list.Count == 0)
 			{
-				_status.Text = I18n.L("这个实例还没有版本，先去「原版游戏」装一个");
+				_status.Text = I18n.L("这个实例还没有版本，先去「下载」装一个");
 			}
 		}
 	}
@@ -1281,10 +1281,12 @@ public sealed class LaunchPage : PageBase
 	{
 		_preferredInstance = name;
 		_preferredVersion = version;
-		if (_instances.Count > 0)
+		// 必须等首次 FillCardData 完成（否则 _ver.Items 未灌入，版本偏好会被丢弃），且与飞行中的填充串行
+		PageBase.Run(async delegate
 		{
-			PageBase.Run(ApplyPreferenceAsync);
-		}
+			await EnsureLoadedAsync();
+			await ApplyPreferenceAsync();
+		});
 	}
 
 	/// <summary>选中指定实例/版本后直接启动（AI 页任务卡「启动游戏」用）。</summary>
@@ -1313,14 +1315,30 @@ public sealed class LaunchPage : PageBase
 			await ReloadVersionsAsync();
 			await ReloadJavaAsync(scan: false);
 		}
-		string preferredVersion = _preferredVersion;
-		_preferredVersion = null;
-		if (!string.IsNullOrEmpty(preferredVersion) && _ver.Items.Contains(preferredVersion))
+		else
 		{
+			// 实例已选中但版本列表可能是旧的（首次填充尾部还会再刷一次），先确保包含目标版本
+			await ReloadVersionsAsync();
+		}
+		string preferredVersion = _preferredVersion;
+		if (string.IsNullOrEmpty(preferredVersion))
+		{
+			SyncBanner();
+			return;
+		}
+		if (_ver.Items.Contains(preferredVersion))
+		{
+			_preferredVersion = null;
 			_syncing = true;
 			_ver.Fill(_ver.Items.Cast<string>(), preferredVersion);
 			_syncing = false;
 		}
+		else if (_ver.Items.Count > 0)
+		{
+			// 版本列表已就绪但没有目标版本（可能已被卸载）——丢弃偏好避免反复重试
+			_preferredVersion = null;
+		}
+		// 版本列表未就绪（0 项）时保留偏好，等下一次 ApplyPreferenceAsync 再试
 		SyncBanner();
 	}
 
@@ -1362,7 +1380,7 @@ public sealed class LaunchPage : PageBase
 		else
 		{
 			_bTitle.Text = (string.IsNullOrEmpty(version) ? I18n.L("未选择版本") : version);
-			_bSub.Text = (string.IsNullOrEmpty(version) ? I18n.L("先到「原版游戏」安装一个版本") : I18n.L("实例 {0} · 点「启动游戏」进入世界", instance));
+			_bSub.Text = (string.IsNullOrEmpty(version) ? I18n.L("先到「下载」安装一个版本") : I18n.L("实例 {0} · 点「启动游戏」进入世界", instance));
 		}
 		if (!string.IsNullOrEmpty(instance))
 		{
@@ -1524,7 +1542,7 @@ public sealed class LaunchPage : PageBase
 		string version = _ver.Str();
 		if (string.IsNullOrEmpty(version))
 		{
-			PageBase.Toast(I18n.L("没有版本"), I18n.L("请先到「原版游戏」安装"), ToastKind.Warning);
+			PageBase.Toast(I18n.L("没有版本"), I18n.L("请先到「下载」安装"), ToastKind.Warning);
 			PageBase.Win?.Navigate("download");
 			return;
 		}

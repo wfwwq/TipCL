@@ -97,7 +97,7 @@ public sealed class VersionManagePage : PageBase
 
 	private readonly StackPanel _groupsHost = new StackPanel();
 
-	private readonly SPanel _empty = Ui.Empty("\ue80a", I18n.L("这个文件夹还没有版本"), I18n.L("点左侧「添加或导入」，或到「原版游戏」页装一个"));
+	private readonly SPanel _empty = Ui.Empty("\ue80a", I18n.L("这个文件夹还没有版本"), I18n.L("点左侧「添加或导入」，或到「下载」页装一个"));
 
 	private readonly List<FolderRow> _folderRows = new List<FolderRow>();
 
