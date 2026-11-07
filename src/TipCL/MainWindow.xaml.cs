@@ -153,6 +153,7 @@ public partial class MainWindow : Window
 		new NavDef("feedback", I18n.L("反馈与帮助"), "\ue8bd", () => new FeedbackPage()),
 		new NavDef("settings", I18n.L("设置"), "\ue713", () => new SettingsPage()),
 		new NavDef("tasks", I18n.L("下载任务"), "\ue9d5", () => new TasksPage()),
+		new NavDef("download", I18n.L("下载"), "\ue896", () => new DownloadPage()),
 		new NavDef("plugins", I18n.L("插件"), "\uea86", () => new TipCL.Pages.Plugins.PluginsPage())
 	};
 
@@ -252,8 +253,11 @@ public partial class MainWindow : Window
 		FitToWorkArea();
 		SetResourceReference(Control.ForegroundProperty, "B.Ink");
 		base.Title = I18n.L("TipCL 启动器");
-		BridgeText.Text = I18n.L("连接中");
 		ThemeBtn.ToolTip = I18n.L("切换深色 / 浅色");
+		AiBtn.ToolTip = I18n.L("AI 助手");
+		AccName.Text = I18n.L("未登录");
+		AccInitial.Text = AccName.Text.Substring(0, 1);
+		SyncThemeIndicator();
 		DropVeilTitle.Text = I18n.L("松手就装");
 		DropVeilHint.Text = I18n.L("整合包、模组、资源包、光影、数据包、存档、皮肤、壁纸都认；认不准会问你一句。");
 		AppServices.Window = this;
@@ -275,11 +279,23 @@ public partial class MainWindow : Window
 		};
 		TabTasks.Click += delegate
 		{
-			Navigate("tasks");
+			Navigate("download");
+		};
+		TabPlugins.Click += delegate
+		{
+			Navigate("plugins");
 		};
 		TabSettings.Click += delegate
 		{
 			Navigate("settings");
+		};
+		AiBtn.Click += delegate
+		{
+			Navigate("ai");
+		};
+		AccBtn.Click += delegate
+		{
+			Navigate("account");
 		};
 		MinBtn.Click += delegate
 		{
@@ -433,6 +449,7 @@ public partial class MainWindow : Window
 			await Wallpaper.ReloadAsync();
 			await ReconcileTasksAsync();
 			await ReloadCurrentAsync();
+			await SyncAccountChipAsync();
 			_bridgeSettled.TrySetResult(null);
 			if (!Smoke.Active)
 			{
@@ -641,10 +658,19 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// 标题栏不再常驻「C 桥」：只在断开时 Logo 右上角亮红点，详情放 Logo 的 ToolTip
 	private void SetBridgeState(string text, string brushKey)
 	{
-		BridgeText.Text = text;
-		BridgeDot.SetResourceReference(Shape.FillProperty, brushKey);
+		BridgePill.ToolTip = text;
+		BridgeDot.Visibility = ((brushKey == "B.Danger" || (brushKey == "B.Warn" && _bridgeReady)) ? Visibility.Visible : Visibility.Collapsed);
+	}
+
+	// 标题栏账号：当前账号（AccountGate 把 active 排第一）的首字母圆 + 名称
+	private async Task SyncAccountChipAsync()
+	{
+		string name = (await AccountGate.ListAsync()).FirstOrDefault() ?? I18n.L("未登录");
+		AccName.Text = name;
+		AccInitial.Text = name.Substring(0, 1).ToUpperInvariant();
 	}
 
 	private static string? _stagedUpdate;
@@ -826,6 +852,10 @@ public partial class MainWindow : Window
 			return;
 		}
 		bool forward = NavOrderIndex(id) >= NavOrderIndex(_currentId);
+		if (_currentId == "account" && _bridgeReady)
+		{
+			Run(SyncAccountChipAsync);
+		}
 		_current?.OnHidden();
 		_currentId = id;
 		_current = page;
@@ -892,10 +922,16 @@ public partial class MainWindow : Window
 		base.WindowState = ((base.WindowState != WindowState.Maximized) ? WindowState.Maximized : WindowState.Normal);
 	}
 
-	// Win11 (build≥22000)：DWMWA_WINDOW_CORNER_PREFERENCE=33 系统圆角；
-	// Win10：RootBorder 自绘 8px 圆角 + 内层 Grid 圆角裁剪；Win7：直角。
-	// 最大化一律回直角。WindowChrome 拖拽/6px resize 不受 CornerRadius 影响。
+	// 窗口圆角 8：Win11 (build≥22000) 走 DWMWA_WINDOW_CORNER_PREFERENCE=33（Backdrop.TryRoundWin11）；
+	// Win10：Backdrop 的亚克力铺满整个矩形 HWND，只裁 WPF 内容挡不住四角 → 再用 SetWindowRgn 把 HWND 本身裁成圆角，
+	// 按 DPI 换算、尺寸变化时重设；最大化清掉区域（直角）。Win7 直角。
 	private double _rootRadius = -1.0;
+
+	private int _rgnW = -1;
+
+	private int _rgnH = -1;
+
+	private int _rgnR = -1;
 
 	private void ApplyWindowCorner()
 	{
@@ -909,7 +945,6 @@ public partial class MainWindow : Window
 			_rootRadius = Math.Max(0.0, Backdrop.RootCornerRadius);
 			if (Environment.OSVersion.Version.Build >= 22000)
 			{
-				// Win11：系统圆角优先；失败也不回退自绘（Win11 上自绘意义不大，保持直角可接受）
 				Backdrop.TryRoundWin11(handle);
 			}
 			RootBorder.SizeChanged += delegate
@@ -938,19 +973,51 @@ public partial class MainWindow : Window
 			double h = el.RenderSize.Height;
 			el.Clip = ((r > 0.0 && w > 0.0 && h > 0.0) ? new RectangleGeometry(new Rect(0.0, 0.0, w, h), r, r) : null);
 		}
+		if (_rootRadius <= 0.0)
+		{
+			return;
+		}
+		IntPtr hwnd = new WindowInteropHelper(this).Handle;
+		if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out RECT rc))
+		{
+			return;
+		}
+		int rw = rc.right - rc.left;
+		int rh = rc.bottom - rc.top;
+		int rr = (int)Math.Round(r * VisualTreeHelper.GetDpi(this).DpiScaleX);
+		if (rw != _rgnW || rh != _rgnH || rr != _rgnR)
+		{
+			_rgnW = rw;
+			_rgnH = rh;
+			_rgnR = rr;
+			Backdrop.SetRoundRegion(hwnd, rw, rh, rr);
+		}
 	}
+
+	[DllImport("user32.dll")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+	private const string GeoMax = "M2,0.5 H8 A1.5,1.5 0 0 1 9.5,2 V8 A1.5,1.5 0 0 1 8,9.5 H2 A1.5,1.5 0 0 1 0.5,8 V2 A1.5,1.5 0 0 1 2,0.5 Z";
+
+	private const string GeoRestore = "M1.7,2.5 H6.3 A1.2,1.2 0 0 1 7.5,3.7 V8.3 A1.2,1.2 0 0 1 6.3,9.5 H1.7 A1.2,1.2 0 0 1 0.5,8.3 V3.7 A1.2,1.2 0 0 1 1.7,2.5 Z M2.5,2.5 V1.7 A1.2,1.2 0 0 1 3.7,0.5 H8.3 A1.2,1.2 0 0 1 9.5,1.7 V6.3 A1.2,1.2 0 0 1 8.3,7.5 H7.5";
+
+	private const string GeoMoon = "M13,9.5 A5.5,5.5 0 0 1 6.5,3 A5.5,5.5 0 1 0 13,9.5 Z";
+
+	private const string GeoSun = "M5,8 A3,3 0 1 0 11,8 A3,3 0 1 0 5,8 Z M8,1.5 V2.8 M8,13.2 V14.5 M1.5,8 H2.8 M13.2,8 H14.5 M3.4,3.4 L4.3,4.3 M11.7,11.7 L12.6,12.6 M3.4,12.6 L4.3,11.7 M11.7,4.3 L12.6,3.4";
 
 	private void SyncMaxGlyph()
 	{
 		bool flag = base.WindowState == WindowState.Maximized;
-		MaxBtn.Content = (flag ? "\ue923" : "\ue922");
+		MaxIco.Data = Geometry.Parse(flag ? GeoRestore : GeoMax);
 		RootBorder.BorderThickness = new Thickness((!flag) ? 1 : 0);
 		ApplyRootCorner();
 	}
 
+	// 深色时显示太阳（点了变浅），浅色时显示月亮
 	internal void SyncThemeIndicator()
 	{
-		ThemeBtn.Content = (App.IsDark ? "\ue706" : "\ue708");
+		ThemeIco.Data = Geometry.Parse(App.IsDark ? GeoSun : GeoMoon);
 	}
 
 	internal void ApplyThemeState(bool dark, bool persistLocal = true)
@@ -1996,12 +2063,13 @@ public partial class MainWindow : Window
 		SyncPluginNavSelection();
 	}
 
-	// 顶栏 4 页签的激活态与当前页联动（launch/library/tasks/settings 之外的高亮全部清掉）
+	// 顶栏 5 页签的激活态与当前页联动（launch/library/tasks/plugins/settings 之外的高亮全部清掉）
 	private void SyncTabs()
 	{
 		TabLaunch.IsChecked = (_currentId == "launch");
 		TabLibrary.IsChecked = (_currentId == "library");
-		TabTasks.IsChecked = (_currentId == "tasks");
+		TabTasks.IsChecked = (_currentId == "download" || _currentId == "tasks");
+		TabPlugins.IsChecked = (_currentId == "plugins");
 		TabSettings.IsChecked = (_currentId == "settings");
 	}
 

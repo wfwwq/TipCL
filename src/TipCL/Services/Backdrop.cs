@@ -70,7 +70,7 @@ public static class Backdrop
 		}
 	}
 
-	/// <summary>系统大圆角能力：Win11 走 DWM，Win10 由窗口层自绘，Win7 直角。</summary>
+	/// <summary>窗口圆角（设备无关像素）：Win11 返回 0（DWM 系统圆角）；Win10 返回 8（MainWindow 用 SetWindowRgn 裁 HWND + WPF Clip）；Win7 直角。</summary>
 	public static int RootCornerRadius
 	{
 		get
@@ -92,6 +92,33 @@ public static class Backdrop
 			{
 				return 0;
 			}
+		}
+	}
+
+	[DllImport("gdi32.dll")]
+	private static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
+
+	[DllImport("user32.dll")]
+	private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, [MarshalAs(UnmanagedType.Bool)] bool redraw);
+
+	[DllImport("gdi32.dll")]
+	private static extern bool DeleteObject(IntPtr h);
+
+	/// <summary>Win10：亚克力（ApplyLegacyBlur）铺满整个 HWND，WPF 侧的 Clip 挡不住四角，
+	/// 只能用窗口区域把 HWND 本身裁圆。w/h/r 为设备像素；r≤0 清除区域（最大化直角）。
+	/// 成功后区域归系统所有，失败才自己删。</summary>
+	public static void SetRoundRegion(IntPtr hwnd, int w, int h, int r)
+	{
+		try
+		{
+			IntPtr rgn = ((r > 0 && w > 0 && h > 0) ? CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2) : IntPtr.Zero);
+			if (SetWindowRgn(hwnd, rgn, redraw: true) == 0 && rgn != IntPtr.Zero)
+			{
+				DeleteObject(rgn);
+			}
+		}
+		catch
+		{
 		}
 	}
 

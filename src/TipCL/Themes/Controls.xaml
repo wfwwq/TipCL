@@ -3,13 +3,10 @@
   <FontFamily x:Key="F.Icon">pack://application:,,,/TipCL;component/Resources/fonts/#TipCL Icons, Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
   <FontFamily x:Key="F.Ui">Microsoft YaHei UI, Microsoft YaHei, Segoe UI, Segoe UI Variable, sans-serif</FontFamily>
   <FontFamily x:Key="F.Mono">Cascadia Mono, Consolas, Microsoft YaHei UI, monospace</FontFamily>
-  <!-- WP-A v2 圆角 token：控件 8 / 卡片 12 / 窗口 8；胶囊 999 只给数字角标 -->
+  <!-- v2 圆角：控件 8 / 卡片 12 / 窗口 8（Backdrop.RootCornerRadius）；CR.Pill 只给数字角标 -->
   <system:Double x:Key="R.Card" xmlns:system="clr-namespace:System;assembly=mscorlib">12</system:Double>
-  <system:Double x:Key="R.Ctl" xmlns:system="clr-namespace:System;assembly=mscorlib">8</system:Double>
-  <system:Double x:Key="R.Window" xmlns:system="clr-namespace:System;assembly=mscorlib">8</system:Double>
   <CornerRadius x:Key="CR.Card">12</CornerRadius>
   <CornerRadius x:Key="CR.Ctl">8</CornerRadius>
-  <CornerRadius x:Key="CR.Window">8</CornerRadius>
   <CornerRadius x:Key="CR.Small">8</CornerRadius>
   <CornerRadius x:Key="CR.Pill">999</CornerRadius>
   <Duration x:Key="D.Fast">0:0:0.13</Duration>
@@ -261,7 +258,7 @@
     <Setter Property="Background" Value="{DynamicResource B.AccentStrong}" />
     <Setter Property="BorderBrush" Value="{DynamicResource B.AccentStrong}" />
     <Setter Property="Foreground" Value="{DynamicResource B.OnAccentStrong}" />
-    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="FontWeight" Value="Bold" />
   </Style>
   <Style x:Key="Btn.Soft" TargetType="{x:Type ButtonBase}" BasedOn="{StaticResource Btn.Base}">
     <Setter Property="Background" Value="{DynamicResource B.AccentSoft}" />
@@ -335,7 +332,7 @@
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
   </Style>
   <!-- v2 窗口按钮：46 宽、高度随标题栏拉伸贴边；内容为 10×10 矢量 Path（线宽 1.1、圆头）。
-       旧用法传图标字体字符串也能显示（ContentPresenter + F.Icon）。 -->
+       Content 放 Path（Style=Ico.Caption）；传图标字体字符串也能显示。 -->
   <Style x:Key="Btn.Caption" TargetType="{x:Type Button}">
     <Setter Property="Width" Value="46" />
     <Setter Property="VerticalAlignment" Value="Stretch" />
@@ -400,7 +397,7 @@
         <ControlTemplate TargetType="{x:Type Button}">
           <Grid Background="#00FFFFFF">
             <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="{StaticResource CR.Ctl}" />
-            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Control.Foreground}" />
+            <ContentPresenter Margin="{TemplateBinding Control.Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Control.Foreground}" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="UIElement.IsMouseOver" Value="True">
@@ -415,29 +412,27 @@
       </Setter.Value>
     </Setter>
   </Style>
-  <!-- 标题栏账号胶囊：头像首字母圆 + 名称，悬停淡底 -->
+  <!-- 标题栏账号钮：头像首字母圆 + 名称（复用 Btn.TitleIcon 模板） -->
   <Style x:Key="Btn.TitleChip" TargetType="{x:Type Button}" BasedOn="{StaticResource Btn.TitleIcon}">
     <Setter Property="Width" Value="Auto" />
     <Setter Property="Padding" Value="4,0,10,0" />
     <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="{x:Type Button}">
-          <Grid Background="#00FFFFFF">
-            <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="{StaticResource CR.Ctl}" />
-            <ContentPresenter Margin="{TemplateBinding Control.Padding}" HorizontalAlignment="Left" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Control.Foreground}" />
-          </Grid>
-          <ControlTemplate.Triggers>
-            <Trigger Property="UIElement.IsMouseOver" Value="True">
-              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.06" />
-            </Trigger>
-            <Trigger Property="ButtonBase.IsPressed" Value="True">
-              <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.12" />
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
+  </Style>
+  <!-- 线条图标：Stroke 跟随所在按钮的 Foreground（悬停变色自动跟随）。Ico.Line 16×16 线宽 1.7；Ico.Caption 10×10 线宽 1.1 -->
+  <Style x:Key="Ico.Line" TargetType="{x:Type Path}">
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="Stretch" Value="None" />
+    <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Control}}}" />
+    <Setter Property="StrokeThickness" Value="1.7" />
+    <Setter Property="StrokeStartLineCap" Value="Round" />
+    <Setter Property="StrokeEndLineCap" Value="Round" />
+    <Setter Property="StrokeLineJoin" Value="Round" />
+  </Style>
+  <Style x:Key="Ico.Caption" TargetType="{x:Type Path}" BasedOn="{StaticResource Ico.Line}">
+    <Setter Property="Width" Value="10" />
+    <Setter Property="Height" Value="10" />
+    <Setter Property="StrokeThickness" Value="1.1" />
   </Style>
   <Style x:Key="NavItem" TargetType="{x:Type ToggleButton}">
     <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
@@ -706,7 +701,7 @@
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ComboBoxItem}">
           <Grid Margin="4,1">
-            <Border Name="Bd" Background="#00FFFFFF" CornerRadius="6" />
+            <Border Name="Bd" Background="#00FFFFFF" CornerRadius="{StaticResource CR.Ctl}" />
             <ContentPresenter Margin="{TemplateBinding Control.Padding}" VerticalAlignment="Center" />
           </Grid>
           <ControlTemplate.Triggers>
@@ -783,7 +778,7 @@
             </TextBox>
             <TextBlock Name="Ph" Text="{TemplateBinding FrameworkElement.Tag}" Foreground="{DynamicResource B.InkFaint}" Margin="{TemplateBinding Control.Padding}" VerticalAlignment="Center" IsHitTestVisible="False" Visibility="Collapsed" />
             <Popup Name="PART_Popup" AllowsTransparency="True" Placement="Bottom" VerticalOffset="4" IsOpen="{TemplateBinding ComboBox.IsDropDownOpen}" PopupAnimation="Fade" Focusable="False">
-              <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="10" MaxHeight="320" Margin="0,0,10,10" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+              <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="12" MaxHeight="320" Margin="0,0,10,10" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
                 <UIElement.Effect>
                   <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.14" Color="#101820" />
                 </UIElement.Effect>
@@ -1140,7 +1135,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ToolTip}">
-          <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="6" Padding="9,6" Margin="6">
+          <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="8" Padding="9,6" Margin="6">
             <UIElement.Effect>
               <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.13" Color="#101820" />
             </UIElement.Effect>
@@ -1155,7 +1150,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ContextMenu}">
-          <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="10" Padding="4" Margin="8">
+          <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="12" Padding="4" Margin="8">
             <UIElement.Effect>
               <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.16" Color="#101820" />
             </UIElement.Effect>
@@ -1173,7 +1168,7 @@
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type MenuItem}">
           <Grid>
-            <Border Name="Bd" Background="#00FFFFFF" CornerRadius="6" />
+            <Border Name="Bd" Background="#00FFFFFF" CornerRadius="{StaticResource CR.Ctl}" />
             <ContentPresenter ContentSource="Header" Margin="12,7" VerticalAlignment="Center" />
           </Grid>
           <ControlTemplate.Triggers>

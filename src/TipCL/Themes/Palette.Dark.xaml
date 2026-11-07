@@ -62,7 +62,6 @@
   <!-- WP-A v2 token（2026-11-06）：卡片 / 标题栏 / 窗口按钮 / 灰按钮 / 分段控件 / 行分隔 -->
   <SolidColorBrush x:Key="B.Card" Color="#232323" />
   <SolidColorBrush x:Key="B.CardBorder" Color="#0FFFFFFF" />
-  <Color x:Key="C.CardShadow">#000000</Color>
   <SolidColorBrush x:Key="B.TitleBar" Color="#1C1C1C" Opacity="0.92" />
   <SolidColorBrush x:Key="B.TitleBarLine" Color="#FFFFFF" Opacity="0.07" />
   <SolidColorBrush x:Key="B.TitleSep" Color="#FFFFFF" Opacity="0.14" />
@@ -81,21 +80,4 @@
     <GradientStop Color="#1B1B1B" Offset="0.6" />
     <GradientStop Color="#181818" Offset="1" />
   </LinearGradientBrush>
-  <RadialGradientBrush x:Key="B.HeroGlow1">
-    <GradientStop Color="#213FB07C" Offset="0" />
-    <GradientStop Color="#003FB07C" Offset="1" />
-  </RadialGradientBrush>
-  <RadialGradientBrush x:Key="B.HeroGlow2">
-    <GradientStop Color="#0D3FB07C" Offset="0" />
-    <GradientStop Color="#003FB07C" Offset="1" />
-  </RadialGradientBrush>
-  <DrawingBrush x:Key="B.HeroGrid" Viewport="0,0,26,26" ViewportUnits="Absolute" TileMode="Tile">
-    <DrawingBrush.Drawing>
-      <GeometryDrawing Geometry="M0,0 L26,0 M0,0 L0,26">
-        <GeometryDrawing.Pen>
-          <Pen Brush="#0BEDEDED" Thickness="1" />
-        </GeometryDrawing.Pen>
-      </GeometryDrawing>
-    </DrawingBrush.Drawing>
-  </DrawingBrush>
 </ResourceDictionary>
