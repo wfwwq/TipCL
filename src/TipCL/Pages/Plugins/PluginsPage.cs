@@ -13,7 +13,7 @@ using TipCL.Services;
 namespace TipCL.Pages.Plugins;
 
 /// <summary>
-/// 侧栏「更多 → 插件」：已安装 / 插件市场 / 开发者 三个标签。
+/// 顶部页签「插件」：已安装 / 市场 分段；开发者、插件设置（市场源等）收在右上 ⋯ 菜单。
 /// 插件设置是本页里的子视图（不是对话框：自定义设置页是 WebView，放进对话层会被 airspace 挡住）。
 /// </summary>
 public sealed partial class PluginsPage : PageBase
@@ -29,14 +29,10 @@ public sealed partial class PluginsPage : PageBase
 
 	private readonly ToggleButton _tMarket;
 
-	private readonly ToggleButton _tDev;
-
 	private readonly ContentControl _body = new ContentControl
 	{
 		Focusable = false
 	};
-
-	private readonly SPanel _tabBar;
 
 	private Tab _tab;
 
@@ -51,28 +47,53 @@ public sealed partial class PluginsPage : PageBase
 	public PluginsPage()
 	{
 		_tInstalled = TabBtn(I18n.L("已安装"), Tab.Installed);
-		_tMarket = TabBtn(I18n.L("插件市场"), Tab.Market);
-		_tDev = TabBtn(I18n.L("开发者"), Tab.Dev);
-		_tabBar = Ui.H(2.0, _tInstalled, _tMarket, _tDev);
-		Grid head = Ui.G(null, "*,Auto");
-		head.Add(_tabBar.VCenter(), 0);
-		head.Add(Ui.H(8.0, Ui.Btn(I18n.L("刷新"), BtnKind.Chip, delegate
+		_tMarket = TabBtn(I18n.L("市场"), Tab.Market);
+		Button more = Ui.IconBtn("\ue712", I18n.L("更多"));
+		ContextMenu menu = new ContextMenu();
+		AddItem(menu, I18n.L("刷新"), "\ue72c", delegate
 		{
 			PageBase.Run(ReloadAllAsync, I18n.L("刷新失败"));
-		}, "\ue72c")).VCenter(), 0, 1);
-		Border bar = new Border
+		});
+		AddItem(menu, I18n.L("开发者"), "\uec7a", delegate
 		{
-			Padding = new Thickness(22.0, 6.0, 22.0, 0.0),
-			BorderThickness = new Thickness(0.0, 0.0, 0.0, 1.0),
-			Child = head
+			SelectTab(Tab.Dev);
+		});
+		AddItem(menu, I18n.L("插件设置"), "\ue713", delegate
+		{
+			ShowSubView(I18n.L("插件设置"), PageBase.ScrollBody(PluginSettingsCard.Build()));
+		});
+		more.ContextMenu = menu;
+		more.Click += delegate
+		{
+			menu.PlacementTarget = more;
+			menu.IsOpen = true;
 		};
-		bar.SetResourceReference(Border.BorderBrushProperty, "B.LineSoft");
+		Grid head = Ui.G(null, "*,Auto");
+		head.Margin = new Thickness(22.0, 16.0, 22.0, 12.0);
+		head.Add(new Border
+		{
+			Style = Ui.S("Seg.Rail"),
+			Child = Ui.H(0.0, _tInstalled, _tMarket),
+			HorizontalAlignment = HorizontalAlignment.Left
+		}, 0);
+		head.Add(Ui.H(6.0, Ui.Btn(I18n.L("从文件安装"), BtnKind.Normal, delegate
+		{
+			string path = Dlg.PickFile(I18n.L("插件包") + " (*.zip)|*.zip", I18n.L("选择插件包"));
+			if (path != null)
+			{
+				PageBase.Run(() => InstallLocalAsync(path, dev: false, null), I18n.L("安装失败"));
+			}
+		}), more).VCenter(), 0, 1);
 		Grid root = Ui.G("Auto,*");
-		root.Add(bar, 0);
+		root.Add(head, 0);
 		root.Add(_body, 1);
 		base.Content = root;
-		_installedHost = Ui.V(10.0);
-		_installedView = PageBase.ScrollBody(InstalledHeader(), _installedHost);
+		_installedHost = new UniformGrid
+		{
+			Columns = 3,
+			Margin = new Thickness(15.0, 0.0, 15.0, 16.0)
+		};
+		_installedView = Ui.Scroll(_installedHost);
 		_marketHost = Ui.V(10.0);
 		BuildMarketChrome();
 		BuildDev();
@@ -113,7 +134,7 @@ public sealed partial class PluginsPage : PageBase
 		ToggleButton b = new ToggleButton
 		{
 			Content = text,
-			Style = Ui.S("TabItemBtn")
+			Style = Ui.S("Seg.Item")
 		};
 		b.Click += delegate
 		{
@@ -128,7 +149,6 @@ public sealed partial class PluginsPage : PageBase
 		_subView = false;
 		_tInstalled.IsChecked = tab == Tab.Installed;
 		_tMarket.IsChecked = tab == Tab.Market;
-		_tDev.IsChecked = tab == Tab.Dev;
 		DisposeSubView();
 		switch (tab)
 		{

@@ -639,8 +639,8 @@ public sealed partial class SettingsPage : PageBase
 		Grid grid4 = Ui.G(null, "*,Auto");
 		grid4.Add(_bgFolder, 0);
 		grid4.Add(el4.M(8.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
-		Border border2 = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("壁纸"), I18n.L("图片或 mp4 动态壁纸；也可以直接把文件拖进窗口")), Ui.Field(I18n.L("壁纸文件"), grid3, I18n.L("留空就不用壁纸。视频会静音循环播放")), Ui.Field(I18n.L("轮播文件夹"), grid4, I18n.L("设了文件夹就按间隔换图，优先于上面那张单图")), Ui.Field(I18n.L("随机顺序"), _bgShuffle, I18n.L("关掉则按文件名顺序轮")), Ui.Field(I18n.L("轮播间隔"), SliderRow(_bgInterval, _bgIntervalLbl), I18n.L("分钟")), Ui.Field(I18n.L("模糊"), SliderRow(_bgBlur, _bgBlurLbl), I18n.L("把壁纸推远一点，文字更好读；随拖随看")), Ui.Field(I18n.L("遮罩浓度"), SliderRow(_bgDim, _bgDimLbl), I18n.L("按当前主题压淡 / 压暗壁纸；随拖随看")), Ui.Field("", Ui.H(8.0, button3, _bgUndo, button4, _bgInfo.VCenter()))));
-		Border border3 = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("主题包"), I18n.L("把当前配色、背景、窗口与主页设置整包存下来，随时切回")), Ui.Field(I18n.L("已保存"), _themePack, I18n.L("从这里挑一个加载或删除")), Ui.Field("", Ui.H(7.0, Ui.Btn(I18n.L("保存为主题包"), BtnKind.Soft, delegate
+		Border border2 = Ui.Card(Ui.V(2.0, Ui.Small(I18n.L("图片或 mp4 动态壁纸；也可以直接把文件拖进窗口")).Wrap(), Ui.Field(I18n.L("壁纸文件"), grid3, I18n.L("留空就不用壁纸。视频会静音循环播放")), Ui.Field(I18n.L("轮播文件夹"), grid4, I18n.L("设了文件夹就按间隔换图，优先于上面那张单图")), Ui.Field(I18n.L("随机顺序"), _bgShuffle, I18n.L("关掉则按文件名顺序轮")), Ui.Field(I18n.L("轮播间隔"), SliderRow(_bgInterval, _bgIntervalLbl), I18n.L("分钟")), Ui.Field(I18n.L("模糊"), SliderRow(_bgBlur, _bgBlurLbl), I18n.L("把壁纸推远一点，文字更好读；随拖随看")), Ui.Field(I18n.L("遮罩浓度"), SliderRow(_bgDim, _bgDimLbl), I18n.L("按当前主题压淡 / 压暗壁纸；随拖随看")), Ui.Field("", Ui.H(8.0, button3, _bgUndo, button4, _bgInfo.VCenter()))));
+		Border border3 = Ui.Card(Ui.V(2.0, Ui.Small(I18n.L("把当前配色、背景、窗口与主页设置整包存下来，随时切回")).Wrap(), Ui.Field(I18n.L("已保存"), _themePack, I18n.L("从这里挑一个加载或删除")), Ui.Field("", Ui.H(7.0, Ui.Btn(I18n.L("保存为主题包"), BtnKind.Soft, delegate
 		{
 			PageBase.Run(SaveThemeAsync, I18n.L("保存失败"));
 		}, "\ue74e"), Ui.Btn(I18n.L("加载"), BtnKind.Chip, delegate
@@ -665,31 +665,131 @@ public sealed partial class SettingsPage : PageBase
 		Grid aiCtxRow = Ui.Field(I18n.L("上下文窗口（token）"), _aiCtx, I18n.L("模型真实窗口未知时按 128k 保守压缩；实测后可改大"));
 		Grid aiFallbackRow = Ui.Field(I18n.L("备用模型（可选）"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它；留空不启用"));
 		_aiCustomRows.AddRange(new UIElement[5] { aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow });
-		Border border7 = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("AI 助手"), I18n.L("对话里下游戏、装模组、读崩溃日志")), Ui.Field(I18n.L("接入方式"), _aiMode), aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow, Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildVisionField(), BuildMcpField(), Ui.Field("", _testAi.Left())));
+		Border border7 = Ui.Card(Ui.V(2.0, Ui.Small(I18n.L("对话里下游戏、装模组、读崩溃日志")).Wrap(), Ui.Field(I18n.L("接入方式"), _aiMode), aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow, Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildVisionField(), BuildMcpField(), Ui.Field("", _testAi.Left())));
 		Border border8 = Ui.Card(Ui.V(2.0, Ui.Field(I18n.L("启动器可见性"), _vis, I18n.L("游戏启动后启动器窗口怎么处理")), Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")), Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html 文件路径")), Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")), Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")), Ui.Field("", _langPreview), Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
 		{
 			PageBase.Run(FirstRunWizard.ShowAsync, I18n.L("向导没能打开"));
 		}, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));
-		SPanel sPanel = Ui.H(10.0, _saveState.VCenter(), button).Right();
 		WireAutoSave();
-		base.Content = PageBase.ScrollBody(BuildMoreLinks(), Ui.Section(I18n.L("设置"), I18n.L("改了就生效，自动保存")), border, border2, border3, border4, border5, border6, BuildPhoneSyncCard(), border7, BuildMemoryCard(), TipCL.Pages.Plugins.PluginSettingsCard.Build(), border8, BuildAboutCard(), sPanel);
+		_views[0] = PageBase.ScrollBody(PTitle(I18n.L("通用")), Gt(I18n.L("外观")), border, Gt(I18n.L("壁纸")), border2, Gt(I18n.L("主题包")), border3, Gt(I18n.L("启动器")), border8, Gt(I18n.L("游戏")), border5, Gt(I18n.L("存储")), border6, Gt(I18n.L("AI 助手")), border7, BuildMemoryCard(), BuildPhoneSyncCard());
+		_views[3] = PageBase.ScrollBody(PTitle(I18n.L("下载与网络")), Gt(I18n.L("下载")), border4);
+		Grid about = Ui.G("Auto,*");
+		about.Add(Ui.V(10.0, PTitle(I18n.L("反馈与关于")), BuildAboutCard(), button.Right()).M(18.0, 14.0, 18.0, 0.0), 0);
+		about.Add(_feedback, 1);
+		_views[6] = about;
+		SPanel nav = Ui.V(2.0, NavBtn(0, I18n.L("通用")), NavBtn(1, I18n.L("账号")), NavBtn(2, "Java"), NavBtn(3, I18n.L("下载与网络")), NavBtn(4, I18n.L("服务器")), NavBtn(5, I18n.L("游戏时长")), NavBtn(6, I18n.L("反馈与关于")), _saveState.M(12.0, 10.0, 0.0, 0.0));
+		nav.Margin = new Thickness(12.0, 16.0, 0.0, 12.0);
+		Grid root = Ui.G(null, "168,*");
+		root.Add(nav, 0);
+		root.Add(_view, 0, 1);
+		base.Content = root;
+		Select(0);
 	}
 
-	// 顶栏页签壳下旧页面入口收敛：设置页顶部一行 Ghost 链接，保证账号/Java/时长/服务器/反馈仍一键可达
-	private static UIElement BuildMoreLinks()
-	{
-		return Ui.H(8.0, Ui.Muted(I18n.L("更多页面")).VCenter(), MoreLink(I18n.L("账号"), "account"), MoreLink("Java", "java"), MoreLink(I18n.L("游戏时长"), "playtime"), MoreLink(I18n.L("服务器"), "servers"), MoreLink(I18n.L("反馈与帮助"), "feedback"));
-	}
+	// 左导航：0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于。子页面是本页自持的实例（不与 MainWindow 共享，避免同一控件两个父级）
+	private readonly System.Windows.Controls.Primitives.ToggleButton[] _nav = new System.Windows.Controls.Primitives.ToggleButton[7];
 
-	private static Button MoreLink(string label, string pageId)
+	private readonly UIElement?[] _views = new UIElement?[7];
+
+	private readonly ContentControl _view = new ContentControl
 	{
-		Button b = Ui.Btn(label, BtnKind.Ghost, delegate
+		Focusable = false
+	};
+
+	private readonly FeedbackPage _feedback = new FeedbackPage();
+
+	private PageBase? _sub;
+
+	private System.Windows.Controls.Primitives.ToggleButton NavBtn(int i, string label)
+	{
+		var b = new System.Windows.Controls.Primitives.ToggleButton
 		{
-			PageBase.Win?.Navigate(pageId);
-		});
-		b.FontSize = 12.5;
-		b.Padding = new Thickness(10.0, 3.0, 10.0, 4.0);
+			Style = Ui.S("Seg.Item"),
+			Content = new TextBlock
+			{
+				Text = label,
+				Width = 120.0
+			},
+			Padding = new Thickness(12.0, 8.0, 12.0, 8.0),
+			Margin = new Thickness(0.0)
+		};
+		b.Click += delegate
+		{
+			Select(i);
+		};
+		_nav[i] = b;
 		return b;
+	}
+
+	private void Select(int i)
+	{
+		for (int k = 0; k < 7; k++)
+		{
+			_nav[k].IsChecked = k == i;
+		}
+		PageBase? sub = i switch
+		{
+			1 => (PageBase)(_views[1] ?? (_views[1] = new AccountPage())),
+			2 => (PageBase)(_views[2] ?? (_views[2] = new JavaPage())),
+			4 => (PageBase)(_views[4] ?? (_views[4] = new ServersPage())),
+			5 => (PageBase)(_views[5] ?? (_views[5] = new PlaytimePage())),
+			6 => _feedback,
+			_ => null,
+		};
+		if (sub != _sub)
+		{
+			_sub?.OnHidden();
+			_sub = sub;
+			ShowSub();
+		}
+		_view.Content = _views[i];
+	}
+
+	private void ShowSub()
+	{
+		PageBase? sub = _sub;
+		if (sub != null && AppServices.Ready)
+		{
+			PageBase.Run(async delegate
+			{
+				await sub.EnsureLoadedAsync();
+				sub.OnShown();
+			});
+		}
+	}
+
+	public override void OnShown()
+	{
+		ShowSub();
+	}
+
+	public override void OnHidden()
+	{
+		_sub?.OnHidden();
+	}
+
+	public override void OnEvent(BridgeEvent ev)
+	{
+		_sub?.OnEvent(ev);
+	}
+
+	private static TextBlock PTitle(string t)
+	{
+		return new TextBlock
+		{
+			Text = t,
+			Style = Ui.S("T.PageTitle"),
+			Margin = new Thickness(0.0, 0.0, 0.0, 2.0)
+		};
+	}
+
+	private static TextBlock Gt(string t)
+	{
+		return new TextBlock
+		{
+			Text = t,
+			Style = Ui.S("T.GroupTitle")
+		};
 	}
 
 	private static UIElement SliderRow(Slider s, TextBlock label)

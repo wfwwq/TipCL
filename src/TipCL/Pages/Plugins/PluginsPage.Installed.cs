@@ -11,26 +11,11 @@ namespace TipCL.Pages.Plugins;
 
 public sealed partial class PluginsPage
 {
-	private readonly SPanel _installedHost;
+	private readonly System.Windows.Controls.Primitives.UniformGrid _installedHost;
 
 	private List<PluginInfo> _installed = new List<PluginInfo>();
 
 	private readonly Dictionary<string, List<ProgressBar>> _bars = new Dictionary<string, List<ProgressBar>>();
-
-	private UIElement InstalledHeader()
-	{
-		return Ui.Section(I18n.L("已安装的插件"), I18n.L("插件可以给侧栏加页面、给 AI 加工具和预设、在首页加卡片、在窗口上加浮层"), Ui.H(8.0, Ui.Btn(I18n.L("从文件安装"), BtnKind.Soft, delegate
-		{
-			string path = Dlg.PickFile(I18n.L("插件包") + " (*.zip)|*.zip", I18n.L("选择插件包"));
-			if (path != null)
-			{
-				PageBase.Run(() => InstallLocalAsync(path, dev: false, null), I18n.L("安装失败"));
-			}
-		}, "\ue8b5"), Ui.Btn(I18n.L("去插件市场"), BtnKind.Primary, delegate
-		{
-			SelectTab(Tab.Market);
-		}, "\ue896")));
-	}
 
 	private async Task LoadInstalledAsync()
 	{
@@ -51,6 +36,7 @@ public sealed partial class PluginsPage
 		{
 			list.RemoveAll((ProgressBar b) => b.Tag as string == "installed");
 		}
+		_installedHost.Columns = (_installed.Count == 0) ? 1 : 3;
 		if (_installed.Count == 0)
 		{
 			SPanel empty = Ui.Empty("\uea86", I18n.L("还没有安装插件"), I18n.L("去插件市场看看，或者把插件 zip 拖进这个页面。"));
@@ -86,40 +72,15 @@ public sealed partial class PluginsPage
 
 	private Border InstalledCard(PluginInfo p)
 	{
-		FrameworkElement icon = PluginIcon.Make(p.Icon, 36.0, "B.AccentText");
-		Border iconBox = new Border
-		{
-			Width = 48.0,
-			Height = 48.0,
-			CornerRadius = new CornerRadius(10.0),
-			Child = icon.Center().VCenter()
-		};
-		iconBox.SetResourceReference(Border.BackgroundProperty, "B.AccentTint");
-		TextBlock name = Ui.Txt(p.DisplayName, 14.0, bold: true).Trim();
-		SPanel title = Ui.H(6.0, name.VCenter(), (p.Version.Length > 0) ? Ui.Tag("v" + p.Version) : null, StateBadge(p), (p.Source == "dev") ? Ui.Tag(I18n.L("开发中"), "B.Info", "B.InfoSoft").Tip(p.DevPath) : null, (p.Source == "local") ? Ui.Tag(I18n.L("本地")) : null, (p.Runtime == "dotnet") ? Ui.Tag(".NET") : null, p.UpdateAvailable ? Ui.Tag(I18n.L("有更新"), "B.Warn", "B.WarnSoft") : null);
-		string meta = string.Join(" · ", new string[2]
-		{
-			(p.Author.Length > 0) ? I18n.L("作者 {0}", p.Author) : "",
-			p.Id
-		}.Where((string s) => s.Length > 0));
-		TextBlock desc = Ui.Muted(p.Description).Wrap();
-		desc.MaxHeight = 40.0;
-		desc.TextTrimming = TextTrimming.CharacterEllipsis;
-		SPanel info = Ui.V(3.0, title, Ui.Small(meta).Trim(), (p.Description.Length > 0) ? desc : null);
-		if (p.Error.Length > 0)
-		{
-			info.Children.Add(Ui.Txt(p.Error, 12.0, bold: false, "B.Danger").Wrap());
-		}
-		if (p.State == "restart_required")
-		{
-			info.Children.Add(Ui.Small(I18n.L(".NET 插件的启用、禁用、更新和卸载要重启 TipCL 才生效")).Wrap());
-		}
-		ProgressBar bar = Ui.Prog();
-		bar.Height = 4.0;
-		bar.Tag = "installed";
-		bar.Visibility = Visibility.Collapsed;
-		Track(p.Id, bar);
-		info.Children.Add(bar.M(0.0, 4.0, 0.0, 0.0));
+		string n = p.DisplayName.Trim();
+		TextBlock letter = Ui.Txt((n.Length > 0) ? char.ToUpperInvariant(n[0]).ToString() : "?", 14.0, bold: true, "B.OnAccentStrong");
+		letter.FontWeight = FontWeights.ExtraBold;
+		Border logo = Ui.Pane(letter.Center().VCenter(), "B.AccentStrong", 9.0, 0.0);
+		logo.Width = 36.0;
+		logo.Height = 36.0;
+		TextBlock name = Ui.Txt(p.DisplayName, 15.0, bold: true).Trim();
+		name.FontWeight = FontWeights.ExtraBold;
+		name.ToolTip = p.Id;
 		CheckBox sw = Ui.Switch(p.Enabled);
 		sw.ToolTip = p.Enabled ? I18n.L("点击禁用") : I18n.L("点击启用");
 		sw.Click += delegate
@@ -144,33 +105,41 @@ public sealed partial class PluginsPage
 				await LoadInstalledAsync();
 			}, on ? I18n.L("启用失败") : I18n.L("禁用失败"));
 		};
-		Button settings = Ui.IconBtn("\ue713", I18n.L("设置"), delegate
+		Grid top = Ui.G(null, "Auto,*,Auto");
+		top.Add(logo, 0);
+		top.Add(name.M(10.0, 0.0, 8.0, 0.0).VCenter(), 0, 1);
+		top.Add(sw.VCenter(), 0, 2);
+		TextBlock desc = Ui.Muted(p.Description).Wrap();
+		desc.FontSize = 12.5;
+		desc.Height = 36.0;
+		desc.TextTrimming = TextTrimming.CharacterEllipsis;
+		desc.Margin = new Thickness(0.0, 10.0, 0.0, 12.0);
+		Button more = Ui.IconBtn("\ue712", I18n.L("更多"));
+		ContextMenu menu = new ContextMenu();
+		if (p.UpdateAvailable)
+		{
+			AddItem(menu, I18n.L("更新"), "\ue896", delegate
+			{
+				PageBase.Run(() => StartPluginTaskAsync("plugins_install", new { id = p.Id }, p.Id, more), I18n.L("更新失败"));
+			});
+		}
+		AddItem(menu, I18n.L("设置"), "\ue713", delegate
 		{
 			ShowSettings(p, forceAuto: false);
 		});
-		Button reload = Ui.IconBtn("\ue72c", I18n.L("重新加载"), delegate
+		if (p.Enabled)
 		{
-			PageBase.Run(async delegate
+			AddItem(menu, I18n.L("重新加载"), "\ue72c", delegate
 			{
-				await PageBase.Api.CallAsync("plugins_reload", new { id = p.Id });
-				PageBase.Toast(I18n.L("已重新加载"), p.DisplayName, ToastKind.Success);
-				await PluginUi.RefreshAsync();
-				await LoadInstalledAsync();
-			}, I18n.L("重新加载失败"));
-		});
-		reload.IsEnabled = p.Enabled;
-		Button? update = null;
-		if (p.UpdateAvailable)
-		{
-			Button upd = Ui.Btn(I18n.L("更新"), BtnKind.Soft, null, "\ue896");
-			upd.Click += delegate
-			{
-				PageBase.Run(() => StartPluginTaskAsync("plugins_install", new { id = p.Id }, p.Id, upd), I18n.L("更新失败"));
-			};
-			update = upd;
+				PageBase.Run(async delegate
+				{
+					await PageBase.Api.CallAsync("plugins_reload", new { id = p.Id });
+					PageBase.Toast(I18n.L("已重新加载"), p.DisplayName, ToastKind.Success);
+					await PluginUi.RefreshAsync();
+					await LoadInstalledAsync();
+				}, I18n.L("重新加载失败"));
+			});
 		}
-		Button more = Ui.IconBtn("\ue712", I18n.L("更多"));
-		ContextMenu menu = new ContextMenu();
 		AddItem(menu, I18n.L("打开数据目录"), "\ue8b7", delegate
 		{
 			OpenFolder(PluginDataDir(p.Id));
@@ -208,12 +177,27 @@ public sealed partial class PluginsPage
 			menu.PlacementTarget = more;
 			menu.IsOpen = true;
 		};
-		SPanel actions = Ui.H(4.0, update, settings, reload, more, sw.M(8.0, 0.0, 0.0, 0.0));
-		Grid g = Ui.G(null, "Auto,*,Auto");
-		g.Add(iconBox.VTop(), 0);
-		g.Add(info.M(14.0, 0.0, 12.0, 0.0), 0, 1);
-		g.Add(actions.VCenter(), 0, 2);
-		return Ui.RowCard(g, null, 14.0);
+		Grid foot = Ui.G(null, "*,Auto");
+		foot.Add(Ui.H(6.0, Ui.Small((p.Source == "dev") ? I18n.L("开发链接") : ((p.Version.Length > 0) ? ("v" + p.Version) : "")).VCenter(), (p.State == "running" && p.Enabled) ? null : StateBadge(p), (p.Source == "dev") ? Ui.Tag(I18n.L("开发"), "B.Warn", "B.WarnSoft").Tip(p.DevPath) : null, (p.Source == "local") ? Ui.Tag(I18n.L("本地")) : null, (p.Runtime == "dotnet") ? Ui.Tag(".NET") : null, p.UpdateAvailable ? Ui.Tag(I18n.L("有更新"), "B.Warn", "B.WarnSoft") : null).VCenter(), 0);
+		foot.Add(more.VCenter(), 0, 1);
+		SPanel body = Ui.V(0.0, top, desc, foot);
+		if (p.Error.Length > 0)
+		{
+			body.Children.Add(Ui.Txt(p.Error, 12.0, bold: false, "B.Danger").Wrap().M(0.0, 6.0, 0.0, 0.0));
+		}
+		if (p.State == "restart_required")
+		{
+			body.Children.Add(Ui.Small(I18n.L(".NET 插件的启用、禁用、更新和卸载要重启 TipCL 才生效")).Wrap().M(0.0, 6.0, 0.0, 0.0));
+		}
+		ProgressBar bar = Ui.Prog();
+		bar.Height = 4.0;
+		bar.Tag = "installed";
+		bar.Visibility = Visibility.Collapsed;
+		Track(p.Id, bar);
+		body.Children.Add(bar.M(0.0, 6.0, 0.0, 0.0));
+		Border card = Ui.Card(body, 16.0);
+		card.Margin = new Thickness(7.0);
+		return card;
 	}
 
 	internal static void AddItem(ItemsControl menu, string header, string glyph, Action act)
