@@ -105,3 +105,20 @@
 - B0 完成前页面包不得开工；页面文件各自独占（Pages/ 下每页一个文件族），公共件只许改 B0 地盘。
 - 每包收尾：自证编译 + 写 progress/M2-*.md + commit（前缀包编号）。
 - 页面替换 Placeholder 时只改 NavRegistry 注册项对应行，注册表冲突由主 agent 合入。
+
+---
+
+## 8. M3 任务书（2026-11-08 追加）
+
+### 8.1 技术决定（已定）
+- 启动链路：直调 Core 已搬的启动链（McLauncher/Preflight 等 M1-A4 未搬部分补齐），进程内拉起 Java 子进程；不做 Python 桥。
+- Java 管理：Java.cs 的 Linux 探测路径补齐（/usr/lib/jvm、sdkman、apt 目录、JAVA_HOME、which java），GUI 探测列表走 IApi。
+- 版本：0.1.0-m3；交付 Linux x64 self-contained 单文件 + AppImage 打包脚本（不出 release、不 push）。
+
+### 8.2 工作包（C0/C1/C2 并行，C3 收尾归主 agent）
+- **M3-C0 启动链路与 Java 管理**：补搬启动链文件；LaunchCore 门面（参数组装/进程拉起/stdout 日志桥/崩溃回传）；Java 探测 Linux 分支补齐；IApi 补 B2 报告的 9 个方法与 launch_game/get_javas/java_download 等启动相关方法；IApi 补齐后通知性写入 progress/M3-C0.md（B2 的回落逻辑会自动切换）。
+- **M3-C1 插件宿主与 AI 运行时落地**：插件启停走 PluginStateStore + 进程内宿主（WebView 面仍降级）；AI 运行时最小落地（Ai/ 运行时按需续搬，M2 页面的 AI 入口接 IApi）。文件地盘：Core/Plugins、Core/Launcher/Ai、App/Common 里 AI 相关新文件（不改 Api.cs，依赖申请）。
+- **M3-C2 打包交付**：linux-x64 self-contained 单文件发布参数（PublishSingleFile/Trimmed 视兼容取舍）、tools/package.sh（AppImage 结构）、docs/ 交付说明、Windows/Linux 双端冒烟清单；不改 src 源码（csproj 发布相关段若必须改，依赖申请）。
+- **M3-C3 总验收（主 agent）**：全量测试、29 条警告清理、启动按钮视觉微调复核、双端冒烟矩阵、PROGRESS/DECISIONS 收尾。
+
+### 8.3 纪律（沿用 §6/§7.3）
