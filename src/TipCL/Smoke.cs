@@ -447,7 +447,7 @@ public static class Smoke
 		{
 		}
 		Application.Current.Shutdown(code);
-		Task.Run(async delegate
+		_ = Task.Run(async delegate
 		{
 			await Task.Delay(1500);
 			Environment.Exit(code);

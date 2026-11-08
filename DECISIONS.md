@@ -150,3 +150,36 @@
 - 理由：区块级粒度在「自由度」与「不破坏页面内聚逻辑」之间最稳；文件驱动 + 可视化双轨满足分享需求；纯 WPF 实现保 Win7。
 - 可回滚：是（框架 4 文件 + 11 页面 diff + 测试，git 可还原；数据文件独立，删掉即回默认布局）。
 - 偏离提示：DownloadPage 列表滚动语义变化（内部滚动→随页滚动）是契约固有行为，记录在 progress/WP-V.md 风险 1。
+
+### D-20 · ImageSharp 2.1.13 审计豁免（2026-11-08，UI 质量修复轮）
+- 处境：UI 评价发现 NU1902/NU1903 共 5 条告警（3 高 2 中）。修复版 3.2.0/4.1.2 起仅 target net6.0+（已下载 3.2.0 nupkg 核实 lib/ 只有 net6.0），net48 无法消费。
+- 评估过的替代：官方 dwebp.exe（1.3.2+ 无 x86 包，丢 32 位兼容）；Imazen.WebP 原生包（/MD 构建依赖 VCRUNTIME140/UCRT，干净 Win7 未必有）；自编译（本机无 C 工具链）。均破坏 Win7/x86/免运行时承诺，放弃。
+- 决定：保留 2.1.13，csproj 加 5 条 `NuGetAuditSuppress`。依据：全仓库唯一入口 `WebpFallback.ToPng` 用 WebP-only Configuration，5 条漏洞全在 TIFF/ICC/直方图路径，零调用、不可达（逐条分析见 docs/security/imagesharp-audit.md）。
+- 守卫：WebpFallbackTests.DecoderRegistersOnlyWebp 反射断言只注册 WEBP；另 3 个契约/真解码测试（样本=libwebp 1.6.0 官方 test.webp）。
+- 退出策略：放弃 net48 / 上游修 2.1.x / 引入 C 工具链自编译 libwebp，任一满足即升级并删豁免。
+- 可回滚：是（删豁免项即恢复告警）。
+
+### D-21 · 可访问性与 WCAG AA 对比度（2026-11-08）
+- 处境：评价发现按钮无键盘焦点视觉、标题栏按钮 Tab 不可达、纯图标按钮无自动化名、辅助文字对比度仅 3.4–3.6:1。
+- 决定：a) Controls.xaml 五个交互模板（BtnTpl/Btn.TitleIcon/Tab.Top/TabItemBtn/Seg.Item）加 2px B.Accent 焦点环（仅 IsKeyboardFocused 显示）；b) Tab.Top 与标题栏 AI/主题/账号 IsTabStop=True（窗口三键保持系统惯例）；c) Ui.Btn/IconBtn 与标题栏按钮设 AutomationProperties.Name（随 I18n/主题/账号同步）；d) 色板成对调整：light InkMuted #888→#666、InkFaint #8A8A8A→#6B6B6B；dark InkMuted #909090→#9A9A9A、InkFaint #707070→#8A8A8A。
+- 数据：全部文字档对最坏背景 ≥4.5:1（脚本实测：light 4.55–5.74，dark 4.5–5.92）。
+- 可回滚：是（色板成对改回、模板删 Kf 即可）。
+
+### D-22 · 窗口最小尺寸统一 + hint 断行 + 圆角收敛 + spec v2（2026-11-08）
+- 处境：XAML Min 720×480 / 默认 900×550 / WndProc 硬编码 900×580 三处矛盾；设置页三条 hint 在 140px 标签列断行难看；圆角残留 3/5/7/3.5；design-spec v1 与 v2 代码脱节。
+- 决定：a) WndProc 的 WM_GETMINMAXINFO 改读 `_wnd.MinWidth/MinHeight`（XAML 唯一真相）；b) 三条 hint 缩短为单行（"换页、进度条、悬浮动效"/"安装时飞入侧栏任务列表"/"毫秒，建议 400–800"），词表成对更新；c) 圆角收敛到 {8,12,999}：AiIcons 7→8、Tag 5→8、三处状态圆点半宽字面量→999；微元素（≤12px 手柄/色条/图标方块）豁免保留 2–3；d) design-spec.md 重写为 v2.0，含 v1→v2 差异表。
+- 可回滚：是。
+
+### D-23 · i18n 工具链修复与词表补齐（2026-11-08）
+- 处境：--i18n-check 找旧布局 wpf/TipCL 跑不了；I18n.EnsureTables 只认 mclauncher/locales（开发态无 payload 时词表空）。
+- 决定：a) I18nCheck 源码路径 src/TipCL 优先、wpf/TipCL 回退；b) I18n.EnsureTables 加 src/TipCL/Resources/locales 回退（运行时 payload 布局优先，行为不变）；c) 工具跑通后量化出 254 个 L() 用到但词表缺失的 key，zh_CN 补恒等映射、en 补人工翻译（保留 {0} 占位符）。
+- 数据：missing_en 254→0、missing_zh 254→0。
+- 遗留（记录不修）：unwrapped 2897 处中文字面量未包 L()——Core 2555（后端/日志串）、Pages 193（多为 AI 提示词〈刻意中文〉、slash 菜单数据、自检串），需逐条判断，属另一轮工作。
+- 可回滚：是。
+
+### D-24 · 构建警告清零与巨型文件拆分（2026-11-08）
+- 处境：1169 条构建警告；AiPage/SettingsPage/LaunchPage 均 2000+ 行。
+- 决定：a) 两工程 `<Nullable>annotations</Nullable>`（消 CS8632，不引入 CS86xx 分析警告）；b) 9 处刻意 fire-and-forget 改 `_ =`（CS4014）；c) WriteJsonTests 删未用变量（CS0219）、SaveSyncTests 理论参数改 string?（xUnit1012）；d) 机械提取 partial：SettingsPage.Themes.cs（390 行）/LaunchPage.Popups.cs（338 行）/AiPage.Images.cs（149 行），三主文件分别 2379→2012 / 2235→1922 / 2865→2740 行，零逻辑改动。
+- 数据：警告 1169→0；build 0 错误；test 157/158（唯一失败=基线 PhoneLinkTests.FullFlow，D-4 在案，Core 业务不在本轮范围）；smoke 10/10 页、17 点击、10 弹窗、0 异常。
+- 体积提示：当前树非 premium 构建 6,224,384 B，**超 D-19 红线 5,757,264**——其中约 370KB 为镜像功能提交（108d556 等，本轮之前已超）、约 110KB 为本轮词表补齐；dist 重切与体积回收（locales gzip 等）留待维护者排期，不在 UI 修复范围。
+- 可回滚：是（partial 提取可 git 还原；警告修复逐项独立）。

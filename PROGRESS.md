@@ -90,3 +90,22 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - 终版交付物（dist）：TipCL-compact-20261107-1308-头部共享修复.exe 5,741,568 B SHA 580a71fb…；TipCL-premium-20261107-1308-头部共享修复.exe 6,038,528 B SHA e23ad3f4…。compact 余量 15,696 B。
 - 终验：128/129（PhoneLink 环境性）；dist compact --smoke 27/27 页全 ok、0 异常（coverage 17/9 低于旧阈值 20/10 为 S4 删页后页数变化所致，非回归）。
 - 待拍板：InstanceDetailPage 无真实 UI 入口（「管理」走对话框 vs 详情页）；PhoneLink 环境复跑；真窗验收。
+
+## 2026-11-08 第七轮（UI 质量评价 → 全量修复）
+- 起因：用户要求评价 UI 质量。实拍 12 张明暗截图 + 代码审查 + test/smoke，给出 7.5–8/10 评价与问题清单；用户指示「把你找出来的全部修复」。
+- 修复清单（决策见 DECISIONS D-20…D-24）：
+  | 项 | 内容 | 验证 |
+  |---|---|---|
+  | 窗口最小尺寸 | WndProc 改读 XAML Min（720×480），消除三处矛盾 | build |
+  | 设置 hint 断行 | 三条 hint 缩短单行 + 词表成对更新 | 实拍明暗 |
+  | 可访问性 | 5 模板焦点环、页签/标题栏 Tab 可达、图标按钮自动化名 | build/smoke |
+  | 对比度 | 明暗 InkMuted/InkFaint 成对调整，全档 ≥4.5:1 | 脚本实测 + 实拍 |
+  | 规范 | design-spec.md 重写 v2.0；圆角收敛 {8,12,999}+微元素豁免 | 实拍 |
+  | 警告 | 1169→0（Nullable annotations / `_ =` / 删未用变量 / xUnit1012） | build 0 警告 |
+  | ImageSharp | 5 条 CVE 不可达分析 + NuGetAuditSuppress + 4 个守卫测试 | test（含真解码） |
+  | i18n | I18nCheck 路径修复 + 词表回退 + 补 254 缺失键（en 人工翻译） | missing_en/zh=0 |
+  | DevShot | consent 弹窗确定性点掉（暂不同意），截图不再被污染 | 12 张干净截图 |
+  | 巨型文件 | 3 个 partial 提取（Themes/Popups/Images），零逻辑改动 | build/test/smoke |
+- 终验：build 0 错误 0 警告；test 157/158（唯一失败=基线 PhoneLink）；smoke 10/10 页 ok、17 点击、10 弹窗、0 异常；i18n missing=0；明暗 12 图视觉回归通过。
+- 产物：截图 `windos/_eval_shots/final/`；smoke 报告 `_eval_smoke_home/_wpf_smoke/run-20261108-153018/`；分析 `docs/security/imagesharp-audit.md`。
+- 遗留（记录不修，属另一轮）：① unwrapped 中文字面量 2897（Core 2555 / Pages 193，多为 AI 提示词与自检串，需逐条判断）；② 体积超 D-19 红线（镜像提交先超 ~370KB + 本轮词表 ~110KB），dist 重切与回收待排期；③ PhoneLink 基线失败（Core 业务，D-4 在案）。

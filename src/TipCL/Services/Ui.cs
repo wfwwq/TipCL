@@ -351,6 +351,11 @@ public static class Ui
 			Style = S(StyleOf(kind))
 		};
 		button.Content = ((glyph == null) ? ((object)text) : ((object)H(6.0, Glyph(glyph, (kind == BtnKind.Primary) ? 13.0 : 12.5), string.IsNullOrEmpty(text) ? null : Txt(text))));
+		if (!string.IsNullOrEmpty(text))
+		{
+			// 图文组合按钮的自动化名取文字（否则屏幕阅读器会读到图标字体的私有码位）
+			System.Windows.Automation.AutomationProperties.SetName(button, text);
+		}
 		if (click != null)
 		{
 			button.Click += click;
@@ -368,6 +373,7 @@ public static class Ui
 		if (tip != null)
 		{
 			button.ToolTip = tip;
+			System.Windows.Automation.AutomationProperties.SetName(button, tip);
 		}
 		if (click != null)
 		{
@@ -525,7 +531,7 @@ public static class Ui
 	public static Border Tag(string text, string fg = "B.InkMuted", string bg = "B.LineSoft")
 	{
 		Border border = new Border();
-		border.CornerRadius = new CornerRadius(5.0);
+		border.CornerRadius = new CornerRadius(8.0);
 		border.Padding = new Thickness(6.0, 1.5, 6.0, 2.5);
 		border.VerticalAlignment = VerticalAlignment.Center;
 		border.Child = Txt(text, 11.0, bold: false, fg);

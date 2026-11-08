@@ -46,7 +46,7 @@ public sealed class MultiplayerPage : PageBase
 	{
 		Width = 10.0,
 		Height = 10.0,
-		CornerRadius = new CornerRadius(5.0)
+		CornerRadius = new CornerRadius(999.0)
 	};
 
 	private readonly DispatcherTimer _timer = new DispatcherTimer

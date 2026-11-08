@@ -182,7 +182,17 @@ public static class I18n
 			string text;
 			try
 			{
-				text = Path.Combine(BridgeHost.FindRoot(), "mclauncher", "locales");
+				string root = BridgeHost.FindRoot();
+				text = Path.Combine(root, "mclauncher", "locales");
+				if (!Directory.Exists(text))
+				{
+					// 开发态（TIPCL_HOME=仓库根，无后端 payload）：词表在源码树里
+					string srcLocales = Path.Combine(root, "src", "TipCL", "Resources", "locales");
+					if (Directory.Exists(srcLocales))
+					{
+						text = srcLocales;
+					}
+				}
 			}
 			catch
 			{

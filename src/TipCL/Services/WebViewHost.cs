@@ -179,7 +179,7 @@ public static partial class WebViewHost
 				["card"] = Hex("B.Paper2", dark ? "#252525" : "#FAFAFA"),
 				["border"] = Hex("B.Line", dark ? "#3A3A3A" : "#E6E6E6"),
 				["accent"] = Hex("B.Accent", "#2E9B6B"),
-				["muted"] = Hex("B.InkMuted", "#888888"),
+				["muted"] = Hex("B.InkMuted", "#666666"),
 				["danger"] = Hex("B.Danger", "#D64545")
 			},
 			["font"] = "\"Microsoft YaHei UI\", \"Segoe UI\", system-ui, sans-serif"

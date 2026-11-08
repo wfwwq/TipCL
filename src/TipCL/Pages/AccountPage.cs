@@ -442,7 +442,7 @@ public sealed class AccountPage : PageBase
 			_loginLayer = null;
 			if (_loginTask != null)
 			{
-				PageBase.Api.TryCallAsync<object>("cancel_task", new
+				_ = PageBase.Api.TryCallAsync<object>("cancel_task", new
 				{
 					task_id = _loginTask
 				});

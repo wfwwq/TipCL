@@ -5,7 +5,8 @@
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
     <LangVersion>12.0</LangVersion>
-    <Nullable>disable</Nullable>
+    <!-- annotations：允许 `string?` 等可空注解（消除 CS8632），但不启用可空警告分析（避免引入海量 CS86xx） -->
+    <Nullable>annotations</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>TipCL</AssemblyName>
     <RootNamespace>TipCL</RootNamespace>
@@ -41,7 +42,13 @@
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
-    <!-- Win7/8.1 的 WIC 不支持 WebP：用纯托管解码兜底（2.x 为 Apache-2.0，支持 .NET Framework） -->
+    <!-- Win7/8.1 的 WIC 不支持 WebP：用纯托管解码兜底（2.x 为 Apache-2.0，支持 .NET Framework）。
+         不升级 3.2.0+：该版本起仅 target net6.0+，net48 无法消费（Win7/8.1 兼容是硬约束）。
+         下列 5 条审计告警经逐条核实均为**不可达路径**（详见 docs/security/imagesharp-audit.md 与 DECISIONS D-20）：
+         本仓库唯一 ImageSharp 入口是 WebpFallback.ToPng 的 Image.Load(WebpOnly, data)，
+         WebpOnly 只注册 WebpConfigurationModule——TIFF 解码/编码、ICC Entries 解析、HistogramEqualization
+         在全仓库零调用（WebpFallbackTests.DecoderRegistersOnlyWebp 作回归守卫）。
+         原生替代方案（libwebp/dwebp）会引入 UCRT/VCRUNTIME 依赖或丢 x86，破坏 Win7 承诺，故不采用。 -->
     <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <!-- 把依赖 DLL 打进单个 exe -->
@@ -54,6 +61,17 @@
          而 xunit 的 VSTest 适配器计算测试 UniqueID 时会枚举 TipCL.exe 的程序集属性，
          net8 测试宿主加载不到 net48 的 PresentationCore/PresentationFramework → 测试全过后运行仍 FATAL -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3912.50" GeneratePathProperty="true" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- ImageSharp 2.1.13 审计豁免：5 条告警全部位于 TIFF/ICC/直方图路径，本程序只注册 WebP 解码器，
+       这些路径不可达（逐条分析见 docs/security/imagesharp-audit.md）。升级到修复版 3.2.0 需要 net6.0+，
+       与 net48/Win7 硬约束冲突；守卫测试 WebpFallbackTests.DecoderRegistersOnlyWebp 防止未来扩大入口。 -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j3p4-wp97-rph4" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j9gm-c75j-xc9q" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-jjfr-hcj7-qf5w" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-gwg2-r3hj-4w44" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-wmxv-xphr-5c9g" />
   </ItemGroup>
 
   <PropertyGroup>

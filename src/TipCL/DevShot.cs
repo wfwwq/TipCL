@@ -76,6 +76,8 @@ public static class DevShot
 		catch
 		{
 		}
+		// FeedbackConsent 在桥就绪后延迟 400ms 弹出；等一下再清弹窗，保证截图不被首启弹窗污染
+		await Task.Delay(700);
 		await DismissWizard(win);
 		if (args?.Contains("--probe") == true)
 		{
@@ -289,12 +291,13 @@ public static class DevShot
 		}
 	}
 
-	// 首启向导会盖住截图：找到「跳过向导」按钮以程序方式点掉（等价用户点击，不碰业务代码）
+	// 首启向导/诊断同意弹窗会盖住截图：找到「跳过向导」或「暂不同意」按钮以程序方式点掉
+	// （等价用户点击，不碰业务代码；consent 选「暂不同意」= 不上传，开发截图的安全默认）
 	private static async Task DismissWizard(MainWindow win)
 	{
 		for (int i = 0; i < 4 && Dlg.AnyOpen; i++)
 		{
-			ButtonBase? skip = FindButton(Dlg.Host, "跳过向导");
+			ButtonBase? skip = FindButton(Dlg.Host, "跳过向导") ?? FindButton(Dlg.Host, "暂不同意");
 			if (skip == null)
 			{
 				break;

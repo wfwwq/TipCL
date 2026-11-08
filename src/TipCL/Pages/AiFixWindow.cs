@@ -803,7 +803,7 @@ internal sealed class AiFixWindow : Window
 		}
 		if (_busy)
 		{
-			(_client ?? AppServices.Client).TryCallAsync<JsonElement>("ai_stop");
+			_ = (_client ?? AppServices.Client).TryCallAsync<JsonElement>("ai_stop");
 		}
 		base.OnClosed(e);
 	}

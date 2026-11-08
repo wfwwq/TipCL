@@ -38,7 +38,7 @@
               <ToggleButton Name="TabSettings" Style="{StaticResource Tab.Top}" Content="设置" />
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
-              <Button Name="AiBtn" Style="{StaticResource Btn.TitleChip}" Height="26" Padding="0" VerticalAlignment="Center" Margin="0,0,2,0">
+              <Button Name="AiBtn" Style="{StaticResource Btn.TitleChip}" Height="26" Padding="0" VerticalAlignment="Center" Margin="0,0,2,0" IsTabStop="True">
                 <Grid>
                   <Border CornerRadius="13" Background="{DynamicResource B.GlassStrong}" BorderBrush="{DynamicResource B.GlassBorder}" BorderThickness="1" />
                   <StackPanel Orientation="Horizontal" Margin="8,0,9,0">
@@ -47,10 +47,10 @@
                   </StackPanel>
                 </Grid>
               </Button>
-              <Button Name="ThemeBtn" Style="{StaticResource Btn.TitleIcon}" VerticalAlignment="Center">
+              <Button Name="ThemeBtn" Style="{StaticResource Btn.TitleIcon}" VerticalAlignment="Center" IsTabStop="True">
                 <Path Name="ThemeIco" Style="{StaticResource Ico.Line}" />
               </Button>
-              <Button Name="AccBtn" Style="{StaticResource Btn.TitleChip}" VerticalAlignment="Center" Margin="2,0,2,0">
+              <Button Name="AccBtn" Style="{StaticResource Btn.TitleChip}" VerticalAlignment="Center" Margin="2,0,2,0" IsTabStop="True">
                 <StackPanel Orientation="Horizontal">
                   <Border Width="24" Height="24" CornerRadius="12" Background="{DynamicResource B.AccentStrong}">
                     <TextBlock Name="AccInitial" Foreground="{DynamicResource B.OnAccentStrong}" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />

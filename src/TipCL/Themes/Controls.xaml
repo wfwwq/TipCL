@@ -184,6 +184,8 @@
       </UIElement.RenderTransform>
       <Border Name="Bd" Background="{TemplateBinding Control.Background}" BorderBrush="{TemplateBinding Control.BorderBrush}" BorderThickness="{TemplateBinding Control.BorderThickness}" SnapsToDevicePixels="True" CornerRadius="{StaticResource CR.Ctl}" />
       <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="{StaticResource CR.Ctl}" />
+      <!-- 键盘焦点环：FocusVisualStyle 被置空，改用模板内 2px 主题色描边（仅 IsKeyboardFocused 时显示，鼠标点击不显示） -->
+      <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="{StaticResource CR.Ctl}" Opacity="0" IsHitTestVisible="False" />
       <ContentPresenter Name="Cp" Margin="{TemplateBinding Control.Padding}" HorizontalAlignment="{TemplateBinding Control.HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding Control.VerticalContentAlignment}" RecognizesAccessKey="True" TextElement.Foreground="{TemplateBinding Control.Foreground}" TextElement.FontFamily="{TemplateBinding Control.FontFamily}" TextElement.FontSize="{TemplateBinding Control.FontSize}" TextElement.FontWeight="{TemplateBinding Control.FontWeight}" />
     </Grid>
     <ControlTemplate.Triggers>
@@ -221,6 +223,9 @@
             </Storyboard>
           </BeginStoryboard>
         </TriggerBase.ExitActions>
+      </Trigger>
+      <Trigger Property="UIElement.IsKeyboardFocused" Value="True">
+        <Setter TargetName="Kf" Property="UIElement.Opacity" Value="0.9" />
       </Trigger>
       <Trigger Property="UIElement.IsEnabled" Value="False">
         <Setter TargetName="Root" Property="UIElement.Opacity" Value="0.45" />
@@ -371,6 +376,7 @@
         <ControlTemplate TargetType="{x:Type Button}">
           <Grid Background="#00FFFFFF">
             <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="{StaticResource CR.Ctl}" />
+            <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="{StaticResource CR.Ctl}" Opacity="0" IsHitTestVisible="False" />
             <ContentPresenter Margin="{TemplateBinding Control.Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Control.Foreground}" />
           </Grid>
           <ControlTemplate.Triggers>
@@ -380,6 +386,9 @@
             </Trigger>
             <Trigger Property="ButtonBase.IsPressed" Value="True">
               <Setter TargetName="Ov" Property="UIElement.Opacity" Value="0.13" />
+            </Trigger>
+            <Trigger Property="UIElement.IsKeyboardFocused" Value="True">
+              <Setter TargetName="Kf" Property="UIElement.Opacity" Value="0.9" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -425,6 +434,7 @@
                 <ScaleTransform x:Name="UnSc" ScaleX="0.3" />
               </UIElement.RenderTransform>
             </Border>
+            <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="6" Margin="4,2" Opacity="0" IsHitTestVisible="False" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="UIElement.IsMouseOver" Value="True">
@@ -450,6 +460,9 @@
                 </BeginStoryboard>
               </TriggerBase.ExitActions>
             </Trigger>
+            <Trigger Property="UIElement.IsKeyboardFocused" Value="True">
+              <Setter TargetName="Kf" Property="UIElement.Opacity" Value="0.9" />
+            </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
@@ -463,7 +476,7 @@
     <Setter Property="FrameworkElement.Cursor" Value="Hand" />
     <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
     <Setter Property="Padding" Value="13,0" />
-    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="IsTabStop" Value="True" />
     <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
@@ -471,6 +484,7 @@
           <Grid Background="#00FFFFFF">
             <ContentPresenter Margin="{TemplateBinding Control.Padding}" VerticalAlignment="Center" RecognizesAccessKey="True" />
             <Border Name="Bar" Height="2.5" CornerRadius="1.25" Margin="13,0" VerticalAlignment="Bottom" Background="{DynamicResource B.Accent}" Opacity="0" />
+            <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="6" Margin="5,7" Opacity="0" IsHitTestVisible="False" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="UIElement.IsMouseOver" Value="True">
@@ -480,6 +494,9 @@
               <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
               <Setter Property="Control.FontWeight" Value="Bold" />
               <Setter TargetName="Bar" Property="UIElement.Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="UIElement.IsKeyboardFocused" Value="True">
+              <Setter TargetName="Kf" Property="UIElement.Opacity" Value="0.9" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -499,9 +516,11 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ToggleButton}">
-          <Border Name="Bd" Background="#00FFFFFF" CornerRadius="{StaticResource CR.Ctl}" SnapsToDevicePixels="True">
+          <Grid>
+            <Border Name="Bd" Background="#00FFFFFF" CornerRadius="{StaticResource CR.Ctl}" SnapsToDevicePixels="True" />
             <ContentPresenter Margin="{TemplateBinding Control.Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
-          </Border>
+            <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="{StaticResource CR.Ctl}" Opacity="0" IsHitTestVisible="False" />
+          </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="UIElement.IsMouseOver" Value="True">
               <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
@@ -510,6 +529,9 @@
               <Setter TargetName="Bd" Property="Border.Background" Value="{DynamicResource B.SegOn}" />
               <Setter Property="Control.Foreground" Value="{DynamicResource B.Ink}" />
               <Setter Property="Control.FontWeight" Value="Bold" />
+            </Trigger>
+            <Trigger Property="UIElement.IsKeyboardFocused" Value="True">
+              <Setter TargetName="Kf" Property="UIElement.Opacity" Value="0.9" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>

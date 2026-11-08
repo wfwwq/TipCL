@@ -4,7 +4,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>12.0</LangVersion>
-    <Nullable>disable</Nullable>
+    <Nullable>annotations</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);NU1702;MSB3277</NoWarn>
@@ -21,6 +21,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TipCL\TipCL.csproj" SetTargetFramework="TargetFramework=net48" SkipGetTargetFrameworkProperties="true" ReferenceOutputAssembly="true" Private="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WebpFallbackTests.RealWebpDecodesToPng 的样本：libwebp 1.6.0 官方发布包自带 test.webp（BSD） -->
+    <None Include="fixtures\webp-sample.webp" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -109,7 +109,7 @@ internal static class AiIcons
 	{
 		ControlTemplate controlTemplate = new ControlTemplate(typeof(Button));
 		FrameworkElementFactory frameworkElementFactory = new FrameworkElementFactory(typeof(Border), "bd");
-		frameworkElementFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(7.0));
+		frameworkElementFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(8.0));
 		frameworkElementFactory.SetBinding(Border.BackgroundProperty, new Binding("Background")
 		{
 			RelativeSource = RelativeSource.TemplatedParent

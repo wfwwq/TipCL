@@ -54,7 +54,7 @@ public sealed class ThumbTile : Border
 			return;
 		}
 		Show(null);
-		LoadAsync(url, px, token);
+		_ = LoadAsync(url, px, token);
 	}
 
 #if PREMIUM

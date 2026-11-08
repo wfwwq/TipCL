@@ -28,7 +28,7 @@ public class SaveSyncTests
 	[InlineData("a", null, "a", SyncDecision.OnlyLocal)]
 	[InlineData(null, "a", null, SyncDecision.OnlyRemote)]
 	[InlineData(null, null, null, SyncDecision.Same)]
-	public void Decide(string local, string remote, string baseHash, SyncDecision expected)
+	public void Decide(string? local, string? remote, string? baseHash, SyncDecision expected)
 	{
 		Assert.Equal(expected, SaveSync.Decide(local, remote, baseHash));
 	}

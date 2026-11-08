@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -154,6 +154,12 @@ public partial class MainWindow : Window
 		base.Title = I18n.L("TipCL 启动器");
 		ThemeBtn.ToolTip = I18n.L("切换深色 / 浅色");
 		AiBtn.ToolTip = I18n.L("AI 助手") + " Ctrl+K";
+		// 可访问性：纯图标按钮给屏幕阅读器一个名字；标题栏按钮可 Tab 到达（XAML 里 IsTabStop=True）
+		System.Windows.Automation.AutomationProperties.SetName(AiBtn, I18n.L("AI 助手"));
+		System.Windows.Automation.AutomationProperties.SetName(MinBtn, I18n.L("最小化"));
+		System.Windows.Automation.AutomationProperties.SetName(MaxBtn, I18n.L("最大化"));
+		System.Windows.Automation.AutomationProperties.SetName(CloseBtn, I18n.L("关闭"));
+		System.Windows.Automation.AutomationProperties.SetName(AccBtn, I18n.L("未登录"));
 		AccName.Text = I18n.L("未登录");
 		AccInitial.Text = AccName.Text.Substring(0, 1);
 		SyncThemeIndicator();
@@ -361,7 +367,7 @@ public partial class MainWindow : Window
 			{
 				await FeedbackConsent.MaybeAskAsync();
 			}
-			WarmUpAsync();
+			_ = WarmUpAsync();
 			if (!Smoke.Active)
 			{
 				Run(AutoCheckUpdateAsync);
@@ -573,6 +579,7 @@ public partial class MainWindow : Window
 		string name = (await AccountGate.ListAsync()).FirstOrDefault() ?? I18n.L("未登录");
 		AccName.Text = name;
 		AccInitial.Text = name.Substring(0, 1).ToUpperInvariant();
+		System.Windows.Automation.AutomationProperties.SetName(AccBtn, name);
 	}
 
 	private static string? _stagedUpdate;
@@ -931,6 +938,7 @@ public partial class MainWindow : Window
 	internal void SyncThemeIndicator()
 	{
 		ThemeIco.Data = Geometry.Parse(App.IsDark ? GeoSun : GeoMoon);
+		System.Windows.Automation.AutomationProperties.SetName(ThemeBtn, I18n.L("切换深色 / 浅色"));
 	}
 
 	internal void ApplyThemeState(bool dark, bool persistLocal = true)
@@ -1105,8 +1113,10 @@ public partial class MainWindow : Window
 				structure.ptMaxPosition.y = Math.Abs(rcWork.top - rcMonitor.top);
 				structure.ptMaxSize.x = Math.Abs(rcWork.right - rcWork.left);
 				structure.ptMaxSize.y = Math.Abs(rcWork.bottom - rcWork.top);
-				structure.ptMinTrackSize.x = 900;
-				structure.ptMinTrackSize.y = 580;
+				// 最小尺寸以 XAML 的 MinWidth/MinHeight 为唯一真相（FitToWorkArea 会按工作区钳制），
+				// 不再硬编码 900×580——否则默认 900×550 打开后拖不回原高、最大化还原被抬高。
+				structure.ptMinTrackSize.x = (int)Math.Ceiling(_wnd?.MinWidth ?? 720.0);
+				structure.ptMinTrackSize.y = (int)Math.Ceiling(_wnd?.MinHeight ?? 480.0);
 				Marshal.StructureToPtr(structure, lParam, fDeleteOld: true);
 				handled = true;
 			}

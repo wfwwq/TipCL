@@ -22,7 +22,10 @@ public static class I18nCheck
 		string text;
 		try
 		{
-			text = Path.Combine(BridgeHost.FindRoot(), "wpf", "TipCL");
+			// 仓库布局已从 wpf/TipCL 迁到 src/TipCL：两种都认，新布局优先
+			string root = BridgeHost.FindRoot();
+			string modern = Path.Combine(root, "src", "TipCL");
+			text = Directory.Exists(modern) ? modern : Path.Combine(root, "wpf", "TipCL");
 		}
 		catch (Exception ex)
 		{

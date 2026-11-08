@@ -23,7 +23,6 @@ public class WriteJsonTests
 			const int threads = 4;
 			const int writesPerThread = 125;
 			Exception failure = null;
-			int done = 0;
 			using (ManualResetEvent gate = new ManualResetEvent(false))
 			{
 				List<Task> tasks = new List<Task>();
