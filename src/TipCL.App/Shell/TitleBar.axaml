@@ -1,0 +1,131 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="TipCL.App.Shell.TitleBar"
+             Height="40">
+  <UserControl.Styles>
+    <!-- 顶部页签：文字 muted，选中加粗 + 底部 2.5px 主色条 -->
+    <Style Selector="Button.topTab">
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Padding" Value="14,0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.InkMuted}" />
+      <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel>
+            <Border Name="HoverBg" Background="Transparent" />
+            <ContentPresenter x:Name="PART_ContentPresenter"
+                              Margin="{TemplateBinding Padding}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              TextElement.Foreground="{TemplateBinding Foreground}"
+                              TextElement.FontWeight="{TemplateBinding FontWeight}" />
+            <Border x:Name="TabBar" Height="2.5" VerticalAlignment="Bottom"
+                    Margin="13,0" CornerRadius="2,2,0,0" Background="Transparent" />
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.topTab:pointerover /template/ Border#HoverBg">
+      <Setter Property="Background" Value="{DynamicResource Shell.NavHover}" />
+    </Style>
+    <Style Selector="Button.topTab.on">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Ink}" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="Button.topTab.on /template/ Border#TabBar">
+      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+    </Style>
+
+    <!-- 窗口按钮：46×40 满高，矢量线宽 1.1 圆头；关闭悬停 #C42B1C 满高白字 -->
+    <Style Selector="Button.cap">
+      <Setter Property="Width" Value="46" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.CaptionFg}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="CapBg" Background="{TemplateBinding Background}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.cap:pointerover /template/ Border#CapBg">
+      <Setter Property="Background" Value="{DynamicResource Shell.CaptionHoverBg}" />
+    </Style>
+    <Style Selector="Button.cap:pressed /template/ Border#CapBg">
+      <Setter Property="Background" Value="{DynamicResource Shell.NavHover}" />
+    </Style>
+    <Style Selector="Button.capClose:pointerover /template/ Border#CapBg">
+      <Setter Property="Background" Value="{DynamicResource Shell.CaptionCloseHoverBg}" />
+    </Style>
+    <Style Selector="Button.capClose:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.CaptionCloseHoverFg}" />
+    </Style>
+
+    <!-- 标题栏图标按钮（主题切换） -->
+    <Style Selector="Button.titleIcon">
+      <Setter Property="Width" Value="34" />
+      <Setter Property="Height" Value="30" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.CaptionFg}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="IconBg" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.titleIcon:pointerover /template/ Border#IconBg">
+      <Setter Property="Background" Value="{DynamicResource Shell.NavHover}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid ColumnDefinitions="Auto,*,Auto" Background="{DynamicResource Shell.TitleBarBg}"
+        PointerPressed="OnTitleBarPointerPressed">
+    <Grid.Styles>
+      <Style Selector="Border.titleLine">
+        <Setter Property="BorderBrush" Value="{DynamicResource Shell.TitleBarLine}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+      </Style>
+    </Grid.Styles>
+
+    <!-- Logo -->
+    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,18,0">
+      <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource Shell.Accent}">
+        <TextBlock Text="T" Foreground="{DynamicResource Shell.OnAccent}" FontSize="12" FontWeight="ExtraBold"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+      <TextBlock Text="TipCL" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0"
+                 Foreground="{DynamicResource Shell.Ink}" />
+    </StackPanel>
+
+    <!-- 顶部 5 页签占位 -->
+    <StackPanel x:Name="TabPanel" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left" />
+
+    <!-- 主题切换 + 窗口按钮 -->
+    <StackPanel Grid.Column="2" Orientation="Horizontal">
+      <Button x:Name="ThemeBtn" Classes="titleIcon" VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="切换深色 / 浅色">
+        <Path x:Name="ThemeIco" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.3"
+              StrokeLineCap="Round" StrokeJoin="Round" Width="16" Height="16"
+              Data="M13,9.5 A5.5,5.5 0 0 1 6.5,3 A5.5,5.5 0 1 0 13,9.5 Z" />
+      </Button>
+      <Border Width="1" Height="16" Margin="6,0" VerticalAlignment="Center" Background="{DynamicResource Shell.Sep}" />
+      <Button x:Name="MinBtn" Classes="cap" ToolTip.Tip="最小化">
+        <Path Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.1" StrokeLineCap="Round"
+              Width="10" Height="10" Data="M0.5,5 H9.5" />
+      </Button>
+      <Button x:Name="MaxBtn" Classes="cap" ToolTip.Tip="最大化">
+        <Path x:Name="MaxIco" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.1"
+              StrokeLineCap="Round" StrokeJoin="Round" Width="10" Height="10"
+              Data="M2,0.5 H8 A1.5,1.5 0 0 1 9.5,2 V8 A1.5,1.5 0 0 1 8,9.5 H2 A1.5,1.5 0 0 1 0.5,8 V2 A1.5,1.5 0 0 1 2,0.5 Z" />
+      </Button>
+      <Button x:Name="CloseBtn" Classes="cap capClose" ToolTip.Tip="关闭">
+        <Path Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.1" StrokeLineCap="Round"
+              Width="10" Height="10" Data="M1,1 L9,9 M9,1 L1,9" />
+      </Button>
+    </StackPanel>
+  </Grid>
+</UserControl>
