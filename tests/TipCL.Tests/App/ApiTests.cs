@@ -42,7 +42,9 @@ public class ApiTests
     public async Task Stub_Methods_Return_Safe_Values()
     {
         Assert.False(await _api.CallAsync<bool>("is_game_running"));
-        Assert.Equal(0L, await _api.CallAsync<long>("get_total_playtime"));
+        // M3-C0：get_total_playtime 由安全桩转正（Playtime 后端随启动链搬入），改断非负数值
+        long total = await _api.CallAsync<long>("get_total_playtime");
+        Assert.True(total >= 0);
         var news = await _api.TryCallAsync("cached_news", new System.Collections.Generic.List<object>());
         Assert.NotNull(news);
     }

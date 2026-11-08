@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TipCL.Core;
 using TipCL.Core.Launcher;
+using TipCL.App.Common.Launch;
 
 namespace TipCL.App.Common;
 
@@ -45,7 +46,8 @@ public sealed class TaskProgress
     private readonly string _taskId;
     private readonly IApi _api;
 
-    internal TaskProgress(string taskId, IApi api) { _taskId = taskId; _api = api; }
+    /// <summary>构造任意 id 的进度汇报器（任务未登记时仅事件流可见，供 LaunchCore 直调/测试用）。</summary>
+    public TaskProgress(string taskId, IApi api) { _taskId = taskId; _api = api; }
 
     public string TaskId => _taskId;
 
@@ -268,17 +270,253 @@ public sealed class InProcessApi : IApi
             case "cancel_task":
                 return PyDict.Of("ok", CancelTask(Py.S(args.Get("id"))));
 
-            // —— M2/M3 尚未落地的能力：安全桩（TryCallAsync 路径回默认值）——
+            // —— M3-C0：版本行 / 存档 / 内容文件 / 实例文件夹（B2 报告的 9 个缺口）——
+            case "get_version_rows":
+                return VersionRows(Inst(), Py.Truthy(args.Get("include_hidden")));
+            case "list_saves":
+                return Saves.ListSaves(Inst(), args.Get("version"));
+            case "open_instance_folder":
+            {
+                var inst = Inst();
+                Crash.ShellOpen(inst.path);
+                return inst.path;
+            }
+            case "uninstall_version":
+            {
+                // spec 形如 "实例名 / 版本名" 或裸版本名（对齐 Windows 版 uninstall_version）
+                string spec = Py.Strip(Py.Str(args.Get("spec") ?? args.Get("version") ?? ""));
+                int idx = spec.IndexOf(" / ", StringComparison.Ordinal);
+                string instName, ver;
+                if (idx >= 0) { instName = spec.Substring(0, idx); ver = spec.Substring(idx + 3); }
+                else { instName = Py.S(Config.CONFIG.Get("default_instance", "default")); ver = spec; }
+                new Installer(InstancesApi.EnsureInstance(instName)).UninstallVersion(Py.Strip(ver));
+                return PyDict.Of("ok", true);
+            }
+            case "import_existing_folder":
+            {
+                string src = PPath.Norm(Py.SS(args.Get("path")));
+                if (src.Length == 0 || !LocalFs.IsDir(src) || !LocalFs.IsDir(PPath.Join(src, "versions")))
+                    throw new ValueError(I18nCore.Tr("选中的文件夹不是游戏目录（需要包含 versions 子目录）"));
+                string srcKey = PPath.Abs(src).TrimEnd('\\', '/');
+                foreach (string item in Instances.ListInstances())
+                {
+                    string other = PPath.Abs(Instances.GetInstancePath(item)).TrimEnd('\\', '/');
+                    if (string.Equals(other, srcKey, Utils.IS_WINDOWS ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                        throw new ValueError(I18nCore.Tr("这个文件夹已经在实例列表里了"));
+                }
+                if (OfficialMigrate.ScanVersions(src).Count == 0)
+                    throw new ValueError(I18nCore.Tr("这个文件夹的 versions 里没有可用的版本（需要 versions/<版本名>/<版本名>.json）"));
+                string newName = Instances.UniqueInstanceName(
+                    Py.Truthy(args.Get("name")) ? Py.SS(args.Get("name")) : new PPath(src).Name);
+                List<object> imported = Py.ListOr(Py.Or(
+                    OfficialMigrate.Migrate(src, newName, wantVersions: true, wantAssets: true, wantAccounts: false)["versions"], new List<object>()));
+                Config.CONFIG.Set("default_instance", newName);
+                Config.CONFIG.Save();
+                return PyDict.Of("ok", true, "instance", newName, "versions", (long)imported.Count,
+                    "message", Py.Fmt(I18nCore.Tr("已导入 {0} 个版本"), (long)imported.Count));
+            }
+            case "get_installed_resourcepacks":
+                return Mods.ListContentFiles(Inst(), "resourcepacks", args.Get("version"))
+                    .Select((string p) => (object)new PPath(p).Name).ToList();
+            case "get_installed_shaders":
+                return Mods.ListContentFiles(Inst(), "shaderpacks", args.Get("version"))
+                    .Select((string p) => (object)new PPath(p).Name).ToList();
+            case "delete_resourcepack":
+                Mods.DeleteContentFile(Inst(), "resourcepacks", args.Get("filename"), args.Get("version"));
+                return PyDict.Of("ok", true);
+            case "delete_shader":
+                Mods.DeleteContentFile(Inst(), "shaderpacks", args.Get("filename"), args.Get("version"));
+                return PyDict.Of("ok", true);
+
+            // —— M3-C0：Java 管理 ——
+            case "get_javas":
+            case "get_java_list":
+            {
+                List<object> javas = Py.Truthy(args.Get("scan_system")) ? Java.AllJavas() : Java.ListInstalledJavas();
+                var rows = new List<object>();
+                foreach (PyDict item in javas)
+                {
+                    rows.Add(PyDict.Of(
+                        "name", Py.Or(item.Get("name"), "Java " + Py.Str(item.Get("major"))),
+                        "major", Py.Str(Py.Or(item.Get("major"), "?")),
+                        "path", Py.Or(Py.Or(item.Get("exe"), item.Get("path")), "")));
+                }
+                return rows;
+            }
+            case "normalize_java_pref":
+                return LaunchCore.NormalizeJavaPref(args.Get("java"));
+            case "java_download":
+            {
+                // 同步下载（页面经 StartTaskAsync 包一层即得任务卡）；vendor 仅支持 adoptium，其余回落
+                long major = Py.Int(args.Get("major"));
+                string path = Java.InstallAdoptium(new DownloadManager(2L), major, (msg, cur, total) =>
+                    RaiseEvent(new ApiEvent { Event = "progress", Message = msg, Current = cur, Total = total }));
+                return PyDict.Of("ok", true, "path", path);
+            }
+            case "java_version_list":
+                return Java.FindSystemJavas();
+
+            // —— M3-C0：启动 ——
+            case "preflight_launch":
+            {
+                object java0 = args.Get("java");
+                string jexe = "";
+                if (Py.Truthy(java0) && !Py.Eq(java0, "自动选择") && !Py.Eq(java0, "auto") && !Py.Eq(java0, "default") && !Py.Eq(java0, ""))
+                    jexe = Py.Str(java0);
+                return Preflight.CheckLaunch(InstancesApi.EnsureInstance(args.Get("instance")),
+                    Py.Or(args.Get("version"), ""), Py.Int(Py.Or(args.Get("memory_mb"), 0L)), jexe);
+            }
+            case "build_launch_command":
+            {
+                var inst = InstancesApi.EnsureInstance(args.Get("instance"));
+                string vid = Py.S(args.Get("version"));
+                if (vid.Length == 0) throw new LaunchError(I18nCore.Tr("请先选择版本"));
+                var accounts = new AccountManager();
+                PyDict acc = LaunchCore.RequireLaunchAccount(accounts, args.Get("account"), args.Get("username"));
+                PyDict props = accounts.LaunchProps(acc);
+                string authServer = Py.Strip(Py.Str(Py.Or(VersionSettings.Load(inst, vid).Get("auth_server"), "")));
+                if (authServer.Length > 0 && !Py.Truthy(props.Get("authlib_api")))
+                {
+                    props = new PyDict(props);
+                    props["authlib_api"] = authServer;
+                }
+                object java0 = Py.Or(args.Get("java"), "自动选择");
+                var lc = McLauncher.BuildLaunchCommand(inst, vid, props,
+                    Py.Eq(java0, "自动选择") || Py.Eq(java0, "") ? "自动选择" : java0,
+                    args.Get("memory_mb"), args.Get("width"), args.Get("height"), new List<object>(), new PyDict(), "", props.Get("authlib_api"));
+                return lc.cmd.Cast<object>().ToList();
+            }
+            case "launch_game":
+            {
+                // 立即返回 task_id，启动流程在 StartTaskAsync 里跑（对齐 Windows 版语义）
+                string vid = Py.S(args.Get("version"));
+                var row = StartTaskAsync(I18nCore.Tr("启动游戏") + " " + vid,
+                    (p, tok) => LaunchCore.RunAsync(p, tok, this, args)).GetAwaiter().GetResult();
+                return PyDict.Of("task_id", row.Id);
+            }
+            case "stop_game":
+                return PyDict.Of("ok", LaunchCore.Stop());
+
+            // —— M3-C0：游玩时长 / 运行状态（原 M2 桩转正）——
             case "is_game_running":
-                return false;
+                return LaunchCore.IsRunning;
+            case "get_playtime":
+                return Playtime.GetPlaytime(Py.Or(args.Get("instance"), Config.CONFIG.Get("default_instance", "default")));
+            case "get_all_playtime":
+                return Playtime.GetAllPlaytime();
             case "get_total_playtime":
-                return 0L;
+                return Playtime.GetTotalPlaytime();
+            case "format_playtime":
+                return Playtime.FormatDuration(args.Get("seconds"));
             case "cached_news":
             case "fetch_news":
                 return new List<object>();
             default:
                 throw new NotImplementedException($"IApi 尚未实现方法 {method}（M2-B0 方法表之外，属 M3 或未搬后端能力）");
         }
+    }
+
+    // ───────────────────────────── 版本行（对齐 Windows 版 get_version_rows）─────────────────────────────
+
+    private static readonly string[][] LoaderTags =
+    {
+        new[] { "neoforge", "NeoForge", "#D84B28" },
+        new[] { "fabric", "Fabric", "#7C5CD6" },
+        new[] { "quilt", "Quilt", "#C25BD6" },
+        new[] { "forge", "Forge", "#E8862E" },
+        new[] { "optifine", "OptiFine", "#2E9B6B" },
+        new[] { "liteloader", "LiteLoader", "#4C8BF5" },
+    };
+
+    private static List<object> LoaderOf(string versionId)
+    {
+        string low = Py.Lower(versionId);
+        foreach (var tag in LoaderTags)
+            if (low.Contains(tag[0]))
+                return new List<object> { tag[1], tag[2] };
+        return new List<object> { I18nCore.Tr("原版"), "#8A9099" };
+    }
+
+    /// <summary>先按版本名识别加载器；看不出来再读版本 json 的 mainClass / libraries。</summary>
+    private static List<object> LoaderOfVersion(Instance inst, string versionId)
+    {
+        List<object> named = LoaderOf(versionId);
+        string name = Py.Str(named[0]);
+        if (LoaderTags.Any((string[] t) => t[1] == name))
+            return named;
+        try
+        {
+            var json = (inst.VersionJson(versionId) as PyDict) ?? new PyDict();
+            var sb = new System.Text.StringBuilder();
+            sb.Append(Py.Lower(Py.S(json.Get("mainClass")))).Append('\n');
+            foreach (object item in Py.ListOr(Py.Or(json.Get("libraries"), new List<object>())))
+                if (item is PyDict lib)
+                    sb.Append(Py.Lower(Py.S(lib.Get("name")))).Append('\n');
+            string blob = sb.ToString();
+            foreach (var pair in new[]
+                     {
+                         new[] { "net.neoforged", "NeoForge" }, new[] { "org.quiltmc", "Quilt" },
+                         new[] { "net.fabricmc", "Fabric" }, new[] { "net.minecraftforge", "Forge" },
+                         new[] { "optifine", "OptiFine" }, new[] { "liteloader", "LiteLoader" },
+                     })
+            {
+                if (blob.Contains(pair[0]))
+                {
+                    var tag = LoaderTags.First((string[] t) => t[1] == pair[1]);
+                    return new List<object> { tag[1], tag[2] };
+                }
+            }
+        }
+        catch (Exception) { }
+        return named;
+    }
+
+    private static long CountMods(string folder)
+    {
+        if (!LocalFs.IsDir(folder)) return 0;
+        return LocalFs.Children(folder).LongCount((string f) => LocalFs.IsFile(f) && Py.Lower(new PPath(f).Name).EndsWith(".jar"));
+    }
+
+    private static List<object> VersionRows(Instance inst, bool includeHidden)
+    {
+        var rows = new List<object>();
+        foreach (string id in inst.InstalledIds())
+        {
+            PyDict st = VersionSettings.Load(inst, id);
+            bool hidden = Py.Truthy(st.Get("hidden"));
+            if (!hidden || includeHidden || Py.Truthy(Config.CONFIG.Get("show_hidden_versions")))
+            {
+                bool isolated = VersionSettings.IsIsolated(st);
+                string modsDir = VersionSettings.ModsDir(inst, id, st);
+                List<object> loader = LoaderOfVersion(inst, id);
+                object isolation = Py.Or(st.Get("isolation"), "none");
+                object label = isolation is string key && VersionSettings.ISOLATION_LABELS.TryGetValue(key, out object v) ? v : "";
+                rows.Add(PyDict.Of(
+                    "id", id,
+                    "loader", loader[0],
+                    "loader_color", loader[1],
+                    "mc", JsonId(inst, id),
+                    "isolation", isolation,
+                    "isolation_label", I18nCore.Tr(Py.S(label)),
+                    "isolated", isolated,
+                    "mods", CountMods(modsDir),
+                    "mods_dir", modsDir,
+                    "hidden", hidden,
+                    "java", Py.Or(st.Get("java"), "自动选择"),
+                    "memory_mb", Py.Or(st.Get("memory_mb"), 0L)));
+            }
+        }
+        return rows;
+    }
+
+    private static string JsonId(Instance inst, string versionId)
+    {
+        try
+        {
+            var json = (inst.VersionJson(versionId) as PyDict) ?? new PyDict();
+            return Py.Str(Py.Or(json.Get("inheritsFrom"), json.Get("id"), versionId));
+        }
+        catch (Exception) { return versionId; }
     }
 
     // ───────────────────────────── 参数工具 ─────────────────────────────
