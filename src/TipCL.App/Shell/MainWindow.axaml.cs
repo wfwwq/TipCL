@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
 using TipCL.App.Pages;
+using TipCL.App.Pages.Launch;
 
 namespace TipCL.App.Shell;
 
@@ -25,6 +26,7 @@ public partial class MainWindow : Window
         TitleBarHost.TabClicked += (_, id) => Navigate(id);
         TitleBarHost.ThemeToggleClicked += (_, _) => ToggleTheme();
         NavHost.NavClicked += (_, id) => Navigate(id);
+        Pages.Library.LibraryPage.NavRequested += id => Navigate(id); // M2-B2：实例库页内跳转（双击版本 → 启动页）
         SetDark(false);
         Navigate("launch", instant: true);
     }
@@ -64,15 +66,15 @@ public partial class MainWindow : Window
     // M1 占位页工厂；M2 换成真实页面时只改这里
     private Control? GetPage(string id) => id switch
     {
-        "launch" => _pages.GetOrAdd(id, () => new PlaceholderLaunch()),
+        "launch" => _pages.GetOrAdd(id, () => new LaunchPage() /* M2-B1 */),
         "dashboard" => _pages.GetOrAdd(id, () => new PlaceholderDashboard()),
         "account" => _pages.GetOrAdd(id, () => new PlaceholderAccount()),
         "java" => _pages.GetOrAdd(id, () => new PlaceholderJava()),
-        "library" => _pages.GetOrAdd(id, () => new PlaceholderLibrary()),
-        "download" => _pages.GetOrAdd(id, () => new PlaceholderDownload()),
+        "library" => _pages.GetOrAdd(id, () => new TipCL.App.Pages.Library.LibraryPage()), // M2-B2：真实实例库替换占位
+        "download" => _pages.GetOrAdd(id, () => new Download.DownloadPage()), // M2-B3：真实下载页替换占位
         "tasks" => _pages.GetOrAdd(id, () => new PlaceholderTasks()),
-        "plugins" => _pages.GetOrAdd(id, () => new PlaceholderPlugins()),
-        "settings" => _pages.GetOrAdd(id, () => new PlaceholderSettings()),
+        "plugins" => _pages.GetOrAdd(id, () => new Pages.Plugins.PluginsPage()), // M2-B4：真实插件页替换占位
+        "settings" => _pages.GetOrAdd(id, () => new Pages.Settings.SettingsPage()), // M2-B5：真实设置页替换占位
         "about" => _pages.GetOrAdd(id, () => new PlaceholderAbout()),
         _ => null,
     };
