@@ -1,0 +1,6 @@
+bin/
+obj/
+artifacts/
+smoke.png
+*.user
+.vs/

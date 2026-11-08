@@ -1,0 +1,11 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="TipCL.App.MainWindow"
+        Title="TipCL"
+        Width="1180" Height="740">
+    <!-- M1-A1 最小占位窗口；A3 将在 Shell/ 下实现正式外壳（自定义标题栏 + 侧边导航） -->
+    <Panel>
+        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="21" Text="TipCL Linux — M1 脚手架占位窗口" />
+    </Panel>
+</Window>
