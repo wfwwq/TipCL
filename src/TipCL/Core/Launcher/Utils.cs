@@ -797,8 +797,10 @@ public static class Utils
 			// tmp 写入阶段也要重试：杀软/Defender 可能在 tmp 刚建好时短暂独占句柄，
 			// 此时 FileStream 构造/写入抛 UnauthorizedAccessException/IOException，
 			// 不在下面 OsReplace 的重试循环覆盖范围内；换新 tmp 名整个重来。
+			// 6 轮 + 递增间隔（累计约 2.5s）：激进杀软会连续拦 3 轮以上；
+			// 全败后再试「直写目标路径」兜底（跳过 tmp+OsReplace，部分拦截只盯新建 tmp 文件）。
 			Exception lastError = null;
-			for (int round = 0; round < 3; round++)
+			for (int round = 0; round < 6; round++)
 			{
 				string text = MkStemp("." + pPath.Name + ".", ".tmp", pPath.Parent);
 				try
@@ -814,6 +816,7 @@ public static class Utils
 					catch (Exception ex2) when (ex2 is UnauthorizedAccessException || ex2 is IOException)
 					{
 						lastError = ex2;
+						Thread.Sleep(100 + 60 * round);
 						continue;
 					}
 					for (int i = 0; i < 12; i++)
@@ -848,6 +851,20 @@ public static class Utils
 					{
 					}
 				}
+			}
+			// 兜底：不经过 tmp，直接写目标路径（损失原子性，但比整个操作失败好；适合缓存类文件）
+			try
+			{
+				using (FileStream fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read))
+				{
+					fileStream.Write(bytes, 0, bytes.Length);
+					fileStream.Flush(flushToDisk: true);
+				}
+				return;
+			}
+			catch (Exception ex3) when (ex3 is UnauthorizedAccessException || ex3 is IOException)
+			{
+				lastError = (lastError ?? ex3);
 			}
 			throw lastError ?? new IOException("WriteJson failed: " + Py.ReprStr(path));
 		}

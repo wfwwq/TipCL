@@ -280,8 +280,16 @@ public static class Manifest
 		}
 		PyDict pyDict2 = (PyDict)dm.FetchJson(Py.Str(((PyDict)obj2).Req("url")), 60L);
 		pyDict2["__tipcl_cached_at"] = Py.Time();
-		Utils.EnsureDir(text);
-		Utils.WriteJson(path, pyDict2);
+		try
+		{
+			Utils.EnsureDir(text);
+			Utils.WriteJson(path, pyDict2);
+		}
+		catch (Exception cacheEx)
+		{
+			// 缓存只是加速：写不进去（杀软锁临时文件等）绝不能让「安装游戏」失败，下次再试
+			Utils.log.Warning("版本缓存写入失败 {0}: {1}", new object[2] { Py.ReprStr(path), Py.ExcStr(cacheEx) });
+		}
 		return pyDict2;
 	}
 
@@ -291,8 +299,16 @@ public static class Manifest
 		string path = PPath.Join(text, version_id + ".json");
 		PyDict pyDict = (PyDict)dm.FetchJson(url, 60L);
 		pyDict["__tipcl_cached_at"] = Py.Time();
-		Utils.EnsureDir(text);
-		Utils.WriteJson(path, pyDict);
+		try
+		{
+			Utils.EnsureDir(text);
+			Utils.WriteJson(path, pyDict);
+		}
+		catch (Exception cacheEx)
+		{
+			// 同上：缓存写失败不让安装失败
+			Utils.log.Warning("版本缓存写入失败 {0}: {1}", new object[2] { Py.ReprStr(path), Py.ExcStr(cacheEx) });
+		}
 		return pyDict;
 	}
 
