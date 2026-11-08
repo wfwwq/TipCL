@@ -147,6 +147,13 @@ public static class FileDrop
 			return await SetWallpaperAsync(paths[0]);
 		case "skin":
 			return await SetSkinAsync(paths[0]);
+		case "plugin":
+			// 插件 zip 拖进窗口任意位置：识别为 TipCL 插件后本地安装；同 id 已装时后端按更新替换处理
+			foreach (string pluginPath in paths)
+			{
+				await AppServices.Client.CallAsync<object>("plugins_install_local", new { path = pluginPath, dev = false });
+			}
+			return I18n.L("正在安装插件，进度见插件页");
 		default:
 		{
 			if (!Installers.TryGetValue(kind, out string method))

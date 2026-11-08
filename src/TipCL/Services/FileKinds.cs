@@ -364,7 +364,7 @@ public static class FileKinds
 
 	public const string Wallpaper = "wallpaper";
 
-	public static readonly string[] AllKinds = new string[8] { "modpack", "mod", "resourcepack", "shaderpack", "datapack", "world", "skin", "wallpaper" };
+	public static readonly string[] AllKinds = new string[9] { "modpack", "mod", "resourcepack", "shaderpack", "datapack", "world", "skin", "wallpaper", "plugin" };
 
 	public static readonly string[] VideoSuffixes = new string[7] { ".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".wmv" };
 
@@ -379,7 +379,8 @@ public static class FileKinds
 		["datapack"] = I18n.L("数据包"),
 		["world"] = I18n.L("存档"),
 		["skin"] = I18n.L("离线皮肤"),
-		["wallpaper"] = I18n.L("启动器壁纸")
+		["wallpaper"] = I18n.L("启动器壁纸"),
+		["plugin"] = I18n.L("TipCL 插件")
 	};
 
 	private static readonly Dictionary<string, string> Actions = new Dictionary<string, string>
@@ -391,7 +392,8 @@ public static class FileKinds
 		["datapack"] = I18n.L("装进 datapacks"),
 		["world"] = I18n.L("装进存档列表"),
 		["skin"] = I18n.L("设为离线账号的皮肤"),
-		["wallpaper"] = I18n.L("设为启动器背景")
+		["wallpaper"] = I18n.L("设为启动器背景"),
+		["plugin"] = I18n.L("安装到启动器（同名已装会替换更新）")
 	};
 
 	private static readonly (int W, int H)[] SkinSizes = new(int, int)[2]
@@ -478,6 +480,12 @@ public static class FileKinds
 			return Make(new string[1] { "modpack" }, sure: true, info.Format + " · Minecraft " + (string.IsNullOrEmpty(info.McVersion) ? I18n.L("未知版本") : info.McVersion));
 		}
 		List<string> list = EntryNames(path);
+		if (list != null && HasEntry(list, "tipcl-plugin.json"))
+		{
+			// TipCL 插件包（zip 根部或单一顶层文件夹里带 tipcl-plugin.json）：细节读清单的 name/version
+			string? pluginDetail = PluginManifestDetail(path);
+			return Make(new string[1] { "plugin" }, sure: true, pluginDetail ?? I18n.L("TipCL 插件包"));
+		}
 		if (list == null)
 		{
 			return Make(null, sure: false, I18n.L("打不开，也认不出是什么"));
@@ -620,6 +628,34 @@ public static class FileKinds
 					Walk(item, depth + 1, prefix + fileName.ToLowerInvariant() + "/");
 				}
 			}
+		}
+	}
+
+	// 插件清单的 name + version，读不到返回 null（外层兜底文案）
+	private static string? PluginManifestDetail(string path)
+	{
+		try
+		{
+			using ZipArchive zip = ZipFile.OpenRead(path);
+			ZipArchiveEntry? entry = zip.Entries.FirstOrDefault((ZipArchiveEntry e) =>
+			{
+				int slashes = e.FullName.Count((char c) => c == '/');
+				return (e.FullName == "tipcl-plugin.json" || (e.FullName.EndsWith("/tipcl-plugin.json", StringComparison.Ordinal) && slashes == 1)) && e.Length < 1048576;
+			});
+			if (entry == null)
+			{
+				return null;
+			}
+			using StreamReader reader = new StreamReader(entry.Open());
+			using JsonDocument doc = JsonDocument.Parse(reader.ReadToEnd());
+			string name = (doc.RootElement.TryGetProperty("name", out JsonElement n) && n.ValueKind == JsonValueKind.String) ? (n.GetString() ?? "") : "";
+			string version = (doc.RootElement.TryGetProperty("version", out JsonElement v) && v.ValueKind == JsonValueKind.String) ? (v.GetString() ?? "") : "";
+			string s = string.Join(" ", new[] { name, version }.Where((string x) => x.Length > 0));
+			return (s.Length > 0) ? s : null;
+		}
+		catch
+		{
+			return null;
 		}
 	}
 
