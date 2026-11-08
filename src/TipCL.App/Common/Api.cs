@@ -299,8 +299,8 @@ public sealed class InProcessApi : IApi
             return d;
         }
         foreach (var p in args.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            if (p.CanRead)
-                d[p.Name] = p.GetValue(args);
+            if (p.CanRead && p.GetValue(args) is { } v)
+                d[p.Name] = v;
         return d;
     }
 }

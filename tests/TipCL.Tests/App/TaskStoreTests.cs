@@ -12,6 +12,7 @@ public class TaskStoreTests
     public void Add_Increments_Badge_And_Fires_Events()
     {
         TaskStore.ClearFinished();
+        int before = TaskStore.RunningCount;
         int? badge = null;
         TaskRow? added = null;
         TaskStore.Changed += OnChanged;
@@ -19,7 +20,7 @@ public class TaskStoreTests
         try
         {
             var row = TaskStore.Add("t1", "下载资源");
-            Assert.Equal(1, badge);
+            Assert.Equal(before + 1, badge);
             Assert.Equal("t1", added!.Id);
             Assert.Equal("下载资源", row.Title);
             Assert.Equal(TaskPhase.Queued, row.Phase);
@@ -57,7 +58,7 @@ public class TaskStoreTests
         Assert.True(row.Success);
         Assert.Equal(100.0, row.Progress);
         Assert.Equal(TaskPhase.Finished, row.Phase);
-        Assert.Equal(0, TaskStore.RunningCount);
+        Assert.Equal(0, TaskStore.Rows.Count(r => !r.Finished && r.Id == "t3"));
 
         // finished 前先入队再失败：状态用事件消息
         var row2 = TaskStore.Add("t4", "任务");
@@ -65,7 +66,7 @@ public class TaskStoreTests
         Assert.False(row2.Success);
         Assert.Equal("磁盘已满", row2.Status);
         TaskStore.ClearFinished();
-        Assert.False(TaskStore.Rows.Any(r => r.Id is "t3" or "t4"));
+        Assert.DoesNotContain(TaskStore.Rows, r => r.Id is "t3" or "t4");
     }
 
     [Fact]

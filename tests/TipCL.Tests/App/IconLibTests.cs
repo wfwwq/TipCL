@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Avalonia;
+using Avalonia.Headless;
 using Avalonia.Media;
 using TipCL.App.Common;
 using Xunit;
@@ -8,6 +10,16 @@ namespace TipCL.Tests.App;
 /// <summary>M2-B0：IconLib 全量 Path Data 可解析 + 覆盖 M2 页面所需图标。</summary>
 public class IconLibTests
 {
+    static IconLibTests()
+    {
+        // Geometry.Parse 需要渲染接口：无头平台一次性初始化
+        if (Application.Current == null)
+            AppBuilder.Configure<Application>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .SetupWithoutStarting();
+    }
+
     [Fact]
     public void All_Path_Data_Parse()
     {

@@ -1,6 +1,7 @@
 using System;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using UiFacade = TipCL.App.Ui.Ui;
 using Avalonia.Layout;
 using Avalonia.Media;
