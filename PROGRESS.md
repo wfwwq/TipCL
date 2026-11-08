@@ -22,3 +22,10 @@
 - 集成期修复见 DECISIONS D-6；整体 sln 构建 0 警告 0 错误，测试 34/35（1 个 Skip 为占位）。
 - M1 验收标准（GOAL §4）逐条核对：①构建 ✅ ②测试 ✅ ③外壳窗口（1180×740、标题栏/页签/主题切换/窗口按钮、侧栏分组导航）✅ ④Core 复用层 + 复用清单（progress/M1-A4.md）✅ ⑤--smoke 出图 ✅（明暗两帧）⑥tools/build.sh+ps1 ✅ ⑦文档（PROGRESS/DECISIONS/交接必读/README）✅。
 - M2 开局共识（来自侦察报告）：先做 R0 公共件（IApi 门面对齐 BackendApi 契约 + TaskStore + PageBase）与 Core 续搬（Ai/FileMemory、Sync、Plugins 市场文件），再并行铺页面；图标方案（沿用 TTF glyph vs 嵌 SVG）待用户拍板。
+
+## 2026-11-08 M2 集成验收（主 agent）
+
+- 六个工作包全部完成：B0（12b9d92+7ad24da，IApi 20 方法/TaskStore/PageBase/ThemeService/IconLib 51 图标）、B2（846054a 实例库+详情）、B4（f9b9b6a 插件页+布局自定义框架）、B1/B3/B5（代码落盘后代理中断，主 agent 代为收尾：e4f6936/c91c7a8/fd37c6f）。
+- 集成期修复（934→0 错误）：全页面 UiClass 别名（Ui 双重名）、BoxShadow 构造、TextElement/Path/Config/Py 缺 using、_statusRow 类型、toggle/send 自引用两步赋值、ComboBox.Text/IsEditable→SelectedItem、LauncherConfig.data.ContainsKey、PageBase.ShellAttach 系替换 protected 生命周期直调、IApi.ToDict 公开。
+- 验收：整体构建 0 警告 0 错误；测试 66/67（1 Skip 冒烟占位）；SMOKE_PAGE=library/download/plugins/settings 逐页冒烟人工核对通过，SMOKE_DARK 深色正常。
+- 遗留给 M3：启动链路（真正拉起 Minecraft）、B2 报告的 9 个 IApi 方法补齐、启动按钮内版本号视觉微调、29 条编译警告清理（多为 nullable 与过时 API）、安装页 csproj 资源项合入确认。

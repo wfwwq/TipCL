@@ -4,3 +4,4 @@ artifacts/
 smoke.png
 *.user
 .vs/
+smoke-*.png

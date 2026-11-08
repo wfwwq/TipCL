@@ -31,7 +31,10 @@ internal static class SmokeRunner
                     var window = new Shell.MainWindow();
                     if (Environment.GetEnvironmentVariable("SMOKE_DARK") == "1")
                         window.SetDark(true);
+                    var page = Environment.GetEnvironmentVariable("SMOKE_PAGE");
                     window.Show();
+                    if (!string.IsNullOrEmpty(page))
+                        window.Navigate(page);
                     Dispatcher.UIThread.RunJobs();
                     if (Environment.GetEnvironmentVariable("SMOKE_PROBE") == "1")
                     {
