@@ -28,3 +28,10 @@
 ## D-5 · 字体（GOAL §2，A1 登记）
 
 - 不嵌字体；窗口 FontFamily 系统回退 `"Microsoft YaHei UI, Noto Sans CJK SC, WenQuanYi Micro Hei, sans-serif"`，当前在 App.axaml 临时样式内，A2 主题库就位后可迁移至 Themes/。
+
+### D-6 · M1 集成期修复（主 agent 验收，2026-11-08）
+- **ResourceInclude 运行时挂载**：Avalonia 11.3 的 `ResourceInclude(Uri)` 构造参数是 baseUri 而非 Source，运行时重挂主题字典必须写 `new ResourceInclude((Uri?)null){ Source = new Uri(...) }`（MainWindow.SetDark）。
+- **跨字典 StaticResource 在运行时重挂不可靠**：A3 的 ShellTokens 转发层（StaticResource 转发 A2 的 B.* 键）在 SetDark 重挂时抛 KeyNotFoundException，DynamicResource 别名又会让消费者拿到扩展对象——最终删除转发层，外壳直接引用 B.* 键（全部 DynamicResource，明暗切换即时生效），ShellTokens.*.axaml 删除。
+- **模板 ContentPresenter 必须显式 `Content="{TemplateBinding Content}"`**（WPF 隐式绑定在 Avalonia 不存在）：Shell 4 处 + A2 Controls.axaml 6 处补齐。曾导致全部按钮内容不渲染（探针显示 ContentPresenter cls=[:empty]）。
+- 冒烟增强：`SMOKE_DARK=1` 深色帧、`SMOKE_PROBE=1` 可视化树探针（含每元素 classes 与 bounds）。
+- 冒烟截图 `smoke.png`/`smoke-dark.png` 与 `_screen.png` 不入库（.gitignore 由本次提交补充）。

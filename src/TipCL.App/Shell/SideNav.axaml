@@ -10,7 +10,7 @@
       <Setter Property="Padding" Value="10,0" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource Shell.InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
       <Setter Property="FontSize" Value="13" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -19,7 +19,8 @@
           <Border x:Name="Pill" Background="{TemplateBinding Background}"
                   CornerRadius="{TemplateBinding CornerRadius}"
                   BorderBrush="Transparent" BorderThickness="1">
-            <ContentPresenter Margin="{TemplateBinding Padding}"
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              Margin="{TemplateBinding Padding}"
                               VerticalAlignment="Center"
                               TextElement.Foreground="{TemplateBinding Foreground}"
                               TextElement.FontWeight="{TemplateBinding FontWeight}" />
@@ -28,24 +29,24 @@
       </Setter>
     </Style>
     <Style Selector="Button.navItem:pointerover /template/ Border#Pill">
-      <Setter Property="Background" Value="{DynamicResource Shell.NavHover}" />
+      <Setter Property="Background" Value="{DynamicResource B.Hover}" />
     </Style>
     <Style Selector="Button.navItem.on">
-      <Setter Property="Background" Value="{DynamicResource Shell.CardBg}" />
-      <Setter Property="Foreground" Value="{DynamicResource Shell.Ink}" />
+      <Setter Property="Background" Value="{DynamicResource B.Card}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
     <Style Selector="Button.navItem.on /template/ Border#Pill">
-      <Setter Property="BorderBrush" Value="{DynamicResource Shell.CardBorder}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.CardBorder}" />
     </Style>
     <Style Selector="TextBlock.navGroup">
       <Setter Property="FontSize" Value="11" />
-      <Setter Property="Foreground" Value="{DynamicResource Shell.InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
       <Setter Property="Margin" Value="20,14,0,5" />
     </Style>
   </UserControl.Styles>
 
-  <Border Background="{DynamicResource Shell.PageBg}" BorderBrush="{DynamicResource Shell.TitleBarLine}"
+  <Border Background="{DynamicResource B.Canvas}" BorderBrush="{DynamicResource B.TitleBarLine}"
           BorderThickness="0,0,1,0">
     <ScrollViewer>
       <StackPanel x:Name="NavPanel" Margin="0,6,0,12" />

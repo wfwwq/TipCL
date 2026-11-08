@@ -105,7 +105,7 @@
           <Border Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" />
           <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="8" />
           <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="8" Opacity="0" IsHitTestVisible="False" />
-          <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+          <ContentPresenter Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
         </Panel>
       </ControlTemplate>
     </Setter>
@@ -169,7 +169,7 @@
       <ControlTemplate>
         <Panel>
           <Border Name="Bd" Background="Transparent" CornerRadius="8" />
-          <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          <ContentPresenter Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Panel>
       </ControlTemplate>
     </Setter>
@@ -191,7 +191,7 @@
     <Setter Property="Template">
       <ControlTemplate>
         <Panel>
-          <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
+          <ContentPresenter Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
           <Border Name="Bar" Height="2.5" CornerRadius="1.25" Margin="13,0" VerticalAlignment="Bottom" Background="{DynamicResource B.Accent}" Opacity="0" />
         </Panel>
       </ControlTemplate>
@@ -219,7 +219,7 @@
       <ControlTemplate>
         <Panel>
           <Border Name="Bd" Background="Transparent" CornerRadius="8" />
-          <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          <ContentPresenter Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Panel>
       </ControlTemplate>
     </Setter>
@@ -251,7 +251,7 @@
             <Border Name="Fill" CornerRadius="6" Background="{DynamicResource B.AccentStrong}" Opacity="0" />
             <Path Name="Tick" Data="M0,4 L3.4,7.4 L9.4,1" Stroke="{DynamicResource B.OnAccentStrong}" StrokeThickness="1.8" Opacity="0" HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Panel>
-          <ContentPresenter Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True" />
+          <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True" />
         </StackPanel>
       </ControlTemplate>
     </Setter>
@@ -368,7 +368,7 @@
       <ControlTemplate>
         <Panel Margin="4,1">
           <Border Name="Bd" Background="Transparent" CornerRadius="8" />
-          <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
+          <ContentPresenter Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
         </Panel>
       </ControlTemplate>
     </Setter>
@@ -460,7 +460,7 @@
     <Setter Property="Template">
       <ControlTemplate>
         <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
-          <ContentPresenter />
+          <ContentPresenter Content="{TemplateBinding Content}" />
         </Border>
       </ControlTemplate>
     </Setter>

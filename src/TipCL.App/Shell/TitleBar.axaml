@@ -8,13 +8,14 @@
       <Setter Property="Height" Value="40" />
       <Setter Property="Padding" Value="14,0" />
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource Shell.InkMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
       <Setter Property="FontSize" Value="13.5" />
       <Setter Property="Template">
         <ControlTemplate>
           <Panel>
             <Border Name="HoverBg" Background="Transparent" />
             <ContentPresenter x:Name="PART_ContentPresenter"
+                              Content="{TemplateBinding Content}"
                               Margin="{TemplateBinding Padding}"
                               HorizontalAlignment="Center" VerticalAlignment="Center"
                               TextElement.Foreground="{TemplateBinding Foreground}"
@@ -26,14 +27,14 @@
       </Setter>
     </Style>
     <Style Selector="Button.topTab:pointerover /template/ Border#HoverBg">
-      <Setter Property="Background" Value="{DynamicResource Shell.NavHover}" />
+      <Setter Property="Background" Value="{DynamicResource B.Hover}" />
     </Style>
     <Style Selector="Button.topTab.on">
-      <Setter Property="Foreground" Value="{DynamicResource Shell.Ink}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
     <Style Selector="Button.topTab.on /template/ Border#TabBar">
-      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="Background" Value="{DynamicResource B.Accent}" />
     </Style>
 
     <!-- 窗口按钮：46×40 满高，矢量线宽 1.1 圆头；关闭悬停 #C42B1C 满高白字 -->
@@ -41,26 +42,26 @@
       <Setter Property="Width" Value="46" />
       <Setter Property="Height" Value="40" />
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource Shell.CaptionFg}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.CaptionInk}" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border x:Name="CapBg" Background="{TemplateBinding Background}">
-            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
         </ControlTemplate>
       </Setter>
     </Style>
     <Style Selector="Button.cap:pointerover /template/ Border#CapBg">
-      <Setter Property="Background" Value="{DynamicResource Shell.CaptionHoverBg}" />
+      <Setter Property="Background" Value="{DynamicResource B.Hover}" />
     </Style>
     <Style Selector="Button.cap:pressed /template/ Border#CapBg">
-      <Setter Property="Background" Value="{DynamicResource Shell.NavHover}" />
+      <Setter Property="Background" Value="{DynamicResource B.Hover}" />
     </Style>
     <Style Selector="Button.capClose:pointerover /template/ Border#CapBg">
-      <Setter Property="Background" Value="{DynamicResource Shell.CaptionCloseHoverBg}" />
+      <Setter Property="Background" Value="{DynamicResource B.CaptionHot}" />
     </Style>
     <Style Selector="Button.capClose:pointerover">
-      <Setter Property="Foreground" Value="{DynamicResource Shell.CaptionCloseHoverFg}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.OnCaptionHot}" />
     </Style>
 
     <!-- 标题栏图标按钮（主题切换） -->
@@ -69,37 +70,37 @@
       <Setter Property="Height" Value="30" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource Shell.CaptionFg}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.CaptionInk}" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border x:Name="IconBg" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
-            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
         </ControlTemplate>
       </Setter>
     </Style>
     <Style Selector="Button.titleIcon:pointerover /template/ Border#IconBg">
-      <Setter Property="Background" Value="{DynamicResource Shell.NavHover}" />
+      <Setter Property="Background" Value="{DynamicResource B.Hover}" />
     </Style>
   </UserControl.Styles>
 
-  <Grid ColumnDefinitions="Auto,*,Auto" Background="{DynamicResource Shell.TitleBarBg}"
+  <Grid ColumnDefinitions="Auto,*,Auto" Background="{DynamicResource B.Chrome}"
         PointerPressed="OnTitleBarPointerPressed">
     <Grid.Styles>
       <Style Selector="Border.titleLine">
-        <Setter Property="BorderBrush" Value="{DynamicResource Shell.TitleBarLine}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource B.TitleBarLine}" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
       </Style>
     </Grid.Styles>
 
     <!-- Logo -->
     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,18,0">
-      <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource Shell.Accent}">
-        <TextBlock Text="T" Foreground="{DynamicResource Shell.OnAccent}" FontSize="12" FontWeight="ExtraBold"
+      <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource B.Accent}">
+        <TextBlock Text="T" Foreground="{DynamicResource B.OnAccent}" FontSize="12" FontWeight="ExtraBold"
                    HorizontalAlignment="Center" VerticalAlignment="Center" />
       </Border>
       <TextBlock Text="TipCL" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0"
-                 Foreground="{DynamicResource Shell.Ink}" />
+                 Foreground="{DynamicResource B.Ink}" />
     </StackPanel>
 
     <!-- 顶部 5 页签占位 -->
@@ -112,7 +113,7 @@
               StrokeLineCap="Round" StrokeJoin="Round" Width="16" Height="16"
               Data="M13,9.5 A5.5,5.5 0 0 1 6.5,3 A5.5,5.5 0 1 0 13,9.5 Z" />
       </Button>
-      <Border Width="1" Height="16" Margin="6,0" VerticalAlignment="Center" Background="{DynamicResource Shell.Sep}" />
+      <Border Width="1" Height="16" Margin="6,0" VerticalAlignment="Center" Background="{DynamicResource B.TitleSep}" />
       <Button x:Name="MinBtn" Classes="cap" ToolTip.Tip="最小化">
         <Path Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.1" StrokeLineCap="Round"
               Width="10" Height="10" Data="M0.5,5 H9.5" />

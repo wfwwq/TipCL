@@ -27,13 +27,13 @@ public class PlaceholderPage : UserControl
             FontSize = 21,
             FontWeight = FontWeight.Bold,
             Margin = new Thickness(0, 0, 0, 8),
-            [!TextBlock.ForegroundProperty] = this.GetResourceObservable("Shell.Ink").ToBinding(),
+            [!TextBlock.ForegroundProperty] = this.GetResourceObservable("B.Ink").ToBinding(),
         };
         var hint = new TextBlock
         {
             Text = Hint,
             FontSize = 13,
-            [!TextBlock.ForegroundProperty] = this.GetResourceObservable("Shell.InkMuted").ToBinding(),
+            [!TextBlock.ForegroundProperty] = this.GetResourceObservable("B.InkMuted").ToBinding(),
         };
         var panel = new StackPanel { Margin = new Thickness(24) };
         panel.Children.Add(title);
@@ -49,8 +49,8 @@ public class PlaceholderPage : UserControl
             BorderThickness = new Thickness(1),
             Child = panel,
         };
-        card[!Border.BackgroundProperty] = this.GetResourceObservable("Shell.CardBg").ToBinding();
-        card[!Border.BorderBrushProperty] = this.GetResourceObservable("Shell.CardBorder").ToBinding();
+        card[!Border.BackgroundProperty] = this.GetResourceObservable("B.Card").ToBinding();
+        card[!Border.BorderBrushProperty] = this.GetResourceObservable("B.CardBorder").ToBinding();
 
         Content = card;
     }

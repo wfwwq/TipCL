@@ -1,8 +1,10 @@
 using System;
 using System.IO;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.VisualTree;
 using Avalonia.Threading;
 using TipCL.App.Shell;
 
@@ -27,8 +29,17 @@ internal static class SmokeRunner
                 try
                 {
                     var window = new Shell.MainWindow();
+                    if (Environment.GetEnvironmentVariable("SMOKE_DARK") == "1")
+                        window.SetDark(true);
                     window.Show();
                     Dispatcher.UIThread.RunJobs();
+                    if (Environment.GetEnvironmentVariable("SMOKE_PROBE") == "1")
+                    {
+                        foreach (var v in window.GetVisualDescendants().Prepend(window))
+                        {
+                            Console.WriteLine($"PROBE {v.GetType().Name} cls=[{string.Join(",", (v as Avalonia.StyledElement)?.Classes ?? [])}] bounds={v.Bounds.Width:F1}x{v.Bounds.Height:F1}@{v.Bounds.X:F0},{v.Bounds.Y:F0}");
+                        }
+                    }
                     using var frame = window.CaptureRenderedFrame();
                     if (frame is null)
                     {

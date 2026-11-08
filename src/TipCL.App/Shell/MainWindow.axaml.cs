@@ -55,12 +55,9 @@ public partial class MainWindow : Window
         _isDark = dark;
         var merged = Resources.MergedDictionaries;
         merged.Clear();
-        merged.Add(new ResourceInclude(new Uri(dark
+        merged.Add(new ResourceInclude((Uri?)null) { Source = new Uri(dark
             ? "avares://TipCL.App/Themes/Palette.Dark.axaml"
-            : "avares://TipCL.App/Themes/Palette.Light.axaml")));
-        merged.Add(new ResourceInclude(new Uri(dark
-            ? "avares://TipCL.App/Shell/ShellTokens.Dark.axaml"
-            : "avares://TipCL.App/Shell/ShellTokens.Light.axaml")));
+            : "avares://TipCL.App/Themes/Palette.Light.axaml") });
         TitleBarHost.SyncThemeIndicator(dark);
     }
 

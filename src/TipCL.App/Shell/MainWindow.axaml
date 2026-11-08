@@ -9,15 +9,13 @@
         ExtendClientAreaChromeHints="NoChrome"
         ExtendClientAreaTitleBarHeightHint="40"
         SystemDecorations="Full"
-        Background="{DynamicResource Shell.PageBg}"
+        Background="{DynamicResource B.Canvas}"
         FontFamily="Microsoft YaHei UI, Noto Sans CJK SC, WenQuanYi Micro Hei, sans-serif">
   <!-- M1-A3 窗口外壳：40px 自定义标题栏 + 196px 分组导航 + 右侧占位页。 -->
-  <!-- Shell.* 令牌转发到 A2 主题键，故 Palette 必须与 ShellTokens 成对合并 -->
   <Window.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://TipCL.App/Themes/Palette.Light.axaml" />
-        <ResourceInclude Source="avares://TipCL.App/Shell/ShellTokens.Light.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Window.Resources>
