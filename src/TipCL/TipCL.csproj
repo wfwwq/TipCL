@@ -24,6 +24,8 @@
          dotnet build TipCL.sln -c Release               → compact（体积红线版，行为与基线一致）
          dotnet build TipCL.sln -c Release -p:Premium=true → premium（嵌入官方图标/hero，不受体积限制） -->
     <DefineConstants Condition="'$(Premium)'=='true'">$(DefineConstants);PREMIUM</DefineConstants>
+    <!-- 只开启动页标题栏沉浸（LaunchPage SyncImmersive），其余保持 compact 行为：dotnet build -c Release -p:Immersive=true -->
+    <DefineConstants Condition="'$(Immersive)'=='true'">$(DefineConstants);IMMERSIVE</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

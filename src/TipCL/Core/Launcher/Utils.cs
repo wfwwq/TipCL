@@ -313,24 +313,9 @@ public static class Utils
 		{
 			return new PPath(environmentVariable).ToString();
 		}
-		string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-		try
-		{
-			string path = Path.Combine(baseDirectory, ".tipcl_wtest");
-			File.WriteAllText(path, "1");
-			File.Delete(path);
-			return new PPath(Path.GetFullPath(baseDirectory)).ToString();
-		}
-		catch (Exception)
-		{
-		}
 		if (IS_WINDOWS)
 		{
-			string text = Environment.GetEnvironmentVariable("APPDATA");
-			if (string.IsNullOrEmpty(text))
-			{
-				text = PPath.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "Roaming");
-			}
+			string text = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 			return PPath.Join(text, "TipCL");
 		}
 		return PPath.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".tipcl");
