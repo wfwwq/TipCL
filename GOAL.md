@@ -82,3 +82,26 @@
 2. 每个代理收尾必须：a) 自证 `dotnet build`（自己范围）0 错误；b) 写 `progress/M1-<包>.md`（做了什么、文件清单、遗留、风险）；c) git commit（信息前缀包编号）。
 3. 共享文件编辑权：GOAL.md 只读；sln 归 A1；PROGRESS.md/DECISIONS.md 各包只**追加**自己小节（追加用 Edit 在文件末尾，禁止重写他人内容）。
 4. 构建防锁：`dotnet build-server shutdown` 后再 build；遇 CS 文件锁报错先 `dotnet build-server shutdown` 重试。
+
+---
+
+## 7. M2 任务书（2026-11-08 追加，依据 docs/m2-recon/ 三份侦察报告）
+
+### 7.1 技术决定（已定）
+- 图标方案：**SVG Path 矢量图标**（与外壳一致）；Windows 版 `TipCLIcons.ttf` 的 glyph 逐个转为 Geometry Path 常量（IconLib），不引入字体文件。
+- 页面宿主：所有页面继承 B0 提供的 PageBase（生命周期：构建→导航参数→激活/停用），接入 NavRegistry 替换对应 Placeholder。
+- RPC 缺口：不做 BridgeServer；B0 提供 IApi 进程内门面（签名对齐 Windows 版 Core/BackendApi.cs 的 snake_case 契约），底层直调 Core 已搬类；M3 再决定是否补 Python 桥。
+- 加载器图标：直接嵌入 5 张官方图（~20KB，Linux 无体积红线），离线回退首字母方块。
+
+### 7.2 工作包
+- **M2-B0 公共件（先行，单独跑）**：IApi 门面 + TaskStore 任务队列 + PageBase 生命周期 + ThemeService（accent 派生，源自设置页 ApplyAccent 390 行色彩数学）+ Core 续搬（Ai/FileMemory、Sync 4 文件、Plugins 市场五文件）+ IconLib（glyph→Path）+ Services 门面（Dlg/Toast/Motion）。
+- **M2-B1 启动页**：左对齐英雄区、截图/hero 背景、版本浮层选择、新闻行（R1 报告）。
+- **M2-B2 实例库 + 实例详情**：卡片、管理进入详情、分段（模组/存档/资源包/光影/设置）、模组行开关（R1 报告）。
+- **M2-B3 下载页 + 安装页**：分段筛选/搜索、加载器 5 卡、版本下拉、Fabric API/OptiFine 联动、底部汇总（R2 报告）。
+- **M2-B4 插件页 + 布局自定义框架**：已安装/市场/开发者分段、卡片、⋯菜单；PageBlock/PageLayoutStore/BlockHost 模型层搬 Core + Avalonia Pointer 拖拽（R3 报告）。
+- **M2-B5 设置页**：左导航 7 项、分组卡、500ms 防抖自动保存、主题色联动（R3 报告）。
+
+### 7.3 协作纪律（沿用 §6）
+- B0 完成前页面包不得开工；页面文件各自独占（Pages/ 下每页一个文件族），公共件只许改 B0 地盘。
+- 每包收尾：自证编译 + 写 progress/M2-*.md + commit（前缀包编号）。
+- 页面替换 Placeholder 时只改 NavRegistry 注册项对应行，注册表冲突由主 agent 合入。
