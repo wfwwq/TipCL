@@ -1,0 +1,468 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- TipCL Linux 控件主题（Avalonia 11 ControlTheme）。
+       移植自 Windows 版 src/TipCL/Themes/Controls.xaml，自足无外部依赖：
+       需与 Palette.Light/Dark.axaml 同挂到 Application.Resources。
+       圆角：控件 8（CR.Ctl）/ 卡片 12（CR.Card）/ 数字角标 999（CR.Pill）。
+       字号阶梯：正文 13 / H3 14 / H2 17 / 页标题(T.H1·T.PageTitle) 21 / 大标题(T.Mega) 24。 -->
+
+  <!-- ===== 字体（不嵌字体，系统回退） ===== -->
+  <FontFamily x:Key="F.Ui">Microsoft YaHei UI, Microsoft YaHei, Noto Sans CJK SC, WenQuanYi Micro Hei, PingFang SC, sans-serif</FontFamily>
+  <FontFamily x:Key="F.Mono">Cascadia Mono, Consolas, DejaVu Sans Mono, Noto Sans Mono CJK SC, monospace</FontFamily>
+  <FontFamily x:Key="F.Icon">Segoe Fluent Icons, Segoe MDL2 Assets, TipCL Icons</FontFamily>
+
+  <!-- ===== 圆角 ===== -->
+  <CornerRadius x:Key="CR.Ctl">8</CornerRadius>
+  <CornerRadius x:Key="CR.Card">12</CornerRadius>
+  <CornerRadius x:Key="CR.Pill">999</CornerRadius>
+
+  <!-- ===== 文本 ===== -->
+  <ControlTheme x:Key="{x:Type TextBlock}" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+  </ControlTheme>
+  <ControlTheme x:Key="T.PageTitle" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="21" />
+    <Setter Property="FontWeight" Value="ExtraBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </ControlTheme>
+  <!-- T.H1：页标题（v2 规格并入 21px ExtraBold） -->
+  <ControlTheme x:Key="T.H1" BasedOn="{StaticResource T.PageTitle}" TargetType="TextBlock" />
+  <ControlTheme x:Key="T.Mega" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="24" />
+    <Setter Property="FontWeight" Value="ExtraBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </ControlTheme>
+  <ControlTheme x:Key="T.H2" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="17" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </ControlTheme>
+  <ControlTheme x:Key="T.H3" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </ControlTheme>
+  <!-- 分组标题：卡片外上方的灰色小字 -->
+  <ControlTheme x:Key="T.GroupTitle" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="Margin" Value="4,0,0,6" />
+  </ControlTheme>
+  <ControlTheme x:Key="T.Muted" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </ControlTheme>
+  <ControlTheme x:Key="T.Small" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkFaint}" />
+  </ControlTheme>
+  <ControlTheme x:Key="T.Mono" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+  </ControlTheme>
+
+  <!-- ===== 卡片：白底无边框（保留 1px 透明边避免布局位移）、圆角 12 ===== -->
+  <ControlTheme x:Key="Card" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.Card}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.CardBorder}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{StaticResource CR.Card}" />
+    <Setter Property="Padding" Value="12" />
+  </ControlTheme>
+  <!-- 分段控件的灰色轨道：里面放若干 Seg.Item -->
+  <ControlTheme x:Key="Seg.Rail" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.SegRail}" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="3" />
+  </ControlTheme>
+
+  <!-- ===== 按钮：隐式主题 = Btn.Base + Btn.Normal 外观 ===== -->
+  <ControlTheme x:Key="{x:Type Button}" TargetType="Button">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Padding" Value="12,6" />
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Background" Value="{DynamicResource B.Paper}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" />
+          <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="8" />
+          <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="8" Opacity="0" IsHitTestVisible="False" />
+          <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Ov">
+      <Setter Property="Opacity" Value="0.07" />
+    </Style>
+    <Style Selector="^:pressed /template/ Border#Ov">
+      <Setter Property="Opacity" Value="0.14" />
+    </Style>
+    <Style Selector="^:focus-visible /template/ Border#Kf">
+      <Setter Property="Opacity" Value="0.9" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.45" />
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="Btn.Normal" BasedOn="{StaticResource {x:Type Button}}" TargetType="Button" />
+  <ControlTheme x:Key="Btn.Primary" BasedOn="{StaticResource {x:Type Button}}" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource B.AccentStrong}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.AccentStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.OnAccentStrong}" />
+    <Setter Property="FontWeight" Value="Bold" />
+  </ControlTheme>
+  <ControlTheme x:Key="Btn.Soft" BasedOn="{StaticResource {x:Type Button}}" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource B.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.AccentSoft2}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.AccentText}" />
+  </ControlTheme>
+  <!-- 灰色"管理"按钮 -->
+  <ControlTheme x:Key="Btn.Ghost" BasedOn="{StaticResource {x:Type Button}}" TargetType="Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+  </ControlTheme>
+  <ControlTheme x:Key="Btn.Danger" BasedOn="{StaticResource {x:Type Button}}" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource B.DangerSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.DangerSoft}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Danger}" />
+  </ControlTheme>
+  <ControlTheme x:Key="Btn.Chip" BasedOn="{StaticResource {x:Type Button}}" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource B.Paper2}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="Padding" Value="11,5" />
+    <Setter Property="FontSize" Value="12" />
+  </ControlTheme>
+  <ControlTheme x:Key="Btn.Icon" BasedOn="{StaticResource Btn.Ghost}" TargetType="Button">
+    <Setter Property="Padding" Value="7" />
+    <Setter Property="MinWidth" Value="30" />
+    <Setter Property="FontSize" Value="13" />
+  </ControlTheme>
+
+  <!-- ===== ToggleButton（页签 / 分段项） ===== -->
+  <ControlTheme x:Key="{x:Type ToggleButton}" TargetType="ToggleButton">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="Padding" Value="12,6" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Name="Bd" Background="Transparent" CornerRadius="8" />
+          <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Bd">
+      <Setter Property="Background" Value="{DynamicResource B.Hover}" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#Bd">
+      <Setter Property="Background" Value="{DynamicResource B.SegOn}" />
+    </Style>
+  </ControlTheme>
+  <!-- v2 顶部页签：选中 = 粗体 + 底部 2.5px 主题色圆角条 -->
+  <ControlTheme x:Key="Tab.Top" TargetType="ToggleButton">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13.5" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="Padding" Value="13,0" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
+          <Border Name="Bar" Height="2.5" CornerRadius="1.25" Margin="13,0" VerticalAlignment="Bottom" Background="{DynamicResource B.Accent}" Opacity="0" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    </Style>
+    <Style Selector="^:checked">
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#Bar">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+  </ControlTheme>
+  <!-- v2 分段控件项（放在 Seg.Rail 里）：选中白底 + 粗体 -->
+  <ControlTheme x:Key="Seg.Item" TargetType="ToggleButton">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13.5" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="Padding" Value="13,6" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Name="Bd" Background="Transparent" CornerRadius="8" />
+          <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    </Style>
+    <Style Selector="^:checked">
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#Bd">
+      <Setter Property="Background" Value="{DynamicResource B.SegOn}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ===== 复选框（隐式 = Chk）：18×18 圆角 6 方框，选中主题色填充 + 白勾 ===== -->
+  <ControlTheme x:Key="{x:Type CheckBox}" TargetType="CheckBox">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Padding" Value="9,0,0,0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel Orientation="Horizontal">
+          <Panel Width="18" Height="18" VerticalAlignment="Center">
+            <Border Name="Bx" CornerRadius="6" Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1.4" />
+            <Border Name="Fill" CornerRadius="6" Background="{DynamicResource B.AccentStrong}" Opacity="0" />
+            <Path Name="Tick" Data="M0,4 L3.4,7.4 L9.4,1" Stroke="{DynamicResource B.OnAccentStrong}" StrokeThickness="1.8" Opacity="0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Panel>
+          <ContentPresenter Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True" />
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Bx">
+      <Setter Property="BorderBrush" Value="{DynamicResource B.Accent}" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#Fill">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="^:checked /template/ Path#Tick">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.45" />
+    </Style>
+  </ControlTheme>
+  <!-- 开关：40×22 轨道 + 16 圆钮，选中右移 18px -->
+  <ControlTheme x:Key="Switch" TargetType="CheckBox">
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel Width="40" Height="22">
+          <Border Name="Tr" CornerRadius="11" Background="{DynamicResource B.Line}" />
+          <Border Name="TrOn" CornerRadius="11" Background="{DynamicResource B.Accent}" Opacity="0" />
+          <Border Name="Kn" Width="16" Height="16" CornerRadius="8" Background="#FFFFFFFF" HorizontalAlignment="Left" Margin="3,0,0,0" BoxShadow="0 1 3 0 #40000000" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:checked /template/ Border#TrOn">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#Kn">
+      <Setter Property="Margin" Value="21,0,0,0" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.45" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ===== 输入框（隐式）：占位文本走 Tag（与 Windows 版一致），获得焦点描主题色 ===== -->
+  <ControlTheme x:Key="{x:Type TextBox}" TargetType="TextBox">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="Background" Value="{DynamicResource B.Paper}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="CaretBrush" Value="{DynamicResource B.Accent}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource B.Accent}" />
+    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}" />
+          <Border Name="Fx" BorderBrush="{DynamicResource B.Accent}" BorderThickness="1.4" Opacity="0" CornerRadius="{TemplateBinding CornerRadius}" />
+          <ScrollViewer Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden">
+            <Panel>
+              <TextBlock Name="Ph" Text="{TemplateBinding Tag}" Foreground="{DynamicResource B.InkFaint}" IsHitTestVisible="False" IsVisible="{Binding ElementName=PART_TextPresenter, Path=Text, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
+              <TextPresenter Name="PART_TextPresenter"
+                             Text="{TemplateBinding Text, Mode=TwoWay}"
+                             TextAlignment="{TemplateBinding TextAlignment}"
+                             TextWrapping="{TemplateBinding TextWrapping}"
+                             PasswordChar="{TemplateBinding PasswordChar}"
+                             RevealPassword="{TemplateBinding RevealPassword}"
+                             SelectionBrush="{TemplateBinding SelectionBrush}"
+                             CaretBrush="{TemplateBinding CaretBrush}"
+                             HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                             VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+            </Panel>
+          </ScrollViewer>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Bd">
+      <Setter Property="BorderBrush" Value="{DynamicResource B.ScrollHover}" />
+    </Style>
+    <Style Selector="^:focus-within /template/ Border#Fx">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="^:focus-within /template/ TextBlock#Ph">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="Input.Multi" BasedOn="{StaticResource {x:Type TextBox}}" TargetType="TextBox">
+    <Setter Property="AcceptsReturn" Value="True" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+  </ControlTheme>
+  <ControlTheme x:Key="Input.Log" BasedOn="{StaticResource {x:Type TextBox}}" TargetType="TextBox">
+    <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+    <Setter Property="FontSize" Value="11.5" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="IsReadOnly" Value="True" />
+    <Setter Property="AcceptsReturn" Value="True" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+  </ControlTheme>
+
+  <!-- ===== 密码框：Avalonia 11 无 PasswordBox，用 TextBox.PasswordChar 实现（主题复用 {x:Type TextBox}） ===== -->
+
+  <!-- ===== 下拉框：圆角 8 外壳 + 圆角 12 弹层，展开时描主题色 ===== -->
+  <ControlTheme x:Key="{x:Type ComboBoxItem}" TargetType="ComboBoxItem">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel Margin="4,1">
+          <Border Name="Bd" Background="Transparent" CornerRadius="8" />
+          <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Bd">
+      <Setter Property="Background" Value="{DynamicResource B.Hover}" />
+    </Style>
+    <Style Selector="^:selected /template/ Border#Bd">
+      <Setter Property="Background" Value="{DynamicResource B.AccentSoft}" />
+    </Style>
+    <Style Selector="^:selected">
+      <Setter Property="Foreground" Value="{DynamicResource B.AccentText}" />
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="{x:Type ComboBox}" TargetType="ComboBox">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Background" Value="{DynamicResource B.Paper}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <ToggleButton Name="PART_Toggle" Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+            <ToggleButton.Template>
+              <ControlTemplate TargetType="ToggleButton">
+                <Panel>
+                  <Border Name="Bd" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}" BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}" BorderThickness="1" CornerRadius="8" />
+                  <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="8" />
+                  <Path Name="Ar" Data="M0,0 L4.5,5 L9,0" Stroke="{DynamicResource B.InkMuted}" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,11,0" />
+                </Panel>
+              </ControlTemplate>
+            </ToggleButton.Template>
+          </ToggleButton>
+          <ContentPresenter Name="Cp" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" HorizontalAlignment="Left" IsHitTestVisible="False" />
+          <TextBlock Name="Ph" Text="{TemplateBinding Tag}" Foreground="{DynamicResource B.InkFaint}" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" IsHitTestVisible="False" IsVisible="False" />
+          <Popup Name="PART_Popup" Placement="Bottom" PlacementTarget="{TemplateBinding}" VerticalOffset="4" IsOpen="{TemplateBinding IsDropDownOpen}" IsLightDismissEnabled="True">
+            <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="12" MaxHeight="320" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" ClipToBounds="True">
+              <ScrollViewer Margin="0,5" VerticalScrollBarVisibility="Auto">
+                <ItemsPresenter Margin="4,0" />
+              </ScrollViewer>
+            </Border>
+          </Popup>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ ToggleButton#PART_Toggle /template/ Border#Ov">
+      <Setter Property="Opacity" Value="0.04" />
+    </Style>
+    <Style Selector="^:dropdownopen /template/ ToggleButton#PART_Toggle /template/ Border#Bd">
+      <Setter Property="BorderBrush" Value="{DynamicResource B.Accent}" />
+    </Style>
+    <Style Selector="^:empty /template/ TextBlock#Ph">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ===== 进度条：6px 圆角轨道 ===== -->
+  <ControlTheme x:Key="{x:Type ProgressBar}" TargetType="ProgressBar">
+    <Setter Property="Height" Value="6" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Accent}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid ClipToBounds="True">
+          <Border Background="{DynamicResource B.LineSoft}" CornerRadius="3" />
+          <Border Name="PART_Track" />
+          <Border Name="PART_Indicator" HorizontalAlignment="Left" CornerRadius="3" Background="{TemplateBinding Foreground}" Opacity="0.99" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:indeterminate /template/ Border#PART_Indicator">
+      <Setter Property="Opacity" Value="0.35" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ===== 工具提示 ===== -->
+  <ControlTheme x:Key="{x:Type ToolTip}" TargetType="ToolTip">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Background" Value="{DynamicResource B.Paper}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
+    <Setter Property="Padding" Value="9,6" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+          <ContentPresenter />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>
