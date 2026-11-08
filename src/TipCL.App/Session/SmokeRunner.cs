@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
+using TipCL.App.Shell;
 
 namespace TipCL.App.Session;
 
@@ -25,7 +26,7 @@ internal static class SmokeRunner
             {
                 try
                 {
-                    var window = new MainWindow();
+                    var window = new Shell.MainWindow();
                     window.Show();
                     Dispatcher.UIThread.RunJobs();
                     using var frame = window.CaptureRenderedFrame();
