@@ -175,7 +175,8 @@ public static class PluginEvents
 		return null;
 	}
 
-	/// <summary>插件页 id（同插件）、完整的 plugin:&lt;id&gt;:&lt;page&gt;，或内置页 id（launch、ai、settings…）。</summary>
+	/// <summary>插件页 id（同插件）、完整的 plugin:&lt;id&gt;:&lt;page&gt;，或内置页 id（launch、ai、settings…）。
+	/// 同插件自己注册的页面 id 优先于内置页（dsh-game 注册了 id "library" 的页面，nav.open("library") 必须进插件页而不是实例库）。</summary>
 	public static void OpenPage(string plugin, string page)
 	{
 		MainWindow? win = AppServices.Window;
@@ -183,12 +184,18 @@ public static class PluginEvents
 		{
 			return;
 		}
+		UiContribution? own = PluginUi.Find("page", plugin, page);
+		if (own != null)
+		{
+			win.Navigate(own.PageId);
+			return;
+		}
 		if (page == "plugins" || MainWindow.NavDefs.Any((NavDef d) => d.Id == page))
 		{
 			win.Navigate(page);
 			return;
 		}
-		UiContribution? c = PluginUi.FindPage(page) ?? PluginUi.Find("page", plugin, page) ?? PluginUi.OfKind("page").FirstOrDefault((UiContribution x) => x.Id == page);
+		UiContribution? c = PluginUi.FindPage(page) ?? PluginUi.OfKind("page").FirstOrDefault((UiContribution x) => x.Id == page);
 		if (c != null)
 		{
 			win.Navigate(c.PageId);
