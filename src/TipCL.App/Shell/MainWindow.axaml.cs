@@ -5,6 +5,7 @@ using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
 using TipCL.App.Pages;
 using TipCL.App.Pages.Launch;
+using TipCL.App.Pages.Download;
 
 namespace TipCL.App.Shell;
 
@@ -71,7 +72,7 @@ public partial class MainWindow : Window
         "account" => _pages.GetOrAdd(id, () => new PlaceholderAccount()),
         "java" => _pages.GetOrAdd(id, () => new PlaceholderJava()),
         "library" => _pages.GetOrAdd(id, () => new TipCL.App.Pages.Library.LibraryPage()), // M2-B2：真实实例库替换占位
-        "download" => _pages.GetOrAdd(id, () => new Download.DownloadPage()), // M2-B3：真实下载页替换占位
+        "download" => _pages.GetOrAdd(id, () => new DownloadPage()), // M2-B3：真实下载页替换占位
         "tasks" => _pages.GetOrAdd(id, () => new PlaceholderTasks()),
         "plugins" => _pages.GetOrAdd(id, () => new Pages.Plugins.PluginsPage()), // M2-B4：真实插件页替换占位
         "settings" => _pages.GetOrAdd(id, () => new Pages.Settings.SettingsPage()), // M2-B5：真实设置页替换占位

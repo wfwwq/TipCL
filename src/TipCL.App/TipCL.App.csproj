@@ -11,12 +11,24 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
   </PropertyGroup>
 
+  <!-- M2-B4 依赖申请：App 侧布局框架（BlockHost）与插件页需要 TipCL.Core 的
+       Core/Layout（PageLayoutStore/Doc/IO）与 Core/Plugins（PluginStateStore/Manifest/Dirs）。
+       B0 落 IApi 门面后同样需要此引用；若 B0 已加，合并时保留一份即可。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\TipCL.Core\TipCL.Core.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.2" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.2" />
     <PackageReference Include="Avalonia.Headless" Version="11.3.2" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.2" Condition="'$(Configuration)' == 'Debug'" />
+  </ItemGroup>
+
+  <!-- M2-B1：启动页嵌入 hero.jpg（launch2 效果图同款默认背景，只读参照仓库拷出） -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
 </Project>
