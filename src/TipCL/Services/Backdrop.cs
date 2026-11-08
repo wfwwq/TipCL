@@ -54,10 +54,8 @@ public static class Backdrop
 
 	private const int DwmwaWindowCornerPreference = 33;
 
-	// WP-S12：DWM 边框色；0xFFFFFFFE = DWMWA_COLOR_DEFAULT（跟随系统）；壁纸时 0x00262626
+	// WP-S12：DWM 边框色；恒定 0x00262626 深灰（DWMWA_COLOR_DEFAULT 在 Win11 浅色主题下是白边）
 	private const int DwmwaBorderColor = 34;
-
-	private const uint DwmColorDefault = 4294967294u;
 
 	private const int DwmwcpRound = 2;
 
@@ -177,8 +175,9 @@ public static class Backdrop
 				{
 					ApplyLegacyBlur(handle, App.IsDark);
 				}
-				// 边框色：壁纸时深灰细线，否则交还系统默认（Win10 上调用失败无副作用）
-				int value3 = unchecked((int)(Wallpaper.Active ? 2500134u : DwmColorDefault));
+				// 边框色：恒定深灰细线。交还系统默认时 Win11 浅色主题会描一圈白边（2026-11-08 用户报告），
+				// Win10 上调用失败无副作用
+				int value3 = unchecked((int)2500134u);
 				DwmSetWindowAttribute(handle, 34, ref value3, 4);
 			}
 		}
