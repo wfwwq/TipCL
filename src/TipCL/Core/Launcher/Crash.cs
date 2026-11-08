@@ -1577,7 +1577,10 @@ public static class Crash
 
 	private static PyDict _run(Instance instance, IEnumerable<string> output_lines, object exit_code, double? started_at, bool cancelled, bool manual, string version, IEnumerable<object> extra_roots)
 	{
-		return _run(instance.path, instance.name, output_lines, exit_code, started_at, cancelled, manual, version, extra_roots);
+		// 版本开启隔离时游戏用 --gameDir 指向 versions\<版本>，日志也写在那里，
+		// 分析根目录随之切换；未隔离/未传版本时回落实例根目录
+		string root = (Py.Truthy(version) ? VersionSettings.GameDir(instance, version) : instance.path);
+		return _run(root, instance.name, output_lines, exit_code, started_at, cancelled, manual, version, extra_roots);
 	}
 
 	public static PyDict AnalyzeInstancePath(string path, string extra_log = "", bool manual = true)
@@ -1792,10 +1795,10 @@ public static class Crash
 		return _run(instance, output_lines, exit_code, started_at, cancelled, manual: false, version, extra_roots);
 	}
 
-	public static PyDict AnalyzeInstance(Instance instance, string extra_log = "", bool manual = true)
+	public static PyDict AnalyzeInstance(Instance instance, string extra_log = "", bool manual = true, string version = "")
 	{
 		List<string> output_lines = ((!string.IsNullOrEmpty(extra_log)) ? Py.SplitLines(extra_log) : null);
-		return _run(instance, output_lines, null, null, cancelled: false, manual, "", null);
+		return _run(instance, output_lines, null, null, cancelled: false, manual, version, null);
 	}
 
 	private static string WriteText(string s)

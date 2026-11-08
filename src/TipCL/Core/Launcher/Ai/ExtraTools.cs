@@ -13,10 +13,10 @@ namespace TipCL.Core.Launcher.Ai;
 /// </summary>
 public static class ExtraTools
 {
-	public static readonly string[] Names = new string[14]
+	public static readonly string[] Names = new string[17]
 	{
 		"get_system_info", "diagnose_lag", "tune_jvm", "list_saves", "backup_save", "list_save_backups", "restore_save_backup", "multiplayer", "list_accounts", "add_offline_account",
-		"switch_account", "set_skin", "open_folder", "phone_sync"
+		"switch_account", "set_skin", "open_folder", "phone_sync", "fs_list", "fs_read", "fs_write"
 	};
 
 	public static readonly Dictionary<string, string> Labels = new Dictionary<string, string>
@@ -34,10 +34,13 @@ public static class ExtraTools
 		{ "switch_account", "切换账号" },
 		{ "set_skin", "设置皮肤" },
 		{ "open_folder", "打开文件夹" },
-		{ "phone_sync", "手机同步" }
+		{ "phone_sync", "手机同步" },
+		{ "fs_list", "列文件" },
+		{ "fs_read", "读文件" },
+		{ "fs_write", "写文件" }
 	};
 
-	public static readonly ToolMetaInfo[] Meta = new ToolMetaInfo[14]
+	public static readonly ToolMetaInfo[] Meta = new ToolMetaInfo[17]
 	{
 		new ToolMetaInfo("get_system_info", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("diagnose_lag", ro: true, "read", "low", lr: false),
@@ -52,7 +55,10 @@ public static class ExtraTools
 		new ToolMetaInfo("switch_account", ro: false, "write_local", "low", lr: false),
 		new ToolMetaInfo("set_skin", ro: false, "write_local", "low", lr: false),
 		new ToolMetaInfo("open_folder", ro: true, "none", "low", lr: false),
-		new ToolMetaInfo("phone_sync", ro: false, "write_local", "low", lr: false)
+		new ToolMetaInfo("phone_sync", ro: false, "write_local", "low", lr: false),
+		new ToolMetaInfo("fs_list", ro: true, "read", "low", lr: false),
+		new ToolMetaInfo("fs_read", ro: true, "read", "low", lr: false),
+		new ToolMetaInfo("fs_write", ro: false, "write_local", "high", lr: false)
 	};
 
 	public static readonly (string[] keys, string[] extra)[] Keywords = new(string[], string[])[6]
@@ -62,7 +68,8 @@ public static class ExtraTools
 		(new string[9] { "联机", "开房", "房间", "朋友一起", "一起玩", "局域网", "陶瓦", "lan", "multiplayer" }, new string[1] { "multiplayer" }),
 		(new string[7] { "皮肤", "账号", "账户", "披风", "离线", "skin", "account" }, new string[4] { "list_accounts", "add_offline_account", "switch_account", "set_skin" }),
 		(new string[3] { "文件夹", "目录", "folder" }, new string[1] { "open_folder" }),
-		(new string[8] { "手机", "平板", "同步", "安卓", "配对", "传到", "phone", "sync" }, new string[2] { "phone_sync", "list_saves" })
+		(new string[8] { "手机", "平板", "同步", "安卓", "配对", "传到", "phone", "sync" }, new string[2] { "phone_sync", "list_saves" }),
+		(new string[8] { "latest.log", "日志文件", "读文件", "写文件", "列目录", "文件内容", "这个文件", "debug.log" }, new string[3] { "fs_list", "fs_read", "fs_write" })
 	};
 
 	private const string SchemasJson = "[" +
@@ -79,7 +86,10 @@ public static class ExtraTools
 		"{\"type\": \"function\", \"function\": {\"name\": \"switch_account\", \"description\": \"切换当前使用的账号\", \"parameters\": {\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\"}}, \"required\": [\"name\"]}}}, " +
 		"{\"type\": \"function\", \"function\": {\"name\": \"set_skin\", \"description\": \"给账号换皮肤：传本地 png 皮肤文件路径（可以是用户刚附的图片），model 为 classic（粗手臂）或 slim（细手臂）\", \"parameters\": {\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"description\": \"账号名\"}, \"path\": {\"type\": \"string\", \"description\": \"皮肤 png 路径\"}, \"model\": {\"type\": \"string\", \"description\": \"classic / slim\"}}, \"required\": [\"name\", \"path\"]}}}, " +
 		"{\"type\": \"function\", \"function\": {\"name\": \"open_folder\", \"description\": \"在资源管理器里打开实例的文件夹，方便用户自己放文件\", \"parameters\": {\"type\": \"object\", \"properties\": {\"kind\": {\"type\": \"string\", \"description\": \"game / mods / saves / resourcepacks / shaderpacks / config / logs / backups\"}, \"instance\": {\"type\": \"string\"}}}}}, " +
-		"{\"type\": \"function\", \"function\": {\"name\": \"phone_sync\", \"description\": \"和手机启动器互传 Java 版存档。手机上要先打开：启动器 → 存档管理 → 从 zip 导入 → 启动同步服务，屏幕会显示地址和 6 位配对码。action：status 查看连接；connect 用 address+code 连接（局域网）；usb 用 code 通过 USB 数据线连接（需手机开 USB 调试）；scan 扫描局域网里的手机；compare 对比两边世界；push 把电脑上的 world 传到手机；pull 把手机上的 world 传到电脑；sync 一键同步（两边都改过的世界会跳过，需要问玩家后再用 push/pull）。被覆盖的一边都会先自动备份。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"status / connect / usb / scan / compare / push / pull / sync\"}, \"address\": {\"type\": \"string\", \"description\": \"手机 IP，可带端口\"}, \"code\": {\"type\": \"string\", \"description\": \"手机上显示的 6 位配对码\"}, \"instance\": {\"type\": \"string\"}, \"version\": {\"type\": \"string\", \"description\": \"开了版本隔离时的版本名\"}, \"root\": {\"type\": \"string\", \"description\": \"手机上的位置 id，默认自动对应（global 或 v:版本名）\"}, \"world\": {\"type\": \"string\", \"description\": \"世界文件夹名\"}}, \"required\": [\"action\"]}}}" +
+		"{\"type\": \"function\", \"function\": {\"name\": \"phone_sync\", \"description\": \"和手机启动器互传 Java 版存档。手机上要先打开：启动器 → 存档管理 → 从 zip 导入 → 启动同步服务，屏幕会显示地址和 6 位配对码。action：status 查看连接；connect 用 address+code 连接（局域网）；usb 用 code 通过 USB 数据线连接（需手机开 USB 调试）；scan 扫描局域网里的手机；compare 对比两边世界；push 把电脑上的 world 传到手机；pull 把手机上的 world 传到电脑；sync 一键同步（两边都改过的世界会跳过，需要问玩家后再用 push/pull）。被覆盖的一边都会先自动备份。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"status / connect / usb / scan / compare / push / pull / sync\"}, \"address\": {\"type\": \"string\", \"description\": \"手机 IP，可带端口\"}, \"code\": {\"type\": \"string\", \"description\": \"手机上显示的 6 位配对码\"}, \"instance\": {\"type\": \"string\"}, \"version\": {\"type\": \"string\", \"description\": \"开了版本隔离时的版本名\"}, \"root\": {\"type\": \"string\", \"description\": \"手机上的位置 id，默认自动对应（global 或 v:版本名）\"}, \"world\": {\"type\": \"string\", \"description\": \"世界文件夹名\"}}, \"required\": [\"action\"]}}}, " +
+		"{\"type\": \"function\", \"function\": {\"name\": \"fs_list\", \"description\": \"列出目录内容：文件名、类型、大小、修改时间，最多 200 条，可用 glob 过滤（如 *.log）。path 填绝对路径，或相对实例根的路径。只能访问启动器数据目录和实例目录（含版本隔离的 versions\\\\版本\\\\），Windows / Program Files 等系统目录会被拒绝。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}, \"glob\": {\"type\": \"string\", \"description\": \"可选，按文件名过滤，如 *.log\"}, \"instance\": {\"type\": \"string\"}}, \"required\": [\"path\"]}}}, " +
+		"{\"type\": \"function\", \"function\": {\"name\": \"fs_read\", \"description\": \"读文本文件，典型用途是读 latest.log 排查启动失败。默认返回最后 200 行；offset_line 从第几行开始读（0 起），max_lines 控制行数。上限 512 KB；二进制文件（jar / png / exe / zip 等）会拒绝，先用 fs_list 看看。路径限制同 fs_list。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}, \"offset_line\": {\"type\": \"integer\", \"description\": \"起始行（0 起），不填读末尾\"}, \"max_lines\": {\"type\": \"integer\", \"description\": \"读取行数，默认 200\"}, \"instance\": {\"type\": \"string\"}}, \"required\": [\"path\"]}}}, " +
+		"{\"type\": \"function\", \"function\": {\"name\": \"fs_write\", \"description\": \"写文本文件：默认覆盖，append=true 追加到末尾。只能写在启动器数据目录或实例目录（含 versions\\\\版本\\\\）里，内容上限 256 KB，会自动建父目录。适合写配置、说明文件；不要碰启动器自己的核心文件和存档。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}, \"content\": {\"type\": \"string\", \"description\": \"完整文件内容\"}, \"append\": {\"type\": \"boolean\", \"description\": \"true 追加，默认 false 覆盖\"}, \"instance\": {\"type\": \"string\"}}, \"required\": [\"path\", \"content\"]}}}" +
 		"]";
 
 	public static List<object> Schemas()
@@ -143,6 +153,21 @@ public static class ExtraTools
 		}
 		case "phone_sync":
 			return PhoneSync(args);
+		case "fs_list":
+		{
+			var (roots, baseDir) = FsContext(backend, args);
+			return FsList(args, roots, baseDir);
+		}
+		case "fs_read":
+		{
+			var (roots2, baseDir2) = FsContext(backend, args);
+			return FsRead(args, roots2, baseDir2);
+		}
+		case "fs_write":
+		{
+			var (roots3, baseDir3) = FsContext(backend, args);
+			return FsWrite(args, roots3, baseDir3);
+		}
 		case "open_folder":
 			return OpenFolder(backend, args);
 		default:
@@ -454,6 +479,304 @@ public static class ExtraTools
 		default:
 			return PyDict.Of("installed", snap.Get("installed"), "running", snap.Get("running"), "state", snap.Get("label"), "room", snap.Get("room"), "error", snap.Get("error"), "game_running", snap.Get("game_running"));
 		}
+	}
+
+	// ---------------- 内置文件读写（fs_list / fs_read / fs_write） ----------------
+
+	private const int _FS_MAX_LIST = 200;
+
+	private const long _FS_MAX_READ = 524288L;
+
+	private const long _FS_MAX_WRITE = 262144L;
+
+	private const int _FS_MAX_LINES = 2000;
+
+	private static readonly HashSet<string> _FS_BINARY_SUFFIX = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+	{
+		".jar", ".zip", ".7z", ".rar", ".gz", ".tar", ".exe", ".dll", ".bin", ".so", ".dylib", ".class",
+		".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".bmp", ".psd",
+		".ogg", ".wav", ".mp3", ".flac", ".mp4", ".mkv", ".webm",
+		".ttf", ".otf", ".woff", ".woff2", ".eot",
+		".pdf", ".pak", ".nbt", ".dat", ".dat_old", ".mca", ".mcr", ".litematic"
+	};
+
+	private static readonly HashSet<string> _FS_DENY_TOP = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+	{
+		"windows", "program files", "program files (x86)", "programdata", "$recycle.bin", "system volume information"
+	};
+
+	/// <summary>fs_* 允许的根目录：启动器数据目录、实例根，以及版本隔离时的 versions\&lt;版本&gt;\（有独立 saves 的版本目录）。实例根本身包含 versions，单列出来是为了把隔离版本目录说清楚。</summary>
+	public static List<string> FsRoots(Instance instance)
+	{
+		List<string> roots = new List<string>();
+		void Add(string p)
+		{
+			if (string.IsNullOrEmpty(p))
+			{
+				return;
+			}
+			string a = PPath.Abs(p);
+			if (!roots.Any((string r) => string.Equals(r, a, StringComparison.OrdinalIgnoreCase)))
+			{
+				roots.Add(a);
+			}
+		}
+		Add(Utils.ROOT);
+		if (instance != null)
+		{
+			Add(instance.path);
+			try
+			{
+				string vdir = instance.VersionsDir();
+				if (Directory.Exists(vdir))
+				{
+					foreach (string v in Directory.GetDirectories(vdir).OrderBy((string x) => x, StringComparer.OrdinalIgnoreCase))
+					{
+						if (Directory.Exists(Path.Combine(v, "saves")))
+						{
+							Add(v);
+						}
+					}
+				}
+			}
+			catch (Exception)
+			{
+			}
+		}
+		return roots;
+	}
+
+	/// <summary>拒绝列表：锚点后的前两级命中系统目录就不放行（就算用户把实例根设到了那里）。</summary>
+	public static bool FsDenied(PPath p)
+	{
+		List<string> parts = p.Parts;
+		int n = (p.Anchor.StartsWith("\\\\")) ? 3 : 1;
+		foreach (string part in parts.Skip(1).Take(n))
+		{
+			if (_FS_DENY_TOP.Contains(part))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/// <summary>fs_* 三条工具共用的路径守卫：绝对路径必须落在允许根内，相对路径基于实例根解析，逃出允许根或命中拒绝列表就抛 ConfigEditError。</summary>
+	public static PPath FsResolve(string raw, List<string> roots, string baseDir)
+	{
+		string text = (raw ?? "").Trim();
+		if (text.Length == 0)
+		{
+			throw new ConfigEditError("路径不能为空");
+		}
+		PPath pPath = new PPath(text.Replace("/", "\\"));
+		if (pPath.Parts.Contains(".."))
+		{
+			throw new ConfigEditError("路径里不能用 ..");
+		}
+		PPath pPath2;
+		if (pPath.IsAbsolute)
+		{
+			pPath2 = pPath.Resolve();
+		}
+		else
+		{
+			if (pPath.Drive.Length > 0)
+			{
+				throw new ConfigEditError("不能只写盘符，请写完整绝对路径或相对实例根的路径");
+			}
+			pPath2 = (new PPath(string.IsNullOrEmpty(baseDir) ? Utils.ROOT : baseDir).Resolve() / text.Replace("/", "\\")).Resolve();
+		}
+		List<string> list = roots ?? FsRoots(null);
+		bool ok = list.Any((string r) =>
+		{
+			PPath pPath3 = new PPath(r).Resolve();
+			return pPath2.Equals(pPath3) || pPath2.IsRelativeTo(pPath3.ToString());
+		});
+		if (!ok)
+		{
+			throw new ConfigEditError("路径不在允许范围内：只能访问启动器数据目录或实例目录");
+		}
+		if (FsDenied(pPath2))
+		{
+			throw new ConfigEditError("不允许访问系统目录");
+		}
+		return pPath2;
+	}
+
+	private static (List<string> roots, string baseDir) FsContext(BackendApi backend, PyDict args)
+	{
+		Instance instance = null;
+		try
+		{
+			instance = Tools._inst(backend, args);
+		}
+		catch (Exception)
+		{
+		}
+		string baseDir = instance?.path;
+		if (string.IsNullOrEmpty(baseDir))
+		{
+			baseDir = Utils.ROOT;
+		}
+		return (FsRoots(instance), baseDir);
+	}
+
+	private static Regex FsGlob(string glob)
+	{
+		if (string.IsNullOrWhiteSpace(glob))
+		{
+			return null;
+		}
+		return new Regex("^" + Regex.Escape(glob.Trim()).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+	}
+
+	private static PyDict FsEntry(PPath p)
+	{
+		bool dir = p.IsDir();
+		long bytes = 0L;
+		string mtime = "";
+		try
+		{
+			if (dir)
+			{
+				mtime = Stamp(new DateTimeOffset(Directory.GetLastWriteTimeUtc(p.Abs())).ToUnixTimeSeconds());
+			}
+			else
+			{
+				FileInfo fi = new FileInfo(p.Abs());
+				bytes = fi.Length;
+				mtime = Stamp(new DateTimeOffset(fi.LastWriteTimeUtc).ToUnixTimeSeconds());
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return PyDict.Of("name", p.Name, "type", dir ? "dir" : "file", "bytes", bytes, "mtime", mtime);
+	}
+
+	public static object FsList(PyDict args, List<string> roots, string baseDir)
+	{
+		args = args ?? new PyDict();
+		PPath pPath = FsResolve(Py.Str(Py.Or(args.Get("path"), "")), roots, baseDir);
+		if (pPath.IsFile())
+		{
+			return Py.L(FsEntry(pPath));
+		}
+		if (!pPath.IsDir())
+		{
+			throw new FileNotFoundError("[Errno 2] No such file or directory: " + pPath.Abs());
+		}
+		Regex glob = FsGlob(Py.Str(Py.Or(args.Get("glob"), "")));
+		List<string> list = new List<string>();
+		try
+		{
+			list.AddRange(Directory.EnumerateFileSystemEntries(pPath.Abs()));
+		}
+		catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+		{
+			throw new PermissionError("读不了目录 " + pPath.Abs() + ": " + Py.ExcStr(ex));
+		}
+		list.Sort(AiFs.ComparePaths);
+		List<object> list2 = new List<object>();
+		foreach (string item in list)
+		{
+			PPath pPath2 = new PPath(item);
+			if (glob != null && !glob.IsMatch(pPath2.Name))
+			{
+				continue;
+			}
+			list2.Add(FsEntry(pPath2));
+			if (list2.Count >= _FS_MAX_LIST)
+			{
+				break;
+			}
+		}
+		return list2;
+	}
+
+	public static object FsRead(PyDict args, List<string> roots, string baseDir)
+	{
+		args = args ?? new PyDict();
+		PPath pPath = FsResolve(Py.Str(Py.Or(args.Get("path"), "")), roots, baseDir);
+		if (!pPath.IsFile())
+		{
+			throw new FileNotFoundError("[Errno 2] No such file or directory: " + pPath.Abs());
+		}
+		if (_FS_BINARY_SUFFIX.Contains(pPath.Suffix))
+		{
+			return "这是二进制文件（" + pPath.Suffix + "），读不了文本。用 fs_list 看看目录里有什么能读的。";
+		}
+		long num = new FileInfo(pPath.Abs()).Length;
+		if (num > _FS_MAX_READ)
+		{
+			return "文件太大（" + (num / 1024) + " KB，上限 512 KB），读不了全文。可以先用 fs_list 确认位置，再让用户手动处理。";
+		}
+		byte[] array = File.ReadAllBytes(pPath.Abs());
+		if (array.Take(4096).Any((byte b) => b == 0))
+		{
+			return "文件里有空字节，像是二进制文件，不按文本读。";
+		}
+		string text = AiFs.ReadText(pPath.ToString(), replace: true);
+		List<string> list = text.Split('\n').ToList();
+		if (list.Count > 0 && list[list.Count - 1].Length == 0)
+		{
+			list.RemoveAt(list.Count - 1);
+		}
+		int count = list.Count;
+		long num2 = Py.Int(Py.Or(args.Get("offset_line"), -1L));
+		long num3 = Py.Int(Py.Or(args.Get("max_lines"), 200L));
+		if (num3 <= 0)
+		{
+			num3 = 200L;
+		}
+		if (num3 > _FS_MAX_LINES)
+		{
+			num3 = _FS_MAX_LINES;
+		}
+		IEnumerable<string> source;
+		string range;
+		if (num2 >= 0)
+		{
+			int num4 = (int)Math.Min(num2, count);
+			source = list.Skip(num4).Take((int)num3);
+			range = "第 " + num4 + "–" + Math.Min(count, num4 + (int)num3) + " 行";
+		}
+		else
+		{
+			int num5 = Math.Max(0, count - (int)num3);
+			source = list.Skip(num5);
+			range = "最后 " + (count - num5) + " 行";
+		}
+		string text2 = string.Join("\n", source);
+		string text3 = (count > 0) ? ("共 " + count + " 行，显示" + range + "。") : "文件是空的。";
+		return text3 + "\n" + text2;
+	}
+
+	public static object FsWrite(PyDict args, List<string> roots, string baseDir)
+	{
+		args = args ?? new PyDict();
+		PPath pPath = FsResolve(Py.Str(Py.Or(args.Get("path"), "")), roots, baseDir);
+		if (pPath.IsDir())
+		{
+			throw new ConfigEditError("目标是个目录，不能当文件写");
+		}
+		string text = Py.Str(Py.Or(args.Get("content"), ""));
+		byte[] bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(text);
+		if ((long)bytes.Length > _FS_MAX_WRITE)
+		{
+			return "写入内容太大（" + (bytes.Length / 1024) + " KB，上限 256 KB），拒绝了。";
+		}
+		Directory.CreateDirectory(pPath.Parent.Abs());
+		if (Py.Truthy(args.Get("append")) && pPath.IsFile())
+		{
+			AiFs.WriteText(pPath.ToString(), AiFs.ReadText(pPath.ToString(), replace: true) + text);
+		}
+		else
+		{
+			AiFs.WriteText(pPath.ToString(), text);
+		}
+		return "已" + (Py.Truthy(args.Get("append")) ? "追加" : "写入") + " " + pPath.Abs() + "（" + bytes.Length + " 字节）";
 	}
 
 	// ---------------- 文件夹 ----------------

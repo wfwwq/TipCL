@@ -467,6 +467,15 @@ public static class Tools
 		}
 		case "install_modpack":
 			return new List<string> { text };
+		case "fs_write":
+			try
+			{
+				return new List<string> { ExtraTools.FsResolve(Py.S(args.Get("path")), ExtraTools.FsRoots(instance), text).Abs() };
+			}
+			catch (Exception)
+			{
+				return new List<string>();
+			}
 		case "install_game":
 			return new List<string> { instance.VersionsDir() };
 		case "download_java":

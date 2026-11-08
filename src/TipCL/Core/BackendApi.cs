@@ -949,46 +949,46 @@ public partial class BackendApi
 		return Mods.ListInstanceModEntries(instance2);
 	}
 
-	private List<object> ContentNames(object instance, string sub)
+	private List<object> ContentNames(object instance, string sub, object version = null)
 	{
-		return ((IEnumerable<string>)Mods.ListContentFiles(_instance(instance), sub)).Select((Func<string, object>)((string p) => new PPath(p).Name)).ToList();
+		return ((IEnumerable<string>)Mods.ListContentFiles(_instance(instance), sub, version)).Select((Func<string, object>)((string p) => new PPath(p).Name)).ToList();
 	}
 
-	public object get_installed_shaders(object instance)
+	public object get_installed_shaders(object instance, [Def("")] object version = null)
 	{
-		return ContentNames(instance, "shaderpacks");
+		return ContentNames(instance, "shaderpacks", version);
 	}
 
-	public object get_installed_resourcepacks(object instance)
+	public object get_installed_resourcepacks(object instance, [Def("")] object version = null)
 	{
-		return ContentNames(instance, "resourcepacks");
+		return ContentNames(instance, "resourcepacks", version);
 	}
 
-	public object get_installed_datapacks(object instance)
+	public object get_installed_datapacks(object instance, [Def("")] object version = null)
 	{
-		return ContentNames(instance, "datapacks");
+		return ContentNames(instance, "datapacks", version);
 	}
 
-	private object DeleteContent(object instance, string sub, object filename)
+	private object DeleteContent(object instance, string sub, object filename, object version = null)
 	{
-		Mods.DeleteContentFile(_instance(instance), sub, filename);
+		Mods.DeleteContentFile(_instance(instance), sub, filename, version);
 		Emit("ui_changed", new PyDict());
 		return null;
 	}
 
-	public object delete_shader(object instance, object filename)
+	public object delete_shader(object instance, object filename, [Def("")] object version = null)
 	{
-		return DeleteContent(instance, "shaderpacks", filename);
+		return DeleteContent(instance, "shaderpacks", filename, version);
 	}
 
-	public object delete_resourcepack(object instance, object filename)
+	public object delete_resourcepack(object instance, object filename, [Def("")] object version = null)
 	{
-		return DeleteContent(instance, "resourcepacks", filename);
+		return DeleteContent(instance, "resourcepacks", filename, version);
 	}
 
-	public object delete_datapack(object instance, object filename)
+	public object delete_datapack(object instance, object filename, [Def("")] object version = null)
 	{
-		return DeleteContent(instance, "datapacks", filename);
+		return DeleteContent(instance, "datapacks", filename, version);
 	}
 
 	public object get_mods_targets(object instance)
@@ -1662,8 +1662,10 @@ public partial class BackendApi
 		Instance instance2 = _instance(Py.Or(instance, pyDict["instance"]));
 		PyDict pyDict2 = Mods.CONTENT_KINDS[kind];
 		DownloadManager downloadManager = _dm(ctx);
-		ctx.Log("安装到 " + instance2.name + "/" + Py.Str(pyDict2["subdir"]));
-		List<object> source = Py.ListOr(Py.Or(Py.DictOr(Py.Or(Mods.InstallContentFromSource(downloadManager, instance2, (string)pyDict2["subdir"], pyDict, downloadManager.on_progress), new PyDict()))["files"], new List<object>()));
+		// 版本开启隔离时，资源包/光影/数据包要装到 versions\<版本>\ 对应目录（与 --gameDir 一致）
+		string version = Py.S(Py.Or(pyDict["version"], ""));
+		ctx.Log("安装到 " + Mods.ContentDir(instance2, (string)pyDict2["subdir"], version));
+		List<object> source = Py.ListOr(Py.Or(Py.DictOr(Py.Or(Mods.InstallContentFromSource(downloadManager, instance2, (string)pyDict2["subdir"], pyDict, downloadManager.on_progress, version), new PyDict()))["files"], new List<object>()));
 		string text = string.Join(", ", source.Select(Py.Str));
 		ctx.Log("完成: " + ((text.Length > 0) ? text : Py.Str(name)));
 		if (kind == "datapack")

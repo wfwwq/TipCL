@@ -577,9 +577,20 @@ public static class Mods
 		return pPath4.Name;
 	}
 
-	public static List<string> ListContentFiles(Instance instance, string subdir)
+	// 内容目录（resourcepacks/shaderpacks/datapacks）：版本开启隔离时游戏实际读写
+	// versions\<版本>\ 下的同名目录，这里与 --gameDir 保持一致
+	public static string ContentDir(Instance instance, string subdir, object version_id = null)
 	{
-		string text = PPath.Join(instance.path, subdir);
+		if (Py.Truthy(version_id))
+		{
+			return PPath.Join(VersionSettings.GameDir(instance, version_id), subdir);
+		}
+		return PPath.Join(instance.path, subdir);
+	}
+
+	public static List<string> ListContentFiles(Instance instance, string subdir, object version_id = null)
+	{
+		string text = ContentDir(instance, subdir, version_id);
 		if (!LocalFs.IsDir(text))
 		{
 			return new List<string>();
@@ -589,9 +600,9 @@ public static class Mods
 			select p).OrderBy<string, string>((string p) => Py.Lower(new PPath(p).Name), StringComparer.Ordinal).ToList();
 	}
 
-	public static void DeleteContentFile(Instance instance, string subdir, object filename)
+	public static void DeleteContentFile(Instance instance, string subdir, object filename, object version_id = null)
 	{
-		PPath pPath = new PPath(PPath.Join(instance.path, subdir)).Resolve();
+		PPath pPath = new PPath(ContentDir(instance, subdir, version_id)).Resolve();
 		PPath pPath2 = (pPath / Py.AsStr(filename, "__fspath__")).Resolve();
 		if (!pPath2.Parent.Equals(pPath))
 		{
@@ -1174,10 +1185,10 @@ public static class Mods
 		return PyDict.Of("source", "modrinth", "slug", slug, "files", Py.L(new PPath(text2).Name));
 	}
 
-	public static PyDict InstallCfContent(DownloadManager dm, object addon_id, Instance instance, string subdir, object mc_version = null, string api_key = null, Action<string, long, long> on_progress = null, object file_id = null)
+	public static PyDict InstallCfContent(DownloadManager dm, object addon_id, Instance instance, string subdir, object mc_version = null, string api_key = null, Action<string, long, long> on_progress = null, object file_id = null, string dest_dir = null)
 	{
 		instance.EnsureStandardDirs();
-		string text = PPath.Join(instance.path, subdir);
+		string text = (Py.Truthy(dest_dir) ? dest_dir : PPath.Join(instance.path, subdir));
 		Utils.EnsureDir(text);
 		List<object> list = Iter(Py.Or(CfDetail(dm, addon_id, api_key)["latestFiles"], new List<object>()));
 		if (list.Count == 0)
@@ -1244,11 +1255,11 @@ public static class Mods
 		throw new ModError("下载失败: " + ((ex == null) ? "None" : Py.ExcStr(ex)));
 	}
 
-	public static PyDict InstallContentFromSource(DownloadManager dm, Instance instance, string subdir, PyDict extra = null, Action<string, long, long> on_progress = null)
+	public static PyDict InstallContentFromSource(DownloadManager dm, Instance instance, string subdir, PyDict extra = null, Action<string, long, long> on_progress = null, object version_id = null)
 	{
 		extra = extra ?? new PyDict();
 		instance.EnsureStandardDirs();
-		string text = PPath.Join(instance.path, subdir);
+		string text = ContentDir(instance, subdir, version_id);
 		Utils.EnsureDir(text);
 		object obj = Py.Or(extra["game_version"], extra["mc_version"]);
 		if (obj is string text2 && (Py.Strip(text2).Length == 0 || text2.StartsWith("全部", StringComparison.Ordinal)))
@@ -1281,7 +1292,7 @@ public static class Mods
 		object file_id = Py.Or(extra["file_id"], extra["version_id"]);
 		if (Py.Truthy(extra["id"]) && (text6.StartsWith("curse", StringComparison.Ordinal) || Py.Truthy(extra["file_id"])))
 		{
-			return InstallCfContent(dm, extra["id"], instance, subdir, obj, null, on_progress, file_id);
+			return InstallCfContent(dm, extra["id"], instance, subdir, obj, null, on_progress, file_id, text);
 		}
 		object obj2 = Py.Or(extra["slug"], extra["name"]);
 		if (!Py.Truthy(obj2))
