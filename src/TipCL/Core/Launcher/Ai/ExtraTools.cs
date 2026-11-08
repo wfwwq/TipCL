@@ -61,7 +61,7 @@ public static class ExtraTools
 		new ToolMetaInfo("fs_write", ro: false, "write_local", "high", lr: false)
 	};
 
-	public static readonly (string[] keys, string[] extra)[] Keywords = new(string[], string[])[6]
+	public static readonly (string[] keys, string[] extra)[] Keywords = new(string[], string[])[7]
 	{
 		(new string[14] { "卡顿", "很卡", "掉帧", "帧数", "fps", "FPS", "lag", "优化", "流畅", "内存", "JVM", "jvm", "GC", "电脑配置" }, new string[3] { "get_system_info", "diagnose_lag", "tune_jvm" }),
 		(new string[9] { "备份", "回滚", "还原", "恢复", "存档", "坏档", "世界", "save", "backup" }, new string[5] { "list_saves", "backup_save", "list_save_backups", "restore_save_backup", "open_folder" }),

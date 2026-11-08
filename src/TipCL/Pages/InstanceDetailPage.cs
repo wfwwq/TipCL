@@ -39,6 +39,8 @@ public sealed class InstanceDetailPage : PageBase
 
 	private readonly TextBlock _sharedNote;
 
+	private readonly TextBlock _isolatedNote;
+
 	public override string Title => _inst;
 
 	public InstanceDetailPage(InstanceInfo info, Action back)
@@ -73,6 +75,11 @@ public sealed class InstanceDetailPage : PageBase
 		_sharedNote.VerticalAlignment = VerticalAlignment.Center;
 		_sharedNote.MaxWidth = 420.0;
 		_sharedNote.Show(shown: false);
+		_isolatedNote = Ui.Txt(I18n.L("该版本已开启隔离：模组/日志/资源包位于 versions\\<版本> 目录下，与实例根目录分开"), 12.5, bold: false, "B.InkMuted");
+		_isolatedNote.TextWrapping = TextWrapping.Wrap;
+		_isolatedNote.VerticalAlignment = VerticalAlignment.Center;
+		_isolatedNote.MaxWidth = 420.0;
+		_isolatedNote.Show(shown: false);
 		_verBox.MinWidth = 200.0;
 		_verBox.SelectionChanged += delegate
 		{
@@ -109,6 +116,7 @@ public sealed class InstanceDetailPage : PageBase
 			HorizontalAlignment = HorizontalAlignment.Left
 		}, 0);
 		bar.Add(_sharedNote, 0, 1);
+		bar.Add(_isolatedNote, 0, 1);
 		bar.Add(_verBox.VCenter().M(12.0, 0.0, 0.0, 0.0), 0, 2);
 		bar.Add(_more.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 3);
 
@@ -161,6 +169,7 @@ public sealed class InstanceDetailPage : PageBase
 			_segBtns[i].Show(!shared);
 		}
 		_sharedNote.Show(shared);
+		_isolatedNote.Show(cur != null && cur.Isolated);
 		if (shared && _seg < 4)
 		{
 			ShowSeg(4);

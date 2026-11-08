@@ -6,9 +6,10 @@ namespace TipCL.Core.Launcher.Ai;
 
 public static class Diagnose
 {
-	public static PyDict Run(Instance instance, string extraLog = "")
+	public static PyDict Run(Instance instance, string extraLog = "", string version = "")
 	{
-		PyDict pyDict = Crash.AnalyzeInstance(instance, extraLog);
+		// 版本开启隔离时日志/崩溃报告在 versions\<版本>\ 下（与 --gameDir 一致）
+		PyDict pyDict = Crash.AnalyzeInstance(instance, extraLog, manual: true, version);
 		List<object> list = new List<object>();
 		foreach (PyDict item in Py.ListOr(Py.Or(pyDict.Get("reasons"), new List<object>())))
 		{
@@ -27,9 +28,10 @@ public static class Diagnose
 		return PyDict.Of("instance", Py.Or(pyDict.Get("instance"), instance.name), "has_latest", Py.Truthy(pyDict.Get("has_latest")), "has_crash", Py.Truthy(pyDict.Get("has_crash")), "has_hs_err", Py.Truthy(pyDict.Get("has_hs_err")), "latest_path", obj, "crash_path", Py.Or(pyDict.Get("direct_file"), ""), "findings", list, "hint", Py.Or(pyDict.Get("summary"), pyDict.Get("detail"), ""), "detail", Py.Or(pyDict.Get("detail"), ""), "latest_tail", Py.Or(pyDict.Get("log_mc"), ""), "crash_tail", Py.Or(pyDict.Get("log_crash"), ""));
 	}
 
-	public static PyDict CollectLogs(Instance instance)
+	public static PyDict CollectLogs(Instance instance, string version = "")
 	{
-		string path = instance.path;
+		// 版本开启隔离时按 --gameDir 读 versions\<版本>\ 下的日志
+		string path = ((version.Length > 0) ? VersionSettings.GameDir(instance, version) : instance.path);
 		string text = "";
 		string text2 = "";
 		string text3 = "";
@@ -74,9 +76,9 @@ public static class Diagnose
 		return PyDict.Of("latest_path", text4, "crash_path", text5, "hs_path", text6, "latest", text, "crash", text2, "hs_err", text3, "debug_tail", Py.Slice(s, -20000));
 	}
 
-	public static string LogExcerpt(Instance instance, string kind = "latest", int maxChars = 6000)
+	public static string LogExcerpt(Instance instance, string kind = "latest", int maxChars = 6000, string version = "")
 	{
-		PyDict pyDict = CollectLogs(instance);
+		PyDict pyDict = CollectLogs(instance, version);
 		string key = ((kind == "crash") ? "crash" : ((kind == "hs") ? "hs_err" : "latest"));
 		string key2 = ((kind == "crash") ? "crash_path" : ((kind == "hs") ? "hs_path" : "latest_path"));
 		string text = Py.S(pyDict.Get(key));

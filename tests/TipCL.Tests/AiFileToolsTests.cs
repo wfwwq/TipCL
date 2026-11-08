@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using TipCL.Core;
 using TipCL.Core.Launcher.Ai;
 using Xunit;
 

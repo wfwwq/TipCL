@@ -123,7 +123,26 @@ public static class Feedback
 
 	private static Dictionary<string, string> _headers()
 	{
-		return new Dictionary<string, string> { { "X-TipCL-Client", "TipCL/1.0.10" } };
+		// ingest 服务器只认 PyMCL 客户端头（与 Android 端共用），X-TipCL-Client 会被 403
+		return new Dictionary<string, string> { { "X-PyMCL-Client", "PyMCL/" + AppInfo.APP_VERSION } };
+	}
+
+	// ingest 服务器认可的 category 值域（同 Android FeedbackLogic.CATEGORY）
+	private static readonly string[] _server_categories = new string[4] { "bug", "feature", "crash", "other" };
+
+	// Sysinfo.Collect 返回 PyDict；服务器/Android 端约定 sysinfo 为多行文本（key: value 每行一条）
+	private static string _sysinfo_text(PyDict info)
+	{
+		if (info == null)
+		{
+			return "";
+		}
+		List<string> lines = new List<string>();
+		foreach (KeyValuePair<string, object> pair in info)
+		{
+			lines.Add(pair.Key + ": " + Py.Str(pair.Value));
+		}
+		return string.Join("\n", lines);
 	}
 
 	public static PyDict _post(string path, PyDict payload, double timeout = 20.0)
@@ -137,7 +156,7 @@ public static class Feedback
 		AuthResponse authResponse;
 		try
 		{
-			authResponse = AuthHttp.Send("POST", url, null, payload, hasJson: true, _headers(), timeout, "TipCL/1.0.10");
+			authResponse = AuthHttp.Send("POST", url, null, payload, hasJson: true, _headers(), timeout, "PyMCL/" + AppInfo.APP_VERSION);
 		}
 		catch (AuthHttpException ex)
 		{
@@ -213,6 +232,8 @@ public static class Feedback
 		{
 			cat = "other";
 		}
+		// 服务器只认 bug/feature/crash/other，桌面端特有分类上送前归并为 other
+		string wireCat = _server_categories.Contains(cat) ? cat : "other";
 		string text = CpSlice(StripArg(title), 120);
 		string text2 = CpSlice(StripArg(body), 16000);
 		string text3 = CpSlice(StripArg(contact), 120);
@@ -224,10 +245,10 @@ public static class Feedback
 		{
 			text = CpSlice((text2.Length > 0) ? Py.SplitLines(text2)[0] : "未命名反馈", 80);
 		}
-		PyDict pyDict = PyDict.Of("device_id", DeviceId(), "category", cat, "title", text, "body", text2, "contact", text3, "app_version", AppInfo.APP_VERSION, "crash", (crash is PyDict) ? crash : null);
+		PyDict pyDict = PyDict.Of("device_id", DeviceId(), "category", wireCat, "title", text, "body", text2, "contact", text3, "app_version", AppInfo.APP_VERSION, "crash", (crash is PyDict) ? crash : null);
 		if (Py.Truthy(include_sysinfo))
 		{
-			pyDict["sysinfo"] = Sysinfo.Collect(force: true, scan_system_java);
+			pyDict["sysinfo"] = _sysinfo_text(Sysinfo.Collect(force: true, scan_system_java));
 		}
 		PyDict pyDict2 = _post("/api/v1/feedback", pyDict, 25.0);
 		_history_add(PyDict.Of("id", Py.Or(pyDict2["id"], ""), "ts", Py.Time(), "category", cat, "title", text, "ok", true));
