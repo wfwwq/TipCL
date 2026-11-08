@@ -88,3 +88,57 @@ public class PluginMarketTests
 		Assert.Equal("m", Py.S(merged[0].Get("marketName")));
 	}
 }
+
+public class PluginMarketMirrorExtraTests
+{
+	[Fact]
+	public void IndexUrls_BuiltFromRawPrefixAndRepoPath()
+	{
+		var urls = PluginMarket.DefaultMirrors().Select(m => m.RawPrefix + PluginMarket.IndexRepoPath).ToList();
+		Assert.Equal(6, urls.Count);
+		Assert.All(urls, u => Assert.EndsWith("/wfwwq/TipCL-market/main/index.json", u));
+		Assert.Contains("https://gitproxy.mrhjx.cn/https://raw.githubusercontent.com/wfwwq/TipCL-market/main/index.json", urls);
+		Assert.Contains("https://raw.githubusercontent.com/wfwwq/TipCL-market/main/index.json", urls);
+	}
+
+	[Fact]
+	public void DownloadCandidates_CustomMirrorParticipates()
+	{
+		var mirrors = new List<PluginMarket.GhMirror>
+		{
+			new() { Id = "custom-x", Label = "我的镜像", RawPrefix = "https://gh.example.com/https://raw.githubusercontent.com", DownloadPrefix = "https://gh.example.com/https://github.com", Enabled = true, Priority = 1 },
+			new() { Id = "github", Label = "GitHub 官方源", RawPrefix = "https://raw.githubusercontent.com", DownloadPrefix = "https://github.com", Enabled = true, Priority = 2 },
+		};
+		var list = PluginMarket.DownloadCandidates("https://github.com/a/b/releases/download/v/p.zip", mirrors);
+		Assert.Equal(new[]
+		{
+			"https://gh.example.com/https://github.com/a/b/releases/download/v/p.zip",
+			"https://github.com/a/b/releases/download/v/p.zip",
+		}, list);
+	}
+
+	[Fact]
+	public void DownloadCandidates_DisabledMirrorExcluded()
+	{
+		var mirrors = PluginMarket.EnabledMirrors(new List<object>
+		{
+			PyDict.Of("id", "github", "name", "GitHub 官方源", "raw_prefix", "https://raw.githubusercontent.com", "download_prefix", "https://github.com", "enabled", true, "priority", 1L),
+			PyDict.Of("id", "gh-proxy", "name", "gh-proxy.com 镜像", "raw_prefix", "https://gh-proxy.com/https://raw.githubusercontent.com", "download_prefix", "https://gh-proxy.com/https://github.com", "enabled", false, "priority", 2L),
+		});
+		var list = PluginMarket.DownloadCandidates("https://github.com/a/b/releases/download/v/p.zip", mirrors);
+		Assert.Single(list);
+		Assert.Equal("https://github.com/a/b/releases/download/v/p.zip", list[0]);
+	}
+
+	[Fact]
+	public void EnabledMirrors_InvalidPrefixDropped()
+	{
+		// 前缀不是 https:// 的条目丢弃，不能让拼接出 http:// 明文或坏地址
+		var mirrors = PluginMarket.EnabledMirrors(new List<object>
+		{
+			PyDict.Of("id", "bad", "name", "坏镜像", "raw_prefix", "http://evil.example.com", "download_prefix", "http://evil.example.com", "enabled", true, "priority", 1L),
+			PyDict.Of("id", "github", "name", "GitHub 官方源", "raw_prefix", "https://raw.githubusercontent.com", "download_prefix", "https://github.com", "enabled", true, "priority", 2L),
+		});
+		Assert.Equal(new[] { "github" }, mirrors.Select(m => m.Id));
+	}
+}

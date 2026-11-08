@@ -236,6 +236,13 @@ public static class DevShot
 				await Task.Delay(1200);
 			}
 		}
+		// --subview plugin-settings：插件页「⋯ → 插件设置」子视图（dev-shot 专用入口，Context menus 是独立弹层拍不到）
+		string subview = ArgVal(args, "--subview") ?? "";
+		if (subview == "plugin-settings" && page is TipCL.Pages.Plugins.PluginsPage plugPage)
+		{
+			plugPage.ShowSettingsSubViewForDevShot();
+			await Task.Delay(1500);
+		}
 		// 后端主题同步可能晚到，渲染前再钉一次主题
 		await win.Dispatcher.InvokeAsync(delegate
 		{

@@ -222,6 +222,12 @@ public sealed partial class PluginsPage : PageBase
 		}
 	}
 
+	/// <summary>dev-shot 专用：渲染「⋯ → 插件设置」子视图（Context menus 是独立弹层，离屏截图拍不到）。</summary>
+	internal void ShowSettingsSubViewForDevShot()
+	{
+		ShowSubView(I18n.L("插件设置"), PageBase.ScrollBody(PluginSettingsCard.Build()));
+	}
+
 	public override void OnEvent(BridgeEvent ev)
 	{
 		switch (ev.Event)

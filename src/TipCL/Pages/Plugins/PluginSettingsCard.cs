@@ -86,7 +86,7 @@ public static class PluginSettingsCard
 		CheckBox unverified = Ui.Switch();
 		// —— 加速镜像（照 MaiBot git_mirror_service 语义）：每行 = 一个镜像对象（enabled + priority 数字），
 		//    ↑↓ 交换相邻镜像的 priority，整份列表持久化到 plugin_mirrors ——
-		SPanel mirrorHost = Ui.V(2.0);
+		SPanel mirrorHost = Ui.V(8.0);
 		List<PluginMarket.GhMirror> mirrors = PluginMarket.DefaultMirrors();
 		bool mirrorSyncing = false;
 		async Task SaveMirrorsAsync()
@@ -266,7 +266,7 @@ public static class PluginSettingsCard
 				(win.GetPage("plugins") as PluginsPage)?.ShowTab("dev");
 			}
 		}, "\ue99a");
-		Border card = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("插件"), I18n.L("插件市场、加速镜像、未审核插件、插件可用的模型供应商")), Ui.Field(I18n.L("插件市场地址"), Ui.H(10.0, edit, summary.VCenter()), I18n.L("填写插件市场的索引地址，可以填多个")), Ui.Field(I18n.L("加速镜像"), Ui.V(6.0, Ui.Small(I18n.L("开关与顺序即优先级：排在前面的先尝试，全部失败才报错。Raw 前缀用于市场索引，下载前缀用于插件包")).Wrap(), mirrorHost, Ui.H(6.0, mirrorAdd, mirrorReset))), Ui.Field(I18n.L("允许安装未审核插件"), unverified, I18n.L("关着时，市场里未审核的插件要先打开这里才能安装")), Ui.Field("", Ui.H(8.0, manage, providers))));
+		Border card = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("插件"), I18n.L("插件市场、加速镜像、未审核插件、插件可用的模型供应商")), Ui.Field(I18n.L("插件市场地址"), Ui.H(10.0, edit, summary.VCenter()), I18n.L("填写插件市场的索引地址，可以填多个")), Ui.Field("", Ui.V(6.0, Ui.Txt(I18n.L("加速镜像"), 13.0, bold: true), Ui.Small(I18n.L("开关与顺序即优先级：排在前面的先尝试，全部失败才报错。Raw 前缀用于市场索引，下载前缀用于插件包")).Wrap(), mirrorHost, Ui.H(6.0, mirrorAdd, mirrorReset))), Ui.Field(I18n.L("允许安装未审核插件"), unverified, I18n.L("关着时，市场里未审核的插件要先打开这里才能安装")), Ui.Field("", Ui.H(8.0, manage, providers))));
 		card.Loaded += delegate
 		{
 			if (!AppServices.Ready)
