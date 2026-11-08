@@ -4191,8 +4191,19 @@ public partial class BackendApi
 		// 插件市场（DESIGN §9）：未配置时下发内置默认索引（官方 + 加速镜像）
 		List<string> marketIndexes = Py.ListOr(G("plugin_market_indexes")).Select(Py.S).Where((string u) => u.Trim().Length > 0).ToList();
 		pyDict["plugin_market_indexes"] = (marketIndexes.Count > 0) ? marketIndexes.Cast<object>().ToList() : Plugins.PluginMarket.DefaultIndexUrls.Cast<object>().ToList();
-		// 加速镜像：未配置时下发内置默认顺序（全部启用），UI 与内核默认保持一致
-		pyDict["plugin_mirrors"] = Plugins.PluginMarket.EnabledMirrors().Select((Plugins.PluginMarket.GhMirror m) => m.Id).Cast<object>().ToList();
+		// 加速镜像：未配置时下发内置默认（全部启用），已配置时下发存储的完整镜像列表；UI 与内核默认保持一致
+		{
+			object mirrorSentinel = new object();
+			object mirrorValue = c.Get(Plugins.PluginMarket.SettingMirrors, mirrorSentinel);
+			List<Plugins.PluginMarket.GhMirror> mirrorsOut = ((ReferenceEquals(mirrorValue, mirrorSentinel) || Plugins.PluginMarket.EnabledMirrors(mirrorValue).Count == 0) ? Plugins.PluginMarket.DefaultMirrors() : Plugins.PluginMarket.EnabledMirrors(mirrorValue));
+			pyDict["plugin_mirrors"] = mirrorsOut.Select((Plugins.PluginMarket.GhMirror m) => (object)PyDict.Of(
+				"id", m.Id,
+				"name", m.Label,
+				"raw_prefix", m.RawPrefix,
+				"download_prefix", m.DownloadPrefix,
+				"enabled", m.Enabled,
+				"priority", (long)m.Priority)).ToList();
+		}
 		pyDict["plugin_allow_unverified"] = Py.Truthy(GD("plugin_allow_unverified", false));
 		return pyDict;
 		object G(string k)
@@ -4608,6 +4619,43 @@ public partial class BackendApi
 		if (Has("plugin_allow_unverified"))
 		{
 			pyDict["plugin_allow_unverified"] = Py.Truthy(G("plugin_allow_unverified"));
+		}
+		// 加速镜像：整份镜像对象列表（id/name/raw_prefix/download_prefix/enabled/priority），照 MaiBot git_mirrors 的结构持久化
+		if (Has("plugin_mirrors"))
+		{
+			List<object> mirrors = new List<object>();
+			HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
+			foreach (PyDict m in Py.ListOr(G("plugin_mirrors")).OfType<PyDict>())
+			{
+				string mid = Py.S(m.Get("id")).Trim();
+				if (mid.Length == 0 || !ids.Add(mid))
+				{
+					continue;
+				}
+				string rawPrefix = Py.S(m.Get("raw_prefix")).Trim();
+				string dlPrefix = Py.S(m.Get("download_prefix")).Trim();
+				if (!rawPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || !dlPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+				{
+					continue;
+				}
+				long priority;
+				try
+				{
+					priority = Py.Int(Py.Or(m.Get("priority"), 999L));
+				}
+				catch (Exception)
+				{
+					priority = 999L;
+				}
+				mirrors.Add(PyDict.Of(
+					"id", mid,
+					"name", Py.Or(m.Get("name"), mid),
+					"raw_prefix", rawPrefix,
+					"download_prefix", dlPrefix,
+					"enabled", Py.Truthy(m.Get("enabled", true)),
+					"priority", priority));
+			}
+			pyDict["plugin_mirrors"] = mirrors;
 		}
 		CONFIG.Update(pyDict);
 		CONFIG.Save();

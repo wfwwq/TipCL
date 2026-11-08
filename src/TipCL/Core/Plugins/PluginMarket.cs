@@ -19,113 +19,136 @@ public sealed class PluginMarket
 
 	public const string SettingAllowUnverified = "plugin_allow_unverified";
 
-	/// <summary>加速镜像的优先级与开关（有序 id 列表：在列表里 = 开，位置 = 优先级；缺省 = 内置默认顺序全开）。</summary>
+	/// <summary>加速镜像（照 MaiBot git_mirror_service 的语义）：每个镜像独立 enabled + priority 数字，
+	/// raw 与 github 下载前缀分开存（前缀含完整被代理域名，拼接 = prefix + 相对路径）。整份镜像列表持久化在 plugin_mirrors。</summary>
 	public const string SettingMirrors = "plugin_mirrors";
 
-	/// <summary>官方市场索引。用户未配置时内置使用，并附带几个加速镜像（同一索引，按 id 合并去重）。</summary>
+	/// <summary>官方市场索引（仓库相对路径见 IndexRepoPath）。</summary>
 	public const string OfficialIndexUrl = "https://raw.githubusercontent.com/wfwwq/TipCL-market/main/index.json";
 
-	/// <summary>GitHub 加速镜像（前缀代理，同时代理 raw 索引和 github.com 直链）。顺序即默认优先级。</summary>
+	/// <summary>索引在 raw 域名下的相对路径。</summary>
+	public const string IndexRepoPath = "/wfwwq/TipCL-market/main/index.json";
+
+	/// <summary>用户自定义镜像的 id 前缀。</summary>
+	public const string CustomMirrorPrefix = "custom-";
+
 	public sealed class GhMirror
 	{
 		public string Id = "";
 
 		public string Label = "";
 
-		/// <summary>前缀代理地址；空串 = GitHub 官方直连。</summary>
-		public string Prefix = "";
+		/// <summary>raw 前缀（含被代理域名，如 https://gitproxy.mrhjx.cn/https://raw.githubusercontent.com）。</summary>
+		public string RawPrefix = "https://raw.githubusercontent.com";
+
+		/// <summary>github 下载前缀（含被代理域名，如 https://github.com）。</summary>
+		public string DownloadPrefix = "https://github.com";
+
+		public bool Enabled = true;
+
+		public int Priority = 999;
+
+		public GhMirror Clone()
+		{
+			return new GhMirror
+			{
+				Id = Id,
+				Label = Label,
+				RawPrefix = RawPrefix,
+				DownloadPrefix = DownloadPrefix,
+				Enabled = Enabled,
+				Priority = Priority
+			};
+		}
 	}
 
-	public static readonly GhMirror[] BuiltinMirrors = new GhMirror[6]
+	/// <summary>内置默认镜像（语义对齐 MaiBot DEFAULT_MIRRORS：priority 1..6，全部启用）。</summary>
+	public static List<GhMirror> DefaultMirrors()
 	{
-		new GhMirror
+		string[][] defs = new string[6][]
 		{
-			Id = "gitproxy-mrhjx",
-			Label = "gitproxy.mrhjx.cn 镜像",
-			Prefix = "https://gitproxy.mrhjx.cn/"
-		},
-		new GhMirror
+			new string[4] { "gitproxy-mrhjx", "gitproxy.mrhjx.cn 镜像", "https://gitproxy.mrhjx.cn/https://raw.githubusercontent.com", "https://gitproxy.mrhjx.cn/https://github.com" },
+			new string[4] { "ghproxy-vip", "ghproxy.vip 镜像", "https://ghproxy.vip/https://raw.githubusercontent.com", "https://ghproxy.vip/https://github.com" },
+			new string[4] { "github", "GitHub 官方源", "https://raw.githubusercontent.com", "https://github.com" },
+			new string[4] { "gh-proxy", "gh-proxy.com 镜像", "https://gh-proxy.com/https://raw.githubusercontent.com", "https://gh-proxy.com/https://github.com" },
+			new string[4] { "v6-gh-proxy", "v6.gh-proxy.org 镜像", "https://v6.gh-proxy.org/https://raw.githubusercontent.com", "https://v6.gh-proxy.org/https://github.com" },
+			new string[4] { "cdn-gh-proxy", "cdn.gh-proxy.com 镜像", "https://cdn.gh-proxy.com/https://raw.githubusercontent.com", "https://cdn.gh-proxy.com/https://github.com" }
+		};
+		List<GhMirror> list = new List<GhMirror>();
+		for (int i = 0; i < defs.Length; i++)
 		{
-			Id = "ghproxy-vip",
-			Label = "ghproxy.vip 镜像",
-			Prefix = "https://ghproxy.vip/"
-		},
-		new GhMirror
-		{
-			Id = "github",
-			Label = "GitHub 官方源",
-			Prefix = ""
-		},
-		new GhMirror
-		{
-			Id = "gh-proxy",
-			Label = "gh-proxy.com 镜像",
-			Prefix = "https://gh-proxy.com/"
-		},
-		new GhMirror
-		{
-			Id = "v6-gh-proxy",
-			Label = "v6.gh-proxy.org 镜像",
-			Prefix = "https://v6.gh-proxy.org/"
-		},
-		new GhMirror
-		{
-			Id = "cdn-gh-proxy",
-			Label = "cdn.gh-proxy.com 镜像",
-			Prefix = "https://cdn.gh-proxy.com/"
+			list.Add(new GhMirror
+			{
+				Id = defs[i][0],
+				Label = defs[i][1],
+				RawPrefix = defs[i][2],
+				DownloadPrefix = defs[i][3],
+				Enabled = true,
+				Priority = i + 1
+			});
 		}
-	};
+		return list;
+	}
 
-	/// <summary>内置默认（全部启用、按内置顺序）的索引候选，供旧引用与默认展示。</summary>
-	public static readonly string[] DefaultIndexUrls = BuiltinMirrors.Select((GhMirror m) => IndexUrlOf(m)).ToArray();
+	/// <summary>内置默认的索引候选（官方 + 镜像），供旧引用与默认展示。</summary>
+	public static readonly string[] DefaultIndexUrls = DefaultMirrors().Select((GhMirror m) => m.RawPrefix + IndexRepoPath).ToArray();
 
 	/// <summary>旧下载镜像列表（纯前缀，保留给老引用；新代码走 DownloadCandidates）。</summary>
-	public static readonly string[] GhDownloadMirrors = BuiltinMirrors.Where((GhMirror m) => m.Prefix.Length > 0).Select((GhMirror m) => m.Prefix).ToArray();
+	public static readonly string[] GhDownloadMirrors = DefaultMirrors().Where((GhMirror m) => m.DownloadPrefix != "https://github.com").Select((GhMirror m) => m.DownloadPrefix + "/").ToArray();
 
-	private static string IndexUrlOf(GhMirror m)
-	{
-		return (m.Prefix.Length == 0) ? OfficialIndexUrl : (m.Prefix + OfficialIndexUrl);
-	}
-
-	/// <summary>启用中的镜像，严格按配置顺序；不在列表里的 = 关闭，未知 id 丢弃。纯函数版本供测试。</summary>
+	/// <summary>从配置对象（List&lt;PyDict&gt; 或缺省）解析镜像列表：enabled 过滤 + priority 排序 + 去重。纯函数供测试。</summary>
 	public static List<GhMirror> EnabledMirrors(object? configured)
 	{
-		List<GhMirror> result = new List<GhMirror>();
-		if (configured is IEnumerable<object> ids)
+		List<GhMirror> all = new List<GhMirror>();
+		if (configured is IEnumerable<object> items)
 		{
 			HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-			foreach (string id in ids.Select(Py.S).Select((string s) => s.Trim()))
+			foreach (PyDict item in items.OfType<PyDict>())
 			{
-				GhMirror? m = BuiltinMirrors.FirstOrDefault((GhMirror b) => b.Id == id);
-				if (m != null && seen.Add(m.Id))
+				string id = Py.S(item.Get("id")).Trim();
+				if (id.Length == 0 || !seen.Add(id))
 				{
-					result.Add(m);
+					continue;
 				}
+				all.Add(new GhMirror
+				{
+					Id = id,
+					Label = Py.Or(item.Get("name"), id).ToString() ?? id,
+					RawPrefix = Py.S(item.Get("raw_prefix")),
+					DownloadPrefix = Py.S(item.Get("download_prefix")),
+					Enabled = Py.Truthy(item.Get("enabled", true)),
+					Priority = (int)Py.Int(Py.Or(item.Get("priority"), 999L))
+				});
 			}
 		}
-		return result;
+		else
+		{
+			all = DefaultMirrors();
+		}
+		return all.Where((GhMirror m) => m.Enabled && m.RawPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && m.DownloadPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase)).OrderBy((GhMirror m) => m.Priority).ThenBy((GhMirror m) => m.Id, StringComparer.Ordinal).ToList();
 	}
 
 	public static List<GhMirror> EnabledMirrors()
 	{
 		try
 		{
-			// 三态：配置缺失 = 内置默认全开；配置存在（哪怕空列表）= 严格按列表（不在 = 关）
+			// 三态：配置缺失 = 内置默认全开；配置存在 = 严格按存储内容（含用户改过的 enabled/priority/自定义镜像）
 			object sentinel = new object();
 			object v = Config.CONFIG.Get(SettingMirrors, sentinel);
 			if (ReferenceEquals(v, sentinel))
 			{
-				return new List<GhMirror>(BuiltinMirrors);
+				return DefaultMirrors();
 			}
-			return EnabledMirrors(v);
+			List<GhMirror> parsed = EnabledMirrors(v);
+			return (parsed.Count > 0) ? parsed : DefaultMirrors();
 		}
 		catch (Exception)
 		{
-			return new List<GhMirror>(BuiltinMirrors);
+			return DefaultMirrors();
 		}
 	}
 
-	/// <summary>市场索引候选：按启用镜像优先级（官方源 = 无前缀直连）。</summary>
+	/// <summary>市场索引候选：按启用镜像优先级（官方源也是普通条目，前缀 + 相对路径）。</summary>
 	public static List<string> IndexUrls()
 	{
 		List<string> custom = new List<string>();
@@ -140,24 +163,32 @@ public sealed class PluginMarket
 		{
 			return custom;
 		}
-		return EnabledMirrors().Select(IndexUrlOf).ToList();
+		return EnabledMirrors().Select((GhMirror m) => m.RawPrefix + IndexRepoPath).ToList();
 	}
 
 	/// <summary>插件包的下载候选地址：按启用镜像优先级（官方源 = 原始直链），仅对 GitHub 链接套前缀。纯函数版本供测试。</summary>
+	/// <summary>下载候选：GitHub raw / release 链接按镜像 priority 逐个换成「下载前缀 + 相对路径」；非 GitHub 直链原样一个候选。纯函数供测试。</summary>
 	public static List<string> DownloadCandidates(string url, IEnumerable<GhMirror> mirrors)
 	{
-		bool gh = url.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://raw.githubusercontent.com/", StringComparison.OrdinalIgnoreCase);
+		string path = null;
+		if (url.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
+		{
+			path = url.Substring("https://github.com".Length);
+		}
+		else if (url.StartsWith("https://raw.githubusercontent.com/", StringComparison.OrdinalIgnoreCase))
+		{
+			path = url.Substring("https://raw.githubusercontent.com".Length);
+		}
 		List<string> list = new List<string>();
+		if (path == null)
+		{
+			list.Add(url);
+			return list;
+		}
 		foreach (GhMirror m in mirrors)
 		{
-			if (m.Prefix.Length == 0)
-			{
-				list.Add(url);
-			}
-			else if (gh)
-			{
-				list.Add(m.Prefix + url);
-			}
+			string prefix = (m.DownloadPrefix.EndsWith("/", StringComparison.Ordinal) ? m.DownloadPrefix : m.DownloadPrefix + "/");
+			list.Add(prefix.TrimEnd('/') + path);
 		}
 		if (list.Count == 0)
 		{
