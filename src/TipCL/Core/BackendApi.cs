@@ -4191,6 +4191,8 @@ public partial class BackendApi
 		// 插件市场（DESIGN §9）：未配置时下发内置默认索引（官方 + 加速镜像）
 		List<string> marketIndexes = Py.ListOr(G("plugin_market_indexes")).Select(Py.S).Where((string u) => u.Trim().Length > 0).ToList();
 		pyDict["plugin_market_indexes"] = (marketIndexes.Count > 0) ? marketIndexes.Cast<object>().ToList() : Plugins.PluginMarket.DefaultIndexUrls.Cast<object>().ToList();
+		// 加速镜像：未配置时下发内置默认顺序（全部启用），UI 与内核默认保持一致
+		pyDict["plugin_mirrors"] = Plugins.PluginMarket.EnabledMirrors().Select((Plugins.PluginMarket.GhMirror m) => m.Id).Cast<object>().ToList();
 		pyDict["plugin_allow_unverified"] = Py.Truthy(GD("plugin_allow_unverified", false));
 		return pyDict;
 		object G(string k)

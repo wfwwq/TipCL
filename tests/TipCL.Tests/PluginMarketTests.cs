@@ -6,33 +6,52 @@ using Xunit;
 public class PluginMarketTests
 {
 	[Fact]
-	public void DefaultIndexUrls_AllHttpsDistinctAndOfficialFirst()
+	public void DefaultIndexUrls_AllHttpsDistinctAndOfficialPresent()
 	{
-		Assert.Equal(PluginMarket.OfficialIndexUrl, PluginMarket.DefaultIndexUrls[0]);
+		Assert.Equal(PluginMarket.BuiltinMirrors.Length, PluginMarket.DefaultIndexUrls.Length);
 		Assert.Equal(PluginMarket.DefaultIndexUrls.Length, PluginMarket.DefaultIndexUrls.Distinct().Count());
 		Assert.All(PluginMarket.DefaultIndexUrls, u => Assert.StartsWith("https://", u));
 		Assert.All(PluginMarket.DefaultIndexUrls, u => Assert.EndsWith("/index.json", u));
+		Assert.Contains(PluginMarket.OfficialIndexUrl, PluginMarket.DefaultIndexUrls);
 	}
 
 	[Fact]
-	public void DownloadCandidates_NonGithub_StaysSingle()
+	public void DownloadCandidates_NonGithub_OnlyOfficialDirect()
 	{
-		var list = PluginMarket.DownloadCandidates("https://example.com/a.zip");
+		var list = PluginMarket.DownloadCandidates("https://example.com/a.zip", PluginMarket.EnabledMirrors(null));
 		Assert.Single(list);
 		Assert.Equal("https://example.com/a.zip", list[0]);
 	}
 
 	[Fact]
-	public void DownloadCandidates_Github_OriginalFirstThenMirrors()
+	public void DownloadCandidates_FollowsMirrorPriority()
 	{
 		const string url = "https://github.com/wfwwq/TipCL-market/releases/download/x/y.zip";
-		var list = PluginMarket.DownloadCandidates(url);
-		Assert.Equal(1 + PluginMarket.GhDownloadMirrors.Length, list.Count);
-		Assert.Equal(url, list[0]);
-		foreach (var mirror in PluginMarket.GhDownloadMirrors)
+		// 用户把镜像设为（只开两个、镜像优先于官方）→ 候选按该顺序，官方直链排在镜像后
+		var mirrors = PluginMarket.EnabledMirrors(new object[] { "gh-proxy", "github" });
+		var list = PluginMarket.DownloadCandidates(url, mirrors);
+		Assert.Equal(new[]
 		{
-			Assert.Contains(mirror + url, list);
-		}
+			"https://gh-proxy.com/" + url,
+			url,
+		}, list);
+	}
+
+	[Fact]
+	public void EnabledMirrors_NullConfig_EmptyButFullListIsBuiltinOrder()
+	{
+		// null = 没有任何镜像（Config 层的「缺失→默认全开」三态在 EnabledMirrors() 里处理）
+		Assert.Empty(PluginMarket.EnabledMirrors(null));
+		var full = PluginMarket.EnabledMirrors(PluginMarket.BuiltinMirrors.Select(m => (object)m.Id));
+		Assert.Equal(PluginMarket.BuiltinMirrors.Select(m => m.Id), full.Select(m => m.Id));
+	}
+
+	[Fact]
+	public void EnabledMirrors_UnknownIdsDropped_StrictList()
+	{
+		// 不在列表里 = 关闭（否则用户没法禁用镜像）；未知 id 丢弃
+		var list = PluginMarket.EnabledMirrors(new object[] { "nope", "cdn-gh-proxy", "github" });
+		Assert.Equal(new[] { "cdn-gh-proxy", "github" }, list.Select(m => m.Id));
 	}
 
 	[Fact]

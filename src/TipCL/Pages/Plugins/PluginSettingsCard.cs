@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using TipCL.Core.Plugins;
 using TipCL.Services;
 
 namespace TipCL.Pages.Plugins;
@@ -82,6 +83,84 @@ public static class PluginSettingsCard
 		TextBlock summary = Ui.Small("");
 		List<string> indexes = new List<string>();
 		CheckBox unverified = Ui.Switch();
+		// —— 加速镜像：开关 + ↑↓ 即优先级（plugin_mirrors = 有序启用 id 列表） ——
+		SPanel mirrorHost = Ui.V(2.0);
+		List<string> mirrorIds = new List<string>();
+		bool mirrorSyncing = false;
+		async Task SaveMirrorsAsync()
+		{
+			await SaveAsync(new Dictionary<string, object> { ["plugin_mirrors"] = mirrorIds.ToList() });
+			AppServices.Toast(I18n.L("已保存"), I18n.L("镜像优先级已更新"), ToastKind.Success);
+			PluginsPage? page = AppServices.Window?.GetPage("plugins") as PluginsPage;
+			page?.RefreshMarketSoon();
+		}
+		void RenderMirrors()
+		{
+			mirrorHost.Children.Clear();
+			List<PluginMarket.GhMirror> enabled = mirrorIds.Select((string id) => PluginMarket.BuiltinMirrors.FirstOrDefault((PluginMarket.GhMirror m) => m.Id == id)).OfType<PluginMarket.GhMirror>().ToList();
+			List<PluginMarket.GhMirror> disabled = PluginMarket.BuiltinMirrors.Where((PluginMarket.GhMirror m) => !mirrorIds.Contains(m.Id)).ToList();
+			List<PluginMarket.GhMirror> all = enabled.Concat(disabled).ToList();
+			foreach (PluginMarket.GhMirror m in all)
+			{
+				bool on = mirrorIds.Contains(m.Id);
+				CheckBox sw = Ui.Switch(on);
+				TextBlock label = Ui.Txt(m.Label, 12.5, bold: true);
+				TextBlock sub = Ui.Muted(m.Prefix.Length == 0 ? "https://github.com（直连）" : m.Prefix + "…");
+				Button up = Ui.IconBtn("\ue70e", I18n.L("上移"));
+				Button down = Ui.IconBtn("\ue70d", I18n.L("下移"));
+				up.IsEnabled = on && mirrorIds.IndexOf(m.Id) > 0;
+				down.IsEnabled = on && mirrorIds.IndexOf(m.Id) < mirrorIds.Count - 1;
+				sw.Click += delegate
+				{
+					if (mirrorSyncing)
+					{
+						return;
+					}
+					if (sw.IsChecked == true)
+					{
+						mirrorIds.Add(m.Id);
+					}
+					else
+					{
+						mirrorIds.Remove(m.Id);
+					}
+					PageBase.Run(SaveMirrorsAsync, I18n.L("设置保存失败"));
+					RenderMirrors();
+				};
+				RoutedEventHandler move = delegate(object s, RoutedEventArgs _)
+				{
+					if (mirrorSyncing || !(s is Button b))
+					{
+						return;
+					}
+					int cur = mirrorIds.IndexOf(m.Id);
+					int dir = (b == up) ? -1 : 1;
+					int next = cur + dir;
+					if (cur < 0 || next < 0 || next >= mirrorIds.Count)
+					{
+						return;
+					}
+					(mirrorIds[cur], mirrorIds[next]) = (mirrorIds[next], mirrorIds[cur]);
+					PageBase.Run(SaveMirrorsAsync, I18n.L("设置保存失败"));
+					RenderMirrors();
+				};
+				up.Click += move;
+				down.Click += move;
+				Border row = Ui.Card(Ui.G(null, "Auto,*,Auto,Auto")
+					.Add(sw.VCenter(), 0)
+					.Add(Ui.V(1.0, label, sub).M(10.0, 0.0, 6.0, 0.0), 0, 1)
+					.Add(up.VCenter(), 0, 2)
+					.Add(down.VCenter(), 0, 3), 12.0);
+				row.Opacity = (on ? 1.0 : 0.62);
+				mirrorHost.Children.Add(row);
+			}
+		}
+		Button mirrorReset = Ui.Btn(I18n.L("恢复默认顺序"), BtnKind.Ghost, delegate
+		{
+			mirrorIds = PluginMarket.BuiltinMirrors.Select((PluginMarket.GhMirror m) => m.Id).ToList();
+			PageBase.Run(SaveMirrorsAsync, I18n.L("设置保存失败"));
+			RenderMirrors();
+		});
 		bool syncing = false;
 		unverified.Click += delegate
 		{
@@ -126,7 +205,7 @@ public static class PluginSettingsCard
 				(win.GetPage("plugins") as PluginsPage)?.ShowTab("dev");
 			}
 		}, "\ue99a");
-		Border card = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("插件"), I18n.L("插件市场、未审核插件、插件可用的模型供应商")), Ui.Field(I18n.L("插件市场地址"), Ui.H(10.0, edit, summary.VCenter()), I18n.L("填写插件市场的索引地址，可以填多个")), Ui.Field(I18n.L("允许安装未审核插件"), unverified, I18n.L("关着时，市场里未审核的插件要先打开这里才能安装")), Ui.Field("", Ui.H(8.0, manage, providers))));
+		Border card = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("插件"), I18n.L("插件市场、加速镜像、未审核插件、插件可用的模型供应商")), Ui.Field(I18n.L("插件市场地址"), Ui.H(10.0, edit, summary.VCenter()), I18n.L("填写插件市场的索引地址，可以填多个")), Ui.Field(I18n.L("加速镜像"), Ui.V(6.0, Ui.Small(I18n.L("开关和 ↑↓ 排序即优先级：排在前面的先尝试，全部失败才报错")).Wrap(), mirrorHost, Ui.H(6.0, mirrorReset))), Ui.Field(I18n.L("允许安装未审核插件"), unverified, I18n.L("关着时，市场里未审核的插件要先打开这里才能安装")), Ui.Field("", Ui.H(8.0, manage, providers))));
 		card.Loaded += delegate
 		{
 			if (!AppServices.Ready)
@@ -137,10 +216,16 @@ public static class PluginSettingsCard
 			{
 				Dictionary<string, JsonElement> s = (await AppServices.Client.TryCallAsync<Dictionary<string, JsonElement>>("get_settings")) ?? new Dictionary<string, JsonElement>();
 				indexes = ParseIndexes(s.TryGetValue("plugin_market_indexes", out JsonElement ix) ? ix : default(JsonElement));
-				syncing = true;
+				mirrorSyncing = true;
+				// get_settings 已回显默认（未配置 = 内置顺序全开）；再兜一层：键缺失也按全开渲染，避免 UI 显示全关而内核全开
+				mirrorIds = (s.TryGetValue("plugin_mirrors", out JsonElement mr) && mr.ValueKind == JsonValueKind.Array)
+					? mr.EnumerateArray().Where((JsonElement x) => x.ValueKind == JsonValueKind.String).Select((JsonElement x) => x.GetString() ?? "").Where((string id) => PluginMarket.BuiltinMirrors.Any((PluginMarket.GhMirror m) => m.Id == id)).ToList()
+					: PluginMarket.BuiltinMirrors.Select((PluginMarket.GhMirror m) => m.Id).ToList();
+				mirrorSyncing = false;
 				unverified.IsChecked = s.TryGetValue("plugin_allow_unverified", out JsonElement a) && a.ValueKind == JsonValueKind.True;
 				syncing = false;
 				Sync();
+				RenderMirrors();
 			});
 		};
 		return card;

@@ -210,6 +210,18 @@ public sealed partial class PluginsPage : PageBase
 		}
 	}
 
+	/// <summary>设置里改了加速镜像后强刷市场缓存（忽略 10 分钟 TTL）。</summary>
+	internal void RefreshMarketSoon()
+	{
+		if (_tab == Tab.Market)
+		{
+			PageBase.Run(async delegate
+			{
+				await LoadMarketAsync(refresh: true);
+			}, I18n.L("刷新失败"));
+		}
+	}
+
 	public override void OnEvent(BridgeEvent ev)
 	{
 		switch (ev.Event)
