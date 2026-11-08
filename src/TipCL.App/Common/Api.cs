@@ -284,7 +284,7 @@ public sealed class InProcessApi : IApi
     // ───────────────────────────── 参数工具 ─────────────────────────────
 
     /// <summary>匿名对象 / 字典 → PyDict（键保持原样，页面侧用 snake_case 传参）。</summary>
-    internal static PyDict ToDict(object? args)
+    public static PyDict ToDict(object? args)
     {
         var d = new PyDict();
         if (args == null) return d;
