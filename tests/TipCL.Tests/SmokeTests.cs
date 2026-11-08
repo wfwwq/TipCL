@@ -11,6 +11,6 @@ public class SmokeTests
     [Fact]
     public void CoreVersion_Is_M1()
     {
-        Assert.Equal("0.1.0-m1", CoreInfo.Version);
+        Assert.Equal("0.1.0-m3", CoreInfo.Version);
     }
 }
