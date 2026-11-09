@@ -37,3 +37,9 @@
 - 验收：全量重建 0 警告 0 错误（清理 29 条 nullable 警告）；测试 108/109（1 Skip）；冒烟矩阵五项目通过；版本统一 0.1.0-m3。
 - 交付物：dist/linux-x64/TipCL.App（42.5 MB 单文件）、dist/win-x64/TipCL.App.exe（43.3 MB，冒烟通过）、tools/package.ps1|sh、tools/AppImage/、docs/DELIVERY.md。
 - M3 遗留见 progress/M3-C3.md §6。
+
+## 2026-11-09 真机验证（主 agent，盒子 Ubuntu 24.04）
+
+- 通过临时文件中转把 linux-x64 单文件送进 Ubuntu 24.04 真机：无头冒烟矩阵 5 项全过，真实 GUI 窗口启动、页签导航、明暗切换均验证。
+- 真机发现并修复缺陷（commit 见下）：`SetDark` 未同步 Avalonia `RequestedThemeVariant`，导致「先浅色构建、后切深色」的页面文字不可读；同时补启动读回已保存主题。修复后真机复验通过。
+- 修复后重发双端产物：linux-x64 44,641,606 B / win-x64 45,487,941 B（win 冒烟通过）。

@@ -28,7 +28,13 @@ public partial class MainWindow : Window
         TitleBarHost.ThemeToggleClicked += (_, _) => ToggleTheme();
         NavHost.NavClicked += (_, id) => Navigate(id);
         Pages.Library.LibraryPage.NavRequested += id => Navigate(id); // M2-B2：实例库页内跳转（双击版本 → 启动页）
-        SetDark(false);
+        bool savedDark = false;
+        try
+        {
+            savedDark = TipCL.Core.Py.Truthy(TipCL.Core.Launcher.Config.CONFIG.Get("ui_dark", TipCL.Core.Py.Box(false)));
+        }
+        catch { }
+        SetDark(savedDark);
         Navigate("launch", instant: true);
     }
 
@@ -56,6 +62,8 @@ public partial class MainWindow : Window
     public void SetDark(bool dark)
     {
         _isDark = dark;
+        if (Avalonia.Application.Current is { } app)
+            app.RequestedThemeVariant = dark ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
         var merged = Resources.MergedDictionaries;
         merged.Clear();
         merged.Add(new ResourceInclude((Uri?)null) { Source = new Uri(dark

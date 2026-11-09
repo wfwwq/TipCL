@@ -105,3 +105,21 @@ chmod +x tools/verify-linux.sh && tools/verify-linux.sh        # 默认 dist/lin
 已在本机验证的部分：
 - `dist/linux-x64/TipCL.App`：`7f 45 4c 46` ELF 头、无散落 `.so`、42.5 MB。
 - `dist/win-x64/TipCL.App.exe --smoke`：exit 0，截图核对通过。
+
+
+## Linux 真机验证结果（2026-11-09，Ubuntu 24.04 x86_64 + X11）
+
+通过临时中转（x0.at）把 `dist/linux-x64/TipCL.App` 送进一台 Ubuntu 24.04 真机执行：
+
+| 项目 | 结果 |
+|---|---|
+| 首启（无 .NET 运行时） | 通过，self-contained 单文件直接运行 |
+| `--smoke` 无头渲染 | 通过，smoke.png 761 KB |
+| `SMOKE_PAGE=library/download/plugins/settings` | 4/4 通过 |
+| `SMOKE_DARK=1` | 通过 |
+| 真实 GUI 窗口（DISPLAY=:0） | 通过：标题栏 5 页签、侧栏分组导航、hero 背景、中文/图标/圆角正常；原生窗口边框为 Linux 下预期表现 |
+| 页面导航（点击页签） | 通过：启动/实例库/下载/插件/设置均可切换 |
+| 明暗主题运行时切换 | **发现并修复缺陷**：仅换 B.* 色板未同步 `RequestedThemeVariant`，导致未显式着色文字在深色底上不可读；已修（SetDark 同步变体 + 启动读回已保存主题），修复后在真机复验通过 |
+| 字体 | 30 个 CJK 字体可用，中文渲染正常（fontconfig 存在） |
+
+产物更新：修复后重发 linux-x64（44,641,606 B）与 win-x64（45,487,941 B，`--smoke` 复跑通过）。

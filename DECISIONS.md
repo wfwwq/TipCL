@@ -41,3 +41,7 @@
 - 不 trim 发布：`PublishTrimmed` 产生成片 IL2026（Core 的 System.Text.Json 反射序列化），Linux 产物本机无法验证运行，M3 优先交付正确性；瘦身路径 = Core JSON 迁 JsonSerializerContext 后再评估。
 - 单文件真单文件：必须加 `IncludeNativeLibrariesForSelfExtract=true`，否则 Skia/HarfBuzz 原生库散落在旁（实测 11 MB）。
 - 插件页启停改走 `PluginRuntime.Start/Stop`（宿主单例）：页面不再自建 store/dirs，避免页面与宿主两份状态。
+
+### D-8 · 主题切换必须同步 Fluent 变体（2026-11-09，真机复现）
+- 现象：浅色下构建页面 → 切深色后，未显式设前景色的文字与默认 Button 仍是浅色变体（深字压深底），真机 Ubuntu 上清晰可见。
+- 修复：`MainWindow.SetDark` 同时设置 `Application.RequestedThemeVariant`；启动时从 Config.CONFIG 读 `ui_dark` 恢复主题。仅换 B.* 色板不足以覆盖 Fluent 内部主题资源。
