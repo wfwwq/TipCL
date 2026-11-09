@@ -88,3 +88,20 @@ chmod +x TipCL.App
 4. **csproj 未加发布段**：单文件参数全部命令行传入；若后续希望 `dotnet publish -r linux-x64` 裸命令即出单文件，需要依赖申请在 App csproj 加 `<PublishSingleFile>` 等段。
 5. AppImage 产出依赖 linuxdeploy（脚本不强制安装，AppDir 已按约定组装，缺工具时给出手工命令）。
 6. 版本号 `0.1.0-m3` 只升在 TipCL.App.csproj；TipCL.Core.csproj 仍为 `0.1.0-m1`（非本包地盘，未动；tests/SmokeTests 断言 Core 版本 = m1，改动须连带测试，留 C3 裁决）。
+
+
+---
+
+## Linux 真机自检（M3-C3 补充，2026-11-09）
+
+本机为 Windows，无 WSL/Docker，Linux 产物只做了结构验证（ELF + 真单文件 + 42.5 MB）。真机验证请在有 Linux 的机器上执行：
+
+```bash
+chmod +x tools/verify-linux.sh && tools/verify-linux.sh        # 默认 dist/linux-x64
+```
+
+脚本会检查：平台/ELF 头/真单文件 → 运行权限 → `--smoke` 出图 → 逐页冒烟矩阵（library/download/plugins/settings + 深色）→ fontconfig 与图形会话提示 → 输出截图目录供人工核对界面。
+
+已在本机验证的部分：
+- `dist/linux-x64/TipCL.App`：`7f 45 4c 46` ELF 头、无散落 `.so`、42.5 MB。
+- `dist/win-x64/TipCL.App.exe --smoke`：exit 0，截图核对通过。
