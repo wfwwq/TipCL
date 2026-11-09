@@ -25,7 +25,7 @@ public static class PluginSettingsCard
     public static List<string> ParseIndexes(object? v)
     {
         var list = new List<string>();
-        foreach (string s in Py.ListOr(v).Select(Py.S))
+        foreach (string s in Py.ListOr(v!).Select(Py.S))
         {
             // 容忍一整行多个分隔符（对齐 Windows 版对字符串值的宽松解析）
             if (s.Contains('\n') || s.Contains('\r') || s.Contains(',') || s.Contains(';'))
@@ -68,7 +68,7 @@ public static class PluginSettingsCard
     public static List<PluginMarket.GhMirror> ParseMirrors(object? v)
     {
         var list = new List<PluginMarket.GhMirror>();
-        foreach (object item in Py.ListOr(v).OfType<object>())
+        foreach (object item in Py.ListOr(v!).OfType<object>())
         {
             if (item is not PyDict x) continue;
             string id = Py.S(x.Get("id")).Trim();
@@ -186,9 +186,9 @@ public static class PluginSettingsCard
                 U.Field("Raw 前缀", rawBox, "完整前缀，含 https://raw.githubusercontent.com"),
                 U.Field("下载前缀", dlBox, "完整前缀，含 https://github.com"));
             if (!await Dlg.Ask("添加自定义镜像", body)) return;
-            string name = nameBox.Text.Trim();
-            string rawPrefix = rawBox.Text.Trim().TrimEnd('/');
-            string dlPrefix = dlBox.Text.Trim().TrimEnd('/');
+            string name = nameBox.Text!.Trim();
+            string rawPrefix = rawBox.Text!.Trim().TrimEnd('/');
+            string dlPrefix = dlBox.Text!.Trim().TrimEnd('/');
             if (name.Length == 0 || !rawPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || !dlPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
                 ToastHost.Show("填得不对", "名称必填；两个前缀都要以 https:// 开头", ToastKind.Warning);
@@ -267,7 +267,7 @@ public static class PluginSettingsCard
         box.MinWidth = 480;
         var body = U.V(8, U.Muted("一行一个插件市场索引地址（index.json）。多个市场按插件 id 合并，排在前面的优先。").Wrap(), box);
         if (!await Dlg.Ask("插件市场地址", body)) return null;
-        var raw = box.Text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        var raw = box.Text!.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
         var clean = Clean(raw);
         if (clean.Count != raw.Count)
         {

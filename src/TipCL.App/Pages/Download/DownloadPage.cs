@@ -291,7 +291,7 @@ public sealed class DownloadPage : PageBase
         if (data is PyDict d)
             items = d.Select(kv => new KeyValuePair<string, object>(kv.Key, kv.Value ?? new PyDict()));
         else if (data is System.Collections.IDictionary idict)
-            items = idict.Keys.Cast<object>().Select(k => new KeyValuePair<string, object>(k?.ToString() ?? "", idict[k] ?? new object()));
+            items = idict.Keys.Cast<object>().Select(k => new KeyValuePair<string, object>(k?.ToString() ?? "", idict[k!] ?? new object()));
         else
             return result;
         foreach (var kv in items)

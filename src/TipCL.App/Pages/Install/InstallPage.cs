@@ -455,7 +455,7 @@ public sealed class InstallPage : UserControl
             });
 
             // 飞行动画 FlyToTasks 在 Linux 降级为直接跳转（R2 §2.3）
-            ToastHost.Show("已加入队列", _sum.Text, ToastKind.Success);
+            ToastHost.Show("已加入队列", _sum.Text ?? "", ToastKind.Success);
             if (this.GetVisualRoot() is MainWindow win)
                 win.Navigate("tasks");
         }

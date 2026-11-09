@@ -29,3 +29,11 @@
 - 集成期修复（934→0 错误）：全页面 UiClass 别名（Ui 双重名）、BoxShadow 构造、TextElement/Path/Config/Py 缺 using、_statusRow 类型、toggle/send 自引用两步赋值、ComboBox.Text/IsEditable→SelectedItem、LauncherConfig.data.ContainsKey、PageBase.ShellAttach 系替换 protected 生命周期直调、IApi.ToDict 公开。
 - 验收：整体构建 0 警告 0 错误；测试 66/67（1 Skip 冒烟占位）；SMOKE_PAGE=library/download/plugins/settings 逐页冒烟人工核对通过，SMOKE_DARK 深色正常。
 - 遗留给 M3：启动链路（真正拉起 Minecraft）、B2 报告的 9 个 IApi 方法补齐、启动按钮内版本号视觉微调、29 条编译警告清理（多为 nullable 与过时 API）、安装页 csproj 资源项合入确认。
+
+## 2026-11-09 M3 验收（主 agent；用户指示本轮起禁用子代理）
+
+- 工作包：C0 启动链路与 Java 管理（c2e4494）、C1 插件宿主与 AI 运行时（856f75b）、C2 打包交付（主 agent 收尾提交）、C3 总验收（主 agent 亲自执行）。
+- C2 与 C0/C1 的首次运行均被手动中断，产物落盘后由主 agent（C2）或重启代理（C0/C1）接续完成；C3 起全部由主 agent 直接执行。
+- 验收：全量重建 0 警告 0 错误（清理 29 条 nullable 警告）；测试 108/109（1 Skip）；冒烟矩阵五项目通过；版本统一 0.1.0-m3。
+- 交付物：dist/linux-x64/TipCL.App（42.5 MB 单文件）、dist/win-x64/TipCL.App.exe（43.3 MB，冒烟通过）、tools/package.ps1|sh、tools/AppImage/、docs/DELIVERY.md。
+- M3 遗留见 progress/M3-C3.md §6。

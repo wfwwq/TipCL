@@ -35,3 +35,9 @@
 - **模板 ContentPresenter 必须显式 `Content="{TemplateBinding Content}"`**（WPF 隐式绑定在 Avalonia 不存在）：Shell 4 处 + A2 Controls.axaml 6 处补齐。曾导致全部按钮内容不渲染（探针显示 ContentPresenter cls=[:empty]）。
 - 冒烟增强：`SMOKE_DARK=1` 深色帧、`SMOKE_PROBE=1` 可视化树探针（含每元素 classes 与 bounds）。
 - 冒烟截图 `smoke.png`/`smoke-dark.png` 与 `_screen.png` 不入库（.gitignore 由本次提交补充）。
+
+### D-7 · M3 收尾裁决（2026-11-09，主 agent，用户指示禁用子代理）
+- 版本统一 `0.1.0-m3`：App/Core csproj + CoreInfo 常量 + SmokeTests 断言四处同步（C2 只改了 App，Core 一处会漏造成测试红）。
+- 不 trim 发布：`PublishTrimmed` 产生成片 IL2026（Core 的 System.Text.Json 反射序列化），Linux 产物本机无法验证运行，M3 优先交付正确性；瘦身路径 = Core JSON 迁 JsonSerializerContext 后再评估。
+- 单文件真单文件：必须加 `IncludeNativeLibrariesForSelfExtract=true`，否则 Skia/HarfBuzz 原生库散落在旁（实测 11 MB）。
+- 插件页启停改走 `PluginRuntime.Start/Stop`（宿主单例）：页面不再自建 store/dirs，避免页面与宿主两份状态。

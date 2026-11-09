@@ -510,7 +510,7 @@ public sealed class LibraryPage : PageBase
         if (v.Isolated && !string.IsNullOrEmpty(v.IsolationLabel))
             tags.Children.Add(UiClass.Tag(v.IsolationLabel));
 
-        var nameRow = UiClass.H(6, Name(id, 15));
+        var nameRow = UiClass.H(6, NameLabel(id, 15));
         if (tags.Children.Count > 0)
             nameRow.Children.Add(tags);
         var subTb = UiClass.Txt(SubLine(v), 12.5, fg: "B.InkMuted");
@@ -559,7 +559,7 @@ public sealed class LibraryPage : PageBase
         return row;
     }
 
-    private static TextBlock Name(string text, double size)
+    private static TextBlock NameLabel(string text, double size)
     {
         var t = UiClass.Txt(text, size, bold: true);
         t.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -648,7 +648,7 @@ public sealed class LibraryPage : PageBase
             Name = _folder,
             Versions = found?.Versions ?? _vers.Count,
         };
-        _shell ??= (Control)Content;
+        _shell ??= (Control)Content!;
         Content = new InstanceDetailPage(this, info, () =>
         {
             if (_shell != null) Content = _shell;
@@ -697,7 +697,7 @@ public sealed class LibraryPage : PageBase
         menu.Items.Add(new Separator());
         Item("重命名…", () => Run(async () =>
         {
-            string text = await Dlg.Prompt("重命名实例", "新名称", instance);
+            string? text = await Dlg.Prompt("重命名实例", "新名称", instance);
             if (!string.IsNullOrWhiteSpace(text) && text != instance)
             {
                 await Api.CallAsync<object>("rename_instance", new { name = instance, new_name = text });
@@ -719,10 +719,10 @@ public sealed class LibraryPage : PageBase
 
     private async Task AddFolderAsync()
     {
-        string path = await Dlg.PickFolder("选择一个已有的游戏文件夹（含 versions 的 .minecraft）");
+        string? path = await Dlg.PickFolder("选择一个已有的游戏文件夹（含 versions 的 .minecraft）");
         if (string.IsNullOrWhiteSpace(path)) return;
         string fileName = Path.GetFileName(path.TrimEnd('\\', '/'));
-        string name = await Dlg.Prompt("导入为文件夹", "显示名称", fileName);
+        string? name = await Dlg.Prompt("导入为文件夹", "显示名称", fileName);
         if (!string.IsNullOrWhiteSpace(name))
         {
             // IApi 未实现 import_existing_folder（M3 任务化）→ 本地登记：建同名实例元数据
@@ -738,7 +738,7 @@ public sealed class LibraryPage : PageBase
 
     private async Task ImportPackAsync()
     {
-        string file = await Dlg.PickFile("导入整合包", "*.mrpack", "*.zip");
+        string? file = await Dlg.PickFile("导入整合包", "*.mrpack", "*.zip");
         if (file == null) return;
         // 整合包安装器属 M3（Catalog/Modpack 未入 IApi）
         Toast("整合包导入", "安装器将在 M3 落地", ToastKind.Warning);
@@ -747,7 +747,7 @@ public sealed class LibraryPage : PageBase
 
     private async Task CreateAsync()
     {
-        string name = await Dlg.Prompt("新建实例", "实例名称（会创建独立的 .minecraft）", "", "例如：1.20.1 生存");
+        string? name = await Dlg.Prompt("新建实例", "实例名称（会创建独立的 .minecraft）", "", "例如：1.20.1 生存");
         if (!string.IsNullOrWhiteSpace(name))
         {
             await Api.CallAsync<object>("create_instance", new { name });

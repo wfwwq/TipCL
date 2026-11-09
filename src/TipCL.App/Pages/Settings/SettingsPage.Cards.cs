@@ -93,14 +93,14 @@ public sealed partial class SettingsPage
         var connect = UiClass.Btn("连接", BtnKind.Soft, (_, _) => Run(async () =>
         {
             SetStatus("连接中…");
-            var info = await Task.Run(() => PhoneLink.Connect(ip.Text.Trim(), token.Text.Trim()));
+            var info = await Task.Run(() => PhoneLink.Connect(ip.Text!.Trim(), token.Text!.Trim()));
             SetStatus($"已连接：{info.Device}");
             Toast("已连接手机", info.Device ?? "", ToastKind.Success);
         }, "连接失败"));
         var usb = UiClass.Btn("USB 自动连接", BtnKind.Chip, (_, _) => Run(async () =>
         {
             SetStatus("USB 连接中…");
-            var info = await Task.Run(() => PhoneLink.ConnectUsb(token.Text.Trim(), log => SetStatus(log)));
+            var info = await Task.Run(() => PhoneLink.ConnectUsb(token.Text!.Trim(), log => SetStatus(log)));
             SetStatus($"已连接：{info.Device}");
             Toast("已连接手机", info.Device ?? "", ToastKind.Success);
         }, "USB 连接失败"));
@@ -134,7 +134,7 @@ public sealed partial class SettingsPage
     {
         var body = UiClass.Multi("说说你的使用体验、遇到的问题或想要的功能…", "", 110);
         var info = UiClass.Small("");
-        Button send = null;
+        Button? send = null;
             send = UiClass.Btn("发送反馈", BtnKind.Primary, (_, _) => Run(async () =>
         {
             if (string.IsNullOrWhiteSpace(body.Text))
@@ -142,10 +142,10 @@ public sealed partial class SettingsPage
                 Toast("先写点内容", "反馈内容不能为空", ToastKind.Warning);
                 return;
             }
-            send.IsEnabled = false;
+            send!.IsEnabled = false;
             info.Text = "发送中…";
             object? r = await Api.TryCallAsync<object?>("feedback_submit", null, new { text = body.Text.Trim() });
-            send.IsEnabled = true;
+            send!.IsEnabled = true;
             if (r == null)
             {
                 info.Text = "反馈通道后端 M3 接入，暂时发送不了。也可以到 GitHub 仓库提 issue。";

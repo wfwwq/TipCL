@@ -245,7 +245,7 @@ public sealed partial class LaunchPage : PageBase
         {
             Theme = UiClass.Theme("Btn.Ghost"),
             Padding = new Thickness(0),
-            Content = UiClass.H(10, playIcon, goText, _goSep, _goVer),
+            Content = UiClass.H(14, playIcon, goText, _goSep, _goVer),
         };
         launchBtn.Click += (_, _) => _ = LaunchAsync();
         _launchShell = new Border
@@ -773,7 +773,7 @@ public sealed partial class LaunchPage : PageBase
             _newsTicker.Text = "暂无新闻";
             return;
         }
-        _newsTicker.Text = Py.S((rows[0] as PyDict)?["title"]);
+        _newsTicker.Text = Py.S(((rows[0] as PyDict)?["title"]) ?? "");
         Motion.Stagger(_newsHost);
     }
 
@@ -816,7 +816,7 @@ public sealed partial class LaunchPage : PageBase
                 ["memory_mb"] = (int)_mem.Value,
                 ["width"] = 854,
                 ["height"] = 480,
-                ["extra_game_args"] = ExtraArgs(),
+                ["extra_game_args"] = ExtraArgs()!,
             };
             var row = await Api.StartTaskAsync("启动游戏", async (prog, ct) =>
             {
@@ -959,7 +959,7 @@ public sealed partial class LaunchPage : PageBase
     {
         if (_statusRow == null)
             return;
-        bool idle = !_prog.IsVisible && (_status.Text.Length == 0 || _status.Text == "就绪");
+        bool idle = !_prog.IsVisible && (string.IsNullOrEmpty(_status.Text) || _status.Text == "就绪");
         _statusRow.IsVisible = !idle;
     }
 

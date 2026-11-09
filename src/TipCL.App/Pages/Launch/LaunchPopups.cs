@@ -117,12 +117,12 @@ public sealed partial class LaunchPage
             UiClass.Field("内存", memRow, labelWidth: 58),
             UiClass.Field("直连", _server, labelWidth: 58));
         advanced.IsVisible = false;
-        Button toggle = null;
+        Button? toggle = null;
         toggle = UiClass.Btn("更多设置", BtnKind.Ghost, (_, _) =>
         {
             bool open = !advanced.IsVisible;
             advanced.IsVisible = open;
-            toggle.Content = UiClass.Txt(open ? "收起" : "更多设置");
+            toggle!.Content = UiClass.Txt(open ? "收起" : "更多设置");
         });
         toggle.HorizontalAlignment = HorizontalAlignment.Left;
 
@@ -167,7 +167,7 @@ public sealed partial class LaunchPage
             };
             var openLib = UiClass.Btn("打开实例库", BtnKind.Ghost, (_, _) =>
             {
-                _switchPopup.IsOpen = false;
+                _switchPopup!.IsOpen = false;
                 (TopLevel.GetTopLevel(this) as MainWindow)?.Navigate("library");
             });
             openLib.FontSize = 12;
@@ -177,7 +177,7 @@ public sealed partial class LaunchPage
                 PlacementMode.Bottom,
                 PopShell(UiClass.V(8, search, UiClass.Sep(), listScroll, UiClass.Sep(), openLib), 400, 430, new Thickness(0, 6, 14, 14)));
         }
-        _switchSearch.Text = "";
+        _switchSearch!.Text = "";
         RenderSwitchRows();
         BoundShell(_switchPopup);
         _switchPopup.IsOpen = true;

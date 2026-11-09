@@ -21,6 +21,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher;
 using TipCL.App.Common;
+using TipCL.App.Common.Plugins;
 using TipCL.Core;
 using TipCL.Core.Plugins;
 
@@ -64,12 +65,13 @@ public sealed class PluginsPage : PageBase
     private readonly List<string> _logIds = new List<string>();
     private Control _devView = null!;
 
-    private readonly PluginDirs _dirs = new PluginDirs();
+    private readonly PluginDirs _dirs;
     private readonly PluginStateStore _store;
 
     public PluginsPage() : base("plugins", "插件")
     {
-        _store = new PluginStateStore(_dirs.StateFile);
+        _dirs = PluginRuntime.Host.Dirs;
+        _store = PluginRuntime.Host.StateStore;
         _tInstalled = TabBtn("已安装", Tab.Installed);
         _tMarket = TabBtn("市场", Tab.Market);
         var more = U.IconBtn(MoreGlyph, "更多");
@@ -311,7 +313,7 @@ public sealed class PluginsPage : PageBase
             bool on = sw.IsChecked == true;
             try
             {
-                _store.Update(p.Id, r => r.Enabled = on);
+                if (on) PluginRuntime.Start(p.Id); else PluginRuntime.Stop(p.Id);
             }
             catch
             {
@@ -319,7 +321,7 @@ public sealed class PluginsPage : PageBase
                 ToastHost.Show(on ? "启用失败" : "禁用失败", "", ToastKind.Error);
                 return;
             }
-            ToastHost.Show(on ? "已启用" : "已禁用", p.DisplayName + (on ? "（插件运行时 M3 接通后生效）" : ""), ToastKind.Success);
+            ToastHost.Show(on ? "已启用" : "已禁用", p.DisplayName, ToastKind.Success);
             _ = LoadInstalledAsync();
         };
         var top = U.G(null, "Auto,*,Auto");
@@ -601,7 +603,7 @@ public sealed class PluginsPage : PageBase
             _marketHost.Children.Add(empty);
             return;
         }
-        string q = _search.Text.Trim();
+        string q = _search.Text!.Trim();
         var shown = _market
             .Where(m => (_tag.Length == 0 || m.Tags.Contains(_tag))
                         && (q.Length == 0 || Contains(m.DisplayName, q) || Contains(m.Id, q) || Contains(m.Author, q) || Contains(m.Description, q)))

@@ -374,7 +374,7 @@ public sealed class InstanceDetailPage : PageBase
         {
             try
             {
-                foreach (var item in Saves.ListSaves(new Instance(_inst), null))
+                foreach (var item in Saves.ListSaves(new Instance(_inst), null!))
                     if (item is PyDict d)
                         list.Add(new SaveRow
                         {
