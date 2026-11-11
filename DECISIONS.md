@@ -166,3 +166,74 @@
 - 新增的 3 条 `CA1416` 警告(Sysinfo.cs 的 Registry)是分析器不认识自定义的 `Utils.IS_WINDOWS` 所致,
   运行时有守卫;**不靠扩大 NoWarn 压掉**。
 
+## D-18 A4 只编译 53/65 个 Ai 文件,用「全纳入 → 按实测错误排除」的不动点做
+
+- **背景**:任务书把 A4 的目标定为「编译不依赖后端的最大子集」。A4 之前的事实是
+  `BackendApi` / `Ai` / `Plugins` 三者循环依赖,而 `BackendApi`+`Plugins` 要到 A5 才有。
+- **做法**:第 1 步把 `Ai\*.cs` 全部 65 个与 `Sync\*.cs` 全部 4 个**字节级复制**进来;
+  第 2 步先全部参与编译,再按「找不到类型/命名空间」(CS0246 / CS0103 / CS0234)
+  的**实测**错误一轮一轮排除,直到这类错误归零(共 4 轮构建:26 → 6 → 11 → 0 条)。
+  每轮的错误行号都记进了 `TipCL.Core.csproj` 的注释。
+- **最终排除 12 个 Ai 文件**(`Sync` 一个都没排除),分两轮/两类:
+
+  | 轮次 | 文件 | 实测缺什么 |
+  |---|---|---|
+  | 1(直接缺后端) | `Ai\Tools.cs` | `BackendApi` ×10(371/381/392/554/600/658/703/805/814/1067 行) |
+  | 1 | `Ai\ExtraTools.cs` | `BackendApi` ×7(105/269/398/426/448/607/784) |
+  | 1 | `Ai\Agent.cs` | 第 7 行 `using TipCL.Core.Plugins`;`BackendApi` ×4(345/466/535/1731) |
+  | 1 | `Ai\Preview.cs` | `BackendApi` ×2(25/86) |
+  | 1 | `Ai\McpServer.cs` | `BackendApi` ×2(32/79) |
+  | 2(连带) | `Ai\Conflict.cs` | `Agent` ×3(385/410/418) |
+  | 2 | `Ai\Tokens.cs` | `Agent` ×2(41/59) |
+  | 2 | `Ai\ToolMeta.cs` | `ExtraTools` ×1(52) |
+  | 3(连带) | `Ai\Compact.cs` | `Tokens` ×6(65/83/145/148/194/239) |
+  | 3 | `Ai\Usage.cs` | `Tokens` ×2(33/34) |
+  | 3 | `Ai\Scheduler.cs` | `ToolMeta` ×2(20/30) |
+  | 3 | `Ai\Hooks.cs` | `ToolMeta` ×1(129) |
+
+- **`ModUpdate.cs` / `Preflight.cs` 的恢复包从 A4 改成 A5**(推翻了 A3 的 PROGRESS 表):
+  A4 实测 `Ai\Conflict.cs` 进不了编译(缺 `Agent`),所以这两个文件仍然恢复不了。
+  任务书给的回退方案就是「改注释」,已照做;**不为此写桩类型**。
+- **A4 一共排除了 19 个文件**:A2/A3 遗留的 7 个(`BackendApi.cs`、`BridgeServer.cs`、
+  `Launcher\SkinServer.cs`、`Launcher\McLauncher.cs`、`Launcher\GameProcess.cs`、
+  `Launcher\ModUpdate.cs`、`Launcher\Preflight.cs`)+ 本包的 12 个 Ai 文件。
+  `Sync` 的 4 个(`LevelDat` / `PhoneClient` / `PhoneLink` / `SaveSync`)全部参与编译。
+- **没有改被复制文件的任何一处**(69 个文件 SHA256 全等,`changed_count=0`),
+  本包唯一动过的工程文件是 `TipCL.Core.csproj`(它不是复制来的)。
+
+## D-19 给 `TipCL.Tests` 开 `InternalsVisibleTo`,好给 internal 的 `TomlLite` 写用例
+
+- **背景**:`Ai\TomlLite.cs` 是 `internal sealed class`。A4 之前全仓库只有
+  `Ai\Conflict.cs` 用它,而 `Conflict.cs` 因为缺 A5 的 `Agent` 被排除 → 没有任何公开路径能碰到它。
+  任务书把「`Ai\TomlLite`(若参与编译)」列为优先测试对象,它确实参与了编译。
+- **决定**:`src\TipCL.Core\TipCL.Core.csproj` 加 `<InternalsVisibleTo Include="TipCL.Tests" />`,
+  测试直接 `TomlLite.Parse(...)`。
+- **为什么不用反射**:反射测内部类型要么绕不开 `BindingFlags.NonPublic`、
+  要么把断言写成字符串化的 MethodInfo,出错时信息更差;`InternalsVisibleTo` 是 SDK 原生支持的一行。
+  这**不**影响任何被复制的源码,也不改变运行行为。
+- **仍然不用反射**:`AiSyncHomeIsolationTests.cs` 对私有路径属性(`VisionCaps.PrefPath`、
+  `Permission._store_path`、`Sync\PhoneLink.StatePath`)一律走「调一次会落盘的公开方法 / 公开读取端」
+  来证明目录位置,不写反射。
+
+## D-20 A4 复核:直接调 `Utils.ResolveRoot()` 的地方是 5 处,不是任务书里写的 4 处
+
+- 任务书列的 4 处(`Ai\FileMemory.cs:23`、`Ai\McpServer.cs:58`、`Ai\VisionCaps.cs:37`、`Sync\PhoneLink.cs:58`)
+  逐行核对**全部属实**;但 `Sync\PhoneClient.cs:376` 还有一处
+  `Path.Combine(Utils.ResolveRoot(), "adb.exe")`,属于同一形状(每次调用都重新解析,不吃 `Utils.ROOT` 缓存)。
+- **影响**:A4 的红线处置不变(`AssemblyInfo.cs` 的 `DisableTestParallelization` 与
+  `TestHomeIsolation.cs` 的 `[ModuleInitializer]` 一个字都没动,新用例也不改写 `TIPCL_HOME`)。
+  A5/B2 改动这几个点时按 **5 处**来数。
+- 另外这两个目录里**走缓存 `Utils.ROOT`** 的落盘位置一共 12 处(Artifacts 24、Checkpoint 26、
+  Hooks 122、Permission 321、Rewind 15、Store 29/400、Trace 20 等),它们本来就吃 `Utils.SetRoot`,
+  隔离由 A3 的机制覆盖。
+
+## D-21 A4 踩到的两个新工具坑(与 D-12 同类)
+
+1. **`write` 工具写出来的 `.ps1` 没有 BOM**:Windows PowerShell 5.1 会按 ANSI 读,
+   脚本里的中文路径再次变成乱码(D-12 已经记过这件事,这次是「自己生成的文件」也中招)。
+   一次性脚本落盘后要再 `[IO.File]::WriteAllText($p, $t, (New-Object Text.UTF8Encoding $true))` 补 BOM。
+2. **`Set-Location` 对 `[IO.File]::*` 静态调用无效**:同一段脚本里先 `Set-Location` 再按相对路径调
+   `[IO.File]::ReadAllText`,解析基目录仍是 DSH 的进程工作目录,结果把 4 个**空文件**写到了仓库根。
+   已按字节数为 0 + 目录校验后删除,提交前 `git status` 复核干净。**改文件一律用 edit 工具,别用脚本批量替换。**
+
+
