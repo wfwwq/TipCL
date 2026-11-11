@@ -73,3 +73,42 @@
 `TipCL.exe` 是 `WinExe`(GUI 子系统)。在 Windows PowerShell 里用 `& .\TipCL.exe ...` 调它**不会等待**,
 `$LASTEXITCODE` 是空的。收尾验证用 `cmd /c "..."`(cmd 会等 GUI 进程)拿到真实退出码。
 `Start-Process -NoNewWindow` 在本沙箱直接 `Access is denied`,没走通。
+
+## D-10 Avalonia 抬到 11.3.23(**取代** D-01 的版本结论)
+
+- **背景**:A2 开工时 `https://api.nuget.org/v3-flatcontainer/avalonia/index.json` 在本次运行环境里能通
+  (HTTP 200),索引里最高的 11.x 稳定版(版本号不含 `-` 后缀)是 **11.3.23**。
+- **决定**:`Directory.Build.props` 的 `TipCLAvaloniaVersion` 从 11.3.2 抬到 **11.3.23**,
+  `dotnet restore TipCL.Mac.sln` 退出码 0(实测拉到了线上包)。
+- **作废**:D-01 里「只能用本地缓存 11.3.2」与它「等能联网时再升」的遗留项到此关闭。
+  仍然坚持 GOAL 的「不用 12.x」。
+
+## D-11 A2 暂时排除编译的 6 个文件(裁决 A)
+
+- A2 只做 Core 基座。下面 6 个文件已**按 Windows 版字节级复制并入库**(内容与源文件逐字节一致),
+  但在 `src/TipCL.Core/TipCL.Core.csproj` 里 `<Compile Remove>` 掉,等对应包恢复:
+
+  | 文件 | 缺什么 | 恢复包 |
+  |---|---|---|
+  | `BackendApi.cs` | Launcher 的 `Config/LauncherConfig`、`AccountManager`、`Instance`、`DownloadManager`、`AgentResult`、`Utils` | A5(后端主体) |
+  | `BackendWorker.cs` | 后端整体;本身只有一个用不到的 `using TipCL.Core.Launcher;` | A5 |
+  | `BridgeServer.cs` | `Launcher.Utils.DecodeUtf8Strict` | A3(主体接线在 A5) |
+  | `CoreResources.cs` | `Launcher.Utils.DecodeUtf8Strict` | A3 |
+  | `PPath.cs` | `Launcher.Utils.ROOT` | A3 |
+  | `TaskContext.cs` | 后端类型 `BackendWorker`(字段 / 构造 / `Current`) | A5 |
+
+- **为什么不写桩类型**:任务书红线禁止空命名空间 / 空实现硬凑。
+- **为什么 `BackendWorker.cs` 也算「依赖」**:它只差一个不用的 `using`,删掉这一行就能编译,但那是
+  改被复制文件(不是跨平台缺口),A5 会把它连 BackendApi 一起接上,所以选**一处不改**的最保守做法。
+- **影响**:`CoreResources` 读资源的逻辑本包进不了编译,嵌入资源清单改用 `typeof(PyJson).Assembly` 断言
+  (A3 恢复 `CoreResources` 后可以补一条走 `CoreResources.ReadText` 的用例)。
+
+## D-12 两个本机踩到的工具陷阱(A2 记录,后续包直接用)
+
+1. **别用 `Assert.DoesNotContain(string, string)` 查 `U+FEFF`**:xunit 走 `CurrentCulture`,
+   而 U+FEFF 是**可忽略字符**,任何字符串都会被判成「在 0 处找到了」。
+   要查 BOM 就用 char 比较(序数),例如 `Assert.NotEqual('\uFEFF', text[0])` /
+   `text.IndexOf('\uFEFF') < 0`。
+2. **本机 `powershell -File x.ps1` 读不到非 ASCII 路径**:Windows PowerShell 5.1 把无 BOM 的
+   UTF-8 脚本按 ANSI 读,脚本里的中文路径会变成乱码(实测 `D:\项目\...` → `D:\椤圭洰\...`)。
+   `artifacts/` 下的一次性脚本要写成 **UTF-8 with BOM**(D-08 只说了输出用 ASCII,这次补上输入侧)。

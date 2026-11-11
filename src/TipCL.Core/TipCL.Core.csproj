@@ -4,6 +4,39 @@
     <RootNamespace>TipCL.Core</RootNamespace>
     <AssemblyName>TipCL.Core</AssemblyName>
     <IsPackable>false</IsPackable>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
   </PropertyGroup>
+
+  <!--
+    资源与 Windows 版 TipCL.csproj 用同一组 LogicalName 嵌入到 TipCL.Core 程序集,
+    因为 CoreResources 读的是自己所在程序集(见 GOAL §3「内嵌资源」)。
+    这些文件(.json/.mjs/.js/.d.ts)会被 SDK 的默认 None glob 收走,
+    显式摘掉 None 以免同一个文件同时是 None 项与 EmbeddedResource 项。
+  -->
+  <ItemGroup>
+    <None Remove="Resources\**\*" />
+  </ItemGroup>
+
+  <!--
+    裁决 A:以下文件已按 Windows 版字节级复制并入库,暂时排除编译,
+    因为它们引用了尚未搬过来的 TipCL.Core.Launcher / 属于后端(A2 只做 Core 基座)。
+    不写桩类型、不留下空命名空间来硬凑编译。
+  -->
+  <ItemGroup>
+    <!-- 依赖 Launcher:Config / LauncherConfig / AccountManager / Instance / DownloadManager / AgentResult / Utils -->
+    <Compile Remove="BackendWorker.cs" />   <!-- 后端整体:A5 与 BackendApi 一起恢复;本身只有一个未使用的 using TipCL.Core.Launcher; -->
+    <Compile Remove="BackendApi.cs" />      <!-- 后端主体:A5(Launcher 体现在 A3)恢复编译 -->
+    <Compile Remove="BridgeServer.cs" />    <!-- 依赖 Launcher.Utils.DecodeUtf8Strict:A3 恢复编译(主体接线在 A5) -->
+    <Compile Remove="CoreResources.cs" />   <!-- 依赖 Launcher.Utils.DecodeUtf8Strict:A3 恢复编译 -->
+    <Compile Remove="PPath.cs" />           <!-- 依赖 Launcher.Utils.ROOT:A3 恢复编译 -->
+    <Compile Remove="TaskContext.cs" />     <!-- 依赖后端类型 BackendWorker(字段/构造/Current):A5 恢复编译 -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\locales\en.json" LogicalName="TipCL.Core.locales.en.json" />
+    <EmbeddedResource Include="Resources\locales\zh_CN.json" LogicalName="TipCL.Core.locales.zh_CN.json" />
+    <EmbeddedResource Include="Resources\ai\model_rules.json" LogicalName="TipCL.Core.ai.model_rules.json" />
+    <EmbeddedResource Include="Resources\plugin-host\**\*" LogicalName="TipCL.Core.plugin-host.%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
 
 </Project>
