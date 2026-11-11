@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>TipCL.Core</RootNamespace>
+    <AssemblyName>TipCL.Core</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>TipCL</AssemblyName>
+    <RootNamespace>TipCL</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Avalonia 11 的 native interop(Windows/Win32 后端)需要 -->
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TipCL.Core\TipCL.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(TipCLAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(TipCLAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Skia" Version="$(TipCLAvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(TipCLAvaloniaVersion)" />
+    <!-- smoke 离屏截图用:Headless 平台 + Skia 真实渲染 -->
+    <PackageReference Include="Avalonia.Headless" Version="$(TipCLAvaloniaVersion)" />
+  </ItemGroup>
+
+</Project>

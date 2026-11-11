@@ -1,0 +1,20 @@
+# 构建产物
+bin/
+obj/
+dist/
+artifacts/
+TestResults/
+*.binlog
+
+# IDE / 用户本地
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# 冒烟截图(--smoke 的默认输出)
+smoke*.png
+
+# macOS
+.DS_Store

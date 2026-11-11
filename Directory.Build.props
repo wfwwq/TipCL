@@ -1,0 +1,25 @@
+<Project>
+
+  <!--
+    mac 线三个工程的公共属性(A1 建立)。
+    - TFM / LangVersion / Nullable / AllowUnsafeBlocks 按 GOAL.md 第 3 节的技术决定统一。
+    - NoWarn 本包留空,A2 搬到 Windows csproj 的列表后再填(见 DECISIONS.md D-03)。
+    - 包版本集中在这里,TipCLAvaloniaVersion 用私有前缀,避免和 Avalonia 包自带的
+      AvaloniaVersion 属性互相覆盖。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>annotations</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- 本机离线:只能用 NuGet 本地缓存里已有的最高 11.x 稳定版(见 DECISIONS.md D-01)。 -->
+    <TipCLAvaloniaVersion>11.3.2</TipCLAvaloniaVersion>
+  </PropertyGroup>
+
+</Project>
