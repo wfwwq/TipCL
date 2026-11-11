@@ -19,17 +19,19 @@
 
   <!--
     裁决 A:以下文件已按 Windows 版字节级复制并入库,暂时排除编译,
-    因为它们引用了尚未搬过来的 TipCL.Core.Launcher / 属于后端(A2 只做 Core 基座)。
-    不写桩类型、不留下空命名空间来硬凑编译。
+    因为它们引用了尚未搬过来的类型。不写桩类型、不留下空命名空间来硬凑编译。
+    A2 排除的 BackendWorker.cs / TaskContext.cs / CoreResources.cs / PPath.cs 已在 A3 恢复编译,
+    BridgeServer.cs 恢复失败(缺 A5 的类型 BackendApi),其硬依赖链一并等 A5。
+    完整推导见 DECISIONS.md D-13。
   -->
   <ItemGroup>
-    <!-- 依赖 Launcher:Config / LauncherConfig / AccountManager / Instance / DownloadManager / AgentResult / Utils -->
-    <Compile Remove="BackendWorker.cs" />   <!-- 后端整体:A5 与 BackendApi 一起恢复;本身只有一个未使用的 using TipCL.Core.Launcher; -->
-    <Compile Remove="BackendApi.cs" />      <!-- 后端主体:A5(Launcher 体现在 A3)恢复编译 -->
-    <Compile Remove="BridgeServer.cs" />    <!-- 依赖 Launcher.Utils.DecodeUtf8Strict:A3 恢复编译(主体接线在 A5) -->
-    <Compile Remove="CoreResources.cs" />   <!-- 依赖 Launcher.Utils.DecodeUtf8Strict:A3 恢复编译 -->
-    <Compile Remove="PPath.cs" />           <!-- 依赖 Launcher.Utils.ROOT:A3 恢复编译 -->
-    <Compile Remove="TaskContext.cs" />     <!-- 依赖后端类型 BackendWorker(字段/构造/Current):A5 恢复编译 -->
+    <Compile Remove="BackendApi.cs" />            <!-- A5 恢复编译:后端主体,依赖 Launcher 的 Config/AccountManager/Instance/DownloadManager/Utils -->
+    <Compile Remove="BridgeServer.cs" />          <!-- A5 恢复编译:缺类型 BackendApi(即属性 Api 的类型、构造函数第 1 个参数,见 BridgeServer.cs 88/102 行) -->
+    <Compile Remove="Launcher\SkinServer.cs" />   <!-- A5 恢复:硬依赖 BridgeServer 的静态方法 Unquote/SplitTarget/Phrase/ReadLine(252/253/285/329/392/426/442 行) -->
+    <Compile Remove="Launcher\McLauncher.cs" />   <!-- A5 恢复:第 40 行调 SkinServer.ApiFor -->
+    <Compile Remove="Launcher\GameProcess.cs" />  <!-- A5 恢复:43/48 行调 McLauncher._set_priority / WatchWindowTitle -->
+    <Compile Remove="Launcher\ModUpdate.cs" />    <!-- A4 恢复:需要 Ai.Conflict.InspectJar;而 Conflict 依赖 Ai.Agent,Agent 又牵出 37 个 Ai 文件 -->
+    <Compile Remove="Launcher\Preflight.cs" />    <!-- A4 恢复:同上(需要 Ai.Conflict.InspectJar) -->
   </ItemGroup>
 
   <ItemGroup>
