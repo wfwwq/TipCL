@@ -350,3 +350,16 @@
 - **代价**:真机上用户点「版本设置」被送进实例详情页,撞上 R9 的崩溃,还让 R8 把崩溃归因到了「版本设置」对话框 —— 归因跑偏的直接原因就是文案与行为不一致(规则已在 D-39 立下)。
 - **规则**:同一入口的文案 / 图标 / 动作三者必须一致,以 Windows 参考版为准;确要偏离必须同时改文案并在 `DECISIONS.md` 立条目,禁止「借壳」。
 - **实例详情页的正当入口**:版本选择区头部的「实例详情」chip(`LibraryPage.cs:130`)与实例卡片右键菜单(`FolderMenu`),两者都走同一个 `OpenDetailAsync`,不因本次归位而丢失。
+
+### D-42 · 冒烟捕获:捕获前必须推一次渲染 pass,并丢弃首帧(R13,2026-11-13,移植代理;主 agent 逐字节复核)
+
+- **事实**:无头会话里只跑 `Dispatcher.UIThread.RunJobs()` **不会**触发 `Measure/Arrange/重合成`(与 D-39 同源);`CaptureRenderedFrame()` 因此可能抓到「尚未重合成的上一帧」。R13 用 stash 前后逐像素对照证明:改前那一帧的插件页空状态整片缺失(2301 px,0.465%),改后与真机参考帧一致。
+- **规则**:冒烟类截图必须在**捕获前**显式推一次渲染 pass(`AvaloniaHeadlessPlatform.ForceRenderTimerTick` + `RunJobs`),再**捕获两次、丢弃首帧、只保存第二帧**;`SMOKE_WAIT` 未显式给时要有最小 settle(现为 400ms),显式给了就仍按原语义等,不许叠加。
+- **不许**:把「截图看着对」当成渲染完成的证据;也不要因为哈希抖动就把 PNG 字节相等当页面身份判据(见 R11 小节:同页两次渲染可差 14~40 B)。
+- **仍未解释的现象**:R8 在真机冷启动首批见过「连续 4 页写成上一页(launch)的帧且字节完全相同」,之后 20 次复跑 + 本轮冷启动 16 次都**没复现**。本轮只把它降级为「已加防御性确定性」,不声称已修掉。
+
+### D-43 · 真机定位控件只用窗口相对坐标;无头/冒烟运行必须用隔离的 TIPCL_HOME(R11/R12/R13,2026-11-13,主 agent)
+
+- **窗口相对坐标**:X11 下 `xdotool getwindowgeometry` 报的 X/Y 与窗口客户区在整屏截图里的位置**并不一致**(实测差 18~50px),所以「整屏截图量位置再反算绝对坐标」连点四轮都可能全部落空。正确做法:`import -window <WID>` 只截窗口 → 在窗口图像里量位置 → `xdotool mousemove --window <WID> x y click 1`。本轮用这套方法一次命中(Y 方向偏 10px 以内)。
+- **隔离 HOME**:跑 `--smoke` / 无头验证必须显式给一个**隔离的 `TIPCL_HOME`**;脚本里别用 `$home` 这类会与 PowerShell 只读变量 `$HOME` 撞名的名字(赋值失败不报错,`TIPCL_HOME` 会静默落到用户目录根,把 `config.json` / `logs` / `ai_chats.json` 写进 `C:\Users\Administrator`)。出事后按「CreationTime 当天 + 路径精确匹配」逐个清理,并复核真实数据基线(`%LOCALAPPDATA%\TipCL\config.json` 的 mtime / sha)。
+- **测活与判据**:进程测活用**产物自己的路径**(改名后的单文件产物 cmdline 里没有 `TipCL.App` 子串,用 `pgrep -f TipCL.App` 会得出「进程没了」的假结论);页面身份看内容/像素,不看 PNG 字节哈希。

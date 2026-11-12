@@ -74,17 +74,19 @@ internal static class SmokeRunner
                         && window.CurrentPageId == "settings"
                         && window.CurrentPage is TipCL.App.Pages.Settings.SettingsPage st)
                         st.SelectTab(tab);
-                    Dispatcher.UIThread.RunJobs();
-                    var waitSec = int.TryParse(Environment.GetEnvironmentVariable("SMOKE_WAIT"), out var w) ? w : 0;
-                    if (waitSec > 0)
-                    {
-                        var until = DateTime.UtcNow.AddSeconds(waitSec);
-                        while (DateTime.UtcNow < until)
-                        {
-                            Dispatcher.UIThread.RunJobs();
-                            System.Threading.Thread.Sleep(50);
-                        }
-                    }
+                    // R8:导航后只跑 RunJobs 不够——无头会话里 await / Thread.Sleep 都不触发
+                    // Measure/Arrange,必须显式推渲染计时器,布局与重合成才跑得动
+                    // (仓库先例:tests/TipCL.Tests/App/InstanceDetailCrashTests.cs 的 PassAsync)。
+                    RenderPass();
+
+                    // R8 真机现象:冷启动首批 8 页里前 4 页把上一页(launch)的帧原样写进新文件名。
+                    // 成因候选:SMOKE_WAIT 默认 0 时零 settle,CaptureRenderedFrame 抓到尚未重合成的上一帧。
+                    // 故未显式给 SMOKE_WAIT 时也补一个最小 settle;显式给了就仍等这么久(原语义)。
+                    var waitRaw = Environment.GetEnvironmentVariable("SMOKE_WAIT");
+                    var waitGiven = int.TryParse(waitRaw, out var waitSec);
+                    var settleMs = waitGiven ? Math.Max(0, waitSec) * 1000 : DefaultSettleMs;
+                    Settle(settleMs);
+
                     if (Environment.GetEnvironmentVariable("SMOKE_PROBE") == "1")
                     {
                         foreach (var v in window.GetVisualDescendants().Prepend(window))
@@ -92,6 +94,10 @@ internal static class SmokeRunner
                             Console.WriteLine($"PROBE {v.GetType().Name} cls=[{string.Join(",", (v as Avalonia.StyledElement)?.Classes ?? [])}] bounds={v.Bounds.Width:F1}x{v.Bounds.Height:F1}@{v.Bounds.X:F0},{v.Bounds.Y:F0}");
                         }
                     }
+                    // 捕获前再显式推一次渲染 pass,然后捕获两次、丢弃第一帧、只保存第二帧:
+                    // 第一张最有可能就是 R8 那个「尚未重合成的上一帧」。
+                    RenderPass();
+                    DiscardFirstFrame(window);
                     using var frame = window.CaptureRenderedFrame();
                     if (frame is null)
                     {
@@ -115,6 +121,47 @@ internal static class SmokeRunner
             .SetupWithoutStarting();
 
         return exitCode;
+    }
+
+    /// <summary>未显式给 SMOKE_WAIT 时的最小 settle 毫秒数:给外壳一次重新测量 + 重合成的机会。</summary>
+    private const int DefaultSettleMs = 400;
+
+    /// <summary>
+    /// 显式推一次渲染 pass:计时器 tick + 跑 Dispatcher 队列。无头会话里只 RunJobs 不会触发
+    /// Measure/Arrange,布局、模板、重合成都要靠这次 tick 才会跑(仓库先例见 DECISIONS.md D-39)。
+    /// </summary>
+    private static void RenderPass()
+    {
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick(1);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>
+    /// settle:ms 毫秒内反复推渲染 pass(tick + RunJobs),让异步灌进来的数据、待跑布局与
+    /// 重合成落地。ms 为 0 时仍至少推两次渲染 pass(不会退化成「什么都不做」)。
+    /// </summary>
+    private static void Settle(int ms)
+    {
+        var until = DateTime.UtcNow.AddMilliseconds(Math.Max(0, ms));
+        do
+        {
+            RenderPass();
+            if (DateTime.UtcNow >= until) break;
+            System.Threading.Thread.Sleep(30);
+        } while (true);
+    }
+
+    /// <summary>捕获一次并丢弃(它最可能就是上一页的残留帧);失败只记一笔,不让冒烟直接退出。</summary>
+    private static void DiscardFirstFrame(Window window)
+    {
+        try
+        {
+            using var warm = window.CaptureRenderedFrame();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"--smoke:丢弃的首帧捕获失败(忽略): {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private static int InstallProbe(string version, string instance)

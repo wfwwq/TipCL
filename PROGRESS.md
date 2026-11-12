@@ -381,3 +381,36 @@
 - **测试**:新增 `tests/TipCL.Tests/App/StartupPromptVisibilityTests.cs`(4 条:未 Show 的窗口不可见 / 未 Show 时提示一次都不跑、Show 后才跑 / 已可见立刻跑 / 永不显示时在上限内收摊且不跑提示);`InstanceDetailCrashTests` 的入口改用「实例详情」chip(同一个 `OpenDetailAsync`),并新增齿轮断言(弹的是版本设置对话框、`Dlg.AnyOpen`、`Detail(win)==null`)。
 - **主 agent 复核**:Release 重编 **0 CS/CA 警告**(2 条 `NU1900` 为镜像噪声);`dotnet test` 独立复跑 **334 通过 / 1 跳过 / 0 失败**(基线 329+1,新增 5);真机上向导确实弹出。
 - **遗留(下一棒)**:冒烟截图的「首批执行残留帧」问题(R8 观察,之后 20 次复跑未再现)。
+
+### 2026-11-13 M4-H R12 补验 + R13 冒烟确定性(主 agent + 移植代理)
+
+**R12 缺陷 2(齿轮归位)真机验收**:最终产物 `tipcl14` 上点实例库版本行齿轮(窗口相对坐标 `(1026,350)`)→ 打开的是 **「版本设置 · 26.3」对话框**(版本隔离 / 独占内存 / JVM 参数 / 垃圾回收器 / 直连服务器 / 端口 / 启动前命令 + 取消/保存),不再是实例详情页;`unhandled=0`、`ERROR=0`。截图 `_cmp/r14-gear.jpg`。
+
+**实例详情页的另一个入口也真机验过**:齿轮归位后,实例详情页由「实例详情」chip 进入 —— **窗口相对坐标 `(780,88)` 命中**(`xdotool mousemove --window $WID` + `import -window $WID`),详情页正常打开(「26.3 / 1个版本」+ 分段条 + 空态),`unhandled=0`。截图 `_cmp/r14y-after.jpg`。**方法论教训**:之前几轮用整屏截图反算坐标,误差 20~50px 导致连点 4 轮都没命中(窗口客户区原点在 X11 下与 `getwindowgeometry` 的 X/Y 并不一致);**只用窗口相对坐标**(窗口自身截图量位置 + `--window $WID` 点击)才可靠。
+
+**盒子 8 页 ×2 批冒烟(冷启动,`rm -rf ~/.net/tipcl14`)**:16/16 次 exit=0,同批 8 张 PNG 两两不同,`$TIPCL_HOME/logs` **0 WARN / 0 ERROR**;R8 那条「冷启动首批把上一页帧写进新文件名」**未复现**(与 R8 自己 20 次复跑未复现一致)。
+
+**R13(冒烟捕获确定性,移植代理;主 agent 逐字节复核)**:只改 `src/TipCL.App/Session/SmokeRunner.cs`(+58/−11)——
+
+- 导航 / `SMOKE_SEG` / `SMOKE_SETTINGS_TAB` 之后显式推一次渲染 pass(`AvaloniaHeadlessPlatform.ForceRenderTimerTick(1)` + `Dispatcher.UIThread.RunJobs()`,即 D-39 那条先例);
+- `SMOKE_WAIT` **显式给了**就仍等这么久(原语义),**未给**时补 400ms 最小 settle(每页 +~0.4s,8 页 5.3s → 8.7s,远低于 30s 上限);
+- 捕获前再推一次渲染 pass,然后**捕获两次、丢弃首帧、只保存第二帧**;首帧捕获失败只记 stderr,不让冒烟崩。
+
+**R13 的关键副产物(改前代码在本机就会抓到未重合成帧)**:把 R13 改动临时 stash 后重跑同一批并逐像素比 —— **plugins / plugins-dark 差 2301 px(0.465%,x318..573 y249..318),改前那帧该区域整片空白,缺了插件页空状态**(`U.Empty("◇","还没有安装插件",…)`);改后与 11/12 盒子参考帧同区域一致。这把「capture 早于渲染完成」从猜测变成了本机因果证据。**但 R8 那次「与上一页完全相同」仍未复现,不能声称已修掉它**:本机是框架依赖产物,没有单文件自解压那一段。
+
+**主 agent 复核 R13**:Release 重编 **0 条 CS/CA 警告**;自己连跑 8 页 ×2 批,**16 张 PNG 的 sha256 与字节数逐页、逐批与 R13 报告完全一致**(launch `27bc9fe4…` / 563098B,library `4e0c364a…` / 45829B,download `30f195d2…` / 23655B,plugins `856adbc1…` / 35012B,settings `318920d4…` / 37893B,ai `ecb78e19…` / 37553B,library-dark `2d075f90…` / 43859B,plugins-dark `6390b2c0…` / 33574B),同批 8/8 互不相同 ⇒ 证据为真且流程确定。
+
+**事故与处置(必读)**:R13 与主 agent 的冒烟脚本里用了 `$home` 变量名,与 PowerShell **只读变量 `$HOME`** 撞名(赋值失败但不报错退出),于是 `TIPCL_HOME` 实际指向 `C:\Users\Administrator`,两次冒烟各在**用户目录根**写下 `config.json` / `ai_chats.json` / `ui-theme.json` / `logs\tipcl-20261113.log`。已按「CreationTime 为当天 + 路径精确匹配」的守卫逐个删除并复核;**真实用户数据目录 `%LOCALAPPDATA%\TipCL` 未被触碰**(`config.json` 仍是 `2026-11-08 17:13:58`、`ai_chats.json` 仍是 `2026-11-08 17:12:29`)。以后冒烟/无头运行一律显式给**隔离的 `TIPCL_HOME`**,且变量名不要叫 `$home`(见 D-43)。
+
+**新发现:测试套件偶发失败(与本次改动无关,立 R14)**:当天在**未改动测试**的情况下连跑,出现两次不同的用例失败,栈都是无头会话初始化竞态:
+
+- `ApiContractsTests.Cleaner_Language_Themes_Accounts_AreWired`:`System.InvalidOperationException: Call from invalid thread`,栈在 `AvaloniaHeadlessPlatform.Initialize` → `Compositor..ctor` → `RenderLoop.Add`;
+- `AiPageResidualTests.SlashMenu_ShowsAndHides`(同一栈,`tests/TipCL.Tests/App/TestApp.cs:50`)。
+
+两者都不经过 `SmokeRunner`(测试里只有 `Skip` 的 `SmokeIntegrationTests` 提到它),所以不是 R13 引入的;但它让「全绿」这个验收判据本身不可靠,必须修。
+
+### 2026-11-13 M4-H R13 数字口径(便于以后对齐)
+
+- 8 页冒烟总时长:改前 5330ms → 改后 8642 / 8685ms(每页 +~410ms,来自 400ms 最小 settle)。
+- `SMOKE_WAIT=1` 时实测 1640ms ≈ `1050 − 400 + 1000`,即显式等待仍是原语义、没有被叠加。
+- 参数兼容性抽查全部 exit=0:`SMOKE_TASKS=1 + SMOKE_PAGE=tasks`、`download + SMOKE_SEG=2`、`settings + SMOKE_SETTINGS_TAB=1`(31957B ≠ 默认 37893B,切页生效)、`library + SMOKE_PROBE=1`(239 行 PROBE)。
