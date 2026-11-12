@@ -695,7 +695,7 @@ Lead 裁决:
 
 给 A6 的事实(Lead 实测 Windows `tests\TipCL.Tests`):
 
-- 共 29 个 `.cs`(84 KB)加一个 `fixtures\webp-sample.webp`。工程引用的是 net48 的 `TipCL.exe`,另有包 `GitHubActionsTestLogger`(mac 不需要)。
+- 共 29 个 `.cs`(84 KB)加一个 `fixtures\webp-sample.webp`(**更正:实际 30 个 `.cs`,见 A6 的 Lead 验收**)。工程引用的是 net48 的 `TipCL.exe`,另有包 `GitHubActionsTestLogger`(mac 不需要)。
 - **7 个文件依赖界面层命名空间**(`TipCL.Services` / `Pages` / `Controls` / `Themes`),A6 搬不了:`AiChatOpsTests`、`FileKindsTests`、`LayoutDefaultTests`、`NavCompatTests`、`PageLayoutTests`、`WebpFallbackTests`、`Win7CompatTests`。后两个还依赖 ImageSharp,是 Windows 专属,mac 版不适用。
 - Windows 的 `TestHome.cs` 是 `public sealed class TestHome : IDisposable`(每个测试在 `%TEMP%` 建临时目录并改 `TIPCL_HOME`,`Dispose` 时恢复),**与 mac 这边的 `internal static class TestHome` 重名**;它还带一行与 `AssemblyInfo.cs` 重复的 `[assembly: CollectionBehavior(...)]`。
 - `StaticInitOrderTests`、`IconFontTests` 靠向上找 `TipCL.sln` 定位仓库根再读源码文件;mac 的 sln 叫 `TipCL.Mac.sln`,源码路径也不同。`IconFontTests` 要的 `TipCLIcons.ttf` 到 C1 才有。
@@ -865,3 +865,33 @@ System.Net.HttpListenerException : 句柄无效。
 8. 分层提醒:`AiFileToolsTests` 里有 `"C:\\some\\where\\else.txt"`、`"C:"`、`GetRandomFileName()` 这类
    Windows 形状的**字符串**与 `"logs\\latest.log"` 的**反斜杠相对路径**,在 Windows 上本来就该绿、本机也全绿;
    但这些字面量对 mac 没有意义,等 mac 端真的开始跑真机测试时值得再看一眼(本包按任务书**不做 mac 化改写**)。
+
+### Lead 验收(2026-11-12 08:40)
+
+结论:**A6 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 第 1 步提交 `cd8e2e4` 里 `Ported\` 的 29 个文件对 Windows 源比 git blob | 29 / 29 一致,确实是原样复制;`TestHome.cs` 没搬 |
+| `git diff cd8e2e4..HEAD -- tests/TipCL.Tests/Ported` | 只有 4 个文件、8 处改动:3 处 `TipCL.sln` / 源码路径适配,5 处 `Path.GetTempPath()` → `TestHome.Root`。没有改断言、期望值,没有删用例或加 Skip |
+| `src\` 自 `6bdad10` 起 | 0 个文件被改 |
+| 红线文件 `AssemblyInfo.cs`、`.gitattributes`、`Directory.Build.props` | 未改 |
+| `TestHomeIsolation.cs` | 静态 `Root` / `Init()` 未动;新增实例成员 `Dir` / 构造 / `Dispose`,临时目录建在 `Root` 下;原有用例未删,新增 2 条 |
+| `Program.cs` | 按声明顺序执行(原来按方法名),补 `IDisposable` / `IAsyncLifetime` 清理;其余逻辑未动 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告 = CA1416 ×7 + SYSLIB0014 ×1 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 652 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 652 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试前后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录数(Lead 复跑前后) | 78 → 78;`tipcl-test-*` 仍是 2 个 |
+| 残留进程 `testhost` / `java` / `adb` / `TipCL` | 0 个 |
+| 参与编译的搬来测试扫描 | 没有实例化后端、监听、联网、起进程、`GetTempPath` 调用(只剩注释里的字样) |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+Lead 的更正与裁决:
+
+- A5 验收里我写「Windows 测试共 29 个 `.cs`」是错的,实际 30 个;除 `TestHome.cs` 外搬 29 个,子代理做得对(D-30)。
+- A5 验收里我把 `StaticInitOrderTests` 归因为 sln 改名也不完整,它还要读未移植的 `Pages\SettingsPage.cs`,归 C3 恢复(D-28)。
+- **`PhoneLinkTests` 维持排除**。除了 testhost 里 `HttpListener` 报「句柄无效」,还有第二个原因:它经 Core 的 `PhoneLink.cs:279` 往 `%TEMP%\tipcl-phone-sync` 写文件,违反「测试临时文件落在仓库内」。Lead 没有在本机复跑它。恢复条件:B2 把该临时目录改成可注入之后。
+- 红线记录:A6 适配前的两次试跑(08:15 / 08:19)在 `%TEMP%` 建了一个空目录 `tipcl-phone-sync`,属于写到了仓库之外。目录为空,Lead 没有删除,已报用户。
+- 执行顺序敏感(D-25 / D-26):同类用例共用缓存的 `Utils.ROOT`,这是 Windows 测试原有的性质。以后不许给测试类加并行或乱序。
