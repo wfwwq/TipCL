@@ -2937,6 +2937,48 @@ NuGet 因为缓存里本来没有 mac 运行时包,第一次 self-contained publ
 6. 路径里带中文/Finder 中文名时能不能正常启动(本机路径 `D:\项目\tipcl\mac` 只有 Windows 侧验过)。
 7. B3 产出的界面还是 A1 的占位窗口:**"能起来"不等于功能可用**,功能可用要等 C 阶段。
 
+### Lead 验收(2026-11-13 06:55)
+
+结论:**B3 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src\` 全部文件 | 自 `d4ad4ce` 起一个字节未改(`git diff --name-status d4ad4ce HEAD -- src` 为空) |
+| 红线文件、`Ported\`、`AssemblyInfo.cs`、`TestHomeIsolation.cs`、`Program.cs`、`.gitattributes`、`Directory.Build.props` | 未改 |
+| 已有测试被改动的 | 只有 `TipCL.Tests.csproj` 多一条 `ProjectReference`(任务书授权) |
+| 仓库内是否新增 `NuGet.config` | 没有;`dist\`、`artifacts\`、`bin\`、`obj\`、PNG、`test-home` 均未入库 |
+| `packaging\TipCL.ico` 与 Windows 源 | SHA256 一致 |
+| `tools\package.ps1` | UTF-8 with BOM;非 ASCII 只出现在注释里;输出行全是 ASCII |
+| 提交的文本文件严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| 归档本身(Lead 用 `tar -tvzf` 独立读回) | 443 条目;全部以 `TipCL.app/` 开头、`/` 分隔、无 `..` 反斜杠;owner 0/0;mtime 全部 `2000-01-01` |
+| 权限位 | 400 个文件 0644、37 个 0755、6 个目录 0755;32 个 `.dylib` 全部 0755;没有任何条目带组/其它写位;`Info.plist` 与 `TipCL.icns` 是 0644 |
+| 可执行的三项 | `Contents/MacOS/TipCL`(150 字节)、两个架构的 apphost 都是 `-rwxr-xr-x` |
+| 两个架构的对称性 | arm64 217 个文件、x64 217 个文件,文件名集合完全一致(比较结果 0 处差异) |
+| 启动脚本(Lead 读原始字节) | 150 字节,CR=0、LF=6、无 BOM、无非 ASCII,正文与任务书逐字一致 |
+| `Info.plist` | 878 字节,UTF-8 无 BOM;`System.Xml` 解析通过,12 个键;中文显示名 `TipCL 启动器` 正常 |
+| Mach-O 头(Lead 自己写解析器复核) | arm64 apphost `cputype=0x0100000C`、x64 `cputype=0x01000007`,两者 `filetype=2` |
+| 代码签名(Lead 独立复核,含 fat 切片) | 30 个 thin Mach-O 全部带 `LC_CODE_SIGNATURE`;**6 个 universal dylib 的两个切片也都带签名**,共 42 个切片;逐个用 CodeDirectory 的页哈希重算,`badPages=0`(全部完好) |
+| 两次运行的确定性 | 85,812,352 字节,SHA256 `66802328B2B2279E4CADB13362A0705899C54070E3F2DB43B097E5F538C06CDC`,两次完全相同 |
+| 归档压缩前后 | 未压缩 210,954,125 字节 / 条目 443 |
+| `%LOCALAPPDATA%\TipCL`(本次工作全程) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| 残留进程 `testhost` / `TipCL` / `java` / `adb` | 0 个 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+**对子代理 2 个待裁决事项的裁决**:
+
+1. **universal dylib 的签名覆盖**:Lead 已用自己写的 fat 头解析器复核,6 个 fat dylib 的**两个切片都带签名且页哈希完好**,所以当前产物没有问题。
+   但"校验器不解析 fat 头"确实是个盲区:将来换 SkiaSharp / Avalonia 版本时如果某个 fat 切片变成未签名,现有校验会给出假阳性。
+   裁决:归 D1(打包校验加固)补上 fat 头解析,**本包不改**。
+2. **6 个 universal dylib 在两个架构目录各存一份**(约占压缩后体积几十 MB):接受,不优化。
+   理由:这是「两个目录各放一份完整 publish 输出」布局的直接结果,改动布局会牵动启动脚本与 `Info.plist`,收益只是体积。归 D2 记录,不在 C 阶段处理。
+
+Lead 说明:
+
+- `TipCL.Mac.sln` 第一行的 UTF-8 BOM 在 `b826a1b` 那次 WIP 提交里丢了。BOM 只是编辑器提示,不影响 `dotnet` 解析,保持现状。
+- 上一个子代理被中断是客观事故,不是它做错了什么;接手者在 `6f83dec` 里把草稿从 Pax 换回 Ustar(定值 mtime)、把暂存目录清理收窄到 `TipCL.app` 子树,这两处都是实质修复。
+
+**B 阶段到此全部结束**(B1a、B1b、B2a、B2b、B2c1、B2c2、B2c3、B2d、B2e、B3)。下一步进入 C 阶段(界面)。
+
 
 
 
