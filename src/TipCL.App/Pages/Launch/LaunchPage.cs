@@ -29,12 +29,22 @@ namespace TipCL.App.Pages.Launch;
 // 左对齐英雄区（kicker + 34px 大标题 + 小标签 + 48 高启动行）+ 截图/hero 背景 + 底部新闻行。
 // 与 Windows 版的差异（M2 阶段裁剪，详见 progress/M2-B1.md）：
 //   - IMMERSIVE/Wallpaper 沉浸分支不搬；无截图回退嵌入 hero.jpg，再回退渐变底。
-//   - BlockHost 五区块（任务/时长/便签/日志）归 M2-B4 布局框架，本页只留新闻行。
-//   - launch_game/preflight_launch/java_combo_options 等方法 B0 尚未实现（桩回默认值），
-//     启动走 StartTaskAsync 包裹 launch_game 调用，未接入时任务失败并提示 M3。
+//   - 底部区块（新闻/下载任务/游戏时长/便签/日志）走 BlockHost，默认只显示新闻。
 public sealed partial class LaunchPage : PageBase
 {
     // —— 配置浮层里的数据控件（实例/版本变化走这里，英雄区从这些状态派生） ——
+    /// <summary>
+    /// 外部预选(照 Windows LaunchPage.PreferInstance):版本管理页双击版本 / 启动该版本时
+    /// 先记下来,切到启动页后由 FillCardDataAsync 消费并选中。
+    /// </summary>
+    private static (string Instance, string Version)? _pending;
+
+    private string _pendingVersion = "";
+
+    /// <summary>请启动页在下次激活时切到该实例(与可选的版本)。</summary>
+    public static void Prefer(string instance, string version = "")
+        => _pending = (instance, version ?? "");
+
     private readonly ComboBox _inst = UiClass.Combo();
 
     private readonly ComboBox _ver = UiClass.Combo();
@@ -44,6 +54,11 @@ public sealed partial class LaunchPage : PageBase
     private readonly TextBox _server = UiClass.Input("直连服务器 ip:port（可空）");
 
     private readonly Slider _mem = UiClass.Sld(1024, 32768, 4096, 256);
+
+    private readonly ComboBox _java = UiClass.Combo();
+
+    // Java 下拉的「标签 → 取值」对(取值 = 可执行文件路径,或「自动选择」)
+    private List<(string Label, string Value)> _javaOpts = new();
 
     private readonly TextBlock _memLbl = UiClass.Txt("4096 MB", 12, bold: true);
 
@@ -117,6 +132,19 @@ public sealed partial class LaunchPage : PageBase
 
     private Border? _newsCard;
 
+    // —— 底部区块(下载任务 / 游戏时长 / 便签 / 日志,默认收起)——
+    private readonly StackPanel _taskHost = UiClass.V(6);
+
+    private readonly TextBlock _playTotal = new() { FontSize = 20, FontWeight = FontWeight.SemiBold };
+
+    private readonly TextBox _notes = UiClass.Multi("随手记点什么…");
+
+    private readonly TextBox _log = UiClass.LogBox();
+
+    private readonly List<string> _logLines = new();
+
+    private TipCL.App.Pages.Layout.BlockHost? _blocks;
+
     // —— 随背景切换配色的半透明块（配置钮 / 联机钮 / 新闻卡 / chips） ——
     private readonly List<Border> _glass = new();
 
@@ -175,18 +203,8 @@ public sealed partial class LaunchPage : PageBase
         WireEvents();
     }
 
-    // 外壳 M1 版尚未接 PageBase.ShellAttach——页面自触发首载，接好后再挪进 OnCreate
-    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        base.OnAttachedToVisualTree(e);
-        if (!_loaded)
-        {
-            _loaded = true;
-            _ = FillCardDataAsync();
-        }
-    }
-
-    private bool _loaded;
+    // 首载统一走 PageBase 生命周期:外壳 Navigate → ShellAttach → OnCreate(只跑一次)
+    protected override void OnCreate() => _ = FillCardDataAsync();
 
     private static IBrush White(byte alpha)
         => new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255));
@@ -213,8 +231,9 @@ public sealed partial class LaunchPage : PageBase
         var kicker = UiClass.H(7, dot, _kickerText);
 
         // 大标题行：实例名 + 下拉箭头，点击开实例切换浮层
-        var chevron = IconLib.Make("Chevron", "B.Ink", 18);
+        var chevron = GlassIcon("Chevron", 18);
         chevron.Opacity = 0.7;
+        chevron.VerticalAlignment = VerticalAlignment.Center;
         _titleRow = UiClass.H(10, _heroTitle, chevron);
         _titleRow.Cursor = new Cursor(StandardCursorType.Hand);
         _titleRow.Background = Brushes.Transparent;
@@ -225,15 +244,8 @@ public sealed partial class LaunchPage : PageBase
         _chipRow.Margin = new Thickness(0, 10, 0, 24);
 
         // 主按钮：主色 48 高外壳 + Ghost 按钮内容；柔光用 BoxShadow 取主题主色
-        var playIcon = new ShapePath
-        {
-            Data = Geometry.Parse(IconLib.PlayData),
-            Width = 17,
-            Height = 17,
-            Stretch = Stretch.Uniform,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        playIcon.Dyn(Shape.FillProperty, "B.OnAccentStrong");
+        var playIcon = IconLib.Make("Play", "B.OnAccentStrong", 17);
+        playIcon.VerticalAlignment = VerticalAlignment.Center;
         var goText = UiClass.Txt("启动游戏", 16, bold: true);
         goText.FontWeight = FontWeight.ExtraBold;
         goText.VerticalAlignment = VerticalAlignment.Center;
@@ -245,9 +257,12 @@ public sealed partial class LaunchPage : PageBase
         {
             Theme = UiClass.Theme("Btn.Ghost"),
             Padding = new Thickness(0),
-            Content = UiClass.H(14, playIcon, goText, _goSep, _goVer),
+            Content = UiClass.H(10, playIcon, goText, _goSep, _goVer),
         };
         launchBtn.Click += (_, _) => _ = LaunchAsync();
+        // 绿底上的文字/图标一律走 OnAccentStrong:按钮自身主题(Btn.Ghost)的 Foreground 会盖掉
+        // 英雄区继承来的白字,不显式设就是「深字压绿底」
+        launchBtn.Dyn(Button.ForegroundProperty, "B.OnAccentStrong");
         _launchShell = new Border
         {
             CornerRadius = new CornerRadius(12),
@@ -318,20 +333,44 @@ public sealed partial class LaunchPage : PageBase
         };
         Glass(_newsCard);
         _newsCard.PointerReleased += (_, e) => { OpenNewsPopup(); e.Handled = true; };
-        var newsWrap = new Panel();
-        newsWrap.Children.Add(_newsCard);
-        newsWrap.Margin = new Thickness(56, 0, 24, 18);
+        var logCard = UiClass.Card(_log, 10);
+        logCard.Height = 240;
+        _notes.Text = Py.S(Config.CONFIG.Get("ui_notes", ""));
+        _notes.LostFocus += (_, _) =>
+        {
+            Config.CONFIG.Set("ui_notes", _notes.Text ?? "");
+            Config.CONFIG.Save();
+        };
+        // 边距同英雄区(左 56 / 右 24 / 下 18)
+        _blocks = new TipCL.App.Pages.Layout.BlockHost("launch", new List<TipCL.App.Pages.Layout.BlockSpec>
+        {
+            new() { Id = "news", Title = "新闻", Content = _newsCard },
+            new() { Id = "tasks", Title = "下载任务", Content = UiClass.Card(_taskHost), DefaultVisible = false },
+            new() { Id = "playtime", Title = "游戏时长", Content = UiClass.Card(_playTotal), DefaultVisible = false },
+            new() { Id = "notes", Title = "便签", Content = UiClass.Card(_notes), DefaultVisible = false },
+            new() { Id = "log", Title = "日志", Content = logCard, DefaultVisible = false },
+        }, new Thickness(56, 0, 24, 18));
+        // 多块同时展开时限高约 62% 页高,避免把上方英雄区挤没
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == BoundsProperty && _blocks != null)
+                _blocks.MaxHeight = Math.Max(120, Bounds.Height * 0.62);
+        };
 
         // 根布局：背景层铺满两行；英雄区 * / 新闻行 Auto
         var root = UiClass.G("*,Auto");
         root.ClipToBounds = true;
+        // 背景铺满整页(含新闻行):只铺第一行会让新闻行落在页面底色上,而新闻行按「有图」
+        // 规则用白字 → 白纸白字看不见。对齐 Windows 的整窗壁纸层。
+        Grid.SetRowSpan(_bgImage, 2);
+        Grid.SetRowSpan(_bgShade, 2);
         root.Add(_bgImage, 0, 0);
         root.Add(_bgShade, 0, 0);
         Grid.SetColumnSpan(_bgImage, 2);
         Grid.SetColumnSpan(_bgShade, 2);
         root.Add(_hero, 0);
-        root.Add(newsWrap, 1);
-        Content = root; // 启动页不做 BlockHost 包装（新闻行直出，见文件头注释）
+        root.Add(_blocks, 1);
+        Content = root;
         ApplyHeroTone(onImage: false);
         SyncHero();
     }
@@ -342,9 +381,11 @@ public sealed partial class LaunchPage : PageBase
     private Border GlassButton(string iconKey, string? label, Action click)
     {
         var icon = GlassIcon(iconKey, 17);
-        Control content = label == null
-            ? icon
-            : UiClass.H(8, icon, UiClass.Txt(label, 14, bold: true));
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        icon.HorizontalAlignment = HorizontalAlignment.Center;
+        var text = label == null ? null : UiClass.Txt(label, 14, bold: true);
+        if (text != null) text.VerticalAlignment = VerticalAlignment.Center;
+        Control content = text == null ? icon : UiClass.H(8, icon, text);
         var b = new Border
         {
             Height = 48,
@@ -549,6 +590,7 @@ public sealed partial class LaunchPage : PageBase
         ApplyHeroTone(_onImage);
         _ = RefreshBackgroundAsync();
         _ = SyncTaskStateAsync();
+        SyncTaskCard();
         if (CurInst().Length > 0)
             _ = ReloadVersionsAsync();
     }
@@ -560,7 +602,17 @@ public sealed partial class LaunchPage : PageBase
         {
             _instances = await LoadInstancesAsync();
             var names = _instances.Select(x => x.Name).ToList();
-            FillCombo(_inst, names, Config.CONFIG.Get("last_user_instance", "") is string s && names.Contains(s) ? s : names.FirstOrDefault());
+            string preferred = Config.CONFIG.Get("last_user_instance", "") is string s && names.Contains(s) ? s : names.FirstOrDefault() ?? "";
+            if (_pending is { } pend)
+            {
+                _pending = null;
+                if (names.Contains(pend.Instance))
+                {
+                    preferred = pend.Instance;
+                    _pendingVersion = pend.Version;
+                }
+            }
+            FillCombo(_inst, names, preferred);
             var user = Py.S(Config.CONFIG.Get("last_user", ""));
             if (string.IsNullOrWhiteSpace(_user.Text))
                 _user.Text = user.Length > 0 ? user : "Player";
@@ -575,9 +627,13 @@ public sealed partial class LaunchPage : PageBase
             _syncing = false;
         }
         await ReloadVersionsAsync();
+        await ReloadJavaAsync(scan: false);
+        _ = ReloadJavaAsync(scan: true);
         SyncBanner();
         _ = CountModsAsync();
         _ = LoadNewsAsync();
+        _ = LoadPlaytimeAsync();
+        SyncTaskCard();
     }
 
     private static async Task<List<InstRow>> LoadInstancesAsync()
@@ -609,6 +665,46 @@ public sealed partial class LaunchPage : PageBase
         cb.SelectedItem = keep != null && items.Contains(keep) ? keep : (items.Count > 0 ? items[0] : null);
     }
 
+    // ————— Java 选择(照 Windows ReloadJavaAsync / SaveJavaAsync / SelectedJava) —————
+
+    /// <summary>当前 Java 下拉的取值(路径或「自动选择」)。</summary>
+    private string SelectedJava()
+    {
+        string label = _java.SelectedItem as string ?? "自动选择";
+        return _javaOpts.FirstOrDefault(o => o.Label == label).Value ?? "自动选择";
+    }
+
+    private async Task ReloadJavaAsync(bool scan)
+    {
+        string inst = CurInst();
+        if (inst.Length == 0)
+            return;
+        var opts = await Api.TryCallAsync<List<object>>("java_combo_options", new List<object>(),
+            new PyDict { ["instance"] = inst, ["scan_system"] = scan }) ?? new List<object>();
+        if (CurInst() != inst || opts.Count == 0)
+            return;
+        var parsed = new List<(string Label, string Value)>();
+        foreach (var o in opts)
+            if (o is PyDict d)
+                parsed.Add((Py.S(d["label"]), Py.S(d["value"])));
+        string keep = await Api.TryCallAsync("java_combo_label_for",
+            "自动选择", new PyDict { ["instance"] = inst, ["options"] = opts }) ?? "自动选择";
+        _syncing = true;
+        _javaOpts = parsed;
+        FillCombo(_java, parsed.Select(o => o.Label).ToList(), keep);
+        _syncing = false;
+        SyncHero();
+    }
+
+    private async Task SaveJavaAsync()
+    {
+        string inst = CurInst();
+        if (inst.Length == 0)
+            return;
+        await Api.TryCallAsync<object>("set_instance_java", null,
+            new PyDict { ["name"] = inst, ["java"] = SelectedJava() });
+    }
+
     private async Task ReloadVersionsAsync()
     {
         string inst = CurInst();
@@ -621,7 +717,10 @@ public sealed partial class LaunchPage : PageBase
             return;
         _versions = vers;
         _syncing = true;
-        FillCombo(_ver, vers, _ver.SelectedItem as string);
+        string wanted = _ver.SelectedItem as string ?? "";
+        if (_pendingVersion.Length > 0 && vers.Contains(_pendingVersion)) wanted = _pendingVersion;
+        _pendingVersion = "";
+        FillCombo(_ver, vers, wanted);
         _syncing = false;
         SyncBanner();
     }
@@ -669,9 +768,29 @@ public sealed partial class LaunchPage : PageBase
         _goSep.IsVisible = _goVer.IsVisible = hasVer;
         if (hasVer)
             _chipRow.Children.Add(Chip(LoaderChip(ver)));
+        string javaChip = JavaChip();
+        if (javaChip.Length > 0)
+            _chipRow.Children.Add(Chip(javaChip));
         _chipRow.Children.Add(Chip($"{_mem.Value / 1024.0:0.#} GB"));
         if (_modCount > 0)
             _chipRow.Children.Add(Chip($"{_modCount} 个模组"));
+    }
+
+    /// <summary>
+    /// Java 小标签:自动 ⇒「Java 自动」;「Java 17 (…)」「jdk1.8.0_301」⇒「Java 17」;
+    /// 路径等认不出的一律原样(对齐 Windows SyncHero 的正则)。
+    /// </summary>
+    private string JavaChip()
+    {
+        string java = _java.SelectedItem as string ?? "";
+        if (java.Length == 0)
+            return "";
+        if (java.StartsWith("自动", StringComparison.Ordinal))
+            return "Java 自动";
+        var m = System.Text.RegularExpressions.Regex.Match(
+            java, @"(?:java|jdk|jre)\D{0,3}(?:1\.)?(\d+)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return m.Success ? "Java " + m.Groups[1].Value : java;
     }
 
     /// <summary>chip 首位显示「加载器名 版本」：与 Windows 版 LOADER_TAGS 同前缀表；不匹配回落版本全名。</summary>
@@ -801,6 +920,8 @@ public sealed partial class LaunchPage : PageBase
         _prog.IsVisible = true;
         _progGen++;
         _status.Text = "准备启动…";
+        _logLines.Clear();
+        _log.Text = "";
         SetLaunchMode(running: true);
         UpdateStatusRow();
         Config.CONFIG.Set("last_user", account);
@@ -872,12 +993,22 @@ public sealed partial class LaunchPage : PageBase
             return;
         _eventWired = true;
         Api.BridgeEvent += ev => Dispatcher.UIThread.Post(() => OnApiEvent(ev));
+        TaskStore.Changed += SyncTaskCard;
         _inst.SelectionChanged += (_, _) =>
         {
             if (_syncing)
                 return;
             _ = ReloadVersionsAsync();
+            _ = ReloadJavaAsync(scan: false);
             _ = CountModsAsync();
+        };
+        _java.SelectionChanged += (_, _) =>
+        {
+            if (_syncing)
+                return;
+            // 实例 Java 偏好:换完即存(照 Windows SaveJavaAsync)
+            _ = SaveJavaAsync();
+            SyncHero();
         };
         _ver.SelectionChanged += (_, _) =>
         {
@@ -909,6 +1040,9 @@ public sealed partial class LaunchPage : PageBase
             return;
         switch (ev.Event)
         {
+            case "log":
+                AppendLog(ev.Text);
+                break;
             case "progress":
             {
                 Motion.Progress(_prog, ev.Total > 0 ? ev.Current * 100.0 / ev.Total : 0);
@@ -938,8 +1072,52 @@ public sealed partial class LaunchPage : PageBase
                     Toast("启动失败", ev.Message, ToastKind.Error);
                 }
                 _taskId = null;
+                _ = LoadPlaytimeAsync();
                 break;
         }
+    }
+
+    private async Task LoadPlaytimeAsync()
+    {
+        object? total = await Api.TryCallAsync<object?>("get_total_playtime");
+        long seconds = 0;
+        try { seconds = Py.Int(total ?? 0L); }
+        catch (Exception) { }
+        _playTotal.Text = Playtime.FormatDuration(seconds);
+    }
+
+    /// <summary>「下载任务」区块:最近 5 条任务的标题 + 进度/结果。</summary>
+    private void SyncTaskCard()
+    {
+        _taskHost.Children.Clear();
+        var rows = TaskStore.Rows.Reverse().Take(5).ToList();
+        if (rows.Count == 0)
+        {
+            _taskHost.Children.Add(UiClass.Muted("暂无下载任务"));
+            return;
+        }
+        foreach (var r in rows)
+        {
+            var title = UiClass.Txt(r.Title, 12);
+            title.TextTrimming = TextTrimming.CharacterEllipsis;
+            var state = UiClass.Small(r.Finished ? (r.Success ? "完成" : "失败") : $"{r.Progress:0}%");
+            state.Margin = new Thickness(8, 0, 0, 0);
+            var g = UiClass.G(null, "*,Auto");
+            g.Add(title, 0, 0);
+            g.Add(state, 0, 1);
+            _taskHost.Children.Add(g);
+        }
+    }
+
+    private void AppendLog(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return;
+        _logLines.Add(text);
+        if (_logLines.Count > 2500)
+            _logLines.RemoveRange(0, _logLines.Count - 2500);
+        _log.Text = string.Join("\n", _logLines);
+        _log.CaretIndex = _log.Text.Length;
     }
 
     private async void HideProgressSoon(int delayMs)

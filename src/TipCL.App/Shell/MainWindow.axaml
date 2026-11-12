@@ -3,15 +3,16 @@
         xmlns:shell="using:TipCL.App.Shell"
         x:Class="TipCL.App.Shell.MainWindow"
         Title="TipCL"
-        Width="1180" Height="740" MinWidth="720" MinHeight="480"
+        Width="900" Height="550" MinWidth="720" MinHeight="480"
         WindowStartupLocation="CenterScreen"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaChromeHints="NoChrome"
-        ExtendClientAreaTitleBarHeightHint="40"
+        ExtendClientAreaTitleBarHeightHint="46"
         SystemDecorations="Full"
         Background="{DynamicResource B.Canvas}"
         FontFamily="Microsoft YaHei UI, Noto Sans CJK SC, WenQuanYi Micro Hei, sans-serif">
-  <!-- M1-A3 窗口外壳：40px 自定义标题栏 + 196px 分组导航 + 右侧占位页。 -->
+  <!-- v2 外壳(对齐 Windows `MainWindow.xaml`):46px 自定义标题栏(Logo + 5 页签 + AI/账号/主题/窗口钮)
+       + 全幅页面区,无侧边导航。默认尺寸 900×550,Min 720×480。 -->
   <Window.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
@@ -20,11 +21,11 @@
     </ResourceDictionary>
   </Window.Resources>
 
-  <Grid RowDefinitions="40,*">
+  <Grid RowDefinitions="46,*">
     <shell:TitleBar x:Name="TitleBarHost" Grid.Row="0" />
-    <Grid Grid.Row="1" ColumnDefinitions="196,*">
-      <shell:SideNav x:Name="NavHost" Grid.Column="0" />
-      <ContentControl x:Name="PageHost" Grid.Column="1" Focusable="False" />
+    <Grid Grid.Row="1">
+      <Rectangle Fill="{DynamicResource B.PageWash}" />
+      <ContentControl x:Name="PageHost" Focusable="False" />
     </Grid>
   </Grid>
 </Window>

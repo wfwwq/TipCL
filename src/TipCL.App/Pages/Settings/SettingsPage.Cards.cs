@@ -2,12 +2,14 @@
 // 记忆走 Core 的 FileMemory（B0 已搬）；手机同步走 Core 的 PhoneLink（B0 已搬）。
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using TipCL.App.Common;
+using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using UiClass = TipCL.App.Ui.Ui;
 using TipCL.Core;
@@ -75,7 +77,7 @@ public sealed partial class SettingsPage
             }
             Render();
         });
-        var refresh = UiClass.Btn("刷新", BtnKind.Chip, (_, _) => Render());
+        var refresh = U.Btn("刷新", BtnKind.Chip, (_, _) => Render(), "Refresh");
         Render();
         AttachedToVisualTree += (_, _) => Render();
         return UiClass.Card(Rows(
@@ -89,19 +91,28 @@ public sealed partial class SettingsPage
         var status = UiClass.Small("");
         var ip = UiClass.Input("手机上显示的地址，例如 192.168.1.5:8765", "", 240);
         var token = UiClass.Input("配对码", "", 120);
-        void SetStatus(string text) => status.Text = text;
+void SetStatus(string text)
+        {
+            // PhoneLink 的进度回调来自后台线程,控件更新必须回 UI 线程
+            if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) status.Text = text;
+            else Avalonia.Threading.Dispatcher.UIThread.Post(() => status.Text = text);
+        }
         var connect = UiClass.Btn("连接", BtnKind.Soft, (_, _) => Run(async () =>
         {
-            SetStatus("连接中…");
-            var info = await Task.Run(() => PhoneLink.Connect(ip.Text!.Trim(), token.Text!.Trim()));
-            SetStatus($"已连接：{info.Device}");
+            SetStatus("连接中...");
+            // 控件取值留在 UI 线程;Task.Run 里只碰纯字符串
+            string addrText = ip.Text!.Trim();
+            string tokenText = token.Text!.Trim();
+            var info = await Task.Run(() => PhoneLink.Connect(addrText, tokenText));
+            SetStatus($"已连接:{info.Device}");
             Toast("已连接手机", info.Device ?? "", ToastKind.Success);
         }, "连接失败"));
         var usb = UiClass.Btn("USB 自动连接", BtnKind.Chip, (_, _) => Run(async () =>
         {
-            SetStatus("USB 连接中…");
-            var info = await Task.Run(() => PhoneLink.ConnectUsb(token.Text!.Trim(), log => SetStatus(log)));
-            SetStatus($"已连接：{info.Device}");
+            SetStatus("USB 连接中...");
+            string tokenText = token.Text!.Trim();
+            var info = await Task.Run(() => PhoneLink.ConnectUsb(tokenText, log => SetStatus(log)));
+            SetStatus($"已连接:{info.Device}");
             Toast("已连接手机", info.Device ?? "", ToastKind.Success);
         }, "USB 连接失败"));
         var disconnect = UiClass.Btn("断开", BtnKind.Ghost, (_, _) => Run(async () =>
@@ -109,6 +120,8 @@ public sealed partial class SettingsPage
             await Task.Run(PhoneLink.Disconnect);
             SetStatus("已断开");
         }, "断开失败"));
+        // 同步面板入口(照 Windows 版 SettingsPage.PhoneSync 的「打开同步面板」)
+        var panelBtn = UiClass.Btn("同步面板", BtnKind.Normal, (_, _) => OpenPhoneSyncPanel());
         if (PhoneLink.Current != null)
             SetStatus($"已连接：{PhoneLink.LastDevice}");
         else
@@ -117,7 +130,21 @@ public sealed partial class SettingsPage
             Rows(
                 UiClass.Field("手机地址", UiClass.H(8, ip, token, connect.VCenter()), "格式 地址:端口"),
                 UiClass.Field("USB", UiClass.H(8, usb, disconnect.VCenter()), "手机插 USB 且开了 USB 调试（adb）时可用"),
-                UiClass.Field("状态", status))));
+                UiClass.Field("同步", UiClass.H(8, panelBtn.VCenter(), status.VCenter()), "对比电脑与手机的世界存档,逐个传或一键同步"))));
+    }
+
+    /// <summary>
+    /// 打开手机同步面板。没连接手机时只提示、不开面板 —— 面板里的「对比/传输」全都要先有连接,
+    /// 空面板只会让人以为能用(照 Windows 版 open.IsEnabled = PhoneLink.Current != null 的同一意图)。
+    /// </summary>
+    internal static void OpenPhoneSyncPanel()
+    {
+        if (PhoneLink.Current == null)
+        {
+            ToastHost.Show("还没连接手机", "先点上面的「连接」或「USB 自动连接」", ToastKind.Warning);
+            return;
+        }
+        Dlg.OpenPanel("手机同步", new PhoneSyncPanel(), 880);
     }
 
     private static Border BuildAboutCard()
@@ -130,36 +157,102 @@ public sealed partial class SettingsPage
     }
 
     /// <summary>反馈卡（Windows 版是独立 FeedbackPage；M2 先落提交卡，完整反馈流 M3 补）。</summary>
+    /// <summary>
+    /// 反馈卡(Windows 版是独立 FeedbackPage;这里落提交卡)。
+    /// 三件事必须做对,否则「点了发送但服务器收不到」:
+    ///   1) 先过同意门 —— `Feedback.Submit` 在没同意时直接抛错,发送根本不会发生;
+    ///   2) 用 `CallAsync`(会抛)而不是 `TryCallAsync`(吞错),把服务器原话念给用户(403/400 要看得见);
+    ///   3) 带上 category / include_sysinfo,让服务端能归类与诊断。
+    /// </summary>
     private Border BuildFeedbackCard()
     {
-        var body = UiClass.Multi("说说你的使用体验、遇到的问题或想要的功能…", "", 110);
+        var body = UiClass.Multi("说说你的使用体验、遇到的问题或想要的功能...", "", 110);
+        var kind = UiClass.Combo(new[] { "问题反馈", "功能建议", "其他" });
         var info = UiClass.Small("");
         Button? send = null;
-            send = UiClass.Btn("发送反馈", BtnKind.Primary, (_, _) => Run(async () =>
+        send = UiClass.Btn("发送反馈", BtnKind.Primary, (_, _) => Run(async () =>
         {
             if (string.IsNullOrWhiteSpace(body.Text))
             {
                 Toast("先写点内容", "反馈内容不能为空", ToastKind.Warning);
                 return;
             }
-            send!.IsEnabled = false;
-            info.Text = "发送中…";
-            object? r = await Api.TryCallAsync<object?>("feedback_submit", null, new { text = body.Text.Trim() });
-            send!.IsEnabled = true;
-            if (r == null)
-            {
-                info.Text = "反馈通道后端 M3 接入，暂时发送不了。也可以到 GitHub 仓库提 issue。";
+            if (!await EnsureFeedbackConsentAsync())
                 return;
+
+            send!.IsEnabled = false;
+            info.Text = "发送中...";
+            try
+            {
+                string category = (kind.SelectedItem as string) switch
+                {
+                    "功能建议" => "suggest",
+                    "其他" => "other",
+                    _ => "bug",
+                };
+                var result = await Api.CallAsync<PyDict>("feedback_submit", new PyDict
+                {
+                    ["category"] = category,
+                    ["body"] = body.Text.Trim(),
+                    ["include_sysinfo"] = true,
+                });
+                body.Text = "";
+                string id = result != null ? Py.S(result.Get("id")) : "";
+                info.Text = id.Length > 0 ? $"已发送(编号 {id}),谢谢!" : "已发送,谢谢你的反馈!";
+                Toast("已发送", "感谢你的反馈", ToastKind.Success);
             }
-            body.Text = "";
-            info.Text = "已发送，谢谢你的反馈！";
-            Toast("已发送", "感谢你的反馈", ToastKind.Success);
+            catch (Exception ex)
+            {
+                // 服务器拒绝的原因要原样呈现(缺客户端标识是 403、字段不合法是 400)
+                info.Text = "发送失败:" + ex.Message;
+                Toast("发送失败", ex.Message, ToastKind.Error);
+            }
+            finally
+            {
+                send!.IsEnabled = true;
+            }
         }, "发送失败"));
+
+        var gh = UiClass.Btn("去 GitHub 提 issue", BtnKind.Chip, (_, _) => OpenExternal("https://github.com/burningtnt/Terracotta"));
         return UiClass.Card(UiClass.V(6,
             UiClass.Section("反馈", "问题与建议直通车"),
             body,
-            UiClass.H(8, send, info.VCenter())).M(18, 8, 18, 16));
+            UiClass.Field("类型", kind, null, 58),
+            UiClass.H(8, send, gh, info.VCenter())).M(18, 8, 18, 16));
     }
+
+    /// <summary>同意门:没同意过就问一次(说明上送内容);拒答则不发。返回是否可继续发送。</summary>
+    private async Task<bool> EnsureFeedbackConsentAsync()
+    {
+        bool has = Py.Truthy(await Api.TryCallAsync<object?>("feedback_has_consent") ?? false);
+        if (has)
+            return true;
+        bool ok = await Dlg.Confirm("发送反馈需要同意上传诊断数据",
+            "会随反馈一起上传:随机设备标识、启动器版本、系统与硬件摘要、已装 Java 摘要。\n" +
+            "不包含账号密码、存档内容与聊天记录。",
+            "同意并发送", "取消");
+        if (!ok)
+            return false;
+        await Api.CallAsync<object?>("feedback_consent", new PyDict { ["allow"] = true });
+        return true;
+    }
+
+    private static void OpenExternal(string url)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            else if (OperatingSystem.IsMacOS())
+                Process.Start("open", new[] { url });
+            else
+                Process.Start("xdg-open", new[] { url });
+        }
+        catch (Exception)
+        {
+        }
+    }
+
 
     private async Task CleanAsync()
     {

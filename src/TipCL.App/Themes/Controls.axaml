@@ -303,7 +303,8 @@
     <Setter Property="CaretBrush" Value="{DynamicResource B.Accent}" />
     <Setter Property="SelectionBrush" Value="{DynamicResource B.Accent}" />
     <Setter Property="Padding" Value="10,7" />
-    <Setter Property="MinHeight" Value="32" />
+    <!-- 45 是 Windows 版输入框的实际渲染高度(库页/下载页实测);它的样式也写 32,但 WPF 文本宿主会再撑高约 13px -->
+    <Setter Property="MinHeight" Value="45" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="Template">
       <ControlTemplate>
@@ -394,12 +395,18 @@
     <Setter Property="Template">
       <ControlTemplate>
         <Panel>
-          <ToggleButton Name="PART_Toggle" Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+          <ToggleButton Name="PART_Toggle" Focusable="False"
+                        Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                        BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                        IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
             <ToggleButton.Template>
               <ControlTemplate TargetType="ToggleButton">
                 <Panel>
-                  <Border Name="Bd" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}" BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}" BorderThickness="1" CornerRadius="8" />
-                  <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="8" />
+                  <!-- 盒子底色/描边跟 ToggleButton 自身走(而不是直接绑 ComboBox):这样悬停/展开态
+                       只需要在外层 ComboBox 主题里对 ToggleButton 设一次属性即可,选择器只跨一层 /template/。
+                       Avalonia 的选择器一次只能跨一层模板(`a /template/ b /template/ c` 会直接抛错),
+                       且 ControlTemplate 既没有 Styles 属性、也不接受多个内容子元素。 -->
+                  <Border Name="Bd" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ToggleButton}}" BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ToggleButton}}" BorderThickness="1" CornerRadius="8" />
                   <Path Name="Ar" Data="M0,0 L4.5,5 L9,0" Stroke="{DynamicResource B.InkMuted}" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,11,0" />
                 </Panel>
               </ControlTemplate>
@@ -408,7 +415,7 @@
           <ContentPresenter Name="Cp" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" HorizontalAlignment="Left" IsHitTestVisible="False" />
           <TextBlock Name="Ph" Text="{TemplateBinding Tag}" Foreground="{DynamicResource B.InkFaint}" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" IsHitTestVisible="False" IsVisible="False" />
           <Popup Name="PART_Popup" Placement="Bottom" PlacementTarget="{TemplateBinding}" VerticalOffset="4" IsOpen="{TemplateBinding IsDropDownOpen}" IsLightDismissEnabled="True">
-            <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="12" MaxHeight="320" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" ClipToBounds="True">
+            <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="12" MaxHeight="320" MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}}" ClipToBounds="True">
               <ScrollViewer Margin="0,5" VerticalScrollBarVisibility="Auto">
                 <ItemsPresenter Margin="4,0" />
               </ScrollViewer>
@@ -417,10 +424,11 @@
         </Panel>
       </ControlTemplate>
     </Setter>
-    <Style Selector="^:pointerover /template/ ToggleButton#PART_Toggle /template/ Border#Ov">
-      <Setter Property="Opacity" Value="0.04" />
+    <!-- 悬停 / 展开态:只跨一层模板,设在 PART_Toggle 上,Bd 通过绑定跟随 -->
+    <Style Selector="^:pointerover /template/ ToggleButton#PART_Toggle">
+      <Setter Property="Background" Value="{DynamicResource B.Hover}" />
     </Style>
-    <Style Selector="^:dropdownopen /template/ ToggleButton#PART_Toggle /template/ Border#Bd">
+    <Style Selector="^:dropdownopen /template/ ToggleButton#PART_Toggle">
       <Setter Property="BorderBrush" Value="{DynamicResource B.Accent}" />
     </Style>
     <Style Selector="^:empty /template/ TextBlock#Ph">

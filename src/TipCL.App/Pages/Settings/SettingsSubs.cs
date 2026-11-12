@@ -4,12 +4,16 @@
 // 的读写）TryCallAsync 回默认值，显示空态与「后端 M3 接入」提示，接口已按 Windows 版键名对齐。
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using TipCL.App.Common;
+using TipCL.App.Pages.Layout;
+using TipCL.App.Shell;
 using TipCL.App.Ui;
 using UiClass = TipCL.App.Ui.Ui;
 using TipCL.Core;
@@ -22,9 +26,9 @@ internal abstract class SettingsSubView : PageBase
 {
     protected SettingsSubView(string id, string title, string sub) : base(id, title)
     {
-        var head = UiClass.Section(title, sub);
+        Header = UiClass.Section(title, sub);
         _stack = UiClass.V(10);
-        _stack.Children.Add(head);
+        _stack.Children.Add(Header);
         var scroll = new ScrollViewer
         {
             Content = _stack,
@@ -36,6 +40,9 @@ internal abstract class SettingsSubView : PageBase
     }
 
     protected readonly StackPanel _stack;
+
+    /// <summary>标题行(两列 "*,Auto");子视图可往右列塞自己的操作区,避免再插一个重复标题。</summary>
+    protected Grid Header { get; }
 
     /// <summary>把行包装进统一间距的纵向容器（B5 收尾补齐）。</summary>
     protected static Avalonia.Controls.Control RowsSub(params Avalonia.Controls.Control[] rows)
@@ -164,71 +171,259 @@ internal sealed class AccountView : SettingsSubView
 
 // ───────────────────────────── Java ─────────────────────────────
 
+/// <summary>
+/// Java 子页(照 Windows 版 Pages/JavaPage.cs 排版:说明 / 安装方式 / 实例默认 / 已检测列表)。
+/// Windows 该页是独立 PageBase,由设置页内层导航第 3 项挂进去;Linux 侧同样挂在设置页内层导航里。
+/// </summary>
 internal sealed class JavaView : SettingsSubView
 {
-    private readonly StackPanel _list = UiClass.V(10);
-    private readonly TextBlock _info = UiClass.Small("");
-
-    public JavaView() : base("settings:java", "Java", "管理启动器自带的与系统里找到的 Java 运行时")
+    private static readonly (string Major, string Note)[] Majors =
     {
-        var scan = UiClass.Btn("扫描 Java", BtnKind.Primary, (_, _) => Run(async () =>
+        ("8", "1.16 及以下旧版本"),
+        ("11", "部分旧模组环境"),
+        ("17", "1.18 – 1.20.4 推荐"),
+        ("21", "1.20.5 – 1.21.11"),
+        ("25", "26.1+ 新版本"),
+    };
+
+    private readonly StackPanel _list = UiClass.V(8);
+    private readonly TextBlock _count = UiClass.Muted("");
+    private readonly ComboBox _inst = UiClass.Combo(null, null, 170);
+    private readonly ComboBox _java = UiClass.Combo();
+    private readonly ComboBox _vendor = UiClass.Combo(null, null, 170);
+    private readonly TextBlock _instJava = UiClass.Small("");
+    private readonly TextBox _manual = UiClass.Input("手动填 java 路径(可空)");
+
+    private List<string> _instances = new();
+    private List<(string Label, string Value)> _javaOpts = new();
+    private List<string> _vendors = new();
+    private bool _sync;
+
+    public JavaView() : base("settings:java", "Java", "游戏按版本挑 Java:26.1+ 要 25,1.20.5+ 要 21,1.18+ 要 17,老版本用 8")
+    {
+        var scan = U.Btn("扫描系统 Java", BtnKind.Soft, (_, _) => Run(() => ReloadListAsync(scan: true), "扫描失败"), "Search");
+        var refresh = U.IconBtn("Refresh", "刷新", (_, _) => Run(LoadCoreAsync, "加载失败"));
+        // 标题与副标题由 SettingsSubView 基类给出,这里只往右列补计数 / 刷新 / 扫描(Windows JavaPage 的头部操作区)
+        var headOps = UiClass.H(8, _count.VCenter(), refresh, scan);
+        headOps.VerticalAlignment = VerticalAlignment.Center;
+        Header.Add(headOps, 0, 1);
+
+        // ── 安装方式:发行版 + 5 张下载卡 ──
+        var cards = new WrapPanel();
+        foreach (var (major, note) in Majors)
         {
-            _info.Text = "扫描中…";
-            object? r = await Api.TryCallAsync<object?>("scan_java", null);
-            if (r == null)
-            {
-                _info.Text = "扫描后端 M3 接入；可在下方手动添加 Java 路径";
-                return;
-            }
-            await LoadCoreAsync();
-        }, "扫描失败"));
-        var add = UiClass.Btn("手动添加", BtnKind.Chip, (_, _) => Run(AddJavaAsync, "添加失败"));
-        _stack.Children.Add(UiClass.Card(RowsSub(UiClass.Field("扫描", UiClass.H(8, scan, add, _info.VCenter()), "自动找启动器目录与系统 PATH 里的 Java"))));
+            string m = major;
+            var dl = U.Btn("下载", BtnKind.Chip, null, "Download");
+            dl.Click += (_, _) => Run(() => DownloadAsync(m), "下载失败");
+            dl.HorizontalAlignment = HorizontalAlignment.Stretch;
+            var card = UiClass.Card(UiClass.V(6, UiClass.Txt("Java " + m, 15, bold: true), UiClass.Small(note).Wrap(), dl), 13);
+            card.Width = 158;
+            card.Margin = new Thickness(0, 0, 10, 10);
+            Motion.HoverLift(card, 1.01);
+            cards.Children.Add(card);
+        }
+        var vendorBar = UiClass.G(null, "*,Auto,Auto");
+        vendorBar.Add(UiClass.Txt("下载新运行时", 13, bold: true).VCenter(), 0, 0);
+        var vendorLbl = UiClass.Txt("发行版", 12, fg: "B.InkMuted");
+        vendorLbl.Mk(0, 0, 8, 0).VCenter();
+        vendorBar.Add(vendorLbl, 0, 1);
+        vendorBar.Add(_vendor.VCenter(), 0, 2);
+        _stack.Children.Add(UiClass.Card(UiClass.V(10, vendorBar, cards), 13));
+
+        // ── 实例默认 ──
+        _inst.SelectionChanged += (_, _) => { if (!_sync) Run(ReloadJavaOptionsAsync, "读取失败"); };
+        _java.SelectionChanged += (_, _) => { if (!_sync) Run(SaveJavaAsync, "保存失败"); };
+        var manualRow = UiClass.G(null, "*,Auto");
+        manualRow.Add(_manual, 0, 0);
+        _manual.Mk(0, 0, 0, 0);
+        var useManual = U.Btn("用这个路径", BtnKind.Chip, (_, _) => Run(ApplyManualAsync, "保存失败"), "Check");
+        useManual.Mk(8, 0, 0, 0).VCenter();
+        manualRow.Add(useManual, 0, 1);
+        _stack.Children.Add(UiClass.Card(UiClass.V(4,
+            UiClass.Field("实例", _inst),
+            UiClass.Field("默认 Java", _java, "「自动选择」由启动器按游戏版本匹配"),
+            UiClass.Field("自定义路径", manualRow, "填绝对路径后点右边按钮,会先做一次规范化"),
+            UiClass.Field("", _instJava)), 13));
+
+        // ── 已检测列表 ──
         _stack.Children.Add(_list);
     }
 
     protected override async Task LoadCoreAsync()
     {
-        var rows = await Api.TryCallAsync<List<object>>("list_java", new List<object>());
-        _list.Children.Clear();
-        if (rows == null || rows.Count == 0)
+        var rows = await Api.TryCallAsync<List<object>>("get_instances", new List<object>()) ?? new();
+        _instances = rows.Select(r => Py.S(Py.D(r).Get("name"))).Where(n => n.Length > 0).ToList();
+        _sync = true;
+        _inst.Items.Clear();
+        foreach (string n in _instances) _inst.Items.Add(n);
+        if (_instances.Count > 0) _inst.SelectedIndex = 0;
+        _sync = false;
+
+        await ReloadVendorsAsync();
+        await ReloadJavaOptionsAsync();
+        await ReloadListAsync(scan: false);
+    }
+
+    private async Task ReloadVendorsAsync()
+    {
+        _vendors = await Api.TryCallAsync<List<string>>("java_vendor_list", null) ?? new();
+        if (_vendors.Count == 0) _vendors = new List<string> { "adoptium" };
+        var labels = new List<string>();
+        foreach (string v in _vendors)
+            labels.Add(await Api.TryCallAsync<string>("java_vendor_label", v, new { vendor = v }) ?? v);
+        _sync = true;
+        _vendor.Items.Clear();
+        foreach (string l in labels) _vendor.Items.Add(l);
+        int idx = _vendors.IndexOf("adoptium");
+        _vendor.SelectedIndex = idx >= 0 ? idx : 0;
+        _sync = false;
+    }
+
+    private string SelectedVendor()
+    {
+        int i = _vendor.SelectedIndex;
+        return i < 0 || i >= _vendors.Count ? "adoptium" : _vendors[i];
+    }
+
+    private async Task ReloadJavaOptionsAsync()
+    {
+        string inst = _inst.SelectedItem as string ?? "";
+        if (inst.Length == 0) return;
+        var rawOpts = await Api.TryCallAsync<List<object?>>("java_combo_options", null, new { instance = inst, scan_system = false }) ?? new();
+        var opts = rawOpts.OfType<PyDict>().ToList();
+        if (opts.Count == 0) return;
+        string keep = await Api.TryCallAsync<string>("java_combo_label_for", "自动选择", new { instance = inst, options = opts }) ?? "自动选择";
+        _sync = true;
+        _javaOpts = opts.Select(o => (Py.S(o.Get("label")), Py.S(o.Get("value")))).ToList();
+        _java.Items.Clear();
+        foreach (var (label, _) in _javaOpts) _java.Items.Add(label);
+        int i = _javaOpts.FindIndex(o => o.Label == keep);
+        _java.SelectedIndex = i >= 0 ? i : 0;
+        _sync = false;
+        await ShowInstanceJavaAsync(inst);
+    }
+
+    private async Task ShowInstanceJavaAsync(string inst)
+    {
+        string stored = await Api.TryCallAsync<string>("get_instance_java", "", new { name = inst }) ?? "";
+        string label = await Api.TryCallAsync<string>("instance_java_label", "", new { name = inst }) ?? "";
+        _instJava.Text = stored.Length == 0
+            ? ""
+            : "当前记录:" + label + (stored == label ? "" : $"({stored})");
+    }
+
+    private async Task SaveJavaAsync()
+    {
+        string inst = _inst.SelectedItem as string ?? "";
+        if (inst.Length == 0) return;
+        string label = _java.SelectedItem as string ?? "";
+        string java = _javaOpts.FirstOrDefault(o => o.Label == label).Value;
+        if (string.IsNullOrEmpty(java)) java = label.Length == 0 ? "自动选择" : label;
+        await Api.CallAsync<object>("set_instance_java", new { name = inst, java });
+        await ShowInstanceJavaAsync(inst);
+        Toast("已保存", $"「{inst}」默认 Java:{label}", ToastKind.Success);
+    }
+
+    private async Task ApplyManualAsync()
+    {
+        string inst = _inst.SelectedItem as string ?? "";
+        string raw = _manual.Text?.Trim() ?? "";
+        if (inst.Length == 0 || raw.Length == 0)
         {
-            _info.Text = "";
-            _list.Children.Add(UiClass.Card(UiClass.Empty("J", "还没有可用的 Java", "下载页安装游戏时可以一键装自带 JRE（M3 接入）；或点「手动添加」"), 18));
+            Toast("先填路径", "填一个 java 可执行文件的绝对路径", ToastKind.Warning);
             return;
         }
-        foreach (var r in rows)
-        {
-            var d = Py.D(r);
-            string name = Py.S(d.Get("name"));
-            string ver = Py.S(d.Get("version"));
-            string path = Py.S(d.Get("path"));
-            var row = UiClass.G(null, "*,Auto");
-            row.Add(UiClass.V(3, UiClass.Txt(string.IsNullOrEmpty(name) ? "Java " + ver : name, 13.5, bold: true), UiClass.Small(path).Wrap()), 0);
-            var ops = UiClass.H(6);
-            if (Py.Truthy(d.Get("is_default")))
-                ops.Children.Add(UiClass.Tag("默认", "B.OnAccentStrong", "B.AccentStrong"));
-            else
-                ops.Children.Add(UiClass.Btn("设为默认", BtnKind.Chip, (_, _) => Run(async () =>
-                {
-                    await Api.CallAsync<object?>("set_default_java", new { path });
-                    await LoadCoreAsync();
-                }, "设置失败")));
-            row.Add(ops.VCenter(), 0, 1);
-            _list.Children.Add(UiClass.RowCard(row, padding: 13));
-        }
+        string normalized = await Api.CallAsync<string>("normalize_java_pref", new { java = raw }) ?? raw;
+        if (normalized != raw) Toast("已规范化", raw + "\n→ " + normalized);
+        await Api.CallAsync<object>("set_instance_java", new { name = inst, java = normalized });
+        _manual.Text = "";
+        await ReloadJavaOptionsAsync();
+        Toast("已保存", $"「{inst}」默认 Java:{normalized}", ToastKind.Success);
     }
 
-    private async Task AddJavaAsync()
+    private async Task ReloadListAsync(bool scan)
     {
-        string? path = await Dlg.PickFolder("选择 Java 主目录（含 bin/java 的目录）");
-        if (string.IsNullOrEmpty(path)) return;
-        await Api.CallAsync<object?>("add_java", new { path });
-        Toast("已添加", path, ToastKind.Success);
-        await LoadCoreAsync();
+        var rawRows = await Api.TryCallAsync<List<object?>>("get_java_list", null, new { scan_system = scan }) ?? new();
+        var rows = rawRows.OfType<PyDict>().ToList();
+        _list.Children.Clear();
+        _count.Text = $"共 {rows.Count} 个";
+        if (rows.Count == 0)
+        {
+            _list.Children.Add(UiClass.Card(UiClass.Empty("Box", "没有找到 Java", "点上面「下载」装一个,或扫描系统已有安装"), 18));
+            return;
+        }
+        var cards = new List<Control>();
+        foreach (var j in rows)
+        {
+            string name = Py.S(j.Get("name"));
+            string major = Py.S(j.Get("major"));
+            string path = Py.S(j.Get("path"));
+
+            var badge = new Border
+            {
+                Width = 42,
+                Height = 42,
+                CornerRadius = new CornerRadius(8),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            badge.Dyn(Border.BackgroundProperty, "B.AccentSoft");
+            badge.Child = UiClass.Txt(major, 14, bold: true, "B.AccentText").Center();
+
+            var setDefault = U.Btn("设为默认", BtnKind.Chip, (_, _) => Run(async () =>
+            {
+                await Api.CallAsync<object>("save_settings", new { data = new { default_java = path } });
+                Toast("已设为默认", name, ToastKind.Success);
+            }, "保存失败"));
+            var forInstance = U.Btn("给本实例", BtnKind.Chip, (_, _) => Run(async () =>
+            {
+                string inst = _inst.SelectedItem as string ?? "";
+                if (inst.Length == 0) return;
+                await Api.CallAsync<object>("set_instance_java", new { name = inst, java = path });
+                await ReloadJavaOptionsAsync();
+                Toast("已保存", $"「{inst}」默认 Java:{name}", ToastKind.Success);
+            }, "保存失败"));
+            var openDir = U.IconBtn("Folder", "打开所在目录", (_, _) => Run(async () =>
+            {
+                string target = File.Exists(path) ? (Path.GetDirectoryName(path) ?? path) : path;
+                bool ok = await Api.TryCallAsync<bool>("open_media", false, new { path = target });
+                if (!ok) Toast("打开失败", target, ToastKind.Warning);
+            }, "打开失败"));
+
+            var col = UiClass.V(2, UiClass.Txt(name, 13, bold: true).Trim(), UiClass.Mono(path).Trim());
+            col.VCenter();
+            var grid = UiClass.G(null, "Auto,*,Auto");
+            badge.Mk(0, 0, 12, 0);
+            grid.Add(badge, 0, 0);
+            grid.Add(col, 0, 1);
+            var ops = UiClass.H(6, setDefault, forInstance, openDir);
+            ops.Mk(12, 0, 0, 0).VCenter();
+            grid.Add(ops, 0, 2);
+            cards.Add(UiClass.RowCard(grid, null, 11));
+        }
+        foreach (var c in cards) _list.Children.Add(c);
+    }
+
+    private async Task DownloadAsync(string major)
+    {
+        string vendor = SelectedVendor();
+        string method = vendor == "adoptium" ? "download_java" : "install_java";
+        await Api.CallAsync<string>(method, new { major = int.Parse(major), vendor });
+        Toast("已加入队列", $"正在下载 {vendor} Java {major},进度看下载任务");
+        if (TopLevel.GetTopLevel(this) is MainWindow w) w.Navigate("tasks");
+    }
+
+    protected override void OnEvent(ApiEvent ev)
+    {
+        if (ev.Event != "finished" || !ev.Success) return;
+        var row = TaskStore.Get(ev.TaskId);
+        if (row != null && row.Title.IndexOf("Java", StringComparison.OrdinalIgnoreCase) >= 0)
+            Run(async () =>
+            {
+                await ReloadListAsync(scan: false);
+                await ReloadJavaOptionsAsync();
+            });
     }
 }
-
 // ───────────────────────────── 服务器 ─────────────────────────────
 
 internal sealed class ServersView : SettingsSubView
@@ -352,7 +547,7 @@ internal sealed class PlaytimeView : SettingsSubView
 
     public PlaytimeView() : base("settings:playtime", "游戏时长", "按实例与版本统计，每次退出游戏后自动累加")
     {
-        var refresh = UiClass.Btn("刷新", BtnKind.Chip, (_, _) => Run(LoadCoreAsync));
+        var refresh = U.Btn("刷新", BtnKind.Chip, (_, _) => Run(LoadCoreAsync), "Refresh");
         var clearAll = UiClass.Btn("清空统计", BtnKind.Ghost, (_, _) => Run(async () =>
         {
             if (await Dlg.Confirm("清空游戏时长", "所有实例的时长记录都会归零。", "清空", "取消", danger: true))

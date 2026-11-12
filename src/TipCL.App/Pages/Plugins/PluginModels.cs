@@ -133,6 +133,8 @@ public sealed class PluginInfo
     public bool HasSettings;
     public string DevPath = "";
     public bool UpdateAvailable;
+    /// <summary>市场里的新版本号(有更新时才有值,用于卡片徽标与菜单文案)。</summary>
+    public string MarketVersion = "";
     public string Homepage = "";
 
     public string DisplayName => (Name.Length > 0) ? Name : Id;
@@ -267,6 +269,8 @@ public sealed class UiContribution
         if (c.Label.Length == 0) c.Label = J.Str(c.Spec, "label", c.Id);
         if (c.Icon.Length == 0) c.Icon = J.Str(c.Spec, "icon");
         if (c.Order == 0.0) c.Order = J.Num(c.Spec, "order");
+        // 参考版这一行是内核算出来的(带 pageToken);Linux 没有内核,地址就在 manifest 的 spec 里
+        if (c.Url.Length == 0) c.Url = J.Str(c.Spec, "url");
         return c;
     }
 }

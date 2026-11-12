@@ -7,8 +7,9 @@ using Avalonia.Media;
 namespace TipCL.App.Shell;
 
 /// <summary>
-/// 自定义标题栏：Logo + 顶部 5 页签 + 主题切换 + 最小化/最大化/关闭。
-/// 线宽 1.1 圆头矢量按钮；关闭悬停 #C42B1C 满高白字。
+/// v2 自定义标题栏(46px):Logo + 顶部 5 页签(启动/实例库/下载/插件/设置)
+/// + 右侧 AI 药丸钮 / 主题 / 账号钮 / 最小化 / 最大化 / 关闭。
+/// 线宽 1.1 圆头矢量按钮;关闭悬停 #C42B1C 满高白字。
 /// </summary>
 public partial class TitleBar : UserControl
 {
@@ -23,6 +24,12 @@ public partial class TitleBar : UserControl
     /// <summary>主题切换按钮被点击。</summary>
     public event EventHandler? ThemeToggleClicked;
 
+    /// <summary>AI 药丸钮被点击(对齐 Windows `AiBtn` → 打开 AI 助手)。</summary>
+    public event EventHandler? AiClicked;
+
+    /// <summary>账号钮被点击(对齐 Windows `AccBtn` → 打开账号页)。</summary>
+    public event EventHandler? AccountClicked;
+
     public TitleBar()
     {
         InitializeComponent();
@@ -33,6 +40,11 @@ public partial class TitleBar : UserControl
             TabPanel.Children.Add(tab);
         }
 
+        // 账号钮默认态:未登录 = 首字母圆 + 「未登录」(对齐 Windows `MainWindow` 构造函数)
+        AccName.Text = "未登录";
+        AccInitial.Text = AccName.Text.Substring(0, 1);
+        AiBtn.Click += (_, _) => AiClicked?.Invoke(this, EventArgs.Empty);
+        AccBtn.Click += (_, _) => AccountClicked?.Invoke(this, EventArgs.Empty);
         ThemeBtn.Click += (_, _) => ThemeToggleClicked?.Invoke(this, EventArgs.Empty);
         ToolTip.SetTip(ThemeBtn, "切换深色 / 浅色");
         ToolTip.SetTip(MinBtn, "最小化");
@@ -45,6 +57,15 @@ public partial class TitleBar : UserControl
 
     /// <summary>浅色时显示月亮（点了变深），深色时显示太阳。</summary>
     public void SyncThemeIndicator(bool dark) => ThemeIco.Data = Geometry.Parse(dark ? GeoSun : GeoMoon);
+
+    /// <summary>同步账号钮:名称 + 首字母圆(空名回落「未登录」,对齐 Windows SyncAccountChipAsync)。</summary>
+    public void SetAccount(string? name)
+    {
+        string n = string.IsNullOrWhiteSpace(name) ? "未登录" : name!.Trim();
+        AccName.Text = n;
+        AccInitial.Text = n.Substring(0, 1).ToUpperInvariant();
+        ToolTip.SetTip(AccBtn, n);
+    }
 
     /// <summary>最大化/还原图标随窗口状态切换。</summary>
     public void SyncMaxGlyph(bool maximized)
@@ -60,6 +81,36 @@ public partial class TitleBar : UserControl
         {
             if (child is Button b)
                 SetClass(b, "on", Equals(b.Tag, id));
+        }
+    }
+
+    // ───── 插件动态页签(P6/P8):group:"top" 的插件页面追加到 5 个内置页签之后 ─────
+
+    private readonly System.Collections.Generic.List<Button> _pluginTabs = new();
+
+    /// <summary>重建插件页签(id = plugin:&lt;plugin&gt;:&lt;page&gt;)。传空即清空。</summary>
+    public void SetPluginTabs(System.Collections.Generic.IEnumerable<(string Id, string Label)> tabs)
+    {
+        foreach (var b in _pluginTabs) TabPanel.Children.Remove(b);
+        _pluginTabs.Clear();
+        foreach (var (id, label) in tabs)
+        {
+            var tab = new Button { Classes = { "topTab" }, Content = label, Tag = id };
+            tab.Click += (_, _) => TabClicked?.Invoke(this, id);
+            ToolTip.SetTip(tab, label);
+            TabPanel.Children.Add(tab);
+            _pluginTabs.Add(tab);
+        }
+    }
+
+    /// <summary>当前插件页签的 id(测试与失效处理用)。</summary>
+    public System.Collections.Generic.IReadOnlyList<string> PluginTabIds
+    {
+        get
+        {
+            var ids = new System.Collections.Generic.List<string>();
+            foreach (var b in _pluginTabs) ids.Add((string?)b.Tag ?? "");
+            return ids;
         }
     }
 

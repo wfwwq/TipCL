@@ -407,7 +407,16 @@ public sealed class InstallPage : UserControl
             ToastHost.Show("请填写实例名称", "", ToastKind.Warning);
             return;
         }
-        _go.IsEnabled = false;
+_go.IsEnabled = false;
+        // 任务体跑在线程池:控件状态必须先在 UI 线程取出再进任务,
+        // 否则 _of.IsChecked / IsVisible 会触发 Avalonia VerifyAccess("Call from invalid thread")。
+        bool optifine = _of.IsChecked == true;
+        bool liteloader = _lite.IsChecked == true && _liteRow.IsVisible;
+        bool installFabricApi = _api.IsChecked == true;
+        int sel = _sel;
+        string ver = _ver;
+        string loader = sel == 0 ? "" : Names[sel];
+        string? loaderVersion = LoaderVersion();
         try
         {
             if (!_instances.Contains(name))
@@ -418,6 +427,9 @@ public sealed class InstallPage : UserControl
             {
                 void Pump(ApiEvent ev)
                 {
+                    // 只搬运「后端原始事件」(不带 taskId);progress.Report 自己会再发一条带
+                    // taskId 的事件,若不过滤会 Report→BridgeEvent→Pump→Report 无限递归(栈溢出)。
+                    if (ev.TaskId.Length > 0) return;
                     if (ev.Event == "progress")
                         progress.Report(ev.Message, ev.Current, ev.Total);
                     else if (ev.Event == "log")
@@ -428,23 +440,23 @@ public sealed class InstallPage : UserControl
                 try
                 {
                     var extra = PyDict.Of(
-                        "optifine", _of.IsChecked == true,
-                        "liteloader", _lite.IsChecked == true && _liteRow.IsVisible);
+                        "optifine", optifine,
+                        "liteloader", liteloader);
                     await api.CallAsync<object?>("install_game", new
                     {
-                        version = _ver,
-                        loader = _sel == 0 ? "" : Names[_sel],
-                        loader_version = LoaderVersion(),
+                        version = ver,
+                        loader,
+                        loader_version = loaderVersion,
                         instance = name,
                         extra,
                     }, ct);
-                    // Fabric API：主任务成功后追加（对齐 Windows 版 install_mod 链）
-                    if ((_sel == 1 || _sel == 4) && _api.IsChecked == true)
+                    // Fabric API:主任务成功后追加(对齐 Windows 版 install_mod 链)
+                    if ((sel == 1 || sel == 4) && installFabricApi)
                     {
                         await api.StartTaskAsync("安装模组 Fabric API", (p2, ct2) => Task.Run(() =>
                         {
                             var dm = new DownloadManager(2, (msg, cur, total) => p2.Report(msg, cur, total));
-                            Mods.InstallModrinthMod(dm, "fabric-api", new Instance(name), _ver, loader: Names[_sel] == "Quilt" ? "quilt" : "fabric");
+                            Mods.InstallModrinthMod(dm, "fabric-api", new Instance(name), ver, loader: loader == "Quilt" ? "quilt" : "fabric");
                         }, ct2));
                     }
                 }

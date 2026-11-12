@@ -2,6 +2,7 @@
 // `Ui.` 会被命名空间遮蔽，B1/B2/B3 都踩了同一个坑）。这里集中转发并补一个 Windows 版语义的
 // Btn(text, kind, click, glyph) 重载；等 UiHelpers 改名后可整体删掉。
 using System;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -19,7 +20,14 @@ public static class U
         var b = UiF.Btn(text, kind, click);
         if (!string.IsNullOrEmpty(glyph))
         {
-            b.Content = UiF.H(6, UiF.Glyph(glyph, 13), UiF.Txt(text));
+            // 图标支持 IconLib 名(矢量 Path,描边跟随按钮前景色)与字体字形字符
+            Control icon = Common.IconLib.All.ContainsKey(glyph!)
+                ? Common.IconLib.Make(glyph!, "B.Ink", 13)
+                : UiF.Glyph(glyph!, 13);
+            if (icon is Avalonia.Controls.Shapes.Path path)
+                path[!Avalonia.Controls.Shapes.Path.StrokeProperty] =
+                    b.GetObservable(Button.ForegroundProperty).ToBinding();
+            b.Content = UiF.H(6, icon, UiF.Txt(text));
         }
         return b;
     }

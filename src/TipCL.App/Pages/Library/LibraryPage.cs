@@ -14,6 +14,7 @@ using Avalonia.Media;
 using Avalonia.VisualTree;
 using Avalonia.Controls.Primitives;
 using TipCL.App.Common;
+using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher;
 // 命名空间 TipCL.App.Pages.* 下 `Ui` 会被解析成命名空间而非类，用别名指到类（B0 同款约定）
@@ -111,23 +112,22 @@ public sealed class LibraryPage : PageBase
     public LibraryPage() : base("library", "实例库")
     {
         // —— 左栏：文件夹列表卡 ——
-        var add = UiClass.Btn("添加已有文件夹", BtnKind.Chip, (_, _) => Run(AddFolderAsync, "导入失败"));
-        var pack = UiClass.Btn("导入整合包", BtnKind.Chip, (_, _) => Run(ImportPackAsync));
-        var create = UiClass.Btn("新建实例", BtnKind.Soft, (_, _) => Run(CreateAsync, "创建失败"));
-        var migrate = UiClass.Btn("导入官方启动器", BtnKind.Chip, (_, _) => Run(MigrateAsync));
+        var add = U.Btn("添加已有文件夹", BtnKind.Chip, (_, _) => Run(AddFolderAsync, "导入失败"), "Folder");
+        var pack = U.Btn("导入整合包", BtnKind.Chip, (_, _) => Run(ImportPackAsync), "Box");
+        var create = U.Btn("新建实例", BtnKind.Soft, (_, _) => Run(CreateAsync, "创建失败"), "Add");
+        var migrate = U.Btn("导入官方启动器", BtnKind.Chip, (_, _) => Run(MigrateAsync), "Import");
         _folderPath[!TextBlock.ForegroundProperty] = _folderPath.GetResourceObservable("B.InkMuted").ToBinding();
         var h = UiClass.Txt("文件夹列表", 18, bold: true);
         h.FontWeight = FontWeight.ExtraBold;
         var left = UiClass.Card(UiClass.V(10, h, _folderPath, _folders, UiClass.Sep(), UiClass.Txt("添加或导入", 13, bold: true), add, pack, create, migrate), 14);
-        left.MinWidth = 300;
         left.MaxWidth = 380;
         left.VerticalAlignment = VerticalAlignment.Top;
 
         // —— 右栏头部：标题 + 计数 + 搜索 + 实例详情 + 刷新 ——
         var h2 = UiClass.Txt("版本选择", 21, bold: true);
         h2.FontWeight = FontWeight.ExtraBold;
-        var refresh = UiClass.Btn("刷新", BtnKind.Chip, (_, _) => Run(LoadAsync));
-        var detail = UiClass.Btn("实例详情", BtnKind.Chip, (_, _) => Run(() => OpenDetailAsync(), "打开失败"));
+        var refresh = U.Btn("刷新", BtnKind.Chip, (_, _) => Run(LoadAsync), "Refresh");
+        var detail = U.Btn("实例详情", BtnKind.Chip, (_, _) => Run(() => OpenDetailAsync(), "打开失败"), "Info");
         _search.TextChanged += (_, _) => RenderGroups();
         var head = UiClass.G("Auto,Auto", "Auto,Auto,*,Auto,Auto,Auto");
         var subHead = UiClass.Txt("双击版本直接启动；行尾可收藏/删除/设置", 12.5, fg: "B.InkMuted");
@@ -136,6 +136,8 @@ public sealed class LibraryPage : PageBase
         _count.Margin = new Thickness(10, 0, 10, 0);
         head.Add(_count, 0, 1);
         head.Add(_search, 0, 3);
+        detail.Margin = new Thickness(8, 0, 0, 0);   // 照 Windows:动作簇之间留 8
+        refresh.Margin = new Thickness(8, 0, 0, 0);
         head.Add(detail, 0, 4);
         head.Add(refresh, 0, 5);
         head.Add(subHead, 1, 0);
@@ -153,16 +155,20 @@ public sealed class LibraryPage : PageBase
         _body = UiClass.G("Auto");
         _body.Add(_leftCard, 0, 0);
         _body.Add(_rightCol, 0, 2);
-        _body.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        _body.ColumnDefinitions.Add(new ColumnDefinition(1, GridUnitType.Star) { MinWidth = 260 });
         _body.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(18)));
-        _body.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Parse("2*")));
+        _body.ColumnDefinitions.Add(new ColumnDefinition(2, GridUnitType.Star));
         Content = PageBase.ScrollBody(_body);
         _shell = (Control)Content;
     }
 
     // ———————————————— 数据 ————————————————
 
-    protected override void OnCreate() => Run(LoadAsync);
+    protected override void OnCreate()
+    {
+        FileDrop.Attach(this);
+        Run(LoadAsync);
+    }
 
     public override string ToString() => PageTitle;
 
@@ -344,13 +350,13 @@ public sealed class LibraryPage : PageBase
 
         var icon = new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(8) };
         icon[!Border.BackgroundProperty] = icon.GetResourceObservable("B.AccentSoft").ToBinding();
-        icon.Child = Center(IconLib.Make("Folder", "B.AccentText", 16));
+        icon.Child = Center(IconLib.Make("Folder", "B.AccentText", 14));
 
         var tail = UiClass.H(6);
         tail.VerticalAlignment = VerticalAlignment.Center;
         if (instName == _defaultInstance)
             tail.Children.Add(UiClass.Tag("默认", "B.OnAccentStrong", "B.AccentStrong"));
-        var moreBtn = UiClass.IconBtn("More", "实例操作", null, 16);
+        var moreBtn = UiClass.IconBtn("More", "实例操作", null, 13);
         moreBtn.Click += (_, _) => FolderMenu(moreBtn, instName);
         tail.Children.Add(moreBtn);
 
@@ -457,8 +463,8 @@ public sealed class LibraryPage : PageBase
         var group = new Group { Key = key, Open = open };
         var head = UiClass.Txt(title, 13.5, bold: true, "B.AccentText");
         head.TextTrimming = TextTrimming.CharacterEllipsis;
-        string iconKey = Array.IndexOf(LoaderKeys, key) >= 0 ? "Package" : "Grid";
-        var icon = IconLib.Make(iconKey, "B.AccentText", 16);
+        string loaderKey = Array.IndexOf(LoaderKeys, key) >= 0 ? key : "";
+        var icon = TipCL.App.Pages.Download.LoaderIcons.Tile(loaderKey, title, 22);
         var chev = IconLib.Make("ChevronDown", "B.InkMuted", 12);
         var folded = UiClass.Small("已折叠");
         folded[!TextBlock.ForegroundProperty] = folded.GetResourceObservable("B.InkFaint").ToBinding();
@@ -468,7 +474,7 @@ public sealed class LibraryPage : PageBase
         var hd = new Border { Padding = new Thickness(12, 8), Cursor = new Cursor(StandardCursorType.Hand), Child = bar };
         var body = new StackPanel { Margin = new Thickness(8, 2, 8, 8) };
         var sep = UiClass.Sep();
-        hd.PointerEntered += (_, _) => hd[!Border.BackgroundProperty] = hd.GetResourceObservable("B.Paper").ToBinding();
+        hd.PointerEntered += (_, _) => hd[!Border.BackgroundProperty] = hd.GetResourceObservable("B.Paper2").ToBinding();
         hd.PointerExited += (_, _) => hd.Background = null;
         hd.Tapped += (_, _) => ToggleGroup(group);
         var card = UiClass.Card(UiClass.V(0, hd, sep, body), 0);
@@ -485,7 +491,7 @@ public sealed class LibraryPage : PageBase
         g.Open = open;
         g.Body.IsVisible = open;
         g.Folded.IsVisible = !open;
-        g.Chevron.Data = Geometry.Parse(open ? IconLib.ChevronDownData : IconLib.ChevronRightData);
+        g.Chevron.Data = IconLib.Geo(open ? "ChevronUp" : "ChevronDown", 12);
     }
 
     private void ToggleGroup(Group g)
@@ -517,20 +523,25 @@ public sealed class LibraryPage : PageBase
         subTb.TextTrimming = TextTrimming.CharacterEllipsis;
         var mid = UiClass.V(2, nameRow, subTb);
 
-        var star = UiClass.IconBtn("Star", fav ? "取消收藏" : "收藏", null, 16);
-        if (fav) star.Content = IconLib.Make("Star", "B.Accent", 16);
+        var star = UiClass.IconBtn("Star", fav ? "取消收藏" : "收藏", null, 13);
+        if (fav)
+        {
+            var filled = IconLib.Make("Star", "B.Accent", 13);
+            filled[!Avalonia.Controls.Shapes.Shape.FillProperty] = filled.GetResourceObservable("B.Accent").ToBinding();
+            star.Content = filled;
+        }
         star.Click += (_, _) => { ToggleFav(v); };
-        var del = UiClass.IconBtn("Trash", "卸载这个版本", null, 16);
+        var del = UiClass.IconBtn("Trash", "卸载这个版本", null, 13);
         del.Click += (_, _) => Run(() => UninstallAsync(inst, id), "卸载失败");
-        var gear = UiClass.IconBtn("Gear", "版本设置", null, 16);
+        var gear = UiClass.IconBtn("Gear", "版本设置", null, 13);
         gear.Click += (_, _) => Run(() => OpenDetailAsync(id), "打开失败");
-        var tail = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+        var tail = new StackPanel { Orientation = Orientation.Horizontal };
         tail.Children.Add(star);
         tail.Children.Add(del);
         tail.Children.Add(gear);
 
         var g = UiClass.G(null, "Auto,*,Auto");
-        var tile = LoaderTile(v.Loader, 36);
+        var tile = TipCL.App.Pages.Download.LoaderIcons.Tile(v.Loader.ToLowerInvariant(), id, 36);
         g.Add(tile, 0, 0).Children.OfType<Control>().Last().VerticalAlignment = VerticalAlignment.Center;
         mid.Margin = new Thickness(10, 0, 10, 0);
         mid.VerticalAlignment = VerticalAlignment.Center;
@@ -564,30 +575,6 @@ public sealed class LibraryPage : PageBase
         var t = UiClass.Txt(text, size, bold: true);
         t.TextTrimming = TextTrimming.CharacterEllipsis;
         return t;
-    }
-
-    /// <summary>加载器图标块：圆角方块 + 矢量图标（无官方加载器图时的等价物）。</summary>
-    private Border LoaderTile(string loader, double size)
-    {
-        string key = loader.ToLowerInvariant() switch
-        {
-            "fabric" => "Lightning",
-            "forge" => "Server",
-            "quilt" => "Puzzle",
-            "neoforge" => "Server",
-            "optifine" => "Filter",
-            "liteloader" => "Lightning",
-            _ => "Box",
-        };
-        var b = new Border
-        {
-            Width = size,
-            Height = size,
-            CornerRadius = new CornerRadius(8),
-        };
-        b[!Border.BackgroundProperty] = b.GetResourceObservable("B.AccentSoft").ToBinding();
-        b.Child = IconLib.Make(key, "B.AccentText", Math.Max(14, size * 0.45));
-        return b;
     }
 
     private static string SubLine(Ver v)

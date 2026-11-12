@@ -420,7 +420,8 @@ public sealed class PluginMarket
 		return errs;
 	}
 
-	private static void ExtractWithPrefix(string zipPath, string prefix, string dest)
+	/// <summary>按包内前缀解压到 dest(M4-H P6:安装链移到 PluginInstaller,这里由 private 改为 public 复用)。</summary>
+	public static void ExtractWithPrefix(string zipPath, string prefix, string dest)
 	{
 		string root = Path.GetFullPath(dest).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 		using ZipArchive z = ZipFile.OpenRead(zipPath);

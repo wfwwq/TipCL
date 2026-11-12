@@ -45,3 +45,231 @@
 ### D-8 · 主题切换必须同步 Fluent 变体（2026-11-09，真机复现）
 - 现象：浅色下构建页面 → 切深色后，未显式设前景色的文字与默认 Button 仍是浅色变体（深字压深底），真机 Ubuntu 上清晰可见。
 - 修复：`MainWindow.SetDark` 同时设置 `Application.RequestedThemeVariant`；启动时从 Config.CONFIG 读 `ui_dark` 恢复主题。仅换 B.* 色板不足以覆盖 Fluent 内部主题资源。
+
+### D-9 · M3 回归修复约定(2026-11-09,主 agent)
+- 事件一律回到 UI 线程:后端工作体跑线程池,`InProcessApi.RaiseEvent` 与 `TaskStore` 公共事件统一 `Dispatcher.UIThread.CheckAccess()/Post`;页面订阅者不再各自做封送(LaunchPage 保留二次 Post 无害,新页面不要复制)。
+- 页面首载只放生命周期钩子:外壳 `Navigate` 负责 ShellDetach/ShellAttach,页面不得再用 OnAttachedToVisualTree 等隐式时机自触发,否则外壳换页后行为不可预期。
+- `FetchTimeoutMs` 是 UI 兜底而非硬超时:core 侧每个镜像自带 4s/20s 连接/读超时并会换源重试;UI 超时后继续等结果,禁止用 CancellationToken 假装能中断(API 层不透传 ct 到下载器)。
+- 文件日志固定 `$TIPCL_HOME/logs/tipcl-YYYYMMDD.log`(UTF-8,按日 append,不自动清理);排障优先看它,其次是 stdout。
+
+### D-10 · 任务体不得触碰控件 + 进度事件不得自环(2026-11-09,真机栈溢出)
+- `IApi.StartTaskAsync` 的 work 回调跑在线程池:任何 Avalonia 控件属性(IsChecked/IsVisible/Text...)都必须先在 UI 线程取出成普通值再进回调;同类规矩适用于 `Task.Run` 里读控件(SettingsPage 手机同步卡)。后台回调要更新 UI 一律走 `Dispatcher.UIThread`。
+- 页面订阅 BridgeEvent 做「事件转任务进度」时必须忽略 `TaskId` 非空的事件:`TaskProgress.Report` 自己会再抛出带 taskId 的事件,不过滤就是无限递归(实测栈溢出杀进程)。
+- 任务生命周期必须落日志(`AppLog`):任务开始/完成/失败(含异常栈)。此前 GUI 安装失败在所有通道上都不可见,只能靠猜。
+
+### D-11 · 外壳以 Windows v2 为准:删侧栏、900×550、标题栏补 AI/账号钮(2026-11-10,主 agent)
+
+**背景(推翻上一轮的差距判断)**:上一轮 handoff 记录「Linux 必须替换成顶栏 启动/游戏/AI助手/更多/下载任务 + 6 分组侧栏」,依据是 `NavModel.cs`。该判断**有误**:`NavModel.TopKeys/GroupedNav` 只服务于页面排序(`VisibleFlatOrder`)与 `NavDump` CLI,不是 UI 结构。
+
+**证据(三重吻合)**:
+1. `windos/tipcl/src/TipCL/MainWindow.xaml`(main @ 803dd38):标题栏 = Logo + **5 页签 启动/实例库/下载/插件/设置** + 右侧 `AiBtn(AI 药丸钮) / ThemeBtn / AccBtn(账号) / 分隔线 / 最小化·最大化·关闭`;内容区全幅,**无侧栏**。`Width=900 Height=550 MinWidth=720 MinHeight=480`、CaptionHeight=46。
+2. `windos/tipcl/docs/design-spec.md` §11 v1→v2 差异表:`导航 侧栏分组 6-7 项 → 顶部 5 页签`;`窗口 1180×740 → 900×550,Min 720×480`;§10 裁决 1「v2 收敛为顶部 5 页签 + 设置子导航」。
+3. 参考截图 `windos/_eval_shots/final/*.png`(明暗 × launch/library/download/plugins/settings/ai 共 10 张)全部无侧栏。
+- 另:`git log -S 'SideNav' -- src/TipCL/MainWindow.xaml` 为空(Windows 外壳从未有侧栏);`docs/mockups-hark/` 的「侧栏分组」是 **v1 旧设计线**。
+
+**落地(M4-A 外壳收官)**:
+- 删 `Shell/SideNav.axaml(.cs)`;`NavRegistry` 只留 `TopTabs`(5 项,文案与 Windows 同)。
+- `MainWindow.axaml`:900×550 / Min 720×480 / 标题栏 46px / 单列全幅内容 + `B.PageWash` 垫底。
+- `TitleBar.axaml(.cs)`:46px;右侧簇 = AI 药丸钮(`Button.titleChip`,玻璃底 + ✳ 线条图标 + "AI") → 主题 → 账号钮(24px 首字母圆 `B.AccentStrong` + 名称,默认「未登录」)→ 分隔线 → 46×46 窗口钮;`Tab.Top` 去掉悬停底色块(Windows 只换前景色)。
+- `MainWindow.axaml.cs`:接线 `AiClicked→Navigate("ai")`、`AccountClicked→Navigate("account")`(对应 Windows `AiBtn/AccBtn`);`GetPage` 键对齐 Windows NavDefs:`launch/library/download/plugins/settings/ai/account/tasks`。
+- `Java`、`关于` **不是顶级页** → 已在 `SettingsPage` 内层 7 项导航里(通用/账号/Java/下载与网络/服务器/游戏时长/反馈与关于),先前已就绪,本轮未改。
+- 删除死占位 `PlaceholderDashboard/Java/About`;新增 `PlaceholderAi`;保留 `PlaceholderAccount`、`PlaceholderTasks`(后者由下载/安装页内跳 `Navigate("tasks")` 进入,对齐 Windows)。
+- 验收:`dotnet build` 0 警告 0 错误;`dotnet test` 109 通过 / 1 跳过 / 0 失败;无头冒烟 `smoke-shell-light.png` 与参考 `_eval_shots/final/launch-light.png` 结构逐项一致(5 页签 + 选中下划线 + AI 药丸 + 月牙主题钮 + 账号钮 + 窗口钮 + 全幅壁纸)。
+
+### D-12 · 代码侧取色失效:主题资源必须挂到 Application 级(2026-11-10,主 agent)
+
+**现象(整站性)**:`Ui.Dyn(control, prop, "B.X")` / `Res.Bind("B.X")` / `Ui.Theme("Btn.*")` / `Ui.Res(...)` 全部解析为 null。可见表征:
+
+- 启动页「启动游戏」按钮不变绿(透明底)、kicker 前绿点不可见、实例标题右侧下拉箭头不可见、新闻标签没有底色;
+- 设置页滑块仍是 Fluent 蓝(不是主题绿);
+- 库页版本行图标显示成字面文字 `Star Trash Gear`。
+
+**根因(三个叠加缺陷)**:
+
+1. **没人挂 Application 级资源**:A2 的 `Ui.ApplyTheme(dark)`(= `EnsureMounted()` 挂 `Themes/Controls.axaml` + 换 `Palette.*`)是代码侧取色的唯一真源,但全app只有 `SettingsPage` 切主题时才调它 → 启动时 `Application.Resources` 是空的。而 `Ui.Dyn`/`Res.Bind`/`Ui.Theme` 都锚定 `Application.Current`,于是全部落空(页面里 XAML 写的 `{DynamicResource B.*}` 走的是窗口级合并,所以「大部分地方看着正常」)。
+2. **D-6 的坑复发**:`EnsureMounted`/`ApplyTheme` 用的是 Avalonia 11.3 的 `ResourceInclude(Uri)` 构造(= baseUri 而非 Source),一调用就抛 `ResourceInclude.Source must be set`。因为从没人调用过,这个缺陷一直潜伏,直到本轮首次调用才炸出来。
+3. **`Controls.axaml` 自身加载不了**:ComboBox 主题里有跨两层模板的选择器 `^:pointerover /template/ ToggleButton#PART_Toggle /template/ Border#Ov` → `ControlTemplate styles cannot contain multiple template selectors`。Avalonia 选择器一次只能跨一层 `/template/`,且 `ControlTemplate` 既没有 `Styles` 属性也不接受多个内容子元素。
+
+**落地**:
+
+- `MainWindow.SetDark` 现在调 `UiClass.ApplyTheme(dark)`(App 级)后仍保留窗口级合并(向后兼容),两处同步换板。
+- `Ui.ApplyTheme`/`EnsureMounted` 改为**幂等 + 加锁**(`ThemeGate`):挂载的是全局字典,并行测试/多窗口构造会并发进来;已是目标色板时直接返回,不再重挂(避免全量资源失效与字典撕裂)。
+- `Controls.axaml` ComboBox:内层 `Border#Bd` 改为绑定 `ToggleButton` 自身 `Background`/`BorderBrush`,悬停/展开态改为只跨一层的 `^:pointerover|:dropdownopen /template/ ToggleButton#PART_Toggle`。
+- 滑块:Fluent 未自绘,改为在调色板里覆盖 Fluent 的 `SliderTrackFill` / `SliderTrackValueFill*` / `SliderThumbBackground*` 键(明暗两套),不动模板 → 不碰拖拽行为。
+- `Ui.IconBtn` 同时接受 `IconLib` 图标名(渲染矢量 Path,描边跟随按钮前景色)与字体字形字符(`"↑"`/`"✕"`/`"\uE712"`),修掉「传图标名却渲染成文字」的整类问题。
+- 启动页:`launchBtn` 前景显式设 `B.OnAccentStrong`(按钮主题前景会盖掉英雄区白字,不设就是深字压绿底);背景层 `Grid.SetRowSpan(_bgImage/_bgShade, 2)` 铺满整页(原先只铺英雄区那一行,新闻行落在页面底色上却是白字 → 白纸白字)。
+
+**测试基建(顺带根治既有的顺序依赖)**:测试体原先直接在线程池线程上碰 Avalonia,而 `AvaloniaObject` 构造有线程亲和、`TaskStore`/`InProcessApi` 按 `Dispatcher.UIThread.CheckAccess()` 决定同步执行或 Post → xUnit 换线程就跑出「Call from invalid thread」/「事件还没跑断言拿到 null」两类随机失败(被本轮改动放大)。现改为 `TestApp.Run/RunAsync`:经 `HeadlessUnitTestSession.StartNew(typeof(App))` 把测试体派发到会话专属 UI 线程,31 个测试方法改造完毕;`AssemblyInfo.cs` 关闭并行(全局态共享)。**连续 3 次 `dotnet test` 均 113 通过 / 1 跳过 / 0 失败**。
+
+### D-13 · 两处「静默失效」的调用约定缺陷(2026-11-11,主 agent)
+
+**A. `ToDict` 不递归 → 所有设置的保存都是空操作**
+
+页面普遍用匿名对象传参:`Api.CallAsync("save_settings", new { data = new { ui_dark = true } })`。原 `ToDict` 只做一层属性反射,嵌套的匿名对象仍是普通对象,于是 `CallCore` 里 `args.Get("data") is PyDict` 判定失败 → 设置**既没进配置也没落盘**(重启即丢)。另外 `save_settings` 分支只 `CONFIG.Set` 不 `Save()`,Windows 版是 `CONFIG.Update` + `CONFIG.Save`。
+
+修:`ToDict` 新增递归 `Deep()`,把嵌套匿名对象 / `IDictionary<string,*>` / `IEnumerable` 一律落成 `PyDict` / `List<object>`;`save_settings`/`update_settings` 合并后显式 `Config.CONFIG.Save()`。
+
+**B. `CallAsync/TryCallAsync` 不做结构转换 → 按 POCO 取结果的地方永远拿默认值**
+
+`CallCore` 统一返回 `PyDict`,而页面有的地方按 `List<object>` 取(能对上)、有的按 POCO 取(`CleanerPreviewStub`/`SmartRecStub`/`Dictionary<string,string>` 的语言表)→ `result is T` 不成立 → 一律回默认值,TryCall 甚至静默返回 fallback。
+
+修:新增 `Coerce(Type, object)`,`is T` 未命中时把 `PyDict` 序列化成 JSON 再按 `PropertyNameCaseInsensitive` 反序列化到目标类型(`Plain()` 负责 PyDict → 纯字典/数组)。`is T` 命中的老路径不受影响。
+
+**同批修正的同类问题**:`Ui.IconBtn` 与 `Ui.Empty` 收图标名却按字体字形渲染 → 传 `"Star"`/`"User"` 会把名字原样画成文字。新增 `Ui.Icon(nameOrGlyph)`:命中 `IconLib` 键走矢量 Path,否则回落字体字形;`IconBtn`/`Empty` 都改用它。
+
+### D-14 · 反馈链路必须「真发得出去、且不被服务器拒」(2026-11-11,主 agent;用户点名要求)
+
+**背景**:设置页「反馈与关于」的提交卡原先用 `TryCallAsync("feedback_submit", new { text })`。这条路有两个致命问题:① `Feedback.Submit` 在**未同意上传诊断数据时会直接抛错**(同意门),而 UI 从没问过同意 → 点了发送根本没发出去;② `TryCallAsync` 吞异常,UI 把任何失败都显示成「反馈通道后端 M3 接入」→ **403/400 被伪装成「后端没做」,无从排查**。
+
+**对真实服务器的探测结论**(`http://114.66.28.184:53611`,只做无副作用探测,未写入任何数据):
+
+| 请求 | 响应 |
+|---|---|
+| `GET /health` | 200 `{"ok":true,"service":"pymcl-ingest","role":"ingest"}` |
+| `POST /api/v1/feedback` **不带** `X-PyMCL-Client` | **403** `{"ok":false,"error":"缺少客户端标识"}` |
+| `POST /api/v1/feedback` 带 `X-PyMCL-Client: PyMCL/1.1.0` + 同 UA、空载荷 | **400** `{"ok":false,"error":"请填写标题或内容"}`(过了标识门,载荷校验被拒) |
+
+即:服务端先卡 `X-PyMCL-Client`(与 Android 端共用;`X-TipCL-Client` 会被 403),再过载荷校验。客户端 `Feedback._headers()` 与 `AuthHttp.Send(..., userAgent: "PyMCL/" + APP_VERSION)` 已经正确,`APP_VERSION=1.1.0` 与桌面端一致。
+
+**落地**:
+1. 反馈卡改为:先过同意门(`feedback_has_consent` → 未同意则 `Dlg.Confirm` 说明上送内容 → `feedback_consent`)→ 再发;
+2. 发送用 `CallAsync`(会抛)并把**服务器原话**显示在卡片与 Toast 上(403/400 可见),不再假报「后端没做」;
+3. 补 `category`(问题/建议/其他 → bug/feature/other,服务端只认 bug/feature/crash/other,桌面端特有分类由 Core 归并为 other)与 `include_sysinfo`(sysinfo 按服务端约定转「key: value」多行文本);
+4. 新增 `feedback_submit_crash` 契约(崩溃报告走同一通道,category 固定 crash)。
+
+**验证**:`tests/TipCL.Tests/App/FeedbackTests.cs` 用本机 TCP sink(免 Windows HttpListener URL ACL)顶替 ingest,**复刻服务器那两条规则**,断言:路径 `/api/v1/feedback`、`X-PyMCL-Client == User-Agent == PyMCL/1.1.0`、`Content-Type: application/json`、必需字段齐全、category 归并、sysinfo 多行「key: value」、整链路 200 + id;并锁住「未同意不发送」与「403 原样抛出」。
+
+### D-15 · API 边界数值归一 + 反馈分类键(2026-11-11,主 agent)
+
+- **数值**:`InProcessApi.ToDict/Deep` 把参数里的 `int/short/byte/sbyte/ushort/uint` 一律转 `long`,`float` 转 `double`。Core 按 Python 语义移植,只认 `long` / `double`(如 `Servers.IndexArg` 见到 `int` 直接抛 TypeError);页面用匿名对象传 `int` 是常态,统一在 API 边界归一,不在各 Core 函数里各自兼容。
+- **反馈分类**:服务端只认 `bug/feature/crash/other`,桌面端分类键是 `FeedbackDefaults.CATEGORIES`(含 `suggest`、`download`、`ui` 等)。设置页反馈卡把标签映射到桌面键(问题反馈 → `bug`、功能建议 → `suggest`、其他 → `other`);`Feedback.Submit` 上送前再转服务端键:`suggest → feature`,其余桌面特有分类 → `other`;调用方直接传 `feature` 也兼容(先归到 `suggest`)。
+
+### D-16 · 测试基建三条硬约束(2026-11-11,主 agent)
+
+1. **测试体必须真的跑完**:`TestApp.Run/RunAsync` 阻塞等待 `HeadlessUnitTestSession.Dispatch` 返回的 Task。`Dispatch` 只是把工作排进会话队列,不等它就是「测试体还没执行就判通过」——`TestApp` 自 M4-C 引入起即如此,真正执行后立刻暴露 4 个失败(见 PROGRESS M4-G)。
+2. **测试会话用真 Skia**:`TestApp` 自带 `BuildAvaloniaApp()`(`UseSkia()` + `UseHeadlessDrawing = false`,与 `SmokeRunner` 一致),`HeadlessUnitTestSession.StartNew(typeof(TestApp))` 按名字反射调用它。默认的无头绘图是桩:`Bitmap.Save` 写出 0 字节、任何 PNG 都解码成 1×1,凡是读写位图的断言都无从成立。
+3. **测试数据根隔离**:`TestIsolation` 模块初始化器在任何用例读 `Utils.ROOT` / `Config.CONFIG` 之前,把根目录切到本进程自建的临时目录(`TIPCL_HOME` + `Utils.SetRoot`),进程退出时删除。不隔离时 ROOT 就是与 Windows 版共用的真实 `%LOCALAPPDATA%\TipCL`。
+- Windows 开发机上仓库目录带低完整性标签,`testhost.exe` 会以低完整性启动而写不了 `%TEMP%`:用 `dotnet test ... -- RunConfiguration.DotNetHostPath=<dotnet.exe>` 跑(见 PROGRESS M4-G 环境注意)。
+
+### D-17 · 明暗以配置 `ui_dark` 为唯一真源(2026-11-11,主 agent)
+
+- 外壳构造与设置页加载都从配置读 `ui_dark`;改明暗的入口必须同时写回配置,否则下一次加载就会把界面改回去。标题栏月牙钮照 Windows(`SetDark` → `PushDarkAsync` → `save_settings`)异步写回,失败弹 Toast;设置页开关走自己的自动保存。
+- 冒烟的明暗只由 `SMOKE_DARK` 决定:构造窗口前把 `ui_dark` 写进**内存**配置(不落盘,不污染 `TIPCL_HOME` 夹具),而不是构造后只调 `SetDark`。
+
+### D-18 · 下载页六分段与 CatalogPage 移植口径(2026-11-12,移植代理)
+
+- **Core 补搬**:`Modpack.cs` / `ModUpdate.cs` 从 Windows 版原样搬(纯 C#,无 WPF/Win32 依赖),文件头注明来源;`CatalogFiles._hit_row` 增补 `icon_url` / `website_url` 两个键——Windows 侧这两项由 `BackendApi._content_row` 在 API 层补齐,Linux 侧在行构造处一次带出,少一层重复映射。
+- **收藏键与落盘**:照 Windows 用 `source|slug(id)|name` 拼键(大小写不敏感),存进 `config.json` 的 `catalog_favorites`,与 Windows 版共用同一配置键;`toggle_favorite` 返回合并后的完整列表(页面据此刷星)。
+- **安装类一律「后台任务 + 立刻返回 task_id」**:`install_mod / install_shader / install_resourcepack / install_datapack / install_world / install_modpack` 走 `StartDetached`(登记 TaskStore、事件流回灌进度),页面拿到 id 后跳「任务」页——与 Windows `BackendApi.StartTask` 语义一致,也与 Linux 侧既有的 `terracotta_prepare` / `launch_game` 一致。
+- **项目介绍页地址按真实类别拼**:Windows `_content_row` 一律按 `kind="mod"` 拼 `modrinth.com/mod/<slug>`,对资源包 / 光影 / 数据包是错地址;Linux 侧按真实 kind 拼(`modpack` / `resourcepack` / `shader` / `datapack` / `world`),CurseForge 侧优先用 `website_url`,否则按 `mc-mods|modpacks|worlds` 段拼。只影响点击行打开的网页,不影响任何布局。
+- **批量导出的返回结构**:**这是一个 Windows 侧的静默缺陷**——`ContentExport.ExportMany` 返回 `{dir, exported[], failed[{name,error}]}`,而 Windows 页面的 `ExportResult` POCO 把 `failed` 当 `List<string>` 取,反序列化失败 → 整块判空 → 「全部导出」点了没有任何反馈。Linux 侧按 `PyDict` 直读实际结构并把失败项逐条列出来,不再造一个对不上的 POCO。
+- **启停模组后重新列一遍**:禁用会把文件改名为 `*.disabled`(Core 语义),行里显示的文件名随之变化;Windows 不刷新,连续点两次会拿着旧文件名报「模组文件不存在」。Linux 侧启停成功后重载已装列表。属修正,不属视觉偏离。
+- **降级项(明确不呈现)**:(1)Windows 的 `SPanel / VirtualList / SmoothScroll / Ui.Skeleton / Dlg.Busy / FileDrop` 在 Linux 侧无对应件——用 `StackPanel + ScrollViewer + 圆角占位块` 等价实现,拖放安装(EnableDrop)不呈现;(2)「游戏版本」筛选在 Windows 是可编辑下拉,Avalonia 侧保持不可编辑(候选表固定,行为等价);(3)取版本文件时的忙碌遮罩(`Dlg.Busy`)不做,进度由任务页呈现。
+- **冒烟**:新增 `SMOKE_SEG=1..6`(下载页分段选择),配套新增 `DownloadPage.SelectSegment(int)` 与 `MainWindow.CurrentPage` 两个公开入口——无头冒烟要能停在任意分段才做得了视觉回归。
+
+### D-19 · 版本管理移植口径与「不移植」裁决(2026-11-12,移植代理)
+
+- **NavDefs 对齐**:Windows `MainWindow.NavDefs` 有 10 个键,其中只有 5 个是顶部页签;`instance`(标题「版本管理」)不在页签里,由启动页版本浮层的「管理」内跳。Linux 侧 `GetPage("instance")` 补上同一语义;`VersionManagePage` 落在 `Pages/Version/`(Windows 平铺在 `Pages/` 下,Linux 按功能分子目录,PARITY 已标注改名)。
+- **PreferInstance 语义**:Windows 直接 `Win.GetPage("launch") as LaunchPage` 调 `PreferInstance`;Linux 侧页面是懒建的,改为 `LaunchPage.Prefer(inst, ver)` 静态待办 + `MainWindow.PreferLaunch` 负责「先 Navigate、页面填充数据时消费」,避免页面还没建就问它要状态。
+- **`create_desktop_shortcut` 明确不移植**:Windows 用 WScript.Shell 建 .lnk,指向启动器并带上实例/版本参数;Linux 侧没有任何 CLI 启动入口(`Program.cs` 只认 `--smoke`),写出来的 `.desktop` 只会是点了没反应的死按钮。菜单里**不呈现**这一项,PARITY 记为「不移植」并写明理由;等 M3 真机阶段补 `--launch <实例> <版本>` 之后再评估。
+- **`export_launch_script` 换脚本方言**:同一调用链(`build_launch_command` 抽出的 `BuildLaunchCmd`),Windows 由 `VersionOps.ExportLaunchBat` 产 `.bat`,Linux 侧改写 `#!/bin/sh` + `cd` + `exec` 并 `chmod +x`。属平台适配,不是行为偏离——导出脚本是排障工具,不参与启动。
+- **按 Core 的真实返回结构取值,不造假列**:Windows 的 `SaveRow` POCO 期望 `Size/LastPlayed/Mode`、`BackupRow` 期望 `Size/Date`,而 Core 实际返回 `{name,path,icon,bytes,mtime}` —— Windows 侧那几列一直是空的。Linux 侧直接读 PyDict 的实际键(字节数格式化 + mtime 本地时间),不假装有「上次游玩 / 模式」。同类问题还有 `ExportResult`(见 D-18)。
+- **隔离默认值**:`Config` 的默认配置里 `default_isolation = "all"`(新版本默认隔离),测试断言按这个真实默认写,不硬编码 "none"。
+- **降级项(明确不呈现)**:Windows 的 `SPanel / SmoothScroll / Dlg.Busy / wpf-ui.json(UiPrefs) / PluginActionBar` 在 Linux 侧无对应件——滚动用 `ScrollViewer`+`MaxHeight`,忙碌遮罩不做(进度由任务页呈现),折叠态与版本收藏先进程内静态表,插件动作栏等 P6 插件宿主落地后再接;拖放导入整合包(FileDrop)不呈现。
+
+### D-20 · Java 子页按 Windows JavaPage 对齐 + `Coerce` 的 POCO 陷阱(2026-11-12,移植代理)
+
+- **宿主方式**:Windows 的 `JavaPage` 是独立 PageBase,由设置页内层导航第 3 项挂进内容区;Linux 侧沿用既有做法,把它实现为 `SettingsSubView` 的子类 `JavaView`(标题/副标题由基类给出),页面结构与 Windows 一致。
+- **子视图标题只能有一个**:`SettingsSubView` 基类构造时就插了「标题 + 副标题」,子类若再 `UiClass.Section(同标题)` 会出现两个重复标题(本轮冒烟里可见)。修法:基类把标题行 `Grid`(两列 `*,Auto`)暴露成 `Header`,子类只往右列补自己的操作区。
+- **`CallAsync<List<PyDict>>` 是陷阱,不要用**:`Coerce` 走的是「PyDict → 纯字典 → JSON → 目标类型」,`PyDict` 本身不可 JSON 反序列化,于是**整块回默认值/抛 InvalidCastException**。取对象列表一律 `List<object?>` + `OfType<PyDict>()`(或 `Py.D` 逐项转);`TryCallAsync<List<PyDict>>` 更隐蔽——它静默回 null,页面表现为「什么都找不到」(本轮 `java_combo_options` 会让「选择 Java」直接说「没找到 Java」)。已在本轮全部改正并加测试。
+- **`export_launch_script` 之外的平台差异**:Java 运行时下载(`download_java` / `install_java`)是纯下载链路,Linux 与 Windows 共用 Core 实现,无平台分支;「打开所在目录」在 Linux 交给 `Crash.OpenPath`(内部 xdg-open)。
+- **冒烟**:新增 `SMOKE_SETTINGS_TAB=0..6`(设置页内层导航项选择),配套 `SettingsPage.SelectTab(int)`;与下载页的 `SMOKE_SEG` 一起构成「页面 + 内部视图」两级冒烟能力。
+
+### D-21 · P4 反馈/向导/崩溃界面的接线与降级(2026-11-12,移植代理)
+
+- **同意门以 config 文件为判据**:Linux 侧照 Windows 语义实现「`config.json` 里没有 `feedback_consent` 键才问一次」(文件优先于内存里的后端值),而不是简单看配置有没有值——Core 默认里该键就是 `null`,只看值会每次启动都问。用例表搬成 `FeedbackConsentTests`。
+- **崩溃事件接线**:Core 的启动链在崩溃时抛 `GameCrashError`(报告字典随异常回传),Linux 侧没有 Windows 的 `crash` 事件总线,遂在 `InProcessApi.StartDetached` 捕获该异常时**缓存报告(按 task_id)+ 补发一个 `crash` 事件**,`MainWindow` 订阅后弹 `CrashUi`。这样崩溃界面与 Windows 一样「自动弹」,而不是只在任务卡上留一行错误。
+- **`apply_crash_action` 的平台化**:Windows 的 `repair_version` / `need_java` 两个分支会直接起后台任务;Linux 侧改为返回 `ok=true` + 一句指向「版本管理 → 修复」/「设置 → Java」的指引(不在崩溃界面里偷偷起长任务),`disable_mods` / `bump_memory` / `open_mods_folder` / `open_crash_file` / `reset_jvm_args` / `open_gpu_hint` 行为与 Windows 一致。
+- **暂不呈现**:崩溃界面的「交给 AI 修复」(依赖 AiFixWindow,属 P5 AI 子系统)、首启向导里的「拖放安装」亮点文案改写为 Linux 已有的能力(版本管理/轮播壁纸/AI 药丸钮),不写做不到的功能。
+- **`Dlg.OpenPanel`**:Windows 的 `Dlg.Panel` 是非模态浮层(带 `layer.Close()`),Linux 侧新增 `OpenPanel` 返回句柄(`Close()` + `Closed` Task),向导据此在「开始使用 / 跳过 / 直接关窗 = 跳过」三种结束方式下都能正确收尾。
+- **启动提示**:首启向导与同意门在 `App.OnFrameworkInitializationCompleted` 里异步触发(不到阻塞首屏),`--smoke` 下跳过——无头截图不该被模态窗口挡住。
+
+### D-22 · AI 子系统移植口径(M4-H P5,2026-11-12,移植代理)
+
+- **Markdown 渲染换宿主**:Windows 的 `MdView` 是 WPF `RichTextBox` + `FlowDocument`(段落/列表/表格都是文档对象);Avalonia 没有对应物 → 改为「解析成块 → 逐个渲染成控件」:段落用 `TextBlock.Inlines`(Avalonia 11 支持 `Run/Bold/Italic/Span/LineBreak/InlineUIContainer`),列表按 `ItemDepth` 缩进、引用用左边框容器、表格用 `Grid`。**只换渲染宿主,不改 Markdown 语义**——`MdParser` 原样搬运,行为由 10 个 xunit 用例锁定。
+- **行内元素的两处差距**:①`Span` 在 Avalonia 里不是 `Control`,没有 `Cursor`/`ToolTip`/`Click` → 链接目前只有主题色 + 下划线,URL 不弹提示、不可点(AI 页把整条回复的纯文本复制留给气泡的复制钮);②`Run` 没有 Background → 行内码没有底色,用等宽 + `B.AccentText` 近似。两条都记在 PROGRESS 遗留里,不假装做过。
+- **`InternalsVisibleTo`**:给 `TipCL.App` 加 `<InternalsVisibleTo Include="TipCL.Tests" />`(Core 侧早已有同样一条)。AI 子系统整族都是 `internal`(与 Windows 一致),不开这条就没法给解析链/气泡写测试。只放宽可见性:不加依赖、不改行为、不改打包产物。
+- **思考段**:Core 的流式把推理内容包成 `<think>…</think>`(`AssembleStreamWrapsReasoningInThinkTags` 已锁),页面按这两个标签切分增量:标签内进「思考」折叠块,标签外进正文 Markdown。
+- **端点键名以 Core 为准**:`Client.ResolveEndpoint` 返回 `mode`(builtin|custom)/`model`/`url`/`headers`,没有 `label`/`configured`;页面按 `mode` 显示「内置网关 / 自定义端点」,并用「能否解析出端点」判断是否已配置(解析抛 `AIClientError` → 显示引导而不是点了没反应)。这类「按想象中的键读后端」是本轮第二次踩(前一次是 `List<PyDict>`),统一按 Core 真实输出取键。
+- **本轮不做的**:工具调用 / 权限确认 / 计划卡 / 步骤组 / 自检 / 附件与图片输入 —— 见 PROGRESS M4-H P5 的遗留清单;宁可留着占位说明,不做假按钮。
+
+### D-23 · Linux 移植与 Windows 参考版的四处有意偏离(P3.5,2026-11-12,移植代理)
+
+- **Shortcut 只保留 Linux/macOS 分支**:Windows 参考版 `_create_windows` 用 PowerShell + WScript.Shell 写 `.lnk`(而且生成的参数无人消费,见 PARITY §6「参考实现缺陷」)。Linux 版把这条「本机平台不适用」的分支换成抛 `ShortcutError("当前平台不支持创建桌面快捷方式")`,不搬 PowerShell 脚本。
+- **`TIPCL_SHORTCUT_POSIX=1`**:Windows 开发机上跑本工程的无头测试时,.desktop 分支永远走不到(而 .desktop 才是交付物),该环境变量把 Shortcut 的「Windows 路径判定」关掉,让测试能断言 .desktop 的键值与可执行位。只影响 `Shortcut` 内部的路径/后缀判定,不影响产品行为(Linux 上本来就走这条)。
+- **`.desktop` 的 Exec/Path/Icon 一律做 Unix 路径规整**:参考版自带的 `_create_linux` 直接把 `ProcessPath` 与工作目录写进去,本机是 Windows 路径时(交叉验证/测试)写出的就是反斜杠,Linux 上不可执行。Linux 版把这三处 `\` → `/`(参数不动,`-i foo` 里的分隔符不是路径)。
+- **图标改为程序化生成的 PNG**:参考版给的是 `icon.ico` / exe 自身(Windows 认 exe 内嵌图标),Linux 桌面环境不认。Linux 侧 `ShortcutIcon` 用 `System.IO.Compression.ZLibStream` 直接生成 128×128 PNG 落在 `$TIPCL_HOME/tipcl.png`,不引入图片资源也不加依赖;生成失败则省略 `Icon=` 键,不写指向不存在文件的图标。
+### D-24 · AI 工具链的移植口径(P5,2026-11-12,移植代理)
+
+- **Agent 在进程内重实现,不搬 Python 侧那套依赖**:参考版 `Core/Launcher/Ai`(~8000 行)的 Agent 依赖 Mcp / Checkpoint / Compact / Store / Trace / Scheduler / Rewind / Artifacts 等 20 余个模块,而这些能力在 Linux 侧(无 Python 桥、无 MCP 客户端)没有等价物。Linux 版按**同一批工具名 + 同一批事件名**(`delta/think/tool/tool_done/status/error/done`)实现最小可用的会话循环:流式 → 有 `tool_calls` 就逐个执行 → 把 `assistant(tool_calls)` 与 `tool(结果)` 追加进对话 → 再发起下一轮。轮数上限 12,超了就让模型不带工具收尾。
+- **工具集只写 Linux 真正有的**:`tune_jvm / backup_save / dispatch_subagent / read_artifact / MCP 工具` 不写进 schema —— 与 P7「逐项判定」同一口径:宁可工具少,不做点了报未知工具的死入口。
+- **权限键与 Windows 共用**:`config.json` 的 `ai_permission_mode`(default/acceptEdits/plan/yolo/custom)与 `ai_permission_rules`,值也一致,便于两边共用/迁移配置。裁决顺序:自定义规则 → 只读直接允许 → 档位(plan 拒写 / yolo 全允许 / acceptEdits 只在删除类问);删除类工具不给「本对话都允许」。规则匹配只按工具名(参考版还有 `content` 参数限定,Linux 侧记在规则里但暂不参与判定,已在面板文案里避免暗示支持)。
+- **确认 / 选择题改成「停靠区」而不是浮层**:Windows 用 `Dlg.Layer` 在窗口上叠浮层;Avalonia 侧没有等价的模态浮层,改成**贴在输入区上方的非模态停靠区**(输入区禁用),用户在卡上决定后工具才继续执行 —— 交互结果与参考版一致,视觉位置不同。`AiFixView` 同理由参考版的独立 Window 改为 `Dlg.OpenPanel` 非模态面板。
+- **图片输入的可用路径**:Avalonia 11.3 的 `IClipboard` 只有文本/文件两组格式(没有位图 API),所以只支持「剪贴板里是图片文件」与「拖入/选择文件」;复制一张截图再粘贴这种场景**暂不可用**,不写提示假装支持。
+- **`Conflict.cs` 原样搬运 + 调用点改名**:参考版里它调 `Agent.DGet`(Agent 的静态工具函数),Linux 侧 Agent 是会话语义,故把该纯函数落到 `Tools.DGet`,搬来的文件只改 3 处调用点,其余不动。
+- **自检换形态**:参考版 `AiSelfTest` 是 WPF 界面自检(要开窗、点按钮、截图);Linux 侧改成不依赖界面也不联网的功能自检,由 xunit 与 `AiSelfTest.VerifyAsync` 覆盖,`--ai-selftest` 的 CLI 入口留待后续。
+- **不做的**:会话记忆面板、上下文占用环、`/斜杠命令`补全、附件缩略图预览、子代理(dispatch_subagent)与 MCP 插件工具 —— 见 PROGRESS P5 遗留,不造假按钮。
+### D-25 · 插件宿主全链的移植边界:文件级真做,运行时不假装(P6,2026-11-12,移植代理)
+
+- **两条运行路径都要宿主**:参考版的插件体系里,Node 插件是「内核拉起 Node 子进程 + stdio 上的 JSON-RPC + 本地服务 + WPF WebView2 承载网页界面」,.NET 插件是「把插件程序集 `Assembly.LoadFrom` 进启动器进程,直接调它的 WPF 界面工厂」。两者在 Linux 侧都没有宿主,且都不允许用第三方包补(不引 CEF/WebKitGTK/Node 宿主,与 P7 判 `WebViewHost` 同一条红线)。
+- **判定口径(逐项表见 `docs/PARITY.md` §7)**:凡是**文件级**能力(市场索引与镜像、安装/更新/卸载、清单与 engines/依赖校验、启停落盘、日志、权限展示、开发链接、数据目录)一律**真做**;凡是需要在进程里跑插件代码或渲染插件网页的能力一律**不移植并写清理由**,不做「看起来像」的空壳。
+- **`DotNetPluginContext` 判不移植的依据(更正一条交接假设)**:SDK 契约 `TipCL.Plugins.*` 定义在 **net48 的 `TipCL` 程序集**里(`TipCL.csproj`: `TargetFramework=net48` / `AssemblyName=TipCL`),界面工厂签名是 `System.Windows.FrameworkElement`(`Sdk/PluginSdk.cs`:4/481)。Linux 上既引用不到这套类型,也不可能加载按它编译的插件二进制(程序集标识 + WPF 依赖都不满足);要「真做」只能另立一套与参考契约**不兼容**的新 SDK,而那样没有任何现成插件可用 —— 那属于新造生态,不是移植。
+- **安装器去掉两步**:`PluginInstaller` 对齐 `PluginMarket.InstallFromMarket/InstallPackage/SwapAndLoad`,但不做 `npm install`(无 Node/npm)与宿主加载/重启。装完之后插件状态是「已安装、已启用、不会被执行」,页面用固定说明 + 启用时的 Toast 如实告知。
+- **修掉参考版遗留的一处「假成功」**:`PluginHost.Start` 原先对 .NET 插件只做一次 `Assembly.LoadFrom` 校验就把状态标成 `running`,而插件的 `Apply(ctx)` 从未被调用。现在 Node/.NET 都返回 `ok=false` + 具体原因;`SetEnabled` 只改落盘状态并回传 `runnable=false` + `reason`(文件级管理是真的,运行不是)。`NoRuntimeReason()` 是这条口径的唯一出处(页面与测试都读它)。
+- **壳侧等价物**:`PluginUi`(进程内快照 + 变更通知)替代参考版从 RPC 拉的 `plugins_ui/plugins_list`;`plugin:<plugin>:<id>` 页面 + `group:"top"` 动态顶部页签(P8)照搬参考版结构;`PluginHostPage` 在插件被禁用/卸载后标成「不可用」(与参考版 `MarkGone` 同语义:当前页保留提示、非当前页从缓存删掉)。
+
+### D-26 · CLI 的实例存在性前置校验(P0,2026-11-12,移植代理)
+
+- **问题**:桌面快捷方式写的是 `-i <实例> launch <版本>`,而 `-i <不存在的实例>` 既不报错也不拒绝 —— `InstancesApi.EnsureInstance` 的语义是「目录不存在就 `Create()`」,单根模式下 `Instances.ResolveName` 还会把未知名字吞成根实例,于是游戏会在**另一个实例的游戏目录**里启动(存档/模组全不对)。主 agent 复核里看到的 exit=3 其实来自「没有离线账号」。
+- **修法**:新增 `InstancesApi.FindInstance`(只查不改、不吞名字、绝不创建),**只在 CLI 入口**(`Session/CommandLine.cs`)做前置校验:不存在时打印「没有这个实例:<名字>」并以 `CliExit.Usage`(4)退出。`--print-command` 同样先校验(打印出来的命令必须真能跑)。UI 路径上的 `EnsureInstance`「不存在就创建」语义**保持不动**,安装/导入流程依赖它。
+- **测试口径**:直接断言「未知实例 → exit=4 且输出含该中文原因,且没有凭空创建实例目录」,不再用「没有离线账号」这类别的失败间接换一个非零码。`-i` 缺值那条路也显式断言 exit=4。
+
+### D-27 · 统一拖放入口(P7,2026-11-12,移植代理)
+
+- **做成统一入口**:`Common/FileDrop.cs` + `Common/FileKinds.cs`,形状对齐参考版 `Services/FileDrop.cs` / `FileKinds.cs`(kind 常量、中文标签与动作说明、`Verdict(路径/名字/候选/是否确定/说明)`、`DropContext{Instance,Version,PreferKind}`)。接入点:主窗口兜底、目录页(带实例上下文)、插件页(偏好 `plugin`)、实例库与版本管理页;`Attach` 幂等(页面可在 `OnActivate` 里挂)。
+- **落到真实链路**:插件包 → `PluginRuntime.InstallLocal`;整合包 → 确认后 `install_modpack`(装成新版本);模组/资源包/光影/数据包/存档 → 同名 `install_*` 任务(装完跳「下载任务」);皮肤 → `set_account_skin`(只对离线账号)。
+- **不列入壁纸**:参考版把图片/视频识别成 `wallpaper` 并写 `ui_background`;Linux 启动页用的是「实例截图 / 内置 hero」背景,这个配置键没有消费方(§5 已判 Wallpaper 的 mp4/轮播不做)。写一个没人读的入口等于假按钮,故 `wallpaper` 不进 `AllKinds`,拖图片时按「可能是皮肤」处理并给候选让用户选。
+- **不做嵌套包递归探测**:参考版会逐层解包找清单(`MaxNest=3`/`ScanLimit=4000`);Linux 侧只读包内成员名与三个关键清单标记(mrpack / CurseForge / tipcl-plugin.json),认不准就问一次,不静默猜。
+### D-28 · AI 服务层的移植口径(M4-H R1,2026-11-12,移植代理)
+
+- **服务层按参考版的形状真做**:`Checkpoint`(内容寻址快照 + journal + 回滚)、`Rewind`(回退上一轮)、`Store`(`ai_chats.json` + `cache/ai_sessions/*.jsonl`)、`Compact` + 五个配置/结果类型、`Tokens/TokenState/Usage`、`Artifacts`、`AiFs`、`Trace`、`StopReason` 全部照参考版语义落地,常量(512MB/1GB/20000 文件、200 条消息、40 个对话、14 天/30 天保留、8000 字落盘阈值)与落盘结构逐项对齐 —— 这样两边的数据目录可以互相搬,排查问题的口径也一致。
+- **MCP 客户端自己实现**:`McpClient` 用 `Process` + stdin/stdout 上的 JSON-RPC 2.0(一行一条、Windows 上 \r\n)、握手 `initialize` → `notifications/initialized`、工具面 `tools/list` / `tools/call`,连接 10s / 调用 60s,超时就杀子进程并抛 `McpError`。**不引第三方 MCP 包**(依赖白名单外);配置键沿用 `ai_mcp_servers`(与参考版同一处、同一形状,参考版也没有 UI,是手改 config 的键)。
+- **`McpServer`(把启动器工具开放给外部 agent)不移植**:它把自己的工具面接到 `BackendApi`(Linux 无 RPC 桥,D-2 已判不移植);更要紧的是 Linux 的写工具在执行前要过界面的确认回调,外部 MCP 客户端没有用户点确认,只会得到一串 `permission_denied` —— 与其开一个只能读不能改的半残接口,不如如实不做。
+- **子代理只读**:`dispatch_subagent` 派生一个独立会话跑调研,子执行器固定 `plan` 档(只能查、不能改玩家目录)、最多 4 轮、**不许再派子代理**(sub-runner 的 `Subagent` 回调留空),结论以 `{ok,answer,stop_reason}` 回给主对话(照参考版 `RunSubagent` 的返回形状)。
+- **写操作前建检查点**:`AiAgent` 在跑写工具前用 `Tools.AffectedPaths(name,args,instance)` 算出可能被改的路径(改配置→config 下那个文件;启停模组→`x.jar` 与 `x.jar.disabled` 两个名字;装模组/光影/资源包/数据包/地图→对应目录;删实例/装整合包→实例根;装游戏→`versions`;下 Java→`java_dir`),再 `Checkpoint.Snapshot`;快照失败不阻断操作,但会在步骤行如实写「这一步的改动无法回退:…」。
+- **等价实现不再另建同名类**:`Prompt` → `AiData.SYSTEM_PROMPT`(P5 已逐字搬);`Diagnose` → `Crash.AnalyzeInstance` + `ToolRunner.Diagnose`;`Permission` → `ToolRunner.Decide` + 五档 + `ai_permission_rules`;`ModConfig` → `ToolRunner` 的 `list/read/write_mod_config`;`AiRule` 不单独建类型(Linux 的规则就存在 config.json 的数组里,用同一批键,面板直接读写 PyDict)。`Hooks/AgentPresets/ChatEventLog` 不移植(无插件宿主;会话事件流已由 `Store.LogEvent` 覆盖),`Preview`(确认卡 diff 预览)与 `ExtraTools` 的通用 fs 工具面记在 PROGRESS 遗留(不放开任意路径读写)。
+
+### D-29 · AI 界面残留:斜杠命令 / 记忆面板 / 占用环 / 对话持久化(M4-H R2,2026-11-12,移植代理)
+
+- **斜杠命令**:`AiChatOps` 照参考版原样搬(名字、别名、提示词、匹配规则),界面侧不做浮层,改成输入区上方的**候选条**(与确认卡/选择题卡同一套「停靠区」思路,见 D-24):上下键移动、Tab 或点击选中、Esc 收起、Enter 直接执行;本地命令只有三种(`new_chat / clear / rewind`),其余把提示词灌进输入框发出去。
+- **对话持久化**:AI 页第一次用到对话时才读 `Store`(页面打开本身不落盘),每轮结束 `UpsertMessages` 写回,回到页面时读回并重画气泡 —— 这样 `/撤回`、`/新对话`、`/清空` 才有真实语义。标题仍按参考版规则取第一句用户消息前 24 字。
+- **`/撤回` 接 `Rewind`**:先落盘当前对话,再 `Rewind.RewindLastRound(chat_id)`(对话截断 + 检查点还原文件 + 标 `TurnRewound` + 清计划),然后按存档重画;Toast 如实报「已还原 N 个改过的文件 / 这一轮没有磁盘改动」,退不动时明确说原因。
+- **上下文占用环**:头部一个 18px 的环 + `百分比 · token 数`,数据是 `Usage.Get(chat_id)`(provider 给过真值就按真值,否则标「(估算)」),窗口取 config 的 `ai_context_window`(经 `Compact.AutoConfigFromSettings` 夹到 8192..2000000),比例按「每轮平均输入 / 窗口」算(照参考版 `AiUiText.ContextRatio`)。
+- **记忆面板**:`AiMemoryPanel` 用 Core `FileMemory` 的 `Entries/Remember/Update/RemoveAt/Clear`(与设置页「AI 助手 → 记忆」卡同一份 `ai_memory.md`),编辑走 `Dlg.Prompt`、删除/清空前确认,写完重新渲染;编辑/删除前核对下标(文件可能刚被别的窗口改过)。
+
+### D-30 · 手机同步面板与两处小尾巴(M4-H R3/R4,2026-11-12,移植代理)
+
+- **`PhoneSyncPanel` 做成真面板**:数据面全部复用 Core 已有的 `PhoneLink`/`SaveSync`(没有第二份实现),面板只做界面与流程:电脑位置(实例/版本)× 手机存档根选择、逐行裁决标签(一致 / 电脑较新 / 手机较新 / 两边都改过 / 只在电脑 / 只在手机)、「传到手机/传到电脑」(覆盖前确认,被覆盖的一边 Core 会先备份)、「一键同步」(冲突项用 `Dlg.Choose` 逐个问:跳过/保留手机的/保留电脑的)、日志框。承载面与 AI 权限面板一致:`Dlg.OpenPanel` 非模态面板。
+- **没连接手机时不打开空面板**:设置页的「同步面板」按钮先查 `PhoneLink.Current`,没连接只给提示 —— 空面板会让人以为能用,而对比/传输全都要先有连接(照参考版 `open.IsEnabled = PhoneLink.Current != null` 的同一意图,Linux 侧改成「点了给原因」而不是把按钮置灰,灰按钮用户不知道去哪)。
+- **插件「有更新」徽标**:已安装卡片读市场索引(`updatable` + 版本号)显示「有更新 → vX」,菜单项同步变成「更新到 vX」;索引只在进已安装分段时后台读一次(失败静默,不拿网络问题打扰用户),读不到就不显示徽标(与参考版「徽标只在市场页」相比是更进一步的实做)。
+- **市场详情截图真的显示**:用 `Common/Thumbs`(远程图 + 进程内缓存)横排 200×118 缩略图,点击在浏览器打开;下载失败或防盗链时显示「图片加载失败 / 点击用浏览器打开」的占位,不显示破图、也不静默留空。
+
+### D-31 · 确认卡的「改前改后」预览:算在 Core、摊平在 Core、页面只转发(M4-H R5,2026-11-12,移植代理)
+
+- **为什么移植 `Preview`**:R1~R4 把它记成「不移植」的遗留,但确认卡**界面早就支持 diff**(`ConfirmCard.PreviewBox` + `AiUiText.LooksLikeDiff`),两边都在、中间没人传 —— 结果就是「写文件前先看清改了什么」永远是个空框。这是安全能力的断链而不是可选装饰,故本轮补齐,并把 `Preview` 从「不移植」清单里摘掉(`docs/PARITY.md` §2/§3/§4 已更新)。
+- **没有 BackendApi 怎么等价**:参考版由 `BackendApi.ConfirmFn` 算预览再发事件;Linux 侧算在 `ToolRunner.RunAsync`(权限裁决之后、真正执行之前),回调签名扩成 `Confirm(call, label, preview)` 把结构体带下去。选这里是因为:只有一份实现(页面拿不到「另一种算法」)、与参考版「后端算好再给界面」同一条口径、测试能直接驱动回调。
+- **结构键名照抄**:`{kind, head, lines, too_large}` 与参考版逐字一致,两边判据可以复用;`head` 到界面时统一以 `@@ ` 开头(照参考版 `ShowConfirm`),这一步做成 `Preview.Flatten` 由两个页面共用 —— **界面要的行不再由调用点自己拼**,杜绝「一个页面记得拼、另一个忘了」再犯。
+- **预览不能挡路**:算预览抛异常就当没有(参考版也用 try 包住);预览只读不写(`write_mod_config` 的旧内容用 `AiFs.ReadText(replace: true)` 读,读不出来按空文件处理);大 diff 落盘走 `Artifacts.Save`(注意 Linux 的 `Artifacts.Store` 返回的是「回给模型的那段话」,要路径得用 `Save`,参考版等同 `Save` 的路径返回)。
+- **页面第三参为什么留空**:参考版那句 `reason` 来自 `Permission` 的裁决理由(「写入本机文件需要确认」之类),而 Linux 的 `ToolRunner.Decide` 只给 allow/ask/deny、没有理由文本。宁可留空并在调用点写明原因,也不为卡片编一句看似权威的假话;卡片仍有风险标签 + 工具标签 + 预览三样真实信息。
+- **测试要盯「链」不是盯「件」**:只测 `Preview` 正是这次断链能藏住的原因(界面逻辑与 `Preview` 都「有」,中间没人传,两边测试全绿)。故回归用例从执行器一路断到卡片:先断言回调真的拿到非空预览,再**驱动页面自己的 `Confirm` 回调**、在页面控件树里取卡、断言其中一行与它的**底色**(连渲染一起验)。为让测试能驱动,两个页面加 `internal ToolRunner Runner`、`ConfirmCard` 加 `internal IReadOnlyList<string> PreviewLines` —— 只放可见性,不加依赖、不改行为、不改打包产物。
+- **顺手清掉的同类项**:`TaskCard(tool)` 在两个页面原先都写死 `""`(任务卡靠它决定后续动作),现由 `TaskStarted` 回调补带工具名(参考版的任务事件本来就带 tool),并加断言锁定。

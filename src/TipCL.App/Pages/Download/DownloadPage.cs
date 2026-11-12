@@ -31,11 +31,21 @@ public sealed class DownloadPage : PageBase
 
     private static readonly string[] Segs = { "原版", "Mod", "整合包", "数据包", "资源包", "光影", "世界" };
 
+    /// <summary>分段 → 目录类别(下标 0 = 原版,无目录页;照 Windows 版 DownloadPage.Kinds)。</summary>
+    private static readonly CatalogKind?[] Kinds =
+    {
+        null, CatalogKind.Mod, CatalogKind.Modpack, CatalogKind.Datapack,
+        CatalogKind.ResourcePack, CatalogKind.Shader, CatalogKind.World,
+    };
+
     private static readonly string[] FilterNames = { "正式版", "快照", "远古" };
 
     private readonly ToggleButton[] _segBtns = new ToggleButton[7];
 
     private readonly ContentControl _host = new();
+
+    /// <summary>六个目录分段的页面(懒建,常驻缓存;照 Windows 版 _subs)。</summary>
+    private readonly CatalogPage?[] _subs = new CatalogPage?[7];
 
     private readonly Grid _shell;
 
@@ -132,10 +142,15 @@ public sealed class DownloadPage : PageBase
 
     private void SyncTasks() => _taskN.Text = TaskStore.RunningCount.ToString();
 
+    /// <summary>切到某个分段(0 = 原版,1..6 = 六个目录分段);冒烟脚本按 SMOKE_SEG 调它。</summary>
+    public void SelectSegment(int k) => ShowSeg(k);
+
     // ───────────────────────────── 分段 ─────────────────────────────
 
     private void ShowSeg(int k)
     {
+        // 照 Windows:离开分段先通知旧分段(停掉它的防抖与在途搜索)
+        if (_seg >= 1 && _seg < _subs.Length) _subs[_seg]?.ShellDetach();
         _seg = k;
         for (int i = 0; i < 7; i++)
             _segBtns[i].IsChecked = i == k;
@@ -144,17 +159,11 @@ public sealed class DownloadPage : PageBase
             _host.Content = _vanillaView;
             return;
         }
-        // 目录页（Mod/整合包/数据包/资源包/光影/世界）属目录工作包，先统一占位
-        var empty = UiClass.Empty(BoxIcon(k), Segs[k], "该分段内容将在目录页移植后提供");
-        empty.Margin = new Thickness(0, 60, 0, 0);
-        _host.Content = empty;
+        // 目录页(Mod / 整合包 / 数据包 / 资源包 / 光影 / 世界):懒建并常驻,再挂进内容区
+        var sub = _subs[k] ??= new CatalogPage(Kinds[k]!);
+        _host.Content = sub;
+        sub.ShellAttach(null);
     }
-
-    private static string BoxIcon(int seg) => seg switch
-    {
-        1 => "Puzzle",
-        _ => "Box",
-    };
 
     // ───────────────────────────── 版本列表 ─────────────────────────────
 
@@ -243,6 +252,18 @@ public sealed class DownloadPage : PageBase
     {
         SyncTasks();
         if (!_loaded) _ = LoadVersionsAsync(force: false);
+        // 回到下载页时把激活通知转给当前目录分段(照 Windows OnShown)
+        if (_seg >= 1 && _seg < _subs.Length) _subs[_seg]?.ShellAttach(null);
+    }
+
+    protected override void OnDeactivate()
+    {
+        if (_seg >= 1 && _seg < _subs.Length) _subs[_seg]?.ShellDetach();
+    }
+
+    protected override void OnEvent(ApiEvent ev)
+    {
+        foreach (var sub in _subs) sub?.ShellEvent(ev);
     }
 
     /// <summary>两段式加载：先本地缓存清单立即渲染，再远程刷新覆盖（超时 9s）。</summary>
@@ -263,9 +284,31 @@ public sealed class DownloadPage : PageBase
         if (force) return;
         try
         {
-            using var cts = new CancellationTokenSource(FetchTimeoutMs);
-            var remote = await Api.CallAsync<object?>("fetch_version_list", null, cts.Token);
-            var rows = ParseVersionRows(remote);
+            // core 侧每个镜像自带连接/读超时(4s/15s)并会换镜像重试,这里只做 UI 兜底:
+            // 超过 FetchTimeoutMs 先提示"仍在后台刷新",不丢弃结果——完成后再补渲染。
+            var fetch = Api.CallAsync<object?>("fetch_version_list", null);
+            var first = await Task.WhenAny(fetch, Task.Delay(FetchTimeoutMs));
+            if (first != fetch)
+            {
+                if (_all.Count == 0)
+                    Toast("版本清单刷新较慢", "仍在后台拉取,完成后会自动更新", ToastKind.Info);
+                try
+                {
+                    var late = ParseVersionRows(await fetch);
+                    if (late.Count > 0)
+                    {
+                        _all = late;
+                        _loaded = true;
+                        if (_install == null) Apply();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Common.AppLog.Warn("版本清单后台刷新失败: " + ex.Message);
+                }
+                return;
+            }
+            var rows = ParseVersionRows(await fetch);
             if (rows.Count > 0)
             {
                 _all = rows;
@@ -275,6 +318,7 @@ public sealed class DownloadPage : PageBase
         }
         catch (Exception ex)
         {
+            Common.AppLog.Warn("版本清单刷新失败: " + ex.Message);
             if (_all.Count == 0)
                 Toast("版本清单刷新失败", ex.Message, ToastKind.Warning);
         }

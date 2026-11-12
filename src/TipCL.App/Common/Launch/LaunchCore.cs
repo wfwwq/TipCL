@@ -348,4 +348,32 @@ public static class InstancesApi
             inst.EnsureStandardDirs();
         return inst;
     }
+
+    /// <summary>
+    /// 只查不改:名字确实指向一个**已存在**的实例才返回它,否则 null。
+    /// 与 <see cref="EnsureInstance"/> 的关键差别是**绝不创建**,也绝不把未知名字吞成根实例。
+    /// 供 CLI 前置校验使用(实例名打错 / 实例被删时不能静默落到默认实例,
+    /// 否则快捷方式会在另一个游戏目录里启动 —— 存档与模组全不对)。
+    /// 注意:`Instances.ResolveName` 在「单根模式」下会把任何未知名字解析成根实例,
+    /// 所以这里还要比对请求名本身,不能只看解析结果。
+    /// </summary>
+    public static Instance FindInstance(object name = null)
+    {
+        if (!Py.Truthy(name))
+            return null;
+        string requested = Py.SS(name);
+        if (requested.Length == 0)
+            return null;
+        string resolved = Instances.ResolveName(requested);
+        if (resolved.Length == 0)
+        {
+            // 解析成根实例:只有请求名本来就是根实例名时才认(单根模式下未知名字也会落到这里)
+            if (!string.Equals(requested, Instances.RootName(), StringComparison.Ordinal))
+                return null;
+            resolved = Instances.RootName();
+        }
+        if (!LocalFs.IsDir(Instances.GetInstancePath(resolved)))
+            return null;
+        return new Instance(resolved);
+    }
 }

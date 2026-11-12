@@ -21,7 +21,7 @@ public static class IconLib
     public const string WifiData = "M2.5,6 A8,8 0 0 1 13.5,6 M4.5,8.5 A5,5 0 0 1 11.5,8.5 M6.5,11 A2,2 0 0 1 9.5,11 M8,13.2 L8.01,13.2";
 
     // ── 通用导航/操作 ──
-    public const string GearData = "M8,5.5 A2.5,2.5 0 1 1 8,10.5 A2.5,2.5 0 0 1 8,5.5 Z M8,1.5 V3 M8,13 V14.5 M1.5,8 H3 M13,8 H14.5 M3.4,3.4 L4.5,4.5 M11.5,11.5 L12.6,12.6 M3.4,12.6 L4.5,11.5 M11.5,4.5 L12.6,3.4";
+    public const string GearData = "M12.91,7.05 L14.66,7.24 L14.66,8.76 L12.91,8.95 A5,5 0 0 1 12.15,10.80 L13.24,12.17 L12.17,13.24 L10.80,12.15 A5,5 0 0 1 8.95,12.91 L8.76,14.66 L7.24,14.66 L7.05,12.91 A5,5 0 0 1 5.20,12.15 L3.83,13.24 L2.76,12.17 L3.85,10.80 A5,5 0 0 1 3.09,8.95 L1.34,8.76 L1.34,7.24 L3.09,7.05 A5,5 0 0 1 3.85,5.20 L2.76,3.83 L3.83,2.76 L5.20,3.85 A5,5 0 0 1 7.05,3.09 L7.24,1.34 L8.76,1.34 L8.95,3.09 A5,5 0 0 1 10.80,3.85 L12.17,2.76 L13.24,3.83 L12.15,5.20 A5,5 0 0 1 12.91,7.05 Z M10.20,8 A2.2,2.2 0 1 1 5.80,8 A2.2,2.2 0 1 1 10.20,8 Z";
     public const string SearchData = "M7,2.5 A4.5,4.5 0 1 1 7,11.5 A4.5,4.5 0 0 1 7,2.5 Z M10.5,10.5 L14,14";
     public const string RefreshData = "M13,8 A5,5 0 1 1 11.3,4.2 M11,1.8 L11.6,4.6 L8.8,5.2";
     public const string AddData = "M8,3 V13 M3,8 H13";
@@ -29,9 +29,11 @@ public static class IconLib
     public const string CloseData = "M4,4 L12,12 M12,4 L4,12";
     public const string BackData = "M9.5,3 L4.5,8 L9.5,13";
     public const string ChevronDownData = "M4,6.5 L8,10.5 L12,6.5";
+    public const string ChevronUpData = "M4,9.5 L8,5.5 L12,9.5";
     public const string ChevronRightData = "M6.5,4 L10.5,8 L6.5,12";
     public const string ChevronLeftData = "M9.5,4 L5.5,8 L9.5,12";
-    public const string MoreData = "M3,8 L3.01,8 M8,8 L8.01,8 M13,8 L13.01,8";
+    // 三个小圆而非零长度线段:零长度线段只画得出描边粗细的一个点,小到看不清
+    public const string MoreData = "M2.4,8 A0.7,0.7 0 1 1 3.8,8 A0.7,0.7 0 1 1 2.4,8 Z M7.3,8 A0.7,0.7 0 1 1 8.7,8 A0.7,0.7 0 1 1 7.3,8 Z M12.2,8 A0.7,0.7 0 1 1 13.6,8 A0.7,0.7 0 1 1 12.2,8 Z";
     public const string OpenExternalData = "M6,3.5 H2.5 V13.5 H12.5 V10 M9,2.5 H13.5 V7 M13.5,2.5 L7.5,8.5";
     public const string SortData = "M5,3 V13 M5,13 L3,10.8 M5,13 L7,10.8 M11,13 V3 M11,3 L9,5.2 M11,3 L13,5.2";
     public const string FilterData = "M2.5,3.5 H13.5 L9.5,8.5 V12.5 L6.5,14 V8.5 Z";
@@ -42,7 +44,7 @@ public static class IconLib
     public const string TrashData = "M3,4.5 H13 M6.5,4.5 V3 H9.5 V4.5 M4.5,4.5 L5,13 H11 L11.5,4.5 M6.8,7 V10.5 M9.2,7 V10.5";
     public const string StarData = "M8,2.5 L9.9,6.2 L14,6.8 L11,9.7 L11.7,13.8 L8,11.9 L4.3,13.8 L5,9.7 L2,6.8 L6.1,6.2 Z";
     public const string GridData = "M2.5,2.5 H7 V7 H2.5 Z M9,2.5 H13.5 V7 H9 Z M2.5,9 H7 V13.5 H2.5 Z M9,9 H13.5 V13.5 H9 Z";
-    public const string ImportData = "M8,2.5 V9 M5.2,6.5 L8,9.3 L10.8,6.5 M2.5,11.5 V13.5 H13.5 V11.5";
+    public const string ImportData = "M2.5,8 H10.5 M7.5,5 L10.5,8 L7.5,11 M13.5,3 V13";
     public const string ExportData = "M8,9.5 V2.5 M5.2,5.3 L8,2.5 L10.8,5.3 M2.5,11.5 V13.5 H13.5 V11.5";
     public const string DownloadData = "M8,2.5 V10 M4.8,7 L8,10.2 L11.2,7 M3,13.5 H13";
 
@@ -93,6 +95,8 @@ public static class IconLib
         ["Close"] = CloseData,
         ["Back"] = BackData,
         ["Chevron"] = ChevronDownData,
+        ["ChevronDown"] = ChevronDownData,
+        ["ChevronUp"] = ChevronUpData,
         ["ChevronRight"] = ChevronRightData,
         ["ChevronLeft"] = ChevronLeftData,
         ["More"] = MoreData,
@@ -138,21 +142,33 @@ public static class IconLib
     public static string Of(string key)
         => All.TryGetValue(key, out var data) ? data : InfoData;
 
-    /// <summary>构建一个 16×16 描边图标 Path（线宽 1.4 圆头，颜色走 DynamicResource 键）。</summary>
+    /// <summary>
+    /// 构建描边图标 Path（线宽 1.4 圆头，颜色走 DynamicResource 键）。
+    /// 16 单位视窗整体等比缩放到 size，保留每个图标自带的留白：不能用 Stretch 撑满，
+    /// 否则 V 形箭头、圆形图标会顶满整个格子，比同字号的 MDL2 字形大一圈。
+    /// </summary>
     public static Avalonia.Controls.Shapes.Path Make(string key, string colorKey = "B.Ink", double size = 16)
     {
         var p = new Avalonia.Controls.Shapes.Path
         {
-            Data = Geometry.Parse(Of(key)),
+            Data = Geo(key, size),
             Width = size,
             Height = size,
-            Stretch = Avalonia.Media.Stretch.Uniform,
             StrokeThickness = 1.4,
             StrokeLineCap = PenLineCap.Round,
             StrokeJoin = PenLineJoin.Round,
         };
         p[!Avalonia.Controls.Shapes.Path.StrokeProperty] = Res.Bind(colorKey);
         return p;
+    }
+
+    /// <summary>按 16 单位视窗缩放到 size 的几何；给已有图标换形状（如折叠箭头）时赋给 Path.Data。</summary>
+    public static Geometry Geo(string key, double size = 16)
+    {
+        var g = Geometry.Parse(Of(key));
+        if (Math.Abs(size - 16) > 0.01)
+            g.Transform = new ScaleTransform(size / 16, size / 16);
+        return g;
     }
 
     /// <summary>校验全部 Path Data 可解析（测试用）；返回解析失败列表。</summary>

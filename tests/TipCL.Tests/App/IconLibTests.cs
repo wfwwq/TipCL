@@ -21,13 +21,13 @@ public class IconLibTests
     }
 
     [Fact]
-    public void All_Path_Data_Parse()
+    public void All_Path_Data_Parse() => TestApp.Run(() =>
     {
         Assert.Empty(IconLib.ValidateAll());
-    }
+    });
 
     [Fact]
-    public void Semantic_Keys_Match_Windows_Ico_Families()
+    public void Semantic_Keys_Match_Windows_Ico_Families() => TestApp.Run(() =>
     {
         // M2 六个页面用到的核心语义键必须齐（命名对齐 Windows 版 Services/Ico.cs）
         string[] required =
@@ -41,22 +41,22 @@ public class IconLibTests
         };
         foreach (string key in required)
             Assert.True(IconLib.All.ContainsKey(key), "缺图标键 " + key);
-    }
+    });
 
     [Fact]
-    public void Of_Falls_Back_To_Info()
+    public void Of_Falls_Back_To_Info() => TestApp.Run(() =>
     {
         Assert.Equal(IconLib.InfoData, IconLib.Of("不存在"));
         Assert.Equal(IconLib.PlayData, IconLib.Of("Play"));
-    }
+    });
 
     [Fact]
-    public void Parse_Geometries_Are_NonEmpty()
+    public void Parse_Geometries_Are_NonEmpty() => TestApp.Run(() =>
     {
         foreach (var kv in IconLib.All)
         {
             Geometry g = Geometry.Parse(kv.Value);
             Assert.NotNull(g);
         }
-    }
+    });
 }

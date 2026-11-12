@@ -36,6 +36,28 @@ public static class PluginRuntime
 
     public static PyDict Stop(string id) => Host.Stop(id);
 
+    /// <summary>启用 / 禁用(只改落盘状态;ok=true 不代表插件能跑,看 runnable/reason)。</summary>
+    public static PyDict SetEnabled(string id, bool enabled) => Host.SetEnabled(id, enabled);
+
+    /// <summary>市场安装 / 更新(下载 + 校验 + 原子替换,见 Core PluginInstaller)。</summary>
+    public static CorePlugins.PluginManifest InstallFromMarket(PyDict entry, IList<string>? granted = null, Action<string>? log = null)
+        => Host.InstallFromMarket(entry, granted ?? new List<string>(), log ?? Noop);
+
+    /// <summary>本地安装(zip / 文件夹)或开发链接(dev=true)。</summary>
+    public static CorePlugins.PluginManifest InstallLocal(string path, bool dev = false, IList<string>? granted = null, Action<string>? log = null)
+        => Host.InstallLocal(path, dev, granted ?? new List<string>(), log ?? Noop);
+
+    private static readonly Action<string> Noop = _ => { };
+
+    /// <summary>卸载(deleteData 时连数据目录一起删)。</summary>
+    public static PyDict Uninstall(string id, bool deleteData) => Host.Uninstall(id, deleteData);
+
+    /// <summary>重读落盘状态(参考版这里是重启插件进程)。</summary>
+    public static PyDict Reload(string id) => Host.Reload(id);
+
+    /// <summary>插件在 Linux 上跑不起来的原因(没有宿主);返回空串表示能跑。</summary>
+    public static string NoRuntimeReason(CorePlugins.PluginManifest? m) => CorePlugins.PluginHost.NoRuntimeReason(m!);
+
     public static bool IsRunning(string id) => Host.IsRunning(id);
 
     public static string ReadLog(string id) => Host.ReadLog(id);

@@ -1,4 +1,6 @@
-// 来源: Windows 版参考仓库 src/TipCL/Core/Launcher/（M3-C0 搬运，仅改跨平台适配；Windows 专属 API 用 Utils.IS_WINDOWS 运行时守卫）
+// 来源: Windows 版参考仓库 src/TipCL/Core/Launcher/Ai/Conflict.cs(M4-H P5 原样搬运)。
+// 纯 C#:只依赖 System.IO.Compression 与 Core 的 Py/Utils/TomlLite,无 WPF/Win32 依赖。
+// 用途:AI 的 scan_mod_conflicts / inspect_mod 两个工具(冲突、缺依赖、加载器不匹配)。
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -36,15 +38,6 @@ public static class Conflict
 		{
 		}
 		return "";
-	}
-
-	private static object DGet(object d, string k)
-	{
-		if (d is PyDict pyDict)
-		{
-			return pyDict.Get(k);
-		}
-		throw new AttributeError("'" + Py.TypeName(d) + "' object has no attribute 'get'");
 	}
 
 	private static PyDict _load_toml(string text)
@@ -392,7 +385,7 @@ public static class Conflict
 			}
 			foreach (object item4 in Py.ListOr(Py.Or(item3.Get("depends"), new List<object>())))
 			{
-				string text5 = L(DGet(item4, "id"));
+				string text5 = L(Tools.DGet(item4, "id"));
 				if (text5.Length == 0 || _SKIP_DEP.Contains(text5))
 				{
 					continue;
@@ -417,7 +410,7 @@ public static class Conflict
 			}
 			foreach (object item5 in Py.ListOr(Py.Or(item3.Get("breaks"), new List<object>())).Concat(Py.ListOr(Py.Or(item3.Get("conflicts"), new List<object>()))))
 			{
-				string text6 = L(DGet(item5, "id"));
+				string text6 = L(Tools.DGet(item5, "id"));
 				if (text6.Length > 0 && hashSet.Contains(text6))
 				{
 					list2.Add(PyDict.Of("type", "breaks", "severity", "error", "id", item3.Get("id"), "other", text6, "file", item3.Get("file"), "message", Py.Str(item3.Get("id")) + " 与 " + text6 + " 不兼容"));
@@ -425,6 +418,6 @@ public static class Conflict
 			}
 		}
 		return PyDict.Of("instance", instance.name, "loader", text, "mc_version", text2, "mod_count", (long)list.Count, "enabled", (long)list.Count((PyDict m) => Py.Truthy(m.Get("enabled"))), "mods", ((IEnumerable<PyDict>)list).Select((Func<PyDict, object>)((PyDict m) => PyDict.Of("file", m.Get("file"), "id", m.Get("id"), "name", m.Get("name"), "version", m.Get("version"), "loader", m.Get("loader"), "enabled", m.Get("enabled"), "depends", (from d in Py.ListOr(Py.Or(m.Get("depends"), new List<object>()))
-			select DGet(d, "id")).Take(12).ToList()))).ToList(), "issues", list2, "issue_count", (long)list2.Count);
+			select Tools.DGet(d, "id")).Take(12).ToList()))).ToList(), "issues", list2, "issue_count", (long)list2.Count);
 	}
 }

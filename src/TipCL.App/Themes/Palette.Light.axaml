@@ -73,4 +73,13 @@
     <GradientStop Color="#F7F7F7" Offset="0.6" />
     <GradientStop Color="#F3F3F3" Offset="1" />
   </LinearGradientBrush>
+  <!-- Fluent 滑块取色覆盖(Controls.axaml 未自绘 Slider:沿用 Fluent 模板但换成本主题色,
+       对齐 Windows 的 Sld——未选段 LineSoft、已选段与拇指 Accent) -->
+  <SolidColorBrush x:Key="SliderTrackFill" Color="#F0F0F0" />
+  <SolidColorBrush x:Key="SliderTrackValueFill" Color="#2E9B6B" />
+  <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#2E9B6B" />
+  <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#2E9B6B" />
+  <SolidColorBrush x:Key="SliderThumbBackground" Color="#2E9B6B" />
+  <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#2E9B6B" />
+  <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#2E9B6B" />
 </ResourceDictionary>

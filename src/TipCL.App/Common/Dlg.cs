@@ -63,6 +63,117 @@ public static class Dlg
         return await result.Task;
     }
 
+    /// <summary>
+    /// 多选一对话框(照 Windows 版 Dlg.Choose):buttons 依次排列,返回被点按钮的下标;
+    /// 直接关窗返回 -1。用于「取消 / 安装最新 / 安装所选」这类三分支确认。
+    /// </summary>
+    public static async Task<int> Choose(string title, Control body, string[] buttons, double width = 560, Window? owner = null)
+    {
+        var host = Resolve(owner);
+        if (host == null) return -1;
+        var result = new TaskCompletionSource<int>();
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            int idx = i;
+            bool primary = i == buttons.Length - 1;
+            var b = new Button { Content = buttons[i] };
+            if (primary)
+            {
+                b[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
+                b[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
+            }
+            b.Click += (_, _) => result.TrySetResult(idx);
+            row.Children.Add(b);
+        }
+        var win = BuildDialog(title, body, width, row);
+        win.Closed += (_, _) => result.TrySetResult(-1);
+        AnyOpen = true;
+        await win.ShowDialog(host);
+        AnyOpen = false;
+        return await result.Task;
+    }
+
+    /// <summary>
+    /// 交互面板(照 Windows 版 Dlg.Panel):只有「关闭」一个按钮,体内可放列表 / 操作行。
+    /// 关窗后 Task 才完成,调用方据此刷新。
+    /// </summary>
+    public static async Task Panel(string title, Control body, double width = 680, Window? owner = null)
+    {
+        var host = Resolve(owner);
+        if (host == null) return;
+        body.MaxWidth = Math.Max(240, width - 40);
+        var close = new Button { Content = "关闭" };
+        close[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
+        close[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
+        var footer = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { close },
+        };
+        var win = BuildDialog(title, body, width, footer);
+        var done = new TaskCompletionSource<bool>();
+        close.Click += (_, _) => win.Close();
+        win.Closed += (_, _) => done.TrySetResult(true);
+        AnyOpen = true;
+        await win.ShowDialog(host);
+        AnyOpen = false;
+        await done.Task;
+    }
+
+    /// <summary>
+    /// 非模态交互面板(照 Windows 版 Dlg.Panel 的 modeless 语义):调用方拿到句柄后可以
+    /// 继续跑自己的流程,需要时用 handle.Close() 关掉,或 await handle.Closed。
+    /// </summary>
+    public static PanelHandle OpenPanel(string title, Control body, double width = 680, Window? owner = null)
+    {
+        var host = Resolve(owner);
+        body.MaxWidth = Math.Max(240, width - 40);
+        var close = new Button { Content = "关闭" };
+        close[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
+        close[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
+        var footer = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { close },
+        };
+        var win = BuildDialog(title, body, width, footer);
+        var closed = new TaskCompletionSource<bool>();
+        win.Closed += (_, _) => closed.TrySetResult(true);
+        close.Click += (_, _) => win.Close();
+        if (host != null)
+        {
+            AnyOpen = true;
+            win.Closed += (_, _) => AnyOpen = false;
+            win.Show(host);
+        }
+        return new PanelHandle(win, closed.Task);
+    }
+
+    /// <summary>OpenPanel 返回的句柄。</summary>
+    public sealed class PanelHandle
+    {
+        internal PanelHandle(Window window, Task closed)
+        {
+            Window = window;
+            Closed = closed;
+        }
+
+        public Window Window { get; }
+
+        public Task Closed { get; }
+
+        public void Close()
+        {
+            try { Window.Close(); }
+            catch (Exception) { }
+        }
+    }
+
     /// <summary>单行输入框。</summary>
     public static async Task<string?> Prompt(string title, string label, string initial = "", string? placeholder = null, Window? owner = null)
     {

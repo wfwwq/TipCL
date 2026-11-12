@@ -1,0 +1,641 @@
+// M4-H P5:AI 工具执行器(Tools.ExecuteTool 的 Linux 版)。
+//
+// Windows 版的 Tools.ExecuteTool(1264 行)把每个工具直接接到 BackendApi 上。Linux 侧没有 BackendApi,
+// 顶层能力都在 App 的 IApi 门面(Common/Api.cs)后面 —— 所以这里按同一批工具名接 **IApi**,
+// 再加几个直接走 Core 的只读工具(诊断/冲突/配置)。接 IApi 还有个好处:测试能塞假门面,不联网。
+//
+// 权限:只读工具直接跑;写/删/启动类工具先问宿主(UI 的 AiPermissionPanel / ConfirmCard),
+// 用户可选「仅这一次」或「这个工具以后都允许」(与 Windows 版 Permission 的 scope 语义一致)。
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using TipCL.Core;
+using TipCL.Core.Launcher;
+
+namespace TipCL.Core.Launcher.Ai;
+
+/// <summary>
+/// 工具执行器。宿主(页面)通过回调提供三件事:权限确认、ask_user 结构化选择、进度事件。
+/// </summary>
+public sealed class ToolRunner
+{
+    /// <summary>调用 IApi 的门面(接口保持最小:只用到 CallAsync)。</summary>
+    public interface IBackend
+    {
+        Task<T?> CallAsync<T>(string method, object? args = null, CancellationToken ct = default);
+    }
+
+    private readonly IBackend _api;
+
+    /// <summary>「这个工具以后都允许」的进程内授权表(照 Windows 版 Permission 的 always 档)。</summary>
+    private readonly HashSet<string> _alwaysAllowed = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 权限档位(照 Windows 版 AiPermissionPanel 的五档):
+    /// default 每次确认 / acceptEdits 写直接执行 / plan 只看不动 / yolo 全自动 / custom 走自定义规则。
+    /// 空串表示读配置(config.json 的 ai_permission_mode)。
+    /// </summary>
+    public string PermissionMode { get; set; } = "";
+
+    private string Mode
+    {
+        get
+        {
+            if (PermissionMode.Length > 0)
+            {
+                return PermissionMode;
+            }
+            string configured = Py.S(Config.CONFIG.Get("ai_permission_mode", "default"));
+            return configured.Length > 0 ? configured : "default";
+        }
+    }
+
+    /// <summary>该工具按当前档位与自定义规则算出的裁决:allow / ask / deny。</summary>
+    public string Decide(string tool)
+    {
+        string rule = RuleFor(tool);
+        if (rule.Length > 0)
+        {
+            return rule;
+        }
+        ToolMetaInfo? meta = ToolMeta.Get(tool);
+        if (meta == null)
+        {
+            return "deny";
+        }
+        if (meta.@readonly)
+        {
+            return "allow";
+        }
+        return Mode switch
+        {
+            "yolo" => "allow",
+            "plan" => "deny",
+            "acceptEdits" => meta.side_effect == "delete" ? "ask" : "allow",
+            _ => "ask",
+        };
+    }
+
+    /// <summary>自定义规则(config.json 的 ai_permission_rules,照 Windows 版 ai_permission_rule_add)。</summary>
+    private static string RuleFor(string tool)
+    {
+        foreach (object? raw in Py.ListOr(Config.CONFIG.Get("ai_permission_rules")))
+        {
+            PyDict rule = Py.D(raw);
+            if (!Py.Eq(rule.Get("tool"), tool))
+            {
+                continue;
+            }
+            string behavior = Py.S(rule.Get("behavior"));
+            if (behavior is "allow" or "deny" or "ask")
+            {
+                return behavior;
+            }
+        }
+        return "";
+    }
+
+    /// <summary>当前实例(工具参数里没写 instance 时用)。</summary>
+    public string Instance { get; set; } = "";
+
+    /// <summary>
+    /// 已连上的 MCP server(由 AiAgent 在每轮开始时按 config 的 ai_mcp_servers 连好)。
+    /// 名字形如 mcp_&lt;server&gt;_&lt;tool&gt; 的调用走这些外部 server，见 Mcp.RouteCall。
+    /// </summary>
+    public List<McpClient> McpClients { get; set; } = new();
+
+    /// <summary>
+    /// dispatch_subagent 的执行体(由 AiAgent 注入:起一个只读的嵌套会话，把结论带回来)。
+    /// 没注入时该工具明确报错，不假装能做。
+    /// </summary>
+    public Func<PyDict, CancellationToken, Task<string>>? Subagent { get; set; }
+
+    /// <summary>
+    /// 权限确认回调:返回 true 表示允许执行;always=true 时本次之后不再问同一工具。
+    /// 第三个参数是「改前改后」的预览(<see cref="Preview.ChangePreview"/> 算出来的行;没有可预览的东西时为 null),
+    /// 界面把它摊平后放进确认卡。预览在这里算而不是在页面算:与参考版「后端算好再发事件」同一条口径,
+    /// 也保证只有一份实现(见 DECISIONS D-31)。
+    /// </summary>
+    public Func<ToolCall, string, PyDict?, Task<(bool ok, bool always)>>? Confirm { get; set; }
+
+    /// <summary>ask_user 回调:收结构化题面,回用户的选择(PyDict:answers/other)。</summary>
+    public Func<PyDict, Task<object?>>? AskUser { get; set; }
+
+    /// <summary>计划更新回调(update_plan 工具)。</summary>
+    public Action<List<(string Title, string Status)>>? PlanChanged { get; set; }
+
+    /// <summary>
+    /// 长任务起好后通知宿主(装模组/装游戏 → 任务卡):任务 id、给人看的标签、**工具名**。
+    /// 工具名一定要传:任务卡靠它决定显示哪个后续动作(参考版的任务事件也带 tool)。
+    /// </summary>
+    public Action<string, string, string>? TaskStarted { get; set; }
+
+    /// <summary>日志(宿主显示在步骤行里)。</summary>
+    public Action<string>? Log { get; set; }
+
+    public ToolRunner(IBackend api) => _api = api;
+
+    /// <summary>宿主门面（AiAgent 派生子代理时要拿同一个后端另起一个只读执行器）。</summary>
+    internal IBackend Api => _api;
+
+    /// <summary>该工具现在是否免确认。</summary>
+    public bool IsAllowedAlways(string name) => _alwaysAllowed.Contains(name);
+
+    /// <summary>手动授权(页面「一直允许」按钮 / 测试用)。</summary>
+    public void AllowAlways(string name) => _alwaysAllowed.Add(name);
+
+    /// <summary>
+    /// 执行一次工具调用。返回值是回给模型的文本(工具消息的 content)。
+    /// 这里是**唯一**会改机器状态的入口,所有写操作都先过 <see cref="Confirm"/>。
+    /// </summary>
+    public async Task<string> RunAsync(ToolCall call, CancellationToken ct = default)
+    {
+        bool mcp = Mcp.IsMcpTool(call.name);
+        if (!mcp && !ToolMeta.Map.ContainsKey(call.name))
+        {
+            call.Mark(ToolCallStatus.FAILED, error: "未知工具");
+            return ToolErr(call.name, "unknown_tool", "没有这个工具: " + call.name, "");
+        }
+
+        // MCP 工具是外部进程，本机无法判定它到底动没动东西:一律按写操作对待（除 yolo 档）
+        bool readOnly = !mcp && ToolMeta.Get(call.name)!.@readonly;
+        if (!readOnly && !_alwaysAllowed.Contains(call.name))
+        {
+            string verdict = mcp ? McpVerdict() : Decide(call.name);
+            if (verdict == "deny")
+            {
+                call.Mark(ToolCallStatus.DENIED, error: "当前权限档位不允许");
+                return ToolErr(call.name, "permission_denied",
+                    Mode == "plan" ? "当前是「只看不动」档位,不能执行写操作" : "当前权限档位不允许这一步", "");
+            }
+            if (verdict == "ask")
+            {
+                if (Confirm == null)
+                {
+                    call.Mark(ToolCallStatus.DENIED, error: "需要用户确认");
+                    return ToolErr(call.name, "permission_denied", "这一步需要用户确认,但界面没有接确认回调", "");
+                }
+                call.Mark(ToolCallStatus.WAITING_PERMISSION);
+                string reason = Tools.Label(call.name, call.args);
+                PyDict? preview = null;
+                try
+                {
+                    preview = Preview.ChangePreview(call.name, call.args, Instance);
+                }
+                catch (Exception)
+                {
+                    // 预览算不出来就当没有:它是给用户看的辅助信息,不能挡住这一步的执行
+                    preview = null;
+                }
+                (bool ok, bool always) = await Confirm(call, reason, preview).ConfigureAwait(false);
+                if (always) _alwaysAllowed.Add(call.name);
+                if (!ok)
+                {
+                    call.Mark(ToolCallStatus.DENIED, error: "用户拒绝");
+                    return ToolErr(call.name, "permission_denied", "用户拒绝了这一步", "");
+                }
+            }
+        }
+
+        call.Mark(ToolCallStatus.RUNNING);
+        Log?.Invoke(Tools.Label(call.name, call.args));
+        try
+        {
+            object? result = await ExecuteAsync(call, ct).ConfigureAwait(false);
+            string text = Clip(AsText(result), call.name);
+            call.Mark(ToolCallStatus.COMPLETED, result: text);
+            return text;
+        }
+        catch (OperationCanceledException)
+        {
+            call.Mark(ToolCallStatus.DENIED, error: "已停止");
+            return ToolErr(call.name, "cancelled", "用户停止了这次操作", "");
+        }
+        catch (Exception ex)
+        {
+            string code = Tools.ClassifyException(ex);
+            call.Mark(ToolCallStatus.FAILED, error: Py.ExcStr(ex));
+            Log?.Invoke("失败: " + Tools.ErrorText(code) + " — " + Py.ExcStr(ex));
+            return Tools.ErrorPayload(ex, call.name, code);
+        }
+    }
+
+    /// <summary>MCP 工具的裁决：plan 档不动、yolo 档放行，其余都要用户点一下。</summary>
+    private string McpVerdict() => Mode switch
+    {
+        "yolo" => "allow",
+        "plan" => "deny",
+        _ => "ask",
+    };
+
+    /// <summary>
+    /// 工具结果太长（超过 8000 字）就整体落盘，只把「文件名 + 前 120 行」回给模型
+    /// （照 Windows 版 Tools._clip）:长结果塞进上下文会把窗口挤爆，模型需要细看时用 read_artifact 读回来。
+    /// </summary>
+    private static string Clip(string text, string toolName)
+    {
+        if ((text ?? "").Length > 8000)
+        {
+            return Artifacts.Store(text, toolName);
+        }
+        return text ?? "";
+    }
+
+    private static string ToolErr(string name, string code, string message, string detail)
+        => PyJson.Dumps(PyDict.Of("ok", false, "error", code, "message", message, "detail", detail, "tool", name));
+
+    private static string AsText(object? result)
+    {
+        if (result == null)
+        {
+            return "";
+        }
+        if (result is string s)
+        {
+            return s;
+        }
+        if (result is PyDict || result is List<object>)
+        {
+            return PyJson.Dumps(result);
+        }
+        return Py.Str(result);
+    }
+
+    private string InstName(PyDict args)
+        => Py.Or(args.Get("instance"), Instance) as string is { Length: > 0 } n ? n : Instance;
+
+    private async Task<object?> ExecuteAsync(ToolCall call, CancellationToken ct)
+    {
+        PyDict args = call.args ?? new PyDict();
+        switch (call.name)
+        {
+            // ── 只读:状态 / 查询 ──
+            case "get_launcher_state":
+                return LauncherState();
+
+            case "list_instances":
+                return await _api.CallAsync<List<object?>>("get_instances", null, ct).ConfigureAwait(false) ?? new List<object?>();
+
+            case "list_installed_versions":
+                return await _api.CallAsync<List<object?>>("get_installed_versions", new { instance = InstName(args) }, ct).ConfigureAwait(false) ?? new List<object?>();
+
+            case "list_mods":
+                return await _api.CallAsync<List<object?>>("get_installed_mod_entries", new { instance = InstName(args) }, ct).ConfigureAwait(false) ?? new List<object?>();
+
+            case "get_java_list":
+                return await _api.CallAsync<List<object?>>("get_java_list", new { scan_system = false }, ct).ConfigureAwait(false) ?? new List<object?>();
+
+            case "search_versions":
+                return await _api.CallAsync<List<object?>>("get_version_list",
+                    new { query = Py.S(args.Get("query")), kind = Py.Or(args.Get("kind"), "release") }, ct).ConfigureAwait(false) ?? new List<object?>();
+
+            case "search_mods":
+            case "search_modpacks":
+            case "search_worlds":
+            {
+                string method = call.name switch
+                {
+                    "search_modpacks" => "search_modpacks",
+                    "search_worlds" => "search_worlds",
+                    _ => "search_mods",
+                };
+                return await _api.CallAsync<List<object?>>(method,
+                    new { query = Py.S(args.Get("query")), source = Py.Or(args.Get("source"), "全部") }, ct).ConfigureAwait(false) ?? new List<object?>();
+            }
+
+            case "search_content":
+            {
+                string kind = Py.Lower(Py.S(Py.Or(args.Get("kind"), "shader")));
+                string method = kind switch
+                {
+                    "resourcepack" or "resourcepacks" or "资源包" => "search_resourcepacks",
+                    "datapack" or "datapacks" or "数据包" => "search_datapacks",
+                    _ => "search_shaders",
+                };
+                return await _api.CallAsync<List<object?>>(method,
+                    new { query = Py.S(args.Get("query")), source = Py.Or(args.Get("source"), "全部") }, ct).ConfigureAwait(false) ?? new List<object?>();
+            }
+
+            // ── 诊断 / 冲突 / 配置(直接走 Core,不走 IApi)──
+            case "diagnose_launch":
+                return Diagnose(args);
+
+            case "scan_mod_conflicts":
+                return Conflict.ScanConflicts(new Instance(InstName(args)));
+
+            case "inspect_mod":
+                return InspectMod(args);
+
+            case "list_mod_configs":
+                return ListConfigs(args);
+
+            case "read_mod_config":
+            {
+                string text = ReadConfig(args, out string readPath);
+                return PyDict.Of("path", readPath, "content", text);
+            }
+
+            // ── 写操作(已过权限)──
+            case "write_mod_config":
+                return WriteConfig(args);
+
+            case "install_game":
+                return Start("install_game", new
+                {
+                    version = Py.S(args.Get("version")),
+                    loader = Py.Or(args.Get("loader"), "无"),
+                    loader_version = args.Get("loader_version"),
+                    instance = InstName(args),
+                }, ct, out string gameTask, "安装 " + Py.S(args.Get("version")));
+
+            case "install_mod":
+                return Start("install_mod", new
+                {
+                    name = Py.S(Py.Or(args.Get("slug"), args.Get("name"))),
+                    instance = InstName(args),
+                    source = Py.Or(args.Get("source"), "Modrinth"),
+                }, ct, out string modTask, "安装模组 " + Py.S(args.Get("name")));
+
+            case "install_modpack":
+                return Start("install_modpack", new
+                {
+                    name = Py.S(Py.Or(args.Get("slug"), args.Get("name"))),
+                    instance = InstName(args),
+                    source = Py.Or(args.Get("source"), "Modrinth"),
+                }, ct, out string packTask, "安装整合包 " + Py.S(args.Get("name")));
+
+            case "install_shader":
+            case "install_resourcepack":
+            case "install_datapack":
+            case "install_world":
+                return Start(call.name, new
+                {
+                    name = Py.S(Py.Or(args.Get("slug"), args.Get("name"))),
+                    instance = InstName(args),
+                    source = Py.Or(args.Get("source"), "Modrinth"),
+                }, ct, out string contentTask, "安装 " + Py.S(args.Get("name")));
+
+            case "create_instance":
+            {
+                object? created = await _api.CallAsync<object>("create_instance", new { name = Py.S(args.Get("name")) }, ct).ConfigureAwait(false);
+                return PyDict.Of("ok", true, "instance", Py.S(args.Get("name")), "detail", AsText(created));
+            }
+
+            case "delete_instance":
+            {
+                await _api.CallAsync<object>("delete_instance", new { name = Py.S(args.Get("name")) }, ct).ConfigureAwait(false);
+                return PyDict.Of("ok", true, "deleted", Py.S(args.Get("name")));
+            }
+
+            case "delete_mod":
+                await _api.CallAsync<object>("delete_mod", new { instance = InstName(args), filename = Py.S(args.Get("filename")) }, ct).ConfigureAwait(false);
+                return PyDict.Of("ok", true, "filename", Py.S(args.Get("filename")));
+
+            case "disable_mod":
+                await _api.CallAsync<object>("disable_mod", new { instance = InstName(args), filename = Py.S(args.Get("filename")) }, ct).ConfigureAwait(false);
+                return PyDict.Of("ok", true, "filename", Py.S(args.Get("filename")), "enabled", false);
+
+            case "enable_mod":
+                await _api.CallAsync<object>("enable_mod", new { instance = InstName(args), filename = Py.S(args.Get("filename")) }, ct).ConfigureAwait(false);
+                return PyDict.Of("ok", true, "filename", Py.S(args.Get("filename")), "enabled", true);
+
+            case "download_java":
+                return Start("download_java", new { major = Py.S(args.Get("major")) }, ct, out string javaTask, "下载 Java " + Py.S(args.Get("major")));
+
+            case "launch_game":
+            {
+                // version 留空时交给启动链自己挑(LaunchCore 会取实例的默认版本设置),
+                // 这里不额外查一次,避免多一次无谓的 API 往返
+                return Start("launch_game", new
+                {
+                    instance = InstName(args),
+                    version = Py.S(args.Get("version")),
+                    username = args.Get("username"),
+                    memory_mb = args.Get("memory_mb"),
+                }, ct, out string launchTask, "启动游戏");
+            }
+
+            // ── 会话内工具 ──
+            case "update_plan":
+            {
+                var items = new List<(string Title, string Status)>();
+                foreach (object? raw in Py.ListOr(args.Get("items")))
+                {
+                    PyDict item = Py.D(raw);
+                    string title = Py.S(item.Get("title"));
+                    if (title.Length == 0)
+                    {
+                        continue;
+                    }
+                    items.Add((title, Py.S(Py.Or(item.Get("status"), "pending"))));
+                }
+                PlanChanged?.Invoke(items);
+                (int done, int total) = AiUiText.PlanProgress(items);
+                return PyDict.Of("ok", true, "done", (long)done, "total", (long)total);
+            }
+
+            case "ask_user":
+            {
+                if (AskUser == null)
+                {
+                    return PyDict.Of("ok", false, "error", "no_ui", "message", "界面没有接 ask_user");
+                }
+                PyDict normalized = Tools.NormalizeAskArgs(call.args ?? new PyDict());
+                object? answer = await AskUser(normalized).ConfigureAwait(false);
+                return Tools.NormalizeAskAnswer(Py.ListOr(normalized.Get("questions")), answer);
+            }
+
+            case "remember":
+                MemoryAdd(Py.S(args.Get("text")));
+                return PyDict.Of("ok", true, "memories", (long)AiMemory.All().Count);
+
+            case "forget":
+                return PyDict.Of("ok", true,
+                    "forgotten", (long)AiMemory.Forget(Py.S(args.Get("text"))),
+                    "memories", (long)AiMemory.All().Count);
+
+            // ── 产物回读 / 子代理 ──
+            case "read_artifact":
+                return Artifacts.ReadArtifact(args.Get("artifact_id"), Py.Or(args.Get("offset"), 0L), Py.Or(args.Get("limit"), 200L));
+
+            case "dispatch_subagent":
+            {
+                if (Subagent == null)
+                {
+                    return ToolErr(call.name, "unknown_tool", "当前会话没有子代理能力", "");
+                }
+                if (Py.Strip(Py.S(args.Get("task"))).Length == 0)
+                {
+                    throw new ValueError("缺少子任务描述(task 字段)");
+                }
+                return await Subagent(args, ct).ConfigureAwait(false);
+            }
+
+            default:
+                // 兜底:MCP 工具（mcp_<server>_<tool>）路由到对应的外部 server
+                if (Mcp.IsMcpTool(call.name))
+                {
+                    return Mcp.RouteCall(McpClients, call.name, args);
+                }
+                return ToolErr(call.name, "unknown_tool", "没有这个工具: " + call.name, "");
+        }
+    }
+
+    /// <summary>起一个后台任务并把 id 交给宿主做任务卡(照 Windows 版 BackendApi.StartTask 语义)。</summary>
+    private object Start(string method, object args, CancellationToken ct, out string taskId, string label)
+    {
+        object? result = _api.CallAsync<object>(method, args, ct).ConfigureAwait(false).GetAwaiter().GetResult();
+        PyDict row = Py.D(result);
+        taskId = Py.S(Py.Or(row.Get("task_id"), row.Get("id")));
+        if (taskId.Length > 0)
+        {
+            // method 就是工具名(install_mod / install_game / download_java / launch_game …),任务卡要它
+            TaskStarted?.Invoke(taskId, label, method);
+        }
+        return PyDict.Of("ok", true, "task_id", taskId, "message", label + " 已开始,可以在「下载任务」里看进度");
+    }
+
+    private PyDict LauncherState()
+    {
+        string def = Py.S(Config.CONFIG.Get("default_instance", "default"));
+        var instances = new List<object>();
+        foreach (object raw in Instances.ListInstances())
+        {
+            PyDict item = Py.D(raw);
+            string name = Py.S(Py.Or(item.Get("name"), item.Get("id")));
+            if (name.Length == 0)
+            {
+                continue;
+            }
+            var inst = new Instance(name);
+            instances.Add(PyDict.Of(
+                "name", name,
+                "versions", (long)inst.InstalledIds().Count,
+                "mods", (long)Mods.ListInstanceMods(inst).Count,
+                "is_default", name == def));
+        }
+        return PyDict.Of(
+            "default_instance", def,
+            "instances", instances,
+            "data_root", Utils.ROOT,
+            "game_root", Instances.RootName(),
+            "java_default", Py.S(Config.CONFIG.Get("default_java", "")),
+            "memory_mb", Py.Or(Config.CONFIG.Get("default_memory_mb"), 0L));
+    }
+
+    private PyDict Diagnose(PyDict args)
+    {
+        var inst = new Instance(InstName(args));
+        PyDict report = Crash.AnalyzeInstance(inst, "", true, Py.S(args.Get("version")));
+        var reasons = new List<object>();
+        foreach (object raw in Py.ListOr(report.Get("reasons")).Take(6))
+        {
+            PyDict item = Py.D(raw);
+            reasons.Add(PyDict.Of("code", Py.S(item.Get("code")), "title", Py.S(item.Get("title")), "extra", Py.S(item.Get("extra"))));
+        }
+        return PyDict.Of(
+            "instance", inst.name,
+            "is_crash", Py.Truthy(report.Get("is_crash")),
+            "headline", Py.S(report.Get("headline")),
+            "summary", Py.S(report.Get("summary")),
+            "exit_code", report.Get("exit_code"),
+            "exit_hint", Py.S(report.Get("exit_hint")),
+            "reasons", reasons,
+            "has_latest_log", Py.Truthy(report.Get("has_latest")),
+            "has_crash_report", Py.Truthy(report.Get("has_crash")),
+            "output_tail", Py.S(report.Get("output_tail")));
+    }
+
+    private PyDict InspectMod(PyDict args)
+    {
+        var inst = new Instance(InstName(args));
+        string modsDir = Mods.ContentDir(inst, "mods");
+        string file = Mods._mod_file_at(modsDir, args.Get("filename"));
+        if (!LocalFs.IsFile(file))
+        {
+            throw new ModError(Py.Fmt("模组文件不存在: {0}", args.Get("filename")));
+        }
+        PyDict info = Conflict.InspectJar(file);
+        var copy = new PyDict(info) { ["filename"] = new PPath(file).Name };
+        return copy;
+    }
+
+    /// <summary>实例 config 目录(写操作只允许落在这里,照 Windows 版 ExtraTools.FsRoots 的白名单)。</summary>
+    private static string ConfigDir(PyDict args, string instance)
+    {
+        var inst = new Instance(instance);
+        string dir = PPath.Join(inst.path, "config");
+        Directory.CreateDirectory(PPath.Abs(dir));
+        return dir;
+    }
+
+    private static string ResolveConfigPath(PyDict args, out string configDir)
+    {
+        string instance = Py.Or(args.Get("instance"), Config.CONFIG.Get("default_instance", "default")) as string ?? "default";
+        configDir = ConfigDir(args, instance);
+        string rel = Py.Strip(Py.S(args.Get("path"))).Replace('\\', '/').TrimStart('/');
+        if (rel.Length == 0 || rel.Contains(".."))
+        {
+            throw new ValueError("配置路径只能在该实例的 config 目录下");
+        }
+        string full = PPath.Norm(PPath.Join(configDir, rel));
+        if (!full.StartsWith(PPath.Norm(configDir), StringComparison.Ordinal))
+        {
+            throw new ValueError("配置路径只能在该实例的 config 目录下");
+        }
+        return full;
+    }
+
+    private List<object> ListConfigs(PyDict args)
+    {
+        string instance = InstName(args);
+        string dir = ConfigDir(args, instance);
+        string prefix = Py.S(args.Get("prefix"));
+        var rows = new List<object>();
+        foreach (string file in LocalFs.RglobFiles(dir).OrderBy(x => x, StringComparer.Ordinal).Take(200))
+        {
+            string rel = new PPath(file).RelativeTo(dir).ToString().Replace('\\', '/');
+            if (prefix.Length > 0 && !rel.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            rows.Add(PyDict.Of("path", rel, "bytes", LocalFs.Size(file)));
+        }
+        return rows;
+    }
+
+    private string ReadConfig(PyDict args, out string path)
+    {
+        path = ResolveConfigPath(args, out _);
+        if (!LocalFs.IsFile(path))
+        {
+            throw new FileNotFoundError(Py.Fmt("配置文件不存在: {0}", args.Get("path")));
+        }
+        return Crash.ReadText(path, 200_000);
+    }
+
+    private PyDict WriteConfig(PyDict args)
+    {
+        string path = ResolveConfigPath(args, out _);
+        string content = Py.S(args.Get("content"));
+        if (LocalFs.IsFile(path))
+        {
+            LocalFs.Copy2(path, path + ".bak");
+        }
+        Directory.CreateDirectory(PPath.Abs(new PPath(path).Parent.ToString()));
+        File.WriteAllText(PPath.Abs(path), content);
+        return PyDict.Of("ok", true, "path", path, "bytes", (long)content.Length, "backup", path + ".bak");
+    }
+
+    private void MemoryAdd(string text)
+    {
+        if (text.Length == 0)
+        {
+            return;
+        }
+        AiMemory.Add(text);
+    }
+}

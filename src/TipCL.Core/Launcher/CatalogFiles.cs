@@ -451,7 +451,9 @@ public static class CatalogFiles
 
 	private static PyDict _hit_row(PyDict h, string default_source)
 	{
-		return PyDict.Of("name", Py.Or(h["title"], h["name"], "?"), "author", Py.Or(h["author"], "?"), "downloads", Py.Int(Py.Or(h["downloads"], 0L)), "id", h["id"], "slug", h["slug"], "source", Py.Or(h["source"], default_source), "description", Py.Or(h["description"], h["summary"], ""), "tags", Py.Or(h["tags"], new List<object>()), "updated", Py.Slice(Py.Str(Py.Or(h["updated"], h["date_modified"], "")), null, 10));
+		// M4-H P1:补 icon_url / website_url,目录页结果卡的缩略图与「打开介绍页」需要它们
+		// (Windows 版这两项由 BackendApi._content_row 补齐,这里在行构造处一次带出)。
+		return PyDict.Of("name", Py.Or(h["title"], h["name"], "?"), "author", Py.Or(h["author"], "?"), "downloads", Py.Int(Py.Or(h["downloads"], 0L)), "id", h["id"], "slug", h["slug"], "source", Py.Or(h["source"], default_source), "description", Py.Or(h["description"], h["summary"], ""), "tags", Py.Or(h["tags"], new List<object>()), "updated", Py.Slice(Py.Str(Py.Or(h["updated"], h["date_modified"], "")), null, 10), "icon_url", Py.Or(h["icon_url"], ""), "website_url", Py.Or(h["website_url"], ""));
 	}
 
 	public static object PickMrVersion(List<object> versions, object version_id)

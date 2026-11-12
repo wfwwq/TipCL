@@ -115,6 +115,13 @@ public static class TaskStore
 
     public static TaskRow? Newest => _rows.LastOrDefault((TaskRow r) => !r.Finished) ?? _rows.LastOrDefault();
 
+    /// <summary>事件统一回到 UI 线程派发(任务工作体跑在线程池)。</summary>
+    private static void Emit(Action a)
+    {
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) a();
+        else Avalonia.Threading.Dispatcher.UIThread.Post(a);
+    }
+
     public static event Action<TaskRow>? Added;
 
     public static event Action<TaskRow>? Updated;
@@ -132,15 +139,13 @@ public static class TaskStore
         var row = new TaskRow { Id = id, Title = string.IsNullOrEmpty(title) ? PlaceholderTitle : title };
         _rows.Add(row);
         if (_rows.Count > 60) _rows.RemoveRange(0, _rows.Count - 60);
-        Added?.Invoke(row);
-        Changed?.Invoke();
+        Emit(() => { Added?.Invoke(row); Changed?.Invoke(); });
         return row;
     }
 
     public static void Update(TaskRow row)
     {
-        Updated?.Invoke(row);
-        Changed?.Invoke();
+        Emit(() => { Updated?.Invoke(row); Changed?.Invoke(); });
     }
 
     public static void Finish(TaskRow row, bool success, string? message = null)
@@ -151,8 +156,7 @@ public static class TaskStore
         row.Progress = success ? 100.0 : row.Progress;
         row.Status = !string.IsNullOrEmpty(message) ? message : (success ? "已完成" : "失败");
         row.Speed = "";
-        Updated?.Invoke(row);
-        Changed?.Invoke();
+        Emit(() => { Updated?.Invoke(row); Changed?.Invoke(); });
     }
 
     /// <summary>消费后端事件流（task_added/progress/log/finished），照 Windows 版语义。</summary>
@@ -175,8 +179,7 @@ public static class TaskStore
                     row.Indeterminate = ev.Total <= 0;
                     if (ev.Total > 0)
                         row.Progress = TaskMsg.Clamp(ev.Current * 100.0 / ev.Total, 0.0, 100.0);
-                    Updated?.Invoke(row);
-                    Changed?.Invoke();
+                    Emit(() => { Updated?.Invoke(row); Changed?.Invoke(); });
                 }
                 break;
             }
@@ -186,7 +189,7 @@ public static class TaskStore
                 if (row != null)
                 {
                     row.Append(ev.Text);
-                    Updated?.Invoke(row);
+                    Emit(() => Updated?.Invoke(row));
                 }
                 break;
             }
@@ -203,8 +206,7 @@ public static class TaskStore
     public static void ClearFinished()
     {
         _rows.RemoveAll((TaskRow r) => r.Finished);
-        Cleared?.Invoke();
-        Changed?.Invoke();
+        Emit(() => { Cleared?.Invoke(); Changed?.Invoke(); });
     }
 
     public static bool Remove(string id)
@@ -212,8 +214,7 @@ public static class TaskStore
         var row = Get(id);
         if (row == null || !row.Finished) return false;
         _rows.Remove(row);
-        Cleared?.Invoke();
-        Changed?.Invoke();
+        Emit(() => { Cleared?.Invoke(); Changed?.Invoke(); });
         return true;
     }
 }

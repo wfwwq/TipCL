@@ -12,7 +12,7 @@ public class ApiTests
     private readonly InProcessApi _api = InProcessApi.Instance;
 
     [Fact]
-    public void ToDict_Accepts_Anonymous_Dict_And_PyDict()
+    public void ToDict_Accepts_Anonymous_Dict_And_PyDict() => TestApp.Run(() =>
     {
         var fromAnon = InProcessApi.ToDict(new { instance = "生存", version = "1.20.1" });
         Assert.Equal("生存", Py.S(fromAnon.Get("instance")));
@@ -27,19 +27,19 @@ public class ApiTests
         Assert.Equal("b", Py.S(fromPd.Get("a")));
 
         Assert.Equal(0, InProcessApi.ToDict(null).Count);
-    }
+    });
 
     [Fact]
-    public async Task Unknown_Method_Throws_But_TryCall_Falls_Back()
+    public Task Unknown_Method_Throws_But_TryCall_Falls_Back() => TestApp.RunAsync(async () =>
     {
         await Assert.ThrowsAsync<NotImplementedException>(
             () => _api.CallAsync<object>("no_such_method", null));
         var fallback = await _api.TryCallAsync("no_such_method", 42);
         Assert.Equal(42, fallback);
-    }
+    });
 
     [Fact]
-    public async Task Stub_Methods_Return_Safe_Values()
+    public Task Stub_Methods_Return_Safe_Values() => TestApp.RunAsync(async () =>
     {
         Assert.False(await _api.CallAsync<bool>("is_game_running"));
         // M3-C0：get_total_playtime 由安全桩转正（Playtime 后端随启动链搬入），改断非负数值
@@ -47,17 +47,17 @@ public class ApiTests
         Assert.True(total >= 0);
         var news = await _api.TryCallAsync("cached_news", new System.Collections.Generic.List<object>());
         Assert.NotNull(news);
-    }
+    });
 
     [Fact]
-    public async Task CancelTask_Unknown_Id_Returns_False()
+    public Task CancelTask_Unknown_Id_Returns_False() => TestApp.RunAsync(async () =>
     {
         var d = await _api.CallAsync<PyDict>("cancel_task", new { id = "nope" });
         Assert.False(Py.Truthy(d!.Get("ok")));
-    }
+    });
 
     [Fact]
-    public async Task StartTask_Runs_To_Finished_And_Reports_Progress()
+    public Task StartTask_Runs_To_Finished_And_Reports_Progress() => TestApp.RunAsync(async () =>
     {
         TaskStore.ClearFinished();
         long progressSeen = 0;
@@ -81,10 +81,10 @@ public class ApiTests
         Assert.Equal(30, progressSeen);
         Assert.Same(row, TaskStore.Get(row.Id));
         TaskStore.ClearFinished();
-    }
+    });
 
     [Fact]
-    public async Task StartTask_Exception_Marks_Row_Failed()
+    public Task StartTask_Exception_Marks_Row_Failed() => TestApp.RunAsync(async () =>
     {
         TaskStore.ClearFinished();
         var row = await _api.StartTaskAsync("会失败的任务", (_, _) => Task.FromException(new InvalidOperationException("炸了")));
@@ -93,5 +93,5 @@ public class ApiTests
         Assert.False(row.Success);
         Assert.Equal("炸了", row.Status);
         TaskStore.ClearFinished();
-    }
+    });
 }

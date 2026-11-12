@@ -114,6 +114,7 @@ public sealed partial class LaunchPage
         _memLbl.VerticalAlignment = VerticalAlignment.Center;
 
         var advanced = UiClass.V(9,
+            UiClass.Field("Java", _java, labelWidth: 58),
             UiClass.Field("内存", memRow, labelWidth: 58),
             UiClass.Field("直连", _server, labelWidth: 58));
         advanced.IsVisible = false;
@@ -172,10 +173,19 @@ public sealed partial class LaunchPage
             });
             openLib.FontSize = 12;
             openLib.HorizontalAlignment = HorizontalAlignment.Left;
+            // 照 Windows ManageLink:浮层里直接进「版本管理」
+            var manage = UiClass.Btn("管理", BtnKind.Ghost, (_, _) =>
+            {
+                _switchPopup!.IsOpen = false;
+                (TopLevel.GetTopLevel(this) as MainWindow)?.Navigate("instance");
+            });
+            manage.FontSize = 12;
+            manage.HorizontalAlignment = HorizontalAlignment.Left;
+            var footer = UiClass.H(8, openLib, manage);
             _switchPopup = MakePopup(
                 _titleRow ?? (Control)this,
                 PlacementMode.Bottom,
-                PopShell(UiClass.V(8, search, UiClass.Sep(), listScroll, UiClass.Sep(), openLib), 400, 430, new Thickness(0, 6, 14, 14)));
+                PopShell(UiClass.V(8, search, UiClass.Sep(), listScroll, UiClass.Sep(), footer), 400, 430, new Thickness(0, 6, 14, 14)));
         }
         _switchSearch!.Text = "";
         RenderSwitchRows();

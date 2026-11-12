@@ -31,10 +31,17 @@ public static class Ui
     public static event Action? ThemeChanged;
 
     /// <summary>
-    /// 兜底挂载：若 App.axaml 未静态合并 Themes/Controls.axaml，则在首次 ApplyTheme 时
-    /// 以代码方式挂到 Application.Resources（A1 地盘的 App.axaml 归属不变，见 progress/M1-A2.md 依赖申请）。
+    /// 兜底挂载:若 App.axaml 未静态合并 Themes/Controls.axaml,则在首次 ApplyTheme 时
+    /// 以代码方式挂到 Application.Resources(A1 地盘的 App.axaml 归属不变,见 progress/M1-A2.md 依赖申请)。
+    /// 改的是**全局**资源字典,故加锁(并行测试/多窗口构造会并发进来)。
     /// </summary>
     public static void EnsureMounted()
+    {
+        lock (ThemeGate)
+            EnsureMountedLocked();
+    }
+
+    private static void EnsureMountedLocked()
     {
         var app = Application.Current;
         if (app == null) return;
@@ -42,31 +49,47 @@ public static class Ui
         foreach (var d in dicts)
             if (d is ResourceInclude ri && ri.Source?.OriginalString.Contains("Controls.axaml") == true)
                 return;
-        dicts.Add(new ResourceInclude(new Uri("avares://TipCL.App/Themes/Controls.axaml")));
+        // D-6:Avalonia 11.3 的 ResourceInclude(Uri) 构造参数是 baseUri,必须显式赋 Source
+        dicts.Add(new ResourceInclude((Uri?)null) { Source = new Uri("avares://TipCL.App/Themes/Controls.axaml") });
     }
 
-    /// <summary>替换 Application.Resources 里的 Palette 资源字典，实现明暗切换。</summary>
+    /// <summary>替换 Application.Resources 里的 Palette 资源字典,实现明暗切换(幂等 + 加锁)。</summary>
     public static void ApplyTheme(bool dark)
     {
-        IsDark = dark;
-        EnsureMounted();
-        var app = Application.Current;
-        if (app == null) return;
-        var dicts = app.Resources.MergedDictionaries;
-        var include = new ResourceInclude(
-            new Uri($"avares://TipCL.App/Themes/{(dark ? "Palette.Dark.axaml" : "Palette.Light.axaml")}"));
-        for (int i = 0; i < dicts.Count; i++)
+        lock (ThemeGate)
         {
-            if (dicts[i] is ResourceInclude ri && ri.Source?.OriginalString.Contains("Palette.") == true)
+            IsDark = dark;
+            EnsureMountedLocked();
+            var app = Application.Current;
+            if (app == null) return;
+            string wanted = $"avares://TipCL.App/Themes/{(dark ? "Palette.Dark.axaml" : "Palette.Light.axaml")}";
+            var dicts = app.Resources.MergedDictionaries;
+            int slot = -1;
+            for (int i = 0; i < dicts.Count; i++)
             {
-                dicts[i] = include;
+                if (dicts[i] is ResourceInclude ri && ri.Source?.OriginalString.Contains("Palette.") == true)
+                {
+                    // 已经是目标色板就不要重挂:重挂会触发全量资源失效,且并发下会撕裂字典
+                    if (ri.Source!.OriginalString == wanted)
+                        return;
+                    slot = i;
+                    break;
+                }
+            }
+            // D-6:同上,ResourceInclude 的 Uri 参数是 baseUri;Source 必须显式设置
+            var include = new ResourceInclude((Uri?)null) { Source = new Uri(wanted) };
+            if (slot >= 0)
+            {
+                dicts[slot] = include;
                 ThemeChanged?.Invoke();
                 return;
             }
+            dicts.Add(include);
+            ThemeChanged?.Invoke();
         }
-        dicts.Add(include);
-        ThemeChanged?.Invoke();
     }
+
+    private static readonly object ThemeGate = new();
 
     /// <summary>按键取任意资源（刷子 / ControlTheme / 圆角等）。</summary>
     public static object? Res(string key)
@@ -140,6 +163,17 @@ public static class Ui
         };
         if (fg != null) t.Dyn(TextBlock.ForegroundProperty, fg);
         return t;
+    }
+
+    /// <summary>
+    /// 通用图标:传 <see cref="Common.IconLib"/> 图标名得矢量 Path(随主题变色),
+    /// 传字体字形字符(如 "✕"/"\uE712")走图标字体。避免把图标名当文字画出来。
+    /// </summary>
+    public static Control Icon(string nameOrGlyph, double size = 16, string fgKey = "B.Ink")
+    {
+        if (nameOrGlyph != null && Common.IconLib.All.ContainsKey(nameOrGlyph))
+            return Common.IconLib.Make(nameOrGlyph, fgKey, size);
+        return Glyph(nameOrGlyph ?? "", size, fgKey);
     }
 
     // ===== 布局 =====
@@ -266,13 +300,25 @@ public static class Ui
         return b;
     }
 
+    /// <summary>
+    /// 图标按钮。参数既可以是 <see cref="IconLib"/> 的图标名(渲染为矢量 Path,
+    /// 与全站图标体系一致),也可以是字体字形字符(如 "↑"/"✕"/"\uE712",沿用 Windows 的图标字体写法)。
+    /// 之前只走字体路径,导致传图标名("Star"/"Trash"/"Gear"…)的地方把名字原样显示成文字。
+    /// </summary>
     public static Button IconBtn(string glyph, string? tip = null, EventHandler<RoutedEventArgs>? click = null, double size = 14)
     {
-        var b = new Button
+        var b = new Button { Theme = Theme("Btn.Icon") };
+        if (glyph != null && Common.IconLib.All.ContainsKey(glyph))
         {
-            Theme = Theme("Btn.Icon"),
-            Content = Glyph(glyph, size)
-        };
+            var p = Common.IconLib.Make(glyph, "B.Ink", size);
+            // 描边跟随按钮前景色:hover/禁用态自动变色(WPF 版 Ico.Line 的等价做法)
+            p[!Avalonia.Controls.Shapes.Path.StrokeProperty] = b.GetObservable(Button.ForegroundProperty).ToBinding();
+            b.Content = p;
+        }
+        else
+        {
+            b.Content = Glyph(glyph ?? "", size);
+        }
         if (tip != null)
         {
             ToolTip.SetTip(b, tip);
@@ -439,7 +485,7 @@ public static class Ui
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center
         }.Dyn(TextBlock.ForegroundProperty, "B.InkFaint");
-        var p = V(8, Glyph(glyph, 24, "B.InkFaint"),
+        var p = V(8, Icon(glyph, 24, "B.InkFaint"),
             new TextBlock
             {
                 Text = title,

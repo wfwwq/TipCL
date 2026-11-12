@@ -354,17 +354,10 @@ public sealed partial class SettingsPage : PageBase
             new() { Id = "network", Title = "下载与网络", Content = UiClass.V(10, PTitle("下载与网络"), Gt("下载"), networkCard) },
         }).Root;
 
-        // 「反馈与关于」= 上 BlockHost("settings:about")（边距传 0 防叠加）+ 下反馈卡
-        var aboutGrid = UiClass.G("Auto,*");
-        aboutGrid.Add(new BlockHost("settings:about", new List<BlockSpec>
-        {
-            new() { Id = "about", Title = "反馈与关于", Content = UiClass.V(10, PTitle("反馈与关于"), BuildAboutCard()).M(18, 14, 18, 0) },
-        }, new Thickness(0)).Root, 0);
-        aboutGrid.Add(BuildFeedbackCard(), 1);
-
+        // 「反馈与关于」= Windows FeedbackPage(2026-11-12 M4-H P4 由内联卡片换成真页:
+        // 提交反馈 / 我提交过的 / 常见问题 / 关于四块都在 FeedbackView 里,index 6 懒建)
         _views[0] = general;
         _views[3] = network;
-        _views[6] = aboutGrid;
 
         // 左导航：0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于
         var nav = UiClass.V(2,
@@ -389,12 +382,16 @@ public sealed partial class SettingsPage : PageBase
     private Border NavBtn(int i, string label)
     {
         // 选中白底胶囊 + 粗体（对照 settings2.png 左栏）；自绘 Border 避开 ToggleButton 模板干扰
-        var text = new TextBlock { Text = label, FontSize = 13.5 };
+        // 尺寸对齐 Windows SettingsPage.NavBtn:文案块定宽 120、内距 12/8、无外边距 →
+        // 选中胶囊 156×33(此前 12/9 + 外边距 1 让它变成 146×36,整列节奏跟着变松)
+        var text = new TextBlock { Text = label, FontSize = 13.5, Width = 120 };
         var pill = new Border
         {
-            CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(12, 9, 12, 9),
-            Margin = new Thickness(0, 1, 8, 1),
+            CornerRadius = new CornerRadius(8),
+            MinWidth = 156,
+            Padding = new Thickness(12, 8, 12, 8),
+            Margin = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Left,
             Child = text,
             Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
         };
@@ -406,6 +403,9 @@ public sealed partial class SettingsPage : PageBase
     }
 
     private int _navSelected;
+
+    /// <summary>切到某个内层导航项(0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于);冒烟脚本按 SMOKE_SETTINGS_TAB 调它。</summary>
+    public void SelectTab(int i) => Select(i);
 
     private void Select(int i)
     {
@@ -436,6 +436,8 @@ public sealed partial class SettingsPage : PageBase
             2 => (PageBase)(_views[2] ??= new JavaView()),
             4 => (PageBase)(_views[4] ??= new ServersView()),
             5 => (PageBase)(_views[5] ??= new PlaytimeView()),
+            // 「反馈与关于」= Windows FeedbackPage(2026-11-12 由内联卡片换成真页:M4-H P4)
+            6 => (PageBase)(_views[6] ??= new TipCL.App.Pages.Feedback.FeedbackView()),
             _ => null,
         };
         if (!ReferenceEquals(sub, _sub))

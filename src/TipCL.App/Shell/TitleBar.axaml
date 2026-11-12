@@ -1,19 +1,20 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="TipCL.App.Shell.TitleBar"
-             Height="40">
+             Height="46">
   <UserControl.Styles>
-    <!-- 顶部页签：文字 muted，选中加粗 + 底部 2.5px 主色条 -->
+    <!-- v2 顶部页签:13.5px、左右 13;选中 = 粗体 + 底部 2.5px 主色圆角条(左右各缩 13)。
+         对齐 Windows Themes/Controls.xaml 的 `Tab.Top`(悬停只换前景色,无底色块)。 -->
     <Style Selector="Button.topTab">
-      <Setter Property="Height" Value="40" />
-      <Setter Property="Padding" Value="14,0" />
+      <Setter Property="Height" Value="46" />
+      <Setter Property="Padding" Value="13,0" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
       <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="FontWeight" Value="Medium" />
       <Setter Property="Template">
         <ControlTemplate>
-          <Panel>
-            <Border Name="HoverBg" Background="Transparent" />
+          <Panel Background="Transparent">
             <ContentPresenter x:Name="PART_ContentPresenter"
                               Content="{TemplateBinding Content}"
                               Margin="{TemplateBinding Padding}"
@@ -21,13 +22,13 @@
                               TextElement.Foreground="{TemplateBinding Foreground}"
                               TextElement.FontWeight="{TemplateBinding FontWeight}" />
             <Border x:Name="TabBar" Height="2.5" VerticalAlignment="Bottom"
-                    Margin="13,0" CornerRadius="2,2,0,0" Background="Transparent" />
+                    Margin="13,0" CornerRadius="1.25" Background="Transparent" />
           </Panel>
         </ControlTemplate>
       </Setter>
     </Style>
-    <Style Selector="Button.topTab:pointerover /template/ Border#HoverBg">
-      <Setter Property="Background" Value="{DynamicResource B.Hover}" />
+    <Style Selector="Button.topTab:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
     </Style>
     <Style Selector="Button.topTab.on">
       <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
@@ -37,10 +38,10 @@
       <Setter Property="Background" Value="{DynamicResource B.Accent}" />
     </Style>
 
-    <!-- 窗口按钮：46×40 满高，矢量线宽 1.1 圆头；关闭悬停 #C42B1C 满高白字 -->
+    <!-- 窗口按钮:46×46 满高,矢量线宽 1.1 圆头;关闭悬停 #C42B1C 满高白字 -->
     <Style Selector="Button.cap">
       <Setter Property="Width" Value="46" />
-      <Setter Property="Height" Value="40" />
+      <Setter Property="Height" Value="46" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{DynamicResource B.CaptionInk}" />
       <Setter Property="Template">
@@ -64,13 +65,14 @@
       <Setter Property="Foreground" Value="{DynamicResource B.OnCaptionHot}" />
     </Style>
 
-    <!-- 标题栏图标按钮（主题切换） -->
+    <!-- 标题栏图标钮(主题切换):32×32、圆角 8、悬停淡底;内容放 16×16 线条 Path -->
     <Style Selector="Button.titleIcon">
-      <Setter Property="Width" Value="34" />
-      <Setter Property="Height" Value="30" />
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource B.CaptionInk}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+      <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border x:Name="IconBg" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
@@ -82,9 +84,37 @@
     <Style Selector="Button.titleIcon:pointerover /template/ Border#IconBg">
       <Setter Property="Background" Value="{DynamicResource B.Hover}" />
     </Style>
+    <Style Selector="Button.titleIcon:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    </Style>
+
+    <!-- 标题栏胶囊钮(AI 药丸 / 账号):宽度自适应、内距 4,0,10,0、前景 B.Ink,复用图标钮的悬停淡底 -->
+    <Style Selector="Button.titleChip">
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="4,0,10,0" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel Background="Transparent">
+            <Border x:Name="ChipBg" Background="{DynamicResource B.Ink}" Opacity="0"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              Margin="{TemplateBinding Padding}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              TextElement.Foreground="{TemplateBinding Foreground}" />
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.titleChip:pointerover /template/ Border#ChipBg">
+      <Setter Property="Opacity" Value="0.07" />
+    </Style>
   </UserControl.Styles>
 
-  <Grid ColumnDefinitions="Auto,*,Auto" Background="{DynamicResource B.Chrome}"
+  <Grid ColumnDefinitions="Auto,*,Auto" Background="{DynamicResource B.TitleBar}"
         PointerPressed="OnTitleBarPointerPressed">
     <Grid.Styles>
       <Style Selector="Border.titleLine">
@@ -93,26 +123,54 @@
       </Style>
     </Grid.Styles>
 
-    <!-- Logo -->
-    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,18,0">
-      <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource B.Accent}">
-        <TextBlock Text="T" Foreground="{DynamicResource B.OnAccent}" FontSize="12" FontWeight="ExtraBold"
+    <!-- Logo(始终 22×22 圆角方块 + 字标) -->
+    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,20,0">
+      <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource B.LogoFill}">
+        <TextBlock Text="T" Foreground="{DynamicResource B.OnLogo}" FontSize="12" FontWeight="ExtraBold"
                    HorizontalAlignment="Center" VerticalAlignment="Center" />
       </Border>
       <TextBlock Text="TipCL" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0"
                  Foreground="{DynamicResource B.Ink}" />
     </StackPanel>
 
-    <!-- 顶部 5 页签占位 -->
+    <!-- 顶部 5 页签 -->
     <StackPanel x:Name="TabPanel" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left" />
 
-    <!-- 主题切换 + 窗口按钮 -->
+    <!-- 右侧:AI 药丸钮 → 主题 → 账号钮 → 分隔线 → 最小化/最大化/关闭 -->
     <StackPanel Grid.Column="2" Orientation="Horizontal">
-      <Button x:Name="ThemeBtn" Classes="titleIcon" VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="切换深色 / 浅色">
-        <Path x:Name="ThemeIco" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.3"
+      <Button x:Name="AiBtn" Classes="titleChip" Height="26" Padding="0" VerticalAlignment="Center" Margin="0,0,2,0"
+              ToolTip.Tip="AI 助手">
+        <Grid>
+          <Border CornerRadius="13" Background="{DynamicResource B.GlassStrong}"
+                  BorderBrush="{DynamicResource B.GlassBorder}" BorderThickness="1" />
+          <StackPanel Orientation="Horizontal" Margin="8,0,9,0">
+            <Path Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.7"
+                  StrokeLineCap="Round" StrokeJoin="Round" Width="16" Height="16" Stretch="None"
+                  Data="M8,1.5 V4.5 M8,11.5 V14.5 M1.5,8 H4.5 M11.5,8 H14.5 M3.4,3.4 L5.4,5.4 M10.6,10.6 L12.6,12.6 M3.4,12.6 L5.4,10.6 M10.6,5.4 L12.6,3.4" />
+            <TextBlock Text="AI" FontSize="11.5" FontWeight="SemiBold" Margin="5,0,0,0" VerticalAlignment="Center"
+                       Foreground="{DynamicResource B.Ink}" />
+          </StackPanel>
+        </Grid>
+      </Button>
+
+      <Button x:Name="ThemeBtn" Classes="titleIcon" VerticalAlignment="Center" ToolTip.Tip="切换深色 / 浅色">
+        <Path x:Name="ThemeIco" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.7"
               StrokeLineCap="Round" StrokeJoin="Round" Width="16" Height="16"
               Data="M13,9.5 A5.5,5.5 0 0 1 6.5,3 A5.5,5.5 0 1 0 13,9.5 Z" />
       </Button>
+
+      <Button x:Name="AccBtn" Classes="titleChip" VerticalAlignment="Center" Margin="2,0,2,0" ToolTip.Tip="账号">
+        <StackPanel Orientation="Horizontal">
+          <Border Width="24" Height="24" CornerRadius="12" Background="{DynamicResource B.AccentStrong}">
+            <TextBlock x:Name="AccInitial" Foreground="{DynamicResource B.OnAccentStrong}" FontSize="11"
+                       FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <TextBlock x:Name="AccName" FontSize="12.5" FontWeight="Medium" MaxWidth="120"
+                     TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="7,0,0,0"
+                     Foreground="{DynamicResource B.Ink}" />
+        </StackPanel>
+      </Button>
+
       <Border Width="1" Height="16" Margin="6,0" VerticalAlignment="Center" Background="{DynamicResource B.TitleSep}" />
       <Button x:Name="MinBtn" Classes="cap" ToolTip.Tip="最小化">
         <Path Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.1" StrokeLineCap="Round"

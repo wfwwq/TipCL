@@ -73,4 +73,12 @@
     <GradientStop Color="#1B1B1B" Offset="0.6" />
     <GradientStop Color="#181818" Offset="1" />
   </LinearGradientBrush>
+  <!-- Fluent 滑块取色覆盖(同 Palette.Light,深色档) -->
+  <SolidColorBrush x:Key="SliderTrackFill" Color="#282828" />
+  <SolidColorBrush x:Key="SliderTrackValueFill" Color="#3FB07C" />
+  <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#3FB07C" />
+  <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#3FB07C" />
+  <SolidColorBrush x:Key="SliderThumbBackground" Color="#3FB07C" />
+  <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#3FB07C" />
+  <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#3FB07C" />
 </ResourceDictionary>
