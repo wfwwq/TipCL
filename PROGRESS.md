@@ -1969,3 +1969,46 @@ Terracotta(B2c)与界面/系统信息展示也不在范围内。
 6. `Preflight._natives_required` 与 `McLauncher._needs_natives` 是两处口径略有差别的判定(clientreq 过滤),
    本包按「各自保持原样」处理,没有合并成一个(B2b 的调用点清单也是分开列的)。
 
+### Lead 验收(2026-11-12 20:45)
+
+结论:**B2d 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src/TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 有对应文件的 238 个里 224 一致、14 个有改动(原有 11 个 + 本包 `Cleaner.cs`、`OfficialMigrate.cs`、`Preflight.cs`);无对应文件的 8 个是原有 7 个 + `Launcher\LaunchArch.cs` |
+| `LaunchArch.cs`(Lead 全文读过) | 只有 `osx` + 进程 `arm64` + `X64Only` / `Mixed` 返回 `x64`,其余返回进程架构原值 |
+| `git diff b745387..HEAD` 对 5 个复制文件(Lead 逐行读过) | 全部是「方法顶部算一次目标架构 + 调用换成带参重载」或逐句等价的抽取 |
+| `Cleaner._lib_relpaths` 对照改动前的循环体 | 逐句等价;三个加入保留集合的分支(artifact 路径、natives jar、classifiers 全部路径)都在。有 3 条测试钉住,含「Apple 芯片上 1.16.5 形态的 x86_64 natives jar 在保留集合里」 |
+| `Installer.ExtractNatives` 对照 Windows 原文 377–414 行 | 过滤、选分类器、缺 jar 告警、解压、计数、收尾判断都在;差别只有告警与解压不再逐库交错 |
+| `Java.cs`、`JavaRuntimeFiles.cs`、`Utils.cs`、红线文件、`Directory.Build.props`、三个 csproj | 未改 |
+| `MacNativeSupport.cs` | 只改了类注释两行 |
+| 已有测试被改动的 | 只有 `B2bNativeClassifierTests.cs` 一行 `DisplayName`(Lead 授权的那处),断言未动 |
+| 本次提交改动的文本文件做严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告只有 SYSLIB0014 ×1 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 1170 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 1170 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(Lead 复跑前后) | 86 → 86,没有新名字 |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL` | 0 个 |
+| B2d 测试扫描 | 没有联网、起进程、调安装 / 启动 / 清理入口、改环境变量 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+**对子代理 4 个待裁决事项的裁决**:
+
+1. `ExtractNatives` 的告警与解压不再交错:接受。
+2. `McLauncher` 私有 3 参 `_expand_args`(63–66 行)已无调用方:**B2e 删除**。留着的风险是以后有人顺手调它,悄悄走回进程架构。
+3. `_native_classifier_entry` / `_natives_entry` 入参是已算好的目标架构:接受。
+4. `Preflight._natives_required` 与 `McLauncher._needs_natives` 的 `clientreq` 口径差:保持 Windows 版原样,不合并。
+
+**当前是半成品状态**:Apple 芯片上的旧版本现在会选对 x86_64 原生库,但 Java 的挑选与安装仍按进程架构(arm64)走,要等 B2e 才自洽。
+
+给 B2e 的事实(Lead 实测 `Java.cs`,行号是当前 HEAD):
+
+- `JavaUsableFor(version_json, java_exe)`(347 行)是所有挑选路径的闸门:`ResolveLaunchJava`(373 行)、`McLauncher._coerce_java_exe`(135 行)、`BackendApi.cs:3096` 都靠它。它只比较大版本,**不看架构**,且内部调 `GetJavaMajor`(会起 `java -version` 进程)。
+- `PickJavaForVersion`(987 行)的局部函数 `Match` 只按大版本筛;`EnsureJavaForVersion`(1342 行)先调它,拿到非空结果就直接返回。所以挑选不看架构时,装好的 arm64 Java 会挡住 x64 Java 的安装。
+- `EnsureJavaForVersion`:组件不是 `jre-legacy` 时走 `InstallMojangRuntime(dm, component, …)`(1166 行,内部 5 处读静态 `PLATFORM_KEY`),否则走 `InstallAdoptium(dm, major, …, arch)`。
+- 启动器自己装的 Java 目录名带架构:`adoptium-<major>-<arch>`、`zulu-<major>-<arch>`、`<component>-<PLATFORM_KEY>`,不同架构不会互相覆盖。
+- 代码里目前没有任何「探测一个 Java 是什么架构」的逻辑(只有 1016 行按路径里有没有 `x86` 字样判断 32 位)。
+- `Installer._ensure_any_java()`(`Installer.cs:969`)在找不到任何 Java 时装 Adoptium 8;B2a 的线上证据是 Adoptium 对 mac aarch64 **没有** Java 8,所以这条兜底在 Apple 芯片上会失败。
+
