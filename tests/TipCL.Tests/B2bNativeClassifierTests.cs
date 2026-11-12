@@ -287,7 +287,7 @@ public class B2bNativeClassifierTests
     }
 
     /// <summary>【现状,不是期望的正确行为】Apple 芯片上老式 natives 分类器一律选不到 —— 三个版本各验一次。</summary>
-    [Fact(DisplayName = "现状(待 Lead 裁决):osx + arm64 下老式 natives-osx / natives-macos 分类器全部选不到")]
+    [Fact(DisplayName = "现状(调用方改传目标架构,见 B2d):osx + arm64 下老式 natives-osx / natives-macos 分类器全部选不到")]
     public void Current_state_osx_arm64_selects_no_legacy_classifier()
     {
         Assert.Null(Installer.SelectNativeClassifier(Lwjgl2Platform(), "osx", "arm64"));

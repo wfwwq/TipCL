@@ -564,3 +564,49 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   的等价钉子把 Windows 行为钉住(见 `B2bClasspathTests`)。
 - **如果 Lead 认为越界**:回退就是把方法体搬回循环,`B2bClasspathTests` 里对 `_classpath_path` 的断言随之换成对
   `Utils.CheckRules` 的断言 —— 已在 PROGRESS.md 的 B2b 遗留第 5 条写明。
+
+## D-46 「本次启动的目标架构」= 版本的确定函数,只有 `osx + arm64` 且原生库不全有 arm64 时才退 x64
+
+- **决定(落地 Lead 在 B2b 验收里的裁决)**:`LaunchArch.For(mergedVersionJson, os, processArch, osVersion)`:
+  `os == "osx"` 且 `processArch == "arm64"` 且 `MacNativeSupport.Analyze(...).Kind` 是 `X64Only` 或 `Mixed`
+  → 返回 `"x64"`;其余一切情况(含 `Arm64Native`、`NoMacNatives`、JSON 为 null、空 `libraries`、非 osx、进程不是 arm64)
+  → 返回 `processArch` 原值。公开入口 `For(json)` 转调并传 `Utils.OS_NAME` / `Utils.ARCH` / `Utils.OS_VERSION`。
+- **为什么 `Mixed` 也归 x64**:缺 arm64 变体的那个库在 arm64 JVM 里加载不了,而观察到的线上数据里每个 mac 原生库
+  都有 x86_64 变体,整份退 x64 一定拿得齐。
+- **为什么 natives 目录不需要按架构分目录**:目标架构只由「版本 JSON + 平台三要素」决定,与已装文件、用户选择、
+  时间无关 —— 同一台机器上同一个版本永远得到同一个值,所以不存在「同一版本两种架构的 natives 互相覆盖」。
+  B2b 第 6 项做法 4 里担心的这一点不成立。
+- **为什么 Windows / Linux / Intel Mac 一定不变**:判定里只有 `osx` + 进程 `arm64` 这一条分支,其余都返回入参原值;
+  单测对 8 个版本 × 5 种平台组合逐格钉住(见 `B2dLaunchArchTests` / `B2dNonAppleNailsTests`)。
+- **未验证**:整条 Rosetta 路径(mac 上的真实取值链、x64 Java 加载 x86_64 dylib)本机是 Windows,一律标「未验证」。
+
+## D-47 调用点改读目标架构的两种形态:可注入重载(takes os/processArch/osVersion)与「已算好 arch 的纯函数」
+
+- **背景**:任务书要求「含调用点的方法如果是纯逻辑或者能拆出纯逻辑部分,就给它加 `internal` 重载,入参增加
+  os / processArch / osVersion,内部用 `LaunchArch.For(resolved, os, processArch, osVersion)`;拆不出纯逻辑的
+  (一边算一边下载、解压),把「决定要哪些 natives jar / 哪些库」那一段抽成 `internal static` 纯函数再测」。
+- **两种形态(都在 PROGRESS.md 的 B2d 第 4 节逐处记了)**:
+  1. **可注入重载**(自己从入参算目标架构,生产代码传 `Utils.*`):
+     `Cleaner._lib_relpaths`、`Installer._natives_to_extract`、`McLauncher._needs_natives`、
+     `Preflight._natives_required`、`OfficialMigrate._library_relpaths`、`LaunchArch.For`。
+     这一种最贴任务书,单测可以直接按 `osx + arm64` 调用。
+  2. **已算好 arch 的纯函数**(调用方法顶部已经为 rules 过滤算过一次目标架构,不再重算第二遍):
+     `Installer._native_classifier_entry`、`Preflight._natives_entry`。单测先断言
+     `LaunchArch.For(夹具, "osx", "arm64", 版本) == "x64"`,再把它传进去,两种形态的断言强度等价,
+     而且避免在循环里对同一份 JSON 反复跑 `MacNativeSupport.Analyze`(任务书:不要在循环里反复算)。
+- **抽取的等价性**:所有抽取都是原循环体的逐句搬运,`rank` / `CheckRules` / 分支判定一字未改,只有
+  「进程架构 → 目标架构」这一处替换;`ExtractNatives` 有一处非功能性差别(缺 jar 告警与解压不再逐库交错),
+  已写进方法注释与 PROGRESS.md 的 B2d 第 4 节末。
+
+## D-48 `OfficialMigrate._library_relpaths` 按「链上所有 libraries」算目标架构;`MacNativeSupport` 只改类注释
+
+- **`OfficialMigrate`**:它没有合并 JSON(逐个 JSON 沿继承链走),按任务书先把链上所有 JSON 的 `libraries`
+  收集成一个只含 `libraries` 键的 `PyDict`(`_merged_libraries`,按链顺序汇总),用 `LaunchArch.For` 算一次目标架构,
+  再照原顺序遍历。**没有改变非 mac 平台的返回值或顺序**(`LaunchArch.For` 在那三种情况下返回进程架构原值,
+  遍历 / 去重 / 追加顺序一字未动,单测里有一条专门钉顺序与去重)。public 签名不变:原来「按链读盘」的部分留在 public 方法里,
+  读完再转调新增的 internal 重载。
+- **`MacNativeSupport.cs`**:只把类注释里「本包**不接入任何调用点**」那句改成「B2d 起由 `LaunchArch` 接入」
+  (Lead 授权的唯一改法);判定口径、方法体、`_key_arch` 一行未改。
+- **不动 Java 侧**:`Java.cs`(平台键、Adoptium / Zulu / Microsoft 的默认架构、已装 Java 挑选)与
+  `Terracotta.cs`(B2c)一律未改,即使它们也在读 `Utils.ARCH` —— 本包只做 natives / 规则 / classpath。
+

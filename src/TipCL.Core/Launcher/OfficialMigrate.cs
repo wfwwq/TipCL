@@ -128,11 +128,29 @@ public static class OfficialMigrate
 
 	public static List<string> _library_relpaths(string src, string versionId)
 	{
-		List<string> list = new List<string>();
-		HashSet<string> hashSet = new HashSet<string>();
+		List<PyDict> list = new List<PyDict>();
 		foreach (string item in _inherit_chain(src, versionId))
 		{
-			foreach (object item2 in Iter(Py.Or(_load_version_json(src, item)["libraries"], new List<object>())))
+			list.Add(_load_version_json(src, item));
+		}
+		return _library_relpaths(list, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION);
+	}
+
+	/// <summary>
+	/// B2d:按继承链各份版本 JSON 算库文件相对路径(逐句搬运原来的循环)。
+	/// 原来只有「传 src + versionId、自己按链读盘」这一个入口,现在把「已经读好的链 JSON」这一步拆开,
+	/// 做成可注入 os / 进程架构 / osVersion 的纯函数。
+	/// 目标架构由「链上所有 JSON 的 libraries 合起来」算一次(整条链共用一个目标架构),再照原顺序遍历;
+	/// 非 mac 平台上 LaunchArch.For 返回进程架构原值,所以返回值与顺序与改动前一致。
+	/// </summary>
+	internal static List<string> _library_relpaths(List<PyDict> chain_jsons, string os, string processArch, string osVersion)
+	{
+		string arch = LaunchArch.For(_merged_libraries(chain_jsons), os, processArch, osVersion);
+		List<string> list = new List<string>();
+		HashSet<string> hashSet = new HashSet<string>();
+		foreach (PyDict pyDictJson in chain_jsons)
+		{
+			foreach (object item2 in Iter(Py.Or(pyDictJson["libraries"], new List<object>())))
 			{
 				if (!(item2 is PyDict pyDict))
 				{
@@ -146,7 +164,7 @@ public static class OfficialMigrate
 					hashSet.Add(Py.Str(o));
 					list.Add(Py.Str(o));
 				}
-				string text2 = Installer.SelectNativeClassifier(pyDict);
+				string text2 = Installer.SelectNativeClassifier(pyDict, os, arch);
 				if (!string.IsNullOrEmpty(text2))
 				{
 					object o2 = Py.Or(G(Py.Or(G(Py.Or(G(d, "classifiers"), new PyDict()), text2), new PyDict()), "path"), (text.Length > 0) ? Utils.MavenArtifactPath(text + ":" + text2) : "");
@@ -159,6 +177,20 @@ public static class OfficialMigrate
 			}
 		}
 		return list;
+	}
+
+	/// <summary>只含 libraries 键的假版本 JSON,按链顺序汇总,用来给 LaunchArch.For 判定这次迁移的目标架构。</summary>
+	private static PyDict _merged_libraries(List<PyDict> chain_jsons)
+	{
+		List<object> list = new List<object>();
+		foreach (PyDict pyDict in chain_jsons)
+		{
+			foreach (object item in Iter(Py.Or(pyDict["libraries"], new List<object>())))
+			{
+				list.Add(item);
+			}
+		}
+		return PyDict.Of("libraries", list);
 	}
 
 	private static IEnumerable<object> Iter(object o)

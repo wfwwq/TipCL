@@ -27,33 +27,49 @@ public static class Cleaner
 			{
 				pyDict2 = pyDict;
 			}
-			foreach (object item2 in Py.ListOr(pyDict2["libraries"]))
+			hashSet.UnionWith(_lib_relpaths(pyDict2, libs, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION));
+		}
+		return hashSet;
+	}
+
+	/// <summary>
+	/// B2d:一个已装版本(合并后的版本 JSON)在清理时要**保留**的库文件路径集合。
+	/// 原来这段循环直接写在 <see cref="_lib_paths"/> 里(一边按已装版本遍历一边算),抽成
+	/// 可注入 os / 进程架构 / osVersion 的纯函数;逐句搬运,只有两处替换:
+	/// natives 分类器按 <see cref="LaunchArch"/> 算出的目标架构选,jar 路径回退查找也按它替换 ${arch}。
+	/// 这个返回值决定 Cleaner 清理时保留哪些文件,改错会误删,所以单测里钉住
+	/// 「osx + arm64 下 1.16.5 形态版本的 x86_64 natives jar 路径在保留集合里」。
+	/// </summary>
+	internal static HashSet<string> _lib_relpaths(PyDict pyDict2, string libs, string os, string processArch, string osVersion)
+	{
+		string arch = LaunchArch.For(pyDict2, os, processArch, osVersion);
+		HashSet<string> hashSet = new HashSet<string>(StringComparer.Ordinal);
+		foreach (object item2 in Py.ListOr(pyDict2["libraries"]))
+		{
+			if (!(item2 is PyDict pyDict3))
 			{
-				if (!(item2 is PyDict pyDict3))
+				continue;
+			}
+			PyDict pyDict4 = Py.DictOr(Py.Or(pyDict3["downloads"], new PyDict()));
+			object o = Py.DictOr(Py.Or(pyDict4["artifact"], new PyDict()))["path"];
+			if (!Py.Truthy(o) && Py.Truthy(pyDict3["name"]) && !Py.Truthy(pyDict3["natives"]))
+			{
+				o = Utils.MavenArtifactPath((string)pyDict3["name"]);
+			}
+			if (Py.Truthy(o))
+			{
+				hashSet.Add(Low(libs, Py.Str(o)));
+			}
+			string text = (Py.Truthy(pyDict3["natives"]) ? Installer.SelectNativeClassifier(pyDict3, os, arch) : null);
+			if (Py.Truthy(text) && Py.Truthy(pyDict3["name"]))
+			{
+				hashSet.Add(Low(libs, Installer.NativesJarRelpath(pyDict3, text, arch)));
+			}
+			foreach (object value in Py.DictOr(Py.Or(pyDict4["classifiers"], new PyDict())).Values)
+			{
+				if (value is PyDict pyDict5 && Py.Truthy(pyDict5["path"]))
 				{
-					continue;
-				}
-				PyDict pyDict4 = Py.DictOr(Py.Or(pyDict3["downloads"], new PyDict()));
-				object o = Py.DictOr(Py.Or(pyDict4["artifact"], new PyDict()))["path"];
-				if (!Py.Truthy(o) && Py.Truthy(pyDict3["name"]) && !Py.Truthy(pyDict3["natives"]))
-				{
-					o = Utils.MavenArtifactPath((string)pyDict3["name"]);
-				}
-				if (Py.Truthy(o))
-				{
-					hashSet.Add(Low(libs, Py.Str(o)));
-				}
-				string text = (Py.Truthy(pyDict3["natives"]) ? Installer.SelectNativeClassifier(pyDict3) : null);
-				if (Py.Truthy(text) && Py.Truthy(pyDict3["name"]))
-				{
-					hashSet.Add(Low(libs, Installer.NativesJarRelpath(pyDict3, text)));
-				}
-				foreach (object value in Py.DictOr(Py.Or(pyDict4["classifiers"], new PyDict())).Values)
-				{
-					if (value is PyDict pyDict5 && Py.Truthy(pyDict5["path"]))
-					{
-						hashSet.Add(Low(libs, Py.Str(pyDict5["path"])));
-					}
+					hashSet.Add(Low(libs, Py.Str(pyDict5["path"])));
 				}
 			}
 		}

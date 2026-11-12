@@ -63,8 +63,8 @@ public sealed class MacNativeSupportReport
 }
 
 /// <summary>
-/// B2b:纯函数 —— 「这个版本在 mac 上有没有 arm64 原生库」。本包**不接入任何调用点**,
-/// 只给 Lead 裁决「Apple 芯片上没有 arm64 原生库的版本怎么跑」提供依据(见 PROGRESS.md 的 B2b 第 5 项)。
+/// B2b:纯函数 —— 「这个版本在 mac 上有没有 arm64 原生库」。B2d 起由 <see cref="LaunchArch"/> 接入:
+/// 只有 osx + 进程架构 arm64 时会问它,用来判定「这次启动要不要退到 x64」(见 <see cref="LaunchArch"/> 的注释)。
 ///
 /// 输入是**合并后的**版本 JSON(<see cref="Manifest.Merge"/> 之后,即 inheritsFrom 已展开),
 /// 因为父版本的 libraries 也要算进来。

@@ -540,6 +540,24 @@ public static class McLauncher
 		return PPath.Join(libs_dir, Utils.MavenArtifactPath(Py.Str(o)));
 	}
 
+	/// <summary>
+	/// B2d:BuildLaunchCommand 的「缺少 natives」预检里那句判定 —— 「这个版本需要不需要 natives」,
+	/// 抽成可注入 os / 进程架构 / osVersion 的纯函数(逻辑是原 Where/Any 的逐句搬运:
+	/// 跳过 clientreq=false 的库,按注入了目标架构的 rules 过滤,再看有没有可选的 natives 分类器)。
+	/// B2b 记的风险(Apple 芯片上这批老式库在 arm64 下全部选不到分类器 → 预检失效)因此在 B2d 之后消失:
+	/// 1.16.5 那类版本在 osx + arm64 上目标架构是 x64,分类器选得到。
+	/// 新式库(1.19.4 起,没有 natives 字段)在任何平台都返回 false,与 Windows 上的现状一致。
+	/// </summary>
+	internal static bool _needs_natives(PyDict resolved, string os, string processArch, string osVersion)
+	{
+		string arch = LaunchArch.For(resolved, os, processArch, osVersion);
+		return Installer.Libs(resolved).Where(delegate(PyDict lib)
+		{
+			object obj = lib.Get("clientreq");
+			return (!(obj is bool) || (bool)obj) && Utils.CheckRules(lib.Get("rules"), null, os, arch, osVersion);
+		}).Any((PyDict lib) => !string.IsNullOrEmpty(Installer.SelectNativeClassifier(lib, os, arch)));
+	}
+
 	public static LaunchCommand BuildLaunchCommand(Instance instance, string version_id, PyDict account_props, object java_exe, object memory_mb = null, object width = null, object height = null, IEnumerable<object> extra_game_args = null, object extra_jvm_args = null, string game_directory = null, object authlib_api = null)
 	{
 		memory_mb = memory_mb ?? ((object)4096L);
@@ -568,11 +586,8 @@ public static class McLauncher
 		string text4 = instance.AssetsDir();
 		string text5 = instance.LibrariesDir();
 		string text6 = Installer.ExtractNatives(instance, pyDict2, version_id);
-		if (Installer.Libs(pyDict2).Where(delegate(PyDict lib)
-		{
-			object obj5 = lib.Get("clientreq");
-			return (!(obj5 is bool) || (bool)obj5) && Utils.CheckRules(lib.Get("rules"));
-		}).Any((PyDict lib) => !string.IsNullOrEmpty(Installer.SelectNativeClassifier(lib))) && !Installer.NativesPresent(text6))
+		string arch = LaunchArch.For(pyDict2);
+		if (_needs_natives(pyDict2, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION) && !Installer.NativesPresent(text6))
 		{
 			throw new LaunchError("缺少 LWJGL 本地库（natives）。请重新安装该 Minecraft 版本后再启动。");
 		}
@@ -580,7 +595,7 @@ public static class McLauncher
 		List<string> list = new List<string>();
 		foreach (PyDict item in Installer.Libs(pyDict2))
 		{
-			string text13 = _classpath_path(item, text5, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION);
+			string text13 = _classpath_path(item, text5, Utils.OS_NAME, arch, Utils.OS_VERSION);
 			if (text13 == null)
 			{
 				continue;
@@ -608,8 +623,8 @@ public static class McLauncher
 		if (Py.Truthy(pyDict2.Get("arguments")))
 		{
 			PyDict obj3 = (PyDict)pyDict2["arguments"];
-			list3 = _expand_args(obj3.Get("jvm", new List<object>()), placeholders, features);
-			list4 = _expand_args(obj3.Get("game", new List<object>()), placeholders, features);
+			list3 = _expand_args(obj3.Get("jvm", new List<object>()), placeholders, features, Utils.OS_NAME, arch, Utils.OS_VERSION);
+			list4 = _expand_args(obj3.Get("game", new List<object>()), placeholders, features, Utils.OS_NAME, arch, Utils.OS_VERSION);
 			if (!list3.Any((string a) => a.StartsWith("-Djava.library.path")))
 			{
 				list3.Insert(0, "-Djava.library.path=" + text6);

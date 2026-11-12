@@ -18,7 +18,7 @@
 | B2a | mac Java 运行时获取(Mojang 平台键 / Adoptium·Zulu mac 包 / 可执行位与链接 / java 定位) | ✅ 完成(见下;**新增 90 条用例,总数 811 → 901,两条通道都 901/901 全绿**) |
 | B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | ✅ 完成(见下;**新增 137 条用例,总数 901 → 1038,两条通道都 1038/1038 全绿**;三个复制文件只加可注入 OS/ARCH 的 internal 重载 + 一处内联逻辑抽取,Windows 行为用等价钉子逐项钉住;新建 `Launcher\MacNativeSupport.cs`,未接入调用点,留 Lead 裁决 arm64 方案) |
 | B2c | NodeRuntime darwin / Terracotta 权限 / adb 路径 / PhoneLink 临时目录 / Preflight 磁盘 / Updater 仅提示 / Shortcut / IsSymlink / Microsoft 厂商分支 / Mojang 安装循环建链顺序 | 未开始 |
-| B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | 未开始 |
+| B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | ✅ 完成(见下;**新增 132 条用例,总数 1038 → 1170,两条通道都 1170/1170 全绿**;新建 `Launcher\LaunchArch.cs`,7 处调用点改读目标架构,5 个复制文件加可注入重载 / 抽取纯函数;Java 侧留给 B2e) |
 | B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | 未开始 |
 | B3 | 打包 | 未开始 |
 | C1-C8 | 界面 | 未开始 |
@@ -1799,3 +1799,173 @@ Lead 认可的取舍:D-37(`TCS2` 文件 + 没有可用凭据库时读取抛 `Pla
 
 另记:1.19.4 起 `natives-macos` 与 `natives-macos-arm64` 两个 jar 在 mac 上都进 classpath。两者在版本 JSON 里的规则都是 `allow os.name=osx`,
 没有 `os.arch` 规则,按 JSON 就该如此,不改;列入真机验证清单。
+
+---
+
+## B2d Apple 芯片旧版本:引入「本次启动的目标架构」,natives / 规则 / classpath 按目标架构
+
+本包实现 Lead 在 B2b 验收里裁决的做法 4 的**前一半**:引入「本次启动的目标架构」,把 Launcher 里读进程架构
+(`Utils.ARCH`)的 natives 选择、`${arch}` 替换、`os.arch` 规则、classpath 全部改成读目标架构。
+**Java 侧一个字没动**(Mojang 平台键、厂商安装包、已装 Java 的挑选、Rosetta 检测都是 B2e),
+Terracotta(B2c)与界面/系统信息展示也不在范围内。
+
+### 1. 三项各自做了什么
+
+1. **第 1 项 目标架构函数**:新建 `src/TipCL.Core/Launcher/LaunchArch.cs`(58 行,纯函数)。
+   - `public static string For(PyDict mergedVersionJson)` → 转调内部重载,传 `Utils.OS_NAME` / `Utils.ARCH` / `Utils.OS_VERSION`。
+   - `internal static string For(PyDict mergedVersionJson, string os, string processArch, string osVersion)`:
+     只有 `os == "osx"` 且 `processArch == "arm64"` 且 `MacNativeSupport.Analyze(json, os, processArch, osVersion).Kind`
+     是 `X64Only` 或 `Mixed` 时才返回 `"x64"`,其余(含 `Arm64Native`、`NoMacNatives`、JSON 为 null、空 `libraries`、
+     非 osx、进程不是 arm64)**一律返回 `processArch` 原值**。
+   - 类注释写清四件事:目标架构是**版本的确定函数**(同一台机器上同一个版本永远得到同一个值,所以 natives 目录
+     **不需要**按架构分目录,B2b 第 6 项担心的「两种架构互相覆盖」不成立);`Mixed` 归 `x64` 的理由(缺 arm64 变体的库
+     在 arm64 JVM 里加载不了,而观察到的数据里每个库都有 x86_64 变体);整条 Rosetta 路径**未经真机验证**;Java 侧由 B2e 处理。
+2. **第 2 项 7 处调用点**全部改读目标架构(逐处见下面第 4 节的表):`Cleaner`、`Installer`(ExtractNatives、
+   `_install_libraries`、`NativesJarRelpath`)、`McLauncher`(缺 natives 预检、classpath、两处 `_expand_args`)、
+   `Preflight`(`_check_libraries`、`_check_natives`)、`OfficialMigrate`。做法统一为:对合并后的版本 JSON
+   **只算一次** `LaunchArch.For(...)`,循环里不再重算;调用点换成 B2b 已有的可注入 internal 重载
+   (`SelectNativeClassifier(lib, os, arch)` / `SubstNativeKey(key, arch)` / `Utils.CheckRules(rules, features, os, arch, osVersion)` /
+   `_classpath_path(..., os, arch, osVersion)` / `_expand_args(..., os, arch, osVersion)`)。
+   顺带解决 B2b 记的两个连带问题:`McLauncher` 的缺 natives 预检在 Apple 芯片的旧版本上**重新生效**;
+   `Cleaner` 的保留集合按目标架构算。
+3. **第 3 项 架构读取点清点**见下(第 3 节):`Launcher\` 下(不含 `Ai\`、`Sync\`)共 23 处架构 / 位数读取点,
+   本包改了 7 个调用点;其余逐条写明不改的理由。
+
+### 2. 语义与实测口径
+
+- 版本 JSON 规则里的 `os.arch`、natives 键里的 `${arch}`、natives 分类器的架构后缀,指的都是**将要运行游戏的 JVM 的架构**
+  = 目标架构,而不是启动器进程的架构。
+- `McLauncher` 的 placeholders(`McLauncher.cs` 603 行那一串)里**没有**任何架构相关的值(逐项看过:`library_directory` /
+  `natives_directory` / `classpath` / `classpath_separator` / 认证 / 分辨率 / 启动器名与版本),所以没有需要换的占位符;
+  版本 JSON 的 `arguments` 里唯一与架构有关的是 `os.arch` 规则(1.19.4 / 26.3 的 `-Xss1M` 挂 `x86`,mac 用不到),B2b 已核对过。
+  本包**没有**给启动命令加任何 JVM 参数(红线)。
+- Apple 芯片上,凡是 mac natives 键里带 `${arch}` 的老式写法都会算出 `X64Only` 或 `Mixed` → 目标架构 x64,而
+  `NativeArchToken` 只把 `x86` 换成 `32`(arm64 与 x64 都得到 `64`),所以 mac 上这两处替换在现有数据里
+  **看不出架构差别**;真正起作用的是「按 x64 的架构后缀表选分类器」这一条(老式 `natives-osx` / `natives-macos`
+  在 arm64 下 rank=0,在 x64 下 rank=1)。
+
+### 3. 第 3 项:`Launcher\` 里的架构 / 位数读取点(不含 `Ai\`、`Sync\`,grep `Utils.ARCH` / `NativeArchToken(` /
+`RuntimeInformation` / `Is64BitProcess` / `Is64BitOperatingSystem`)
+
+| # | 文件:行 | 用途 | 本包是否改为目标架构 | 不改的理由 |
+|---|---|---|---|---|
+| 1 | `Utils.cs:347-358`(`IsOSPlatform`) | `OS_NAME` 的实现 | 否 | 这是「进程在哪个系统上」的唯一来源,不是架构;它本身还作为 LaunchArch 的 os 入参 |
+| 2 | `Utils.cs:247` + `360-369`(`RuntimeInformation.OSArchitecture`) | `ARCH` / `ArchName()` = **进程架构**的定义 | 否 | 架构读取的源头;本包新增的 LaunchArch 就是拿它当「进程架构」入参,保留语义不变 |
+| 3 | `Utils.cs:1303-1306`(public `CheckRules`) | 转调,传 `OS_NAME` / `ARCH` / `OS_VERSION` | 保留 | public 签名不变(B2b 已有可注入重载);本包 5 个调用点全部改传目标架构 |
+| 4 | `Installer.cs:206-212`(public `NativeArchToken()`) | 转调,读 `Utils.ARCH` | 保留(公开 API) | 内部重载(B2b)已存在;本包的使用方 `SubstNativeKey(key, arch)` 按目标架构 |
+| 5 | `Installer.cs:240-243`(public `SubstNativeKey(key)`) | 转调,读 `Utils.ARCH` | 保留(公开 API) | 本包 3 处调用点(`NativesJarRelpath`、`_install_libraries`、`Preflight._natives_entry`)已改成传 arch |
+| 6 | `Installer.cs:257-261`(public `SelectNativeClassifier(lib)`) | 转调,读 `Utils.OS_NAME` / `Utils.ARCH` | 保留(公开 API) | 6 处调用点已全部改成 `SelectNativeClassifier(lib, os, arch)` |
+| 7 | `Installer.cs:333-336`(public `NativesJarRelpath(lib, nkey)`) | 转调,读 `Utils.ARCH` | 保留(公开 API) | 新增 3 参重载;2 处调用点(ExtractNatives、Cleaner)已改传目标架构 |
+| 8 | `Installer.cs:454/773-775`(`ExtractNatives` / `_install_libraries`) | 目标架构 | **已改** | 见第 4 节 |
+| 9 | `Cleaner.cs:30`(`_lib_paths`→`_lib_relpaths`) | 目标架构 | **已改** | 见第 4 节 |
+| 10 | `McLauncher.cs:65`(私有 `_expand_args` 转调) | 读 `Utils.*` | 保留(私有,**现在没有调用方**) | 两处调用点在 626/627 行改成 internal 重载并传目标架构;转调壳留着不动以免无谓删除(见遗留 5) |
+| 11 | `McLauncher.cs:589-590`(BuildLaunchCommand) | 目标架构 | **已改** | 见第 4 节 |
+| 12 | `Preflight.cs:274/313/419` | 目标架构 | **已改** | 见第 4 节 |
+| 13 | `OfficialMigrate.cs:136/167` | 目标架构 | **已改** | 见第 4 节 |
+| 14 | `LaunchArch.cs:34` | 新文件里把 `Utils.ARCH` 当「进程架构」入参 | 新增 | 本包新增的唯一定义处 |
+| 15 | `MacNativeSupport.cs:112/178/184` | 判定函数内部 | 未改 | 已经是可注入形式(`Analyze(json, os, arch, os_version)`);按调用方传入的目标架构工作 |
+| 16 | `Java.cs:69`(`PlatformKeyFor(OS_NAME, ARCH)`) | Mojang 平台键 `mac-os` / `mac-os-arm64` | 未改 | **属于 Java 侧 → B2e** |
+| 17 | `Java.cs:139`(`AdoptiumArch(arch ?? Utils.ARCH)`) | Adoptium 包名/架构 | 未改 | B2e |
+| 18 | `Java.cs:1289` / `1439` / `1503`(`arch ?? Utils.ARCH`) | 厂商安装的默认架构 | 未改 | B2e |
+| 19 | `Java.cs:1335`(`Utils.ARCH == "x64"`) | `_IsLegacy32bit`(只在 Windows 生效) | 未改 | B2e;且这个分支在非 Windows 上根本不进 |
+| 20 | `Java.cs:1427`(`ZuluArch(arch ?? Utils.ARCH)`) | Zulu 包名/架构 | 未改 | B2e |
+| 21 | `Terracotta.cs:413`(`Utils.ARCH`) | 联机组件自己读 OS/架构 | 未改 | **属于 Terracotta → B2c**(B2b 第 6 项也这么记) |
+| 22 | `Sysinfo.cs:396`(`"arch", Utils.ARCH`)+ `249`(`PROCESSOR_ARCHITEW6432` / `PROCESSOR_ARCHITECTURE`)+ `256`(`RuntimeInformation.OSArchitecture`) | 系统信息展示(「系统信息」页给别人看的机器信息) | 未改 | 语义是「启动器进程所在机器」,不是「游戏 JVM 架构」;改了反而错 |
+| 23 | `Crash.cs:1363`(`Environment.Is64BitOperatingSystem`) | 崩溃报告里的内存/位数建议 | 未改 | 系统信息展示,与 JVM 架构无关 |
+
+`Is64BitProcess` 在 `Launcher\`(不含 `Ai\`、`Sync\`)里**没有任何出现**(grep 0 命中)。
+
+### 4. 对复制文件的每处改动
+
+共 5 个复制文件(+1 个只改类注释)。所有 public 签名、`NoWarn`、csproj、TFM 一律未动;
+`Java.cs`、`JavaRuntimeFiles.cs`、`Utils.cs` 一行未改;`MacNativeSupport.cs` 只改类注释里的一句话(Lead 授权范围)。
+
+| 文件 | 位置 | 原来是什么 | 改成什么 | 为什么 |
+|---|---|---|---|---|
+| `Launcher\Cleaner.cs` | `_lib_paths`(14-42)+ 新增 `_lib_relpaths`(46 起) | `_lib_paths` 里逐版本内联遍历 `libraries`,`Installer.SelectNativeClassifier(pyDict3)` / `Installer.NativesJarRelpath(pyDict3, text)` 读进程架构 | 循环体整段抽成 `internal static HashSet<string> _lib_relpaths(PyDict pyDict2, string libs, string os, string processArch, string osVersion)`(内部 `LaunchArch.For` 算一次),`_lib_paths` 对每个已装版本 `UnionWith(_lib_relpaths(pyDict2, libs, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION))`;两处调用换成带 arch 的重载 | 保留集合必须按目标架构算(改错会误删),而且要在 Windows 本机按 osx + arm64 断言 |
+| `Launcher\Installer.cs` | `NativesJarRelpath`(333-355) | public 方法体里 `SubstNativeKey(item.Key)` 读 `Utils.ARCH` | 新增 `internal static NativesJarRelpath(lib, nkey, arch)`,public 转调并传 `Utils.ARCH`;回退查找用 `SubstNativeKey(item.Key, arch)`,其余逐字相同 | 分类器回退查找的 `${arch}` 替换要按目标架构 |
+| `Launcher\Installer.cs` | `ExtractNatives`(411-460) | 方法里边遍历边查文件、边解压 | 抽出 `internal static List<KeyValuePair<string, PyDict>> _natives_to_extract(resolved, libs_dir, os, processArch, osVersion)`(含缺 jar 告警);`ExtractNatives` 保留 `NativesDir` / `EnsureDir` / 解压循环与父版本复制 | 原方法一边解压一边算,抽不出可注入重载;抽出的纯函数能断言「osx + arm64 下要解压的就是两个 x86_64 jar」 |
+| `Launcher\Installer.cs` | `_install_libraries`(773/806)+ 新增 `_native_classifier_entry` | `Utils.CheckRules(item.Get("rules"))`;classifiers 回退里 `SubstNativeKey(item2.Key)`;natives 分支内联 22 行 | 方法顶部加 `string arch = LaunchArch.For(resolved)`(算一次);`CheckRules(item.Get("rules"), null, Utils.OS_NAME, arch, Utils.OS_VERSION)`;natives 分支抽成 `internal static PyDict _native_classifier_entry(lib, downloads, os, arch, out string classifier)`(返回 null = 没有分类器,返回空 PyDict = 有分类器但清单里查不到 → 原来也是走 maven 兜底) | 安装时下载哪个 natives jar 要按目标架构 |
+| `Launcher\McLauncher.cs` | `BuildLaunchCommand` 586-590 | `Installer.Libs(pyDict2).Where(…clientreq…CheckRules(lib.Get("rules"))).Any(… SelectNativeClassifier(lib) …) && !Installer.NativesPresent(text6)` | `internal static bool _needs_natives(resolved, os, processArch, osVersion)`(原 Where/Any 的逐句搬运,内部按目标架构过 rules、选分类器);调用点 `_needs_natives(pyDict2, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION) && !Installer.NativesPresent(text6)`(**短路顺序未变**) | 预检判定要可注入断言;B2b 记的「arm64 上预检失效」在目标架构为 x64 后消失 |
+| `Launcher\McLauncher.cs` | 589 + 598 + 626/627 | `string text6 = …ExtractNatives(…)` 后没有架构变量;`_classpath_path(item, text5, Utils.OS_NAME, Utils.ARCH, …)`;两处 `_expand_args(…)` 走私有转调(内部读 `Utils.ARCH`) | 新增 `string arch = LaunchArch.For(pyDict2)`(**只算一次**);`_classpath_path(…, Utils.OS_NAME, arch, Utils.OS_VERSION)`;两处 `_expand_args(…, Utils.OS_NAME, arch, Utils.OS_VERSION)` | classpath 与 `os.arch` 规则按目标架构 |
+| `Launcher\Preflight.cs` | `_check_libraries`(272-328)+ 新增 `_natives_entry` | `Utils.CheckRules(item.Get("rules"))`;natives 分支内联(分类器 → classifiers 查找 → 相对路径) | 顶部 `string arch = LaunchArch.For(resolved)`(算一次);`CheckRules(item.Get("rules"), null, Utils.OS_NAME, arch, Utils.OS_VERSION)`;natives 分支抽成 `internal static PyDict _natives_entry(lib, downloads, name, os, arch, out string relpath)` | 体检要按目标架构检查 natives jar(原方法查文件,抽不出可注入重载) |
+| `Launcher\Preflight.cs` | `_check_natives`(396-423)+ 新增 `_natives_required` | 内联 foreach + `CheckRules(item.Get("rules"))` + `SelectNativeClassifier(item)`,`flag` + `break` | 抽成 `internal static bool _natives_required(resolved, os, processArch, osVersion)`(命中即 `return true`,语义与 break 相同);`_check_natives` 用它 | 同上;并保留「这里没有 clientreq 过滤」的原口径(与 `McLauncher._needs_natives` 差这一处) |
+| `Launcher\OfficialMigrate.cs` | `_library_relpaths`(129-182) | 按 `_inherit_chain` 边读盘边遍历,`Installer.SelectNativeClassifier(pyDict)` 读进程架构 | public 方法只负责「按链读好 JSON → 转调」;新增 `internal static List<string> _library_relpaths(List<PyDict> chain_jsons, os, processArch, osVersion)` 与私有 `_merged_libraries(chain_jsons)`(只含 `libraries` 键,按链顺序汇总,给 `LaunchArch.For` 用);`SelectNativeClassifier(pyDict, os, arch)` | 任务书指定做法:先用「链上所有 JSON 的 libraries」算目标架构,再照原顺序遍历;非 mac 平台上 `LaunchArch.For` 返回进程架构原值,顺序与去重逻辑一字未动 |
+| `Launcher\MacNativeSupport.cs` | 类注释 66-67 | 「本包**不接入任何调用点**,只给 Lead 裁决…」 | 「B2d 起由 `LaunchArch` 接入:只有 osx + 进程架构 arm64 时会问它…」 | 本包接入了;行为、判定口径、方法体一行未改(Lead 只授权这一句) |
+
+`Installer.cs` 里 `ExtractNatives` 的抽取有**一处非功能性差别**(已写在方法注释里):原来「缺 jar 的告警」与「解压」是逐库交错的,
+现在先算完「要解压哪些」再逐个解压 —— 告警顺序可能前移,解压顺序与文件内容不变,且 `num > 0 && NativesPresent(text)` 的收尾判断未变。
+`McLauncher` 的私有 3 参 `_expand_args` 现在没有调用方(遗留 5)。
+
+### 5. 新文件
+
+- `src/TipCL.Core/Launcher/LaunchArch.cs`(58 行):第 1 项的目标架构纯函数 + 类注释里的判定依据。
+- `tests/TipCL.Tests/B2dFixtures.cs`:B2d 的版本 JSON 夹具(8 个取证版本 + 人造 Mixed / NoMacNatives / 继承链 /
+  「只有键没有 path 的 classifiers」),**不含用例**。
+- `tests/TipCL.Tests/B2dLaunchArchTests.cs`:56 条。
+- `tests/TipCL.Tests/B2dCallSiteArchTests.cs`:53 条。
+- `tests/TipCL.Tests/B2dNonAppleNailsTests.cs`:23 条。
+
+### 6. 测试(新增 132 条用例,总数 1038 → 1170)
+
+- `LaunchArch.For`:8 个版本 × 5 种平台组合逐格断言(40 条:`osx+arm64` 里 6 个老版本 → `x64`、1.19.4 / 26.3 → `arm64`;
+  `osx+x64`、`windows+x64`、`windows+arm64`、`linux+arm64` 一律等于进程架构),再加 null JSON、空 `libraries`、
+  人造 `Mixed` → x64、人造 `NoMacNatives` → 进程架构、`Arm64Native` 显式钉 Kind、确定性(同一版本两次调用相同、
+  与 osVersion 无关)、「只有 6 个老版本被改架构」、公开入口在本机恒等于 `Utils.ARCH`、注入本机三字段 == 注入字面量。
+- 每个调用点:osx + arm64 下 1.16.5 形态选到 x86_64 分类器(`natives-macos`,与 osx + x64 相同)、
+  1.12.2 老式参数版本选到 `natives-osx`、1.19.4 / 26.3 形态与改动前相同(新式库任何架构都返回 null);
+  `_natives_to_extract` 在 `TestHome.Dir` 下自造两个空 jar 后按 osx+arm64 拿到那两条 x86_64 路径(与 osx+x64 相同、
+  与 windows 注入相同),并另有一条「jar 不存在时返回空列表」证明前一条真靠文件命中;
+  `Cleaner._lib_relpaths` 按 Lead 要求断言 x86_64 natives jar **在保留集合里**,并另有一条用「只有键没有 path 的
+  `natives-macos-${arch}` 分类器」证明保留集合里那条 maven 兜底路径确实由目标架构算出来;
+  缺 natives 预检 `_needs_natives` 与 `Preflight._natives_required` 逐版本断言(旧版本需要、1.19.4 / 26.3 不需要、
+  windows 两种形态与改动前一致),并对照「按进程架构 arm64 直接判」的旧写法证明 B2b 记的风险已消失;
+  `OfficialMigrate._library_relpaths` 用「子版本有 arm64 + 父版本 1.16.5」的混合链断言整链退 x64、1.19.4 链不变、
+  顺序与去重照旧。
+- 「非 Apple 芯片行为未变」钉子:arch 型纯函数用 `Utils.ARCH` 与 `LaunchArch` 算出的值调用结果逐项相等
+  (Windows 与 Intel Mac 两种注入);(os, 进程架构, osVersion) 型纯函数用「本机三字段」与「字面量 windows + x64」逐项相等。
+- 期望值全部来自「读过的源码行为」或「B2b 的线上证据」,每条用例的注释里都写明是哪一种。
+
+### 7. 验证命令与实际结果(全部在本机真实执行过)
+
+| 检查 | 结果 |
+|---|---|
+| 开工前 `%LOCALAPPDATA%\TipCL` 元信息 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与 Lead 基线**一致**(不一致就停手,本次没有出现) |
+| `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 0,0 错误;警告**只有 SYSLIB0014 ×1**(`Sync\PhoneClient.cs:116`,与 B2b 相同) |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0:**通过 1170 / 失败 0 / 跳过 0**(862 ms,没有 `Win32Exception (5)`,没有超时) |
+| `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 0:**1170 通过 / 0 失败 / 0 跳过 / 不支持 0**,与 `dotnet test` 一致;B2d 三个文件 56 + 53 + 23 = 132 条 |
+| `%TEMP%` 的 `tipcl*` 目录名字集合(两条通道各前后各一次) | 86 → 86(两条通道都是),测试窗口内**新增 0 个** |
+| `--smoke --theme light / dark` | 退出码 0 / 0;**3739 / 3751 字节**,与 A1 起一直一致 |
+| 测试后 `%LOCALAPPDATA%\TipCL` 元信息 | 9328 个文件 / 889530606 字节 / 2026-11-10 20:42:16,**与开工时逐项一致** |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL` | **0 个** |
+| `src\TipCL.Core\` 全部 `.cs` 对 Windows 源比 SHA256 | 总数 **246**;一致 **224**、有改动 **14**、Windows 源里没有对应文件 **8**。有改动的 14 = 原有 11(`Ai\ExtraTools.cs`、`GlobalMods.cs`、`Java.cs`、`Sysinfo.cs`、`Plugins\DotNetPluginContext.cs`、`Plugins\Sdk\PluginSdk.cs`、`Plugins\Sdk\PluginUiRegistry.cs`、`Plugins\SecretStore.cs`、`Launcher\Utils.cs`、`Launcher\Installer.cs`、`Launcher\McLauncher.cs`)+ 本包 3 个(`Launcher\Cleaner.cs`、`Launcher\OfficialMigrate.cs`、`Launcher\Preflight.cs`);没有对应文件的 8 = 原有 7 + 本包 `Launcher\LaunchArch.cs` |
+| 联网请求数(本包) | **0**(所需证据 B2a / B2b 已取好,`artifacts\b2b\` 只读复用;没有启动任何外部进程) |
+
+### 8. 未验证项(本机是 Windows,没有 Mac)
+
+1. **整条 Rosetta 路径未在真机上验证**:Apple 芯片上目标架构为 x64 之后,`SelectNativeClassifier` /
+   `${arch}` / `os.arch` / classpath / 预检在 mac 上的真实取值链(`Utils.OS_NAME == "osx"`、`Utils.ARCH == "arm64"`
+   是推断),本机只测到纯函数。
+2. x64 Java(经 Rosetta)能否加载这些 x86_64 `.dylib`、老版本在 Apple 芯片上的实际启动结果 —— 属 B2e 与真机。
+3. 1.19.4 及更新的版本在 Apple 芯片上「目标架构 arm64 + 两个 natives jar 都进 classpath」是否正确(B2b 遗留第 2 条)。
+4. 模组 / 整合包版本(继承链合并后的 JSON)上的目标架构判定:`MacNativeSupport` 可能见到 vanilla 8 份 JSON 里
+   没有的 classifier 写法(B2b 遗留第 4 条,本包把它的结论接到了真实调用点上,风险面因此变大 —— 见遗留 2)。
+
+### 9. 遗留与风险
+
+1. `_lib_relpaths`(Cleaner)的抽取改变了 `Cleaner` 内部结构(行为等价:每个版本的保留集合逐项相同,
+   只是改成先算 `arch` 再进循环)。若 Lead 认为超出「加可注入重载」的范围,回退方式是把 `_lib_relpaths` 的方法体
+   搬回 `_lib_paths` 的循环、循环里传 `Utils.*`,B2d 的 Cleaner 用例随之改成对 `Installer.SelectNativeClassifier`
+   的断言(与 B2b 遗留第 5 条同型)。
+2. `Mixed` 在真实数据里还没出现过(8 份 vanilla JSON 只有 `X64Only` / `Arm64Native`);模组版本一旦出现
+   「一半有 arm64、一半没有」,会整份退到 x64 —— 这是 Lead 裁决的口径,若真机上发现某个「没有 arm64 变体」的库
+   其实是 universal 二进制,要改的是 `MacNativeSupport._key_arch`(B2b 遗留第 4 条)。
+3. `_install_libraries` 的目标架构算了一次(给 rules 过滤用),`_native_classifier_entry` 又按传入的同一个 arch 工作 ——
+   两处用的是同一个值(方法注释写明传入的是目标架构);`Preflight._natives_entry` 同理。若 Lead 希望
+   完全只留一个计算点,做法是把 rules 过滤也一起抽成同一个纯函数。
+4. `ExtractNatives` 的告警与解压顺序变化(见第 4 节末),无副作用、不改文件内容,但 diff 里能看出来,留给 Lead 复核。
+5. `McLauncher` 的私有 3 参 `_expand_args`(63-66 行)现在**没有调用方**(它是 B2b 留的转调壳);本包按
+   「不扩大 diff」保留,如果 Lead 认为死代码该删,直接删掉那 4 行即可(测试对它没有断言)。
+6. `Preflight._natives_required` 与 `McLauncher._needs_natives` 是两处口径略有差别的判定(clientreq 过滤),
+   本包按「各自保持原样」处理,没有合并成一个(B2b 的调用点清单也是分开列的)。
+

@@ -240,8 +240,41 @@ public static class Preflight
 		return PPath.Join(inst.path, "mods");
 	}
 
+	/// <summary>
+	/// B2d:Preflight._check_libraries 里「这个库要检查的 natives jar」那一段(逐句搬运),抽成纯函数 ——
+	/// 原方法一边算路径一边查文件,抽不出可注入重载,所以把「决定要查哪个 jar」抽出来。
+	/// <paramref name="arch"/> 是**目标架构**(见 <see cref="LaunchArch"/>),由 _check_libraries 按合并后的
+	/// 版本 JSON 算一次后传进来(不在循环里反复算)。没有 natives 分类器时返回 null(relpath 置 null);
+	/// 否则返回 classifiers 里选中的那条下载条目(原来的 pyDict4),relpath 是它的相对路径。
+	/// </summary>
+	internal static PyDict _natives_entry(PyDict lib, PyDict downloads, object name, string os, string arch, out string relpath)
+	{
+		string text4 = Installer.SelectNativeClassifier(lib, os, arch);
+		if (string.IsNullOrEmpty(text4))
+		{
+			relpath = null;
+			return null;
+		}
+		PyDict pyDict3 = Py.DictOr(Py.Or(downloads.Get("classifiers"), new PyDict()));
+		PyDict pyDict4 = Py.DictOr(Py.Or(pyDict3.Get(text4), new PyDict()));
+		if (pyDict4.Count == 0)
+		{
+			foreach (KeyValuePair<string, object> item2 in pyDict3)
+			{
+				if (Installer.SubstNativeKey(item2.Key, arch) == text4)
+				{
+					pyDict4 = Py.DictOr(Py.Or(item2.Value, new PyDict()));
+					break;
+				}
+			}
+		}
+		relpath = (Py.Truthy(pyDict4.Get("path")) ? Py.Str(pyDict4["path"]) : Utils.MavenArtifactPath(Py.Str(name) + ":" + text4));
+		return pyDict4;
+	}
+
 	private static void _check_libraries(Instance inst, PyDict resolved, List<object> items)
 	{
+		string arch = LaunchArch.For(resolved);
 		string text = inst.LibrariesDir();
 		List<string> list = new List<string>();
 		List<string> list2 = new List<string>();
@@ -253,7 +286,7 @@ public static class Preflight
 				break;
 			}
 			object obj = item.Get("clientreq");
-			if ((obj is bool && !(bool)obj) || !Utils.CheckRules(item.Get("rules")))
+			if ((obj is bool && !(bool)obj) || !Utils.CheckRules(item.Get("rules"), null, Utils.OS_NAME, arch, Utils.OS_VERSION))
 			{
 				continue;
 			}
@@ -280,25 +313,11 @@ public static class Preflight
 					list2.Add(new PPath(text2).Name);
 				}
 			}
-			string text4 = Installer.SelectNativeClassifier(item);
-			if (string.IsNullOrEmpty(text4) || num >= 400)
+			PyDict pyDict4 = _natives_entry(item, pyDict, o, Utils.OS_NAME, arch, out string text5);
+			if (string.IsNullOrEmpty(text5) || num >= 400)
 			{
 				continue;
 			}
-			PyDict pyDict3 = Py.DictOr(Py.Or(pyDict.Get("classifiers"), new PyDict()));
-			PyDict pyDict4 = Py.DictOr(Py.Or(pyDict3.Get(text4), new PyDict()));
-			if (pyDict4.Count == 0)
-			{
-				foreach (KeyValuePair<string, object> item2 in pyDict3)
-				{
-					if (Installer.SubstNativeKey(item2.Key) == text4)
-					{
-						pyDict4 = Py.DictOr(Py.Or(item2.Value, new PyDict()));
-						break;
-					}
-				}
-			}
-			string text5 = (Py.Truthy(pyDict4.Get("path")) ? Py.Str(pyDict4["path"]) : Utils.MavenArtifactPath(Py.Str(o) + ":" + text4));
 			string text6 = PPath.Join(text, text5);
 			num++;
 			if (!new PPath(text6).IsFile())
@@ -377,17 +396,27 @@ public static class Preflight
 		}
 	}
 
-	private static void _check_natives(Instance inst, string version, PyDict resolved, List<object> items)
+	/// <summary>
+	/// B2d:Preflight._check_natives 里「这个版本有没有需要 natives 的库」的判定,抽成可注入 os /
+	/// 进程架构 / osVersion 的纯函数(逐句搬运原来那个带 break 的循环)。
+	/// 注意这里**没有** clientreq 过滤,与 McLauncher._needs_natives 的口径差这一处,两边各自保持原样。
+	/// </summary>
+	internal static bool _natives_required(PyDict resolved, string os, string processArch, string osVersion)
 	{
-		bool flag = false;
+		string arch = LaunchArch.For(resolved, os, processArch, osVersion);
 		foreach (PyDict item in Installer.Libs(resolved))
 		{
-			if (Utils.CheckRules(item.Get("rules")) && !string.IsNullOrEmpty(Installer.SelectNativeClassifier(item)))
+			if (Utils.CheckRules(item.Get("rules"), null, os, arch, osVersion) && !string.IsNullOrEmpty(Installer.SelectNativeClassifier(item, os, arch)))
 			{
-				flag = true;
-				break;
+				return true;
 			}
 		}
+		return false;
+	}
+
+	private static void _check_natives(Instance inst, string version, PyDict resolved, List<object> items)
+	{
+		bool flag = _natives_required(resolved, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION);
 		if (flag)
 		{
 			string text;

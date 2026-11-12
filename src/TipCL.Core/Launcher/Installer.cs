@@ -332,13 +332,23 @@ public class Installer
 
 	public static string NativesJarRelpath(PyDict lib, string nkey)
 	{
+		return NativesJarRelpath(lib, nkey, Utils.ARCH);
+	}
+
+	/// <summary>
+	/// B2d:可注入 arch 的内部重载(arch = 本次启动的目标架构,见 <see cref="LaunchArch"/>)。
+	/// 逻辑与原方法逐字相同,只有一处替换:回退查找分类器时用传入的 arch 做 ${arch} 替换
+	/// (原来是静态 Utils.ARCH)。公开方法转调本方法并传 Utils.ARCH。
+	/// </summary>
+	internal static string NativesJarRelpath(PyDict lib, string nkey, string arch)
+	{
 		PyDict pyDict = Py.DictOr(Py.Or(Py.DictOr(Py.Or(lib.Get("downloads"), new PyDict())).Get("classifiers"), new PyDict()));
 		object o = pyDict.Get(nkey);
 		if (!Py.Truthy(o))
 		{
 			foreach (KeyValuePair<string, object> item in pyDict)
 			{
-				if (SubstNativeKey(item.Key) == nkey)
+				if (SubstNativeKey(item.Key, arch) == nkey)
 				{
 					o = item.Value;
 					break;
@@ -401,30 +411,51 @@ public class Installer
 		return list;
 	}
 
-	public static string ExtractNatives(Instance instance, PyDict resolved, string version_id)
+	/// <summary>
+	/// B2d:ExtractNatives 里「这个版本要解压哪些 natives jar」的那一段(逐句搬运,含缺 jar 的告警),
+	/// 抽成可注入 os / 进程架构 / osVersion 的纯函数 —— 因为原方法一边解压一边算,抽不出可注入重载。
+	/// 目标架构由 <see cref="LaunchArch"/> 算一次,分类器选择与 jar 路径回退都按它走;
+	/// 返回值是 (natives jar 绝对路径, extract 字典) 的列表,顺序与原来的遍历顺序一致。
+	/// 与原代码的唯一差别:原来「缺 jar 的告警」与「解压」是逐库交错的,现在先算完列表再逐个解压
+	/// (告警与解压都不改文件内容,解压顺序保持原样)。
+	/// </summary>
+	internal static List<KeyValuePair<string, PyDict>> _natives_to_extract(PyDict resolved, string libs_dir, string os, string processArch, string osVersion)
 	{
-		string text = NativesDir(instance, version_id, resolved);
-		Utils.EnsureDir(text);
-		string text2 = instance.LibrariesDir();
-		int num = 0;
+		string arch = LaunchArch.For(resolved, os, processArch, osVersion);
+		List<KeyValuePair<string, PyDict>> list = new List<KeyValuePair<string, PyDict>>();
 		foreach (PyDict item in Libs(resolved))
 		{
-			if ((Py.Eq(item.Get("clientreq"), false) && item.Get("clientreq") is bool) || !Utils.CheckRules(item.Get("rules")))
+			if ((Py.Eq(item.Get("clientreq"), false) && item.Get("clientreq") is bool) || !Utils.CheckRules(item.Get("rules"), null, os, arch, osVersion))
 			{
 				continue;
 			}
-			string text3 = SelectNativeClassifier(item);
+			string text3 = SelectNativeClassifier(item, os, arch);
 			if (string.IsNullOrEmpty(text3))
 			{
 				continue;
 			}
-			string text4 = PPath.Join(text2, NativesJarRelpath(item, text3));
+			string text4 = PPath.Join(libs_dir, NativesJarRelpath(item, text3, arch));
 			if (!new PPath(text4).IsFile())
 			{
 				Utils.log.Warning("缺少 natives jar: %s", text4);
 				continue;
 			}
-			List<string> exclude = StrList(Py.DictOr(Py.Or(item.Get("extract"), new PyDict())).Get("exclude"));
+			list.Add(new KeyValuePair<string, PyDict>(text4, Py.DictOr(Py.Or(item.Get("extract"), new PyDict()))));
+		}
+		return list;
+	}
+
+	public static string ExtractNatives(Instance instance, PyDict resolved, string version_id)
+	{
+		string text = NativesDir(instance, version_id, resolved);
+		Utils.EnsureDir(text);
+		string text2 = instance.LibrariesDir();
+		List<KeyValuePair<string, PyDict>> list = _natives_to_extract(resolved, text2, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION);
+		int num = 0;
+		foreach (KeyValuePair<string, PyDict> item in list)
+		{
+			string text4 = item.Key;
+			List<string> exclude = StrList(item.Value.Get("exclude"));
 			try
 			{
 				DownloadManager.ExtractJarNatives(text4, text, exclude);
@@ -697,18 +728,49 @@ public class Installer
 		return PPath.Join(instance.VersionsDir(), text2, text2 + ".jar");
 	}
 
+	/// <summary>
+	/// B2d:_install_libraries 里「这个库要下载哪个 natives 分类器 jar」的那一段(逐句搬运),抽成纯函数。
+	/// <paramref name="arch"/> 是**目标架构**(见 <see cref="LaunchArch"/>),由调用方按合并后的版本 JSON 算一次;
+	/// 分类器选择与 classifiers 键的 ${arch} 回退查找都按它走。
+	/// 返回 null 表示这个库没有可选的 natives 分类器(原来直接 continue);
+	/// 返回空 PyDict 表示分类器存在但下载清单里查不到条目(原来也是走 maven 兜底路径)。
+	/// </summary>
+	internal static PyDict _native_classifier_entry(PyDict lib, PyDict downloads, string os, string arch, out string classifier)
+	{
+		classifier = SelectNativeClassifier(lib, os, arch);
+		if (string.IsNullOrEmpty(classifier))
+		{
+			return null;
+		}
+		PyDict pyDict3 = Py.DictOr(Py.Or(downloads.Get("classifiers"), new PyDict()));
+		PyDict pyDict4 = Py.DictOr(Py.Or(pyDict3.Get(classifier), new PyDict()));
+		if (pyDict4.Count == 0)
+		{
+			foreach (KeyValuePair<string, object> item2 in pyDict3)
+			{
+				if (SubstNativeKey(item2.Key, arch) == classifier)
+				{
+					pyDict4 = Py.DictOr(Py.Or(item2.Value, new PyDict()));
+					break;
+				}
+			}
+		}
+		return pyDict4;
+	}
+
 	public void _install_libraries(PyDict resolved, string version_id, bool force = false)
 	{
 		Instance obj = instance;
 		string text = obj.LibrariesDir();
 		string text2 = NativesDir(obj, version_id, resolved);
 		Utils.EnsureDir(text2);
+		string arch = LaunchArch.For(resolved);
 		List<DownloadTask> list = new List<DownloadTask>();
 		List<KeyValuePair<string, PyDict>> list2 = new List<KeyValuePair<string, PyDict>>();
 		foreach (PyDict item in Libs(resolved))
 		{
 			object obj2 = item.Get("clientreq");
-			if ((obj2 is bool && !(bool)obj2) || !Utils.CheckRules(item.Get("rules")))
+			if ((obj2 is bool && !(bool)obj2) || !Utils.CheckRules(item.Get("rules"), null, Utils.OS_NAME, arch, Utils.OS_VERSION))
 			{
 				continue;
 			}
@@ -744,23 +806,10 @@ public class Installer
 			{
 				Utils.log.Warning("库 %s 没有可下载的 artifact，跳过", text3);
 			}
-			string text8 = SelectNativeClassifier(item);
-			if (string.IsNullOrEmpty(text8))
+			PyDict pyDict4 = _native_classifier_entry(item, pyDict, Utils.OS_NAME, arch, out string text8);
+			if (pyDict4 == null)
 			{
 				continue;
-			}
-			PyDict pyDict3 = Py.DictOr(Py.Or(pyDict.Get("classifiers"), new PyDict()));
-			PyDict pyDict4 = Py.DictOr(Py.Or(pyDict3.Get(text8), new PyDict()));
-			if (pyDict4.Count == 0)
-			{
-				foreach (KeyValuePair<string, object> item2 in pyDict3)
-				{
-					if (SubstNativeKey(item2.Key) == text8)
-					{
-						pyDict4 = Py.DictOr(Py.Or(item2.Value, new PyDict()));
-						break;
-					}
-				}
 			}
 			string text9 = (Py.Truthy(pyDict4.Get("path")) ? Py.Str(pyDict4["path"]) : Utils.MavenArtifactPath(text3 + ":" + text8));
 			string text10 = PPath.Join(text, text9);
