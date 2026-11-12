@@ -22,4 +22,16 @@
     <PackageReference Include="Avalonia.Headless" Version="$(TipCLAvaloniaVersion)" />
   </ItemGroup>
 
+  <!-- C1a:内置图标字体(替代系统 Segoe MDL2 / Fluent Icons)。Windows 版是 WPF 的 <Resource>,
+       Avalonia 对应的是 AvaloniaResource,运行期用 avares://TipCL/Resources/fonts/TipCLIcons.ttf#TipCL Icons 取。
+       .axaml 文件不用在这里列:Avalonia 的 build props 默认把 **\*.axaml 收进 AvaloniaXaml。 -->
+  <ItemGroup>
+    <AvaloniaResource Include="Resources\fonts\TipCLIcons.ttf" />
+  </ItemGroup>
+
+  <!-- C1a:色板与图标系统的用例要看 internal 的 Palette / LucideAssets(与 D-19 同一手法)。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TipCL.Tests" />
+  </ItemGroup>
+
 </Project>
