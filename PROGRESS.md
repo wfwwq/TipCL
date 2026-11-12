@@ -2718,6 +2718,38 @@ Windows 上的等价性:同一个 json 对象(`ExportVersionJson(..., isWindows:
 5. `%TEMP%` 下出现了一个叫 `tipcl-probe` 的目录(创建于 22:28:19,窗口内),**不是本包产物**:仓库里没有任何代码提到这个名字,目录里是另一个会话的 .NET 探针工程(`probe.csproj` / `Program.cs` / `bin` / `obj` / `out` / `scratch`)。已记入 [DECISIONS.md](DECISIONS.md) D-61。
 6. 本包没有改 `Utils.cs` / `Java.cs` / `McLauncher.cs` / `Installer.cs` / `Preflight.cs` / `GlobalMods.cs` / 其它复制文件;没有改 TFM、没有扩 `NoWarn`、没有新增警告;没有联网请求。
 
+### Lead 验收(2026-11-12 22:40)
+
+结论:**B2c3 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src/TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 有对应文件的 238 个里 216 一致、22 个有改动(原有 18 个 + 本包 `BackendApi.cs`、`Shortcut.cs`、`Updater.cs`、`VersionOps.cs`);无对应文件的 10 个是原有 9 个 + `Launcher\PosixShell.cs` |
+| `git diff b54f409..HEAD -- BackendApi.cs`(Lead 逐行读过) | 只有 `export_launch_script` 里的两行:版本 JSON 经 `ExportVersionJson`,文件后缀与写盘经 `ExportScriptExtension` / `ExportLaunchScript`。Windows 上传入的仍是同一个 JSON 对象、后缀仍是 `.bat`、仍调 `ExportLaunchBat` |
+| `Updater.cs`、`Shortcut.cs`、`VersionOps.cs` 的改动与新文件 `PosixShell.cs`(Lead 逐行读过) | `Updater`:`Download` / `ApplyStaged` 开头加平台守卫,`Check` 两个返回各多一个 `can_self_update` 键,`BuildApplyScript` 未动。`Shortcut`:`Chmod755` 不再是空方法;mac 的 `.command` 正文改用单引号规则,描述里的换行压成空格;Windows / Linux 分支收到的参数未变。`VersionOps`:`ExportLaunchBat` 未动,新增的都是独立方法 |
+| 红线文件、`Ported\` 下全部文件、`TipCL.Tests.csproj`、`Directory.Build.props`、`TipCL.Core.csproj` | 未改 |
+| 已有测试被改动的 | 0 个 |
+| 本次提交改动的文本文件做严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告只有 SYSLIB0014 ×1 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 1680 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 1680 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致;其下没有出现 `exports` 目录 |
+| 真实桌面(Lead 复跑前后) | 条目数 14 → 14,最新写入时间未变 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(Lead 复跑前后) | 87 → 87,没有新名字 |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL`,以及新起的 `powershell` | 0 个 |
+| B2c3 测试扫描 | 没有联网、起进程、调 `Updater.Check` / `Download` / `ApplyStaged`、调 `Shortcut` 的创建 / 删除 / 桌面目录入口、读桌面路径、改环境变量 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+Lead 的说明:
+
+- `%TEMP%\tipcl-probe`(22:28:19 创建)Lead 复核:前缀在本仓库 `src` / `tests` 里零命中,目录里是一个独立的 .NET 工程,不是本仓库的测试所建。
+- 这一包顺带堵了一个从 Windows 版带来的问题:mac 的 `.command` 快捷方式原来把实例名、版本号、用户名用双引号直接拼进 shell 脚本且不转义,名字里带引号或 `$` 就能注入命令。
+- D-60、D-61 接受。
+- 留给界面阶段:`can_self_update` 为 false 时界面要把「立即更新」换成「打开下载页」;下载页地址清单里目前只有更新包的 `url`,没有单独的页面地址,C 阶段接设置页时再定。
+
+B2 阶段(mac 逻辑核对)到此全部完成:B2a、B2b、B2d、B2e、B2c1、B2c2、B2c3。
+
 
 
 
