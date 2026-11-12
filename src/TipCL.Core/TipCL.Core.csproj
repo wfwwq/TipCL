@@ -43,6 +43,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      B1a:`IImageCodec` 的 mac 实现(SkiaImageCodec / SkiaDecodedImage),WebP 也走 Skia,不引 ImageSharp。
+      版本必须与 Avalonia 解析到的 SkiaSharp 一致 → 放在 Directory.Build.props 的 TipCLSkiaSharpVersion。
+    -->
+    <PackageReference Include="SkiaSharp" Version="$(TipCLSkiaSharpVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Resources\locales\en.json" LogicalName="TipCL.Core.locales.en.json" />
     <EmbeddedResource Include="Resources\locales\zh_CN.json" LogicalName="TipCL.Core.locales.zh_CN.json" />
     <EmbeddedResource Include="Resources\ai\model_rules.json" LogicalName="TipCL.Core.ai.model_rules.json" />

@@ -22,6 +22,12 @@
   <PropertyGroup>
     <!-- A2 抬到 flatcontainer 索引里最高的 11.x 稳定版,取代 D-01 的 11.3.2(见 DECISIONS.md D-10)。 -->
     <TipCLAvaloniaVersion>11.3.23</TipCLAvaloniaVersion>
+    <!--
+      B1a:`TipCL.Core` 的 Skia 图片编解码用(见 GOAL §3「图片」)。
+      **必须与 Avalonia 解析到的 SkiaSharp 版本一致**(Avalonia 11.3.23 → SkiaSharp 2.88.9),
+      升级 Avalonia 时一起核对;两个版本不一致时进程里会同时加载两份 SkiaSharp,原生库会冲突。
+    -->
+    <TipCLSkiaSharpVersion>2.88.9</TipCLSkiaSharpVersion>
   </PropertyGroup>
 
 </Project>

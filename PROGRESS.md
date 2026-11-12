@@ -13,7 +13,10 @@
 | A4 | Ai + Sync | ✅ 完成(见下;**Ai 53/65 + Sync 4/4 参与编译;全工程 19 个文件待 A5 恢复编译**,见 D-18;这 19 个文件已在 A5 全部恢复) |
 | A5 | Plugins + BackendApi + Bridge | ✅ 完成(见下;**19 个待恢复文件全部恢复,`TipCL.Core` 里 0 个被排除编译的文件**) |
 | A6 | 测试移植 | ✅ 完成(见下;**搬来 29 个文件 → A 类 15 / B 类 4 / C 类 10;可跑用例 127 条,测试总数 523 → 652,两条通道都 652/652 全绿**) |
-| B1-B3 | mac 平台层 / 逻辑核对 / 打包 | 未开始 |
+| B1a | mac 平台服务(Keychain / Skia 编解码 / 插件凭据 AES-GCM / 启动接线) | ✅ 完成(见下;**新增 114 条用例,总数 652 → 766,两条通道都 766/766 全绿**) |
+| B1b | 运行时差异修复(ShellOpen / 去提权 / 其它 A2x) | 未开始 |
+| B2 | mac 逻辑核对 + 单测 | 未开始 |
+| B3 | 打包 | 未开始 |
 | C1-C8 | 界面 | 未开始 |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
@@ -895,3 +898,153 @@ Lead 的更正与裁决:
 - **`PhoneLinkTests` 维持排除**。除了 testhost 里 `HttpListener` 报「句柄无效」,还有第二个原因:它经 Core 的 `PhoneLink.cs:279` 往 `%TEMP%\tipcl-phone-sync` 写文件,违反「测试临时文件落在仓库内」。Lead 没有在本机复跑它。恢复条件:B2 把该临时目录改成可注入之后。
 - 红线记录:A6 适配前的两次试跑(08:15 / 08:19)在 `%TEMP%` 建了一个空目录 `tipcl-phone-sync`,属于写到了仓库之外。目录为空,Lead 没有删除,已报用户。
 - 执行顺序敏感(D-25 / D-26):同类用例共用缓存的 `Utils.ROOT`,这是 Windows 测试原有的性质。以后不许给测试类加并行或乱序。
+
+## B1a mac 平台服务(Keychain / Skia 编解码 / 插件凭据 / 启动接线)
+
+任务书:`GOAL.md` §3 的「凭据」与「图片」两行 + Lead 给 B1a 的五条裁决。**只做 B1a**,B1b / B2 / B3 未开始。
+
+### 做了什么
+
+1. **`MacKeychainSecretStore`**(新):`ISecretStore` 的 mac 实现,走 `/usr/bin/security` 的 generic password。
+   命令行拼装是三条纯函数(`ReadArguments` / `WriteArguments` / `DeleteArguments`),进程调用通过构造函数注入的
+   运行器委托(默认运行器用 `ProcessStartInfo.ArgumentList`,`UseShellExecute=false`,stdout/stderr 并发读)。
+   存储编码 = `b64:` + 密码 UTF-8 Base64;错误语义对齐 `WinCredSecretStore`(读不到 → null;删不到 →
+   `SecretNotFoundException`;其它 → `OSError`),异常消息里不含密码。
+2. **`SkiaImageCodec` / `SkiaDecodedImage`**(新):`IImageCodec` 的 Skia 实现,PNG / JPEG / WebP / GIF / BMP 实测都能解
+   (WebP 直接由 Skia 解,不引 ImageSharp),`HasAlpha` / `Resize` / `EncodePng` / `EncodeJpeg` / `Dispose` 逐项对齐 WPF 版,
+   差异见下面的对照表。
+3. **`Plugins\SecretStore.cs` 的非 Windows 分支**:新增魔数 `TCS2` = AES-256-GCM(主密钥 32 字节随机数,
+   Base64 存进 `ISecretStore` 的 `TipCL plugin secrets` / `master-key`)。Windows 仍写 `TCS1`;非 Windows 且没有凭据库时
+   保持 `TCS0`。为了在本机测到 AES 分支,加了 `internal` 注入构造函数(公开构造函数签名与 Windows 行为不变)。
+4. **启动接线**:`PlatformBootstrap.Init()`(Core)给 `PlatformServices.ImageCodec`(所有平台 → Skia)与
+   `PlatformServices.SecretStore`(仅 mac → Keychain,其它平台保持 null)赋值,只赋值、不做任何 I/O;
+   `TipCL.App\Program.cs` 在 `Main` 第一行调用它(桌面与 `--smoke` 共用)。
+5. **测试**:新增 5 个文件、114 个用例(两条通道都全绿,总数 652 → 766),外加 webp 夹具入仓库。
+
+### 关键文件
+
+| 文件 | 说明 |
+|---|---|
+| [MacKeychainSecretStore.cs](src/TipCL.Core/Platform/Mac/MacKeychainSecretStore.cs) | 新。mac 凭据库实现 + 命令行纯函数 + `SecretStoreCommandResult` |
+| [SkiaImageCodec.cs](src/TipCL.Core/Platform/Skia/SkiaImageCodec.cs) | 新。Skia 解码入口(EXIF 方向、alpha 判定、失败异常) |
+| [SkiaDecodedImage.cs](src/TipCL.Core/Platform/Skia/SkiaDecodedImage.cs) | 新。`Resize` / `EncodePng` / `EncodeJpeg` / `Dispose` + `ApplyOrigin` |
+| [PlatformBootstrap.cs](src/TipCL.Core/Platform/PlatformBootstrap.cs) | 新。平台接线(纯函数 + 只赋值的 `Init`) |
+| [SecretStore.cs](src/TipCL.Core/Plugins/SecretStore.cs) | 改。TCS2 / 注入入口(逐处见下) |
+| [Program.cs](src/TipCL.App/Program.cs) | 改。`Main` 第一行 `PlatformBootstrap.Init()`(3 行) |
+| [Directory.Build.props](Directory.Build.props) | 改。新增 `TipCLSkiaSharpVersion = 2.88.9` |
+| [TipCL.Core.csproj](src/TipCL.Core/TipCL.Core.csproj) | 改。加 `SkiaSharp` 包引用 |
+| [TipCL.Tests.csproj](tests/TipCL.Tests/TipCL.Tests.csproj) | 改。webp 夹具 `CopyToOutputDirectory` |
+| [fixtures/webp-sample.webp](tests/TipCL.Tests/fixtures/webp-sample.webp) | 新(从 Windows 测试目录字节级复制,SHA256 `1BF9449D...098A`,4880 字节,与源一致) |
+
+测试文件:`B1aKeychainTests.cs`(39)、`B1aSkiaCodecTests.cs`(44)、`B1aPluginSecretStoreAesTests.cs`(19)、
+`B1aImagesCodecTests.cs`(6)、`B1aPlatformBootstrapTests.cs`(6)。
+
+### 对复制文件的每处改动(`Plugins\SecretStore.cs`,184 → 296 行)
+
+Windows 源:184 行;mac 现 296 行。除下面这些,其余字节一致(见字节自检)。
+
+1. 第 8 行后加 `using TipCL.Core.Platform;`(要用 `PlatformServices` / `ISecretStore`)。
+2. 类注释里加两行 B1a 说明(TCS2 / 旧格式仍可读)。
+3. 魔数区加 `MagicAes`(`TCS2`)+ 5 个常量:`AesNonceSize=12`、`AesTagSize=16`、`MasterKeySize=32`、
+   `MasterKeyService="TipCL plugin secrets"`、`MasterKeyAccount="master-key"`。
+4. 字段:`_keyStore`(`ISecretStore`)、`_windows`(bool)新增。
+5. `public SecretStore(string path)` 改成链式委托 `: this(path, PlatformServices.SecretStore, IsWindows)`,
+   方法体原样搬进新的 `internal SecretStore(string path, ISecretStore keyStore, bool treatAsWindows)`。
+6. `ReadAll`:`if (!IsWindows)` → `if (!_windows)`;`else` 分支拆成 `else if (head.SequenceEqual(MagicAes)) → AesGcmDecrypt(body)`,
+   原来的 `TCS0` 分支变成最后的 `else`(逻辑不变)。
+7. `WriteAll`:`if (IsWindows)` → `if (_windows)`;新增 `else if (_keyStore != null)` 分支写 `TCS2`;
+   并把 `Directory.CreateDirectory(...)` 从方法开头挪到**加密之后、落盘之前**(这样凭据库失败时磁盘上不留任何东西)。
+8. 新增 4 个私有方法:`MasterKey()`、`AesGcmEncrypt(byte[])`、`AesGcmDecrypt(byte[])`(放在 `DpapiProtect` 之后;
+   `DpapiProtect` / `DpapiUnprotect` / `Xor` 一字未动)。
+
+没有删任何既有逻辑、没有改 `TCS0` / `TCS1` 的读写行为、没有动 `Get` / `Set` / `Names` / `DeleteAll`。
+
+### 新引的包
+
+- `SkiaSharp` 2.88.9(→ `src\TipCL.Core`,版本取自 `Directory.Build.props` 的 `TipCLSkiaSharpVersion`)。
+  必须与 Avalonia 11.3.23 解析到的 SkiaSharp 一致(见 DECISIONS D-34)。已在 NuGet 缓存里,restore 未联网。
+- 没有引 ImageSharp / WPF / WinForms / WebView2;`NoWarn` 未动。
+
+### Skia 与 WPF 语义对照表
+
+| 项 | WPF(`WpfImageCodec` / `WpfDecodedImage`) | Skia(本包) | 差异 |
+|---|---|---|---|
+| 支持的格式 | WIC 能认的(PNG/JPEG/GIF/BMP/TIFF/ICO…),WebP 先经 `WebpFallback` 转 PNG | Skia 的 PNG/JPEG/WebP/GIF/BMP…(实测这 5 种都解得出) | Skia 不需要 `WebpFallback`(那是 Win7 没有 WIC WebP 的补丁) |
+| `Decode(null)` | `ArgumentNullException("data")` | 相同 | 无 |
+| 认不出格式 | `InvalidDataException("cannot identify image file")` | 同一条消息(`SKCodec.Create` 返回 null 或尺寸非法) | 无 |
+| 认得出但解不出像素 | WIC 抛自己的异常 | `InvalidDataException("cannot decode image data (结果码)")` | 新增的第二种消息形态(实测:截断的 PNG 会走到这里) |
+| `HasAlpha` | `BitmapSource.Format` ∈ {Bgra32/Pbgra32/Rgba64/Prgba64/…} 或调色板里有 A<255 | `SKCodec.Info.AlphaType != Opaque`(实测 `ColorType` 恒 `Bgra8888`) | 「RGB + tRNS」这一种:WPF=false、Skia=Unpremul→true;其余实测一致(含「有 alpha 通道但像素全不透明」= true) |
+| EXIF 方向 | 读 WIC 元数据 `/app1/ifd/{ushort=274}` 后按 1..8 变换;PNG 的 eXIf 也能读 | `SKCodec.EncodedOrigin`:JPEG EXIF 生效;**PNG eXIf 在 2.88.9 上恒 `TopLeft`(不生效)** | PNG 的 eXIf 少一次摆正(有用例钉住这个事实) |
+| 解码后的像素格式 | Bgra32/Pbgra32;无 alpha 的图转 Bgr24 | Bgra8888/Premul;无 alpha 的图转 Rgb888x/Opaque | 一一对应;实测 Skia 只能解到 N32(要 `Rgb888x` 目标会 `InvalidConversion`),所以是「解完再转」 |
+| `Resize` 插值 | `BitmapScalingMode.HighQuality` | `SKFilterQuality.High` | 各自的高质量档,像素级结果不保证逐位相同(尺寸与 alpha 语义一致) |
+| `Resize` 后 | 无 alpha → 再转 Bgr24 | 无 alpha → 保持 Rgb888x | 一致(重编码 PNG 的 IHDR color type 都是 2) |
+| `Resize(0/负数)` | WPF 的 `RenderTargetBitmap` 抛 `ArgumentException` | 显式抛 `ArgumentException` | 无(语义对齐,消息不同) |
+| `EncodePng` | `PngBitmapEncoder`,不隔行 | `SKImage.Encode(Png, 100)` | 都是 PNG;带 alpha → color type 6,不带 → 2 |
+| `EncodeJpeg` 的透明像素 | 先 `FormatConvertedBitmap(...Bgr24...)`,**不铺底色** | 先转 `Bgra8888` 再交给 Skia,**不铺底色** | premul→opaque 的具体取色规则不同,只对 `HasAlpha=true` 的图有像素差;`Images._shrink` 只在 `HasAlpha=false` 时走 JPEG |
+| `EncodeJpeg(quality)` | `Math.Max(1, Math.Min(100, q))` | 同(抽成 internal `ClampQuality`,单测 6 个边界) | 无。另实测 `Rgb888x` 源编 JPEG 返回 null → 先转 `Bgra8888` |
+| 线程 | 解码/缩放/编码都跑在 STA 线程(`RunSta`) | 直接在当前线程 | WPF 是 `BitmapSource` 的线程亲和性要求;Skia 位图没有,不需要 |
+| `Dispose` | 丢掉 `BitmapSource` 引用 | `SKBitmap.Dispose()`(可重复调) | Dispose 后再读 `Width` 两者都会抛 |
+
+### Keychain 与 WinCred 语义对照表
+
+| 操作 | Windows `WinCredSecretStore` | `MacKeychainSecretStore` |
+|---|---|---|
+| 读不到 | `GetPassword` 返回 **null**(`ERROR_NOT_FOUND` 1168) | 同(退出码 44) |
+| 删除不存在的 | 抛 `SecretNotFoundException(service)` | 同 |
+| 其它失败 | `OSError("(码, 'CredRead', '消息')")` | `OSError("(码, 'security find-generic-password', 'stderr')")`,`stderr` 为空时 `no stderr` |
+| 写 null 密码 | 落成字面量 `"None"` | 同(照抄这个怪癖以对齐语义) |
+| 服务名回退 | service 找不到时再试 `username@service` 复合名 | **无**(命令行按任务书固定三条;mac 上也没有旧数据要兼容) |
+| 存储编码 | UTF-16LE blob(读时先按 BOM/UTF-16 解,失败再试 UTF-8) | `b64:` + UTF-8 Base64(**读时兼容别的工具写的裸值**) |
+| 运行器 | 直接 `DllImport advapi32` | 注入的可运行器委托 + argv 级 `ProcessStartInfo`(单测只用假运行器,一次进程都不起) |
+
+### 测试(新增 114 条,总数 652 → 766)
+
+| 文件 | 用例 | 覆盖 |
+|---|---|---|
+| [B1aKeychainTests.cs](tests/TipCL.Tests/B1aKeychainTests.cs) | 39 | 三条命令行逐项断言(含空格 / 引号 / 中文 / 以 `-` 开头的值 / 空串)、`b64:` 往返(中文 / 换行 / 空串 / 5600 字符)、裸值直读、末尾换行、44 码、其它码抛 `OSError`、**异常消息里不含密码**、打码、调用次数与参数、UTF-8 而非 UTF-16、构造不起进程 |
+| [B1aSkiaCodecTests.cs](tests/TipCL.Tests/B1aSkiaCodecTests.cs) | 44 | 现造 PNG(带 / 不带 alpha,含「有通道但全不透明」)、JPEG、WebP(带 / 不带 alpha)、1x1 透明 GIF、手工 BMP、真实 webp 夹具(128×128)、尺寸与 `HasAlpha`、`Resize` 尺寸 / alpha / 非法尺寸、`EncodePng` 的 PNG 魔数与 IHDR color type、`EncodeJpeg` 的 SOI、编码后再解码、`ClampQuality` 边界、垃圾字节与截断 PNG 抛异常、**8 个 EXIF 方向逐像素对拍**、PNG eXIf 不生效这一事实、`Dispose` 幂等 |
+| [B1aPluginSecretStoreAesTests.cs](tests/TipCL.Tests/B1aPluginSecretStoreAesTests.cs) | 19 | `TCS2` 文件头与布局、Set/Get/Names/DeleteAll 往返、两次写入密文不同(nonce 随机)、改一个字节 / 改魔数 → 读不出来、换主密钥读不出来、主密钥只生成一次且名字与长度正确、坏密钥不覆盖且报错、无凭据库仍写 `TCS0`、旧 `TCS0` 仍可读、`TCS1` 非 Windows 读不出来、**凭据库失败时 Set 抛异常且磁盘上不留任何文件**、公开构造函数按平台走 |
+| [B1aImagesCodecTests.cs](tests/TipCL.Tests/B1aImagesCodecTests.cs) | 6 | 接上真编解码器后 `Images.EncodeBytes` 把 400×200 缩到 64×32(不透明走 JPEG、带 alpha 走 PNG),`ImageCodec` 为 null 时原样返回,垃圾输入抛 `ImageError`;`PlatformServices.ImageCodec` 在 `finally` 里恢复 |
+| [B1aPlatformBootstrapTests.cs](tests/TipCL.Tests/B1aPlatformBootstrapTests.cs) | 6 | `CreateSecretStore(true/false)`、`CreateImageCodec()`、`Init(true/false)` 与 `Init()` 的赋值结果、不碰数据目录;`PlatformServices` 的静态在 `finally` 里恢复 |
+
+### 验证命令与实际结果(全部在本机真实执行过)
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| 开工基线 | `Get-ChildItem %LOCALAPPDATA%\TipCL -Recurse` | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16;`%TEMP%` 下 `tipcl*` 目录 **78** 个 —— 与 Lead 给的基线一致 |
+| 构建 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 0,**0 错误**;警告 8 个 = `CA1416 ×7` + `SYSLIB0014 ×1`(与 A6 基线逐项相同,本包没有新增) |
+| `dotnet test` 通道 | `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,**通过 766 / 失败 0 / 跳过 0**(2 秒,本机这次可用,没触发 D-05 的沙箱限制) |
+| 进程内执行器 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 0,**766 / 0 / 0**,**不支持 0**;与 `dotnet test` 逐数一致 |
+| 新增用例数 | `dotnet exec ... \| 按 B1a* 类名计数` | 39 + 44 + 19 + 6 + 6 = **114**;652 + 114 = 766 |
+| 冒烟(接线后画面未变) | `cmd /c "src\TipCL.App\bin\Release\net8.0\TipCL.exe --smoke --theme light --out artifacts\smoke-light.png"` / `--theme dark ...` | 退出码 0 / 0;**3739 字节 / 3751 字节**(与 A1/A6 相同) |
+| 收尾元信息 | 同开工基线命令 | 9328 / 889530606 / 2026-11-10 20:42:16(**三项全等**);`%TEMP%` 下 `tipcl*` 目录 **78 → 78**(没增加) |
+| 残留进程 | `Get-Process testhost,java,adb,TipCL` | 各 **0** 个(另查 `security` 也是 0) |
+| 字节一致性自检 | `src\TipCL.Core\**\*.cs` 对 `windos\tipcl\src\TipCL\Core\` 同相对路径比 SHA256 | 总 **242** / 一致 **234** / 有改动 **4** / 无对应 **4**。有改动 = A5 的 3 个(`Plugins\DotNetPluginContext.cs`、`Plugins\Sdk\PluginSdk.cs`、`Plugins\Sdk\PluginUiRegistry.cs`)+ 本包的 `Plugins\SecretStore.cs`;无对应 = 本包新建的 4 个平台实现(`Platform\Mac\MacKeychainSecretStore.cs`、`Platform\PlatformBootstrap.cs`、`Platform\Skia\SkiaImageCodec.cs`、`Platform\Skia\SkiaDecodedImage.cs`) |
+
+补充实测(用 `artifacts\probe` 的一次性探针项目量的,不入库):`AesGcm.IsSupported = true`(本机 Windows)、
+SkiaSharp 2.88.9 的 `SKCodec.Info.ColorType` 恒为 `Bgra8888`、JPEG 的 EXIF 方向生效、PNG 的 eXIf 不生效、
+`Rgb888x` 目标解码报 `InvalidConversion`、`Rgb888x` 源编 JPEG 返回 null。
+
+### 未验证项(本机是 Windows,没有 Mac)
+
+- **Keychain 的一切真机行为**:`security` 的退出码 44、`find-generic-password -w` 对非 ASCII 的实际输出形态、
+  `add-generic-password -U` 的更新语义、`-w` 后面带空串 / 以 `-` 开头的值是否被 getopt 当成参数、
+  `/usr/bin/security` 的路径与可用性。**命令行拼装与输出解析只有单测,没有真机跑过**。
+- **AES-GCM 在 mac 上是否 `IsSupported`**(本机 Windows 实测 true;不支持时按 D-32 抛 `PlatformNotSupportedException`)。
+- Keychain 主密钥在真机上的存取往返(单测用的是假凭据库)。
+- 桌面启动路径(会开窗口)没有跑;`--smoke` 两条路径都跑了,`PlatformBootstrap.Init()` 在分支之前共用同一行。
+- mac 上 Skia 原生库的加载、Skia 在 mac 上解 WebP、mac 上 `--smoke` 渲染,全部未验证。
+
+### 遗留与风险
+
+- **写入时密码会短暂出现在 `security` 的 argv 里**(同机其他用户可用 `ps` 看到);备选 `security -i` 因为
+  转义规则本机无法验证而没有采用。见 DECISIONS D-31。
+- **PNG 的 eXIf 方向在 SkiaSharp 2.88.9 上不生效**(JPEG EXIF 正常)。升级 Skia 时要复核这条;
+  上下界都不影响 `Images._shrink`(它只做缩放与重编码)。
+- `security` 失败时的 stdout 没有纳入 `OSError` 消息(只带 stderr);stderr 为空写成 `no stderr`。
+- 主密钥坏掉(非 Base64 / 长度不对)时**故意报错而不换密钥**,避免把既有文件变成永久读不出来。
+- Windows 写出的 `TCS1`(DPAPI)文件在 mac 上仍然读不出来(与 A5 记录一致,本包没有做迁移)。
+  mac 上第一次写入会生成 `TCS2` + Keychain 主密钥,不需要迁移路径。
+- `MacKeychainSecretStore` 不做 Windows 的「`username@service` 复合名回退」;mac 上没有旧数据要兼容。
+- 本包**没有**做 `ShellOpen` / 打开浏览器 / 去提权 / `NodeRuntime` darwin 那些运行时差异(属 A22 与 B1b / B2)。
+- 工具陷阱记录:D-36(PowerShell 5.1 的 `Get-Content | Set-Content` 改坏中文,两个新建测试文件已重写)。

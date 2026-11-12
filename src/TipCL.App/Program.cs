@@ -1,5 +1,6 @@
 using System;
 using Avalonia;
+using TipCL.Core.Platform;
 using TipCL.Smoke;
 
 namespace TipCL;
@@ -13,6 +14,10 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // B1a 平台接线:只给 PlatformServices 的两个静态属性赋值(图片走 Skia;凭据库仅 mac 接 Keychain)。
+        // 必须在任何 Core 代码初始化之前调用,两条启动路径都要走。
+        PlatformBootstrap.Init();
+
         if (HasFlag(args, "--smoke"))
         {
             if (!SmokeOptions.TryParse(args, out SmokeOptions options, out string error))

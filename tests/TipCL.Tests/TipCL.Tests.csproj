@@ -21,6 +21,12 @@
     <ProjectReference Include="..\..\src\TipCL.Core\TipCL.Core.csproj" />
   </ItemGroup>
 
+  <!-- B1a:WebP 真实夹具(从 Windows 测试目录字节级复制,libwebp 官方 test.webp,BSD)。
+       Skia 版编解码器的用例要读它,所以必须进输出目录。 -->
+  <ItemGroup>
+    <None Update="fixtures\webp-sample.webp" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- A6:从 Windows tests\TipCL.Tests(除 TestHome.cs)字节级复制来的 29 个测试文件。
        第 1 步先整体 Remove,确认构建/测试不受影响;第 4 步逐个决策后逐个放出来:
        A 类(原样通过)/ B 类(最小适配后通过)→ 已从这个 Remove 里删掉;
