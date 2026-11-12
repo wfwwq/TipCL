@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
+using System.Text;
 
 namespace TipCL.Packager;
 
@@ -79,21 +80,39 @@ internal sealed class TarEntrySnapshot
 /// 这样同一份输入两次写出来的 tar 字节完全相同(压缩前)。
 ///
 /// 固定 mtime 选 2000-01-01T00:00:00Z:可复现,且不落进任何「1970 之前/未来时间」的坑。
+///
+/// **格式用 Ustar,不用 Pax**(本包实测改动,2026-11-12,探针在 `artifacts/tarprobe/`,不入库):
+/// .NET 8 的 `PaxTarEntry` 每次写都会补 `atime` / `ctime` 两条扩展记录,而它们的值取的是**写的那一刻**,
+/// 于是同一份输入两次写出的字节不同(第一次实测差在第 533 字节);`PaxTarEntry` 也没有公开的
+/// `Atime` / `Ctime` 可以钉死。Ustar 没有扩展头,同样的输入两次写出完全一致(实测)。
+/// 代价是条目名不能超过 100 字节 —— 本 bundle 实际最长的名字 83 字节
+/// (`.../libSystem.Security.Cryptography.Native.OpenSsl.dylib`),超了会在下面显式抛错而不是静默截断。
 /// </summary>
 internal static class TarGz
 {
     public static readonly DateTimeOffset FixedModificationTime =
         new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
+    /// <summary>Ustar 头里名称字段的字节数。</summary>
+    public const int NameMaxBytes = 100;
+
     /// <summary>写未压缩的 tar(确定性;测试用它做「两次写出来的字节相同」的比对)。</summary>
     public static void WriteTar(IReadOnlyList<TarSourceEntry> entries, Stream output)
     {
-        using TarWriter writer = new TarWriter(output, TarEntryFormat.Pax, leaveOpen: true);
+        using TarWriter writer = new TarWriter(output, TarEntryFormat.Ustar, leaveOpen: true);
         foreach (TarSourceEntry source in SortOrdinal(entries))
         {
-            PaxTarEntry entry = source.IsDirectory
-                ? new PaxTarEntry(TarEntryType.Directory, source.Name)
-                : new PaxTarEntry(TarEntryType.RegularFile, source.Name);
+            string name = source.Name;
+            if (Encoding.UTF8.GetByteCount(name) > NameMaxBytes)
+            {
+                throw new InvalidOperationException(
+                    "tar entry name is too long for the Ustar format (" + Encoding.UTF8.GetByteCount(name)
+                    + " > " + NameMaxBytes + " bytes): " + name);
+            }
+
+            UstarTarEntry entry = source.IsDirectory
+                ? new UstarTarEntry(TarEntryType.Directory, name)
+                : new UstarTarEntry(TarEntryType.RegularFile, name);
 
             entry.Mode = (UnixFileMode)source.Mode;
             entry.ModificationTime = FixedModificationTime;

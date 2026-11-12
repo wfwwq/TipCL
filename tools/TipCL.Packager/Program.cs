@@ -108,10 +108,13 @@ internal static class Program
         Console.WriteLine("[packager] icns: " + slots + ", " + icon.IcnsBytes.Length + " bytes");
 
         // 2) 暂存目录:组装 .app 目录树
+        // 只删自己那棵 `TipCL.app`,不删整个 stage 目录:`--stage` 是外部传进来的参数,
+        // 万一指到仓库根或别的目录上,递归删整棵树的后果太大;而 tar 里的条目全部来自
+        // `TipCL.app/` 之下,清掉它就足以保证同一份输入两次运行结果一致。
         string appRoot = Path.Combine(options.StageDir, BundleLayout.AppName);
-        if (Directory.Exists(options.StageDir))
+        if (Directory.Exists(appRoot))
         {
-            Directory.Delete(options.StageDir, recursive: true);
+            Directory.Delete(appRoot, recursive: true);
         }
 
         Directory.CreateDirectory(Path.Combine(appRoot, "Contents", "MacOS", "arm64"));
@@ -122,9 +125,12 @@ internal static class Program
         WriteFile(Path.Combine(options.StageDir, RelPath(BundleLayout.LauncherEntry)), LauncherScript.Bytes());
         WriteFile(Path.Combine(options.StageDir, RelPath(BundleLayout.IcnsEntry)), icon.IcnsBytes);
 
-        int arm64Files = CopyPublishOutput(options.Arm64Dir, Path.Combine(appRoot, "Contents", "MacOS", "arm64"));
-        int x64Files = CopyPublishOutput(options.X64Dir, Path.Combine(appRoot, "Contents", "MacOS", "x64"));
-        Console.WriteLine("[packager] staged: arm64=" + arm64Files + " files, x64=" + x64Files + " files (no .pdb)");
+        int arm64Files = CopyPublishOutput(
+            options.Arm64Dir, Path.Combine(appRoot, "Contents", "MacOS", "arm64"), out int arm64Pdb);
+        int x64Files = CopyPublishOutput(
+            options.X64Dir, Path.Combine(appRoot, "Contents", "MacOS", "x64"), out int x64Pdb);
+        Console.WriteLine("[packager] staged: arm64=" + arm64Files + " files, x64=" + x64Files + " files"
+            + " (.pdb skipped: " + arm64Pdb + " + " + x64Pdb + ")");
 
         // 3) 归档条目:固定条目 + 两个架构目录下的实际文件
         List<TarSourceEntry> entries = new List<TarSourceEntry>();
@@ -229,15 +235,17 @@ internal static class Program
         return true;
     }
 
-    /// <summary>把 emit 目录的内容复制进 bundle(逐字节;`.pdb` 不复制)。返回复制的文件数。</summary>
-    private static int CopyPublishOutput(string sourceDir, string targetDir)
+    /// <summary>把 emit 目录的内容复制进 bundle(逐字节;`.pdb` 不复制)。返回复制的文件数,`skipped` 是跳过的 .pdb 数。</summary>
+    private static int CopyPublishOutput(string sourceDir, string targetDir, out int skipped)
     {
         Directory.CreateDirectory(targetDir);
         int count = 0;
+        skipped = 0;
         foreach (string file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
         {
             if (file.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
             {
+                skipped++;
                 continue;
             }
 
