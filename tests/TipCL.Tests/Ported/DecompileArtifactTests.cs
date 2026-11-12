@@ -15,10 +15,12 @@ public class DecompileArtifactTests
 	public void NoPointerReadsOfBoxedTuples()
 	{
 		var dir = new DirectoryInfo(AppContext.BaseDirectory);
-		while (dir != null && !File.Exists(Path.Combine(dir.FullName, "TipCL.sln")))
+		// A6 B 类改动:sln 文件名 TipCL.sln → TipCL.Mac.sln。
+		while (dir != null && !File.Exists(Path.Combine(dir.FullName, "TipCL.Mac.sln")))
 			dir = dir.Parent;
 		Assert.NotNull(dir);
-		string src = Path.Combine(dir!.FullName, "src", "TipCL");
+		// A6 B 类改动:扫描目录 src\TipCL(Windows App 工程)→ src(mac 的源码根,含 TipCL.App 与 TipCL.Core)。
+		string src = Path.Combine(dir!.FullName, "src");
 		var bad = Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
 			.Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar))
 			.Where(f => File.ReadAllText(f).Contains("*)(&"))

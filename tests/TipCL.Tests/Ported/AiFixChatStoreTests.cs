@@ -73,7 +73,8 @@ public class AiFixChatStoreTests
 	public void AiRunEnsuresUnknownChatId()
 	{
 		string root = SourceRoot();
-		string api = File.ReadAllText(Path.Combine(root, "src", "TipCL", "Core", "BackendApi.cs"));
+		// A6 B 类改动:相对路径 src\TipCL\Core\... → src\TipCL.Core\...(mac 的程序集拆分)。
+		string api = File.ReadAllText(Path.Combine(root, "src", "TipCL.Core", "BackendApi.cs"));
 		Assert.Contains("Store.EnsureChat(pyDict, chat_id", api);
 		Assert.Contains("Store.GetChat(pyDict, chat_id) == null", api);
 	}
@@ -81,7 +82,8 @@ public class AiFixChatStoreTests
 	private static string SourceRoot()
 	{
 		DirectoryInfo dir = new DirectoryInfo(AppContext.BaseDirectory);
-		while (dir != null && !File.Exists(Path.Combine(dir.FullName, "TipCL.sln")))
+		// A6 B 类改动:sln 文件名 TipCL.sln → TipCL.Mac.sln。
+		while (dir != null && !File.Exists(Path.Combine(dir.FullName, "TipCL.Mac.sln")))
 		{
 			dir = dir.Parent;
 		}

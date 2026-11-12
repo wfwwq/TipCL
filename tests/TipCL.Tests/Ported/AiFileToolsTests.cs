@@ -29,7 +29,8 @@ public class AiFileToolsTests : IDisposable
 
 	public AiFileToolsTests()
 	{
-		_root = Path.Combine(Path.GetTempPath(), "tipcl-fs-test-" + Guid.NewGuid().ToString("N"));
+		// A6 B 类改动:原来写 Path.GetTempPath(),红线要求测试临时文件必须落在仓库内 → 改到 TestHome.Root 下。
+		_root = Path.Combine(TestHome.Root, "tipcl-fs-test-" + Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(_root);
 		_roots = new List<string> { _root };
 	}
@@ -72,7 +73,8 @@ public class AiFileToolsTests : IDisposable
 	[Fact]
 	public void OutsideAbsolutePathRejected()
 	{
-		string other = Path.Combine(Path.GetTempPath(), "tipcl-fs-not-allowed.txt");
+		// A6 B 类改动:Path.GetTempPath() → TestHome.Root(红线:临时文件落在仓库内;这里只用它的路径做「根之外」的反例)。
+		string other = Path.Combine(TestHome.Root, "tipcl-fs-not-allowed.txt");
 		Assert.Throws<ConfigEditError>(() => ExtraTools.FsResolve(other, _roots, _root));
 		Assert.Throws<ConfigEditError>(() => ExtraTools.FsResolve("C:\\some\\where\\else.txt", _roots, _root));
 	}
@@ -187,7 +189,8 @@ public class AiFileToolsTests : IDisposable
 	[Fact]
 	public void WriteOutsideRootRejected()
 	{
-		string path = Path.Combine(Path.GetTempPath(), "tipcl-fs-escape.txt");
+		// A6 B 类改动:Path.GetTempPath() → TestHome.Root(理由同上)。
+		string path = Path.Combine(TestHome.Root, "tipcl-fs-escape.txt");
 		Assert.Throws<ConfigEditError>(() => ExtraTools.FsWrite(Args("path", path, "content", "x"), _roots, _root));
 		Assert.False(File.Exists(path));
 	}

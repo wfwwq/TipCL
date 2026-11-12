@@ -15,7 +15,8 @@ public class WriteJsonTests
 	[Fact]
 	public async Task ConcurrentWritersKeepFileValidAndNeverThrow()
 	{
-		string dir = Path.Combine(Path.GetTempPath(), "tipcl-wjtest-" + Guid.NewGuid().ToString("N"));
+		// A6 B 类改动:原来写 Path.GetTempPath(),红线要求测试临时文件必须落在仓库内 → 改到 TestHome.Root 下。
+		string dir = Path.Combine(TestHome.Root, "tipcl-wjtest-" + Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(dir);
 		try
 		{

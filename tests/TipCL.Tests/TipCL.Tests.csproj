@@ -22,11 +22,28 @@
   </ItemGroup>
 
   <!-- A6:从 Windows tests\TipCL.Tests(除 TestHome.cs)字节级复制来的 29 个测试文件。
-       它们的原始形态整体排除编译,再在 A6 第 4 步逐个决策、逐个放出来:
-       A 类(原样通过)/ B 类(最小适配后通过)→ 从这个 Remove 里删掉该文件;
-       C 类(本包搬不了)→ 保留在 Remove 里,原因见下面的注释与 PROGRESS.md 的 A6 小节。 -->
+       第 1 步先整体 Remove,确认构建/测试不受影响;第 4 步逐个决策后逐个放出来:
+       A 类(原样通过)/ B 类(最小适配后通过)→ 已从这个 Remove 里删掉;
+       C 类(本包搬不了)→ 留在下面,每个都注明原因与恢复包(详见 PROGRESS.md 的 A6 小节)。 -->
   <ItemGroup>
-    <Compile Remove="Ported\**\*.cs" />
+    <!-- C 类:依赖界面层命名空间(TipCL.Services / Pages / Controls / Themes),随 C 阶段对应页面恢复 -->
+    <Compile Remove="Ported\AiChatOpsTests.cs" />          <!-- using TipCL.Pages.Ai → 恢复包 C3(AI 对话页) -->
+    <Compile Remove="Ported\FileKindsTests.cs" />          <!-- using TipCL.Services → 恢复包 C2/C3(基础 Services 落地后) -->
+    <Compile Remove="Ported\NavCompatTests.cs" />          <!-- using TipCL.Services + TipCL(导航)→ 恢复包 C2(外壳/导航) -->
+    <Compile Remove="Ported\PageLayoutTests.cs" />         <!-- using TipCL.Pages → 恢复包 C3(对应页面) -->
+    <Compile Remove="Ported\LayoutDefaultTests.cs" />      <!-- 3 条只用 Core,1 条用 TipCL.Pages.DashLayout → 整文件归 C,恢复包 C3(启动页布局) -->
+    <Compile Remove="Ported\StaticInitOrderTests.cs" />    <!-- 读 src/TipCL/Pages/SettingsPage.cs 源码 → 恢复包 C3(设置页) -->
+    <!-- C 类:Windows 专属,与界面层命名空间 + ImageSharp 绑定,mac 版不适用(GOAL:图片走 SkiaSharp) -->
+    <Compile Remove="Ported\WebpFallbackTests.cs" />       <!-- TipCL.Services + SixLabors.ImageSharp,恢复包:无(mac 版不适用) -->
+    <Compile Remove="Ported\Win7CompatTests.cs" />         <!-- TipCL.Services + SixLabors.ImageSharp,恢复包:无(mac 版不适用) -->
+    <!-- C 类:环境限制(不是移植差异)。FakePhone 在测试内起 HttpListener(http://127.0.0.1:<随机端口>/),
+         `dotnet test` 通道的 testhost 里 HttpListener.Start() 必抛
+         System.Net.HttpListenerException: 句柄无效。(栈顶 System.Net.HttpListener.SetupV2Config),
+         而同一份 dll 走进程内执行器通道时 4 条用例全过 → 本沙箱 testhost 的环境限制,不是代码问题。
+         按任务书「不要改成别的监听方式」保持原样;恢复包:能在 testhost 里起 HttpListener 的环境(或改用进程内通道验收)。 -->
+    <Compile Remove="Ported\PhoneLinkTests.cs" />
+    <!-- C 类:需要 C1 的内嵌字体资源才算得动 -->
+    <Compile Remove="Ported\IconFontTests.cs" />           <!-- 要 Resources\fonts\TipCLIcons.ttf 与界面源码 → 恢复包 C1(主题/图标) -->
   </ItemGroup>
 
 </Project>

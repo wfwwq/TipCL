@@ -18,7 +18,8 @@ namespace TipCL.Tests;
 ///
 /// 这个执行器不跨进程,直接在本进程里反射执行 [Fact] / [Theory]:
 /// 断言仍然是 xunit 自己的 Assert(抛 Xunit.Sdk.XunitException),不是另写一套断言。
-/// 支持:[Fact]、[Theory] + [InlineData]/[MemberData]/[ClassData]、Skip、async(Task)。
+/// 支持:[Fact]、[Theory] + [InlineData]/[MemberData]/[ClassData]、Skip、async(Task);
+/// 以及测试类实现的 IDisposable / IAsyncLifetime(跑完无论成败都清理,和 xunit 一致 —— A6 补)。
 /// 不认识的形态记为 UNSUPPORTED 并让退出码非 0 —— 绝不静默跳过任何用例。
 /// </summary>
 internal static class Program
@@ -39,7 +40,12 @@ internal static class Program
             foreach (MethodInfo method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
                                                .Where(m => m.GetCustomAttributes<FactAttribute>(true).Any() ||
                                                            m.GetCustomAttributes<TheoryAttribute>(true).Any())
-                                               .OrderBy(m => m.Name, StringComparer.Ordinal))
+                                               // 按声明顺序(MetadataToken)执行,和 xunit 一致 —— A6 之前这里按方法名排序。
+                                               // 原因:搬来的 Windows 测试里有顺序敏感的用例(例如 AiFixChatStoreTests 三条用例
+                                               // 共用缓存里的 Utils.ROOT,又各自 new TestHome(),方法名的字母序会把
+                                               // SetActiveOnUnknownChatIsSilentAndKeepsActive 排到最后,读到前一条用例留下的 chat)。
+                                               // xunit 走声明顺序,所以两边必须一致,否则两条通道的结论不可比。
+                                               .OrderBy(m => m.MetadataToken))
             {
                 string display = type.Name + "." + method.Name;
 
@@ -128,24 +134,62 @@ internal static class Program
 
     private static string? Execute(Type type, MethodInfo method, object?[] row)
     {
+        object? instance = null;
+        string? error = null;
+
         try
         {
-            object? instance = Activator.CreateInstance(type);
+            instance = Activator.CreateInstance(type);
+
+            // xunit 语义:实现了 IAsyncLifetime 的测试类,构造之后先 InitializeAsync,跑完再 DisposeAsync。
+            if (instance is IAsyncLifetime lifetime)
+            {
+                lifetime.InitializeAsync().GetAwaiter().GetResult();
+            }
+
             object? result = method.Invoke(instance, row);
             if (result is Task task)
             {
                 task.GetAwaiter().GetResult();
             }
-
-            return null;
         }
         catch (TargetInvocationException tie) when (tie.InnerException is not null)
         {
-            return tie.InnerException.GetType().FullName + ": " + tie.InnerException.Message;
+            error = tie.InnerException.GetType().FullName + ": " + tie.InnerException.Message;
         }
         catch (Exception ex)
         {
-            return ex.GetType().FullName + ": " + ex.Message;
+            error = ex.GetType().FullName + ": " + ex.Message;
+        }
+
+        // 无论成功失败都要清理实例(xunit 的规则:IAsyncLifetime 优先于 IDisposable)。
+        string? disposeError = DisposeInstance(instance);
+        return error ?? disposeError;
+    }
+
+    private static string? DisposeInstance(object? instance)
+    {
+        if (instance is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (instance is IAsyncLifetime lifetime)
+            {
+                lifetime.DisposeAsync().GetAwaiter().GetResult();
+            }
+            else if (instance is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return "Dispose 失败 " + ex.GetType().FullName + ": " + ex.Message;
         }
     }
 
