@@ -19,7 +19,7 @@
 | B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | ✅ 完成(见下;**新增 137 条用例,总数 901 → 1038,两条通道都 1038/1038 全绿**;三个复制文件只加可注入 OS/ARCH 的 internal 重载 + 一处内联逻辑抽取,Windows 行为用等价钉子逐项钉住;新建 `Launcher\MacNativeSupport.cs`,未接入调用点,留 Lead 裁决 arm64 方案) |
 | B2c1 | Java 与安装的收尾:Mojang 安装循环建链顺序与已存在链接 / Microsoft 厂商分支 / `forge-legacy` 的 Java 8 / Preflight 磁盘空间守卫 / `GlobalMods.IsSymlink` | ✅ 完成(见下;**新增 72 条用例,总数 1405 → 1477,两条通道都 1477/1477 全绿**;`Java.cs` / `Preflight.cs` / `GlobalMods.cs` 各按最小面改动,新逻辑全部落在 `JavaRuntimeFiles.cs` / `JavaArch.cs`;第 2 项走了「改 mac 地址为 `macos` + `.tar.gz`」这一支,**依据是 6 个 `aka.ms` HEAD 请求的线上证据**,见小节取证表与 D-54) |
 | B2c2 | 其余平台差异(一):NodeRuntime darwin / Terracotta 可执行权限 / adb 路径 / PhoneLink 临时目录 | ✅ 完成(见下;**新增 102 条用例,总数 1477 → 1579,两条通道都 1579/1579 全绿**;只改了任务书点名的 4 个复制文件;第 1 项 darwin 包名有 2 个 GET 的线上证据;第 4 项 PhoneLinkTests **仍排除** —— testhost 的 HttpListener 依旧抛「句柄无效」,往 %TEMP% 写文件那个原因已修好并实测) |
-| B2c3 | 其余平台差异(二):Updater 仅提示 / Shortcut / 导出启动脚本(含 `BackendApi.cs:2958` 传未合并 JSON) | 未开始 |
+| B2c3 | 其余平台差异(二):Updater 仅提示 / Shortcut / 导出启动脚本(含 `BackendApi.cs:2958` 传未合并 JSON) | ✅ 完成(见下;**新增 101 条用例,总数 1579 → 1680,两条通道都 1680/1680 全绿**;只改了 4 个复制文件:Updater.cs / Shortcut.cs / VersionOps.cs / BackendApi.cs 仅 `export_launch_script` 两行;新建 `Launcher\PosixShell.cs`;`Updater.Check` 增加唯一被授权的增量键 `can_self_update`;mac 的 `.command` 改走 POSIX 单引号并补可执行位) |
 | B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | ✅ 完成(见下;**新增 132 条用例,总数 1038 → 1170,两条通道都 1170/1170 全绿**;新建 `Launcher\LaunchArch.cs`,7 处调用点改读目标架构,5 个复制文件加可注入重载 / 抽取纯函数;Java 侧留给 B2e) |
 | B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | ✅ 完成(见下;**新增 235 条用例,总数 1170 → 1405,两条通道都 1405/1405 全绿**;新建 `Launcher\JavaArch.cs`,`Java.cs` / `McLauncher.cs` / `Installer.cs` 各改一处;写测试时抓到并修掉一个「读取委托 / 探测委托」接错的真 bug,见 D-50;两处同类缺口只记录未改,见 D-52) |
 | B3 | 打包 | 未开始 |
@@ -2553,6 +2553,172 @@ Lead 的裁决与说明:
 - **`PhoneLinkTests` 继续排除**:临时目录的原因已消除,但 `dotnet test` 通道里 `HttpListener.Start()` 仍报「句柄无效」。子代理把它放出来实测后又放回去,做法正确。Lead 没有单独复跑放出来的状态。
 - D-58(注释里的标点用半角)、D-59(Windows 报错原文作为实参保留、旧注释用追加更正)接受。
 - mac 上的三条 adb 默认位置、Node 的 tar 包布局(`bin/node`、`bin/npm` 符号链接)、Terracotta 内核能否执行,都列入真机验证清单。
+
+---
+
+## B2c3 其余平台差异(二):Updater 仅提示 / Shortcut / 导出启动脚本
+
+三个项全部**已改**。唯一被授权的 Windows 可见改动是 `Updater.Check` 多一个键 `can_self_update`(Windows 上为 true);其余两处都只新增非 Windows 分支,Windows 代码路径一字未动,并用「读源码的结构钉子 + 纯函数逐字对照」钉住。
+
+> 本节的标点按 D-58 用半角(全角 `,` `(` `)` `:` 在本机写不出)。源码里需要全角标点的新文案一律用 `\uXXXX` 转义写。
+
+### 0. 开工前的元数据测量(红线核对)
+
+| 项 | 结果 |
+|---|---|
+| `%LOCALAPPDATA%\TipCL` 开工时(只列目录,不读内容) | **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,与 Lead 给的基线三项完全一致 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(开工时) | 86 个名字 |
+| 真实桌面目录(metadata only)条目数(开工时) | 14 |
+
+### 1. 第 1 项:Updater 在非 Windows 上只提示、不自替换(已改)
+
+[Updater.cs](src/TipCL.Core/Launcher/Updater.cs) 的四处改动:
+
+| 位置 | 改前 | 改后 |
+|---|---|---|
+| 新函数(第 81 行之后) | 无 | `internal static bool SelfUpdateSupported(string os)` = `os == "windows"`;`internal static void EnsureSelfUpdateSupported(string os)` 在非 Windows 上抛 `RuntimeError` |
+| `ApplyStaged`(原 125 行起) | 第一句是 `string pkg = Utils.AbsPath(package);` | 第一句变成 `EnsureSelfUpdateSupported(Utils.OS_NAME);`,后面原样 |
+| `Download`(原 149 行起) | 第一句是 `string text = Py.Str(Py.Or(info?["url"], ""));` | 第一句变成守卫,后面原样 |
+| `Check` 的两个 `return PyDict.Of(...)`(原 95 / 102 行) | 8 / 9 个键 | 各多一个 `"can_self_update"`,取值 `SelfUpdateSupported(Utils.OS_NAME)`(Windows 上 true) |
+
+抛出的文案在源码里是这样写的(全角逗号用转义,避免 D-58 的抄写陷阱):
+
+```csharp
+throw new RuntimeError("\u5f53\u524d\u5e73\u53f0\u4e0d\u652f\u6301\u539f\u5730\u81ea\u66f4\u65b0\uFF0C\u8bf7\u5230\u4e0b\u8f7d\u9875\u4e0b\u8f7d\u65b0\u7248\u672c\u5b89\u88c5");
+```
+
+解码后 = `当前平台不支持原地自更新` + U+FF0C + `请到下载页下载新版本安装`。
+
+**`Check` 返回的键清单(逐行读过原 84-103 行,并逐字核对了改动后的两行)**:
+
+| 分支 | 键(顺序即源码顺序) |
+|---|---|
+| 清单拉取失败(catch 分支) | `ok` `current` `latest` `has_update` `can_self_update` `message` `notes` `url` —— 原有 8 个 + 新增 1 个 |
+| 拉取成功 | `ok` `current` `latest` `has_update` `can_self_update` `message` `notes` `url` `sha256` —— 原有 9 个 + 新增 1 个 |
+
+两个分支的差别只有成功分支多一个 `sha256`(改动前就是这样,本包没动)。其它平台差异没有偷偷塞进这个字典。
+
+**清单里能提供什么(给 UI 阶段留的取证,本包只记录、不实现)**:`Check` 只读更新清单的这四组键 ——
+`version` / `latest`、`sha256`、`notes` / `changelog`、`url` / `download`。
+也就是说**清单里没有独立的「下载页」字段**:唯一与下载有关的地址就是更新包自己的 `url`(`Download` 直接拿它下 `.bin`)。
+另外 `Updater.DEFAULT_URL` 与 `Config.UpdateUrl()`(=`ManifestUrl()`)都是**清单地址**,不是下载页。
+所以「打开下载页」这个 UI 行为要等 UI 阶段决定用哪个地址 —— **本包不发明任何 URL、也不加下载页功能**。
+
+`BackendApi.start_self_update` **没有改**:非 Windows 上它的后台任务现在会在 `Updater.Download` 的守卫处抛出上面那句中文文案,任务以该文案失败(UI 阶段据此改走「打开下载页」)。
+
+### 2. 第 2 项:macOS 桌面快捷方式(已改)
+
+[Shortcut.cs](src/TipCL.Core/Launcher/Shortcut.cs) 的四处改动:
+
+1. **`Chmod755`(原 176-178 行,空方法)**:改前方法体是空的 —— 生成的 `.command` / `.desktop` **从来没有可执行位**。改后只有一句 `JavaRuntimeFiles.SetExecutable(path)`(非 Windows 设 0755,Windows 第一句就返回,失败只记警告)。
+   Linux 的 `.desktop` 因此也第一次拿到执行位 —— 任务书已接受,在此记录。
+2. **新纯函数 `internal static string MacCommandScript(string description, string workdir, string target, IEnumerable<string> args)`**:返回完整正文 ——
+   `#!/bin/sh` / `# <单行化的 description>` / `cd ` + `PosixShell.Quote(workdir)` / `exec ` + `PosixShell.JoinCommand(target 及其后每个参数)`,LF 行尾、结尾一个换行。
+   description 里的 `\r\n` / `\r` / `\n` 一律换成空格(用户可控文本不能靠换行顶出注释行)。
+3. **`_create_macos`**:改前用 `_quote`(只在「有空格」时加双引号、完全不转义)拼正文;改后调 `MacCommandScript`,并把新加的第七个参数 `IEnumerable<string> rawArgs` 传进去。`arguments` 这个参数在 mac 分支**有意不用**(它是 cmd 风格的预拼接结果)。
+4. **`CreateLaunchShortcut`(原 225-226 行)**:
+
+| | 改前 | 改后 |
+|---|---|---|
+| 参数表 | `IEnumerable<string> source = list.Skip(1).Concat<string>(LaunchArgs(...));` | `List<string> rawArgs = list.Skip(1).Concat(LaunchArgs(...)).ToList();` |
+| 预拼接 | `string arguments = string.Join(" ", source.Select(_quote));` | `string arguments = string.Join(" ", rawArgs.Select(_quote));`(**取值逐字相同**) |
+| 分发 | mac 分支只传 `arguments` | mac 分支多传 `rawArgs`;Windows / Linux 两分支的实参一字不变 |
+
+**只复核、记录、没有改**的四件事:
+
+- `DesktopDir()`:非 Windows 下先读 `HOME`,再依次试 `Desktop` / `桌面` 两个子目录,都不存在时返回规范化后的 `HOME` —— 最坏情况下快捷方式会落到家目录根。本包不动它。
+- `LauncherCommand()`:返回 exe 同目录下的 `TipCL-CLI`(存在就用它,否则用 exe 自身)。GOAL 的 `.app` 结构里正在运行的 exe 是 `Contents/MacOS/<arch>/TipCL`,所以 mac 上写进 `.command` 的 target 就是这一层 —— 打包阶段要确认这一层真有可执行文件(B3)。
+- Linux `.desktop` 的 `Exec=` 行仍是 `_quote(target) + " " + arguments` 的弱引号(与本包修掉的 mac 分支同一个毛病);本仓库不出 Linux 包,只记录。
+- `RemoveLaunchShortcut()`:按 os 取扩展名(`.lnk` / `.command` / `.desktop`)删除,未改动。
+
+### 3. 第 3 项:导出启动脚本(已改)
+
+[VersionOps.cs](src/TipCL.Core/Launcher/VersionOps.cs) 新增四个成员(全部在 `ExportLaunchBat` **之后**,那个函数一个字节都没动):
+
+| 新成员 | 行为 |
+|---|---|
+| `internal static string ExportScriptExtension(string os)` | `windows` → `.bat`,`osx` → `.command`,其余(含 null / 空 / 大小写不同)→ `.sh` |
+| `internal static string PosixLaunchScript(IEnumerable<object> cmd, object cwd)` | `#!/bin/sh` / `cd ` + `PosixShell.Quote(Py.Str(cwd))` / `PosixShell.JoinCommand(cmd 逐个 Py.Str)`;LF、结尾换行、**没有** `chcp` / `pause` / `exec`,不加任何 JVM 参数或 arch 前缀 |
+| `internal static string ExportLaunchScript(string dest, IEnumerable<object> cmd, object cwd, string os)` | `windows` → 原样转调 `ExportLaunchBat` 并返回它的返回值;否则建父目录 → 写 UTF-8 无 BOM → `JavaRuntimeFiles.SetExecutable` → 返回 `new PPath(dest).ToString()`(与 `ExportLaunchBat` 同形) |
+| `internal static PyDict ExportVersionJson(PyDict childJson, Func<string, PyDict> loadParent, bool isWindows)` | Windows **原样返回同一个对象**(loader 一次都不调);否则 `Manifest.ResolveInherits`,抛异常(缺父版本 / 继承环 / loader 抛)时退回 `childJson` |
+
+[BackendApi.cs](src/TipCL.Core/BackendApi.cs) 的 `export_launch_script` 内**只有两行**被改(该文件其它任何位置都没动):
+
+```csharp
+// 改前(原 2958 行)
+string java_exe = Java.ResolveLaunchJava((Py.Or(instance2.VersionJson(text), new PyDict()) as PyDict) ?? new PyDict(), null, null, null, delegate(string t)
+// 改后
+string java_exe = Java.ResolveLaunchJava(VersionOps.ExportVersionJson((Py.Or(instance2.VersionJson(text), new PyDict()) as PyDict) ?? new PyDict(), (string pid) => instance2.VersionJson(pid) as PyDict, Utils.IS_WINDOWS), null, null, null, delegate(string t)
+```
+
+```csharp
+// 改前(原 2963 行)
+string text2 = VersionOps.ExportLaunchBat(PPath.Norm(Py.Truthy(dest) ? Py.Str(dest) : PPath.Join(Utils.ROOT, "exports", "launch-" + instance2.name + "-" + text + ".bat")), launchCommand.cmd.Cast<object>(), launchCommand.game_dir);
+// 改后
+string text2 = VersionOps.ExportLaunchScript(PPath.Norm(Py.Truthy(dest) ? Py.Str(dest) : PPath.Join(Utils.ROOT, "exports", "launch-" + instance2.name + "-" + text + VersionOps.ExportScriptExtension(Utils.OS_NAME))), launchCommand.cmd.Cast<object>(), launchCommand.game_dir, Utils.OS_NAME);
+```
+
+Windows 上的等价性:同一个 json 对象(`ExportVersionJson(..., isWindows: true)` 原样返回)、同一个默认文件名后缀(`ExportScriptExtension("windows") == ".bat"`)、同一条写盘路径(`ExportLaunchScript` 转调 `ExportLaunchBat`)—— 由纯函数逐字对照 + 字节对比用例钉住。
+非 Windows 上第一个参数变成合并继承链后的 JSON:Forge 这类 `inheritsFrom` 版本从此和真实启动用同一份版本 JSON 判架构(这就是 B2e Lead 裁决里那条「`BackendApi.cs:2958` 传未合并 JSON」的落地)。
+
+### 新文件
+
+| 文件 | 说明 |
+|---|---|
+| [PosixShell.cs](src/TipCL.Core/Launcher/PosixShell.cs) | `internal static class PosixShell`:`Quote(string)`(null 按空串;整串单引号包裹,内部每个 `'` 换成 `'\''`,空串 → `''`)与 `JoinCommand(IEnumerable<string>)`(各自 Quote 后单空格连接)。纯函数,不碰盘、不碰环境 |
+| [B2c3PosixShellTests.cs](tests/TipCL.Tests/B2c3PosixShellTests.cs) | 26 条 |
+| [B2c3UpdaterNotifyTests.cs](tests/TipCL.Tests/B2c3UpdaterNotifyTests.cs) | 23 条 |
+| [B2c3MacCommandScriptTests.cs](tests/TipCL.Tests/B2c3MacCommandScriptTests.cs) | 23 条 |
+| [B2c3ExportLaunchScriptTests.cs](tests/TipCL.Tests/B2c3ExportLaunchScriptTests.cs) | 29 条 |
+
+### 测试(新增 101 条用例,总数 1579 → 1680)
+
+| 新文件 | 覆盖 | 用例数(含 Theory 展开) |
+|---|---|---|
+| `B2c3PosixShellTests.cs` | `Quote` 的 17 组逐字对照(空 / null / 空格 / 制表 / 单引号 / 那串敌意实例名 / 双引号 / `$HOME` / `$(id)` / 反引号 / 反斜杠 / 换行 / 分号 / 通配符 / 中文);「结果一定以单引号开头结尾」;「抹掉所有 `'\''` 转义后**只剩最外两个单引号**」;引号内内容逐字不变;`JoinCommand` 的空表 / null 表 / 单元素 / 多元素 / 空串元素 / null 元素 / 保序 / 敌意参数 | 26 |
+| `B2c3UpdaterNotifyTests.cs` | `SelfUpdateSupported("windows")` 为真 + 9 个非 Windows 取值为假;守卫在 Windows 不抛、在 5 个非 Windows 取值上抛 `RuntimeError` 且文案逐字相等;文案含「下载页」「不支持」且不含 http / powershell;本机分支自洽;源码钉子:`Download` / `ApplyStaged` 的第一句就是守卫(各 1 处)、`BuildApplyScript` 里没有守卫且三句原文仍在、`Check` 两个 return 各含 `can_self_update`、键名清单、平台判定只有一处 | 23 |
+| `B2c3MacCommandScriptTests.cs` | 普通取值逐字全文;敌意实例名逐字转义;10 个混合参数(含 `$HOME` / 反引号 / 双引号 / `$(touch ...)` / 空串 / 中文)经**独立的反解器**逐个还原成原值;description 的 CRLF / CR / LF / 双换行都压成空格(5 组逐字全文);敌意 description 不能顶出注释行;空 / null description;无参数不留尾空格;带空格 / 单引号 / 中文的路径;用户可控值只出现在正确加引号的词里;只有 LF + 恰好一个结尾换行;第一行是裸 shebang;`SetExecutable` 在 Windows 上是空操作;源码钉子:`Chmod755` 不再为空、mac 分支走 `MacCommandScript` + `Chmod755` + 无 BOM 编码且不再用 `_quote`、`CreateLaunchShortcut` 的 rawArgs、Windows / Linux 两分支与 `_quote` 未变 | 23 |
+| `B2c3ExportLaunchScriptTests.cs` | `ExportScriptExtension` 8 组;Windows 扩展名等于改动前的字面量;mac 扩展名与 `Shortcut` 的选择一致;`PosixLaunchScript` 的真实命令行逐字全文(含冒号分隔 classpath 与中文路径)、敌意值逐字、`$` / 反引号 / 双引号 / 分号 / 反斜杠保持字面量、没有 cmd 三件套、空表 / null 表的空命令行、null cwd 与 Windows 分支同源(`Py.Str` → `None`);`ExportLaunchScript` 的 osx 落盘字节(UTF-8 无 BOM / 只有 LF / 首字节 `#` / 内容等于 `PosixLaunchScript` / 建父目录 / 返回值形态)、linux 同正文、**windows 与直接调 `ExportLaunchBat` 字节全等**、Windows 分支不碰权限位;`ExportVersionJson` 的 Windows 同实例且 loader 不调、非 Windows 合并父的 `libraries` 与 `assets` 且子的键覆盖父、无继承时只拷贝、loader 抛异常 / 返回 null / 成环都退回 child、null child 的两分支行为;源码钉子:`BackendApi` 两行新写法 + 旧 `.bat` 默认名片段已消失、`ExportLaunchBat` 未被本包碰 | 29 |
+
+实际条数(进程内通道按类统计,合计 **101**):`B2c3ExportLaunchScriptTests` 29、`B2c3PosixShellTests` 26、`B2c3MacCommandScriptTests` 23、`B2c3UpdaterNotifyTests` 23。
+
+用例一律不联网、不起进程、不实例化 `BackendApi` / `BridgeServer` / `PluginManager`;没有调 `Updater.Check` / `Download` / `ApplyStaged`、没有调 `Shortcut.CreateLaunchShortcut` / `RemoveLaunchShortcut` / `DesktopDir`、没有调 `McLauncher.BuildLaunchCommand`、没有调任何 `Java` 安装 / 挑选入口;不写真实桌面、不写 `%TEMP%`,落盘的脚本都在 `TestHome.Root` 之下;没有改任何全局静态,也没有新建 `[ModuleInitializer]`。
+每条期望值的来源都写在用例注释里:来自本包读过的源码,或来自任务书给定的 POSIX 事实。
+其中 8 条是「读源码」的结构钉子(用 `RepoSource` 读仓库内的 `.cs` 正文,只读不写),它们钉的是「生产调用点确实接了新接缝」和「Windows 分支一字未动」。
+
+### 验证命令与实际结果(全部在本机真实执行过)
+
+| 命令 | 结果 |
+|---|---|
+| `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 错误**;**1 个警告 = SYSLIB0014 ×1**(`src\TipCL.Core\Launcher\Sync\PhoneClient.cs(116,38)`,本包未动的那处 `WebRequest`)。写测试时一度多出 5 个 `xUnit1012`(null 用在非空 `string` 形参上),已把形参改成 `string?` 修掉 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 **0**,通过 **1680** / 失败 0 / 跳过 0(没有出现 `Win32Exception (5)`) |
+| `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 **0**,总计 **1680**,通过 1680 / 失败 0 / 跳过 0 / **不支持 0** |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(两条通道前后各一次) | **87 → 87**(22:29:48 → 22:29:54 这次窗口内)**没有新名字**;相对开工时的 86 多出来的那一个是 `tipcl-probe`(22:28:19 出现),**不是本包产物**,见遗留第 5 条。真实桌面目录条目数 **14 → 14** |
+| `cmd /c "src\TipCL.App\bin\Release\net8.0\TipCL.exe --smoke --theme light --out artifacts\smoke-light.png"` / `--theme dark ...` | 退出码 **0 / 0**,**3739 字节 / 3751 字节**(与 A1 起逐次相同);SHA256 `17F3CD87…017BF` / `374716FF…38144` |
+| `%LOCALAPPDATA%\TipCL` 测试后 | **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,三项与开工时完全一致 |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL` | 全 **0**;另有 2 个 `powershell` 进程,一个是上一个会话(Lead)的轮询脚本(PID 1660,22:24:14 起),一个是本次测量命令自己的 shell,都不是本包起的 |
+| 字节一致性自检(`src/TipCL.Core` 全部 `.cs` 对 Windows 源比 SHA256) | 总数 **248** / 一致 **216** / 有改动 **22** / Windows 源里没有对应文件 **10**。有改动的 22 = 既有 18 个 + 本包实际改的 4 个(`BackendApi.cs`、`Launcher/Shortcut.cs`、`Launcher/Updater.cs`、`Launcher/VersionOps.cs`);没有对应文件的 10 = 既有 9 个 + 本包新建的 `Launcher/PosixShell.cs` |
+| `git diff --stat`(提交前)| 4 个复制文件 **+162 / -14** 行;其中 `BackendApi.cs` 只有 2 行改动(`2 +/-2`),其余三个文件的改动全在本节逐条列出 |
+
+### 未验证(本机是 Windows,没有 Mac)
+
+1. **mac 上双击 `.command` 能不能起来**:`.command` 由 Terminal 执行、必须有可执行位这两条按任务书给定的事实实现,**真机没跑过**;`File.SetUnixFileMode` 在本机(Windows)是空操作,所以「0755 到底设上没有」只能靠真机日志确认。
+2. **`_quote` 的那些旧用法在 mac 上已不再使用,但 Linux 的 `.desktop` `Exec=` 仍是弱引号**(只记录),真机上没验。
+3. **`DesktopDir()` 在 mac 上到底返回哪个目录**(`~/Desktop` 还是 `~/桌面`,或最坏情况的 `HOME` 根)没有真机验证;本包的用例**不碰真实桌面**,也没有模拟它。
+4. **导出的 `.command` 在 mac 上真的能启动 Minecraft** 没有验证(要真机 + 装好的实例)。
+5. `ExportVersionJson` 非 Windows 分支在真机上拿到的父版本 JSON 形态没有验证(本机只用假 loader 测)。
+6. mac 上「打开下载页」这一步本身属于 UI 阶段,本包没有实现,也没有验证。
+
+### 遗留与风险
+
+1. `Updater.Check` 新增的 `can_self_update` 需要 UI 阶段接上(否则 mac 上界面仍会给出「立即更新」的入口,点了会拿到那句中文报错)。
+2. `PosixLaunchScript` 的 cwd 走 `Py.Str(cwd)`,null 会变成字符串 `None` —— 这是与 `ExportLaunchBat` 的 `Py.Str(cwd)` **同源**的既有语义(不是本包新引入),用例已把这个行为写清楚。
+3. mac 分支的 `.command` 里 `exec` 会把 shell 换成目标进程(这是快捷方式该有的行为);导出脚本**故意不用 `exec`**,以便 Terminal 正常显示退出码。
+4. `_create_macos` 多了一个参数而 `arguments` 在 mac 分支不参与正文;将来若有人往 mac 正文里加内容,记得别把预拼接的 `arguments` 又接回去。
+5. `%TEMP%` 下出现了一个叫 `tipcl-probe` 的目录(创建于 22:28:19,窗口内),**不是本包产物**:仓库里没有任何代码提到这个名字,目录里是另一个会话的 .NET 探针工程(`probe.csproj` / `Program.cs` / `bin` / `obj` / `out` / `scratch`)。已记入 [DECISIONS.md](DECISIONS.md) D-61。
+6. 本包没有改 `Utils.cs` / `Java.cs` / `McLauncher.cs` / `Installer.cs` / `Preflight.cs` / `GlobalMods.cs` / 其它复制文件;没有改 TFM、没有扩 `NoWarn`、没有新增警告;没有联网请求。
+
+
 
 
 

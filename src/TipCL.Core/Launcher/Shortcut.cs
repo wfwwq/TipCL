@@ -173,8 +173,16 @@ public static class Shortcut
 		return text;
 	}
 
+	/// <summary>
+	/// B2c3:原来这里是**空方法** —— 生成的 .command / .desktop 从来没有可执行位,
+	/// mac 上双击 .command 会被系统当成普通文本(或直接报没有执行权限)。
+	/// 复用同程序集里已有的 JavaRuntimeFiles.SetExecutable:非 Windows 设 0755,
+	/// Windows 上第一句就返回(Windows 生成的是 .lnk,走 _create_windows,根本不经过这里)。
+	/// Linux 的 .desktop 因此也第一次拿到执行位 —— 任务书接受,已记入 PROGRESS.md。
+	/// </summary>
 	private static void Chmod755(string path)
 	{
+		JavaRuntimeFiles.SetExecutable(path);
 	}
 
 	private static string _create_linux(string name, string target, string arguments, string workdir, string icon, string description)
@@ -200,16 +208,46 @@ public static class Shortcut
 		return text;
 	}
 
-	private static string _create_macos(string name, string target, string arguments, string workdir, string icon, string description)
+	/// <summary>
+	/// B2c3 新接缝(纯函数):拼 macOS 上双击即用的 .command 脚本正文。三条要点:
+	/// 1. description 里有用户可控文本(实例名 / 版本号),其中的 CR / LF 一律换成空格 ——
+	///    注释只占一行,不能让换行把后面的命令顶出注释;
+	/// 2. workdir / target / 每个参数都走 PosixShell.Quote 的单引号规则,
+	///    用户可控文本里带单引号、$、反引号、双引号、分号、空格都不可能跳出引号;
+	/// 3. 行尾只有 LF、最后有一个换行(写盘的编码由调用方保证:UTF-8 无 BOM)。
+	/// </summary>
+	internal static string MacCommandScript(string description, string workdir, string target, IEnumerable<string> args)
 	{
-		string text = PPath.Join(DesktopDir(), name + ".command");
-		File.WriteAllText(contents: string.Join("\n", new List<string>
+		List<string> list = new List<string>
 		{
 			"#!/bin/sh",
-			"# " + description,
-			"cd " + _quote(workdir),
-			"exec " + _quote(target) + " " + arguments
-		}) + "\n", path: PPath.Abs(text), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+			"# " + _one_line(description),
+			"cd " + PosixShell.Quote(workdir)
+		};
+		List<string> list2 = new List<string> { target };
+		if (args != null)
+		{
+			list2.AddRange(args);
+		}
+		list.Add("exec " + PosixShell.JoinCommand(list2));
+		return string.Join("\n", list) + "\n";
+	}
+
+	/// <summary>把任意文本压成单行:CRLF / CR / LF 三种换行都换成空格(null 按空串)。</summary>
+	private static string _one_line(string text)
+	{
+		return (text ?? "").Replace("\r\n", " ").Replace('\r', ' ').Replace('\n', ' ');
+	}
+
+	/// <summary>
+	/// macOS 分支。第七个参数 rawArgs 是本包新加的:上面那份预拼接的 arguments 走的是
+	/// cmd 风格的 _quote,在 sh 里不安全,所以 mac 分支要原始参数表、自己按 POSIX 规则加引号。
+	/// arguments 参数**有意不用**(Windows / Linux 两个分支拿到的仍是逐字相同的值)。
+	/// </summary>
+	private static string _create_macos(string name, string target, string arguments, string workdir, string icon, string description, IEnumerable<string> rawArgs)
+	{
+		string text = PPath.Join(DesktopDir(), name + ".command");
+		File.WriteAllText(PPath.Abs(text), MacCommandScript(description, workdir, target, rawArgs), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 		Chmod755(PPath.Abs(text));
 		return text;
 	}
@@ -222,8 +260,10 @@ public static class Shortcut
 		}
 		List<string> list = LauncherCommand();
 		string target = list[0];
-		IEnumerable<string> source = list.Skip(1).Concat<string>(LaunchArgs(instance, version, username, account));
-		string arguments = string.Join(" ", source.Select(_quote));
+		// B2c3:先落成 List —— Windows / Linux 两个分支照旧用预拼接的 arguments(值与改动前
+		// 逐字相同),macOS 分支另外拿到**没拼接过**的原始参数表,自己按 POSIX 规则加引号。
+		List<string> rawArgs = list.Skip(1).Concat(LaunchArgs(instance, version, username, account)).ToList();
+		string arguments = string.Join(" ", rawArgs.Select(_quote));
 		string name2 = SafeFilename(Py.Truthy(instance) ? Py.Or(name, Py.Str(version) + " - " + Py.Str(instance)) : version);
 		string icon = "";
 		string[] array = new string[2]
@@ -247,7 +287,7 @@ public static class Shortcut
 		}
 		if (Utils.IS_MAC)
 		{
-			return _create_macos(name2, target, arguments, pROJECT_ROOT, icon, description);
+			return _create_macos(name2, target, arguments, pROJECT_ROOT, icon, description, rawArgs);
 		}
 		return _create_linux(name2, target, arguments, pROJECT_ROOT, icon, description);
 	}

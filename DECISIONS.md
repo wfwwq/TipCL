@@ -778,3 +778,31 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
    永远不返回 null/空。按「Windows 行为逐项不变」优先,保留原语义,并用一条用例把这个语义写清楚。
    非 Windows 分支根本不碰这个参数(mac 的默认位置是 `~/Library/Android/sdk`,不是 `%LOCALAPPDATA%`)。
 
+## D-60 B2c3 的七处保守取舍
+
+1. **`_create_macos` 用「加参数」而不是「改语义」**。任务书允许「加参数或加重载」,本包给 mac 分支加了第七个参数 `IEnumerable<string> rawArgs`(原始参数表),
+   而 `arguments` 这个参数在 mac 分支**有意不用**(它是 cmd 风格 `_quote` 的预拼接结果,在 sh 里不安全)。
+   Windows / Linux 两个分支收到的实参**逐字未变**,并用源码钉子钉住(`CreateLaunchShortcut` 里 `string.Join(" ", rawArgs.Select(_quote))` 与三条 `return _create_*(...)` 的原文)。
+2. **`Chmod755` 复用 `JavaRuntimeFiles.SetExecutable`**,没有另写一套 chmod。理由:同一个程序集里已经有「非 Windows 设 0755、Windows 空操作、失败只记警告」的实现。
+   副作用是 Linux 的 `.desktop` 也第一次拿到执行位 —— 任务书已明确接受。
+3. **`ExportVersionJson` 非 Windows 分支用 `catch (Exception)` 全兜底**(缺父版本、继承成环、loader 自己抛异常、甚至 loader 是 null),统一退回 `childJson`。
+   理由:导出启动脚本是只读动作,宁可脚本里出现未合并的版本 JSON(Java 挑选那一侧还有自己的兜底),也不要让「导出」整体失败;而 Windows 分支根本不进 try,行为逐字不变。
+4. **`PosixLaunchScript` 的 cwd 走 `Py.Str(cwd)`**(null → 字符串 `None`),没有改成「null → 空串」。理由:这与 `ExportLaunchBat` 里那句 `cd /d "<Py.Str(cwd)>"` **同源**,
+   两条分支在同一个输入上应当给出一致的行为;改成空串反而是新的分歧。测试把这个行为逐字写清楚。
+5. **description 里的 CR / LF 压成空格**(而不是删掉或加转义)。理由:注释必须只占一行(否则用户可控文本能把后面的命令顶出注释),同时尽量保留原文信息;
+   压完仍然只出现在 `#` 开头的那一行里,由逐字全文用例钉住。
+6. **测试里读源码的助手返回正文而不是路径**(本包改名 `RepoSource`)。B2c2 的 `RepoFile` 返回路径、由调用方自己 `File.ReadAllText`;
+   本包第一次照抄时漏了 `File.ReadAllText`,22 条用例红在同一类原因上。改名并直接返回正文,让这个坑不能再犯。
+7. **导出脚本的默认文件名后缀改用 `ExportScriptExtension(Utils.OS_NAME)`**,Windows 上仍等于改动前写死的 `.bat`(纯函数逐字对照 + 「windows 分支与直接调 `ExportLaunchBat` 字节全等」用例钉住)。
+
+## D-61 `%TEMP%\tipcl-probe` 不是 B2c3 的产物(B2c3 实测,给 Lead 的证据)
+
+- **现象**:B2c3 跑测试的窗口内(22:28:19)`%TEMP%` 下多了一个目录名 `tipcl-probe`,按任务书的收尾要求(窗口内新出现的 `tipcl*` 名字要报出来、期望为空)必须查清。
+- **证据(三条,都是实测)**:
+  1. 全仓库 grep `tipcl-probe` **零命中**(源码、测试、脚本、文档都没有这个名字),本包也不可能凭空造出它;
+  2. 目录内容是一个**别人的 .NET 探针工程**:`probe.csproj` / `Program.cs` / `bin` / `obj` / `out` / `scratch`,其中 `bin`/`obj`/`out` 的时间戳(22:28:32 / 22:28:35)与同一时刻本机另一个 `dotnet build` 的 MSBuild 临时目录成对出现;
+  3. 本包两条通道的用例只往 `TestHome.Root` 下写(逐条审过:没有 `Path.GetTempPath()`、没有写真实桌面),随后再做一次「两条通道前后各一次」的名字集合比对是 **87 → 87,没有新名字**。
+- **结论**:该目录属于本机另一个会话的临时探针工程,不是本包的越界产物;本包不改它、也不清理别人的临时文件。
+  记在这里是为了避免后续验收把它算到 B2c3 头上(机器上同时有别的会话在跑,`%TEMP%` 总量不可比)。
+
+

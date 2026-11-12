@@ -2955,12 +2955,12 @@ public partial class BackendApi
 			PyDict pyDict = accounts.LaunchProps(account);
 			string text = Py.Str(version);
 			PyDict pyDict2 = LaunchFlow.Prepare(instance2, text, null, Py.Int(Py.Or(Config.CONFIG.Get("memory_mb"), 4096L)));
-			string java_exe = Java.ResolveLaunchJava((Py.Or(instance2.VersionJson(text), new PyDict()) as PyDict) ?? new PyDict(), null, null, null, delegate(string t)
+			string java_exe = Java.ResolveLaunchJava(VersionOps.ExportVersionJson((Py.Or(instance2.VersionJson(text), new PyDict()) as PyDict) ?? new PyDict(), (string pid) => instance2.VersionJson(pid) as PyDict, Utils.IS_WINDOWS), null, null, null, delegate(string t)
 			{
 				ctx.Log(t);
 			});
 			McLauncher.LaunchCommand launchCommand = McLauncher.BuildLaunchCommand(instance2, text, pyDict, java_exe, Py.Or(pyDict2["memory_mb"], 4096L), null, null, (List<object>)pyDict2["extra_game_args"], pyDict2["jvm_args"], (string)pyDict2["game_dir"], pyDict.Get("authlib_api"));
-			string text2 = VersionOps.ExportLaunchBat(PPath.Norm(Py.Truthy(dest) ? Py.Str(dest) : PPath.Join(Utils.ROOT, "exports", "launch-" + instance2.name + "-" + text + ".bat")), launchCommand.cmd.Cast<object>(), launchCommand.game_dir);
+			string text2 = VersionOps.ExportLaunchScript(PPath.Norm(Py.Truthy(dest) ? Py.Str(dest) : PPath.Join(Utils.ROOT, "exports", "launch-" + instance2.name + "-" + text + VersionOps.ExportScriptExtension(Utils.OS_NAME))), launchCommand.cmd.Cast<object>(), launchCommand.game_dir, Utils.OS_NAME);
 			ctx.Log("已写出 " + text2);
 			return text2;
 		});

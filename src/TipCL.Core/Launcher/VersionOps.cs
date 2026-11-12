@@ -230,4 +230,86 @@ public static class VersionOps
 		File.WriteAllBytes(PPath.Abs(dest), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(text2));
 		return new PPath(dest).ToString();
 	}
+
+	/// <summary>
+	/// B2c3 新接缝(纯函数):导出启动脚本的扩展名。Windows 是 .bat,
+	/// macOS 用 .command(Terminal 双击即执行,与 Shortcut 的 mac 分支保持同一选择),
+	/// 其余平台用最通用的 .sh。
+	/// </summary>
+	internal static string ExportScriptExtension(string os)
+	{
+		if (os == "windows")
+		{
+			return ".bat";
+		}
+		if (os == "osx")
+		{
+			return ".command";
+		}
+		return ".sh";
+	}
+
+	/// <summary>
+	/// B2c3 新接缝(纯函数):非 Windows 的启动脚本正文。与 ExportLaunchBat 的差别都是**有意**的:
+	/// 没有 chcp(那是 cmd 的事)、没有 pause(双击 .command 时 Terminal 会自己停在窗口里,
+	/// 而且退出码要能正常返回)、没有 exec(让 shell 等命令跑完并把退出码交回 Terminal)、
+	/// 每个参数各自按 POSIX 规则加单引号、换行一律 LF、结尾有换行。
+	/// 不加任何 JVM 参数、不加 arch 前缀 —— 命令表由调用方(McLauncher)拼好原样传进来。
+	/// </summary>
+	internal static string PosixLaunchScript(IEnumerable<object> cmd, object cwd)
+	{
+		List<string> list = new List<string> { "#!/bin/sh", "cd " + PosixShell.Quote(Py.Str(cwd)) };
+		List<string> list2 = new List<string>();
+		if (cmd != null)
+		{
+			foreach (object item in cmd)
+			{
+				list2.Add(Py.Str(item));
+			}
+		}
+		list.Add(PosixShell.JoinCommand(list2));
+		return string.Join("\n", list) + "\n";
+	}
+
+	/// <summary>
+	/// B2c3:导出启动脚本的统一入口。Windows 走原来的 ExportLaunchBat(**一个字节都没动**,
+	/// 返回值也是它原来那个),其余平台写 PosixLaunchScript 的正文、UTF-8 无 BOM,
+	/// 并按上面的扩展名约定补一次可执行位(失败只记警告,不让导出失败),返回值形式与
+	/// ExportLaunchBat 一致(PPath 规范化后的路径)。
+	/// </summary>
+	internal static string ExportLaunchScript(string dest, IEnumerable<object> cmd, object cwd, string os)
+	{
+		if (os == "windows")
+		{
+			return ExportLaunchBat(dest, cmd, cwd);
+		}
+		Utils.EnsureDir(new PPath(dest).Parent.ToString());
+		string text = PosixLaunchScript(cmd, cwd);
+		File.WriteAllBytes(PPath.Abs(dest), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(text));
+		JavaRuntimeFiles.SetExecutable(PPath.Abs(dest));
+		return new PPath(dest).ToString();
+	}
+
+	/// <summary>
+	/// B2c3 新接缝(纯函数对注入的 loader 而言):导出启动脚本时交给 Java 挑选的那个版本 JSON。
+	/// Windows 上**原样返回 childJson**(与改动前同一个对象,loader 一次都不调,行为逐字不变);
+	/// 非 Windows 上先合并继承链 —— 因为 ResolveLaunchJava 要按最终生效的版本 JSON 判架构,
+	/// 传未合并的 child 会让 Forge 这类 inheritsFrom 的版本挑错 Java(B2e 的 Lead 裁决)。
+	/// 合并抛异常(缺父版本 / 继承环)时退回 childJson,让导出至少能出脚本,由 Java 挑选自己兜底。
+	/// </summary>
+	internal static PyDict ExportVersionJson(PyDict childJson, Func<string, PyDict> loadParent, bool isWindows)
+	{
+		if (isWindows)
+		{
+			return childJson;
+		}
+		try
+		{
+			return Manifest.ResolveInherits(childJson, loadParent);
+		}
+		catch (Exception)
+		{
+			return childJson;
+		}
+	}
 }
