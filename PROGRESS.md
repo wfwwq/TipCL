@@ -2526,6 +2526,34 @@ mac 上到底能不能执行**未经真机验证**。
 4. Windows 分支里 `Path.Combine(localAppData, …)` 对 null 抛异常这一点被忠实保留(生产中不会发生),将来若有人拿它当通用工具函数用,需要自己保证非 null。
 5. 本包没有动 `Utils.cs` / `BackendApi.cs` / 其它复制文件,也没有改 TFM、没有扩 `NoWarn`、没有新增警告。
 
+### Lead 验收(2026-11-12 22:10)
+
+结论:**B2c2 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src/TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 有对应文件的 238 个里 220 一致、18 个有改动(原有 14 个 + 本包 `NodeRuntime.cs`、`Terracotta.cs`、`Sync\PhoneClient.cs`、`Sync\PhoneLink.cs`);无对应文件的 9 个不变,本包没有新建 `.cs` |
+| `git diff adfd75b..HEAD` 对 4 个复制文件(Lead 逐行读过) | `NodeRuntime.cs`:平台与后缀交给纯函数,Windows 仍是 `win-x64` / `win-x86` + `.zip`,mac 走 `darwin-*` + `.tar.gz` 并用 `SafeExtractTarGz` 解压;sha256 校验与镜像循环未动。`Terracotta.cs`:安装后给内核可执行文件补 0755,Windows 返回空表。`PhoneClient.cs`:候选列表抽成纯函数,Windows 的 6 类候选与顺序未变(含每个 PATH 目录先 `adb.exe` 后 `adb`);Windows 报错原文一字未动。`PhoneLink.cs`:临时目录改为可注入,默认值仍是系统临时目录下的 `tipcl-phone-sync` |
+| `BackendApi.cs`、`Java.cs`、`JavaArch.cs`、`JavaRuntimeFiles.cs`、`LaunchArch.cs`、`MacNativeSupport.cs`、`Utils.cs`、`Installer.cs`、`McLauncher.cs`、`PluginManager.cs`、`PluginMarket.cs`、`Ported\` 下全部文件、红线文件、`Directory.Build.props`、`TipCL.Core.csproj` | 未改 |
+| `TipCL.Tests.csproj` | 只多了一段注释;`Ported\PhoneLinkTests.cs` 仍在 `Compile Remove` 里 |
+| 已有测试被改动的 | 0 个 |
+| 本次提交改动的文本文件做严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告只有 SYSLIB0014 ×1 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 1579 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 1579 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(Lead 复跑前后) | 86 → 86,没有新名字;`tipcl-phone-sync` 条目数 0 → 0 |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL`,以及新起的 `node` | 0 个 |
+| B2c2 测试扫描 | 没有联网、起进程、调 `NodeRuntime` 的下载 / 探测入口、调无参 `FindAdb()`、建真实符号链接、改环境变量;`PhoneLink.TempDirProvider` 的临时替换在 `finally` 里恢复 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+Lead 的裁决与说明:
+
+- **`PhoneLinkTests` 继续排除**:临时目录的原因已消除,但 `dotnet test` 通道里 `HttpListener.Start()` 仍报「句柄无效」。子代理把它放出来实测后又放回去,做法正确。Lead 没有单独复跑放出来的状态。
+- D-58(注释里的标点用半角)、D-59(Windows 报错原文作为实参保留、旧注释用追加更正)接受。
+- mac 上的三条 adb 默认位置、Node 的 tar 包布局(`bin/node`、`bin/npm` 符号链接)、Terracotta 内核能否执行,都列入真机验证清单。
+
 
 
 
