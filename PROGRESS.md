@@ -17,7 +17,8 @@
 | B1b | 运行时差异修复(SecretStore 读取路径 / 代码页 / 打开文件夹 / 软链接 / CA1416) | ✅ 完成(见下;**新增 45 条用例,总数 766 → 811,两条通道都 811/811 全绿**;CA1416 ×7 → 0) |
 | B2a | mac Java 运行时获取(Mojang 平台键 / Adoptium·Zulu mac 包 / 可执行位与链接 / java 定位) | ✅ 完成(见下;**新增 90 条用例,总数 811 → 901,两条通道都 901/901 全绿**) |
 | B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | ✅ 完成(见下;**新增 137 条用例,总数 901 → 1038,两条通道都 1038/1038 全绿**;三个复制文件只加可注入 OS/ARCH 的 internal 重载 + 一处内联逻辑抽取,Windows 行为用等价钉子逐项钉住;新建 `Launcher\MacNativeSupport.cs`,未接入调用点,留 Lead 裁决 arm64 方案) |
-| B2c | NodeRuntime darwin / Terracotta 权限 / adb 路径 / PhoneLink 临时目录 / Preflight 磁盘 / Updater 仅提示 / Shortcut / IsSymlink / Microsoft 厂商分支 / Mojang 安装循环建链顺序 | 未开始 |
+| B2c1 | Java 与安装的收尾:Mojang 安装循环建链顺序与已存在链接 / Microsoft 厂商分支 / `forge-legacy` 的 Java 8 / Preflight 磁盘空间守卫 / `GlobalMods.IsSymlink` | 未开始 |
+| B2c2 | 其余平台差异:NodeRuntime darwin / Terracotta 可执行权限 / adb 路径 / PhoneLink 临时目录 / Updater 仅提示 / Shortcut / 导出启动脚本(含 `BackendApi.cs:2958` 传未合并 JSON) | 未开始 |
 | B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | ✅ 完成(见下;**新增 132 条用例,总数 1038 → 1170,两条通道都 1170/1170 全绿**;新建 `Launcher\LaunchArch.cs`,7 处调用点改读目标架构,5 个复制文件加可注入重载 / 抽取纯函数;Java 侧留给 B2e) |
 | B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | ✅ 完成(见下;**新增 235 条用例,总数 1170 → 1405,两条通道都 1405/1405 全绿**;新建 `Launcher\JavaArch.cs`,`Java.cs` / `McLauncher.cs` / `Installer.cs` 各改一处;写测试时抓到并修掉一个「读取委托 / 探测委托」接错的真 bug,见 D-50;两处同类缺口只记录未改,见 D-52) |
 | B3 | 打包 | 未开始 |
@@ -2155,5 +2156,46 @@ arm64 的 Java(而真正启动走的是合并 JSON → x64)。红线不许改 `B
    这是任务书裁决的保守做法,代价是 Apple 芯片跑老版本时更可能触发自动下载。
 5. `JavaArch` 的目录名推断只认启动器自己会创建的两种名字形态;用户自己放到别处、又没有 `release`
    的 Java 一律探测不出来(按任务书「探测不出来按不可用」处理)。
+
+### Lead 验收(2026-11-12 21:15)
+
+结论:**B2e 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src/TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 有对应文件的 238 个里 224 一致、14 个有改动(与 B2d 相同的 14 个);无对应文件的 9 个是原有 8 个 + `Launcher\JavaArch.cs` |
+| `git diff 496c1ce..HEAD` 对 `Java.cs`、`McLauncher.cs`、`Installer.cs`(Lead 逐行读过) | `JavaUsableFor` / `PickJavaForVersion` 在非 Apple 芯片上先返回、不探测;`InstallMojangRuntime` 只把 5 处 `PLATFORM_KEY` 换成入参;`EnsureJavaForVersion` 改走 `PlanInstall`;`McLauncher` 删掉无调用方的 3 参 `_expand_args`,报错文案只在跨架构时追加一句;`Installer` 只改兜底大版本一处 |
+| `JavaArch.cs`(Lead 全文读过,452 行) | 探测只读 `<JAVA_HOME>/release`,不起进程;所有判断以「`osx` + 进程 `arm64`」为前提;没有 Rosetta 检测,没有给启动命令加前缀 |
+| `BackendApi.cs`、`LaunchArch.cs`、`MacNativeSupport.cs`、`Utils.cs`、`Cleaner.cs`、`Preflight.cs`、`OfficialMigrate.cs`、`JavaRuntimeFiles.cs`、红线文件、`Directory.Build.props`、三个 csproj | 未改 |
+| 已有测试被改动的 | 0 个 |
+| 本次提交改动的文本文件做严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告只有 SYSLIB0014 ×1 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 1405 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 1405 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(Lead 复跑前后) | 86 → 86,没有新名字 |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL` | 0 个 |
+| B2e 测试扫描 | 没有联网、起进程、调 `Java` 的挑选 / 安装 / 探测版本入口、改环境变量;`JavaArch.Detect(path)` 的调用只读 `TestHome.Root` 下的文件 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+**对子代理 3 个待裁决事项的裁决**(Lead 读过 `BackendApi.cs` 2924–2963、3084–3105 与 `Java.cs` 1414–1443 核实):
+
+1. **`BackendApi.cs:2958`(`export_launch_script`)传未合并的版本 JSON**:属实,另外三个调用点传的都是 `ResolveInherits` 的结果。
+   这个功能导出的是 `.bat`(`VersionOps.ExportLaunchBat`),在 mac 上本来就要另做 `.command` / `.sh`,归 B2c 的「导出启动脚本」项一并处理,
+   届时把该调用点改成先 `Manifest.ResolveInherits`(只在非 Windows 分支,Windows 上的行为不动)。在那之前 mac 上不要依赖导出脚本。
+2. **`Java.JavaForInstaller("forge-legacy")` 在 Apple 芯片上装 Adoptium 8 必失败**:属实(Adoptium 没有 mac aarch64 的 Java 8)。
+   裁决:Apple 芯片上这一处装 **Adoptium 8 的 x64 包**(目录 `adoptium-8-x64`)。Forge 安装器是纯 Java,x64 的 JVM 经 Rosetta 能跑;
+   而 1.17 之前的版本在 Apple 芯片上本来就要用 x64 的 Java 8 启动,装同一个包可以复用,不必再多下一个 Zulu。归 B2c。
+3. **`_ensure_any_java()` 兜底 8 → 17**:接受。老 Forge 处理器 jar 在 Java 17 上能否运行列入真机验证清单。
+
+**Apple 芯片旧版本这条路径现在在代码层面自洽**(目标架构 x64 → x86_64 原生库 → x64 Java → Mojang `mac-os` 清单或 Adoptium x64),
+但**全程没有在 Mac 上运行过**。真机清单里至少要验:`release` 文件里 `OS_ARCH` 的真实取值、x64 的 `java` 是否确实自动经 Rosetta 启动、
+没装 Rosetta 时的实际报错、1.16.5 与 1.18.2 能否进入游戏。
+
+B2c 拆成两包:
+
+- **B2c1(Java 与安装的收尾)**:Mojang 安装循环建链顺序与已存在链接、Microsoft 厂商分支、`forge-legacy` 的 Java 8、`Preflight` 磁盘空间守卫、`GlobalMods.IsSymlink`。
+- **B2c2(其余平台差异)**:NodeRuntime darwin、Terracotta 可执行权限、adb 路径、`PhoneLink` 临时目录、Updater 仅提示、Shortcut、导出启动脚本。
 
 
