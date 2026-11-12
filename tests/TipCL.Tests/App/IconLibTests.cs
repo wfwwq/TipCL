@@ -1,6 +1,4 @@
 using System.Collections.Generic;
-using Avalonia;
-using Avalonia.Headless;
 using Avalonia.Media;
 using TipCL.App.Common;
 using Xunit;
@@ -10,15 +8,14 @@ namespace TipCL.Tests.App;
 /// <summary>M2-B0：IconLib 全量 Path Data 可解析 + 覆盖 M2 页面所需图标。</summary>
 public class IconLibTests
 {
-    static IconLibTests()
-    {
-        // Geometry.Parse 需要渲染接口：无头平台一次性初始化
-        if (Application.Current == null)
-            AppBuilder.Configure<Application>()
-                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-                .UseSkia()
-                .SetupWithoutStarting();
-    }
+    // 这里原先有个静态构造:Application.Current == null 时自己 AppBuilder.Configure<Application>()
+    // .UseHeadless(...).UseSkia().SetupWithoutStarting()。那是在**测试线程**上另起一次无头初始化,
+    // 和 TestApp 的会话抢同一份进程级状态:它会把一份「归测试线程所有」的 ManagedDispatcherImpl 留在
+    // 根 locator 作用域里;之后任何线程在 HeadlessUnitTestSession 的派发窗口里抢先创建
+    // Dispatcher.UIThread,装进来的调度器就归测试线程所有(而不是会话线程),会话线程随后在
+    // AvaloniaHeadlessPlatform.Initialize -> Compositor..ctor -> RenderLoop.Add 上偶发报
+    // "Call from invalid thread"。本类四个用例本来就走 TestApp.Run 落在会话上,Geometry.Parse 需要的
+    // 渲染接口在会话里已经就绪,那次额外初始化是多余的,故删掉。
 
     [Fact]
     public void All_Path_Data_Parse() => TestApp.Run(() =>

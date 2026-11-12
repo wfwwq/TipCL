@@ -363,3 +363,11 @@
 - **窗口相对坐标**:X11 下 `xdotool getwindowgeometry` 报的 X/Y 与窗口客户区在整屏截图里的位置**并不一致**(实测差 18~50px),所以「整屏截图量位置再反算绝对坐标」连点四轮都可能全部落空。正确做法:`import -window <WID>` 只截窗口 → 在窗口图像里量位置 → `xdotool mousemove --window <WID> x y click 1`。本轮用这套方法一次命中(Y 方向偏 10px 以内)。
 - **隔离 HOME**:跑 `--smoke` / 无头验证必须显式给一个**隔离的 `TIPCL_HOME`**;脚本里别用 `$home` 这类会与 PowerShell 只读变量 `$HOME` 撞名的名字(赋值失败不报错,`TIPCL_HOME` 会静默落到用户目录根,把 `config.json` / `logs` / `ai_chats.json` 写进 `C:\Users\Administrator`)。出事后按「CreationTime 当天 + 路径精确匹配」逐个清理,并复核真实数据基线(`%LOCALAPPDATA%\TipCL\config.json` 的 mtime / sha)。
 - **测活与判据**:进程测活用**产物自己的路径**(改名后的单文件产物 cmdline 里没有 `TipCL.App` 子串,用 `pgrep -f TipCL.App` 会得出「进程没了」的假结论);页面身份看内容/像素,不看 PNG 字节哈希。
+
+### D-44 · 测试套件偶发 `Call from invalid thread` 的真根因:进程级 `Dispatcher.UIThread` 被跨线程抢占(R14,2026-11-13,移植代理;主 agent 复核)
+
+- **别先怀疑并行**:`tests/TipCL.Tests/AssemblyInfo.cs` 早已 `DisableTestParallelization = true`;「关并行 / 加 Collection / runner.json」对本问题全是 no-op(探针在 ~1820 次派发里 0 次并发)。遇到这类 flaky,先查**进程级静态状态**,再查并发。
+- **机制**:`HeadlessUnitTestSession` 每次派发都 `Dispatcher.ResetForUnitTests()`(置空进程级 `Dispatcher.UIThread`)+ `AppBuilder.SetupUnsafe()`,于是每个派发边界都有一个「谁先读谁赢」的窗口;而 `Dispatcher.UIThread` 的线程亲和由**构造它的那份 `IDispatcherImpl`** 决定。赢家可能是会话线程(正常),也可能是**测试里自己另起的一次无头初始化**留下的实现(归测试线程 ⇒ 之后必失配),或产品码的后台线程。
+- **纪律**:① 测试里**禁止**再自己 `AppBuilder.Configure<…>().UseHeadless(...).SetupWithoutStarting()` 另起初始化 —— 必须统一走 `TestApp` 的会话,否则会把「归错误线程所有」的实现留在**根** locator 作用域(`AvaloniaLocator` 是进程级静态,不是线程本地);② 会话起来后把「会话线程自己那份 `IDispatcherImpl`」钉进根作用域当兜底(测试代码内、失败可退化为旧行为);③ 修 flaky **必须给机制级证据**(IL / 探针时间线 / 最小复现对照,如基线 13/13 失败 vs 修复 9/9 通过),**不许**用「跑了几次没失败」当结论。
+- **代价与风险**:兜底走反射访问 Avalonia 内部类型与私有字段(`AvaloniaLocator.Current` / `_parentScope` / `_registry`、`GetService`);升级 Avalonia 后改名会**静默失效**,后果是退回偶发失败、不会新增失败。若将来 Avalonia 给出公开入口(或 headless 会话自身保证 UIThread 归属),应改回公开 API。
+- **判据(以后照用)**:验收这类修复要同时给「改动前后的失败率/机制」与「用例总数不变(335 = 334 + 1 skip)、耗时不变差」,三者缺一不可。
