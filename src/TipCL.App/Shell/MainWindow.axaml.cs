@@ -173,17 +173,73 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>等主窗口可见的上限(ms)。生命周期在 OnFrameworkInitializationCompleted 之后才 Show,
+    /// 正常几毫秒内就可见;窗口一直不显示时也不能把启动提示永久挂住。</summary>
+    private const int VisibleWaitMs = 15000;
+
     /// <summary>首启向导 + 反馈同意门(M4-H P4,照 Windows 启动顺序:先向导,再同意门)。</summary>
     public async Task RunStartupPromptsAsync()
     {
         try
         {
-            await TipCL.App.Pages.Feedback.FirstRunWizard.MaybeShowAsync();
-            await TipCL.App.Common.FeedbackConsent.MaybeAskAsync(this);
+            if (!await RunWhenVisibleAsync(this, VisibleWaitMs, RunPromptsAsync))
+                TipCL.App.Common.AppLog.Warn("主窗口 " + VisibleWaitMs + "ms 内没有可见,启动提示已跳过");
         }
         catch (Exception ex)
         {
             TipCL.App.Common.AppLog.Warn("启动提示失败: " + ex.Message);
+        }
+    }
+
+    private async Task RunPromptsAsync()
+    {
+        await TipCL.App.Pages.Feedback.FirstRunWizard.MaybeShowAsync();
+        await TipCL.App.Common.FeedbackConsent.MaybeAskAsync(this);
+    }
+
+    /// <summary>
+    /// M4-H R12:两个启动提示都等主窗口**真正可见**之后再跑。`App.OnFrameworkInitializationCompleted` 在
+    /// `desktop.MainWindow = win` 之后立刻调本方法,此刻窗口还没 `Show()`,而 Avalonia 的
+    /// `ShowDialog(owner)` 对不可见的 owner 直接抛 `Cannot show window with non-visible owner.`。
+    /// 真机实测(X11,`first_run=true` 的全新 HOME,修复前产物 tipcl12)抛的是**第一个**提示
+    /// (`FirstRunWizard.MaybeShowAsync` → 立刻弹面板),异常中断整个 `RunStartupPromptsAsync`,
+    /// 于是排在后面的同意门(它自带 400ms 延迟,单独跑其实弹得出来)一次都轮不到 —— 用户看到的是
+    /// 「首启向导和同意门都没出现,日志只有一条 WARN」。照 Windows 是窗口显示 + bridge 连接完成之后
+    /// 才 await 这两个提示(`windos/.../MainWindow.xaml.cs:362-369`)。
+    /// 返回 false = 等到上限窗口仍不可见(此时不跑提示,由 `RunStartupPromptsAsync` 记一条明确的 WARN)。
+    /// </summary>
+    internal static async Task<bool> RunWhenVisibleAsync(Window window, int timeoutMs, Func<Task> prompts)
+    {
+        if (!await WaitUntilVisibleAsync(window, timeoutMs)) return false;
+        await prompts();
+        return true;
+    }
+
+    /// <summary>
+    /// 等窗口可见:已可见立刻返回;否则等 `Opened` 或 `IsVisible` 变真,最多 <paramref name="timeoutMs"/> 毫秒。
+    /// 用窗口状态判断(不是固定 sleep);上限保证窗口永远不显示时不会永久挂起。
+    /// </summary>
+    internal static async Task<bool> WaitUntilVisibleAsync(Window window, int timeoutMs)
+    {
+        if (window.IsVisible) return true;
+        // 不在 Opened 处理器里直接跑提示(那时还在 Show() 的调用栈上):让续接回到 Dispatcher 上执行。
+        var visible = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnOpened(object? sender, EventArgs e) => visible.TrySetResult(true);
+        void OnChanged(object? sender, Avalonia.AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property == Avalonia.Visual.IsVisibleProperty) visible.TrySetResult(window.IsVisible);
+        }
+        window.Opened += OnOpened;
+        window.PropertyChanged += OnChanged;
+        try
+        {
+            var timeout = Task.Delay(timeoutMs);
+            return await Task.WhenAny(visible.Task, timeout) != timeout && await visible.Task;
+        }
+        finally
+        {
+            window.Opened -= OnOpened;
+            window.PropertyChanged -= OnChanged;
         }
     }
 

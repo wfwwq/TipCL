@@ -33,6 +33,16 @@ public sealed class InstanceDetailPage : PageBase
     private readonly ToggleButton[] _segBtns = new ToggleButton[5];
     private readonly ContentControl _host = new();
     private readonly StackPanel _rows = UiClass.V(0);
+
+    // _rows 的**唯一**容器:整个页面生命周期只有一个 ScrollViewer 拥有它,且只赋值一次。
+    // 原因(Avalonia 硬约束):一个控件只能有一个父级。以前 ShowSeg 每次 new 一个 ScrollViewer
+    // 并把同一个 _rows 塞进去 —— 旧的 ScrollViewer 被换下时它的 ScrollContentPresenter 仍然
+    // 持有 _rows,下一次布局就会抛「already has a visual parent」。
+    private readonly ScrollViewer _rowsHost = new()
+    {
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        Margin = new Thickness(22, 0, 22, 0),
+    };
     private readonly TextBlock _note = UiClass.Txt("", 12.5, fg: "B.InkMuted");
     private readonly ComboBox _verBox = new() { MinWidth = 200 };
     private readonly TextBlock _meta = UiClass.Txt("", 12, fg: "B.InkMuted");
@@ -89,10 +99,9 @@ public sealed class InstanceDetailPage : PageBase
         _verBox.Margin = new Thickness(12, 0, 0, 0);
         bar.Add(_verBox, 0, 2);
 
-        var card = UiClass.Card(_rows, 0);
-        card.Padding = new Thickness(0, 4);
-        card.Margin = new Thickness(22, 0, 22, 16);
-        card.VerticalAlignment = VerticalAlignment.Top;
+        // _rows 的唯一容器:挂一次就不再动(ShowSeg 只换分段状态与数据,不再重建容器)
+        _rowsHost.Content = _rows;
+        _host.Content = _rowsHost;
 
         var shell = UiClass.G("Auto,Auto,*");
         shell.Add(head, 0);
@@ -120,7 +129,9 @@ public sealed class InstanceDetailPage : PageBase
     {
         _loadingVersions = true;
         _vers.Clear();
-        var raw = await Api.TryCallAsync<List<object?>>("get_version_rows", null, new { include_hidden = false });
+        // 修缺陷 B:本页是**这个实例**的详情,版本列表必须取实例目录(以前不传 instance →
+        // 拿到根实例 <TIPCL_HOME>/.minecraft/versions 的版本,与下面的本地扫描、与启动预检都不一致)
+        var raw = await Api.TryCallAsync<List<object?>>("get_version_rows", null, new { instance = _inst, include_hidden = false });
         if (raw is { Count: > 0 })
         {
             foreach (var item in raw)
@@ -208,12 +219,7 @@ public sealed class InstanceDetailPage : PageBase
         _seg = k;
         for (int i = 0; i < 5; i++)
             _segBtns[i].IsChecked = i == k;
-        _host.Content = new ScrollViewer
-        {
-            Content = _rows,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Margin = new Thickness(22, 0, 22, 0),
-        };
+        // 不在这里重建容器:容器是 _rowsHost(见字段注释),_rows 始终只属于它
         Run(LoadSegAsync, "读取失败");
     }
 

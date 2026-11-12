@@ -184,7 +184,10 @@ public sealed class VersionManagePage : PageBase
 
     private async Task ReloadVersionsAsync()
     {
-        var rows = await Api.TryCallAsync<List<object?>>("get_version_rows", null, new { include_hidden = true }) ?? new();
+        // 修缺陷 B:必须带 instance —— 不传 instance 时 Core 的 Instance("") 落到**根实例**
+        // (<TIPCL_HOME>/.minecraft/versions),而这一页左栏写着「当前文件夹 <实例目录>」、
+        // 行操作(uninstall/rename/copy/hide)传的也是 _folder,启动预检同样只看实例目录。
+        var rows = await Api.TryCallAsync<List<object?>>("get_version_rows", null, new { instance = _folder, include_hidden = true }) ?? new();
         _vers = new List<Ver>();
         foreach (var item in rows)
         {

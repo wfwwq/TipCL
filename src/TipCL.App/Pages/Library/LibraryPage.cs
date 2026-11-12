@@ -224,7 +224,10 @@ public sealed class LibraryPage : PageBase
     private async Task ReloadVersionsAsync()
     {
         // 首选 IApi 契约 get_version_rows；B0 方法表尚未实现 → 本地扫描实例版本目录
-        var raw = await Api.TryCallAsync<List<object?>>("get_version_rows", null, new { include_hidden = false });
+        // 修缺陷 B:必须带上 instance —— 不传 instance 时 Core 的 Instance("") 落到**根实例**
+        // (<TIPCL_HOME>/.minecraft/versions);本页左栏写的是「当前文件夹 <实例目录>」,
+        // 行操作与 else 分支的本地扫描用的都是 _folder,列表必须与它们、与启动预检同源。
+        var raw = await Api.TryCallAsync<List<object?>>("get_version_rows", null, new { instance = _folder, include_hidden = false });
         var list = new List<Ver>();
         if (raw is { Count: > 0 })
         {
@@ -533,8 +536,15 @@ public sealed class LibraryPage : PageBase
         star.Click += (_, _) => { ToggleFav(v); };
         var del = UiClass.IconBtn("Trash", "卸载这个版本", null, 13);
         del.Click += (_, _) => Run(() => UninstallAsync(inst, id), "卸载失败");
+        // M4-H R12 缺陷 2:与 Windows 对位(`windos/.../Pages/LibraryPage.cs:713-720`)——齿轮打开版本设置
+        // 对话框,关掉后刷新列表;以前这里误挂 OpenDetailAsync,把用户送进「实例详情」页。
+        // 实例详情仍由标题栏「实例详情」chip 与文件夹右键菜单进入(见上方 detail 与 FolderMenu)。
         var gear = UiClass.IconBtn("Gear", "版本设置", null, 13);
-        gear.Click += (_, _) => Run(() => OpenDetailAsync(id), "打开失败");
+        gear.Click += (_, _) => Run(async () =>
+        {
+            await TipCL.App.Pages.Version.VersionSetupDialog.ShowAsync(inst, id);
+            await LoadAsync();
+        });
         var tail = new StackPanel { Orientation = Orientation.Horizontal };
         tail.Children.Add(star);
         tail.Children.Add(del);

@@ -290,3 +290,63 @@
 - **必须可取消**:退避等待走 `Task.Delay(wait, ct)`,用户在「停止」按钮上的取消立刻生效,不允许睡满退避。参考版的 `Thread.Sleep` 写法不搬。
 - **必须有上限并可见**:每轮最多 3 次重试;重试要发 `status` 文案 + `ModelRetry` 会话事件 + 轨迹记录,不允许静默卡住。
 - **不搬「换模型兜底」**:参考版 `_maybe_fallback` 依赖 bundled 备用模型配置,Linux 没有这套配置,只搬原地重发;用尽后按 `stream_failed` 收尾,并在文档写明这是有意偏离。
+
+### D-34 · 真机验证怎么驱动、冒烟判据盯什么(R8,2026-11-12,移植代理)
+
+- **怎么驱动盒子**:人不在机器跟前,一律经 `rsh --box main bash -s` 送脚本执行。两个坑写在这里备用:①`rsh` 会在命令行上吃掉双引号 → 只用 `bash -s` + stdin 送脚本;②PowerShell 管道给原生进程会补 CRLF(远端报 `bash: line N: $'\r': command not found`)→ 本地先把脚本规范成 LF,再用 `cmd /c "… < file"` 喂进去。偶发 `tls handshake eof (through proxy 127.0.0.1:7890)` 属传输抖动,重试即可。工具与脚本留在 `_cmp/box/`(gitignore),盒子凭据不写进任何文件或报告。
+- **冒烟判据不看字节哈希**:同一页面两次渲染会差 14~40 字节(文本次像素、时间戳等),所以「两次 PNG 字节不同」**不等于**「页面不同」。本轮判据改成三条:逐页人眼看截图 + `--smoke` 退出码 0 + `$TIPCL_HOME/logs/*.log` 0 WARN / 0 ERROR。要在 CI 里做字节级断言,必须显式给 `SMOKE_WAIT` 留出布局时间。
+- **「首批结果不可信」要当成制度**:tipcl12 头 4 次冒烟把上一页的帧写进了别的页面文件名(4 份 PNG 字节全等,`bbf203ca…`),之后 20 次复跑(含清自解压缓存 `~/.net/tipcl12`、按原顺序重跑)再没出现。故真机冒烟要么跑两轮,要么第一批结果丢弃 —— 首轮「看起来对」不等于对。
+- **真机验证不改产品代码**:遇到问题只记录事实 + 证据(见 D-36),把定性和修复留回主 agent,避免在「已验收产物」上顺手改东西。
+
+### D-35 · 桌面快捷方式真机验证:入口打不开就走「应用自己那套 Core 代码」的等价路径,判据是 CLI 预检输出(R8,2026-11-12,移植代理)
+
+- **首选路径**:按方案先试 GUI(实例库页 → 版本行右键 → 「创建桌面快捷方式」)。**真机上右键菜单打不开**(证据见 D-36 ②),GUI 自动化做不到这一步 —— 如实记录,不硬凑。
+- **等价路径(明确写清走的是哪条)**:`.desktop` 由**产品自己的代码**生成,不是我手抄 —— 在开发机上以 `TIPCL_SHORTCUT_POSIX=1` 真跑 `TipCL.Core.Shortcut.CreateLaunchShortcut`,只把 `Exec=` / `Path=` 两行改成盒子上的真实值(`/home/user/tipcl/tipcl12`、`/home/user/tipcl`);`Icon=` 指向的 `tipcl.png` 由 `ShortcutIcon.Render()` 真跑生成。于是「字段顺序、`Name=`/`Comment=` 文案、引号规则、`Terminal=false`、`Categories=Game;`、LF 结尾、755 权限」全部来自产品代码;`-i <实例> launch <版本>` 这段参数还另外用**应用自己的 CLI** `--print-command` 对过一遍(`启动参数: -i 26.3 launch 1.20.1`)。
+- **判据选「链路 + 结论」而不是「游戏起来没起来」**:盒子上没有账号、也不该真去下 JVM,所以「游戏没起来」不是失败。真正的判据是 **`.desktop → CLI → 预检` 真的执行并给出可执行结论**:实测 `实例: 26.3 | 版本: 26.3` → `实例 Java 设置: 自动选择` → `启动游戏前请先创建一个离线用户(「账号」页 → 添加离线账号)` → `=== CLI 退出(Launch,退出码 3)===`。**只有「点了没反应」才算不通过。**
+- **没验到的部分必须写明**:「GUI 自己把文件写出来」这一步真机没做到(入口打不开),所以结论只能写成「等价路径下的链路已验证」,不能写成「GUI 生成的快捷方式已验证」。
+
+### D-36 · 真机上发现的三个界面问题:本轮只记录与留证,不改代码(R8,2026-11-12,移植代理)
+
+> ⚠️ **2026-11-13 更正**:第 1 条的归因有误 —— 崩的不是「版本设置」对话框,而是**实例详情页首次布局**(`InstanceDetailPage` 的孤儿 Border);实例库那枚齿轮提示写「版本设置」、实际打开实例详情页。见 D-39 与 `M4-H R9`。
+
+- **①点版本行齿轮(版本设置)打崩应用**:`System.InvalidOperationException: The control StackPanel already has a visual parent Border while trying to add it as a child of ScrollContentPresenter (Name = PART_ContentPresenter, Host = ScrollViewer)`;`[ERROR] unhandled(UI)` 后进程直接退出,**2/2 复现**(日志 `~/.tipcl/logs/tipcl-20261112.log` 内有完整栈;异常发生在模板应用/布局阶段,`ScrollContentPresenter.AttachToScrollViewer` → 某个 `StackPanel` 已经是别处的 `Border` 子节点)。
+- **②版本行右键菜单真机打不开**:同坐标左键双击能切到启动页(证明命中该行)、悬停高亮也生效,但注入 button-3 后既不弹菜单、`xwininfo -root -tree` 也无新窗口(7 次,含按像素网格量准的行内坐标);而实例卡的「•••」按钮走**同一个** `ContextMenuFx.Show` 能正常弹出 → 菜单门面本身没问题,问题在「谁能触发它」。**定性未完成**:不能排除 Avalonia/X11 侧对右键 `PointerReleased.InitialPressMouseButton` 的处理,也不能排除是 XTest 注入的差异(盒子上 `xev` 不可用,没能在应用内取证),故只记录现象,不下结论。
+- **③界面「版本选择」与 CLI 预检看的版本目录不一致**:界面列的是 `<TIPCL_HOME>/.minecraft/versions`(全局目录)里的 `1.20.1`,CLI 预检找的是实例目录 `<TIPCL_HOME>/.minecraft/26.3/versions` → 界面里看得见的版本,启动时报「版本未安装」。代码里 `Instance.VersionsDir()` 是两处同源(`PPID` 路径 + `"versions"`),所以**根因本轮没定**,只把现象与目录证据留下(盒子实例 `26.3` 自己的版本是 `<…>/26.3/versions/26.3/`,含 41 MB 的 `26.3.jar`,并不在界面列表里)。
+- **为什么不在本轮修**:R8 的任务是「真机验证 + 如实记录」,而这三处都涉及「哪个行为才算对」的取舍(②要先定判据归属,③要先定全局/实例 versions 的语义),在已验收的产物上顺手改会污染验证结论。故只记录。
+
+### D-37 · 拖放导入真机不可用:根因是窗口没有 XdndAware,不写含糊话(R8,2026-11-12,移植代理)
+
+- **代码侧是接了的**:`FileDrop.Attach`(`DragDrop.SetAllowDrop` + `DragOver`/`Drop` → `FileKinds.Identify` → 导入链)挂在 MainWindow / 实例库 / 版本管理 / 下载 / 插件页。
+- **真机上为什么不行**:`xprop` 查 launcher 窗口**没有 `XdndAware`**(同一脚本查 Chrome 窗口 `XdndAware(ATOM) = BITMAP` 正常,说明检查本身有效)。X11 拖放协议要求**目标窗口先声明 XdndAware**,源端才会发 `XdndEnter`;缺这个属性,任何程序都拖不进来 —— 这不是我脚本的问题。
+- **实测补证**:用真实拖放源 Thunar(打开 `~/drop-test`,里面有 `example-mod.jar`)做了一次真拖:按下 → 16 步移动到应用窗口内 → 松开;截图里能看到拖影落在应用窗口内、Thunar 图标变蓝选中,松手后应用**毫无反应**(`26.3/mods/` 目录无变化、应用日志无新行)。
+- **写法要求**:这条只能写成「**未完成 + 根因是缺 XdndAware**」,**不能**写成「拖放已在真机验证通过」,也不能含糊成「自动化不可靠」;证据文件 `_cmp/box-c-50-setup.png`、`-51-before-drag.png`、`-52-dragover.png`、`-53-dropped.png`。
+
+### D-38 · Linux/X11 无 XDND:拖放不可用是平台限制,不许含糊成「接线问题」(R8 复核,2026-11-12,主 agent)
+
+- **事实**:Avalonia 11.3.2 的 X11 后端**没有实现 XDND 协议**。取证:对 `~/.nuget/packages` 下 **149 个 Avalonia 程序集**做 UTF-16 字符串搜索,`XdndAware / XdndEnter / XdndPosition / XdndDrop / XdndSelection / XdndStatus / XdndFinished / XdndTypeList / XdndActionCopy` **全部 0 命中**;方法有效性由同目录 `Avalonia.X11.dll` 内 `_NET_WM_STATE` 命中 9 次佐证。
+- **真机现象与之吻合**:launcher 窗口 `xprop` 无 `XdndAware`(Chrome 窗口有),因此拖放源不发 `XdndEnter`,任何程序都拖不进去;用真实拖放源(Thunar)实测松手后应用毫无反应。
+- **结论与措辞要求**:P7 的 `FileDrop / FileKinds` **代码已经写好且逻辑有测试**,但**入口在 Linux 上不可用**;文档与汇报一律写成「代码已实现,**Linux/X11 平台不支持**」,禁止写成「已做成统一入口」或「自动化不可靠」。Windows 参考版不受影响(那边是 WPF/Win32 的 OLE 拖放)。
+- **不做的事**:不为了实现拖放去引 X11 互操作手写 XDND,也不升级 Avalonia(版本冻结在 11.3.2)。要恢复这个能力,只能等 Avalonia 在 X11 后端实现 XDND 后重新评估。
+- **可用替代**:各页已有的显式入口(插件页「从文件安装」、「链接安装 / 导入本地文件」、AI 页的剪贴板粘贴与文件选择器),这些是真机可用的路径;若后续要加一句界面提示引导用户用按钮,属可选改进。
+
+### D-39 · 一个控件一个父级:容器单持有,且无头测试必须真跑一次布局 pass(R9,2026-11-13,移植代理;主 agent 复核)
+
+- **规则**:页面/对话框里的「行容器」(StackPanel 等)只能有**一个**宿主,并且**只赋值一次**。禁止「每次渲染 `new` 一个 `ScrollViewer` 把同一个 StackPanel 塞进去」——旧宿主被换下时它的 `ScrollContentPresenter` 仍持有该子级,下一次布局就抛 `already has a visual parent`。正确形状:`_rowsHost` 字段创建一次 → `_rowsHost.Content = _rows` → `_host.Content = _rowsHost`;切换分段只改状态与数据。
+- **Avalonia 的报错时机很阴**:给**尚未进可视树**的 `ScrollViewer` 赋 `Content` 不报错,要等它第一次 `Measure → ApplyTemplate → AttachToScrollViewer` 才抛;异常从 `MediaContext.Render()` 的布局回调冒出,Dispatcher 视为 `unhandled(UI)` → **进程直接退出**(用户看到的是「点完按钮进程没了」,没有错误框,极难自查)。
+- **所以无头测试要挡住这类回归,必须显式推一次渲染**:`AvaloniaHeadlessPlatform.ForceRenderTimerTick()` + `Dispatcher.UIThread.RunJobs()` + `TopLevel.CaptureRenderedFrame()`(冒烟截图用的同一条路)。只 `await Task.Delay(...)` 不会触发 `Measure`,非法父级可以在测试里一直潜伏 —— 这就是「宿主机全绿、真机一布局就崩」的根因,以后写任何布局相关回归测试都要照这条来。
+- **版本列表的实例上下文必须显式传**:`Instance("")` 会落到根实例,于是「不传 `instance`」= 读**全局** `<TIPCL_HOME>/.minecraft/versions`;凡是要展示或操作某个实例的版本,一律显式 `instance = <实例名>`,不要依赖这个隐性兜底。
+- **真机归因纪律**:出现「点 X 崩了」时,先确认 X 这个按钮**实际**做了什么。本轮就是提示文字写「版本设置」、点击实际打开「实例详情」,导致归因跑偏到对话框上;提示/标题与实际行为不一致**本身就是缺陷**,要单独记录。
+
+### D-40 · 启动提示必须等主窗口真正可见(Avalonia 对不可见 owner 的 ShowDialog 直接抛)(R12,2026-11-13,移植代理;主 agent 复核 + 真机验收)
+
+- **事实**:`ShowDialog(owner)` 与 `Dlg` 系列对话框对 `IsVisible == false` 的 owner 抛 `InvalidOperationException: Cannot show window with non-visible owner.`;而 `App.OnFrameworkInitializationCompleted` 里 `desktop.MainWindow = win` 之后窗口还没 `Show()`,任何在这一刻发起的提示都会失败。
+- **真机现象与精度**:修复前每次启动一条 `[WARN] 启动提示失败: …`;更重要的是**真实首启时首启向导与同意门都不出现** —— 抛的是第一个提示(向导,无延迟),异常中断了整个 `RunStartupPromptsAsync`,同意门(自带 400ms 延迟,单独跑其实弹得出来)因此永远轮不到。所以「同意门在 Linux 上弹不出来」只在 `first_run=true` 时成立;`first_run=false` 时旧产物也弹得出来(实测两版都弹)。
+- **规则**:凡启动阶段要弹的窗口(向导 / 同意门 / 更新提示…)都必须先等主窗口可见,判断用窗口状态(`Opened` 或 `IsVisible` 变化),并给等待上限;窗口一直不可见时记一条**文案不同**的 WARN,别把「没等到可见」和「弹窗失败」混成同一条日志。无头路径(`--smoke`)不进启动提示。
+- **不许的写法**:固定 `Sleep` 硬等;把 owner 传 null 改成非模态绕开(会丢模态语义);或在 `ShowDialog` 外面 catch 一下就当前面没发生 —— 这次事故就是「异常被吞成 WARN」把首启向导悄无声息地吃掉的。
+
+### D-41 · 版本行齿轮归位:文案与行为以 Windows 参考版为准(R12,2026-11-13,移植代理;主 agent 复核)
+
+- **事实**:Linux 侧版本行齿轮 tooltip 写「版本设置」,点击执行 `OpenDetailAsync`(切到实例详情页);Windows 参考版同一位置(`Pages/LibraryPage.cs:713-720`)执行 `VersionSetupDialog.ShowAsync(inst, id)` + `LoadAsync()`。
+- **代价**:真机上用户点「版本设置」被送进实例详情页,撞上 R9 的崩溃,还让 R8 把崩溃归因到了「版本设置」对话框 —— 归因跑偏的直接原因就是文案与行为不一致(规则已在 D-39 立下)。
+- **规则**:同一入口的文案 / 图标 / 动作三者必须一致,以 Windows 参考版为准;确要偏离必须同时改文案并在 `DECISIONS.md` 立条目,禁止「借壳」。
+- **实例详情页的正当入口**:版本选择区头部的「实例详情」chip(`LibraryPage.cs:130`)与实例卡片右键菜单(`FolderMenu`),两者都走同一个 `OpenDetailAsync`,不因本次归位而丢失。

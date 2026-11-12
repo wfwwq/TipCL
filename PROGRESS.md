@@ -334,3 +334,50 @@
 - **测试**:新建 `tests/TipCL.Tests/Core/AiRetryTests.cs`(6 项 + 本机 `TcpListener` 假网关、随机空闲端口,不联网):429→200 且请求数=2;连续 429 请求数=4、最终 `Category == "rate_limited"`;401 请求数=1(不重试);503→200 重试;已吐正文再报限流请求数=1(不重发);退避期间取消 <700ms 抛出且不再发第二次。
 - **验收(主 agent 复跑)**:Debug / Release 全新重编 **0 代码警告 0 错误**(出现 8 条 `NU1900`——NuGet 拉华为镜像漏洞库失败,属既有环境噪声,文档此前已注明);`dotnet test` 连续 2 次 **323 通过 / 1 跳过 / 0 失败**(基线 317+1,新增 6);真实 `%LOCALAPPDATA%\TipCL` 数据未改。
 - **已知遗留**:`StopReason.RATE_LIMITED` 仍无人消费(参考版同样只在定义处出现,不参与流程;要区分限流失败可读 `ModelRetry` 事件的 `category`);网关单渠道限流很紧(RPM=12),排队时 15s 的流式连接超时偏紧——现在这类超时已能重试,但仍有首次即超时的可能。
+
+### 2026-11-12 M4-H R8 真机验证(Ubuntu 云盒子)(移植代理)
+
+> ⚠️ **2026-11-13 更正**:本小节「点版本设置齿轮把应用打崩」的**归因有误** ——真正崩的是**实例详情页的首次布局**(`InstanceDetailPage` 的孤儿 Border 把 `_rows` 收成子级),而实例库那枚齿轮的提示文字写着「版本设置」、点击实际是打开实例详情页。根因与修法见 `M4-H R9`。
+
+- **本轮目的**:把产物送到真机(盒子 `main`,Ubuntu/Xfce,`DISPLAY=:0`)跑三件只有真机能验的事 —— 发布产物能不能跑、桌面快捷方式双击能不能启动、拖放导入能不能进;做不了的如实写清为什么。全程**不改产品代码、不动版本号、不 commit / 不 push、不碰 Windows 参考仓库、盒子凭据不落任何文件**;证据统一放 `_cmp/`(gitignore)。
+- **A 发布产物真的能跑(完成)**:用项目自己的发布命令 `tools/package.ps1 -SkipWin` 出 `linux-x64` 自包含单文件 `dist/TipCL-linux-x64/TipCL.App`(**44,965,425 B**,ELF,sha256 `881b9be9…`);tar 上传到盒子**新目录** `/home/user/tipcl/tipcl12`(既有 `tipcl` / `tipcl8`–`tipcl11` 与旧 `smoke.png`、`smokehome/` 一律没动),`chmod +x` 后以**隔离 HOME** `TIPCL_HOME=/home/user/tipcl/smoke12` 跑 `--smoke`:8 页(launch / library / download / plugins / settings / ai + library-dark / plugins-dark)**8/8 退出码 0 且都产出 PNG**,`$TIPCL_HOME/logs/tipcl-20261112.log` **0 WARN / 0 ERROR**(78 行全 INFO)。证据:`_cmp/box-smoke-*.png`(逐页)、`_cmp/box-smoke12-log.txt`。
+- **A 的两个真机观察**:(1)**首批执行的 4 页截图是「上一帧残留」** —— tipcl12 头 4 次冒烟把 launch 页的帧原样写进了 library / download / plugins / settings 四个文件名里(四份 PNG 字节完全相同 `bbf203ca…`);随后 **20 次复跑(含清掉自解压缓存 `~/.net/tipcl12` 后按原顺序重跑)再没复现**,每次都是正确且各自不同的页面。残留帧存 `_cmp/box-smoke-stale-batch1-*.png`,正确帧存 `_cmp/box-smoke-*.png`。(2)**同一页面两次渲染会差 14~40 字节**(如 plugins 53637 / 53623),所以**PNG 字节哈希不能当「页面身份」判据**;要稳需显式加 `SMOKE_WAIT`。
+- **B 桌面快捷方式双击(完成,但入口走的是等价路径)**:`.desktop → 应用自身 CLI → 启动预检`这条链**真的跑起来了、不是「点了没反应」** —— `gio launch` 后应用日志与 stdout 打出:`实例: 26.3 | 版本: 26.3`、`实例 Java 设置: 自动选择`、`启动游戏前请先创建一个离线用户(「账号」页 → 添加离线账号)`、`=== CLI 退出(Launch,退出码 3)===`。**但 GUI 自带的「创建桌面快捷方式」入口在真机上打不开**(见下),所以 `.desktop` 是用**应用自己的 Core 代码**在开发机上以 `TIPCL_SHORTCUT_POSIX=1` 真跑 `Shortcut.CreateLaunchShortcut` 生成,只把 `Exec=` / `Path=` 两行改成盒子上的真实值;`Icon=` 指向的 `$TIPCL_HOME/tipcl.png` 由 `ShortcutIcon.Render()` 真跑生成(839 B,sha256 `84a7a3e4…`)。落到盒子上的两份:`~/Desktop/26.3 - 26.3.desktop`(220 B,mode **755**,sha256 `6c5fb4b2…`)与 `~/Desktop/1.20.1 - 26.3.desktop`(226 B,sha256 `4b0623db…`),后者 `gio launch` 得到的是同一个链路的另一条预检结论 `版本未安装: 找不到 1.20.1 的版本 JSON`(退出码 3)。证据:`_cmp/box-gui12-log.txt`、`_cmp/box-desktop-*.png`。
+- **B 的一个环境事实**:盒子桌面上**不显示 `~/Desktop` 里的图标**(截图 `_cmp/box-desktop-40-desktop-with-file.png` 里桌面是空的),所以没有「桌面上看得见图标」的截图;快捷方式文件本身改用「内容 + 权限位 + sha256」核实。
+- **真机顺带暴露的三个问题(都已复现,本轮只记录不改)**:①**点版本行的齿轮(版本设置)直接把应用打崩** —— `System.InvalidOperationException: The control StackPanel already has a visual parent Border while trying to add it as a child of ScrollContentPresenter (Name = PART_ContentPresenter, Host = ScrollViewer)`,`unhandled(UI)` 后进程退出,**2/2 复现**(日志 `~/.tipcl/logs/tipcl-20261112.log`)。②**版本行右键菜单在真机上打不开** —— 同一坐标左键双击能切到启动页(证明命中该行)、悬停高亮也生效,但注入 button-3 后既不弹菜单、`xwininfo -root -tree` 里也没有新窗口(前后共 7 次,含按像素网格量准的行内坐标);而实例卡的「•••」按钮走**同一个** `ContextMenuFx` 能正常弹出。③**界面里看得见的版本,启动时报「版本未安装」** —— 界面「版本选择」列的是 `<TIPCL_HOME>/.minecraft/versions`(全局目录)里的 `1.20.1`,而 CLI 预检找的是实例目录 `<TIPCL_HOME>/.minecraft/26.3/versions`。
+- **C 真机拖放导入(未完成,根因已定位)**:launcher 窗口**没有 `XdndAware` 属性**(`xprop` 实测;同一脚本查 Chrome 窗口 `XdndAware(ATOM) = BITMAP` 正常),按 X11 拖放协议**任何程序都无法向它发起拖放**;再用**真实拖放源**(Thunar 打开 `~/drop-test`,放 `example-mod.jar`,内含 `fabric.mod.json`,按 `FileKinds` 应判「模组 jar」)实拖一次:截图 `_cmp/box-c-52-dragover.png` 里能看到拖影落在应用窗口内、Thunar 图标变蓝选中,松手后**应用毫无反应**(实例 `mods/` 目录无变化、应用日志无新行,`_cmp/box-c-53-dropped.png`)。所以这条真机路径**不可用**,不是自动化脚本的问题;没有伪造任何数据。证据:`_cmp/box-c-50-setup.png`、`-51-before-drag.png`、`-52-dragover.png`、`-53-dropped.png`。
+- **D 手机同步真机传文件(未验证 / 条件不具备)**:需要手机与盒子在同一网络、且手机侧同步服务在跑,本轮无手机、无该服务,**不验证、不编数据**(按方案的「未验证/条件不具备」记)。
+- **验收**:`_cmp/` 里证据齐(文件名见上各条);本节保持 CRLF;`DECISIONS.md` 追加 D-34~D-37 并保持 LF;未 commit / 未 push / 未改版本号;盒子用完 `sleep`。
+
+### 2026-11-13 M4-H R9 崩溃根因修复(实例详情页)+ 版本列表语义(移植代理;主 agent 复核)
+
+- **缺陷 A:真机必崩的根因不是「版本设置」对话框,而是「实例详情」页的首次布局。** `Pages/Library/InstanceDetailPage.cs` 构造函数遗留 `var card = UiClass.Card(_rows, 0);` —— 这个 Border **从未进可视树**,却把页面唯一的行 StackPanel `_rows` 收成自己的子级;随后 `ShowSeg()` 又把**同一个** `_rows` 赋给 `new ScrollViewer { Content = _rows }` → 一个控件两个父级。给未进可视树的 ScrollViewer 赋 `Content` **不当场报错**,要等它第一次 `Measure → ApplyTemplate → ScrollContentPresenter.AttachToScrollViewer` 绑 Content 才抛;异常从 `MediaContext.Render()` 的布局回调冒到 Dispatcher 就是 `unhandled(UI)` → **进程直接退出**(所以真机现象是「点完按钮进程突然没了」,不是弹错误框)。
+- **触发路径(解释了此前的误判)**:实例库 `LibraryPage.cs:536-537` 那枚 Tooltip 写「版本设置」的齿轮,点击实际是 `OpenDetailAsync` → 打开实例详情页;版本管理页的同名齿轮才走 `VersionSetupDialog`(不崩)。真机那次点的正是前者 → 被误记为「版本设置对话框打崩应用」(已在 R8 小节与 D-36 处加更正标记)。
+- **为什么以前的无头测试抓不到(两件事必须同时成立)**:1 无头会话不走渲染计时器,`await Task.Delay` 不触发 `Measure`,模板永不 ApplyTemplate,非法父级一直潜伏 —— 必须显式推一次渲染(`AvaloniaHeadlessPlatform.ForceRenderTimerTick()` + `Dispatcher.UIThread.RunJobs()` + `CaptureRenderedFrame()`,即冒烟截图那条路);2 旧复现台 `Navigate("instance")` 构造的是版本管理页,压根没构造 `InstanceDetailPage`。
+- **修法(根因级)**:删掉孤儿 Border;`_rows` 的容器改为字段 `_rowsHost`(只创建一次、只挂一次),`ShowSeg` 只切分段状态与数据、不再重建容器 —— 顺带堵住「切分段第二发」时旧容器 presenter 仍持有面板的同类隐患。
+- **缺陷 B:同一语义被算成两个路径。** `Instance("")` 落根实例,所以 `get_version_rows` 不传 `instance` 时返回的是**全局** `<TIPCL_HOME>/.minecraft/versions`;而页面兜底扫描、行操作、CLI 启动预检看的都是**实例目录** → 界面里看得见的版本、启动时报「版本未安装」。已修三个调用点(`LibraryPage` / `VersionManagePage` / `InstanceDetailPage`)并加测试。如实说明:3 条页面级渲染断言写后被删(共享无头会话下页面异步灌数据时机不稳),**不留假测试**。
+- **缺陷 C 结论**:不是 XTest 注入伪象 —— `LibraryPage` 本来就没挂版本行菜单(菜单挂在实例卡上);主 agent 复核 Windows 参考版 `Pages/LibraryPage.cs` 后确认**它的版本行同样没有右键菜单**(行尾是 收藏/卸载/版本设置 三个内联按钮,右键菜单是实例卡的 `打开文件夹 / 设为默认实例 / 选择 Java... / 管理模组 / 存档管理... / 重命名... / 删除实例`,`:899` 起)→ 两边一致,**不是移植缺口**。
+- **新增测试**:`tests/TipCL.Tests/App/InstanceDetailCrashTests.cs`(含「打开→切分段→再开」与强制渲染 pass)、`tests/TipCL.Tests/App/VersionListScopeTests.cs`;**负向对照**把孤儿 Border 那行注回 → 5 条回归 5/5 红,删掉即全绿。
+- **验收(主 agent 复跑)**:Debug / Release 全新重编 **0 代码警告 0 错误**(8 条 `NU1900` 为 NuGet 镜像联网噪声);`dotnet test` 连续 2 次 **329 通过 / 1 跳过 / 0 失败**(基线 323+1,新增 6);`library` / `instance` 冒烟 exit=0 出图、日志 0 WARN/0 ERROR;真实 `%LOCALAPPDATA%\TipCL` 未动;上一棒的 `scratch-out.txt` 与 `ScratchReproTests.cs` 已删除。
+- **遗留**:真机**差分复验**(旧产物 `tipcl12` 应崩、含修复的新产物应不崩)由 R11 在盒子上执行;本轮未上盒子。
+
+### 2026-11-13 M4-H R11 真机差分验收(实例详情页崩溃:修复前必崩 / 修复后不崩;主 agent)
+
+- **目的**:R9 已在宿主侧用无头测试证明根因并做了负向对照,但**没上真机**;本轮补的是同一台真机上两个产物的差异。
+- **环境**:盒子 `main`(Ubuntu 24.04.5 / XFCE4 / `DISPLAY=:0` / 1280×800),`TIPCL_HOME=/home/user/tipcl/smoke13`;两个自包含单文件产物 `tipcl12`(修复前,**44,965,425 B**)与 `tipcl13`(修复后,**44,965,362 B**)。
+- **路径**:`xdotool` 点顶栏「实例库」(370,158)→ 点版本行行尾那枚 tooltip 写「版本设置」的齿轮(1026,350)——就是 `LibraryPage` 里执行 `OpenDetailAsync` 的那一枚(`:539-540`)。
+- **结果**:`tipcl12` **进程直接没了**(`alive=0`),日志 `17:55:17.867 [ERROR] unhandled(UI)` + `System.InvalidOperationException: The control StackPanel already has a visual parent Border while trying to add it as a child of ScrollContentPresenter (Name = PART_ContentPresenter, Host = ScrollViewer)`,堆栈一路到 `Program.Main`;`tipcl13` **`alive=1` 且 0 条 unhandled**,同一坐标打开的是实例详情页(头部「26.3 / 1个版本」+ 分段条 + 空态)。R9 的根因归因在真机上得到同型日志确认。
+- **判据**(不看 PNG 哈希):进程是否存活 + 日志 `unhandled` 计数 + 截图内容。同页两次渲染字节可差 14~40 B,哈希不能当页面身份判据。
+- **顺带的独立佐证**:同一个实例面板,`tipcl12` 列的是全局目录里的 `1.20.1`,`tipcl13` 列的是实例目录里的 `26.3` —— 与 R9 对 `Instance("")` 落根实例的分析一致(缺陷 B)。
+- **顺带发现**:两个产物**每次启动**都有一条 `[WARN] 启动提示失败: Cannot show window with non-visible owner.` → 立 R12。
+- **归档**:`progress/M4-H-R11-真机差分验收.md`(含坐标怎么量准、`pgrep` 该用产物路径、rsh 脚本行尾必须 LF、取图别用跨行宽正则这些教训);证据 `_cmp/r11i-*.jpg`、`_cmp/r11i-out.txt`。
+
+### 2026-11-13 M4-H R12 启动提示时序 + 版本行齿轮对位(移植代理;主 agent 复核 + 真机验收)
+
+- **缺陷 1(启动提示在窗口可见之前触发)**:`App.OnFrameworkInitializationCompleted` 在 `desktop.MainWindow = win` 之后**立刻**调 `RunStartupPromptsAsync()`,此刻窗口还没 `Show()`;现场每次启动都带一条 `[WARN] 启动提示失败: Cannot show window with non-visible owner.`。真机差分(`first_run=true` 的全新 HOME)把精度钉死了:抛的是**第一个**提示(首启向导,无延迟),异常中断整个 `RunStartupPromptsAsync`,于是排在后面的同意门(自带 400ms 延迟,单独跑其实弹得出来)一次都轮不到 ⇒ **真实首启时向导和同意门双双没出现**,用户只看到界面正常、日志一条 WARN。照 Windows 参考版(`MainWindow.xaml.cs:362-369`)是在窗口显示 + bridge 连接完成之后才 await 这两个提示。
+- **修法**:`RunStartupPromptsAsync` 先等主窗口可见(`Opened` 或 `Visual.IsVisible` 变真,上限 15s)再依次跑两个提示;窗口一直不可见时记一条**文案不同**的 WARN(「主窗口 15000ms 内没有可见,启动提示已跳过」),以便与「弹窗仍然抛异常」区分。`--smoke` 语义不变(冒烟路径根本不进这里)。
+- **真机验收(盒子 `main`,`first_run=true` 的全新 HOME)**:修复前 `tipcl12` → 日志 1 条 WARN、「欢迎使用 TipCL」向导**没出现**;修复后新产物 `tipcl14`(**44,966,962 B**,sha256 `a95423e2…`,上传后双向核对一致)→ **0 WARN**、向导**正常弹出**(第 1/4 步,含「跳过向导」)。另用 `first_run=false` 的 fixture 做对照:两版都会弹同意门(说明那条 400ms 延迟对旧实现是有效的,问题在向导那一步把整串中断了)。
+- **缺陷 2(版本行齿轮挂羊头卖狗肉)**:`LibraryPage` 版本行齿轮 tooltip 写「版本设置」,点击却执行 `OpenDetailAsync`(Windows 参考版 `:713-720` 是 `VersionSetupDialog.ShowAsync(inst, id)` + `LoadAsync()`)。这不只是文案问题 —— 真机上正是它把用户送进实例详情页撞上 R9 的崩溃,并在排查初期造成归因错误(R8)。已改为与 Windows 对位;实例详情页仍由「实例详情」chip 与实例卡片右键菜单进入。
+- **测试**:新增 `tests/TipCL.Tests/App/StartupPromptVisibilityTests.cs`(4 条:未 Show 的窗口不可见 / 未 Show 时提示一次都不跑、Show 后才跑 / 已可见立刻跑 / 永不显示时在上限内收摊且不跑提示);`InstanceDetailCrashTests` 的入口改用「实例详情」chip(同一个 `OpenDetailAsync`),并新增齿轮断言(弹的是版本设置对话框、`Dlg.AnyOpen`、`Detail(win)==null`)。
+- **主 agent 复核**:Release 重编 **0 CS/CA 警告**(2 条 `NU1900` 为镜像噪声);`dotnet test` 独立复跑 **334 通过 / 1 跳过 / 0 失败**(基线 329+1,新增 5);真机上向导确实弹出。
+- **遗留(下一棒)**:冒烟截图的「首批执行残留帧」问题(R8 观察,之后 20 次复跑未再现)。

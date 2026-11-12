@@ -107,7 +107,7 @@
 `AiPage.cs` / `AiPage.Images.cs` / `AiChatOps / AiIcons / AiRisk / AiSelfTest / AiUiText / AiPermissionPanel`;
 Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 消息块 `Bubble / AskBlock / AskCard / ConfirmCard / PlanCard / ChatInput / StepGroup / ThinkFold / ToolLine / ToolState / TaskCard`。
-→ Linux(2026-11-12 M4-H P5 更新):Markdown 链(`Pages/Ai/MdParser.cs` / `MdBlock.cs` / `MdInline.cs` / `MdView.cs`)+ 对话页(`AiPage.cs` / `AiBubble.cs` / `ChatInput.cs`)+ **消息块与交互件**(`ToolLine.cs` / `StepGroup.cs` / `ConfirmCard.cs` / `AskCard.cs`(含 `AskBlock`)/ `PlanCard.cs` / `TaskCard.cs` / `AiIcons.cs` / `AiPermissionPanel.cs` / `AiImages.cs`)+ **Core 工具链**(`Launcher/Ai/Tools.cs` / `ToolRunner.cs` / `AiAgent.cs` / `AiToolTypes.cs` / `AiUiText.cs` / `AiRisk.cs` / `AiMemory.cs` / `AiFixChat.cs` / `AiSelfTest.cs` / `Conflict.cs`)已移植;**崩溃界面的「交给 AI 修复」**(参考版 `AiFixWindow.cs`)在 Linux 侧是 `Pages/Ai/AiFixView.cs`(非模态面板)。**确认卡的「改前改后」预览**(参考版 `Core/Launcher/Ai/Preview.cs`)已于 M4-H R5 接通:写工具在执行前算出逐行 diff / 删除清单 / 安装目标,经 `ToolRunner.Confirm` 回调交给 `ConfirmCard` 着色显示(见 §3 与该轮 DECISIONS D-31)。
+→ Linux(2026-11-12 M4-H P5 更新):Markdown 链(`Pages/Ai/MdParser.cs` / `MdBlock.cs` / `MdInline.cs` / `MdView.cs`)+ 对话页(`AiPage.cs` / `AiBubble.cs` / `ChatInput.cs`)+ **消息块与交互件**(`ToolLine.cs` / `StepGroup.cs` / `ConfirmCard.cs` / `AskCard.cs`(含 `AskBlock`)/ `PlanCard.cs` / `TaskCard.cs` / `AiIcons.cs` / `AiPermissionPanel.cs` / `AiImages.cs`)+ **Core 工具链**(`Launcher/Ai/Tools.cs` / `ToolRunner.cs` / `AiAgent.cs` / `AiToolTypes.cs` / `AiUiText.cs` / `AiRisk.cs` / `AiMemory.cs` / `AiFixChat.cs` / `AiSelfTest.cs` / `Conflict.cs`)已移植;**崩溃界面的「交给 AI 修复」**(参考版 `AiFixWindow.cs`)在 Linux 侧是 `Pages/Ai/AiFixView.cs`(非模态面板)。图片输入由 `AiImages` 提供:**剪贴板粘贴与文件选择器可用**;「拖入图片」在 Linux/X11 上不可用(同 §8 首段的平台限制,见 D-38)。**确认卡的「改前改后」预览**(参考版 `Core/Launcher/Ai/Preview.cs`)已于 M4-H R5 接通:写工具在执行前算出逐行 diff / 删除清单 / 安装目标,经 `ToolRunner.Confirm` 回调交给 `ConfirmCard` 着色显示(见 §3 与该轮 DECISIONS D-31)。
 
 **AI 服务层(2026-11-12 M4-H R1 补齐)**:之前「仍缺」的那几件已在 Core 里做成真件,名字与参考版一致 ——
 `Checkpoint`(检查点快照/回滚,内容寻址 + journal)、`Rewind`(回退上一轮:对话截断 + 文件还原 + `TurnRewound`)、
@@ -147,7 +147,7 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 4. **AI 对话子系统**:2026-11-12 P5 主体完成(工具链 / 权限确认 / 结构化选择题 / 计划卡与任务卡 / 自检 / 图片输入 / 崩溃「交给 AI 修复」),**R1+R2(同日)补齐服务层与界面残留** —— 检查点回滚 / 上下文压缩 / 令牌与用量 / MCP 客户端 / 只读子代理 / 产物回读 / 斜杠命令 / 记忆面板 / 上下文占用环全部落地(见 §2 AI 小节);剩真模型端到端(需要 API key)与 `McpServer`(依赖 `BackendApi`)。**R5 接通了确认卡的变更预览**(逐行 diff / 删除清单 / 安装目标,见 §2 AI 小节与 D-31)。
 5. **Core 业务件**:`News`、`Worlds`、`Servers`、`Feedback`、`Repair`、`Themes`、`Thumbnails`、`UiLayout`、`Updater`、`Cleaner`、`ContentExport`、`HelpContent` —— 这些在 M4-D/P1/P2/P4 已陆续搬入 `src/TipCL.Core`(见 §3「已移植」);真正还缺的是 `Shortcut`(P3.5 已完成)与上表所列的 AI 服务层、插件宿主。
 6. ~~插件宿主全链~~:2026-11-12 P6 判定并落地 —— **文件级链路(市场/安装/更新/卸载/启停/日志/权限/开发链接)+ 壳侧(`plugin:` 页面、动态顶部页签、界面贡献快照)已真做**;需要在进程内跑插件代码或渲染插件网页的那一半不移植(无 Node 宿主、参考 .NET 契约基于 WPF),理由与逐项判定见 §7。
-7. **Services 视觉/交互件**:WebViewHost、SPanel、Wallpaper、SideFrost、SmoothScroll、LucideAssets(逐项结论见 §5);**`FileDrop/FileKinds` 已于 P6/P7 做成统一拖放入口,见 §8**。
+7. **Services 视觉/交互件**:WebViewHost、SPanel、Wallpaper、SideFrost、SmoothScroll、LucideAssets(逐项结论见 §5);**`FileDrop/FileKinds` 已于 P6/P7 落地为代码级统一入口(见 §8)**;但 Linux/X11 上收不到系统拖放(平台限制,见 §8 首段与 D-38),真机可用入口是各页的显式导入按钮。
 
 > 注:「真机 E2E(Fabric 安装、启动游戏)」依赖 Ubuntu 盒子(`mcp__box__*`),当前会话未接入,需盒子可用时执行。
 
@@ -167,7 +167,7 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | `Backdrop.cs` | 250 | 不移植 | 窗口级亚克力/毛玻璃(Win32 `DwmSetWindowAttribute`)。Linux 桌面环境的模糊由合成器决定,应用侧没有可移植的等价 API。 |
 | `PhoneSyncPanel.cs` | 205 | **已移植(2026-11-12 M4-H R3)** | 世界同步/对比面板:`Pages/Settings/PhoneSyncPanel.cs`(电脑实例×手机存档根、逐行裁决、传到手机/传到电脑、一键同步含冲突逐个问、日志框),数据面全走 Core `PhoneLink`/`SaveSync`;设置页手机同步卡补「同步面板」入口(没连接只提示,不开空面板)。 |
 | `ImeGuard.cs` | 88 | 不移植 | WPF 输入法(IME)组合态修正;Avalonia 的 TextBox 自己处理 IME 组合,Linux/ibus 路径不适用。 |
-| `FileDrop.cs` / `FileKinds.cs` | 291 / 671 | **已移植(统一入口)** | 拖放导入(插件/整合包/模组/资源包/光影/数据包/存档/皮肤)。Linux 侧 `Common/FileDrop.cs` + `Common/FileKinds.cs`:窗口级 + 页面级(目录页带实例上下文、插件页偏好 plugin)`DragDrop` 接入,识别 → 分桶 → 认不准的问一次 → 落到真实安装链。**不做**壁纸(没有自定义壁纸消费方)、不做嵌套包递归探测,理由见 §8。 |
+| `FileDrop.cs` / `FileKinds.cs` | 291 / 671 | **已移植(代码);Linux/X11 上收不到系统拖放** | 拖放导入(插件/整合包/模组/资源包/光影/数据包/存档/皮肤)。Linux 侧 `Common/FileDrop.cs` + `Common/FileKinds.cs`:窗口级 + 页面级(目录页带实例上下文、插件页偏好 plugin)`DragDrop` 接入,识别 → 分桶 → 认不准的问一次 → 落到真实安装链。**不做**壁纸(没有自定义壁纸消费方)、不做嵌套包递归探测,理由见 §8。 |
 
 ## 6. 对照中发现的 Windows 参考实现缺陷(汇总)
 
@@ -257,6 +257,15 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 
 ## 8. 统一拖放入口(2026-11-12,M4-H P7)
 
+> **2026-11-12 主 agent 复核(真机 + 程序集取证):Linux/X11 上收不到系统拖放。**
+> 真机实测:launcher 窗口**没有 `XdndAware` 属性**(`xprop`;同脚本查 Chrome 窗口 `XdndAware(ATOM) = BITMAP` 正常,证明检查有效),
+> 而没有该属性时 X11 拖放源不会发 `XdndEnter` → 任何程序都拖不进来(Thunar 真拖一次:拖影落入窗口、松手后应用毫无反应)。
+> 根因再往下一层:**Avalonia 11.3.2 的 X11 后端根本没有实现 XDND** —— 对 149 个 Avalonia 程序集做 UTF-16 搜索,`XdndAware` 等协议符号 **0 命中**
+> (同一 `Avalonia.X11.dll` 内 `_NET_WM_STATE` 命中 9 次,可证搜索方法有效)。
+> 所以这是**平台/后端不支持**,不是本项目的接线问题,也不是自动化脚本问题。下表描述的接入点与识别逻辑**代码层面成立且有测试覆盖**,
+> 但在 Linux 上永远收不到 OS 拖放事件;真机上可用的是各页已有的显式入口(「从文件安装」「导入本地文件」「链接安装」)。
+> 详见 `DECISIONS.md` D-38 与 `PROGRESS.md` 的 `M4-H R8`。
+
 > Windows 参考版:`Services/FileDrop.cs`(291)+ `Services/FileKinds.cs`(671),由 `PageBase.EnableDrop` 在页面级接入,
 > 主窗口再挂一层兜底(`MainWindow.xaml.cs:1175`)。Linux 侧按同一形状落地,逐项差异如下。
 
@@ -269,3 +278,17 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | 皮肤 | `AccountPage.EditSkinExternalAsync` | `set_account_skin`(离线账号) | 只对离线账号有效(与参考版一致:正版/皮肤站的皮肤在各自网站上改)。 |
 
 > 可受理类型:`plugin / modpack / mod / resourcepack / shaderpack / datapack / world / skin`(见 `Common/FileKinds.AllKinds`)。
+
+## 9. 真机验收发现的 Linux 侧缺陷与修正(2026-11-13,M4-H R11 / R12)
+
+盒子 `main`(Ubuntu 24.04.5 / XFCE4 / X11)上的验收发现三条**只在真机暴露**的 Linux 侧缺陷,均已修,并按真机差分验收:
+
+| # | 现象 | 根因 | 处置 | 真机 / 测试验收 |
+|---|---|---|---|---|
+| 1 | 实例库版本行齿轮(提示「版本设置」)一点,**进程直接消失** | `InstanceDetailPage` 构造里遗留的孤儿 `Border` 把唯一的行 `StackPanel` 收成子级 → 首次布局时一个控件两个父级 → `unhandled(UI)` | 删孤儿 Border,行容器改字段 `_rowsHost`(只挂一次),`get_version_rows` 补 `instance`(R9) | `tipcl12`(修复前)`alive=0` + `unhandled(UI)` + 同型异常堆栈;`tipcl13`(修复后)`alive=1`、0 unhandled、实例详情页正常渲染(R11) |
+| 2 | 每次启动一条 `[WARN] 启动提示失败: Cannot show window with non-visible owner.`;真实首启时**首启向导与同意门都不出现** | 启动提示在主窗口 `Show()` 之前触发,Avalonia 对不可见 owner 的 `ShowDialog` 直接抛;第一个提示(向导)的异常中断了整串提示 | 先等主窗口可见(状态判断 + 15s 上限)再依次跑两个提示;`--smoke` 不进该路径(见 D-40) | `tipcl12` → 1 条 WARN、向导没出现;`tipcl14` → 0 WARN、向导正常弹出(R12) |
+| 3 | 版本行齿轮提示「版本设置」,点击实际打开实例详情页 | 移植时挂错处理器(Windows 是 `VersionSetupDialog`) | 改为与 Windows 对位:`VersionSetupDialog.ShowAsync(inst, id)` + `LoadAsync()`(见 D-41) | 单元测试断言弹的是版本设置对话框、`Dlg.AnyOpen` 且 `Detail(win) == null`(R12) |
+
+> 这三条都**不影响**「页面是否移植完成」的判定(§2 / §4 的页面件覆盖不变),但都属于「无头测试全绿、真机一看就废」的类型:布局类缺陷必须显式推一次渲染 pass 才抓得住(见 D-39),提示 / 弹窗类缺陷必须等窗口真实可见(见 D-40)。
+>
+> 另有一条平台限制与上述缺陷无关:Linux/X11 收不到系统拖放(Avalonia 11.3.2 无 XDND,见 §8 首段与 D-38),真机可用入口是各页的显式导入按钮。
