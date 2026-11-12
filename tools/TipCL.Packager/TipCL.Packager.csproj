@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>TipCL.Packager</AssemblyName>
+    <RootNamespace>TipCL.Packager</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- 只为读 AppInfo.APP_NAME / APP_DISPLAY_NAME / APP_VERSION(不许硬抄第二份)。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TipCL.Core\TipCL.Core.csproj" />
+  </ItemGroup>
+
+  <!-- 解 .ico、编 .icns 里的 PNG 用;版本与 Avalonia 解析到的一致(见 Directory.Build.props 的注释)。 -->
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="$(TipCLSkiaSharpVersion)" />
+  </ItemGroup>
+
+  <!-- 全部逻辑都是 internal static 纯函数,测试工程直接调(与 D-19 同一手法)。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TipCL.Tests" />
+  </ItemGroup>
+
+</Project>

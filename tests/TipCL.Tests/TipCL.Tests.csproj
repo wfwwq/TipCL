@@ -19,6 +19,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TipCL.Core\TipCL.Core.csproj" />
+    <!-- B3:打包工具的全部逻辑都是 internal static 纯函数(靠 TipCL.Packager 的 InternalsVisibleTo 看到),
+         这里只引用工程,**不**调它的 Program.Main(测试不许起进程、不许跑 dotnet publish)。 -->
+    <ProjectReference Include="..\..\tools\TipCL.Packager\TipCL.Packager.csproj" />
   </ItemGroup>
 
   <!-- B1a:WebP 真实夹具(从 Windows 测试目录字节级复制,libwebp 官方 test.webp,BSD)。
