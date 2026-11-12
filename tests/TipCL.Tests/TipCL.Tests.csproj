@@ -47,7 +47,18 @@
          System.Net.HttpListenerException: 句柄无效。(栈顶 System.Net.HttpListener.SetupV2Config),
          而同一份 dll 走进程内执行器通道时 4 条用例全过 → 本沙箱 testhost 的环境限制,不是代码问题。
          按任务书「不要改成别的监听方式」保持原样;恢复包:能在 testhost 里起 HttpListener 的环境(或改用进程内通道验收)。 -->
+    <!-- B2c2(2026-11-12)复核:上面两个原因里的**第二个已经修好**了 —— PhoneLink.TempZip 现在走可注入的
+         PhoneLink.TempDirProvider,测试进程(见 B2c2PhoneLinkTempDirTests.cs 的 [ModuleInitializer])
+         把它指到 TestHome.Root/phone-sync;实测把它从 Compile Remove 放出来跑:
+         进程内通道 1583/1583 全过(含用 HttpListener 的 FullFlow),跑完 %TEMP% 下没有新目录、
+         tipcl-phone-sync 条目数不变,临时 zip 的落点都在 TestHome.Root 之下。
+         但**第一个原因仍在**:`dotnet test` 通道里 FullFlow 必抛
+         System.Net.HttpListenerException : 句柄无效。(栈顶 System.Net.HttpListener.SetupV2Config
+         ← HttpListener.Start(),Ported\PhoneLinkTests.cs:44),
+         同一份 dll 走进程内通道那 4 条用例全过 —— 本沙箱 testhost 的环境限制,不是移植差异。
+         所以本文件**继续排除**,恢复条件不变。 -->
     <Compile Remove="Ported\PhoneLinkTests.cs" />
+
     <!-- C 类:需要 C1 的内嵌字体资源才算得动 -->
     <Compile Remove="Ported\IconFontTests.cs" />           <!-- 要 Resources\fonts\TipCLIcons.ttf 与界面源码 → 恢复包 C1(主题/图标) -->
   </ItemGroup>

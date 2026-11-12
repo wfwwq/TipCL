@@ -274,9 +274,22 @@ public static class PhoneLink
 
 	#region 传输
 
-	private static string TempZip()
+	/// <summary>
+	/// B2c2:临时 zip 的落点(可注入)。默认就是原来的「系统临时目录 + tipcl-phone-sync 子目录」。
+	/// 测试程序集用 [ModuleInitializer] 把它指到 TestHome.Root 之下;委托必须在**被调用时**才读 Root
+	/// (模块初始化器之间的执行顺序没有保证)。
+	/// </summary>
+	internal static Func<string> TempDirProvider = DefaultTempDir;
+
+	/// <summary>B2c2:默认落点(纯函数,只拼字符串,不落盘)。</summary>
+	internal static string DefaultTempDir()
 	{
-		string dir = Path.Combine(Path.GetTempPath(), "tipcl-phone-sync");
+		return Path.Combine(Path.GetTempPath(), "tipcl-phone-sync");
+	}
+
+	internal static string TempZip()
+	{
+		string dir = (TempDirProvider ?? DefaultTempDir)();
 		Directory.CreateDirectory(dir);
 		return Path.Combine(dir, Guid.NewGuid().ToString("N") + ".zip");
 	}

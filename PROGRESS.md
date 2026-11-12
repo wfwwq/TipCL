@@ -18,7 +18,7 @@
 | B2a | mac Java 运行时获取(Mojang 平台键 / Adoptium·Zulu mac 包 / 可执行位与链接 / java 定位) | ✅ 完成(见下;**新增 90 条用例,总数 811 → 901,两条通道都 901/901 全绿**) |
 | B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | ✅ 完成(见下;**新增 137 条用例,总数 901 → 1038,两条通道都 1038/1038 全绿**;三个复制文件只加可注入 OS/ARCH 的 internal 重载 + 一处内联逻辑抽取,Windows 行为用等价钉子逐项钉住;新建 `Launcher\MacNativeSupport.cs`,未接入调用点,留 Lead 裁决 arm64 方案) |
 | B2c1 | Java 与安装的收尾:Mojang 安装循环建链顺序与已存在链接 / Microsoft 厂商分支 / `forge-legacy` 的 Java 8 / Preflight 磁盘空间守卫 / `GlobalMods.IsSymlink` | ✅ 完成(见下;**新增 72 条用例,总数 1405 → 1477,两条通道都 1477/1477 全绿**;`Java.cs` / `Preflight.cs` / `GlobalMods.cs` 各按最小面改动,新逻辑全部落在 `JavaRuntimeFiles.cs` / `JavaArch.cs`;第 2 项走了「改 mac 地址为 `macos` + `.tar.gz`」这一支,**依据是 6 个 `aka.ms` HEAD 请求的线上证据**,见小节取证表与 D-54) |
-| B2c2 | 其余平台差异(一):NodeRuntime darwin / Terracotta 可执行权限 / adb 路径 / PhoneLink 临时目录 | 未开始 |
+| B2c2 | 其余平台差异(一):NodeRuntime darwin / Terracotta 可执行权限 / adb 路径 / PhoneLink 临时目录 | ✅ 完成(见下;**新增 102 条用例,总数 1477 → 1579,两条通道都 1579/1579 全绿**;只改了任务书点名的 4 个复制文件;第 1 项 darwin 包名有 2 个 GET 的线上证据;第 4 项 PhoneLinkTests **仍排除** —— testhost 的 HttpListener 依旧抛「句柄无效」,往 %TEMP% 写文件那个原因已修好并实测) |
 | B2c3 | 其余平台差异(二):Updater 仅提示 / Shortcut / 导出启动脚本(含 `BackendApi.cs:2958` 传未合并 JSON) | 未开始 |
 | B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | ✅ 完成(见下;**新增 132 条用例,总数 1038 → 1170,两条通道都 1170/1170 全绿**;新建 `Launcher\LaunchArch.cs`,7 处调用点改读目标架构,5 个复制文件加可注入重载 / 抽取纯函数;Java 侧留给 B2e) |
 | B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | ✅ 完成(见下;**新增 235 条用例,总数 1170 → 1405,两条通道都 1405/1405 全绿**;新建 `Launcher\JavaArch.cs`,`Java.cs` / `McLauncher.cs` / `Installer.cs` 各改一处;写测试时抓到并修掉一个「读取委托 / 探测委托」接错的真 bug,见 D-50;两处同类缺口只记录未改,见 D-52) |
@@ -2380,6 +2380,152 @@ Lead 认可的取舍:D-54(Microsoft 在 mac 上用 `macos` + `.tar.gz`,依据是
 - `TryCreateRuntimeLink` 在新建或重建时返回 true,但底层 `CreateLink` 建链失败只记警告,所以「返回 true」不等于链接一定建成。目前没有调用方使用这个返回值。
 - Microsoft 的地址只对 Java 17 取过证,其它大版本在 mac 上是否同样是 `macos` + `.tar.gz` 未验证。
 - Mojang 运行时的建链顺序改动只有代码审读和纯函数级单测,没有端到端装过一次(测试不许联网)。
+
+## B2c2 其余平台差异(一):NodeRuntime darwin / Terracotta 可执行权限 / adb 路径 / PhoneLink 临时目录
+
+### 1. NodeRuntime 在 mac 上自动下载便携版 Node(已改)
+
+**第 0 步取证(2 个 GET,查询时间 2026-11-12 21:35:33 +08:00,两份原文存在 `artifacts/b2c2/`,不入库)**
+
+| 源 | 结果 | 里面的 darwin / win-x64 行(逐字) |
+|---|---|---|
+| `https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt` | 200,3981 字节 | `node-v22.23.5-darwin-arm64.tar.gz`、`node-v22.23.5-darwin-x64.tar.gz`(同架构另有 `.tar.xz`)、`node-v22.23.5-win-x64.zip` |
+| `https://npmmirror.com/mirrors/node/latest-v22.x/SHASUMS256.txt` | 200,3777 字节 | `node-v22.20.0-darwin-arm64.tar.gz`、`node-v22.20.0-darwin-x64.tar.gz`(镜像版本比官方滞后)、`node-v22.20.0-win-x64.zip` |
+
+结论:mac 包名形态就是 `node-v<版本>-darwin-<架构>.tar.gz`,与 `PickFromShasums` 的 `"-" + platform + ext` 过滤规则天然吻合,所以 platform 取 `darwin-arm64` / `darwin-x64`、ext 取 `.tar.gz`。
+本次**只发了这 2 个 GET**,没有下载任何 Node 压缩包(测试夹具里那 12 行是从上面两份文件逐字抄的,已用脚本核对:`node-v*` 文件名 12 / 12 命中,真实 sha256 13 / 13 命中,唯一的「不命中」是刻意构造的大小写测试值)。
+
+**改了什么(全部落在 `Plugins\NodeRuntime.cs`,483 → 568 行)**
+
+| 接缝 | 内容 |
+|---|---|
+| `DownloadTargetFor(string os, Architecture processArch, bool is64BitOperatingSystem)` | 新增 internal 纯函数,返回 `(platform, ext)?`。Windows → `win-x64` / `win-x86` + `.zip`(与改动前 `Environment.Is64BitOperatingSystem ? "win-x64" : "win-x86"` 逐字相同,**不看进程架构**);`osx`+`Arm64` → `darwin-arm64`+`.tar.gz`;`osx`+`X64` → `darwin-x64`+`.tar.gz`;其余(含 linux、mac 上 32 位 / 未知架构)→ null。 |
+| `PortableExePath(nodeDir, isWindows)` | 新增 internal 纯函数:Windows `<dir>/node.exe`,非 Windows `<dir>/bin/node`(与 `Locate` 142–145 行已有的兜底拼法一致)。 |
+| `FindExtractedNodeDir(tmp, isWindows, listDirs?, fileExists?)` | 新增 internal 纯函数:解压临时目录里「含 node 可执行文件的那一层」。Windows 看一层子目录里的 `node.exe`,非 Windows 看 `bin/node`;找不到返回 null(调用方保持原来的 `?? tmp`);`listDirs` 抛异常时**原样往上抛**,与改动前 `Directory.GetDirectories` 的异常语义一致(由镜像循环 catch)。 |
+| `Download` | 平台/扩展名 = `DownloadTargetFor(Utils.OS_NAME, RuntimeInformation.ProcessArchitecture, Environment.Is64BitOperatingSystem)`;原来那句「当前系统不支持自动下载 Node…」的 `RuntimeError` **文案一字未动**,只是改由 `target == null` 触发;`PickFromShasums(shasums, platform, ext)`;解压按扩展名分流(`.zip` 仍走 `Utils.SafeExtractZip`,否则走 `JavaRuntimeFiles.SafeExtractTarGz`);一层目录用 `FindExtractedNodeDir(tmp, IsWindows)`;可执行文件用 `PortableExePath(dirs.NodeDir, IsWindows)`。镜像循环、sha256 校验、`Directory.Move`、清理、`ProbeVersion(exe) ?? file.Split('-')[1].TrimStart('v')` 全部照旧。 |
+| 文案 | 「SHASUMS256.txt 里没有 X 的 zip」改成 `… + " 的 " + (ext == ".zip" ? "zip" : ext)`,`.zip` 分支拼出来与改动前**逐字相同**。 |
+
+**npm 核对表(第 1 项要求的结论:不需要改)**
+
+| 位置 | 现状(`FindNpmCli` / `NpmInstall`,365–409 行) | mac 布局下是否正确 | 依据 |
+|---|---|---|---|
+| `FindNpmCli` 候选 1 | `<node 目录>/node_modules/npm/bin/npm-cli.js` | 不适用(Windows zip 布局) | 源码 |
+| `FindNpmCli` 候选 2 | `<node 目录>/../lib/node_modules/npm/bin/npm-cli.js` | **正确**:node 在 `<NodeDir>/bin/node` 时 dir=`<NodeDir>/bin`,拼出来就是 `<NodeDir>/lib/node_modules/npm/bin/npm-cli.js` | 源码 + 用例(`B2c2NodeRuntimeTests.Npm_cli_is_found_for_the_mac_tarball_layout`,用 `TestHome.Root` 下空文件摆出该布局后真的找到了) |
+| `FindNpmCli` 候选 3 | `<node 目录>/../node_modules/npm/bin/npm-cli.js` | 无关(兜底) | 源码 |
+| `NpmInstall` 的落点 | `cli != null` → 跑 `node <npm-cli.js> install …` | **正确**(不依赖 npm 可执行位,直接让 node 跑 js) | 源码 382–394 行 |
+| `NpmInstall` 没有 cli 时 | `FindOnPath(IsWindows ? "npm.cmd" : "npm")` | **正确**:非 Windows 已经在找无后缀的 `npm` | 源码 392 行 |
+| `NpmInstall` 的 `NodeDir/bin/npm` 符号链接 | 没有被使用 | 无关(mac tar 包里 `bin/npm` 是指向 `../lib/node_modules/npm/bin/npm-cli.js` 的符号链接,但代码走上面那条,不需要它) | 源码;符号链接的存在形态**未经真机验证** |
+
+**未验证**:mac 上 tar.gz 解出来顶层是不是 `node-v22.x.y-darwin-*/`、可执行文件是不是 `bin/node`(只按 `Locate` 既有约定实现);mac 上 `Download` 端到端能否跑通(测试里一律不调它)。
+`KillTree` 的非 Windows 分支只核对不改:非 Windows 不 taskkill,只 `p.Kill()`,没有缺口(B2c2 不新增 linux 功能)。
+
+### 2. Terracotta 可执行权限(已改)
+
+**现状结论(读代码,不是猜的)**
+
+| 位置 | 现状 |
+|---|---|
+| `Launcher\Terracotta.cs:679-720` `_extract_named` | 用 `File.WriteAllBytes(...)` 把内核写到 `<ROOT>/terracotta/0.4.2/<exe>`(702 行) |
+| `Launcher\Terracotta.cs:722-772` `Install` | 下载 → 校验 sha512 → 删旧目录 → `_extract_named` → `action("已安装到 …")`,**全程没有任何设可执行权限的代码**;全文件 grep 不到 `SetUnixFileMode` / `chmod`(只有 1187 行把 `Executable()` 交给 `Process.Start`) |
+| 结论 | mac / linux 上装出来的内核权限位是 umask 默认值(通常 0644),**没有执行权限**,第一次 `Process.Start` 会失败 |
+
+**改法**:新增 internal 纯函数 `FilesNeedingExecutableBit(string os, string exeName)` —— Windows 返回**空表**(循环体一次都不执行,改动前就是不设权限位,行为逐字不变);非 Windows 返回只含 `exeName` 的单元素数组(不碰同包里的 `VCRUNTIME140.DLL`)。
+`Install` 在 `_extract_named` 成功之后、`action("已安装到 …")` 之前加:
+
+```csharp
+foreach (string needsExec in FilesNeedingExecutableBit(Utils.OS_NAME, pkg.exe))
+{
+    JavaRuntimeFiles.SetExecutable(PPath.Join(text3, needsExec));
+}
+```
+
+`JavaRuntimeFiles.SetExecutable` 是 B2a 已有的实现(内部先判 `OperatingSystem.IsWindows()` 再 `File.SetUnixFileMode(…, 0755)`,失败只记警告)。
+mac 上到底能不能执行**未经真机验证**。
+
+### 3. adb 路径(已改)
+
+- `PhoneClient.FindAdb()` 拆成三段:`AdbCandidates(...)` 纯函数(只拼字符串,不碰文件系统)、可注入重载 `FindAdb(os, configured, baseDir, dataRoot, getEnv, homeDir, localAppData, pathValue, pathSeparator, exists)`、以及 3 行的生产包装(取真实值 + 转调,`Config.CONFIG` 与 `Utils.ResolveRoot()` 的取法与顺序照旧,`ResolveRoot` 仍包在 `try/catch` 里)。
+- **Windows(`os == "windows"`)候选与顺序逐项不变**:配置项 → `<程序目录>\adb.exe` → `<数据根>\adb.exe` → `ANDROID_HOME`、`ANDROID_SDK_ROOT` 下 `platform-tools\adb.exe` → `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe` → PATH 逐目录先 `adb.exe` 再 `adb`(空项跳过、非空项 `Trim`)。用一条「整表逐项相等」的用例钉住。
+  忠实照搬的一个细节:Windows 分支那条 `Path.Combine(localAppData, …)` 也是无条件的,所以传 null 进来同样抛 `ArgumentNullException`(生产中 `GetFolderPath` 不会给 null;非 Windows 分支根本不碰这个值)。已用一条用例明确记录。
+- **非 Windows**:配置项 → `<程序目录>/adb` → `<数据根>/adb` → `ANDROID_HOME` / `ANDROID_SDK_ROOT` 下 `platform-tools/adb` → (仅 `osx`)`<用户主目录>/Library/Android/sdk/platform-tools/adb` → (仅 `osx`)`/opt/homebrew/bin/adb`、`/usr/local/bin/adb` → PATH 各目录下 `adb`。**不再探测任何 `adb.exe`,也不看 LocalApplicationData**(有用例逐条钉住)。
+  mac 的 `~/Library/Android/sdk` 与两个 Homebrew 位置是任务书裁决给出的默认位置,**未经真机验证**,已列入真机清单。
+- **报错文案**:`PhoneClient.cs:439` 那句原文**一个字都没动**,只是从「字面量直接传给 `InvalidOperationException`」改成「作为实参传给 `AdbMissingMessage(os, windowsText)`」;`AdbMissingMessage` 在 `os == "windows"` 时原样返回这个实参,非 Windows 返回新文案(不提 `adb.exe` 与 `AdbWin*.dll`,说明可在设置里填 adb 路径或安装 Android platform-tools)。
+  有一条用例**读源码**核对生产调用点传的字面量逐字等于改动前的原文(纯函数化以后这是唯一不执行生产入口的钉法;旧源码里那句含全角括号,无法整句重抄,见 D-58)。
+
+### 4. PhoneLink 临时目录可注入(已改)+ PhoneLinkTests 的尝试结果
+
+- `Launcher\Sync\PhoneLink.cs`:新增 `internal static Func<string> TempDirProvider = DefaultTempDir;` 与 `internal static string DefaultTempDir()`(就是原来那一句 `Path.Combine(Path.GetTempPath(), "tipcl-phone-sync")`,只拼字符串不落盘);`TempZip()` 由 private 改 internal,落点改成 `(TempDirProvider ?? DefaultTempDir)()`,**生产默认行为与改动前完全一致**。
+- 测试工程新增 `tests\TipCL.Tests\B2c2PhoneLinkTempDirTests.cs`,里面有自己的 `[ModuleInitializer]`,把 `TempDirProvider` 指到 `Path.Combine(TestHome.Root, "phone-sync")`;**委托是惰性的**(在被调用时才读 `TestHome.Root`),没有改 `TestHome.Init()`。
+- **PhoneLinkTests 的尝试结果:仍然排除(`Compile Remove` 保持)**。把它从 `Compile Remove` 里放出来真跑了两条通道:
+  - `dotnet test TipCL.Mac.sln -c Release --no-build`:退出码 **1**,失败 1 / 通过 1582 / 总计 1583。失败的就是 `PhoneLinkTests.FullFlow`,异常原文:
+    `System.Net.HttpListenerException : 句柄无效。` ← `System.Net.HttpListener.SetupV2Config()` ← `HttpListener.Start()`(`Ported\PhoneLinkTests.cs:44`,由 `FullFlow` 在 202 行走进 `FakePhone..ctor`)—— 与 A6 / D-27 记的一模一样。
+  - 进程内通道:退出码 **0**,**1583/1583 全过**(含 `FullFlow`)。
+  - 两次都量了 `%TEMP%`:`tipcl*` 目录名字集合 86 → 86,**没有新名字**;`tipcl-phone-sync` 条目数 0 → 0;临时 zip 的落点确实落在 `tests\TipCL.Tests\bin\Release\net8.0\test-home\<guid>\phone-sync\` 之下(该目录被真的建了出来,里面没有残留 zip)。
+  结论:两个排除原因里**第二个(往 %TEMP% 写文件)已经修好**,但 testhost 里 `HttpListener` 那个环境限制仍在(D-27),所以按任务书**放回 `Compile Remove`**,不改监听方式、不改该测试文件的任何断言;csproj 里那段旧注释下面补了一段 B2c2 复核说明。
+
+### 对复制文件的每处改动(只动了任务书点名的 4 个文件,别的复制文件一个字没改)
+
+| 文件(行数变化) | 原来 | 改成 | 为什么 |
+|---|---|---|---|
+| `Plugins\NodeRuntime.cs`(483 → 568) | `if (!IsWindows) throw new RuntimeError(…)`;`string platform = Environment.Is64BitOperatingSystem ? "win-x64" : "win-x86"` | 先 `DownloadTargetFor(Utils.OS_NAME, RuntimeInformation.ProcessArchitecture, Environment.Is64BitOperatingSystem)`,null 时抛**同一句** `RuntimeError` | 让 mac 也能下载;不支持时文案逐字不变 |
+| 同上 | `using System.Linq;` 之后没有 InteropServices | 加 `using System.Runtime.InteropServices;` | 要用 `Architecture` / `RuntimeInformation` |
+| 同上 | `PickFromShasums(shasums, platform)` | `PickFromShasums(shasums, platform, ext)` | mac 要 `.tar.gz`(默认参数仍是 `.zip`,Windows 行为不变) |
+| 同上 | `"SHASUMS256.txt 里没有 " + platform + " 的 zip"` | `… + " 的 " + (ext == ".zip" ? "zip" : ext)` | mac 上说 zip 不对;`.zip` 分支逐字相同 |
+| 同上 | `Utils.SafeExtractZip(zip, tmp);` | `if (ext == ".zip") { SafeExtractZip } else { JavaRuntimeFiles.SafeExtractTarGz(zip, tmp); }` | mac 的包是 tar.gz;Windows 仍走原函数 |
+| 同上 | `Directory.GetDirectories(tmp).FirstOrDefault(d => File.Exists(Path.Combine(d, "node.exe"))) ?? tmp` | `FindExtractedNodeDir(tmp, IsWindows) ?? tmp` | 同样的「一层目录」判断,非 Windows 改看 `bin/node`,并做成可注入纯函数 |
+| 同上 | `string exe = System.IO.Path.Combine(dirs.NodeDir, "node.exe");` | `string exe = PortableExePath(dirs.NodeDir, IsWindows);` | 非 Windows 是 `<NodeDir>/bin/node`;Windows 分支结果逐字相同 |
+| 同上 | `/// 下载便携版 Node 22 LTS 到 runtime/node(走 TipCL 下载器,校验 SHASUMS256)。只支持 Windows x64(其他平台抛错)。` | 那句话保留原样,紧接着补 3 行「B2c2 更正」 | 旧句里的**全角括号无法整句重抄**(D-58);更正后描述与代码一致 |
+| `Launcher\Terracotta.cs`(1833 → 1852) | `Install` 里 `_extract_named(...)` 成功之后直接 `action("已安装到 " + text3);` | 中间插入 4 行循环调用 `FilesNeedingExecutableBit(Utils.OS_NAME, pkg.exe)` + `JavaRuntimeFiles.SetExecutable(...)` | 非 Windows 上装出来的内核没有执行权限;Windows 下该表为空,行为不变 |
+| 同上 | 没有这个函数 | 新增 internal 纯函数 `FilesNeedingExecutableBit(os, exeName)` + 一段 XML 注释 | 把「要不要设权限」做成可注入 os 的纯函数并单测 |
+| `Launcher\Sync\PhoneClient.cs`(475 → 537) | `FindAdb()` 一个方法内含全部候选拼装 + `FirstOrDefault(File.Exists)` | 拆成 `AdbCandidates(...)`(纯函数)+ `FindAdb(…10 个参数…)`(可注入)+ 3 行的 `FindAdb()` 包装 | 平台差异要能在本机单测 |
+| 同上 | 没有这个函数 | 新增 internal 纯函数 `AdbMissingMessage(os, windowsText)` | 文案按 os 选,可单测 |
+| 同上 | `throw new InvalidOperationException("<旧文案>")` | `throw new InvalidOperationException(AdbMissingMessage(Utils.OS_NAME, "<同一句旧文案>"))` | 字面量一字未动,只换了传参方式 |
+| 同上 | 旧注释「找 adb:设置里指定的 → …」 | 保留,后面接一段 `<remarks>` 描述两套候选 | 旧注释含全角冒号与箭头,无法整句重抄(D-58) |
+| `Launcher\Sync\PhoneLink.cs`(432 → 443) | `private static string TempZip()` 内写死 `Path.Combine(Path.GetTempPath(), "tipcl-phone-sync")` | 新增 `TempDirProvider` / `DefaultTempDir()`,`TempZip` 改 internal 并读提供者 | 测试临时文件必须落在仓库内(A6 lead 验收的恢复条件) |
+
+### 测试(新增 102 条用例,总数 1477 → 1579)
+
+| 新文件 | 覆盖 | 用例数(含 Theory 展开) |
+|---|---|---|
+| `tests\TipCL.Tests\B2c2NodeRuntimeTests.cs` | `DownloadTargetFor` 的 Windows 钉子(含「不看进程架构」4 格)/ mac 两个架构 / 不支持的平台与架构 / `PortableExePath` 两个分支 / `FindExtractedNodeDir` 的真实目录树(Windows 与 unix 各一组、第一个匹配、空目录、注入委托、委托抛异常)/ `PickFromShasums` 用线上夹具挑 darwin-arm64、darwin-x64、win-x64(含**默认参数**那条钉子)、扩展名真的参与筛选、镜像夹具、找不到 / 小写化 / 坏长度 / npm 布局 4 条 / `Download` 接缝的结构钉子 | 48 |
+| `tests\TipCL.Tests\B2c2TerracottaExecTests.cs` | Windows 空表(含 null 名)/ 非 Windows 单元素(4 个真实内核名)/ 只有 `"windows"` 特判 / `SetExecutable` 的 Windows 空操作与 unix 0755 / null 空 不存在路径 / 幂等 / 文件名不含分隔符 / `Install` 接缝的结构钉子 | 17 |
+| `tests\TipCL.Tests\B2c2AdbPathTests.cs` | Windows 整表逐项相等 + 去掉配置项 / 数据根 / 环境变量后的整表相等 + 单个环境变量 + LocalApplicationData 无条件 + PATH 裁剪 + 注入分隔符 / mac 整表 + 主目录未知 + linux 没有 mac 专属候选 / 非 Windows 不出现 `.exe` 与 AppData / `FindAdb` 注入存在性判断(配置项优先、第一个命中、全不命中、委托调用顺序、环境变量询问顺序、真实 `File.Exists`）/ Windows 文案逐字 + 非 Windows 文案排除 exe/dll 措辞 / 生产调用点与生产入口的**源码结构钉子** | 30 |
+| `tests\TipCL.Tests\B2c2PhoneLinkTempDirTests.cs` | 默认提供者 = 原来那一句(只比字符串)/ 测试进程的提供者指向 `TestHome.Root/phone-sync` / `TempZip` 落点 + 只建目录不建文件 / 两次名字不同 / 提供者在 `finally` 里恢复 / 不在默认 %TEMP% 子目录下 / 源码结构钉子 + 本文件的 `[ModuleInitializer]` | 7 |
+
+实际条数(进程内通道按类统计,合计 **102**):`B2c2NodeRuntimeTests` 48、`B2c2AdbPathTests` 30、`B2c2TerracottaExecTests` 17、`B2c2PhoneLinkTempDirTests` 7。
+
+用例一律不联网、不起进程、不建真实符号链接、不实例化 `BackendApi` / `BridgeServer` / `PluginManager`;临时文件都在 `TestHome.Root` 之下;改全局静态(`TempDirProvider`)的那条用例在 `finally` 里恢复。
+
+### 验证命令与实际结果(全部在本机真实执行过)
+
+| 命令 | 结果 |
+|---|---|
+| `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 错误**;**1 个警告 = SYSLIB0014 ×1**(`src\TipCL.Core\Launcher\Sync\PhoneClient.cs(116,38)`,本包未动的那处 `WebRequest`) |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 **0**,通过 **1579** / 失败 0 / 跳过 0(2.1 秒,没有出现 `Win32Exception (5)`) |
+| `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 **0**,总计 **1579**,通过 1579 / 失败 0 / 跳过 0 / **不支持 0** |
+| `cmd /c "src\TipCL.App\bin\Release\net8.0\TipCL.exe --smoke --theme light --out artifacts\smoke-light.png"` / `--theme dark …` | 退出码 **0 / 0**,**3739 字节 / 3751 字节**(与 A1 起逐次相同) |
+| `%LOCALAPPDATA%\TipCL` 开工时 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16 |
+| 测试后再量 | **9328 / 889530606 / 2026-11-10 20:42:16**,三项完全一致(测试全程没有碰真实数据目录) |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(两条通道前后各一次) | **86 → 86**,**没有新名字**;`tipcl-phone-sync`(A6 留下的空目录)条目数 **0 → 0** |
+| 残留进程 `testhost` / `adb` / `java` / `javaw` / `TipCL` | 全 **0**;`node` 有 4 个,创建时间分别是 2026-11-10 22:30:23、2026-11-10 23:11:48、2026-11-12 19:20:47(×2),**都早于本包第一次跑测试(21:52)**,不是本包留下的 |
+| 字节一致性自检(`src/TipCL.Core` 全部 `.cs` 对 Windows 源比 SHA256) | 总数 **247** / 一致 **220** / 有改动 **18** / Windows 源里没有对应文件 **9**。有改动的 18 = 既有 14 个 + 本包实际改的 4 个(`Plugins/NodeRuntime.cs`、`Launcher/Terracotta.cs`、`Launcher/Sync/PhoneClient.cs`、`Launcher/Sync/PhoneLink.cs`);没有对应文件的仍是既有 9 个,本包没有新建 `.cs` |
+| 联网请求总数 | **2 个 GET**(上面第 0 步那两份 SHASUMS256.txt),没有别的请求、没有下载任何 Node 压缩包 |
+
+### 未验证(本机是 Windows,没有 Mac)
+
+1. mac 上 `NodeRuntime.Download` 端到端(下载 → 校验 → `SafeExtractTarGz` → `Directory.Move` → `bin/node` 能跑);**顶层目录名与 `bin/node` 布局只按 `Locate` 的既有约定实现**,tar 包实际形态没看过(不能下载包来看)。
+2. mac 上 tar 包里 `bin/npm` 符号链接的实际形态(不影响功能,因为 `NpmInstall` 是让 node 直接跑 `npm-cli.js`)。
+3. mac 上陶瓦内核能不能执行(权限位 0755 本机设不了、也验不了);`/opt/homebrew/bin/adb`、`/usr/local/bin/adb`、`~/Library/Android/sdk/platform-tools/adb` 这三条默认位置;`ANDROID_HOME` / `ANDROID_SDK_ROOT` 在 mac 上的常见形态。
+4. `osx` / `linux` 分支的候选路径在本机跑纯函数时用的是 Windows 的 `Path.Combine`(反斜杠),mac 上真机才会用 `/` —— 断言本身与平台无关(同一函数构造),但真机上的绝对路径拼法没有验过。
+
+### 遗留与风险
+
+1. `PhoneLinkTests` 仍被排除(testhost 的 `HttpListener` 环境限制),它的 4 条用例只在进程内通道跑得到;真机上或能起 `HttpListener` 的环境里应当再试一次。
+2. `NodeRuntime.Download` 的 mac 分支建议在真机上补一条:`TIPCL_NODE` 不设时让它下载一次,确认 `runtime/node/bin/node --version` 能跑(本包只能保证代码审读 + 纯函数单测)。
+3. `JavaRuntimeFiles.SetExecutable` 失败只记警告不抛,所以「权限位设没设上」在 mac 上要靠真机日志确认;`FilesNeedingExecutableBit` 只处理内核本体,如果将来 mac 包里多了需要执行位的辅助文件,要同步扩这个表。
+4. Windows 分支里 `Path.Combine(localAppData, …)` 对 null 抛异常这一点被忠实保留(生产中不会发生),将来若有人拿它当通用工具函数用,需要自己保证非 null。
+5. 本包没有动 `Utils.cs` / `BackendApi.cs` / 其它复制文件,也没有改 TFM、没有扩 `NoWarn`、没有新增警告。
+
 
 
 

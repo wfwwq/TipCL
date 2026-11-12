@@ -362,40 +362,102 @@ public sealed class PhoneClient
 	}
 
 	/// <summary>找 adb：设置里指定的 → 启动器同目录 → 数据目录 → Android SDK → PATH。</summary>
+	/// <remarks>
+	/// B2c2:adb 候选路径(纯函数,只拼字符串,不碰文件系统)。
+	/// <list type="bullet">
+	/// <item>Windows = <c>os == "windows"</c>:候选与顺序**与改动前逐项相同** —— 配置项 → 程序目录\adb.exe →
+	/// 数据根\adb.exe → ANDROID_HOME / ANDROID_SDK_ROOT 下 platform-tools\adb.exe →
+	/// %LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe → PATH 各目录下 adb.exe 再 adb
+	/// (每个 PATH 目录先 adb.exe、后 adb,与改动前一样);</item>
+	/// <item>非 Windows:配置项 → 程序目录/adb → 数据根/adb → ANDROID_HOME / ANDROID_SDK_ROOT 下
+	/// platform-tools/adb → (仅 osx)用户主目录/Library/Android/sdk/platform-tools/adb →
+	/// (仅 osx) /opt/homebrew/bin/adb、/usr/local/bin/adb(从访达启动的应用拿不到 shell 的 PATH,所以显式列出)
+	/// → PATH 各目录下 adb。非 Windows **不探测任何 adb.exe,也不看 LocalApplicationData**。</item>
+	/// </list>
+	/// mac 的 ~/Library/Android/sdk 与两个 Homebrew 位置**未经真机验证**(任务书给出的默认位置)。
+	/// </remarks>
+	internal static List<string> AdbCandidates(string os, string configured, string baseDir, string dataRoot, Func<string, string> getEnv, string homeDir, string localAppData, string pathValue, char pathSeparator)
+	{
+		bool windows = os == "windows";
+		string exe = windows ? "adb.exe" : "adb";
+		List<string> c = new List<string>();
+		if (!string.IsNullOrEmpty(configured))
+		{
+			c.Add(configured);
+		}
+		c.Add(Path.Combine(baseDir, exe));
+		if (!string.IsNullOrEmpty(dataRoot))
+		{
+			c.Add(Path.Combine(dataRoot, exe));
+		}
+		string[] envNames = new string[2] { "ANDROID_HOME", "ANDROID_SDK_ROOT" };
+		foreach (string envName in envNames)
+		{
+			string envValue = ((getEnv == null) ? null : getEnv(envName));
+			if (!string.IsNullOrEmpty(envValue))
+			{
+				c.Add(Path.Combine(envValue, "platform-tools", exe));
+			}
+		}
+		if (windows)
+		{
+			c.Add(Path.Combine(localAppData, "Android", "Sdk", "platform-tools", exe));
+		}
+		else if (os == "osx")
+		{
+			if (!string.IsNullOrEmpty(homeDir))
+			{
+				c.Add(Path.Combine(homeDir, "Library", "Android", "sdk", "platform-tools", exe));
+			}
+			c.Add("/opt/homebrew/bin/adb");
+			c.Add("/usr/local/bin/adb");
+		}
+		foreach (string dir in (pathValue ?? "").Split(pathSeparator))
+		{
+			if (dir.Trim().Length > 0)
+			{
+				c.Add(Path.Combine(dir.Trim(), exe));
+				if (windows)
+				{
+					c.Add(Path.Combine(dir.Trim(), "adb"));
+				}
+			}
+		}
+		return c;
+	}
+
+	/// <summary>B2c2:按候选顺序返回第一个「存在」的 adb(存在性判断由调用方注入,便于单测)。</summary>
+	internal static string FindAdb(string os, string configured, string baseDir, string dataRoot, Func<string, string> getEnv, string homeDir, string localAppData, string pathValue, char pathSeparator, Func<string, bool> exists)
+	{
+		return AdbCandidates(os, configured, baseDir, dataRoot, getEnv, homeDir, localAppData, pathValue, pathSeparator).FirstOrDefault(exists ?? File.Exists);
+	}
+
+	/// <summary>
+	/// B2c2:找不到 adb 时的文案(纯函数,可注入 os)。
+	/// Windows 分支**原样返回调用点传进来的那句话** —— 改动前的字面量一字未动,只是从常量变成了实参;
+	/// 非 Windows 分支不提 adb.exe 与 AdbWin*.dll(这两样在 mac / linux 上根本不存在)。
+	/// </summary>
+	internal static string AdbMissingMessage(string os, string windowsText)
+	{
+		if (os == "windows")
+		{
+			return windowsText;
+		}
+		return "没找到 adb\u3002可在设置里填写 adb 的完整路径\uFF0C或安装 Android platform-tools 后重试";
+	}
+
 	public static string FindAdb()
 	{
-		List<string> c = new List<string>();
 		string conf = Py.Str(Py.Or(Config.CONFIG.Get("adb_path", ""), ""));
-		if (conf.Length > 0)
-		{
-			c.Add(conf);
-		}
-		c.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "adb.exe"));
+		string dataRoot = null;
 		try
 		{
-			c.Add(Path.Combine(Utils.ResolveRoot(), "adb.exe"));
+			dataRoot = Utils.ResolveRoot();
 		}
 		catch (Exception)
 		{
 		}
-		foreach (string env in new[] { "ANDROID_HOME", "ANDROID_SDK_ROOT" })
-		{
-			string v = Environment.GetEnvironmentVariable(env);
-			if (!string.IsNullOrEmpty(v))
-			{
-				c.Add(Path.Combine(v, "platform-tools", "adb.exe"));
-			}
-		}
-		c.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Android", "Sdk", "platform-tools", "adb.exe"));
-		foreach (string dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
-		{
-			if (dir.Trim().Length > 0)
-			{
-				c.Add(Path.Combine(dir.Trim(), "adb.exe"));
-				c.Add(Path.Combine(dir.Trim(), "adb"));
-			}
-		}
-		return c.FirstOrDefault(File.Exists);
+		return FindAdb(Utils.OS_NAME, conf, AppDomain.CurrentDomain.BaseDirectory, dataRoot, (string name) => Environment.GetEnvironmentVariable(name), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Environment.GetEnvironmentVariable("PATH") ?? "", Path.PathSeparator, (string path) => File.Exists(path));
 	}
 
 	public static string RunAdb(string adb, string args, int timeoutMs = 15000)
@@ -436,7 +498,7 @@ public sealed class PhoneClient
 	/// </summary>
 	public static string ConnectUsb(string token, out Info info, Action<string> log = null)
 	{
-		string adb = FindAdb() ?? throw new InvalidOperationException("没找到 adb.exe。把 Android platform-tools 里的 adb.exe（连同两个 AdbWin*.dll）放到 TipCL 同目录即可");
+		string adb = FindAdb() ?? throw new InvalidOperationException(AdbMissingMessage(Utils.OS_NAME, "没找到 adb.exe。把 Android platform-tools 里的 adb.exe（连同两个 AdbWin*.dll）放到 TipCL 同目录即可"));
 		List<string> devs = ParseAdbDevices(RunAdb(adb, "devices"));
 		if (devs.Count == 0)
 		{

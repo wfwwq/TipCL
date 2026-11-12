@@ -436,6 +436,25 @@ public static class Terracotta
 		}
 	}
 
+	/// <summary>
+	/// B2c2:解压完内核之后,哪些文件需要补可执行位(纯函数,可注入 os)。
+	/// Windows 返回空表 —— 改动前根本不设权限位,这里一个文件都不碰(行为逐字不变);
+	/// 非 Windows 只给内核可执行文件本身(Linux / mac 的包里没有 DLL,只有一个无后缀的二进制),
+	/// 不含同包里的 VCRUNTIME140.DLL。
+	///
+	/// 现状(改动前):<c>_extract_named</c> 用 <c>File.WriteAllBytes</c> 落盘,非 Windows 上权限位是 umask 默认值,
+	/// 装上来的内核**没有执行权限**,<c>Process.Start</c> 会失败。这是本包补的那一处(mac / linux 同型)。
+	/// mac 上到底能不能执行**未经真机验证**。
+	/// </summary>
+	internal static string[] FilesNeedingExecutableBit(string os, string exeName)
+	{
+		if (os == "windows" || string.IsNullOrEmpty(exeName))
+		{
+			return Array.Empty<string>();
+		}
+		return new string[1] { exeName };
+	}
+
 	private static Pkg PackageMeta()
 	{
 		if (!_PACKAGES.TryGetValue(Classifier(), out Pkg value))
@@ -766,6 +785,10 @@ public static class Terracotta
 			{
 			}
 			throw;
+		}
+		foreach (string needsExec in FilesNeedingExecutableBit(Utils.OS_NAME, pkg.exe))
+		{
+			JavaRuntimeFiles.SetExecutable(PPath.Join(text3, needsExec));
 		}
 		action("已安装到 " + text3);
 		return text3;

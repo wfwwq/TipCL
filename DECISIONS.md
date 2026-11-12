@@ -743,3 +743,38 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
 - **未验证**:mac 上 `LinkTarget` 对悬空链接确实非 null(任务书的规定;本机是 Windows,测试不许建真实符号链接,
   所以全部用假委托 + 「真实普通文件必须是 false」的钉子)。
 
+## D-58 本机工具陷阱第三次现形:全角标点**抄不进** `edit` 的 `old_string`(B2c2 实测)
+
+- **现象**:用 `edit` 工具把源码里的中文句子整句抄进 `old_string` 时,匹配失败。实测原因是**我抄出来的全角
+  标点会变成半角**:写一个 `(`,`old_string` 里就是 U+0028;写一个 `,`,就是 U+002C。而源码里的
+  `,` / `(` / `)` / `:` 是 U+FF0C / U+FF08 / U+FF09 / U+FF1A,**字节不同 → 匹配不上**。
+  这解释了 A5(D-24)「12 条用例期望值打印出来一模一样却判不相等」以及 A3(D-16)的同类现象:同一个陷阱,
+  以前只在「读回来抄进测试」时踩到,这次是在 `edit` 的 `old_string` 里踩到。
+- **能可靠写出的字符(实测)**:ASCII 全集(含 `"` `\` 制表符 U+0009)、CJK 汉字、`。`(U+3002)、`、`(U+3001)。
+  **写不出的**:U+FF0C / U+FF08 / U+FF09 / U+FF1A 这类「全角 ASCII 外形」的标点。
+- **做法(后续包直接用)**:
+  1. 源码里的**新文案**尽量用 `\uXXXX` 转义表达需要的全角标点(例如
+     `"没找到 adb\u3002可在设置里填写 adb 的完整路径\uFF0C或安装 Android platform-tools 后重试"`);
+  2. 测试里的**期望值**一律 `\uXXXX` 转义(D-16 / D-24 的要求在 B2c2 依然照办,而且这次是**必须**的);
+  3. 必须改到一句**含全角标点**的旧文本时,不要整句重抄,改用两种办法之一:
+     (a) 只匹配/替换句子里的 ASCII 片段(例如把 `throw new X("` 换成 `throw new X(Helper(os, "`,让原字面量
+     **原封不动**成为实参 —— B2c2 的 adb 报错文案就是这么做的,`git diff` 里旧文案仍以未改动的样子出现);
+     (b) 在旧句后面**加一行「B2c2 更正」**,而不是重写旧句(NodeRuntime 的 `Download` 注释就是这么处理的)。
+  4. 核对办法:一次性脚本(`artifacts/`,不入库)把目标行的非 ASCII 字符打成 `\uXXXX` 再比,不要靠肉眼。
+- **附带一条**:`Assert.DoesNotContain(string, string)` 查 `U+FEFF` 的坑(D-12 第 1 条)同源,都是「看起来一样、
+  其实不是同一个字符」。
+
+## D-59 B2c2 的两处保守取舍
+
+1. **adb 的 Windows 报错文案用「实参」而不是「常量」保留**。任务书要求文案按 os 选,而 `PhoneClient.cs:439`
+   那句含全角括号(D-58 抄不动)。做法:`AdbMissingMessage(string os, string windowsText)` —— Windows 分支
+   **原样返回调用点传进来的实参**,调用点那句字面量一个字节都没改,只是从「直接传给 `InvalidOperationException`」
+   变成「传给 `AdbMissingMessage`」。代价:纯函数层单独看不知道 Windows 文案是什么,所以补了一条**读源码**的
+   结构性用例,核对生产调用点传的字面量逐字等于改动前的原文(B2c1 已有「读源码」的先例)。另一个选择是把新文案
+   用 `\uXXXX` 写在函数里、把旧文案留在注释里,评估后放弃(注释里的死文本更难维护)。
+2. **`AdbCandidates` 的 Windows 分支保留「`localAppData` 为 null 就抛 `ArgumentNullException`」**。原实现是
+   无条件的 `Path.Combine(Environment.GetFolderPath(LocalApplicationData), …)`,传 null 同样抛。加一个
+   `IsNullOrEmpty` 守卫会让这条候选在「空串」时消失(与原行为不同),而生产中 `GetFolderPath` 在 Windows 上
+   永远不返回 null/空。按「Windows 行为逐项不变」优先,保留原语义,并用一条用例把这个语义写清楚。
+   非 Windows 分支根本不碰这个参数(mac 的默认位置是 `~/Library/Android/sdk`,不是 `%LOCALAPPDATA%`)。
+

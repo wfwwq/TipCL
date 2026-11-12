@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -159,6 +160,66 @@ public static class NodeRuntime
 		return null;
 	}
 
+	/// <summary>
+	/// B2c2:便携版 Node 的 (platform, ext) —— 纯函数,可注入 os / 进程架构 / 是否 64 位系统。
+	/// 返回 null 表示本平台不支持自动下载(<see cref="Download"/> 抛原来那句 <see cref="RuntimeError"/>)。
+	/// <list type="bullet">
+	/// <item>Windows:<c>win-x64</c> / <c>win-x86</c> + <c>.zip</c>,与改动前逐字相同
+	/// (原来就是 Environment.Is64BitOperatingSystem ? "win-x64" : "win-x86",不看进程架构);</item>
+	/// <item>mac:<c>darwin-arm64</c> / <c>darwin-x64</c> + <c>.tar.gz</c>,**按进程架构**取
+	/// (Node 是启动器自己用的,与 B2d 的目标架构无关)。包名形态有线上证据:2026-11-12 21:35 抓取的
+	/// nodejs.org / npmmirror 两份 SHASUMS256.txt 里都是 node-v22.23.5-darwin-arm64.tar.gz 这样的名字,
+	/// 见 PROGRESS.md 的 B2c2 小节;</item>
+	/// <item>其它(含 linux,以及 32 位 / 未知的 mac 架构):不支持。</item>
+	/// </list>
+	/// </summary>
+	internal static (string platform, string ext)? DownloadTargetFor(string os, Architecture processArch, bool is64BitOperatingSystem)
+	{
+		if (os == "windows")
+		{
+			return (is64BitOperatingSystem ? "win-x64" : "win-x86", ".zip");
+		}
+		if (os == "osx")
+		{
+			if (processArch == Architecture.Arm64)
+			{
+				return ("darwin-arm64", ".tar.gz");
+			}
+			if (processArch == Architecture.X64)
+			{
+				return ("darwin-x64", ".tar.gz");
+			}
+			return null;
+		}
+		return null;
+	}
+
+	/// <summary>
+	/// B2c2:便携版 node 可执行文件的落点(纯函数)。
+	/// Windows 是 &lt;node 目录&gt;/node.exe;非 Windows 是 &lt;node 目录&gt;/bin/node
+	/// —— 与 <see cref="Locate"/> 里已有的「非 Windows 且 &lt;dir&gt;/node 不存在时改看 &lt;dir&gt;/bin/node」一致。
+	/// mac 上这个布局**未经真机验证**(只按 Locate 的既有约定实现)。
+	/// </summary>
+	internal static string PortableExePath(string nodeDir, bool isWindows)
+	{
+		return isWindows ? System.IO.Path.Combine(nodeDir, "node.exe") : System.IO.Path.Combine(nodeDir, "bin", "node");
+	}
+
+	/// <summary>
+	/// B2c2:解压临时目录里「含 node 可执行文件的那一层」的探测(纯函数,注入 isWindows 与两个 IO 委托便于单测)。
+	/// Windows 看一层子目录里有没有 <c>node.exe</c>;非 Windows 看 <c>bin/node</c>
+	/// (tar.gz 顶层是 node-v22.x.y-darwin-*/ 一层目录)。找不到返回 null,调用方按原来的 <c>?? tmp</c> 处理。
+	/// <paramref name="listDirs"/> 抛异常时原样往上抛(与改动前 Directory.GetDirectories 的行为一致:
+	/// 由 <see cref="Download"/> 的镜像循环 catch 掉)。
+	/// </summary>
+	internal static string FindExtractedNodeDir(string tmp, bool isWindows, Func<string, string[]> listDirs = null, Func<string, bool> fileExists = null)
+	{
+		Func<string, string[]> dirs = listDirs ?? ((string d) => Directory.GetDirectories(d));
+		Func<string, bool> exists = fileExists ?? ((string p) => File.Exists(p));
+		string relative = isWindows ? "node.exe" : System.IO.Path.Combine("bin", "node");
+		return dirs(tmp).FirstOrDefault((string d) => exists(System.IO.Path.Combine(d, relative)));
+	}
+
 	/// <summary>从 SHASUMS256.txt 里挑出 v22 win-x64 zip 的文件名和 sha256。</summary>
 	public static (string file, string sha256) PickFromShasums(string shasums, string platform = "win-x64", string ext = ".zip")
 	{
@@ -175,14 +236,19 @@ public static class NodeRuntime
 
 	/// <summary>
 	/// 下载便携版 Node 22 LTS 到 runtime/node（走 TipCL 下载器，校验 SHASUMS256）。只支持 Windows x64（其他平台抛错）。
+	/// B2c2 更正:上面那句「只支持 Windows x64」已不再成立 —— 现在 Windows 装 win-x64 / win-x86 的 zip,
+	/// mac 装 darwin-arm64 / darwin-x64 的 tar.gz(见 DownloadTargetFor,包名形态有线上 SHASUMS256.txt 证据),
+	/// 其余平台仍然抛 RuntimeError。Windows 的取值与文案逐字未变。
 	/// </summary>
 	public static NodeInfo Download(PluginDirs dirs, DownloadManager dm, Action<string> log)
 	{
-		if (!IsWindows)
+		(string platform, string ext)? target = DownloadTargetFor(Utils.OS_NAME, RuntimeInformation.ProcessArchitecture, Environment.Is64BitOperatingSystem);
+		if (target == null)
 		{
 			throw new RuntimeError("当前系统不支持自动下载 Node，请自行安装 Node " + MinMajor + " 或更高版本");
 		}
-		string platform = Environment.Is64BitOperatingSystem ? "win-x64" : "win-x86";
+		string platform = target.Value.platform;
+		string ext = target.Value.ext;
 		Exception last = null;
 		foreach (string mirror in Mirrors)
 		{
@@ -191,10 +257,10 @@ public static class NodeRuntime
 				string baseUrl = mirror + "latest-v" + MinMajor + ".x/";
 				log?.Invoke("获取 Node 版本信息：" + baseUrl);
 				string shasums = Net.GetText(baseUrl + "SHASUMS256.txt", 6.0, 30.0);
-				var (file, sha) = PickFromShasums(shasums, platform);
+				var (file, sha) = PickFromShasums(shasums, platform, ext);
 				if (file == null)
 				{
-					throw new RuntimeError("SHASUMS256.txt 里没有 " + platform + " 的 zip");
+					throw new RuntimeError("SHASUMS256.txt 里没有 " + platform + " 的 " + (ext == ".zip" ? "zip" : ext));
 				}
 				string zip = System.IO.Path.Combine(dirs.RuntimeRoot, ".download", file);
 				log?.Invoke("下载 " + file);
@@ -216,9 +282,16 @@ public static class NodeRuntime
 					Utils.RemoveTree(tmp);
 				}
 				log?.Invoke("解压 Node…");
-				Utils.SafeExtractZip(zip, tmp);
-				// zip 里是 node-v22.x.y-win-x64/ 一层目录
-				string inner = Directory.GetDirectories(tmp).FirstOrDefault((string d) => File.Exists(System.IO.Path.Combine(d, "node.exe"))) ?? tmp;
+				if (ext == ".zip")
+				{
+					Utils.SafeExtractZip(zip, tmp);
+				}
+				else
+				{
+					JavaRuntimeFiles.SafeExtractTarGz(zip, tmp);
+				}
+				// zip 里是 node-v22.x.y-win-x64/ 一层目录;tar.gz 里是 node-v22.x.y-darwin-*/ 一层目录,可执行文件在其下 bin/node
+				string inner = FindExtractedNodeDir(tmp, IsWindows) ?? tmp;
 				if (Directory.Exists(dirs.NodeDir))
 				{
 					Utils.RemoveTree(dirs.NodeDir);
@@ -235,7 +308,7 @@ public static class NodeRuntime
 				catch (Exception)
 				{
 				}
-				string exe = System.IO.Path.Combine(dirs.NodeDir, "node.exe");
+				string exe = PortableExePath(dirs.NodeDir, IsWindows);
 				string v = ProbeVersion(exe) ?? file.Split('-')[1].TrimStart('v');
 				log?.Invoke("Node " + v + " 已就绪");
 				return new NodeInfo
