@@ -1260,3 +1260,34 @@ Windows 分支仍是 `CreateSymbolicLinkW(text, text2, 2)`,非 Windows 用委托
 - 覆盖 `Crash.ShellOpenHook` 的用例依赖全程序集串行(`AssemblyInfo.cs` 已关并行),不与其他用例互相干扰;
   `B1bOpenFolderTests.The_hook_is_restored_after_the_test` 会连带盯住「谁忘了在 finally 里恢复钩子」。
 - `Crash.ReadText` 的 GB18030 回落现在真的能拿到 54936;这条路径是崩溃日志解析,没有别的副作用。
+
+### Lead 验收(2026-11-12 18:55)
+
+结论:**B1b 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src/TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 有对应文件的 238 个里 231 一致、7 个有改动(A5 的 3 个 + `SecretStore.cs` + 本包 `ExtraTools.cs`、`GlobalMods.cs`、`Sysinfo.cs`);无对应文件的 5 个是 B1a 的 4 个 + `Platform\CodePages.cs` |
+| `SecretStore.cs` 现在的读取路径(Lead 全文读过) | `TCS2`:取主密钥阶段的异常原样抛出;凭据库里没有主密钥、密文截断、认证失败、JSON 不合法 → 空表;读取不创建主密钥。`TCS0` / `TCS1` / 未知魔数 / 文件读失败的行为未变;Windows 分支未变 |
+| `ExtraTools.cs`、`GlobalMods.cs`、`Sysinfo.cs` 的 `git diff a9ca20d..HEAD`(Lead 逐行读过) | 都只加了非 Windows 分支或可注入重载;Windows 分支仍是原来那一行;公开签名未变 |
+| `Directory.Build.props` 与三个 csproj | 未改:`NoWarn` 仍 6 项,没有新包 |
+| 红线文件 `AssemblyInfo.cs`、`TestHomeIsolation.cs`、`Program.cs`(测试)、`B1aPluginSecretStoreAesTests.cs`、`.gitattributes` | 未改 |
+| 本次提交改动的文本文件做严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告只剩 SYSLIB0014 ×1(CA1416 从 7 条到 0 条) |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 811 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 811 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(Lead 复跑前后) | 85 → 85,没有新名字 |
+| `explorer.exe` 进程(Lead 复跑前后) | 都只有 PID 9920,没有新起的 |
+| 残留进程 `testhost` / `java` / `adb` / `TipCL` / `security` | 0 个 |
+| B1b 测试扫描 | 没有起进程、建真实符号链接、走 Windows 分支、写注册表、改环境变量;`Crash.ShellOpenHook` 的 3 处赋值都在 `finally` 里恢复 |
+| 缺陷回归用例(Lead 读过 `B1bSecretStoreReadPathTests.cs` 前 200 行) | 「凭据库失败时 Get / Names / Set 抛出且文件逐字节不变」「第一次读失败、第二次成功时 Set 仍抛出且不写」两条都在,断言真实 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+Lead 认可的取舍:D-37(`TCS2` 文件 + 没有可用凭据库时读取抛 `PlatformNotSupportedException` 而不是空表,避免随后被覆盖成 `TCS0`)。
+
+留给后面的包(只记录):
+
+- `plugins_set_provider` / `plugins_remove_provider` 是「内存状态先改、密钥后写」,`Set` 抛异常时会部分成功。这是 Windows 版原有的调用顺序,C 阶段接插件页时处理。
+- `GlobalMods.IsSymlink` 对悬空链接的判断留给 B2 在真机清单里核对。
