@@ -17,7 +17,9 @@
 | B1b | 运行时差异修复(SecretStore 读取路径 / 代码页 / 打开文件夹 / 软链接 / CA1416) | ✅ 完成(见下;**新增 45 条用例,总数 766 → 811,两条通道都 811/811 全绿**;CA1416 ×7 → 0) |
 | B2a | mac Java 运行时获取(Mojang 平台键 / Adoptium·Zulu mac 包 / 可执行位与链接 / java 定位) | ✅ 完成(见下;**新增 90 条用例,总数 811 → 901,两条通道都 901/901 全绿**) |
 | B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | ✅ 完成(见下;**新增 137 条用例,总数 901 → 1038,两条通道都 1038/1038 全绿**;三个复制文件只加可注入 OS/ARCH 的 internal 重载 + 一处内联逻辑抽取,Windows 行为用等价钉子逐项钉住;新建 `Launcher\MacNativeSupport.cs`,未接入调用点,留 Lead 裁决 arm64 方案) |
-| B2c | NodeRuntime darwin / Terracotta 权限 / adb 路径 / PhoneLink 临时目录 / Preflight 磁盘 / Updater 仅提示 / Shortcut / IsSymlink | 未开始 |
+| B2c | NodeRuntime darwin / Terracotta 权限 / adb 路径 / PhoneLink 临时目录 / Preflight 磁盘 / Updater 仅提示 / Shortcut / IsSymlink / Microsoft 厂商分支 / Mojang 安装循环建链顺序 | 未开始 |
+| B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | 未开始 |
+| B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | 未开始 |
 | B3 | 打包 | 未开始 |
 | C1-C8 | 界面 | 未开始 |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
@@ -1755,3 +1757,45 @@ Lead 认可的取舍:D-37(`TCS2` 文件 + 没有可用凭据库时读取抛 `Pla
    若将来发现某个老包其实是 universal 二进制,要改 `_key_arch`。
 5. `_classpath_path` 的抽取改变了 `McLauncher` 内部结构(不改行为),如果 Lead 认为它超出了「只加可注入重载」的范围,
    回退方式很直接(把方法体搬回循环),测试里对它的断言也要跟着换成对 `Utils.CheckRules` 的断言。
+
+### Lead 验收(2026-11-12 20:05)
+
+结论:**B2b 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src/TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 有对应文件的 238 个里 227 一致、11 个有改动(原有 8 个 + 本包 `Utils.cs`、`Installer.cs`、`McLauncher.cs`);无对应文件的 7 个是原有 6 个 + `Launcher\MacNativeSupport.cs` |
+| `git diff 46837d6..HEAD` 对三个复制文件(Lead 逐行读过) | `Utils.cs`、`Installer.cs`:只把 `OS_NAME` / `ARCH` / `OS_VERSION` 换成入参,原 public 方法转调,分支一个没动。`McLauncher.cs`:`_expand_args` 同样处理;classpath 循环体抽成 `_classpath_path` |
+| `_classpath_path` 对照 Windows 原文 528–573 行 | 逐句等价:`clientreq`、规则、无名字、`artifact.path`、有 `natives` 无 artifact、maven 兜底六个分支都在;去重键 `Manifest.LibraryIdentity` 与插入顺序留在循环里未变 |
+| `MacNativeSupport.cs`(Lead 全文读过) | 纯函数,没有接入任何调用点 |
+| `Java.cs`、`JavaRuntimeFiles.cs`、红线文件、`Directory.Build.props`、三个 csproj | 未改 |
+| 本次提交改动的文本文件做严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告只有 SYSLIB0014 ×1 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 1038 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 1038 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(Lead 复跑前后) | 86 → 86,没有新名字 |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL` | 0 个 |
+| B2b 测试扫描 | 没有联网、起进程、调安装或启动入口、改环境变量 |
+| 调用点清单(Lead 用 grep 复核) | `SelectNativeClassifier` 6 处、`SubstNativeKey` 3 处、`CheckRules` 静态版 5 处,与上文第 6 节的表一致 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+**对子代理 4 个待裁决事项的裁决**:
+
+1. **Apple 芯片上没有 arm64 原生库的版本:采用「x64 Java 经 Rosetta + x86_64 原生库」**(上文第 6 节做法 4)。
+   依据:8 份版本 JSON 显示 1.18.2 及更老的 mac 原生库只有 x86_64,`mac-os-arm64` 运行时清单也没有它们要的 Java 组件;
+   做法 1(拒绝启动)与 GOAL「功能与 Windows 版对齐、能真正启动 Minecraft」不符,做法 2、3 单独做不成立。
+   设计要点(分两包实现):
+   - 引入**本次启动的目标架构**:纯函数,入参是合并后的版本 JSON、OS、进程架构。只有 `osx` + 进程 `arm64` + `MacNativeSupport` 判定为 `X64Only` 或 `Mixed` 时返回 `x64`,其余一律返回进程架构。所以 Windows / Linux 与 Intel Mac 上结果恒等于现状。
+   - `Mixed` 归 `x64`:缺 arm64 变体的库在 arm64 JVM 里加载不了,而观察到的数据里每个库都有 x86_64 变体。
+   - 目标架构是版本的确定函数(同一台机器上同一个版本永远得到同一个值),所以 natives 目录**不需要**按架构分目录;上文第 6 节做法 4 担心的「互相覆盖」不成立。
+   - **B2d**:natives 选择、`${arch}` 替换、规则里的 `os.arch`、classpath、缺 natives 预检,全部改为读目标架构。
+   - **B2e**:Java 侧。Mojang 平台键、厂商安装、已装 Java 的挑选都按目标架构;Rosetta 未安装时启动前给出明确提示。
+   - 本机没有 Mac,整条 Rosetta 路径只能测到纯函数,真机步骤写进 `docs/MAC-VERIFY.md`(D2)。
+2. **`_classpath_path` 抽取**:接受。已对照 Windows 原文确认等价。
+3. **arm64 下缺 natives 预检不触发**:由 B2d 一并解决(目标架构为 `x64` 后 `SelectNativeClassifier` 不再返回 null)。
+4. **无后缀的 `natives-osx` / `natives-macos` 按 x86_64 记**:接受,列入真机验证清单。
+
+另记:1.19.4 起 `natives-macos` 与 `natives-macos-arm64` 两个 jar 在 mac 上都进 classpath。两者在版本 JSON 里的规则都是 `allow os.name=osx`,
+没有 `os.arch` 规则,按 JSON 就该如此,不改;列入真机验证清单。
