@@ -21,4 +21,12 @@
     <ProjectReference Include="..\..\src\TipCL.Core\TipCL.Core.csproj" />
   </ItemGroup>
 
+  <!-- A6:从 Windows tests\TipCL.Tests(除 TestHome.cs)字节级复制来的 29 个测试文件。
+       它们的原始形态整体排除编译,再在 A6 第 4 步逐个决策、逐个放出来:
+       A 类(原样通过)/ B 类(最小适配后通过)→ 从这个 Remove 里删掉该文件;
+       C 类(本包搬不了)→ 保留在 Remove 里,原因见下面的注释与 PROGRESS.md 的 A6 小节。 -->
+  <ItemGroup>
+    <Compile Remove="Ported\**\*.cs" />
+  </ItemGroup>
+
 </Project>
