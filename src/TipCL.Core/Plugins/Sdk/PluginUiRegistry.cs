@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows;
 
 namespace TipCL.Plugins;
 
@@ -157,19 +156,19 @@ public sealed class NativeUiEntry
 	public List<string> Presets { get; set; } = new List<string>();
 
 	/// <summary>page / dashCard 的控件工厂。</summary>
-	public Func<FrameworkElement> Factory { get; set; }
+	public Func<object> Factory { get; set; }
 
 	/// <summary>aiView 的控件工厂，参数是 chatId。</summary>
-	public Func<string, FrameworkElement> AiViewFactory { get; set; }
+	public Func<string, object> AiViewFactory { get; set; }
 
 	/// <summary>生成 page / dashCard 控件（在 UI 线程调用）。</summary>
-	public FrameworkElement Create()
+	public object Create()
 	{
 		return Factory?.Invoke();
 	}
 
 	/// <summary>生成 aiView 控件（在 UI 线程调用）。</summary>
-	public FrameworkElement CreateAiView(string chatId)
+	public object CreateAiView(string chatId)
 	{
 		return AiViewFactory?.Invoke(chatId);
 	}

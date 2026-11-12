@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
-using System.Windows;
 using TipCL.Plugins;
 
 namespace TipCL.Core.Plugins;
@@ -478,7 +477,7 @@ internal sealed class DotNetPluginContext : IPluginContext, IPluginLogger, IPlug
 
 	// ── 界面 ──
 
-	public IDisposable RegisterPage(PluginPageSpec spec, Func<FrameworkElement> factory)
+	public IDisposable RegisterPage(PluginPageSpec spec, Func<object> factory)
 	{
 		_mgr.RequirePermission(_p.Id, PluginPermissions.Ui);
 		string icon = spec.Icon ?? "";
@@ -500,7 +499,7 @@ internal sealed class DotNetPluginContext : IPluginContext, IPluginLogger, IPlug
 		return Track(d.Dispose, "page " + spec.Id);
 	}
 
-	public IDisposable RegisterDashCard(PluginDashCardSpec spec, Func<FrameworkElement> factory)
+	public IDisposable RegisterDashCard(PluginDashCardSpec spec, Func<object> factory)
 	{
 		_mgr.RequirePermission(_p.Id, PluginPermissions.Ui);
 		IDisposable d = PluginUiRegistry.Register(new NativeUiEntry
@@ -516,7 +515,7 @@ internal sealed class DotNetPluginContext : IPluginContext, IPluginLogger, IPlug
 		return Track(d.Dispose, "dashCard " + spec.Id);
 	}
 
-	public IDisposable RegisterAiView(PluginAiViewSpec spec, Func<string, FrameworkElement> factory)
+	public IDisposable RegisterAiView(PluginAiViewSpec spec, Func<string, object> factory)
 	{
 		_mgr.RequirePermission(_p.Id, PluginPermissions.Ui);
 		List<string> presets = (spec.Presets ?? new List<string>()).Select((string x) => x.StartsWith("plugin:", StringComparison.Ordinal) ? x : AgentPreset.MakeFullId(_p.Id, x)).ToList();

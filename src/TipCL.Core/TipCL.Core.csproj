@@ -27,45 +27,19 @@
   </ItemGroup>
 
   <!--
-    裁决 A:以下文件已按 Windows 版字节级复制并入库,暂时排除编译,
-    因为它们引用了尚未搬过来的类型。不写桩类型、不留下空命名空间来硬凑编译。
-    A2 排除的 BackendWorker.cs / TaskContext.cs / CoreResources.cs / PPath.cs 已在 A3 恢复编译,
-    BridgeServer.cs 恢复失败(缺 A5 的类型 BackendApi),其硬依赖链一并等 A5。
-    完整推导见 DECISIONS.md D-13。
-    A4 追加:实测 `Ai\Conflict.cs` 进不了编译(缺 A5 的 Agent),所以 ModUpdate/Preflight 的恢复包
-    从 A4 改为 A5,注释同步改掉(见 D-18)。
+    A2 起一共 19 个文件被 Compile Remove(A2/A3 的 7 个 + A4 的 12 个),A5 把它们全部恢复编译:
+    BackendApi / Plugins / BridgeServer 三者之间的循环依赖在 A5 一次性闭合,恢复后 TipCL.Core
+    里**没有任何被排除编译的文件**。A2-A4 的推导见 DECISIONS.md D-11 / D-13 / D-14 / D-18。
   -->
   <ItemGroup>
-    <Compile Remove="BackendApi.cs" />            <!-- A5 恢复编译:后端主体,依赖 Launcher 的 Config/AccountManager/Instance/DownloadManager/Utils -->
-    <Compile Remove="BridgeServer.cs" />          <!-- A5 恢复编译:缺类型 BackendApi(即属性 Api 的类型、构造函数第 1 个参数,见 BridgeServer.cs 88/102 行) -->
-    <Compile Remove="Launcher\SkinServer.cs" />   <!-- A5 恢复:硬依赖 BridgeServer 的静态方法 Unquote/SplitTarget/Phrase/ReadLine(252/253/285/329/392/426/442 行) -->
-    <Compile Remove="Launcher\McLauncher.cs" />   <!-- A5 恢复:第 40 行调 SkinServer.ApiFor -->
-    <Compile Remove="Launcher\GameProcess.cs" />  <!-- A5 恢复:43/48 行调 McLauncher._set_priority / WatchWindowTitle -->
-    <Compile Remove="Launcher\ModUpdate.cs" />    <!-- A5 恢复(A4 实测恢复不了):需要 Ai.Conflict.InspectJar,而 Conflict 缺 A5 的 Ai.Agent -->
-    <Compile Remove="Launcher\Preflight.cs" />    <!-- A5 恢复(A4 实测恢复不了):同上(需要 Ai.Conflict.InspectJar) -->
-  </ItemGroup>
-
-  <!--
-    A4 复制了 Ai(65 个)+ Sync(4 个),但 BackendApi / Plugins 要到 A5 才有,
-    而这三者互相依赖,所以本包只能编译「不依赖后端的最大子集」。
-    下面按「直接缺后端」与「连带」两组,每组注释里的类型都是实测的编译错误,不是猜的。
-    推导见 DECISIONS.md D-18。
-  -->
-  <ItemGroup>
-    <!-- A5 恢复编译(直接缺后端) -->
-    <Compile Remove="Launcher\Ai\Tools.cs" />       <!-- A5 恢复:10 处用 BackendApi(371/381/392/554/600/658/703/805/814/1067 行) -->
-    <Compile Remove="Launcher\Ai\ExtraTools.cs" />  <!-- A5 恢复:7 处用 BackendApi(105/269/398/426/448/607/784 行) -->
-    <Compile Remove="Launcher\Ai\Agent.cs" />       <!-- A5 恢复:第 7 行 using TipCL.Core.Plugins;4 处用 BackendApi(345/466/535/1731 行) -->
-    <Compile Remove="Launcher\Ai\Preview.cs" />     <!-- A5 恢复:2 处用 BackendApi(25/86 行) -->
-    <Compile Remove="Launcher\Ai\McpServer.cs" />   <!-- A5 恢复:2 处用 BackendApi(32/79 行) -->
-    <!-- A5 恢复编译(连带:被排除的文件里的类型) -->
-    <Compile Remove="Launcher\Ai\Conflict.cs" />    <!-- A5 恢复:3 处用 Agent(385/410/418 行);它的两个调用方 ModUpdate/Preflight 一并等 A5 -->
-    <Compile Remove="Launcher\Ai\Tokens.cs" />      <!-- A5 恢复:2 处用 Agent(41/59 行) -->
-    <Compile Remove="Launcher\Ai\ToolMeta.cs" />    <!-- A5 恢复:第 52 行用 ExtraTools -->
-    <Compile Remove="Launcher\Ai\Compact.cs" />     <!-- A5 恢复(连带):6 处用 Tokens(65/83/145/148/194/239 行) -->
-    <Compile Remove="Launcher\Ai\Usage.cs" />       <!-- A5 恢复(连带):2 处用 Tokens(33/34 行) -->
-    <Compile Remove="Launcher\Ai\Scheduler.cs" />   <!-- A5 恢复(连带):2 处用 ToolMeta(20/30 行) -->
-    <Compile Remove="Launcher\Ai\Hooks.cs" />       <!-- A5 恢复(连带):第 129 行用 ToolMeta -->
+    <!--
+      裁决(Lead,A5):`Plugins\SecretStore.cs` 166/172 行用 ProtectedData(DPAPI)。
+      net8.0 不内置该 API(它在 Windows Desktop 的共享框架里,类库用不了),
+      所以按 Lead 裁决直接引这个 NuGet 包让 SecretStore.cs 原样编译。
+      非 Windows 分支(AES-GCM + Keychain)归 B1;该包在 mac 上调用会抛 PlatformNotSupportedException,
+      记入 PROGRESS.md 的 A5「运行时差异清点」。见 DECISIONS.md D-22。
+    -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

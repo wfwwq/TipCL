@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using System.Windows;
 
 // .NET 插件 SDK（DESIGN §3.2）。插件引用 TipCL.exe 编译，实现 ITipCLPlugin。
 // 数据类型约定：JSON 对象用 TipCL.Core.PyDict（也接受 IDictionary<string, object>），数组用 List<object>，整数 long，小数 double。
@@ -256,11 +255,11 @@ public sealed class PluginAiViewSpec
 
 public interface IPluginUi
 {
-	IDisposable RegisterPage(PluginPageSpec spec, Func<FrameworkElement> factory);
+	IDisposable RegisterPage(PluginPageSpec spec, Func<object> factory);
 
-	IDisposable RegisterDashCard(PluginDashCardSpec spec, Func<FrameworkElement> factory);
+	IDisposable RegisterDashCard(PluginDashCardSpec spec, Func<object> factory);
 
-	IDisposable RegisterAiView(PluginAiViewSpec spec, Func<string, FrameworkElement> factory);
+	IDisposable RegisterAiView(PluginAiViewSpec spec, Func<string, object> factory);
 
 	void Toast(string text, string kind = "info");
 
