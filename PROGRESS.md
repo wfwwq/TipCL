@@ -17,7 +17,7 @@
 | B1b | 运行时差异修复(SecretStore 读取路径 / 代码页 / 打开文件夹 / 软链接 / CA1416) | ✅ 完成(见下;**新增 45 条用例,总数 766 → 811,两条通道都 811/811 全绿**;CA1416 ×7 → 0) |
 | B2a | mac Java 运行时获取(Mojang 平台键 / Adoptium·Zulu mac 包 / 可执行位与链接 / java 定位) | ✅ 完成(见下;**新增 90 条用例,总数 811 → 901,两条通道都 901/901 全绿**) |
 | B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | ✅ 完成(见下;**新增 137 条用例,总数 901 → 1038,两条通道都 1038/1038 全绿**;三个复制文件只加可注入 OS/ARCH 的 internal 重载 + 一处内联逻辑抽取,Windows 行为用等价钉子逐项钉住;新建 `Launcher\MacNativeSupport.cs`,未接入调用点,留 Lead 裁决 arm64 方案) |
-| B2c1 | Java 与安装的收尾:Mojang 安装循环建链顺序与已存在链接 / Microsoft 厂商分支 / `forge-legacy` 的 Java 8 / Preflight 磁盘空间守卫 / `GlobalMods.IsSymlink` | 未开始 |
+| B2c1 | Java 与安装的收尾:Mojang 安装循环建链顺序与已存在链接 / Microsoft 厂商分支 / `forge-legacy` 的 Java 8 / Preflight 磁盘空间守卫 / `GlobalMods.IsSymlink` | ✅ 完成(见下;**新增 72 条用例,总数 1405 → 1477,两条通道都 1477/1477 全绿**;`Java.cs` / `Preflight.cs` / `GlobalMods.cs` 各按最小面改动,新逻辑全部落在 `JavaRuntimeFiles.cs` / `JavaArch.cs`;第 2 项走了「改 mac 地址为 `macos` + `.tar.gz`」这一支,**依据是 6 个 `aka.ms` HEAD 请求的线上证据**,见小节取证表与 D-54) |
 | B2c2 | 其余平台差异:NodeRuntime darwin / Terracotta 可执行权限 / adb 路径 / PhoneLink 临时目录 / Updater 仅提示 / Shortcut / 导出启动脚本(含 `BackendApi.cs:2958` 传未合并 JSON) | 未开始 |
 | B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | ✅ 完成(见下;**新增 132 条用例,总数 1038 → 1170,两条通道都 1170/1170 全绿**;新建 `Launcher\LaunchArch.cs`,7 处调用点改读目标架构,5 个复制文件加可注入重载 / 抽取纯函数;Java 侧留给 B2e) |
 | B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | ✅ 完成(见下;**新增 235 条用例,总数 1170 → 1405,两条通道都 1405/1405 全绿**;新建 `Launcher\JavaArch.cs`,`Java.cs` / `McLauncher.cs` / `Installer.cs` 各改一处;写测试时抓到并修掉一个「读取委托 / 探测委托」接错的真 bug,见 D-50;两处同类缺口只记录未改,见 D-52) |
@@ -2197,5 +2197,158 @@ B2c 拆成两包:
 
 - **B2c1(Java 与安装的收尾)**:Mojang 安装循环建链顺序与已存在链接、Microsoft 厂商分支、`forge-legacy` 的 Java 8、`Preflight` 磁盘空间守卫、`GlobalMods.IsSymlink`。
 - **B2c2(其余平台差异)**:NodeRuntime darwin、Terracotta 可执行权限、adb 路径、`PhoneLink` 临时目录、Updater 仅提示、Shortcut、导出启动脚本。
+
+---
+
+## B2c1 Java 与安装的收尾(建链顺序与幂等 / Microsoft 分支 / forge-legacy 的 Java 8 / 磁盘空间 / IsSymlink)
+
+本包做任务书点名的 5 项,每一项都只用「加非 Windows 分支」或「只改 mac 分支」的形态,Windows 分支的代码路径保持原样,
+并用单测钉住。**没有**碰 B2c2 的任何一项(NodeRuntime / Terracotta / adb / PhoneLink 临时目录 / Updater / Shortcut / 导出启动脚本),
+也没有改 B2d / B2e 已验收的目标架构逻辑。
+
+### 1. 五项各自做了什么
+
+1. **Mojang 运行时安装的建链顺序与幂等(已改)**
+   - `Java.cs` 的清单遍历循环里,`type == "link"` 的条目原来**当场**调 `TryCreateRuntimeLink` 建链(此时 `DownloadAll` 还在后面),
+     现在循环里只把 `(条目名, 目标)` 收进 `list3`,等 `dm.DownloadAll(...)` 返回之后、设可执行权限**之前**逐个建
+     (与厂商 `tar.gz` 路径「文件写完再建链」一致)。Windows 分支一字未变:仍然不收集、不建链。
+   - **幂等**:`JavaRuntimeFiles.DecideLink(existingTarget, pathExists, desiredTarget)` 是纯函数,四格:
+     路径上没有 → **新建**;已是符号链接且目标字符串**逐字相同**(`Ordinal`) → **跳过且不记警告**;
+     已是符号链接但目标不同 → **删除后重建**;路径上是普通文件或目录 → **跳过 + 记一条警告,不删**
+     (宁可少建一条链接,也不删已经下载好的文件)。
+   - 生产读取委托是 `FileSystemInfo.LinkTarget`;副作用出口是新增的 `JavaRuntimeFiles.LinkHooks`
+     (读取既有目标 / 判存在 / 删除 / 建链),单测全部注入假委托,不建真实符号链接。
+   - 厂商 `tar.gz` 解压路径(`SafeExtractTarGz`)**未改**:它的调用方在解压前先 `RemoveTree`,不需要幂等。
+   - **修正 B2a 小节那句与代码不符的描述的方式**:按任务书要求**不改历史文字**。现在的真实顺序是:
+     Mojang 路径 = 先 `DownloadAll`(下载全部文件)**再**建链(本包改的);厂商 `tar.gz` 路径 = 文件写完再建链(B2a 起就是这样)。
+     B2a 的 Lead 验收已经把「先建链、后下载」记为更正,B2a 小节的正文与「遗留」第 5 条里那句括号仍未改(历史文字)。
+2. **Microsoft 厂商分支在 mac 上(已改,走「改下载逻辑」那一支)** —— 见下面第 2 节的取证表与裁决。
+3. **`forge-legacy` 在 Apple 芯片上的 Java 8(已改)**:`JavaForInstaller("forge-legacy", ...)` 找不到已装 Java 8 时,
+   Apple 芯片上改传 `arch = "x64"`(`InstallAdoptium(dm, 8L, on_progress, false, JavaArch.Legacy8AdoptiumArch(Utils.OS_NAME, Utils.ARCH))`,
+   装 `adoptium-8-x64`);其余平台该实参是 `null`,逐字等于改动前的 `InstallAdoptium(dm, 8L, on_progress)`。
+   纯函数 `JavaArch.Legacy8AdoptiumArch(os, processArch)`:Apple 芯片 → `"x64"`,其余 → `null`。
+4. **`Preflight.FreeBytes` 的非 Windows 分支(已改)**:新增可注入重载
+   `FreeBytes(path, isWindows, windowsFree, unixFree)`;`FreeBytesHook` 优先级不变(非 null 时两个委托都不碰);
+   路径经 `Utils.AbsPath` 规范化后交给对应委托;任何异常仍然返回 `null`。生产入口按 `Utils.IS_WINDOWS` 选
+   `FreeBytesWindowsApi`(kernel32,改动前的实现逐字保留为独立方法)或 `FreeBytesDriveInfo`
+   (`new DriveInfo(绝对路径).AvailableFreeSpace`)。唯一调用点 `Preflight.cs:125` 一行未动。
+   「给定路径怎么找到所在卷」的做法与「mac 上未验证」写进了方法注释与 D-56。
+5. **`GlobalMods.IsSymlink` 的非 Windows 分支(已改)**:新增内部重载
+   `IsSymlink(p, isWindows, readLinkTarget)`;`isWindows` 为 true 的那一支是改动前实现的**逐字**搬运,
+   非 Windows 上 `(readLinkTarget ?? LinkTargetOrDefault)(p) != null`(`LinkTargetOrDefault` 用
+   `Directory.Exists(p) ? new DirectoryInfo(p) : new FileInfo(p)` 的 `LinkTarget`,悬空链接也成立),异常一律 false。
+
+### 2. 第 2 项的取证表与采用的分支
+
+取证时间 **2026-11-12 21:14:52 +08:00**;命令形态
+`Invoke-WebRequest -Uri https://aka.ms/download-jdk/<name> -Method Head -MaximumRedirection 0 -UseBasicParsing -TimeoutSec 20`;
+**共 6 个请求,全部只访问 `aka.ms`**,不跟随重定向、不下载任何文件(脚本留在 `artifacts\b2c1-head.ps1`,不入库)。
+PowerShell 5.1 对 3xx 抛 `MaximumRedirectExceeded`,状态码与 `Location` 从异常的 `Response` 里取。
+
+| 请求的短链名(前缀都是 `https://aka.ms/download-jdk/`) | 状态码 | `Location` |
+|---|---|---|
+| `microsoft-jdk-17-mac-x64.zip`(改动前 mac 会拼出来的形态) | 302 | `https://www.bing.com?ref=aka&shorturl=download-jdk/microsoft-jdk-17-mac-x64.zip`(aka.ms 兜底页 → 短链不存在) |
+| `microsoft-jdk-17-mac-x64.tar.gz` | 302 | `https://www.bing.com?ref=aka&shorturl=...`(同上) |
+| `microsoft-jdk-17-mac-aarch64.zip` | 302 | `https://www.bing.com?ref=aka&shorturl=...`(同上) |
+| `microsoft-jdk-17-mac-aarch64.tar.gz` | 302 | `https://www.bing.com?ref=aka&shorturl=...`(同上) |
+| `microsoft-jdk-17-macos-x64.tar.gz` | 301 | `https://aka.ms/download-jdk/microsoft-jdk-17.0.21.0.2-macos-x64.tar.gz`(真实的版本化包名) |
+| `microsoft-jdk-17-macos-aarch64.tar.gz` | 301 | `https://aka.ms/download-jdk/microsoft-jdk-17.0.21.0.2-macos-aarch64.tar.gz`(真实的版本化包名) |
+
+**采用的分支**:任务书的第一种情况(证据明确:某个 `<os>` + `tar.gz` 重定向到真实包名,而 `mac` + `zip` 指向兜底页)
+→ **改下载逻辑**:mac 的 OS 段 `mac` → `macos`、后缀 `.zip` → `.tar.gz`。
+实现是三个纯函数 `JavaRuntimeFiles.MicrosoftJdkOsFor` / `MicrosoftJdkArchiveSuffixFor` / `MicrosoftJdkUrl`,
+`Java.cs` 的 `_InstallMicrosoft` 只改一行转调(删掉了原来那行 `Pick(Utils.OS_NAME, ...)` 的 `text4`,它只被那行 URL 用)。
+Windows / Linux 的地址**逐字不变**(含 Linux 那个「地址 `.zip`、落盘 `.tar.gz`」的原样矛盾 —— 红线不许动),
+未知 OS 仍然抛 `KeyError`(与改动前的 `Java.Pick` 同语义)。落到 mac 上,地址后缀与落盘后缀(`ArchiveSuffixFor`)现在一致了。
+
+### 3. 对复制文件的每处改动(共 3 个文件;新逻辑都在 `JavaRuntimeFiles.cs` / `JavaArch.cs` 这两个 B2a/B2e 建的新文件里)
+
+`Java.cs`:
+
+| 位置 | 原来是什么 | 改成什么 | 为什么 |
+|---|---|---|---|
+| `InstallMojangRuntime`(内部重载)声明 `list2` 处 | 只有 `List<DownloadTask> list2 = ...` | 多一行 `List<KeyValuePair<string, string>> list3 = new ...` | 收集 link 条目,延后建链 |
+| 同上,`pyDict4` 遍历里的 `type == "link"` 分支 | 当场 `JavaRuntimeFiles.TryCreateRuntimeLink(Utils.AbsPath(text2), item.Key, ..., isWindows: false)` | `list3.Add(new KeyValuePair<string, string>(item.Key, Py.Str(...)))`(仍在 `!Utils.IS_WINDOWS` 里) | 顺序:下载完成后统一建链 |
+| 同上,`if (list2.Count > 0) { dm.DownloadAll(...); }` 之后 | 没有这一段 | 新增 `if (!Utils.IS_WINDOWS) { foreach (...) JavaRuntimeFiles.TryCreateRuntimeLink(Utils.AbsPath(text2), item3.Key, item3.Value, isWindows: false); }` | 同上(位置选在 `DownloadAll` 之后、设可执行权限之前) |
+| `JavaForInstaller` 的 `forge-legacy` 分支 | `return InstallAdoptium(dm, 8L, on_progress);` | `return InstallAdoptium(dm, 8L, on_progress, false, JavaArch.Legacy8AdoptiumArch(Utils.OS_NAME, Utils.ARCH));` | Apple 芯片上 Adoptium 没有 8 的 aarch64 包 |
+| `_InstallMicrosoft` | `string text4 = Pick(Utils.OS_NAME, "windows", "windows", "osx", "mac", "linux", "linux");` + `string url = "https://aka.ms/download-jdk/microsoft-jdk-" + major + "-" + text4 + "-" + text3 + ".zip";`(2 行) | `string url = JavaRuntimeFiles.MicrosoftJdkUrl(Utils.OS_NAME, major.ToString(), text3);`(1 行 + 2 行注释) | mac 的正确形态是 `macos` + `.tar.gz`(D-54) |
+
+`Preflight.cs`:`FreeBytes(string)`(私有)的**方法体**搬进新的 `internal static` 重载
+`FreeBytes(string, bool, Func<string,long?>, Func<string,long?>)`,私有入口改成一行转调
+`FreeBytes(path, Utils.IS_WINDOWS, FreeBytesWindowsApi, FreeBytesDriveInfo)`;kernel32 那段判断搬进
+`FreeBytesWindowsApi`(逐字),新增 `FreeBytesDriveInfo`。P/Invoke 声明 `GetDiskFreeSpaceEx` 保留原样。
+
+`GlobalMods.cs`:`IsSymlink(string p)` 原来只有实现体,现在拆成
+`IsSymlink(string p)`(转调)、`internal static bool IsSymlink(string p, bool isWindows, Func<string, string> readLinkTarget)`
+(`isWindows` 那一支是原实现逐字搬运)、`private static string LinkTargetOrDefault(string p)`。
+P/Invoke 声明 `CreateSymbolicLinkW` 保留原样,`_link_file` 的两处调用点未动。
+
+### 4. 新增的两个非复制文件里的新成员
+
+- `JavaRuntimeFiles.cs`:`MicrosoftJdkOsFor` / `MicrosoftJdkArchiveSuffixFor` / `MicrosoftJdkUrl`(第 2 项)、
+  `DecideLink`(纯函数)+ `LinkDecision` 枚举 + `LinkHooks` 副作用出口 + `TryCreateRuntimeLink` 的幂等实现
+  + `ReadLinkTargetDefault` / `ExistsDefault` / `DeleteLink`(第 1 项)。`TryCreateRuntimeLink` 的旧签名靠
+  「`warn` 之后追加一个可选参数 `hooks`」保持兼容,B2a 的 3 条既有用例一个字没改。
+- `JavaArch.cs`:`Legacy8AdoptiumArch(os, processArch)`(第 3 项)。
+
+### 5. 测试(新增 72 条用例,总数 1405 → 1477)
+
+| 文件 | 覆盖内容 | 用例数 |
+|---|---|---|
+| `tests\TipCL.Tests\B2c1LinkOrderTests.cs` | `DecideLink` 四格 + 逐字比较(`../T` / `./../t` / 绝对路径)/ Windows 分支不碰任何 hook / 新建(相对目标原样保留)/ 目标相同跳过且无警告 / 目标不同删后建 / 普通文件跳过且不删 / 条目名逃出 / 目标逃出 / 状态读取委托抛异常 → 警告 + 跳过 / 真实文件(生产读取委托):普通文件一个字节没动 / 真实生产建链出口在 Windows 上不落盘 | 20 |
+| `B2c1MicrosoftUrlTests.cs` | Windows 三个架构段逐字 / Linux 两个架构段逐字 / major 原样拼接 / mac 的 `macos` + `tar.gz` 两个架构段 / mac 地址不再含 `-mac-` 且不以 `.zip` 结尾 / 与线上 301 的 `Location` 同族 / OS 段映射 / 未知 OS 抛 `KeyError` / 后缀映射 / mac 的地址后缀与落盘后缀一致 | 20 |
+| `B2c1Legacy8Tests.cs` | `Legacy8AdoptiumArch` 5 种组合 / 与 `IsAppleSilicon` 逐格重合 / 传进去的 `x64` 落到 Adoptium 地址仍是 `x64` / 非 Apple 传 null = 原行为 / 目录名是 `adoptium-8-x64` | 12 |
+| `B2c1GlobalModsSymlinkTests.cs` | Windows 分支三种形态(普通文件 / 目录 / 不存在)+ Windows 分支不读 `LinkTarget` / 非 Windows:有目标 → true、null → false、两种异常 → false / 委托收到原样路径 / 生产读取委托对真实普通文件与目录都是 false | 11 |
+| `B2c1PreflightFreeBytesTests.cs` | 两个平台标志各选对委托(另一个一次都不调)/ 委托收到绝对路径 / 两个标志下抛异常都返回 null / `FreeBytesHook` 优先且 finally 恢复 / hook 为 null 时委托生效 / 真实 `DriveInfo` 委托对 `TestHome.Root` 取到 > 0 / 真实 kernel32 委托仍取到值且与 `DriveInfo` 同量级 | 9 |
+
+期望值来源逐条写在文件头注释里(**读过的源码行为** / **线上证据** / **本包新语义**三类分开标);
+断言源码中文文案时用 `\uXXXX` 转义(D-16 / D-24)。用例都不联网、不起进程、不建真实符号链接、不实例化 `BackendApi`,
+`Preflight.FreeBytesHook` 的改动在 `finally` 里恢复原值。
+
+### 6. 验证命令与实际结果(全部在本机真实执行过)
+
+| 命令 | 结果 |
+|---|---|
+| `dotnet build-server shutdown` | 退出码 0 |
+| `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 0,**0 错误**;警告 **1 个 = SYSLIB0014 ×1**(`Launcher\Sync\PhoneClient.cs:116`,与基线一致) |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 **1477** / 失败 0 / 跳过 0,用时 953 ms(真跑成功,没有出现 `Win32Exception (5)`) |
+| `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 0,总计 **1477**,通过 1477,失败 0,跳过 0,**不支持 0** |
+| `cmd /c "...\TipCL.exe --smoke --theme light --out artifacts\smoke-light.png"` | 退出码 0,**3739** 字节(与 A1/B2e 一致) |
+| `cmd /c "...\TipCL.exe --smoke --theme dark --out artifacts\smoke-dark.png"` | 退出码 0,**3751** 字节(与 A1/B2e 一致) |
+| 字节一致性自检(`src\TipCL.Core\` 全部 `.cs` 排除 `bin\` / `obj\`,对 Windows 源比 SHA256) | 总数 **247**,一致 **224**,有改动 **14**(与 B2e 相同的 14 个;本包改的 `Launcher\GlobalMods.cs` / `Launcher\Java.cs` / `Launcher\Preflight.cs` 都在这 14 个里),Windows 源里没有对应文件 **9**(与 B2e 相同,**没有新建 `.cs` 文件** —— 本包只往 B2a/B2e 既有的两个新文件里加成员) |
+| `%LOCALAPPDATA%\TipCL`(开工时) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16(**与 Lead 基线逐项一致**,所以继续) |
+| `%LOCALAPPDATA%\TipCL`(测试与冒烟之后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16(**与开工时逐项一致**) |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(每条测试通道前后各取一次) | 86 → 86,**没有新名字**(两次窗口都是 0 个新增) |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL` | 0 个 |
+| 本包联网请求数 | **6**(全部是第 2 项的 `HEAD aka.ms`,只读重定向头,不跟随、不下载) |
+
+### 7. 未验证项(本机是 Windows,没有 Mac)
+
+1. mac 上真实的建链 / 删除 / 「目标相同就跳过」/ 悬空链接行为 —— 全部用假委托 + 生产读取委托在真实普通文件上的钉子验证,
+   真实符号链接一条都没建(红线)。
+2. mac 上 `DriveInfo` 对任意子目录路径(尤其 `/`、外部卷、网络挂载)的行为;本机只验证了真实 `DriveInfo` 委托
+   对 `TestHome.Root` 取到大于 0 的值。
+3. Microsoft 短链只查了 `major = 17`;别的 major(8 / 21 / 25 等)在 mac 上是否同样存在、`macos` + `zip` 是否存在
+   (后者与本包结论无关:我们要的就是 `tar.gz`)。
+4. x64 的 Adoptium Java 8 经 Rosetta 跑 Forge 安装器的真实结果;1.17 之前的版本在 Apple 芯片上复用 `adoptium-8-x64` 的实际启动结果。
+5. 第 1 项的**顺序**改动(建链移到 `DownloadAll` 之后)只做了代码审读 + 纯函数/委托级单测,没有端到端装一次 Mojang 运行时
+   (`InstallMojangRuntime` 要下载文件,红线不许测试联网)。
+
+### 8. 遗留与风险
+
+1. **第 1 项的幂等只覆盖「目标字符串逐字相同」**:如果某次清单里目标的写法变了(`./../x` ↔ `../x`),会走「删除重建」,
+   这是有意的(逐字比较能暴露清单变化),代价是多一次删建。
+2. **`Conflict` 分支不删文件**:清单里 `link` 与 `file` 指向同一路径时,后到的一方会让先建好的东西留着不动
+   (link 分支记一条警告)。mac 的 Mojang 清单(`mac-os-arm64/java-runtime-gamma`)里没有这种冲突条目,属防御性设计。
+3. **Linux 的「地址 `.zip`、落盘 `.tar.gz`」矛盾原样保留**(Microsoft 与 Zulu 两处),红线不许改 Linux 的 URL 参数;
+   mac 侧已一致。
+4. **界面上的「可选厂商」是否把 Microsoft 从 mac 去掉:只记录,未改**(任务书第 2 项的第二种情况才要求记录是否去掉;
+   本包走的是第一种情况,但界面清单本身不在本包范围内)。
+5. **`Preflight.FreeBytes` 的非 Windows 分支换成 `DriveInfo` 后,「查不到」仍然是 null**:`CheckLaunch` 因此不产生磁盘告警,
+   与改动前 mac 上的表现一致(不会误报空间充足)。
+6. **`JavaForInstaller("forge-legacy")` 在 Apple 芯片上会多下一个 x64 的 Java 8**:如果用户机器上已经有 Zulu 的
+   arm64 Java 8(手动装的),本方法仍然会去装 Adoptium 的 x64 包(它只看「已装列表里有没有 major == 8」,
+   找不到就装)。这与 Lead 的裁决一致(装同一个包可以复用),不额外判断。
+
 
 

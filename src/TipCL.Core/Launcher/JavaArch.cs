@@ -211,6 +211,22 @@ public static class JavaArch
 	}
 
 	/// <summary>
+	/// B2c1:<c>Java.JavaForInstaller("forge-legacy")</c> 找不到已装的 Java 8 时要装的那个 Adoptium 包该传什么 arch。
+	/// Apple 芯片上返回 <c>"x64"</c>(Adoptium 对 mac <c>aarch64</c> **没有** Java 8 的包,线上实测见 PROGRESS.md 的 B2a;
+	/// 而 <c>macos-x64</c> 的 Java 8 有包;Forge 安装器是纯 Java,x64 的 JVM 经 Rosetta 能跑,且 1.17 之前的版本在
+	/// Apple 芯片上本来就要用 x64 的 Java 8,装同一个 <c>adoptium-8-x64</c> 目录可以复用,不必再多下一个 Zulu)。
+	/// 其余平台返回 <c>null</c> = <c>InstallAdoptium</c> 原来的「用进程架构」,行为逐字不变。
+	/// </summary>
+	internal static string Legacy8AdoptiumArch(string os, string processArch)
+	{
+		if (IsAppleSilicon(os, processArch))
+		{
+			return "x64";
+		}
+		return null;
+	}
+
+	/// <summary>
 	/// 跨架构时在原文案后面追加上 <see cref="RosettaNote"/>;**原文案一字不改**(只是拼接),
 	/// 也不改启动命令 / JVM 参数(不加 <c>arch -x86_64</c> 之类的前缀)。非跨架构返回**原字符串本身**。
 	/// </summary>

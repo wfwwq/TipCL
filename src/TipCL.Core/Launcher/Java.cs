@@ -1248,6 +1248,8 @@ public static class Java
 		}
 		Utils.EnsureDir(text2);
 		List<DownloadTask> list2 = new List<DownloadTask>();
+		// B2c1:link 条目先只收集 (条目名, 目标),等下面 DownloadAll 完成之后再建链(见 DownloadAll 之后的循环)。
+		List<KeyValuePair<string, string>> list3 = new List<KeyValuePair<string, string>>();
 		foreach (KeyValuePair<string, object> item in pyDict4)
 		{
 			PyDict pyDict5 = Py.DictOr(item.Value);
@@ -1264,9 +1266,11 @@ public static class Java
 					// B2a:清单里的 link 条目原来被静默跳过(mac-os-arm64 的 java-runtime-gamma 有 208 个,
 					// 全部形如 legal/java.compiler/LICENSE -> ../java.base/LICENSE)。
 					// 非 Windows 上按 ResolveLinkTarget 的安全检查建软链;Windows 分支行为不变(仍是跳过)。
+					// B2c1:这里**只收集**。改动前是当场建链,也就是链接先于被链接的文件出现;
+					// 上次下载中断后重跑(force=false,不会 RemoveTree)时链接已经存在,会刷一屏警告。
 					if (!Utils.IS_WINDOWS)
 					{
-						JavaRuntimeFiles.TryCreateRuntimeLink(Utils.AbsPath(text2), item.Key, Py.Str(Py.Or(pyDict5.Get("target"), "")), isWindows: false);
+						list3.Add(new KeyValuePair<string, string>(item.Key, Py.Str(Py.Or(pyDict5.Get("target"), ""))));
 					}
 					continue;
 				}
@@ -1293,6 +1297,15 @@ public static class Java
 		if (list2.Count > 0)
 		{
 			dm.DownloadAll(list2, "下载 Mojang Java " + component);
+		}
+		if (!Utils.IS_WINDOWS)
+		{
+			// B2c1:链接在**全部文件下载完之后**建(与厂商 tar.gz 解压路径一致:那里也是文件写完再建链)。
+			// 建链本身是幂等的(链接已在位且目标相同时跳过),所以下载中断后重跑不会再刷一屏警告。
+			foreach (KeyValuePair<string, string> item3 in list3)
+			{
+				JavaRuntimeFiles.TryCreateRuntimeLink(Utils.AbsPath(text2), item3.Key, item3.Value, isWindows: false);
+			}
 		}
 		if (!Utils.IS_WINDOWS)
 		{
@@ -1422,7 +1435,11 @@ public static class Java
 					return Py.Str(item["exe"]);
 				}
 			}
-			return InstallAdoptium(dm, 8L, on_progress);
+			// B2c1:Apple 芯片上 Adoptium 对 mac aarch64 **没有** Java 8 的包(线上证据见 PROGRESS.md 的 B2a),
+			// 所以这里改装 x64 的包(目录 adoptium-8-x64)。Forge 安装器是纯 Java,x64 的 JVM 经 Rosetta 能跑;
+			// 而 1.17 之前的版本在 Apple 芯片上本来就要用 x64 的 Java 8 启动,装同一个包可以复用。
+			// 其余平台 arch 传 null = InstallAdoptium 原来的「用进程架构」,行为逐字不变。
+			return InstallAdoptium(dm, 8L, on_progress, false, JavaArch.Legacy8AdoptiumArch(Utils.OS_NAME, Utils.ARCH));
 		}
 		long num = Math.Max(17L, minMajor);
 		foreach (PyDict item2 in ListInstalledJavas())
@@ -1552,8 +1569,9 @@ public static class Java
 			return text2;
 		}
 		string text3 = Pick(arch, "x64", "x64", "x86", "x86", "arm64", "aarch64");
-		string text4 = Pick(Utils.OS_NAME, "windows", "windows", "osx", "mac", "linux", "linux");
-		string url = "https://aka.ms/download-jdk/microsoft-jdk-" + major + "-" + text4 + "-" + text3 + ".zip";
+		// B2c1:地址交给纯函数。Windows / Linux 的地址逐字不变(仍是 <os> + .zip);
+		// mac 从「mac + .zip」改成线上实测存在的「macos + .tar.gz」(证据见 JavaRuntimeFiles.MicrosoftJdkOsFor)。
+		string url = JavaRuntimeFiles.MicrosoftJdkUrl(Utils.OS_NAME, major.ToString(), text3);
 		Utils.EnsureDir(java_dir);
 		string text5 = ArchiveSuffix();
 		string text6 = PPath.Join(java_dir, "microsoft-" + major + "-" + arch + text5);

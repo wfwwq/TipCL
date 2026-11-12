@@ -660,3 +660,86 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
    带 `inheritsFrom` 的版本(Forge 等)子 JSON 里没有原生库,`LaunchArch.For` 会判成「没有 mac 原生库」
    而得到 `arm64`,于是导出的启动脚本可能选到 arm64 的 Java。红线不许改 `BackendApi.cs`,**未改**。
 
+## D-53 Mojang 运行时安装:建链挪到下载之后,并且做成幂等(四格语义)
+
+- **顺序**:改动前 `Java.cs` 的清单遍历循环里**边遍历边建链**(当时 `DownloadAll` 还在后面),
+  也就是「链接先于被链接的文件出现」;现在循环里只收集 `(条目名, 目标)` 到 `list3`,
+  等 `dm.DownloadAll(...)` 返回之后、设可执行权限**之前**逐个建 —— 与厂商 `tar.gz` 解压路径
+  (文件写完再建链)一致。Windows 分支一字未改(仍然不收集、不建链)。
+- **幂等(新增 `JavaRuntimeFiles.TryCreateRuntimeLink(..., LinkHooks)`)**:
+  `DecideLink(existingTarget, pathExists, desiredTarget)` 是纯函数,四格:
+  路径上没有 → 新建;已是符号链接且目标字符串**逐字相同**(`Ordinal`) → 跳过且**不记警告**;
+  已是符号链接但目标不同 → 删掉重建(链接没有内容,删掉安全);
+  路径上是普通文件或目录 → 跳过 + 记一条警告,**不删**(宁可少建一条链接,也不删已经下载好的文件)。
+- **为什么「逐字相同」而不是解析后比较**:厂商与 Mojang 给的 target 都是相对路径,写进去什么就读出来什么;
+  做过一次解析再比较会把 `./../x` 与 `../x` 当成同一条,反而掩盖了清单本身的变化。
+- **软链接之外的其它失败仍然只记警告**(路径非法 / 目标逃出安装目录 / 父目录建不出来 / 状态读取抛异常),
+  不把异常抛给「装 Java」这条链 —— 与改动前一致(一条坏链接不该让整个运行时装不上)。
+- **未验证**:mac 上真实的建链 / 删除 / 悬空链接行为(本机是 Windows,不建真实符号链接;全部用假委托测)。
+
+## D-54 Microsoft OpenJDK 在 mac 上的地址:`macos` + `.tar.gz`(6 个 HEAD 请求的线上证据)
+
+- **取证**(2026-11-12 21:14:52 +08:00,`Invoke-WebRequest -Method Head -MaximumRedirection 0 -UseBasicParsing -TimeoutSec 20`,
+  只访问 `aka.ms`,**共 6 个请求**,不跟随重定向、不下载任何文件):
+
+  | 请求路径 | 状态码 | `Location` |
+  |---|---|---|
+  | `microsoft-jdk-17-mac-x64.zip` | 302 | `https://www.bing.com?ref=aka&shorturl=...`(兜底页) |
+  | `microsoft-jdk-17-mac-x64.tar.gz` | 302 | `https://www.bing.com?ref=aka&shorturl=...`(兜底页) |
+  | `microsoft-jdk-17-mac-aarch64.zip` | 302 | `https://www.bing.com?ref=aka&shorturl=...`(兜底页) |
+  | `microsoft-jdk-17-mac-aarch64.tar.gz` | 302 | `https://www.bing.com?ref=aka&shorturl=...`(兜底页) |
+  | `microsoft-jdk-17-macos-x64.tar.gz` | 301 | `https://aka.ms/download-jdk/microsoft-jdk-17.0.21.0.2-macos-x64.tar.gz` |
+  | `microsoft-jdk-17-macos-aarch64.tar.gz` | 301 | `https://aka.ms/download-jdk/microsoft-jdk-17.0.21.0.2-macos-aarch64.tar.gz` |
+
+- **裁决(任务书第 2 项的第一种情况)**:证据明确 —— `macos` + `tar.gz` 会重定向到**真实的版本化包名**,
+  而 `mac` + `zip` / `mac` + `tar.gz` 全是 aka.ms 的 bing 兜底页(即短链不存在)。
+  所以走「改下载逻辑」这一支:**只改 mac**,OS 段 `mac` → `macos`、后缀 `.zip` → `.tar.gz`。
+- **实现**:`JavaRuntimeFiles.MicrosoftJdkOsFor(os)` / `MicrosoftJdkArchiveSuffixFor(os)` /
+  `MicrosoftJdkUrl(os, major, archToken)` 三个纯函数,`Java.cs` 的 `_InstallMicrosoft` 只改一行转调。
+  Windows / Linux 的地址**逐字不变**(`windows` / `linux` + `.zip`,含 Linux 那个「地址 zip、落盘 tar.gz」的原样矛盾——红线不许动),
+  未知 OS 仍然抛 `KeyError`(与改动前的 `Java.Pick` 同语义)。
+- **顺带修掉的死结**:mac 上落盘文件名走 `ArchiveSuffixFor(os)`(非 Windows = `.tar.gz`)、解压按文件名后缀选解压器,
+  改动前「地址要 zip、文件名叫 tar.gz」必然解压失败(D-43 记录、B2a 未修)。现在两者一致。
+- **未验证**:`major` 换别的值(8 / 21 / 25)时 mac 的短链是否同样存在(只按任务书查了 17);
+  `macos` + `zip` 组合没有查(预算 6 个已用完,但任何结论都不需要它 —— 我们要的就是 `tar.gz`)。
+  界面上的「可选厂商列表」是否把 Microsoft 从 mac 去掉:**只记录,未改**(那是界面的事)。
+
+## D-55 `forge-legacy` 在 Apple 芯片上装 Adoptium 8 的 **x64** 包(目录 `adoptium-8-x64`)
+
+- **背景**:`JavaForInstaller("forge-legacy", ...)` 找不到已装 Java 8 时 `InstallAdoptium(dm, 8L, on_progress)`,
+  而 Adoptium 对 mac `aarch64` **没有** Java 8 的包(B2a 线上实测:0 个包),Apple 芯片上这条路径必失败(D-52 第 1 条)。
+- **裁决落地**:Apple 芯片上改传 `arch = "x64"`(装 `adoptium-8-x64`),其余平台传 `null`(逐字等于改动前)。
+  Forge 安装器是纯 Java,x64 的 JVM 经 Rosetta 能跑;而 1.17 之前的版本在 Apple 芯片上本来就要用 x64 的 Java 8 启动,
+  同一个目录可以复用,不必再多下一个 Zulu。
+- **实现**:`JavaArch.Legacy8AdoptiumArch(os, processArch)`(纯函数,Apple 芯片 → `"x64"`,其余 → `null`),
+  `Java.cs` 只改那一行的实参。**为什么放 `JavaArch`**:它是 B2e 建的架构判定文件,`IsAppleSilicon` 已在里面,
+  再往 `Java.cs` 里塞逻辑只会让复制文件的 diff 变大。
+- **未验证**:Rosetta 下跑 Forge 安装器的真实结果(本机是 Windows,没有 Mac)。
+
+## D-56 `Preflight.FreeBytes` 的非 Windows 分支:`DriveInfo`(保守写法,mac 未验证)
+
+- **做法**:新增可注入内部重载 `FreeBytes(path, isWindows, windowsFree, unixFree)`:
+  `FreeBytesHook` 优先级不变(非 null 时两个委托都不碰);否则把路径 `Utils.AbsPath` 规范化后交给对应委托;
+  任何异常仍然吞成 `null`。生产入口 `FreeBytes(string)` 按 `Utils.IS_WINDOWS` 选
+  `FreeBytesWindowsApi`(kernel32,逐字保留改动前的实现)或 `FreeBytesDriveInfo`。
+- **「给定路径怎么找到所在卷」**:非 Windows 上用 `new DriveInfo(绝对路径).AvailableFreeSpace`,
+  由运行时把绝对路径归到它所在的挂载点。这是**最保守的写法**:取不到就是抛异常 → 被吞成 `null` →
+  与改动前 mac 上 `DllNotFoundException` 被吞掉的表现完全一致(「查不到磁盘剩余空间」),不会误报空间充足。
+- **未验证**:mac 上 `DriveInfo` 对任意子目录路径(尤其 `/`、外部卷、网络挂载)的真实行为。
+  本机(Windows)只验证了「真实 `DriveInfo` 委托对 `TestHome.Root` 取到大于 0 的值」这条钉子。
+- **为什么不改 `CheckLaunch`**:红线禁止测试进 `CheckLaunch`;调用点(`Preflight.cs:125`)一行未动,
+  所以「什么时候查、查谁」都没变,只有实现换成了能跨平台的。
+
+## D-57 `GlobalMods.IsSymlink` 非 Windows 分支改用 `FileSystemInfo.LinkTarget != null`
+
+- **背景**:改动前唯一实现是 `FileInfo.Attributes & FileAttributes.ReparsePoint`。B1b(D-37 第 4 条)复核后
+  「不改」的判断在 mac 上对**悬空链接**不成立(属性读取会抛 → `catch` 返回 false),任务书第 5 项要求改掉。
+- **做法**:`IsSymlink(p, isWindows, readLinkTarget)` —— `isWindows` 为 true 的那一支是改动前实现的**逐字搬运**;
+  非 Windows 上 `(readLinkTarget ?? LinkTargetOrDefault)(p) != null`,`LinkTargetOrDefault` 用
+  `FileSystemInfo.LinkTarget`(对普通文件返回 null,对正常链接与悬空链接都返回目标字符串)。
+  异常一律返回 false(与改动前一致)。
+- **`FileInfo` 还是 `DirectoryInfo`**:用 `Directory.Exists(p) ? new DirectoryInfo(p) : new FileInfo(p)` ——
+  悬空的**目录**链接上 `Directory.Exists` 是 false,而两者取到的 `LinkTarget` 相同,所以这样能覆盖悬空链接。
+- **未验证**:mac 上 `LinkTarget` 对悬空链接确实非 null(任务书的规定;本机是 Windows,测试不许建真实符号链接,
+  所以全部用假委托 + 「真实普通文件必须是 false」的钉子)。
+

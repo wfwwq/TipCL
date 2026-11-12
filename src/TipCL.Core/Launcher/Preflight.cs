@@ -45,6 +45,21 @@ public static class Preflight
 
 	private static long? FreeBytes(string path)
 	{
+		return FreeBytes(path, Utils.IS_WINDOWS, FreeBytesWindowsApi, FreeBytesDriveInfo);
+	}
+
+	/// <summary>
+	/// B2c1:磁盘剩余空间,平台实现可注入。
+	/// <list type="bullet">
+	/// <item><paramref name="isWindows"/> 为 true → <paramref name="windowsFree"/>(生产上是 kernel32 的
+	/// <c>GetDiskFreeSpaceEx</c>,逐字保留改动前的实现);</item>
+	/// <item>否则 → <paramref name="unixFree"/>(生产上是 <see cref="FreeBytesDriveInfo"/>)。</item>
+	/// </list>
+	/// <see cref="FreeBytesHook"/> 的优先级不变(非 null 时**先**走它,两个委托都不碰)。
+	/// 两个委托收到的都是规范化后的绝对路径;任何异常都返回 null(与改动前一致)。
+	/// </summary>
+	internal static long? FreeBytes(string path, bool isWindows, Func<string, long?> windowsFree, Func<string, long?> unixFree)
+	{
 		Func<string, long?> freeBytesHook = FreeBytesHook;
 		if (freeBytesHook != null)
 		{
@@ -52,16 +67,38 @@ public static class Preflight
 		}
 		try
 		{
-			if (GetDiskFreeSpaceEx(Utils.AbsPath(path), out var avail, out var _, out var _))
-			{
-				return (long)avail;
-			}
-			return null;
+			string abs = Utils.AbsPath(path);
+			return (isWindows ? windowsFree : unixFree)(abs);
 		}
 		catch (Exception)
 		{
 			return null;
 		}
+	}
+
+	/// <summary>Windows 实现:kernel32(<c>GetDiskFreeSpaceEx</c>),与改动前逐字相同。</summary>
+	internal static long? FreeBytesWindowsApi(string absPath)
+	{
+		if (GetDiskFreeSpaceEx(absPath, out var avail, out var _, out var _))
+		{
+			return (long)avail;
+		}
+		return null;
+	}
+
+	/// <summary>
+	/// 非 Windows 实现:<c>System.IO.DriveInfo</c>。
+	/// <para>
+	/// 「给定路径怎么找到所在卷」的做法:<see cref="DriveInfo"/> 的构造函数接受**绝对路径**
+	/// (<see cref="Utils.AbsPath"/> 保证),由运行时把它归到该路径所在的挂载点,再取
+	/// <c>AvailableFreeSpace</c>。调用方已经把 try/catch 放在上面那个可注入的 <c>FreeBytes</c> 重载里,路径不存在 / 不是合法卷时异常会被吞成 null。**mac 上未验证**(本机是 Windows,分卷与
+	/// 挂载点的真实形态没跑过;不排除某些挂载方式下 <c>DriveInfo</c> 拿不到值 —— 拿不到就是
+	/// 「查不到磁盘剩余空间」,与改动前 mac 上 <c>DllNotFoundException</c> 被吞掉的表现一致)。
+	/// </para>
+	/// </summary>
+	internal static long? FreeBytesDriveInfo(string absPath)
+	{
+		return new DriveInfo(absPath).AvailableFreeSpace;
 	}
 
 	[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

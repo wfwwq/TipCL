@@ -83,6 +83,53 @@ internal static class JavaRuntimeFiles
 		return "zip";
 	}
 
+	/// <summary>
+	/// B2c1:Microsoft OpenJDK 地址里的 OS 段。Windows / Linux 逐字不变(<c>windows</c> / <c>linux</c>),
+	/// mac 从改动前的 <c>mac</c> 改成 <c>macos</c>。未知 OS 与 <c>Java.Pick</c> 一样抛 <see cref="KeyError"/>。
+	/// <para>
+	/// 线上证据(2026-11-12 21:14,<c>HEAD https://aka.ms/download-jdk/microsoft-jdk-17-&lt;os&gt;-&lt;arch&gt;.&lt;ext&gt;</c>,
+	/// <c>-MaximumRedirection 0</c>,共 6 个请求,原始输出见 PROGRESS.md 的 B2c1 取证表):
+	/// <c>mac-x64.zip</c> / <c>mac-x64.tar.gz</c> / <c>mac-aarch64.zip</c> / <c>mac-aarch64.tar.gz</c> 四个都得到
+	/// <c>302 -&gt; https://www.bing.com?ref=aka&amp;shorturl=...</c>(aka.ms 的「短链不存在」兜底页);
+	/// 而 <c>macos-x64.tar.gz</c> / <c>macos-aarch64.tar.gz</c> 都得到 <c>301 -&gt;</c> 真实的版本化短链
+	/// (<c>.../microsoft-jdk-17.0.21.0.2-macos-x64.tar.gz</c> / <c>...-macos-aarch64.tar.gz</c>)。
+	/// 所以 mac 的 OS 段是 <c>macos</c>,且扩展名是 <c>tar.gz</c>,不是改动前的 <c>mac</c> + <c>.zip</c>。
+	/// </para>
+	/// </summary>
+	internal static string MicrosoftJdkOsFor(string os)
+	{
+		if (os == "osx")
+		{
+			return "macos";
+		}
+		if (os == "windows" || os == "linux")
+		{
+			return os;
+		}
+		throw new KeyError(Py.ReprStr(os));
+	}
+
+	/// <summary>
+	/// B2c1:Microsoft OpenJDK 地址里的包后缀。Windows / Linux 仍逐字是 <c>.zip</c>(红线:这两个平台的地址不许变),
+	/// mac 是 <c>.tar.gz</c>(线上证据见 <see cref="MicrosoftJdkOsFor"/>)。
+	/// 注意落盘文件名用的是 <see cref="ArchiveSuffixFor"/>(非 Windows 是 <c>.tar.gz</c>),
+	/// 所以 mac 上这两处现在**一致**了(改动前是「地址要 zip、文件名叫 tar.gz」)。
+	/// </summary>
+	internal static string MicrosoftJdkArchiveSuffixFor(string os)
+	{
+		return (os == "osx") ? ".tar.gz" : ".zip";
+	}
+
+	/// <summary>
+	/// B2c1:Microsoft OpenJDK 的下载地址(纯函数,可注入 os / major / 架构段)。
+	/// Windows / Linux 的返回值与改动前逐字相同;mac 是新增的 <c>macos</c> + <c>.tar.gz</c>。
+	/// 变更依据见 <see cref="MicrosoftJdkOsFor"/>。
+	/// </summary>
+	internal static string MicrosoftJdkUrl(string os, string major, string archToken)
+	{
+		return "https://aka.ms/download-jdk/microsoft-jdk-" + major + "-" + MicrosoftJdkOsFor(os) + "-" + archToken + MicrosoftJdkArchiveSuffixFor(os);
+	}
+
 	/// <summary>权限位纯函数:可执行 → 0755,其余 → 0644。</summary>
 	internal static UnixFileMode ModeForEntry(bool executable)
 	{
@@ -230,11 +277,45 @@ internal static class JavaRuntimeFiles
 	}
 
 	/// <summary>
+	/// B2c1:链接路径上「已经有什么」时该怎么办(纯函数)。
+	/// <list type="bullet">
+	/// <item><see cref="LinkDecision.Create"/>:路径上什么都没有 → 新建;</item>
+	/// <item><see cref="LinkDecision.Skip"/>:已经是符号链接且目标字符串与要建的**逐字相同** → 跳过,不记警告
+	/// (非 <c>force</c> 重跑时这是常见路径:上次下载中断,链接已经建好了);</item>
+	/// <item><see cref="LinkDecision.Replace"/>:已经是符号链接但目标不同 → 删掉重建(链接本身没有内容,删掉安全);</item>
+	/// <item><see cref="LinkDecision.Conflict"/>:路径上是普通文件或目录 → **跳过并记警告,不删**
+	/// (避免误删已经下载好的文件;宁可少建一条链接,也不删掉已经落盘的内容)。</item>
+	/// </list>
+	/// </summary>
+	internal static LinkDecision DecideLink(string existingTarget, bool pathExists, string desiredTarget)
+	{
+		if (!pathExists)
+		{
+			return LinkDecision.Create;
+		}
+		if (existingTarget == null)
+		{
+			return LinkDecision.Conflict;
+		}
+		return string.Equals(existingTarget, desiredTarget, StringComparison.Ordinal) ? LinkDecision.Skip : LinkDecision.Replace;
+	}
+
+	/// <summary>
 	/// 按 Mojang 运行时清单里的一个 <c>type: link</c> 条目建符号链接。
 	/// 目标逃出安装根目录(例如 <c>../../</c> 指到外面)时**跳过并记日志**,不抛异常。
 	/// Windows 上保持改动前的行为(跳过),返回 false。
+	/// <para>
+	/// B2c1:这一版是**幂等**的 —— 路径上已经是符号链接时按 <see cref="DecideLink"/> 处理,
+	/// 目标相同就不再调 <c>File.CreateSymbolicLink</c>(改动前会抛异常并被记成警告,
+	/// <c>mac-os-arm64</c> 的 <c>java-runtime-gamma</c> 一次就是 208 条)。
+	/// </para>
+	/// <para>
+	/// <paramref name="hooks"/> 为空时全部走真实文件系统(见 <see cref="LinkHooks"/>);
+	/// 单测注入假委托即可在 Windows 上验证这条 mac 分支,不必真的建符号链接。
+	/// 返回值:<c>true</c> = 链接已在位(新建成功或本来就对);<c>false</c> = 跳过(路径非法、目标非法或路径上有普通文件/目录)。
+	/// </para>
 	/// </summary>
-	internal static bool TryCreateRuntimeLink(string installRootAbs, string entryKey, string target, bool isWindows, Action<string> warn = null)
+	internal static bool TryCreateRuntimeLink(string installRootAbs, string entryKey, string target, bool isWindows, Action<string> warn = null, LinkHooks hooks = null)
 	{
 		if (isWindows)
 		{
@@ -261,8 +342,76 @@ internal static class JavaRuntimeFiles
 			Warn(warn, "Mojang 运行时 link 的父目录建立失败,已跳过: " + entryKey + " (" + Py.ExcStr(ex) + ")");
 			return false;
 		}
-		CreateLink(linkPath, linkTarget, null, isWindows);
-		return true;
+		LinkHooks linkHooks = hooks ?? new LinkHooks();
+		string existingTarget;
+		bool pathExists;
+		try
+		{
+			existingTarget = (linkHooks.ReadLinkTarget ?? ReadLinkTargetDefault)(linkPath);
+			pathExists = (linkHooks.Exists ?? ExistsDefault)(linkPath) || existingTarget != null;
+		}
+		catch (Exception ex)
+		{
+			Warn(warn, "Mojang 运行时 link 的既有状态读取失败,已跳过: " + entryKey + " (" + Py.ExcStr(ex) + ")");
+			return false;
+		}
+		switch (DecideLink(existingTarget, pathExists, linkTarget))
+		{
+		case LinkDecision.Create:
+			CreateLink(linkPath, linkTarget, linkHooks.CreateLink, isWindows);
+			return true;
+		case LinkDecision.Replace:
+			DeleteLink(linkPath, linkHooks.DeleteLink);
+			CreateLink(linkPath, linkTarget, linkHooks.CreateLink, isWindows);
+			return true;
+		case LinkDecision.Skip:
+			return true;
+		default:
+			Warn(warn, "Mojang 运行时 link 的路径上已有普通文件或目录,已跳过: " + entryKey);
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// 读一个路径上的符号链接目标;返回 null 表示「不是符号链接」(或路径不存在)。
+	/// 生产实现用 <see cref="FileSystemInfo.LinkTarget"/> —— 用 <see cref="FileInfo"/> 而不是
+	/// <see cref="DirectoryInfo"/>,因为**悬空的目录链接**上 <c>Directory.Exists</c> 是 false,
+	/// 而 <c>LinkTarget</c> 两者取到的底层值相同(都是对路径做 lstat / 读 reparse point)。
+	/// </summary>
+	private static string ReadLinkTargetDefault(string path)
+	{
+		FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
+		return info.LinkTarget;
+	}
+
+	private static bool ExistsDefault(string path)
+	{
+		return File.Exists(path) || Directory.Exists(path);
+	}
+
+	/// <summary>删掉一条已存在的链接。链接本身没有内容,所以先按文件删,失败再按目录删(不递归)。</summary>
+	private static void DeleteLink(string linkPath, Action<string> deleteLink)
+	{
+		if (deleteLink != null)
+		{
+			deleteLink(linkPath);
+			return;
+		}
+		try
+		{
+			File.Delete(linkPath);
+		}
+		catch (Exception ex)
+		{
+			try
+			{
+				Directory.Delete(linkPath);
+			}
+			catch (Exception ex2)
+			{
+				Utils.log.Warning("删除既有符号链接失败 %s: %s / %s", linkPath, Py.ExcStr(ex), Py.ExcStr(ex2));
+			}
+		}
 	}
 
 	/// <summary>
@@ -429,5 +578,41 @@ internal static class JavaRuntimeFiles
 
 		/// <summary>是否按 Windows 语义解析路径;null 时按当前真实平台。</summary>
 		public bool? IsWindows { get; set; }
+	}
+
+	/// <summary>B2c1:<see cref="TryCreateRuntimeLink"/> 在链接路径上已有东西时的处置(见 <see cref="DecideLink"/>)。</summary>
+	internal enum LinkDecision
+	{
+		/// <summary>路径上什么都没有 → 新建。</summary>
+		Create,
+
+		/// <summary>已经是符号链接且目标相同 → 跳过(不记警告)。</summary>
+		Skip,
+
+		/// <summary>已经是符号链接但目标不同 → 删掉重建。</summary>
+		Replace,
+
+		/// <summary>路径上是普通文件或目录 → 跳过并记警告,不删。</summary>
+		Conflict,
+	}
+
+	/// <summary>
+	/// B2c1:建链接这条 mac 路径的副作用出口。全部为 null 时走真实文件系统
+	/// (<see cref="FileSystemInfo.LinkTarget"/> / <c>File.Exists</c> / <c>File.Delete</c> / <c>File.CreateSymbolicLink</c>);
+	/// 测试注入假委托即可在 Windows 上验证这条分支,不建真实符号链接(见 DECISIONS.md D-49 附近的既有做法)。
+	/// </summary>
+	internal sealed class LinkHooks
+	{
+		/// <summary>读取链接路径上既有的链接目标;返回 null = 不是符号链接。null 委托时走 <see cref="FileSystemInfo.LinkTarget"/>。</summary>
+		public Func<string, string> ReadLinkTarget { get; set; }
+
+		/// <summary>链接路径上是否已有东西(普通文件 / 目录 / 链接)。null 委托时走 <c>File.Exists || Directory.Exists</c>。</summary>
+		public Func<string, bool> Exists { get; set; }
+
+		/// <summary>删掉目标不同的既有链接。null 委托时先 <c>File.Delete</c>、失败再 <c>Directory.Delete</c>。</summary>
+		public Action<string> DeleteLink { get; set; }
+
+		/// <summary>建链接出口。null 委托时走 <c>File.CreateSymbolicLink</c>(非 Windows)。</summary>
+		public Action<string, string> CreateLink { get; set; }
 	}
 }

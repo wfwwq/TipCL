@@ -12,6 +12,31 @@ public static class GlobalMods
 
 	private static bool IsSymlink(string p)
 	{
+		return IsSymlink(p, Utils.IS_WINDOWS, null);
+	}
+
+	/// <summary>
+	/// B2c1:<paramref name="isWindows"/> 为 true 时**逐字**是改动前的实现(先看
+	/// <see cref="FileAttributes.ReparsePoint"/>,读属性抛异常就返回 false)。
+	/// 非 Windows 上改用「链接目标不为 null」判断:Windows 的
+	/// <c>ReparsePoint</c> 是 NTFS 重解析点语义,在 mac 上既不看 <c>lstat</c> 也对**悬空链接**不成立;
+	/// <see cref="FileSystemInfo.LinkTarget"/> 对正常链接与悬空链接都返回目标字符串。
+	/// <paramref name="readLinkTarget"/> 为 null 时走真实文件系统(<see cref="FileSystemInfo.LinkTarget"/>);
+	/// 任何异常返回 false(与改动前一致)。
+	/// </summary>
+	internal static bool IsSymlink(string p, bool isWindows, Func<string, string> readLinkTarget)
+	{
+		if (!isWindows)
+		{
+			try
+			{
+				return (readLinkTarget ?? LinkTargetOrDefault)(p) != null;
+			}
+			catch (Exception)
+			{
+				return false;
+			}
+		}
 		try
 		{
 			FileInfo fileInfo = new FileInfo(p);
@@ -21,6 +46,17 @@ public static class GlobalMods
 		{
 			return false;
 		}
+	}
+
+	/// <summary>
+	/// 生产实现:读一个路径上的符号链接目标(null = 不是符号链接)。
+	/// 用 <see cref="FileInfo"/> 而不是 <see cref="DirectoryInfo"/>:悬空的**目录**链接上
+	/// <c>Directory.Exists</c> 是 false,而两者取到的 <c>LinkTarget</c> 相同。
+	/// </summary>
+	private static string LinkTargetOrDefault(string p)
+	{
+		FileSystemInfo info = Directory.Exists(p) ? new DirectoryInfo(p) : new FileInfo(p);
+		return info.LinkTarget;
 	}
 
 	public static bool _link_file(string dest, string src)
