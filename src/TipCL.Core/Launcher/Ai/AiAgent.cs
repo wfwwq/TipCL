@@ -17,6 +17,10 @@
 //   · Mcp:每轮开始按 config 的 ai_mcp_servers 连外部 server,把它们的工具并进工具表;
 //   · Artifacts:超长工具结果落盘 + read_artifact 回读;
 //   · dispatch_subagent:派一个**只读**子代理跑调研,把结论带回来。
+//
+// M4-H R7:补上 Windows 版有、Linux 侧原先漏掉的**限流/5xx 重试**(参考版 Agent.cs 的 retry 分支):
+// 429 / 500 / 502 / 503 / 504 与分类为 rate_limited 的失败,在这一轮还没产出任何内容时最多重发 3 次
+// (退避 min(4, 2^(n-1)) 秒 + 抖动,等待可被「停止」打断);已经吐出正文就绝不重发,免得用户看到重复内容。
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -450,6 +454,65 @@ public sealed class AiAgent
         public readonly List<ToolInvocation> Calls = new();
     }
 
+    /// <summary>一轮流式请求失败后最多原地重发几次(照参考版 Agent.cs 的 num4 &lt; 3)。</summary>
+    private const int MaxStreamRetries = 3;
+
+    /// <summary>一次流式请求的结果(重试的最小单元:增量直接吐给 state,这里只带回错误与本轮的 tool_calls)。</summary>
+    private sealed class StreamAttempt
+    {
+        public string Error = "";
+        public AIClientError? ClientError;
+        public string Finish = "";
+        public readonly List<object> PendingTools = new();
+    }
+
+    /// <summary>
+    /// 重试前的退避秒数:min(4, 2^(n-1)) 再乘 0.8~1.2 的抖动
+    /// (照参考版 _sleep_backoff:第 1 次约 1 秒、第 2 次约 2 秒、第 3 次约 4 秒,有上限、不会无限等)。
+    /// </summary>
+    private static double BackoffSeconds(int attempt)
+    {
+        return Math.Min(4.0, Math.Pow(2.0, attempt - 1)) * (0.8 + 0.4 * Random.Shared.NextDouble());
+    }
+
+    /// <summary>
+    /// 这次失败能不能原地重发(照参考版 Agent.cs 的 retry 分支):
+    ///   · 401/403 认证类(Fatal)一次都不重试;
+    ///   · 只有 Retryable 的错误才重试:429 / 500 / 502 / 503 / 504,以及分类为 rate_limited 的;
+    ///     provider_timeout / provider_network_error / provider_stream_error 也算可重试(与参考版 Retryable 口径一致);
+    ///   · **这一轮已经吐出正文/思考内容或拿到 tool_calls 就绝不重发** —— 重发会让用户看到重复内容;
+    ///   · 上下文超长、参数错、未知错误都不是 Retryable,照旧直接失败。
+    /// </summary>
+    private bool CanRetryStream(AIClientError? err, RoundState state, StreamAttempt attempt)
+    {
+        if (err == null || err.Fatal() || !err.Retryable())
+        {
+            return false;
+        }
+        return state.Text.Length == 0 && state.Calls.Count == 0 && attempt.PendingTools.Count == 0;
+    }
+
+    /// <summary>重试说明(给状态行/日志看,别让界面静默卡住)。</summary>
+    private static string RetryNotice(AIClientError err, int attempt, double waitSeconds)
+    {
+        string why = err.Status > 0
+            ? "HTTP " + err.Status
+            : err.Category switch
+            {
+                "rate_limited" => "限流",
+                "provider_timeout" => "超时",
+                "provider_network_error" => "网络异常",
+                "provider_stream_error" => "连接中断",
+                _ => "出错",
+            };
+        return "接口" + why + ",正在重试(第 " + attempt + "/" + MaxStreamRetries + " 次,约 " +
+               waitSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " 秒后)";
+    }
+
+    /// <summary>
+    /// 发一轮流式请求;限流(429)与 5xx 这类「重发一次就好」的失败会退避重试(参考版有、Linux 侧原先漏了这一层)。
+    /// 重试有次数上限,退避期间随时能被 CancellationToken 打断(用户点「停止」立刻断,不等完)。
+    /// </summary>
     private async Task StreamOnceAsync(List<object> messages, RoundState state, List<object> mcpSchemas, CancellationToken ct)
     {
         var cancel = new HttpCancel();
@@ -460,9 +523,86 @@ public sealed class AiAgent
             ? null
             : Tools.SelectToolSchemas(messages).Concat(mcpSchemas).ToList();
 
-        string error = "";
-        string finish = "";
-        var pendingTools = new List<object>();
+        int retries = 0;
+        while (true)
+        {
+            StreamAttempt attempt = await StreamAttemptAsync(messages, state, tools, cancel, linked).ConfigureAwait(false);
+
+            if (linked.IsCancellationRequested)
+            {
+                state.Failed = true;
+                _emit(new AiAgentEvent { Kind = "error", Error = "", Text = "已停止", Round = state.Round });
+                return;
+            }
+            if (attempt.Error.Length > 0)
+            {
+                if (retries < MaxStreamRetries && CanRetryStream(attempt.ClientError, state, attempt))
+                {
+                    retries++;
+                    double wait = BackoffSeconds(retries);
+                    // 让界面/日志看得见「限流了,正在重试第 N 次」,而不是静默卡住
+                    _emit(new AiAgentEvent
+                    {
+                        Kind = "status",
+                        Text = RetryNotice(attempt.ClientError!, retries, wait),
+                        Round = state.Round,
+                    });
+                    Store.LogEvent(ChatId, "ModelRetry", PyDict.Of(
+                        "turn_id", TurnId,
+                        "round", (long)state.Round,
+                        "attempt", (long)retries,
+                        "category", attempt.ClientError!.Category,
+                        "error", Py.Slice(attempt.Error, null, 160)));
+                    Trace.Record("retry", state.Round, "", "", attempt.ClientError, null, null,
+                        "attempt", (long)retries, "wait", Math.Round(wait, 1));
+                    // 退避 + 尊重取消:取消时 Task.Delay 直接抛 OperationCanceledException,不会睡满
+                    await Task.Delay(TimeSpan.FromSeconds(wait), ct).ConfigureAwait(false);
+                    continue;
+                }
+                state.Failed = true;
+                // 报错也要记一次用量(这一轮确实花掉了请求)
+                Usage.Add(ChatId, null, Tokens.EstimateMessages(messages), 0);
+                _emit(new AiAgentEvent { Kind = "error", Error = attempt.Error, Round = state.Round });
+                return;
+            }
+
+            state.FinishReason = attempt.Finish;
+            foreach (object? raw in attempt.PendingTools)
+            {
+                PyDict item = Py.D(raw);
+                PyDict function = Py.D(item.Get("function"));
+                string name = Py.S(function.Get("name"));
+                if (name.Length == 0)
+                {
+                    continue;
+                }
+                (PyDict? args, string parseError) = Tools.ParseArgs(function.Get("arguments"), name);
+                if (args == null)
+                {
+                    // 参数解析不了的调用不丢弃:回一条工具错误给模型,让它重发
+                    var broken = new ToolCall(Py.S(Py.Or(item.Get("id"), "call_bad")), name, new PyDict());
+                    state.Calls.Add(new ToolInvocation
+                    {
+                        Raw = new PyDict(item),
+                        Call = broken,
+                    });
+                    broken.Mark(ToolCallStatus.FAILED, error: parseError);
+                    continue;
+                }
+                var call = new ToolCall(Py.S(Py.Or(item.Get("id"), "call_" + state.Calls.Count)), name, args);
+                state.Calls.Add(new ToolInvocation { Raw = new PyDict(item), Call = call });
+            }
+            return;
+        }
+    }
+
+    /// <summary>
+    /// 发一次流式请求:增量文本 / 用量事件照旧直接吐给 state,
+    /// 只把「这轮的错误 + tool_calls + 结束原因」带回去,交 <see cref="StreamOnceAsync"/> 决定要不要重试。
+    /// </summary>
+    private async Task<StreamAttempt> StreamAttemptAsync(List<object> messages, RoundState state, List<object>? tools, HttpCancel cancel, CancellationTokenSource linked)
+    {
+        var attempt = new StreamAttempt();
 
         await Task.Run(() =>
         {
@@ -495,7 +635,7 @@ public sealed class AiAgent
                         case "tool_calls":
                             foreach (object? item in Py.ListOr(ev.Get("tool_calls")))
                             {
-                                pendingTools.Add(item!);
+                                attempt.PendingTools.Add(item!);
                             }
                             break;
                         case "usage":
@@ -508,17 +648,20 @@ public sealed class AiAgent
                             break;
                         }
                         case "error":
-                            error = Py.S(ev.Get("message"));
-                            if (error.Length == 0)
+                            attempt.Error = Py.S(ev.Get("message"));
+                            if (attempt.Error.Length == 0)
                             {
-                                error = "AI 接口出错";
+                                attempt.Error = "AI 接口出错";
                             }
+                            // 参考版把流里的 error 事件包成 AIClientError 抛出来;这里同样包一层,
+                            // 让「额度不足 / rate limit」这类没有 HTTP 状态码的错误也能按分类决定要不要重试。
+                            attempt.ClientError = new AIClientError(attempt.Error);
                             break;
                         case "done":
-                            finish = Py.S(ev.Get("finish_reason"));
+                            attempt.Finish = Py.S(ev.Get("finish_reason"));
                             break;
                     }
-                    if (error.Length > 0)
+                    if (attempt.Error.Length > 0)
                     {
                         break;
                     }
@@ -526,54 +669,19 @@ public sealed class AiAgent
             }
             catch (AIClientError ex)
             {
-                if (!linked.IsCancellationRequested) error = ex.Message;
+                if (!linked.IsCancellationRequested)
+                {
+                    attempt.Error = ex.Message;
+                    // 保留带状态码/分类的原异常:429 与 5xx 靠它走重试分支
+                    attempt.ClientError = ex;
+                }
             }
             catch (Exception ex)
             {
-                if (!linked.IsCancellationRequested) error = "AI 对话异常:" + Py.ExcStr(ex);
+                if (!linked.IsCancellationRequested) attempt.Error = "AI 对话异常:" + Py.ExcStr(ex);
             }
         }, CancellationToken.None).ConfigureAwait(false);
 
-        if (linked.IsCancellationRequested)
-        {
-            state.Failed = true;
-            _emit(new AiAgentEvent { Kind = "error", Error = "", Text = "已停止", Round = state.Round });
-            return;
-        }
-        if (error.Length > 0)
-        {
-            state.Failed = true;
-            // 报错也要记一次用量(这一轮确实花掉了请求)
-            Usage.Add(ChatId, null, Tokens.EstimateMessages(messages), 0);
-            _emit(new AiAgentEvent { Kind = "error", Error = error, Round = state.Round });
-            return;
-        }
-
-        state.FinishReason = finish;
-        foreach (object? raw in pendingTools)
-        {
-            PyDict item = Py.D(raw);
-            PyDict function = Py.D(item.Get("function"));
-            string name = Py.S(function.Get("name"));
-            if (name.Length == 0)
-            {
-                continue;
-            }
-            (PyDict? args, string parseError) = Tools.ParseArgs(function.Get("arguments"), name);
-            if (args == null)
-            {
-                // 参数解析不了的调用不丢弃:回一条工具错误给模型,让它重发
-                var broken = new ToolCall(Py.S(Py.Or(item.Get("id"), "call_bad")), name, new PyDict());
-                state.Calls.Add(new ToolInvocation
-                {
-                    Raw = new PyDict(item),
-                    Call = broken,
-                });
-                broken.Mark(ToolCallStatus.FAILED, error: parseError);
-                continue;
-            }
-            var call = new ToolCall(Py.S(Py.Or(item.Get("id"), "call_" + state.Calls.Count)), name, args);
-            state.Calls.Add(new ToolInvocation { Raw = new PyDict(item), Call = call });
-        }
+        return attempt;
     }
 }
