@@ -990,7 +990,10 @@ public class Installer
 				return _java_cache;
 			}
 		}
-		_java_cache = Java.InstallAdoptium(dm, 8L, on_progress);
+		// B2e:兜底大版本按平台算 —— Apple 芯片上用 17(Adoptium 对 mac aarch64 没有 8 的包,
+		// 见 PROGRESS.md 的 B2a 第 1.3 节;这个 Java 只是用来跑 Forge / NeoForge 的处理器 jar,
+		// 挑选时不看版本),其它平台仍是 8(原值)。
+		_java_cache = Java.InstallAdoptium(dm, JavaArch.FallbackMajor(Utils.OS_NAME, Utils.ARCH), on_progress);
 		return _java_cache;
 	}
 

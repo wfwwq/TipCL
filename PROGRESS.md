@@ -19,7 +19,7 @@
 | B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | ✅ 完成(见下;**新增 137 条用例,总数 901 → 1038,两条通道都 1038/1038 全绿**;三个复制文件只加可注入 OS/ARCH 的 internal 重载 + 一处内联逻辑抽取,Windows 行为用等价钉子逐项钉住;新建 `Launcher\MacNativeSupport.cs`,未接入调用点,留 Lead 裁决 arm64 方案) |
 | B2c | NodeRuntime darwin / Terracotta 权限 / adb 路径 / PhoneLink 临时目录 / Preflight 磁盘 / Updater 仅提示 / Shortcut / IsSymlink / Microsoft 厂商分支 / Mojang 安装循环建链顺序 | 未开始 |
 | B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | ✅ 完成(见下;**新增 132 条用例,总数 1038 → 1170,两条通道都 1170/1170 全绿**;新建 `Launcher\LaunchArch.cs`,7 处调用点改读目标架构,5 个复制文件加可注入重载 / 抽取纯函数;Java 侧留给 B2e) |
-| B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | 未开始 |
+| B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | ✅ 完成(见下;**新增 235 条用例,总数 1170 → 1405,两条通道都 1405/1405 全绿**;新建 `Launcher\JavaArch.cs`,`Java.cs` / `McLauncher.cs` / `Installer.cs` 各改一处;写测试时抓到并修掉一个「读取委托 / 探测委托」接错的真 bug,见 D-50;两处同类缺口只记录未改,见 D-52) |
 | B3 | 打包 | 未开始 |
 | C1-C8 | 界面 | 未开始 |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
@@ -2011,4 +2011,149 @@ Terracotta(B2c)与界面/系统信息展示也不在范围内。
 - 启动器自己装的 Java 目录名带架构:`adoptium-<major>-<arch>`、`zulu-<major>-<arch>`、`<component>-<PLATFORM_KEY>`,不同架构不会互相覆盖。
 - 代码里目前没有任何「探测一个 Java 是什么架构」的逻辑(只有 1016 行按路径里有没有 `x86` 字样判断 32 位)。
 - `Installer._ensure_any_java()`(`Installer.cs:969`)在找不到任何 Java 时装 Adoptium 8;B2a 的线上证据是 Adoptium 对 mac aarch64 **没有** Java 8,所以这条兜底在 Apple 芯片上会失败。
+
+---
+
+## B2e Apple 芯片旧版本:Java 的挑选与安装按「本次启动的目标架构」
+
+> 本包做任务书的 6 项。**改动的复制文件只有 3 个**(`Launcher\Java.cs` +54/−11、`Launcher\McLauncher.cs` +5/−7、
+> `Launcher\Installer.cs` +4/−1),新逻辑全在新文件 `src\TipCL.Core\Launcher\JavaArch.cs`(381 行)
+> 与 5 个测试文件里。`BackendApi.cs` 只读了两小段(第 6 项取证),**未改**。
+
+### 1. 六项各自做了什么
+
+| 项 | 结论 | 落点 |
+|---|---|---|
+| 1 探测 Java 架构 | **新增**。`JavaArch.Detect`:先读 `<JAVA_HOME>/release` 的 `OS_ARCH=`(`aarch64`/`arm64` → arm64,`x86_64`/`amd64`/`x64` → x64,`i386|i486|i586|i686|x86` → x86),读不到再按启动器目录名推断(`<厂商>-<major>-<arch>` 三段名 / `…-mac-os[-arm64]`),都不行 → null。**只读这一个文件,不起进程** | `JavaArch.cs` |
+| 2 可用性与挑选按目标架构 | **改**。`Acceptable` 真值表(非 Apple 恒 true;跨架构只要 x64,探测不出来按不可用;同架构恒 true)、`Rank`/`FilterForTarget`(跨架构只留 x64;同架构 arm64/null 稳定排前)。`JavaUsableFor` 追加架构判断(非 Apple 先 return true);`PickJavaForVersion` 的 `prefer` 分支与 `Match` 都过一遍 | `JavaArch.cs` + `Java.cs` |
+| 3 安装按目标架构 | **改**。`InstallMojangRuntime` 加带 `platformKey` 的 internal 重载(内部 5 处静态 `PLATFORM_KEY` → 入参);`JavaArch.PlanInstall` 纯函数给平台键与 Adoptium 的 `arch`;`EnsureJavaForVersion` 按计划执行 | `JavaArch.cs` + `Java.cs` |
+| 4 Rosetta 提示 | **加**。跨架构时 `ResolveLaunchJava` 通过 `on_note` 发 `JavaArch.RosettaNote` 并 `Utils.log.Info` 记一条;`_coerce_java_exe` 抛 `LaunchError` 时用 `JavaArch.WithRosettaNote` 追加同一句(原文案一字不改)。**不检测 Rosetta、不阻断、不加 `arch -x86_64`** | `JavaArch.cs` + `Java.cs` + `McLauncher.cs` |
+| 5 两处小事 | (a) 删掉 `McLauncher` 私有 3 参 `_expand_args`(grep 确认无调用方,含测试);(b) `Installer._ensure_any_java()` 的兜底大版本走 `JavaArch.FallbackMajor`(Apple 芯片 17,其余 8)—— 用途先查清是「跑 Forge/NeoForge 处理器 jar,挑 Java 时不看版本」,见 D-51 | `McLauncher.cs` + `Installer.cs` |
+| 6 核对传入的版本 JSON | **只读取证,未改**(结论见下面第 5 节;两处需要 Lead 裁决的写进回报) | 无 |
+
+### 2. `release` 的取证结果(第 1 项要求先取证)
+
+用脚本按键取 `artifacts/b2a/` 里 B2a 留下的两份 Mojang 运行时清单(不入库,只打印聚合结果):
+
+| 清单 | `files` 条目 | `jre.bundle/Contents/Home/release` | 该条目形态 |
+|---|---|---|---|
+| `mac-os-arm64` / `java-runtime-gamma` | 437 | **有** | `type=file`、`executable=false`、`downloads.raw` 有(1074 字节) |
+| `mac-os` / `jre-legacy` | 179 | **有** | `type=file`、`executable=false`、`downloads.raw` 有(528 字节) |
+
+结论:mac 上启动器自己装的 Java 也是 `<JAVA_HOME>/release`(与 Adoptium 的包布局一致),
+所以第 1 项的探测路径成立。**`release` 里 `OS_ARCH` 的真实取值本机没有 mac 的 JDK 可看 → 未验证**
+(测试里用的是自造的文本,见第 6 节)。
+
+顺带核对(给第 3 项的平台键做证据,`all.json` 的组件是**按平台列全部键、没有的给空数组**):
+`mac-os` 非空 7 个(含 `java-runtime-beta`、`jre-legacy`),`mac-os-arm64` 非空 4 个
+(`delta`/`epsilon`/`gamma`/`gamma-snapshot`,**没有 beta、没有 jre-legacy**)—— 与 B2a 表格一致。
+
+### 3. 第 6 项:逐调用点结论(传的是合并前还是合并后的版本 JSON)
+
+| 调用点 | 传的 `version_json` | 依据 |
+|---|---|---|
+| `BackendApi.cs:2933` / `2936`(`preview_launch` 一类) | **合并后** | 2927 行 `version_json = Manifest.ResolveInherits(pyDict, pid => inst.VersionJson(pid))`,失败才退回 `pyDict` |
+| `BackendApi.cs:3095` / `3096` / `3100` | **合并后** | 3055–3064 行同样先 `ResolveInherits` |
+| `McLauncher.cs:578`(`_coerce_java_exe`) | **合并后** | 569–577 行 `pyDict2 = Manifest.ResolveInherits(pyDict, loadParent)`,`ResolveInherits` 抛异常时直接 `throw LaunchError`,**不会**退化成子 JSON |
+| `BackendApi.cs:2958`(`export_launch_script`) | **子版本原文(未合并)** | 直接 `instance2.VersionJson(text)` |
+
+后果与建议改法(第 4 节的风险 1、D-52 第 2 条):带 `inheritsFrom` 的版本(Forge 等)子 JSON 里没有原生库,
+`LaunchArch.For` 会判成「没有 mac 原生库」→ 目标架构 = 进程架构(`arm64`),于是导出的启动脚本可能选到
+arm64 的 Java(而真正启动走的是合并 JSON → x64)。红线不许改 `BackendApi.cs`,**本包未改**。
+
+### 4. 对复制文件的每处改动
+
+**(a) `src\TipCL.Core\Launcher\Java.cs`(+54 / −11)**
+
+| 位置 | 原来 | 改成 | 为什么 |
+|---|---|---|---|
+| `JavaUsableFor`(现 364–386 行) | `return javaMajor.Value >= num;` | 大版本不够仍 return false;够的话先判 `IsAppleSilicon`,`不是`→直接 `return true`(与原来逐项相同、不读盘),`是`→`AcceptableForExecutable(os, proc, LaunchArch.For(version_json), exe)` | 挑选路径的闸门都要看架构,跨架构时 arm64 的 Java 加载不了 x86_64 原生库 |
+| `ResolveLaunchJava` 方法开头(现 390–395) | 只有 `long num = RequiredJavaMajor(...)` | 追加:跨架构 → `on_note?.Invoke(JavaArch.RosettaNote)` + `Utils.log.Info("%s", JavaArch.RosettaNote)` | 第 4 项:无条件提示,不检测不阻断 |
+| `PickJavaForVersion` 方法开头 | 只有 `long required = ...` | 追加 `targetArch`(只在 Apple 芯片上算 `LaunchArch.For(version_json)`,否则就是 `Utils.ARCH`) | 不在非 Apple 芯片上多做哪怕一次版本 JSON 计算 |
+| `PickJavaForVersion` 的 `prefer` 分支 | `javaMajor.Value >= required` | 追加 `&& AcceptableForExecutable(os, proc, targetArch, text)` | 显式指定的 Java 也要过架构这关 |
+| `PickJavaForVersion` 的局部函数 `Match` 第一行 | 直接 `from PyDict j in javas` | 先 `javas = JavaArch.FilterForTarget(javas, os, proc, targetArch);`,其余三处筛选 / 取最小大版本**逐字未改** | 非 Apple 芯片上这步原样返回同一个列表(单测钉了 `Assert.Same`) |
+| `InstallMojangRuntime` | 一个 public 方法,内部 5 处读静态 `PLATFORM_KEY`(1169/1172/1189/1196/1198 行) | 拆成 public 转调 + **internal 重载**(多一个 `platformKey` 入参),5 处换成入参;方法体其余逐字不变 | 跨架构要装 `mac-os`(它有 `jre-legacy`/`java-runtime-beta`) |
+| `EnsureJavaForVersion` 主体 | `if (Py.Truthy(obj) && !Py.Eq(obj,"jre-legacy"))` 里调 `InstallMojangRuntime(dm, component, on_progress, force)`;末尾 `arch = _IsLegacy32bit(version_json) ? "x86" : null` | 先算 `JavaArch.PlanInstall(...)`,再 `if (plan.TryMojang)` → `InstallMojangRuntime(dm, component, plan.MojangPlatformKey, ...)`;末尾 `InstallAdoptium(..., plan.AdoptiumArch)` | 平台键与 Adoptium 的 arch 都按目标架构;`TryMojang` 与原来的 `Py.Truthy(obj) && !Py.Eq(obj,"jre-legacy")` 等价 |
+
+**(b) `src\TipCL.Core\Launcher\McLauncher.cs`(+5 / −7)**
+
+| 位置 | 原来 | 改成 | 为什么 |
+|---|---|---|---|
+| 63–66 行 | 私有 3 参 `_expand_args` 转调 6 参重载 | **删除**(grep 全仓确认只有它自己那一行在调用 6 参版);6 参版的 XML 注释补一句说明删因 | B2d 的 Lead 裁决;留着会有人顺手调它、悄悄走回进程架构 |
+| `_coerce_java_exe` 的 `throw new LaunchError` | 长中文文案直接构造 | 先放进 `text2`,再 `throw new LaunchError(JavaArch.WithRosettaNote(text2, Utils.OS_NAME, Utils.ARCH, LaunchArch.For(resolved)))`;**文案本身逐字未改**(全角标点用 `\uXXXX` 核对过) | 第 4 项:跨架构时在原文案后追加 Rosetta 提示;非跨架构原样返回 |
+
+**(c) `src\TipCL.Core\Launcher\Installer.cs`(+4 / −1)**
+
+| 位置 | 原来 | 改成 | 为什么 |
+|---|---|---|---|
+| `_ensure_any_java()` 最后一行(现 996 行) | `Java.InstallAdoptium(dm, 8L, on_progress);` | `Java.InstallAdoptium(dm, JavaArch.FallbackMajor(Utils.OS_NAME, Utils.ARCH), on_progress);` | Apple 芯片上 Adoptium 没有 Java 8 的 aarch64 包(线上证据),兜底改成 17;其它平台仍 8(见 D-51) |
+
+### 5. 新文件
+
+- `src\TipCL.Core\Launcher\JavaArch.cs`(381 行,全部为新代码):`RosettaNote` 常量、`IsAppleSilicon`、
+  `IsCrossArch`、`Acceptable`、`AcceptableForExecutable`(生产重载 + 可注入读取委托的重载)、
+  `FilterForTarget`(同上两个重载)、`Rank`、`PlanInstall`(+ 嵌套的 `InstallPlan`)、`FallbackMajor`、
+  `WithRosettaNote`、`Detect(string)`(生产入口)/ `Detect(string, Func<string,string>)`(可注入)、
+  `MapOsArchValue`,以及私有的 `_ParseOsArch` / `_Unquote` / `_InferFromDirectoryNames` / `_JavaHomeOf` /
+  `_LastSeparatorBefore` / `_ExeOf` / `_ReadTextOrNull`。
+- 测试 5 个文件(都只测纯函数 / `TestHome.Root` 下自造的小文件,全部不联网、不起进程):
+  `B2eJavaArchDetectTests.cs`、`B2eJavaAcceptableTests.cs`、`B2eJavaInstallPlanTests.cs`、
+  `B2eNonAppleNailsTests.cs`、`B2eRosettaNoteTests.cs`。
+
+### 6. 测试(新增 235 条用例,总数 1170 → 1405)
+
+| 文件 | 覆盖 | 用例数 |
+|---|---|---|
+| `B2eJavaArchDetectTests` | `release` 里各种 `OS_ARCH` 写法(引号 / 空白 / 多行 / CRLF / 大小写 / 未知值 / 没有该行)、`jre.bundle/Contents/Home/bin/java` 与 `…/Contents/Home/bin/java` 的 `release` 位置、读取委托返回 null / 抛异常、目录名推断的各种形态、冲突以 `release` 为准、生产入口读 `TestHome.Root` 下的真实文件、`MapOsArchValue` 全表 | 82 |
+| `B2eJavaAcceptableTests` | `Acceptable` 真值表 36 格(os×进程×目标×探测)、`IsAppleSilicon` / `IsCrossArch`、可注入读取委托的入口(非 Apple **一次都不读**、Apple 每个候选正好读一次)、`FilterForTarget` 跨架构只留 x64 / 同架构稳定排序(逐项 `Assert.Same` 钉顺序)/ 非 PyDict 项当「不知道」、`Rank` | 74 |
+| `B2eJavaInstallPlanTests` | 安装计划 3 形态 × 6 平台组合逐格(平台键 / Adoptium arch / TryMojang)、非跨架构平台键 == `Java.PlatformKeyFor(os, 进程架构)`、`legacy32 ? x86 : null`、空 component 与 `jre-legacy` 不走 Mojang、**夹具 → `LaunchArch.For` → 安装计划** 的端到端 3 条(1.16.5 → Adoptium `x64`;1.18.2 → Mojang `mac-os`;1.19.4 → Mojang `mac-os-arm64`)、非 Apple 同夹具钉子、`FallbackMajor` | 51 |
+| `B2eNonAppleNailsTests` | 生产入口读真实文件、非 Apple 恒 true 且不看盘、Apple 跨架构 / 同架构的真实文件判定 | 16 |
+| `B2eRosettaNoteTests` | 文案含 `softwareupdate --install-rosetta`、中文用 `\uXXXX` 断言、不含 `arch -x86_64`、跨架构拼接 / 非跨架构原样返回 | 12 |
+
+**期望值来自哪** 每种都在注释里标了:非 Apple 与 `legacy32 ? x86 : null` / 平台键 == `PLATFORM_KEY`
+来自**改动前的源码行为**;`mac-os` / `mac-os-arm64` 的键名与「有没有 `jre-legacy` / `java-runtime-beta`」
+来自 **B2a 的线上证据**;Adoptium 没有 mac aarch64 的 Java 8 同理;目标架构来自 **B2d 的夹具与结论**。
+
+**写测试时抓到的真 bug(已修,记 D-50)**:第一版把「读取 `release` 的委托」与「探测架构的委托」搞混,
+生产代码给 `AcceptableForExecutable` / `FilterForTarget` 传了 `JavaArch.Detect` 当读取器 →
+探测退化成只看目录名。现在生产重载不带委托,单测另有真实文件那一条钉住生产路径。
+
+### 7. 验证命令与实际结果(全部在本机真实执行过)
+
+| 命令 | 结果 |
+|---|---|
+| `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 0,**0 错误**;警告 **1 个**(`-v:n` 复核:`PhoneClient.cs(116,38) SYSLIB0014` ×1,与基线相同) |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 **1405** / 失败 0 / 跳过 0 |
+| `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 0,通过 **1405** / 失败 0 / 跳过 0 / **不支持 0** |
+| `TipCL.exe --smoke --theme light/dark --out artifacts\smoke-*.png` | 退出码 0 / 0;`smoke-light.png` **3739 字节**、`smoke-dark.png` **3751 字节**(与基线一致) |
+| 字节一致性自检(`artifacts\b2e-bytecheck.ps1`,对 `D:\项目\tipcl\windos\tipcl\src\TipCL\Core`) | mac 侧 247 个 `.cs`:有对应文件的 238 个里 **224 一致 / 14 有改动**(含本包改的 `Launcher\Java.cs`、`Launcher\McLauncher.cs`、`Launcher\Installer.cs`);**无对应文件 9 个** = 原有 8 个 + `Launcher\JavaArch.cs` |
+| `%LOCALAPPDATA%\TipCL`(开工时 / 测试后) | 两次都是 **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,与 Lead 给的三项基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合 | `dotnet test` 前后 **86 → 86**、进程内执行器前后 **86 → 86**,测试窗口内**没有新名字** |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL` | **0 个** |
+| 测试扫描 | 5 个新文件都没有联网、起进程、调 `GetJavaMajor` / `ResolveLaunchJava` / 任何 `Install*`、没有实例化 `BackendApi` / `BridgeServer` / `PluginManager`、没有改 `TIPCL_HOME`、临时文件都写在 `TestHome.Root` 之下 |
+
+### 8. 未验证项(本机是 Windows,没有 Mac)
+
+1. **mac 上整条 Rosetta 路径**:x64 Java 经 Rosetta 起 JVM、x86_64 原生库的加载 —— 一律未验证。
+2. **`release` 里 `OS_ARCH` 的真实取值与拼写**:Adoptium / Azul / Mojang 的 mac 包里这个文件长什么样,
+   本机没有 mac 的 JDK 可看;测试用的是自造文本。**唯一核对过的是「这个文件在包里的相对路径」**(第 2 节)。
+3. 探测不出架构时会**自动下载一个 x64 的 Java**(`Acceptable` 把 null 当不可用)—— 这个「自动下载」
+   在 mac 上的真实效果未验证。
+4. Apple 芯片上 `_ensure_any_java()` 改成装 Java 17 后,老 Forge 的处理器 jar 能不能被 Java 17 跑起来未验证(D-51)。
+5. `PlatformKeyFor("osx","x64") == "mac-os"` 与 `mac-os` 的 `java-runtime-beta` 清单能**下载成功**未验证
+   (B2a 只查了 `all.json` 的键与两份文件清单,没有下载过任何运行时)。
+
+### 9. 遗留与风险
+
+1. **`export_launch_script` 传的是未合并的子版本 JSON**(第 3 节):导出的启动脚本可能选到 arm64 的 Java。
+   建议改法:像另外两个调用点那样先 `Manifest.ResolveInherits`(在 `BackendApi.cs` 内,本包红线不许改)。
+2. **`JavaForInstaller("forge-legacy")` 仍装 Adoptium 8**(`Java.cs:1382`):Apple 芯片上必失败
+   (Adoptium 没有 8 的 aarch64 包;Azul 有,见 B2a 的 Lead 补查)。本包范围没点名这个方法,**未改**。
+3. `JavaUsableFor` / `PickJavaForVersion` 每次调用都要探一次架构(读一次 `release`),没有缓存 ——
+   只有在 Apple 芯片上才发生,量级是「几个候选各读一个小文件」,本包没有加缓存(改动面最小优先)。
+4. `FilterForTarget` 在跨架构时会把**探测不出来**的候选(包括 `/usr/bin/java` 这类系统 Java)全部滤掉:
+   这是任务书裁决的保守做法,代价是 Apple 芯片跑老版本时更可能触发自动下载。
+5. `JavaArch` 的目录名推断只认启动器自己会创建的两种名字形态;用户自己放到别处、又没有 `release`
+   的 Java 一律探测不出来(按任务书「探测不出来按不可用」处理)。
+
 

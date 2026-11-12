@@ -610,3 +610,53 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
 - **不动 Java 侧**:`Java.cs`(平台键、Adoptium / Zulu / Microsoft 的默认架构、已装 Java 挑选)与
   `Terracotta.cs`(B2c)一律未改,即使它们也在读 `Utils.ARCH` —— 本包只做 natives / 规则 / classpath。
 
+## D-49 探测一个 Java 的架构:先读 `release` 的 `OS_ARCH`,再按启动器目录名推断,都不行按「不知道」处理
+
+- **做法**:`JavaArch.Detect(javaExe)` 只读 `<JAVA_HOME>/release` 一个文件(`JAVA_HOME` = 可执行文件
+  路径里 `bin` 的上一级,文本切分、不改分隔符),解析 `OS_ARCH=` 那一行:
+  `aarch64`/`arm64` → `arm64`,`x86_64`/`amd64`/`x64` → `x64`,`i386|i486|i586|i686|x86` → `x86`,
+  其它值 → 继续;读不到 / 抛异常 → 按目录名推断(只认 `<厂商>-<major>-<arch>` 三段名与 `…-mac-os[-arm64]`);
+  仍然不行 → `null`。冲突时以 `release` 为准。
+- **为什么不起进程**:`java -version` 只能给大版本,给不出架构;红线也禁止测试起进程。
+- **为什么只在 Apple 芯片上调用**:所有调用点(生产)先判 `IsAppleSilicon(os, processArch)`,
+  不是就直接返回原结果,连 `release` 都不碰 —— 「Windows / Linux / Intel Mac 行为不变」因此是结构性成立的。
+- **未验证**:`release` 里 `OS_ARCH` 的真实取值(本机没有 mac 的 JDK)。线上能核对的是**路径形态**:
+  B2e 核对了 Mojang 的 `mac-os-arm64/java-runtime-gamma` 与 `mac-os/jre-legacy` 两份文件清单里都有
+  `jre.bundle/Contents/Home/release`(`type=file`,1074 / 528 字节),与 Adoptium 包的布局一致。
+
+## D-50 「读取委托」不是「探测委托」:生产重载不带委托(测试抓到的真 bug)
+
+- **踩到的坑**:`Detect(javaExe, readTextOrNull)` 的可注入参数是**读一个文本文件**的委托。
+  第一版 `JavaUsableFor` / `PickJavaForVersion` 把它当成「探测委托」传了 `JavaArch.Detect`(公开入口),
+  结果是:探测路径里 `<home>/release` 的**内容**永远拿不到(拿到的是对 release 路径再探测一次的结论),
+  探测退化成「只看目录名」——在测试里表现为「`release` 明明写着 `x86_64`,却判成不可用」。
+- **改法**:给 `AcceptableForExecutable` / `FilterForTarget` 各加一个**不带委托**的生产重载
+  (`…(os, proc, target, exe)` / `…(javas, os, proc, target)`),生产代码只用这个;带委托的重载留给单测。
+- **教训**:可注入参数的语义要写进 XML 注释(已写),单测要用**真实文件**再钉一遍生产路径
+  (`B2eNonAppleNailsTests` 用 `TestHome.Root` 下的真实 `release` 文件)。
+
+## D-51 Apple 芯片上 `Installer._ensure_any_java()` 的兜底大版本:8 → 17
+
+- **用途先查清**(`Installer.cs:852-858` → `_run_processors`):这个 Java 只用来跑 Forge / NeoForge 安装器的
+  处理器 jar(`java -cp <libs> <Main-Class> …`,`Installer.cs:913` 的 `Utils.RunProcess`),挑选时
+  **完全不看版本**(第一个已装 → 第一个系统 Java → 都没有才装);所以它要的是「随便一个能跑的 Java」,
+  不是「Java 8」。
+- **证据**:Adoptium 对 mac `aarch64` **没有 Java 8 的包**(线上实测 0 个,见 B2a 第 1.3 节),
+  原样保留的话 Apple 芯片上这条兜底必然抛异常。
+- **改法**:`JavaArch.FallbackMajor(os, processArch)`:Apple 芯片 → `17`,其余平台 → `8`(原值)。
+  只改 `Installer.cs` 那一行的实参,平台键 / 其它逻辑未动。
+- **残留风险**(未验证,记在 PROGRESS.md):老 Forge 的处理器 jar 是 Java 8 字节码,用 Java 17 跑需要
+  这些 jar 不依赖 JDK 15+ 已删除的 API(如 Nashorn / JAXB);新 Forge(1.17+)的处理器反而要 Java 17。
+  两种情况下这条兜底都比「装不上 Java 8」好,但不能保证 100% 能跑。
+
+## D-52 发现但**没有改**的两处同类缺口(交 Lead 裁决)
+
+1. `JavaForInstaller("forge-legacy", …)`(`Java.cs:1382`)在找不到 Java 8 时仍 `InstallAdoptium(dm, 8L)`,
+   即 mac + `aarch64` → **必失败**(Adoptium 没有 8 的 aarch64 包;Azul 有,B2a 的 Lead 用 5 个只读请求证实过)。
+   本包的范围(任务书第 1–6 项)没有点名这个方法,**未改**。
+2. `BackendApi.export_launch_script`(`BackendApi.cs:2958`)把 `instance.VersionJson(text)`
+   —— **未合并的子版本 JSON**——传给 `ResolveLaunchJava`,而另外两个调用点(2933 / 3095)与
+   `McLauncher.BuildLaunchCommand`(578)传的都是 `Manifest.ResolveInherits(...)` 的结果。
+   带 `inheritsFrom` 的版本(Forge 等)子 JSON 里没有原生库,`LaunchArch.For` 会判成「没有 mac 原生库」
+   而得到 `arm64`,于是导出的启动脚本可能选到 arm64 的 Java。红线不许改 `BackendApi.cs`,**未改**。
+

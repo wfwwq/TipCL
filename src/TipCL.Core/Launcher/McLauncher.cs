@@ -60,14 +60,11 @@ public static class McLauncher
 		return Py.Str(Py.Or(resolved.Get("type"), "custom"));
 	}
 
-	private static List<string> _expand_args(object args_raw, PyDict placeholders, PyDict features)
-	{
-		return _expand_args(args_raw, placeholders, features, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION);
-	}
-
 	/// <summary>
 	/// B2b:可注入 os / arch / osVersion 的内部重载,让「给定一份 arguments.jvm 列表 + os / arch ->
-	/// 展开后的参数列表」能在 Windows 本机按 mac 的参数测试。逻辑与上面那个私有方法逐字相同。
+	/// 展开后的参数列表」能在 Windows 本机按 mac 的参数测试。
+	/// (B2e 删掉了原来那个转调本方法的私有 3 参重载:它已经没有调用方,留着会让人顺手调它、
+	/// 悄悄走回进程架构。逻辑本身一字未改。)
 	/// </summary>
 	internal static List<string> _expand_args(object args_raw, PyDict placeholders, PyDict features, string os, string arch, string osVersion)
 	{
@@ -153,7 +150,8 @@ public static class McLauncher
 			}
 		}
 		long? num2 = (Py.Truthy(java_exe) ? Java.GetJavaMajor(java_exe) : ((long?)null));
-		throw new LaunchError("Java " + ((num2.HasValue && num2.Value != 0L) ? num2.Value.ToString() : "?") + " 无法启动此版本（需要 Java " + num + "+）。Forge 1.17+ 会向 JVM 传入 --module-path，Java 8 会报 Unrecognized option: -p。请到「Java」页下载 Java 17，启动页 Java 选「自动选择」。");
+		// B2e:跨架构时在原文案后面追加 Rosetta 提示(原文案一字不改);非跨架构返回原字符串本身。
+		throw new LaunchError(JavaArch.WithRosettaNote("Java " + ((num2.HasValue && num2.Value != 0L) ? num2.Value.ToString() : "?") + " 无法启动此版本（需要 Java " + num + "+）。Forge 1.17+ 会向 JVM 传入 --module-path，Java 8 会报 Unrecognized option: -p。请到「Java」页下载 Java 17，启动页 Java 选「自动选择」。", Utils.OS_NAME, Utils.ARCH, LaunchArch.For(resolved)));
 	}
 
 	private static string Basename(string p)

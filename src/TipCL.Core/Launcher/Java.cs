@@ -365,7 +365,19 @@ public static class Java
 		long? javaMajor = GetJavaMajor(java_exe);
 		if (javaMajor.HasValue)
 		{
-			return javaMajor.Value >= num;
+			if (!(javaMajor.Value >= num))
+			{
+				return false;
+			}
+			// B2e:Apple 芯片上还要看这个 Java 的架构能不能跑「本次启动的目标架构」
+			// (跨架构时 arm64 的 Java 加载不了 x86_64 原生库)。
+			// 非 Apple 芯片(Windows / Linux / Intel Mac):先判一次、直接 true 返回,
+			// 与改动前的 `return javaMajor.Value >= num;` 逐项相同,不算目标架构、不读盘、不探测。
+			if (!JavaArch.IsAppleSilicon(Utils.OS_NAME, Utils.ARCH))
+			{
+				return true;
+			}
+			return JavaArch.AcceptableForExecutable(Utils.OS_NAME, Utils.ARCH, LaunchArch.For(version_json), Py.Str(java_exe));
 		}
 		return false;
 	}
@@ -373,6 +385,13 @@ public static class Java
 	public static string ResolveLaunchJava(PyDict version_json, object prefer = null, DownloadManager dm = null, Action<string, long, long> on_progress = null, Action<string> on_note = null)
 	{
 		long num = RequiredJavaMajor(version_json);
+		// B2e:跨架构(Apple 芯片上这个版本只有 x86_64 原生库)时发一条**无条件提示**:
+		// 不检测 Rosetta 是否已安装、不阻断启动;非 Apple 芯片上 IsCrossArch 恒为 false,一行日志都不多。
+		if (JavaArch.IsCrossArch(Utils.OS_NAME, Utils.ARCH, LaunchArch.For(version_json)))
+		{
+			on_note?.Invoke(JavaArch.RosettaNote);
+			Utils.log.Info("%s", JavaArch.RosettaNote);
+		}
 		string text = PickJavaForVersion(version_json, prefer);
 		if (text != null && !JavaUsableFor(version_json, text))
 		{
@@ -987,13 +1006,21 @@ public static class Java
 	public static string PickJavaForVersion(PyDict version_json, object prefer = null)
 	{
 		long required = RequiredJavaMajor(version_json);
+		// B2e:目标架构只在 Apple 芯片上才算(非 Apple 上它恒等于进程架构,懒得算也不读版本 JSON)。
+		string targetArch = Utils.ARCH;
+		if (JavaArch.IsAppleSilicon(Utils.OS_NAME, Utils.ARCH))
+		{
+			targetArch = LaunchArch.For(version_json);
+		}
 		if (Py.Truthy(prefer))
 		{
 			string text = _PreferToExe(prefer);
 			if (text != null)
 			{
 				long? javaMajor = GetJavaMajor(text);
-				if (javaMajor.HasValue && javaMajor.Value >= required)
+				// B2e:显式指定的 Java 也要过架构这一关(跨架构时它得是 x64 的);
+				// 非 Apple 芯片上 AcceptableForExecutable 直接 true,不探测。
+				if (javaMajor.HasValue && javaMajor.Value >= required && JavaArch.AcceptableForExecutable(Utils.OS_NAME, Utils.ARCH, targetArch, text))
 				{
 					return text;
 				}
@@ -1008,6 +1035,9 @@ public static class Java
 		return Match(FindSystemJavas());
 		string Match(List<object> javas)
 		{
+			// B2e:先把候选按目标架构过滤 / 排序(跨架构只留 x64;同架构 arm64 优先)。
+			// 非 Apple 芯片上这一步原样返回同一个列表,下面的筛选逻辑逐字未变。
+			javas = JavaArch.FilterForTarget(javas, Utils.OS_NAME, Utils.ARCH, targetArch);
 			List<PyDict> list = (from PyDict j in javas
 				where Py.Eq(j.Get("major"), required)
 				select j).ToList();
@@ -1165,11 +1195,21 @@ public static class Java
 
 	public static string InstallMojangRuntime(DownloadManager dm, string component, Action<string, long, long> on_progress = null, bool force = false)
 	{
+		return InstallMojangRuntime(dm, component, PLATFORM_KEY, on_progress, force);
+	}
+
+	/// <summary>
+	/// B2e:平台键可注入的重载(mac 上跨架构时要用 <c>mac-os</c> 而不是 <c>mac-os-arm64</c>:
+	/// 后者没有 <c>jre-legacy</c> / <c>java-runtime-beta</c>)。方法体与上面那个公开方法逐字相同,
+	/// 只是把原来 5 处读静态 <see cref="PLATFORM_KEY"/> 的地方换成 <paramref name="platformKey"/>。
+	/// </summary>
+	internal static string InstallMojangRuntime(DownloadManager dm, string component, string platformKey, Action<string, long, long> on_progress = null, bool force = false)
+	{
 		string java_dir = Config.CONFIG.java_dir;
-		PyDict pyDict = Py.DictOr(GetRuntimeManifest(dm)).Get(PLATFORM_KEY) as PyDict;
+		PyDict pyDict = Py.DictOr(GetRuntimeManifest(dm)).Get(platformKey) as PyDict;
 		if (!Py.Truthy(pyDict))
 		{
-			Utils.log.Warning("Mojang 运行时清单中没有平台 %s", PLATFORM_KEY);
+			Utils.log.Warning("Mojang 运行时清单中没有平台 %s", platformKey);
 			return null;
 		}
 		List<object> list = pyDict.Get(component) as List<object>;
@@ -1186,16 +1226,16 @@ public static class Java
 			return null;
 		}
 		string text = Py.Str(Py.DictOr(Py.Or(pyDict2.Get("version"), new PyDict())).Get("name", "?"));
-		string text2 = PPath.Join(java_dir, component + "-" + PLATFORM_KEY);
+		string text2 = PPath.Join(java_dir, component + "-" + platformKey);
 		string text3 = JavaRuntimeFiles.FindJavaUnderRoot(text2, Utils.IS_WINDOWS, Utils.IS_MAC);
 		if (text3 != null && !force)
 		{
 			return text3;
 		}
 		Utils.EnsureDir(java_dir);
-		_SafeUnlink(PPath.Join(java_dir, component + "-" + PLATFORM_KEY + ".zip"));
+		_SafeUnlink(PPath.Join(java_dir, component + "-" + platformKey + ".zip"));
 		on_progress?.Invoke("下载 Mojang Java 运行时 " + component + " (" + text + ")", 0L, 1L);
-		string text4 = PPath.Join(java_dir, component + "-" + PLATFORM_KEY + ".manifest.json");
+		string text4 = PPath.Join(java_dir, component + "-" + platformKey + ".manifest.json");
 		dm.Download(obj, text4, obj2 as string, (pyDict3.Get("size") == null) ? ((long?)null) : new long?(Py.Int(pyDict3.Get("size"))), force);
 		PyDict pyDict4 = Py.DictOr(Py.Or(Py.DictOr(Utils.ReadJson(text4)).Get("files"), new PyDict()));
 		if (pyDict4.Count == 0)
@@ -1349,11 +1389,15 @@ public static class Java
 		PyDict pyDict = Py.DictOr(Py.Or(version_json.Get("javaVersion"), new PyDict()));
 		object obj = pyDict.Get("component");
 		object o = Py.Or(pyDict.Get("majorVersion"), RequiredJavaMajor(version_json));
-		if (Py.Truthy(obj) && !Py.Eq(obj, "jre-legacy"))
+		// B2e:安装计划按「本次启动的目标架构」算 —— Mojang 的平台键与 Adoptium 的 arch
+		// 都要跟目标架构走(Apple 芯片上老版本退 x64 时 mac-os-arm64 没有 jre-legacy / java-runtime-beta)。
+		// 非 Apple 芯片上 PlanInstall 给出的就是改动前的值(静态 PLATFORM_KEY / legacy32 ? x86 : null)。
+		JavaArch.InstallPlan plan = JavaArch.PlanInstall(Py.Truthy(obj) ? Py.Str(obj) : null, Py.Int(o), Utils.OS_NAME, Utils.ARCH, LaunchArch.For(version_json), _IsLegacy32bit(version_json));
+		if (plan.TryMojang)
 		{
 			try
 			{
-				string text2 = InstallMojangRuntime(dm, Py.Str(obj), on_progress, force);
+				string text2 = InstallMojangRuntime(dm, Py.Str(obj), plan.MojangPlatformKey, on_progress, force);
 				if (text2 != null)
 				{
 					return text2;
@@ -1364,8 +1408,7 @@ public static class Java
 				Utils.log.Warning("Mojang 运行时下载失败，回退 Adoptium: %s", Py.ExcStr(e));
 			}
 		}
-		string arch = (_IsLegacy32bit(version_json) ? "x86" : null);
-		return InstallAdoptium(dm, Py.Int(o), on_progress, force, arch);
+		return InstallAdoptium(dm, Py.Int(o), on_progress, force, plan.AdoptiumArch);
 	}
 
 	public static string JavaForInstaller(string loader, DownloadManager dm, Action<string, long, long> on_progress = null, long minMajor = 17L)
