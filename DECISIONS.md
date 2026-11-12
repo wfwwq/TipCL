@@ -805,4 +805,82 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
 - **结论**:该目录属于本机另一个会话的临时探针工程,不是本包的越界产物;本包不改它、也不清理别人的临时文件。
   记在这里是为了避免后续验收把它算到 B2c3 头上(机器上同时有别的会话在跑,`%TEMP%` 总量不可比)。
 
+## D-62 tar 用 Ustar 而不是 Pax(确定性实测,改掉继承草稿的写法)
+
+- **背景**:任务书要求"同一份输入两次写出来的 tar 字节完全相同(压缩前)"。继承来的草稿(`b826a1b`)用的是
+  `TarWriter(..., TarEntryFormat.Pax)` + `PaxTarEntry`,mtime / uid / gid / uname / gname 都钉死了,看上去够了。
+- **实测(探针 `artifacts/tarprobe/`,不入库;`artifacts/tarprobe/run5.log`)**:
+  - `Pax`:同一份输入连写两次,**第一次差异在第 533 字节**,内容是扩展头里的
+    `atime=1794497685.6498163` vs `atime=1794497685.6521515`(`ctime` 同理)。也就是说 .NET 8 的
+    `PaxTarEntry` 每次写都会补 `atime` / `ctime` 两条记录,取值是**写的那一刻**;而 `PaxTarEntry` 的公开属性里
+    **没有** `Atime` / `Ctime`(反射确认:`ExtendedAttributes` / `DeviceMajor` / `DeviceMinor` / `GroupName` /
+    `UserName` / `Checksum` / `EntryType` / `Format` / `Gid` / `ModificationTime` / `Length` / `LinkName` /
+    `Mode` / `Name` / `Uid` / `DataStream`),没法钉死。后果:tar.gz 的 SHA256 不可复现。
+  - `Ustar` / `Gnu`:同样两次写,**逐字节相同**(`firstdiff=-1`)。
+- **决定**:`TarGz.WriteTar` 改用 `TarEntryFormat.Ustar` + `UstarTarEntry`,并把 `Mode` / `ModificationTime`(固定
+  2000-01-01T00:00:00Z)/ `Uid` / `Gid` / `UserName` / `GroupName` 显式写死。实测两次全流程运行的归档 SHA256
+  完全相同(`66802328...C06CDC`)。
+- **代价**:Ustar 的名字字段只有 100 字节。加 `TarGz.NameMaxBytes = 100` 与显式报错(不静默截断);本 bundle 实际
+  最长的名字是 `.../libSystem.Security.Cryptography.Native.OpenSsl.dylib`(83 字节),用例钉住。将来真出现超长名字,
+  打包会**响亮地失败**,那时可选换 `Gnu`(实测同样确定)或给条目改名。
+
+## D-63 暂存目录只清 `TipCL.app`,不删整个 `--stage` 目录
+
+- 继承草稿是 `Directory.Delete(options.StageDir, recursive: true)`:`--stage` 是命令行参数,万一指到仓库根或用户目录,
+  递归删整棵树的后果太大(本机也不能保证调用方永远传对)。
+- 改成只删 `Path.Combine(stage, "TipCL.app")`:tar 里的条目**全部**来自 `TipCL.app/` 之下(六个固定目录 + 两个架构目录
+  的实际文件 + Info.plist / 启动脚本 / icns),所以清掉这棵子树就足以保证同一份输入两次运行结果一致。
+- 顺带:`staged` 那行现在报出跳过的 `.pdb` 数(实际 2 + 2),免得"没把 .pdb 打进包"只是口头承诺。
+
+## D-64 6 个 universal(fat)dylib 不在 Mach-O 校验与代码签名报告内(如实划边界)
+
+- 实跑发现:打包器只认出 **30** 个 thin 64 位 Mach-O 文件(2 apphost + 2 createdump + 26 thin dylib),
+  而 `.dylib` 一共 **32** 个(每架构 16)。差的 6 个(每架构 3 个)是
+  `libSkiaSharp.dylib` / `libHarfBuzzSharp.dylib` / `libAvaloniaNative.dylib`。
+- **原因(读字节实测)**:这 3 个文件在两个架构目录里的头 4 字节都是 `CA FE BA BE`、偏移 4 的 `nfat_arch = 2`,
+  即 **universal(fat)Mach-O**,不是任务书「File-format facts」里定义的 64 位小端单架构 Mach-O。
+- **决定**:**不**扩展解析器去读 fat 头。理由:任务书没给 fat 头的字段定义,按"不许凭记忆写 mac 事实"的红线,
+  写一个我无法用真实产物核对的解析器风险更大。于是:
+  - 这 6 个文件的 `LC_CODE_SIGNATURE` **未验证**,PROGRESS.md 的 B3 小节与最终回报里都写明;
+  - 它们的权限位**不受影响**:以 `.dylib` 结尾 → 一律 0755(校验里 `32 dylibs 0755` 就是 16 × 2),任务书要求满足。
+- 留给后续(需要真机或 mac 产物才能做):如果要覆盖它们,得先有 fat 头的字段定义与一份真实产物做对照。
+
+## D-65 `CFBundleIdentifier` 用占位值 `com.tipcl.launcher`,用户可改
+
+- 任务书(Lead 裁决)给的占位值,写在 [InfoPlist.cs](tools/TipCL.Packager/InfoPlist.cs) 的 `BundleIdentifier` 常量里,
+  唯一一处,`Info.plist` 由它生成,单测与打包器校验共用同一份。
+- **这是占位值**:用户/以后发版时想换成自己的反向域名(例如 `com.<自己>.tipcl`),只需改这一个常量并重新打包;
+  本仓库不申请、不校验任何 bundle id 的唯一性,也没有做 `codesign`,所以现在这个值只是 plist 里的一个字符串。
+- 其余键的值同理集中在 `InfoPlist.ForTipCL()`:名字/显示名/版本取 Core 的 `AppInfo`(不另抄一份),
+  `LSMinimumSystemVersion = 10.15` / `NSPrincipalClass = NSApplication` / `CFBundlePackageType = APPL` 等来自任务书。
+
+## D-66 icns 的 128 那一张由 256 缩小,不去取源 .ico 里原生的 128 PNG
+
+- 取证:`packaging\TipCL.ico`(94953 字节)里 7 个条目 16/24/32/48/64/128/**256**,全是 PNG;
+  SkiaSharp 2.88.9 的 ICO 解码器给的是最大的那张(256×256,Bgra8888/Unpremul)。
+- 任务书要求"只产出不需要把源图放大到超过最大边长的尺寸",于是 `SelectSlots(256)` → `ic07/ic08/ic13`(不出 `ic09`)。
+  实现上 `ic08` / `ic13` 直接用解码出来的 256 重编码,`ic07`(128)是**从 256 用 `SKFilterQuality.High` 缩下来的**,
+  **没有**去取 .ico 里那张原生 128 PNG。
+- 理由:保持"一条数据流、一套缩放规则"更好核;任务书也没要求用原生 128。代价:128 那一张理论上不如原生 128 锐利
+  (19655 字节 vs 原生 21832 字节,肉眼差别未验证——本机没有 Mac,看不到 Finder/Dock 的实际渲染)。
+  若以后有人要在意这一点,只需在 `IconBuilder.Build` 里改成"源里就有目标尺寸时直接取那一条",`IcnsWriter.SelectSlots`
+  的判据不用动。
+
+## D-67 `package.ps1` 的四处取舍(都已在实跑里验证)
+
+1. **`-NuGetSource` 只透传给两条 `dotnet publish`**(`--source <url>`),不动机器上的 NuGet 配置、仓库里也不加
+   `NuGet.config`:本机 `huaweicloud` 镜像超时(每次 restore 20 s + `NU1900` 噪声),
+   而 `https://api.nuget.org/v3/index.json` 正常。打包器自己那一步走 `dotnet run`,没有 `--source` 选项,
+   所以它的日志里仍会出现 `NU1900`(环境噪声,不算新警告)。
+2. **脚本存成 UTF-8 with BOM**,与 [tools/build.ps1](tools/build.ps1)(无 BOM)不同:build.ps1 的非 ASCII 只出现在
+   **注释**里所以侥幸没坏,本脚本注释更多且更长,按 D-12 补 BOM 让 Windows PowerShell 5.1 正确读中文注释。
+   脚本的**字符串字面量与输出仍全是 ASCII**(D-08):打包器打印的也是 ASCII,路径一律相对仓库根。
+3. **先预热一次 publish**:本机 NuGet 缓存里原本没有 mac 运行时包,第一次 self-contained publish 要下载
+   (`microsoft.netcore.app.runtime/host.osx-{arm64,x64}` 与 `microsoft.aspnetcore.app.runtime.osx-{arm64,x64}`,都是 8.0.33)。
+   为避免"脚本超时/被误判卡死",开工时先用**同一对 publish 命令**预热缓存(日志 `artifacts/package-logs/warm-publish-*.log`),
+   随后脚本那两次全流程运行都是缓存命中(每步仍然真跑 publish,只是不再下载)。两次全流程分别是 126.7 s / 111.8 s。
+4. **每步完整输出进 `artifacts\package-logs\*.log`,控制台只留一行状态 + 打包器的校验清单**:publish 的日志几十万行,
+   倒到控制台既看不清也会把上下文撑爆(GOAL 第 5 节的上下文纪律)。`stderr` 并进管道时临时把
+   `$ErrorActionPreference` 切回 `Continue`,免得"有警告的构建"被 PowerShell 5.1 当成终止性错误。
+
 

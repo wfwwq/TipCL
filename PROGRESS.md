@@ -22,7 +22,7 @@
 | B2c3 | 其余平台差异(二):Updater 仅提示 / Shortcut / 导出启动脚本(含 `BackendApi.cs:2958` 传未合并 JSON) | ✅ 完成(见下;**新增 101 条用例,总数 1579 → 1680,两条通道都 1680/1680 全绿**;只改了 4 个复制文件:Updater.cs / Shortcut.cs / VersionOps.cs / BackendApi.cs 仅 `export_launch_script` 两行;新建 `Launcher\PosixShell.cs`;`Updater.Check` 增加唯一被授权的增量键 `can_self_update`;mac 的 `.command` 改走 POSIX 单引号并补可执行位) |
 | B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | ✅ 完成(见下;**新增 132 条用例,总数 1038 → 1170,两条通道都 1170/1170 全绿**;新建 `Launcher\LaunchArch.cs`,7 处调用点改读目标架构,5 个复制文件加可注入重载 / 抽取纯函数;Java 侧留给 B2e) |
 | B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | ✅ 完成(见下;**新增 235 条用例,总数 1170 → 1405,两条通道都 1405/1405 全绿**;新建 `Launcher\JavaArch.cs`,`Java.cs` / `McLauncher.cs` / `Installer.cs` 各改一处;写测试时抓到并修掉一个「读取委托 / 探测委托」接错的真 bug,见 D-50;两处同类缺口只记录未改,见 D-52) |
-| B3 | 打包 | 未开始 |
+| B3 | 打包 | ✅ 完成(见下;**新增 116 条用例,总数 1680 → 1796,两条通道都 1796/1796 全绿**;`tools\package.ps1` + 打包器实跑通过:443 条目、85,812,352 字节 tar.gz、两次运行 SHA256 完全一致;审草稿时改了两处 —— tar 从 Pax 换 Ustar(确定性)、暂存目录只删 `TipCL.app`) |
 | C1-C8 | 界面 | 未开始 |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
@@ -2749,6 +2749,193 @@ Lead 的说明:
 - 留给界面阶段:`can_self_update` 为 false 时界面要把「立即更新」换成「打开下载页」;下载页地址清单里目前只有更新包的 `url`,没有单独的页面地址,C 阶段接设置页时再定。
 
 B2 阶段(mac 逻辑核对)到此全部完成:B2a、B2b、B2d、B2e、B2c1、B2c2、B2c3。
+
+---
+
+## B3 打包
+
+### 做了什么
+
+1. **审读并修好了继承来的打包器草稿**。`b826a1b`("B3 WIP checkpoint")里那 10 个文件是上一个被中断的子代理留下的,**没评审过、没跑过**;
+   本包逐行对照任务书的「Bundle layout」「Tar entry modes」「Verification performed by the packager」三节读完,改动**只有两处**(见下),其余原样保留。
+2. **新增 [tools/package.ps1](tools/package.ps1)**:`dotnet build-server shutdown` → 两条 self-contained publish(osx-arm64 / osx-x64)→ 打包器组装 + 写归档 + 自校验。
+   PowerShell 5.1 兼容,控制台输出全 ASCII(D-08),本脚本自身存成 **UTF-8 with BOM**(`tools/build.ps1` 是无 BOM 的,内容只有中文**注释**所以侥幸没坏;
+   本脚本注释更多,按 D-12 补上 BOM,避免 5.1 按 ANSI 读)。全步输出进 `artifacts\package-logs\*.log`,控制台只留每步一行状态 + 打包器校验清单。
+3. **真实发布 + 真实打包**(两次),产出 `dist\TipCL-macos-universal.tar.gz`,两次 SHA256 完全相同(见下表)。
+4. **`.ico` 取证**(读字节 + SkiaSharp 实测),`icns` 按取证结论产出 `ic07/ic08/ic13`。
+5. **新增 116 条 B3 用例**(7 个文件),两条测试通道都 1796/1796 全绿。
+
+### 关键文件
+
+| 文件 | 说明 |
+|---|---|
+| [tools/package.ps1](tools/package.ps1) | 本包新增:发布 → 组装 → 打包 → 校验的入口(参数 `-NuGetSource`) |
+| [tools/TipCL.Packager/TarGz.cs](tools/TipCL.Packager/TarGz.cs) | 本包修改:Pax → **Ustar** + 名字长度上限显式报错 |
+| [tools/TipCL.Packager/Program.cs](tools/TipCL.Packager/Program.cs) | 本包修改:只删 `TipCL.app` 子树;补报跳过的 `.pdb` 数 |
+| [tools/TipCL.Packager/BundleLayout.cs](tools/TipCL.Packager/BundleLayout.cs) / [InfoPlist.cs](tools/TipCL.Packager/InfoPlist.cs) / [LauncherScript.cs](tools/TipCL.Packager/LauncherScript.cs) / [IcnsWriter.cs](tools/TipCL.Packager/IcnsWriter.cs) / [IconBuilder.cs](tools/TipCL.Packager/IconBuilder.cs) / [MachO.cs](tools/TipCL.Packager/MachO.cs) / [BundleVerifier.cs](tools/TipCL.Packager/BundleVerifier.cs) | 草稿原有,本包逐项核对后未改 |
+| [tests/TipCL.Tests/B3PackagerFixtures.cs](tests/TipCL.Tests/B3PackagerFixtures.cs) | 本包新增:合成 Mach-O / 假 bundle / 校验助手(临时文件全部落在 `TestHome.Root` 之下) |
+| [tests/TipCL.Tests/B3InfoPlistTests.cs](tests/TipCL.Tests/B3InfoPlistTests.cs) / [B3LauncherScriptTests.cs](tests/TipCL.Tests/B3LauncherScriptTests.cs) / [B3IcnsWriterTests.cs](tests/TipCL.Tests/B3IcnsWriterTests.cs) / [B3MachOTests.cs](tests/TipCL.Tests/B3MachOTests.cs) / [B3ModeClassificationTests.cs](tests/TipCL.Tests/B3ModeClassificationTests.cs) / [B3TarGzTests.cs](tests/TipCL.Tests/B3TarGzTests.cs) | 本包新增:116 条用例 |
+
+产物目录都在 `.gitignore` 里:`artifacts\publish\osx-*`、`artifacts\package\TipCL.app`、`artifacts\package-logs\`、`dist\TipCL-macos-universal.tar.gz`。
+
+### 继承草稿只改了两处
+
+1. **tar 格式 `Pax` → `Ustar`**([TarGz.cs](tools/TipCL.Packager/TarGz.cs))。这是本包实测发现的**真问题**,不是口味问题:
+   .NET 8 的 `PaxTarEntry` 每次写都会补 `atime` / `ctime` 两条扩展记录,而**取值是写的那一刻**(`PaxTarEntry` 没有公开的 `Atime` / `Ctime` 可以钉死),
+   于是同一份输入两次写出来的字节不同(探针实测第一次差在第 533 字节:`atime=1794497685.6498163` vs `atime=1794497685.6521515`),`tar.gz` 的 SHA256 也就不可复现。
+   Ustar 没有扩展头,同一份输入两次写出**逐字节相同**(探针实测;Gnu 也相同,选 Ustar 是因为它是更基础、更通用的形态)。
+   探针在 `artifacts/tarprobe/`(不入库),结论记入 DECISIONS.md D-62。
+   代价:Ustar 名字字段只有 100 字节 → 加 `TarGz.NameMaxBytes` 上限并在超限时显式抛错;本 bundle 实际最长的名字是
+   `TipCL.app/Contents/MacOS/arm64/libSystem.Security.Cryptography.Native.OpenSsl.dylib`(83 字节),有富余,已用用例钉住。
+2. **暂存目录只清 `TipCL.app`**([Program.cs](tools/TipCL.Packager/Program.cs))。草稿是 `Directory.Delete(stage, recursive: true)`;
+   `--stage` 是外部传进来的参数,万一指到仓库根就删掉一整棵树。tar 条目全部来自 `TipCL.app/` 之下,清掉它就够保证两次运行一致,所以改成只删子树。
+   顺带在 staged 那行补报跳过的 `.pdb` 数(实际是 2 + 2),让"没把 .pdb 打进包里"这件事在日志里看得见。
+
+核对过、**没有改**的点(逐项对照任务书):六个必填目录 + 9 个必填文件;`Info.plist` 的 12 个键与值(名字/显示名/版本取 Core 的 `AppInfo`,不另抄);
+启动脚本 6 行逐字相同(LF、无 BOM、结尾一个换行、150 字节);icns 只出 `ic07/ic08/ic13`、不出 `ic09`;目录 0755、数据 0644、三个可执行 0755;
+Mach-O 头的字段偏移与 `cmd == 0x1D` 判据;校验清单 13 项 + `OK` / `FAIL` 行格式;退出码 0/1/2;控制台只输出 ASCII。
+
+### `.ico` 取证(读字节 + 实测,不是凭记忆)
+
+`packaging\TipCL.ico` = **94953 字节**(Windows 图标的字节级副本)。按 ICO 目录结构读出来(探针 `artifacts/iconprobe/`,不入库):
+
+| 条目 | 尺寸 | 位深 | 数据长度 | 偏移 | 数据头 |
+|---|---|---|---|---|---|
+| 0 | 16×16 | 32 | 841 | 118 | `PNG` |
+| 1 | 24×24 | 32 | 1537 | 959 | `PNG` |
+| 2 | 32×32 | 32 | 2452 | 2496 | `PNG` |
+| 3 | 48×48 | 32 | 4613 | 4948 | `PNG` |
+| 4 | 64×64 | 32 | 7416 | 9561 | `PNG` |
+| 5 | 128×128 | 32 | 21832 | 16977 | `PNG` |
+| 6 | 256×256 | 32 | 56144 | 38809 | `PNG` |
+
+SkiaSharp 2.88.9 在这台机器上**认得 .ico**(`encodedFormat=Ico`),`SKCodec.Create` 给的是**最大的那张**:`256×256`、`Bgra8888/Unpremul`,
+`GetPixels` 返回 `Success`;`ScalePixels(High)` 缩到 128 返回 `true`。据此产出 `ic07(128, 由 256 缩下来)`、`ic08(256, 原尺寸重编码)`、`ic13(256, 同 ic08)`:
+`TipCL.icns` = **133917 字节**,三个元素负载 19655 / 57115 / 57115(`ic08` 与 `ic13` 同一份 256 PNG;128 的那张走 256→128 缩小,不是去取源文件里那张原生 128 PNG,见 D-66)。
+
+### 代码签名结论(只报告,不判失败)
+
+打包器对bundle 里每个能解析成 **thin 64 位 Mach-O** 的文件报告 `LC_CODE_SIGNATURE`:实跑结果 **30 个,带签名的 30 个,不带的 0 个**
+(2 个 apphost + 2 个 `createdump` + 26 个 thin dylib,arm64/x64 各一半)。**没有任何一个 Mach-O 文件缺签名命令。**
+
+同时如实记录一个**解析边界**:`libSkiaSharp.dylib` / `libHarfBuzzSharp.dylib` / `libAvaloniaNative.dylib` 这 3 个 × 2 架构 = **6 个 dylib 是 universal(fat)Mach-O**
+(头 4 字节 `CA FE BA BE`,偏移 4 的 `nfat_arch` = 2),任务书给的 64 位小端单架构定义覆盖不到它们,所以这 6 个**没有**出现在上面的 30 里,
+它们的 `LC_CODE_SIGNATURE` **未验证**。这不影响权限位:它们以 `.dylib` 结尾,按后缀规则一律 0755(校验里 `32 dylibs 0755` 就是 16 × 2)。
+
+### 真实打包运行(两次,都是 `tools\package.ps1` 全流程)
+
+命令:`powershell -NoProfile -ExecutionPolicy Bypass -File tools\package.ps1 -NuGetSource https://api.nuget.org/v3/index.json`
+
+| 项 | 第 1 次 | 第 2 次 |
+|---|---|---|
+| 退出码 | **0**(126.7 s) | **0**(111.8 s) |
+| 每架构 publish 文件数 | osx-arm64 **219** / osx-x64 **219** | 同 |
+| 跳过的 `.pdb` | 2 + 2 | 同 |
+| 进 bundle 的文件数 | arm64 217 / x64 217 | 同 |
+| 归档条目数 | **443**(6 目录 + 434 文件 + Info.plist + 启动脚本 + icns) | 同 |
+| 未压缩总量 | **210,954,125 字节** | 同 |
+| `dist\TipCL-macos-universal.tar.gz` | **85,812,352 字节** | 同 |
+| SHA256 | `66802328B2B2279E4CADB13362A0705899C54070E3F2DB43B097E5F538C06CDC` | **完全相同** |
+
+NuGet 因为缓存里本来没有 mac 运行时包,第一次 self-contained publish 要下载;本机实测下到 NuGet 缓存的 6 个包(都是 **8.0.33**,与共享运行时版本一致):
+
+| 包 | 版本 | 缓存目录创建时间 |
+|---|---|---|
+| `microsoft.netcore.app.runtime.osx-arm64` | 8.0.33 | 23:20:30 |
+| `microsoft.netcore.app.host.osx-arm64` | 8.0.33 | 23:20:30 |
+| `microsoft.aspnetcore.app.runtime.osx-arm64` | 8.0.33 | 23:20:30 |
+| `microsoft.netcore.app.runtime.osx-x64` | 8.0.33 | 23:22:11 |
+| `microsoft.netcore.app.host.osx-x64` | 8.0.33 | 23:22:11 |
+| `microsoft.aspnetcore.app.runtime.osx-x64` | 8.0.33 | 23:22:11 |
+
+这 6 个包是开工时先用同一对 publish 命令**预热**时下下来的(日志 `artifacts\package-logs\warm-publish-*.log`),
+随后脚本那两次全流程跑的是缓存命中(每步仍然真跑了 publish,只是不再下载)。机器上的 NuGet 配置一个字没改,仓库里也没有加 `NuGet.config`;
+`-NuGetSource` 只是把 `--source` 透传给两条 publish 命令(见 D-67)。
+
+打包器校验清单(第 2 次运行逐行原样,13 项):
+
+```
+    OK    entry names -- 443 entries, all under TipCL.app/ with '/' separators and no '..'
+    OK    required entries -- 9 files + 6 directories present
+    OK    directory modes (0755) -- 6 directories all 0755
+    OK    launcher + apphost modes (0755) -- 3 executables all 0755
+    OK    data modes (Info.plist + icns 0644, dylibs 0755) -- 2 data files 0644, 32 dylibs 0755
+    OK    no group/other write bits -- all 443 entries clean
+    OK    apphost arm64 (TipCL.app/Contents/MacOS/arm64/TipCL) -- cputype=0x0100000C cpusubtype=0x00000000 filetype=2 ncmds=18 sizeofcmds=1752
+    OK    apphost x86_64 (TipCL.app/Contents/MacOS/x64/TipCL) -- cputype=0x01000007 cpusubtype=0x00000003 filetype=2 ncmds=18 sizeofcmds=1752
+    OK    Info.plist keys -- 12 keys match
+    OK    TipCL.icns structure -- magic ok, total=133917 bytes, elements: ic07(19663) ic08(57123) ic13(57123)
+    OK    launcher script bytes -- 150 bytes, LF only, no BOM, byte-identical to the expected text
+    OK    no .pdb / no .exe entries -- 0 found
+    OK  * code-signature report -- mach-o files=30 with LC_CODE_SIGNATURE=30 without=0
+```
+
+(校验读的是**刚写进磁盘、再从磁盘读回来**的归档,不是内存里那份;最后一行 `OK *` 星号表示只报告、不算失败。)
+
+### 验证命令与实际结果
+
+| 命令 | 结果 |
+|---|---|
+| `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 错误**;警告合计 8 = `NU1900` ×7(镜像不可达的环境噪声)+ `SYSLIB0014` ×1(`src\TipCL.Core\Launcher\Sync\PhoneClient.cs(116,38)`,本包未动) |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 **0**,通过 **1796** / 失败 0 / 跳过 0 |
+| `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 **0**,总计 **1796**,通过 1796 / 失败 0 / 跳过 0 / **不支持 0** |
+| `cmd /c "src\TipCL.App\bin\Release\net8.0\TipCL.exe --smoke --theme light --out artifacts\smoke-light.png"` / `--theme dark ...` | 退出码 **0 / 0**,**3739 / 3751 字节**,SHA256 `17F3CD87...017BF` / `374716FF...38144`,与 A1 起逐次相同(两次 `-r osx-*` publish **没有**动到 `bin\Release\net8.0\TipCL.exe`) |
+| `%LOCALAPPDATA%\TipCL` 开工时 / 全部跑完 | **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,前后一致 |
+| 残留进程 `testhost` / `TipCL` / `java` / `javaw` / `adb` / `dotnet` | 全 **0** |
+| `%TEMP%` 下 `tipcl*` 目录名字集合 | 现在 **87** 个,与 B2c3 的开工快照(86)相比多出来的只有 `tipcl-probe`(22:28:19 创建,早于本包开工的 23:19,属 D-61 记的另一个会话的探针,**不是本包产物**);本包窗口内**没有新名字** |
+| 真实桌面条目数(只读计数) | **14**,与 Lead 记录一致,本包没有写任何东西进去 |
+| `src\TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 总数 **248** / 一致 **216** / 有改动 **22** / Windows 源里没有对应文件 **10** —— 与 Lead 的上一组数字完全一致(本包没碰 Core) |
+| `git status --short`(提交前) | 只有本包自己新增/修改的源码与文档,没有 `bin` / `obj` / `artifacts` / `dist` / PNG / `test-home` |
+
+### 新增测试(116 条,1680 → 1796)
+
+| 文件 | 条数 | 覆盖 |
+|---|---|---|
+| B3InfoPlistTests.cs | 19 | 12 个键与值、`AppInfo` 取值、声明与 DOCTYPE、`true/` 元素、五个 XML 字符转义、XML 往返、坏文档报错 |
+| B3LauncherScriptTests.cs | 8 | 逐字文本、LF/无 BOM/结尾换行、六行结构、两条分支、纯 ASCII |
+| B3IcnsWriterTests.cs | 20 | magic 与大端总长、元素类型/长度、空元素表、四种不自洽长度、`SelectSlots` 512/256/128/64、**真实 .ico 的 7 个条目与 256 解码**、重编码确定性 |
+| B3MachOTests.cs | 20 | 合成 arm64 / x86_64 头、有/无 `0x1D`、非 Mach-O、null、字节不足、`ncmds` 超出、`cmdsize=0` 不空转、只有 filetype 2 算可执行、未知 cputype 回退 |
+| B3ModeClassificationTests.cs | 18 | 启动脚本与两个 apphost、`.dylib`、`.dll`、`.json`、别名的 Mach-O 可执行、fat 名不符的后缀、目录、`0022` 掩码、必填条目清单 |
+| B3TarGzTests.cs | 29 | 往返名字/权限、顶层条目、目录 0755、序数排序、**两次写出的 tar / tar.gz / 落盘归档逐字节相同**、gzip MTIME 为 0、名字超 100 字节显式报错、校验器全过 + 8 种「故意写坏」必失败、代码签名计数与清单 |
+| B3PackagerFixtures.cs | 2(助手) | 合成 Mach-O / 假 bundle / 仓库文件定位;临时文件全在 `TestHome.Root` 之下 |
+
+用例里的期望值都在注释里标了来源:**任务书**(字段定义、权限位、文本)还是**实测**(`.ico` 的 7 个条目、SkiaSharp 解 256、
+最长文件名 83 字节、apphost 的 `sizeofcmds=1752`)。测试不起进程、不联网、不跑 `dotnet publish`、不调 `Program.Main`。
+
+### 未验证(本机是 Windows,没有 Mac)
+
+1. **`.app` 在 Mac 上到底能不能起来**:双击、Gatekeeper 拦不拦、`xattr -cr` 之后能不能运行 —— **全未验证**。
+2. 解包后**权限位是否真的保留**(`tar -xzf` 的行为、Finder 解压的行为):本包只验到**归档里**的 mode 位,没验到磁盘上的。
+3. `TipCL.icns` 在 Finder / Dock 里**画出来什么样**:只验了结构(magic / 总长 / 元素类型与长度 / PNG 签名),没验渲染。
+4. 6 个 universal dylib 的 `LC_CODE_SIGNATURE`(解析器只认 thin Mach-O,见上)。
+5. `LSMinimumSystemVersion = 10.15`、`NSPrincipalClass = NSApplication` 这些键在真机上够不够:值来自任务书,没有对照 Apple 文档独立核实。
+6. `uname -m` 在 Intel Mac 上返回 `x86_64` 是任务书给的事实;本机没有 Intel Mac 可验,启动脚本只按「等于 `arm64` 走 arm64,其余走 x64」写。
+7. 未签名产物在 macOS 上的**长期**行为(每次打开都要 `xattr -cr` 还是只需一次)、以及 macOS 版本差异,没验。
+8. Avalonia/osx 的运行期行为(窗口、字体、Keychain)属 B1/C 阶段,不在 B3 范围。
+
+### 遗留与风险
+
+1. **归档里没有任何签名步骤**(任务书不许签名):分发时必须在 README 里写 `xattr -cr TipCL.app`,这是 D2 文档包的事。
+2. `dist\TipCL-macos-universal.tar.gz` 在 `.gitignore` 里,**不入库**;要让别人拿到,得另行拷贝(本包不 push、不发 release)。
+3. 两个架构目录里各自带了一份**同样的 universal dylib**(Skia/HarfBuzz/AvaloniaNative 3 个 × 2 架构 = 6 个文件被装了两遍),
+   归档因此比"必要"大约多出几十 MB。这是"两个目录各自放完整 publish 输出"这个布局的直接结果,不改布局就省不掉;记在这里当优化项。
+4. `artifacts\package\TipCL.app` 是暂存树(打包后留在磁盘上,已在 `.gitignore` 里),不影响归档内容。
+5. `TipCL.Mac.sln` 第一行的 **UTF-8 BOM 在上一个 WIP 提交里丢了**(现在头两个字节是 `0D 0A`):按要求**保持原样不动**,只在这里记一笔;
+   它不影响 `dotnet build` / `dotnet test`(实测两条通道都正常)。
+6. 打包器用 Ustar:将来若 bundle 里出现**超过 100 字节**的条目名,打包会显式失败(不会静默截断),到时候要么改名要么换回带扩展头的格式。
+7. 本包没有改 `src\TipCL.Core\` 下任何文件、没有改 `TipCL.App.csproj`(publish 不需要额外属性)、没有改 TFM、没有扩 `NoWarn`、没有新增警告。
+8. `package.ps1` 只对 `publish` 传 `--source`;`dotnet run`(打包器自己)那一步走缓存 + 机器上的 NuGet 配置,所以它的日志里会出现 `NU1900` 噪声警告。
+
+### 需要有人在 Mac 上核对的事(B3 交出去的清单)
+
+1. `tar -xzf TipCL-macos-universal.tar.gz` 之后 `ls -l TipCL.app/Contents/MacOS/`:目录是 `drwxr-xr-x`,`TipCL` / `arm64/TipCL` / `x64/TipCL` 是 `-rwxr-xr-x`,
+   每个 dylib 也应是 `-rwxr-xr-x`,`.dll` / `.json` / `Info.plist` / `TipCL.icns` 应是 `-rw-r--r--`。
+2. `xattr -cr TipCL.app` 再双击:Apple 芯片上应跑 `Contents/MacOS/arm64/TipCL`,Intel 上应跑 `x64/TipCL`(可用 `ps -ax | grep TipCL` 看路径确认)。
+3. 图标在 Finder / Dock 里是否正常显示(128 / 256 两个尺寸够不够看)。
+4. Gatekeeper 具体拦成什么样(是"来自身份不明的开发者"还是"已损坏"),把原话记下来。
+5. 归档里**没有任何 Mach-O 签名命令的缺失项**,但这不等于 macOS 认这份产物;真机结论以实际启动为准。
+6. 路径里带中文/Finder 中文名时能不能正常启动(本机路径 `D:\项目\tipcl\mac` 只有 Windows 侧验过)。
+7. B3 产出的界面还是 A1 的占位窗口:**"能起来"不等于功能可用**,功能可用要等 C 阶段。
 
 
 
