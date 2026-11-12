@@ -1048,3 +1048,48 @@ SkiaSharp 2.88.9 的 `SKCodec.Info.ColorType` 恒为 `Bgra8888`、JPEG 的 EXIF 
 - `MacKeychainSecretStore` 不做 Windows 的「`username@service` 复合名回退」;mac 上没有旧数据要兼容。
 - 本包**没有**做 `ShellOpen` / 打开浏览器 / 去提权 / `NodeRuntime` darwin 那些运行时差异(属 A22 与 B1b / B2)。
 - 工具陷阱记录:D-36(PowerShell 5.1 的 `Get-Content | Set-Content` 改坏中文,两个新建测试文件已重写)。
+
+### Lead 验收(复跑于 2026-11-12 09:10,结论落盘于 18:30)
+
+结论:**B1a 通过,带一条必须在 B1b 修的缺陷**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src/TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 有对应文件的 238 个里 234 一致、4 个有改动(A5 的 3 个 + 本包 `Plugins\SecretStore.cs`);无对应文件的 4 个全是本包新建的平台实现 |
+| `git diff b57f0c1..HEAD -- src/TipCL.Core/Plugins/SecretStore.cs`(Lead 逐行读过) | +115 / −3:新增 `TCS2` 分支、主密钥、`internal` 注入构造;公开构造签名未变,Windows 仍写 `TCS1`,无凭据库仍写 `TCS0` |
+| `MacKeychainSecretStore.cs`(Lead 全文读过) | 走 `/usr/bin/security` 绝对路径,参数用 `ArgumentList` 不经 shell;写入值恒为 `b64:` 前缀;异常消息不带密码 |
+| `PlatformBootstrap.cs` + `Program.cs` | 只赋值;凭据库仅 mac 接 Keychain,其它平台为 null |
+| 仓库内是否出现 `Cred*` API / `WinCredSecretStore` 实现 | 没有(只在注释里提到名字) |
+| SkiaSharp 解析版本(App / Core / Tests) | 三处都是 2.88.9 |
+| WebP 夹具 | 与 Windows 测试目录里的源文件 SHA256 一致 |
+| 本次提交改动的文本文件做严格 UTF-8 解码 + 乱码扫描 | 全部合法,没有 U+FFFD 或连串问号(D-36 的损坏确实已修) |
+| 红线文件 `AssemblyInfo.cs`、`TestHomeIsolation.cs`、`Program.cs`(测试)、`.gitattributes` | 未改 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告 = CA1416 ×7 + SYSLIB0014 ×1,无新增 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 766 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 766 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试前后,以及 18:24 再量) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录数(Lead 复跑前后) | 78 → 78 |
+| 残留进程 `testhost` / `java` / `adb` / `TipCL` / `security` | 0 个 |
+| B1a 测试扫描 | 没有起进程、联网、改环境变量、实例化后端;改 `PlatformServices` 的用例都在 `finally` 里恢复;唯一一处 `new MacKeychainSecretStore()`(默认运行器)只构造不调用 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+**缺陷(Lead 读代码发现,根因在 Lead 的任务书,不是子代理没照做)**:
+
+- `SecretStore.ReadAll()` 的 `catch (Exception)` 把**凭据库调用失败**也当成「文件读不出来」返回空字典。
+  `Set(name, value)` 的流程是先 `ReadAll()` 再 `WriteAll()`:如果读的那一次 Keychain 调用失败(钥匙串被锁、用户在授权弹窗点了拒绝),
+  而紧接着写的那一次成功,文件会被**只含新条目的内容覆盖**,该插件原有的其它密钥全部丢失。
+  同理 `Get()` 在 Keychain 失败时返回 null,调用方分不清「没存过」和「暂时读不到」。
+- 任务书只规定了「写入时 Keychain 失败不许降级」,没规定读取。B1b 修:`TCS2` 文件在取主密钥阶段的失败必须抛出,
+  只有「解密认证失败 / 内容不是合法 JSON」才按读不出来处理。
+- 附带:读取一个 `TCS2` 文件时如果 Keychain 里没有主密钥,当前实现会**生成并写入一把新密钥**(读操作产生写副作用)。B1b 一并改成读取路径不创建密钥。
+
+其余 Lead 认可的取舍:D-31(写入时值出现在 `security` 的 argv)、主密钥损坏时报错而不换钥、`PlatformBootstrap` 放在 Core。
+
+给 B1b 的事实(Lead 实测):
+
+- `Terracotta.AllowFirewall()`(571 行)第 573 行已有 `if (!Utils.IS_WINDOWS)` 守卫,提权脚本在 mac 上走不到,**不需要改**。
+- `Crash.ShellOpen`(1899 行)已有 `open` / `xdg-open` 分支和 `ShellOpenHook`,**不需要改**;`Ai\ExtraTools.cs:801` 没走它,直接起 `explorer.exe`。
+- `GlobalMods._link_file`(26–53 行)无条件调 `CreateSymbolicLinkW`,失败后退化成 `File.Copy`。
+- `Sysinfo._winreg_value`(149 行)用 `Utils.IS_WINDOWS` 做守卫,分析器不认,产生 3 条 CA1416。
+- 代码页:全仓库没有调用 `Encoding.RegisterProvider`;`LauncherPureTests.cs:296` 的用例名是 `Cp437_is_available_or_silently_falls_back_to_utf8`。
