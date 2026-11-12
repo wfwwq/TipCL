@@ -2982,6 +2982,52 @@ Lead 说明:
 
 **B 阶段到此全部结束**(B1a、B1b、B2a、B2b、B2c1、B2c2、B2c3、B2d、B2e、B3)。下一步进入 C 阶段(界面)。
 
+---
+
+## C1a 主题色板 + 图标字体 + Lucide 图标
+
+### Lead 验收(2026-11-13 07:55)
+
+结论:**C1a 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 两次提交(`27ccd5f` src + `e8bb9a8` 测试/文档) | 工作树干净;无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+| `src\TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,**与 B3 验收时完全相同**(本包一个字节没碰 Core) |
+| 红线文件(测试工程隔离三件、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改 |
+| 已有测试被改动的 | 只有 `Ported\IconFontTests.cs`(A6 授权范围内的 3 处路径适配)与两个 csproj |
+| 调色板键集合(Lead 独立比对) | 浅色 61 = 深色 61 = Windows 源 61;**键名与键序完全一致**(`windows 独有` 与 `mac 独有` 均为空) |
+| 调色板取值(Lead 独立比对) | 61 组 `键=颜色/不透明度` 平铺对比 **0 处差异**;三处渐变的停靠点与颜色逐一相同 |
+| `TipCLIcons.ttf` 与 LICENSE | 与 Windows 源 SHA256 一致 |
+| `Services\LucideAssets.cs` | 与 Windows 源 SHA256 一致(字节级复制) |
+| 本次提交文本文件严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| 入库垃圾(`bin`/`obj`/`dist`/`artifacts`/PNG/`test-home`) | 0 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告 = `NU1900` ×4(本机镜像不可达的环境噪声)+ `SYSLIB0014` ×1 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 **1900** / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 **1900** / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke --theme light` | 退出码 0,**3713 字节**,SHA256 `D4F53678CF9314B9F3A69B42F778F6A8FF54ADE8E8F0FEB086C4EE00355A3037` |
+| `--smoke --theme dark` | 退出码 0,**3669 字节**,SHA256 `CFD798FF7B4512D99251F916D0FA72C6F15E5D427ACA1EBB25F77D9C0837FBA3`;与 light **不同** |
+| 截图像素(Lead 用 `System.Drawing` 采样) | 两张都是 900×550;左上角 `#F5F5F5` / `#161616`,正是**浅色/深色色板的 `B.Canvas`**;中心文字色 `#2C2626` / `#EDEDED`(对应 `B.Ink` 的 `#262626` / `#EDEDED`,浅色那张是抗锯齿像素) |
+| `--smoke --page home --theme dark` / `--smoke --theme blue` | 退出码 0 / **2**(参数校验仍有效) |
+| `%LOCALAPPDATA%\TipCL`(测试前后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合 | 89 → 89,没有新名字 |
+| 残留进程 `testhost` / `TipCL` / `java` / `adb` | 0 个 |
+
+**对子代理 3 个待裁决事项的裁决**:
+
+1. **`Services\Ico.cs` 一并搬进 C1a**:接受。它是图标字体的字形码位表,没有 WPF 依赖,和 `LucideAssets.cs` 一样属于图标系统;`Ported\IconFontTests` 正是靠它才有意义。
+2. **测试工程引用 `TipCL.App` + `TipCL.App` 开 `InternalsVisibleTo`**:接受(D-69)。代价是测试进程里多一套 Avalonia 程序集,但 C1a 的用例本来就必须起 headless Avalonia(`Geometry.Parse` 没有平台会直接抛)。
+3. **`--smoke` 基准哈希更新为 3713 / 3669**:接受。D-04 的占位色已删,颜色改取自真色板,`--smoke` 的基准从此刻起就是这两个值;A1/B3 验收表里的 3739 / 3751 就此作废(已在上面表格留档)。
+
+**新基准(后续包不许改)**:`--smoke --theme light` = 3713 字节 / `D4F53678…`;`--smoke --theme dark` = 3669 字节 / `CFD798FF…`。
+
+**Lead 记下的两条风险(交给 C2)**:
+
+- **主题热切换**:`Palette` 是取色时按当前变体解析一次,已建好的控件不会跟着换主题。C2 接主题切换时必须改成动态资源或订阅变体后重建。
+- **`Motion.cs` 未移植**:`Lucide` 现在自带最小动画实现与一个 `MotionEnabled` 静态开关,C2 要换成正式门面(D-70)。
+
+**D-69 那个坑值得单独记一笔**:Avalonia 建 Dispatcher 会替换当前线程的 `SynchronizationContext`,排在其后的 async 用例续体会永久排队 —— 表现为「用例全跑完却卡死、连汇总行都不打」。`C1aFixtures.EnsureAvalonia()` 已在 `finally` 里还原。以后任何包引入 Avalonia 初始化都必须照做。
+
 
 
 
