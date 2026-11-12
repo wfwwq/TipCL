@@ -2350,5 +2350,35 @@ P/Invoke 声明 `CreateSymbolicLinkW` 保留原样,`_link_file` 的两处调用�
    arm64 Java 8(手动装的),本方法仍然会去装 Adoptium 的 x64 包(它只看「已装列表里有没有 major == 8」,
    找不到就装)。这与 Lead 的裁决一致(装同一个包可以复用),不额外判断。
 
+### Lead 验收(2026-11-12 21:35)
+
+结论:**B2c1 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src/TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 有对应文件的 238 个里 224 一致、14 个有改动(与 B2e 相同的 14 个);无对应文件的 9 个不变,本包没有新建 `.cs` |
+| `git diff f84574f..HEAD` 对 `Java.cs`、`Preflight.cs`、`GlobalMods.cs`(Lead 逐行读过) | `Java.cs`:link 条目改为先收集、`DownloadAll` 之后再建;`forge-legacy` 只多传一个 arch 实参;Microsoft 地址交给纯函数。`Preflight.cs`:kernel32 实现原样搬进 `FreeBytesWindowsApi`,非 Windows 走 `DriveInfo`。`GlobalMods.cs`:Windows 分支原样,非 Windows 看 `LinkTarget` |
+| `JavaRuntimeFiles.cs`、`JavaArch.cs` 的新增(Lead 逐行读过) | `DecideLink` 四种状态;路径上是普通文件或目录时只告警、不删除;路径与目标的安全检查仍在建链之前 |
+| `BackendApi.cs`、`Installer.cs`、`McLauncher.cs`、`LaunchArch.cs`、`MacNativeSupport.cs`、`Utils.cs`、`Cleaner.cs`、`OfficialMigrate.cs`、红线文件、`Directory.Build.props`、三个 csproj | 未改 |
+| 已有测试被改动的 | 0 个 |
+| 本次提交改动的文本文件做严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告只有 SYSLIB0014 ×1 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 1477 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 1477 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| `%TEMP%` 下 `tipcl*` 目录名字集合(Lead 复跑前后) | 86 → 86,没有新名字 |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL` | 0 个 |
+| B2c1 测试扫描 | 没有联网、起进程、建真实符号链接、调 `Java` 的安装 / 挑选入口;`Preflight.FreeBytesHook` 的两处赋值都在 `finally` 里恢复 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+Lead 认可的取舍:D-54(Microsoft 在 mac 上用 `macos` + `.tar.gz`,依据是 6 个 HEAD 请求里只有这两个地址指向真实包名)、D-55、D-56、D-57。
+
+只记录、不处理:
+
+- `TryCreateRuntimeLink` 在新建或重建时返回 true,但底层 `CreateLink` 建链失败只记警告,所以「返回 true」不等于链接一定建成。目前没有调用方使用这个返回值。
+- Microsoft 的地址只对 Java 17 取过证,其它大版本在 mac 上是否同样是 `macos` + `.tar.gz` 未验证。
+- Mojang 运行时的建链顺序改动只有代码审读和纯函数级单测,没有端到端装过一次(测试不许联网)。
+
 
 
