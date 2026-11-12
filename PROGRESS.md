@@ -23,7 +23,10 @@
 | B2d | Apple 芯片旧版本:目标架构 + natives / 规则 / classpath 按目标架构(Lead 裁决见 B2b 的 Lead 验收) | ✅ 完成(见下;**新增 132 条用例,总数 1038 → 1170,两条通道都 1170/1170 全绿**;新建 `Launcher\LaunchArch.cs`,7 处调用点改读目标架构,5 个复制文件加可注入重载 / 抽取纯函数;Java 侧留给 B2e) |
 | B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | ✅ 完成(见下;**新增 235 条用例,总数 1170 → 1405,两条通道都 1405/1405 全绿**;新建 `Launcher\JavaArch.cs`,`Java.cs` / `McLauncher.cs` / `Installer.cs` 各改一处;写测试时抓到并修掉一个「读取委托 / 探测委托」接错的真 bug,见 D-50;两处同类缺口只记录未改,见 D-52) |
 | B3 | 打包 | ✅ 完成(见下;**新增 116 条用例,总数 1680 → 1796,两条通道都 1796/1796 全绿**;`tools\package.ps1` + 打包器实跑通过:443 条目、85,812,352 字节 tar.gz、两次运行 SHA256 完全一致;审草稿时改了两处 —— tar 从 Pax 换 Ustar(确定性)、暂存目录只删 `TipCL.app`) |
-| C1-C8 | 界面 | 未开始 |
+| C1a | 主题色板 + 图标字体 + Lucide 图标(Avalonia 移植) | ✅ 完成(见下) |
+| C1b | `Themes/Controls.axaml` 移植 | 未开始 |
+| C1c | `Services/Ui.cs` / `UiExt.cs` 门面 | 未开始 |
+| C2-C8 | 外壳 + 页面 | 未开始 |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
 ## 仓库现状(截至 A1)
@@ -2984,3 +2987,117 @@ Lead 说明:
 
 
 
+
+---
+
+## C1a 主题色板 + 图标字体 + Lucide 图标(Avalonia 移植)
+
+### 做了什么
+
+1. **两份主题色板移植为 axaml**:[src/TipCL.App/Themes/Palette.Light.axaml](src/TipCL.App/Themes/Palette.Light.axaml) /
+   [Palette.Dark.axaml](src/TipCL.App/Themes/Palette.Dark.axaml)。键名、键序、取值与 Windows 版
+   `Themes\Palette.Light|Dark.xaml` **逐项一致**(各 61 个键 = 7 个 `C.*` 颜色 + 54 个刷子,含 3 个渐变),
+   语法只做等价翻译(渐变 `0,0 → 1,1` 写成 `0%,0% → 100%,100%`,语义都是相对包围盒)。
+   开工时用脚本把两份 axaml 与两份 WPF 源逐条对拍过(61/61 条,唯一差异就是渐变端点写法)。
+2. **色板接线**:[src/TipCL.App/Themes/Palette.cs](src/TipCL.App/Themes/Palette.cs) + `App.Initialize()` 里的
+   `Palette.Install(this)`,把两份 `ResourceInclude` 挂进 `Application.Resources` 的 `ThemeDictionaries[Light/Dark]`
+   (Avalonia 11 的惯用法,见 [DECISIONS.md](DECISIONS.md) D-68)。按字符串查键(`B.*` / `C.*`)走
+   `Palette.Brush` / `Palette.Color`,**查不到给中性灰兜底,不抛异常**。
+3. **图标字体**:`Src\TipCL.App\Resources\fonts\TipCLIcons.ttf`(14232 字节,与 Windows 源 SHA256 相同)
+   与 `LICENSE-FluentSystemIcons.txt`(1078 字节)按 `Copy-Item -LiteralPath` 字节级复制;
+   csproj 里注册成 `AvaloniaResource`,运行期字体族的 URI 是
+   `avares://TipCL/Resources/fonts/TipCLIcons.ttf#TipCL Icons`(家族名取自 ttf 的 name 表 nameID 1,与 Windows 版
+   `Services\Ui.cs` 里的 `#TipCL Icons` 一致)。`Palette.IconFont` / `Palette.IconFontUri` 是 C1c 的 `Ui.GlyphFont` 要用的入口。
+4. **Lucide 图标系统**:[src/TipCL.App/Services/Lucide.cs](src/TipCL.App/Services/Lucide.cs)(WPF → Avalonia 移植,
+   15 个 `public const string` path data 常量逐字节照抄)+
+   [LucideAssets.cs](src/TipCL.App/Services/LucideAssets.cs)(143 KB base64 PNG 表,**字节级复制,未改一个字节**)
+   + [Ico.cs](src/TipCL.App/Services/Ico.cs)(67 个字形常量,同样字节级复制)。
+   公开方法 `Icon` / `Spinner` / `Asset` / `Rotate` / `Shimmer` / `ToolIcon` 的名字与参数默认值照旧;
+   实现上的四处等价改写在 D-70 里逐条记了(几何烘缩放 / 动画守卫 / `Rectangle` + `OpacityMask` / `ToolIcon` 内联 `IsMcp`)。
+5. **删掉 A1 的占位色(D-04)**:[MainWindow.cs](src/TipCL.App/MainWindow.cs) 改成从色板取
+   `B.Canvas`(底板)与 `B.Ink`(文字),窗口仍是 900×550 / Min 720×480、仍无标题栏导航
+   (C2 的事),`ApplyThemeVisuals()` 与 `PageId` 的对外行为不变,`--smoke` 照旧编译。
+6. **新增 104 条用例**(1796 → 1900),并把 A6 排除的 `Ported\IconFontTests.cs` 恢复编译(按 A6 的 B 类路径规则改 3 处,断言一字未改)。
+
+### 关键文件
+
+| 文件 | 说明 |
+|---|---|
+| [src/TipCL.App/Themes/Palette.Light.axaml](src/TipCL.App/Themes/Palette.Light.axaml) / [Palette.Dark.axaml](src/TipCL.App/Themes/Palette.Dark.axaml) | 本包新增:两份色板(61 键,键序/取值照 WPF 源) |
+| [src/TipCL.App/Themes/Palette.cs](src/TipCL.App/Themes/Palette.cs) | 本包新增:色板安装 + 按键查表 + 兜底色 + 图标字体入口 |
+| [src/TipCL.App/Services/Lucide.cs](src/TipCL.App/Services/Lucide.cs) | 本包新增:Lucide 图标系统的 Avalonia 移植 |
+| [src/TipCL.App/Services/LucideAssets.cs](src/TipCL.App/Services/LucideAssets.cs) | 字节级复制(143325 字节,SHA256 `1B93FADF…BB52`) |
+| [src/TipCL.App/Services/Ico.cs](src/TipCL.App/Services/Ico.cs) | 字节级复制(2843 字节,SHA256 `7916C17E…A233`) |
+| [src/TipCL.App/Resources/fonts/TipCLIcons.ttf](src/TipCL.App/Resources/fonts/TipCLIcons.ttf) / [LICENSE-FluentSystemIcons.txt](src/TipCL.App/Resources/fonts/LICENSE-FluentSystemIcons.txt) | 字节级复制(14232 / 1078 字节) |
+| [src/TipCL.App/App.cs](src/TipCL.App/App.cs) / [MainWindow.cs](src/TipCL.App/MainWindow.cs) / [TipCL.App.csproj](src/TipCL.App/TipCL.App.csproj) | 本包修改:挂色板、删占位色、注册字体资源 + `InternalsVisibleTo` |
+| [tests/TipCL.Tests/C1aFixtures.cs](tests/TipCL.Tests/C1aFixtures.cs) | 本包新增:测试夹具(钉死的键表/取值/字体哈希 + headless Avalonia 引导 + ttf cmap/name 解析) |
+| [tests/TipCL.Tests/C1aPaletteTests.cs](tests/TipCL.Tests/C1aPaletteTests.cs) / [C1aIconFontTests.cs](tests/TipCL.Tests/C1aIconFontTests.cs) / [C1aLucideTests.cs](tests/TipCL.Tests/C1aLucideTests.cs) | 本包新增:104 条用例的主体 |
+| [tests/TipCL.Tests/Ported/IconFontTests.cs](tests/TipCL.Tests/Ported/IconFontTests.cs) | 恢复编译:A6 的 B 类路径适配 3 处,断言未改 |
+| [tests/TipCL.Tests/TipCL.Tests.csproj](tests/TipCL.Tests/TipCL.Tests.csproj) | 本包修改:加 `TipCL.App` 工程引用;去掉 `IconFontTests.cs` 的 `Compile Remove` |
+
+### `--smoke` 的字节与哈希(颜色换成真色板后**应当**变,旧值作废)
+
+| 帧 | 字节 | SHA256 | 角落像素 |
+|---|---|---|---|
+| `--smoke --theme light` | **3713**(原 3739) | `D4F53678CF9314B9F3A69B42F778F6A8FF54ADE8E8F0FEB086C4EE00355A3037` | `#F5F5F5` = `B.Canvas` 浅色 |
+| `--smoke --theme dark` | **3669**(原 3751) | `CFD798FF7B4512D99251F916D0FA72C6F15E5D427ACA1EBB25F77D9C0837FBA3` | `#161616` = `B.Canvas` 深色 |
+
+两帧哈希**不同** ✓;像素抽查也确认真的是色板里的颜色(不是同图换名)。
+
+### 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | `dotnet build-server shutdown` 然后 `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 错误**;警告合计 **7**,去重后只有两类:`NU1900`(本机 huaweicloud 镜像不可达的环境噪声)与 `SYSLIB0014` ×1(`src\TipCL.Core\Launcher\Sync\PhoneClient.cs(116,38)`,本包未动)。没有新增编译器警告 |
+| 2 | `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 **0**,通过 **1900** / 失败 0 / 跳过 0(共 1900) |
+| 3 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll`(进程内通道) | 退出码 **0**,总计 **1900**,通过 1900 / 失败 0 / 跳过 0 / **不支持 0** |
+| 4 | `cmd /c "src\TipCL.App\bin\Release\net8.0\TipCL.exe --smoke --theme light --out artifacts\c1a-light.png"` | 退出码 **0**,**3713** 字节 |
+| 5 | 同上 `--theme dark --out artifacts\c1a-dark.png` | 退出码 **0**,**3669** 字节;两张哈希不同(见上表) |
+| 6 | `--smoke --page home --theme dark` | 退出码 **0**(仍只解析并保存 page id,不切页) |
+| 7 | `--smoke --theme blue` | 退出码 **2**(stderr 打中文原因 + 用法) |
+| 8 | `%LOCALAPPDATA%\TipCL` 开工时 / 全部跑完 | **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,前后一致 |
+| 9 | 残留进程 `testhost` / `TipCL` / `java` / `javaw` / `adb` | 全 **0** |
+| 10 | `%TEMP%` 下 `tipcl*` 目录个数 | **89 → 89**(最近的两个 `tipcl-r9-smoke`、`tipcl-r9-smoke2` 建在 00:07/00:15,早于本包开工的 06:53,是别的会话留下的;本包窗口内没有新名字) |
+| 11 | `src\TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 总数 **248** / 有对应文件 **238** / 一致 **216** / 有改动 **22** / Windows 源里没有对应文件 **10** —— 与 Lead 的上一组数字逐项一致(本包没碰 Core) |
+| 12 | `git status --short`(提交前) | 只有本包自己新增/修改的源码、测试与文档;没有 `bin` / `obj` / `artifacts` / `dist` / PNG / `test-home` |
+
+### 新增测试(104 条,1796 → 1900)
+
+| 文件 | 条数 | 覆盖 |
+|---|---|---|
+| C1aPaletteTests.cs | 26 | 两份 axaml 可解析为 XML、键集合与键序一致、61 键(7 颜色 + 54 刷子)、**逐项等于 WPF 源(钉死的 61 条键值表)**、颜色都是 `#RRGGBB`/`#AARRGGBB`、`Opacity` 落在 0..1、渐变 2~3 个停靠点且偏移升序、渐变端点用百分比、源码里按字符串查的 `B.*` / `C.*` 键都存在(非空性断言:至少扫到 B.Canvas/B.Ink/B.InkMuted/B.AccentDeep)、`Palette.Keys` 与 axaml 键序一致;Avalonia 层:61 键在两个变体下全部解析成功、`C.*` 是 Color 对象、刷子颜色与不透明度、八位 ARGB 透明确实透明确(浅色 `#00FFFFFF`、深色 `#0FFFFFFF`)、渐变刷 3 个停靠点、未知键(`B.Nope` / `C.Nope` / `B.` / 空串 / `not-a-key`)返回兜底灰不抛、明暗同键取值不同、`Palette.Current` 跟随 `Application.RequestedThemeVariant`(改完在 finally 里还原) |
+| C1aIconFontTests.cs | 31 | ttf 在位且非空、**SHA256 与 Windows 源一致**、LICENSE 在位且哈希一致、name 表家族名 `TipCL Icons`、cmap 非空且覆盖私有区、**22 个采样码位逐个 Theory 断言在字体里**、字体以 `avares://TipCL/Resources/fonts/TipCLIcons.ttf` 嵌进去且字节与仓库文件一致、Avalonia FontManager 能按该族名拿到字形、URI 形态与家族名一致、字体目录里只有这两个文件 |
+| C1aLucideTests.cs | 46 | 15 个 path data 常量逐个 Theory:能 `Geometry.Parse` 且 bounds 非零、常量个数 15、**每个常量与 Windows 源逐字节相同(从 WPF 源里抽字面量对比)**、描边/尺寸缩放(`size/24` 烘进几何、`StrokeThickness = 2×s`)、24 时不缩放、刷子键生效与未知键兜底、旋转原点居中、Spinner 是 LoaderCircle + RotateTransform + 默认 `B.AccentDeep`、Rotate 关动画时直接落位(90°/0°,改完开关在 finally 里还原)、无 RotateTransform 时自动建、null 不抛、开动画不抛、Shimmer 关时回到纯色刷、开时是 5 段渐变、关动画时不出渐变、ToolIcon 的已知工具名(Theory ×4)/ MCP 前缀 / 未知与 null 返回 null、`IsMcp` 与 WPF 判定一致、`LucideAssets` 非空且无空值、**每个内嵌资源都是合法 PNG 且 IHDR 宽高非零(只报工具名与计数,不打印 base64)**、工具名集合与 Windows 源一致、`Asset` 是 Rectangle + 调色板填充 + ImageBrush 遮罩(Bitmap 128×128)、未知工具退回 Spinner、重复调用复用同一张位图、Ico.cs 覆盖 22 个采样码位、移植后的 Lucide.cs 不引入 `TipCL.Pages` / `System.Windows`、`LucideAssets.cs` 与 Windows 源 SHA256 一致 |
+| Ported/IconFontTests.cs | 1 | 恢复编译的既有用例:扫 `src\TipCL.App` + `src\TipCL.Core` 的 `.cs`/`.xaml`,每个 `\uExxx`/`\uFxxx` 码位与 PUA 字符都必须在字体里 |
+
+用例里的期望值都在注释里标了来源:**Windows 源**(逐项钉进 `C1aFixtures`)还是**本机实测**(Skia headless 下解析出来的结果)。
+`D:\项目\tipcl\windos\...` 那条路径可用时会额外跑 6 条交叉复核(不可用则打印一行原因后返回,不判失败;本机这次**是真跑的**)。
+测试不起进程、不联网、不写任何临时文件(唯一的落盘位置是进程内执行器与测试自身的 `TestHome.Root` 隔离目录)。
+
+### 未验证(本机是 Windows,没有 Mac)
+
+1. **mac 上 `avares://…/TipCLIcons.ttf#TipCL Icons` 能不能命中字体**:本机(Windows + Avalonia headless + Skia)
+   实测家族名能解析、字形能取到;macOS 的字体后端是 CoreText(Avalonia.Native),没验过,家族名里那个空格在 mac 上要不要转义也没验。
+2. **mac 真机渲染出来的色板/图标长什么样**:只验到 Windows 上的 Skia 离屏像素与几何 bounds。
+3. **动画的实际观感**(转圈、微光、箭头旋转):本包只在有 `ApplicationLifetime` 时启动动画,本机没有在 mac 上跑过窗口,动画的视觉效果未验证。
+4. **mac 的"减弱动态效果"没有对应实现**:WPF 的 `Motion.Enabled` 读的是 `SystemParameters.ClientAreaAnimation` + 远程会话;
+   mac 版现在是 `Lucide.MotionEnabled` 静态开关(默认 true),接 C2 的 Motion 门面时再补。
+5. **微光的渐变相对变换**:WPF 用 `RelativeTransform = TransformGroup{ScaleTransform(3,1), TranslateTransform}`,
+   Avalonia 用 `Brush.Transform` + 默认 `TransformOrigin`;坐标系是否逐像素等价没验。
+6. **Retina 多倍缩放下的图标锐度**没验。
+
+### 遗留与风险
+
+1. **主题热切换**:`Palette.Brush` 是"创建时按当前变体解析一次",已有控件不会跟着换主题(Windows 版是 WPF 动态资源)。
+   目前 mac 版只有启动期 `--theme` 决定主题,窗口自己监听 `ActualThemeVariantChanged`,所以还看不出来;
+   C2 接主题热切换时要么改用 `{DynamicResource}` 绑定、要么订阅变体重建控件(见 D-68 末条)。
+2. **`Motion.cs` 未移植**(属 C2 的 Services):Lucide 自带了最小动画实现 + `MotionEnabled` 静态开关;
+   C2 应该把它换成正式的门面(D-70 第 2 条),届时"动画开关"要与 mac 的减弱动态效果对上。
+3. **`Services\Ico.cs` 的归属待 Lead 裁决**:它不在 C1a 的编号清单里,但它是"图标字体要替代的那张字形表",
+   本包把它一并字节级复制了(无依赖,随时可以搬去 C1c)—— 见 D-70 第 5 条。
+4. **图标字体只有 69 个码位**(Ico.cs 用掉 67 个):以后加图标必须同时补字体,否则 `Ported\IconFontTests` 会红(这正是它的意义)。
+5. **测试进程里起了 headless Avalonia**,并且 Avalonia 会把当前线程的 `SynchronizationContext` 换掉:
+   `C1aFixtures.EnsureAvalonia()` 已经在 `finally` 里还原(不还原会把进程内执行器卡死,详见 D-69 末条)。
+   以后再加 Avalonia 初始化一定要照做。
+6. **没有做**的事:`Themes\Controls.xaml`(C1b)、`Services\Ui.cs` / `UiExt.cs`(C1c)、任何页面(C2+)、
+   壁纸与 `PremiumAssets` 的内嵌(它们属于页面/C2);没有改 TFM、没有扩 `NoWarn`、没有新增警告、没有联网请求。

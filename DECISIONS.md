@@ -884,3 +884,74 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
    `$ErrorActionPreference` 切回 `Continue`,免得"有警告的构建"被 PowerShell 5.1 当成终止性错误。
 
 
+
+## D-68 主题色板用 Avalonia 的 ThemeDictionaries,查不到键给中性灰兜底
+
+- 色板落在 `src/TipCL.App/Themes/Palette.Light.axaml` / `Palette.Dark.axaml`(Avalonia 的 `ResourceDictionary`),
+  键名、键序、取值与 Windows 版 `Themes\Palette.Light|Dark.xaml` **逐项一致**(各 61 个键:7 个 `C.*` 颜色 + 54 个刷子)。
+  语法只做等价翻译:WPF 的 `<LinearGradientBrush StartPoint="0,0" EndPoint="1,1">`(默认 RelativeToBoundingBox)
+  写成 Avalonia 的 `StartPoint="0%,0%" EndPoint="100%,100%"`,`Opacity` 仍是刷子的普通属性。
+- 装法:在 `App.Initialize()` 里调 `Palette.Install(this)` —— 两份 `ResourceInclude` 放进
+  `Application.Resources` 里一份字典的 `ThemeDictionaries[Light/Dark]`。这是 Avalonia 11 的惯用做法,
+  好处是 C1b 的 `Controls.axaml` 可以直接写 `{DynamicResource B.Ink}`,不用在代码里切两份字典。
+  **没有**走「两份字典 + `RequestedThemeVariant` 代码 switch」那条路(那样 C1b 的 axaml 会没法写动态资源)。
+- 代码侧入口是 [src/TipCL.App/Themes/Palette.cs](src/TipCL.App/Themes/Palette.cs):`Keys`(61 个键,顺序照 WPF 源)、
+  `TryGet` / `Brush` / `Color` / `Current` / `Normalize`,以及 `IconFont` / `IconFontUri`。
+  **查不到的键返回中性灰 `#808080`(Palette.FallbackColor),不抛异常** —— 键名写错属于"编译期看不出来、运行期才炸"的
+  那一类错,不该让窗口起不来。
+- 变体归一化:只有明确 `ThemeVariant.Dark` 才算深色,其余(含 `Default`、跟随系统)按浅色 ——
+  与 A1 占位色的判定是同一套规则(D-04 的判定保留,只把颜色换成真色板)。
+- 「代码里列一份键表」与「axaml 里写一份」是**故意的双份**:`Keys` 负责给"按字符串查键"的老代码做存在性对拍,
+  测试里要求 WPF 源、两份 axaml、`Keys`、以及源码里出现的 `"B.*"` / `"C.*"` 字面量**四处都对得上**。
+- 一次性解析 vs 动态资源:图标/刷子在创建时按当前变体**解析一次**(`Palette.Brush(key)` 会读
+  `Application.ActualThemeVariant`)。Windows 版用的是 WPF 的 `SetResourceReference`(动态资源,主题切换自动重取色);
+  mac 版目前只有启动期决定主题(`--theme`)与窗口自己监听 `ActualThemeVariantChanged`,**已有控件不会跟着热切换**。
+  C2 接主题热切换时要么改成 `{DynamicResource}` 绑定、要么订阅变体重建,到时再定(见"遗留")。
+
+## D-69 C1a 的测试工程引用 TipCL.App,期望值的权威副本钉在测试里
+
+- `tests/TipCL.Tests` 新增 `<ProjectReference Include="..\..\src\TipCL.App\TipCL.App.csproj" />`,
+  靠 TipCL.App 的 `<InternalsVisibleTo Include="TipCL.Tests" />` 看到 `internal` 的 `Palette` / `LucideAssets`
+  (与 D-19、B3 对 `TipCL.Packager` 的手法一致)。
+- 为什么不能只把 axaml 当 XML 文本解析就完事:**几何解析本身就要真平台** —— 本机实测,不
+  `SetupWithoutStarting()` 直接 `Geometry.Parse` 会抛
+  `InvalidOperationException: Unable to locate 'Avalonia.Platform.IPlatformRenderInterface'`。
+  所以 C1a 的用例分两层:
+  1. **XML 文本层**(不需要平台):键集合 / 键序 / 取值 / 语法 / 源码里按字符串查的键是否存在;
+  2. **headless Avalonia 层**(`UseHeadless(UseHeadlessDrawing=false)` + `UseSkia()`,与 A1 的 smoke 同一套配置):
+     资源求值、`C.*` 颜色对象、刷子不透明度、渐变停靠点、avares 字体族与字形、几何 bounds。
+- 期望值的权威副本钉在 [tests/TipCL.Tests/C1aFixtures.cs](tests/TipCL.Tests/C1aFixtures.cs)(键表 + 取值 + 字体 SHA256),
+  **不依赖** `D:\项目\tipcl\windos\...` 那条路径可用;路径可用时另有交叉复核用例(不可用就打印一行原因后返回,不判失败)。
+- **踩到的坑(必须记)**:Avalonia 建 Dispatcher 时会把当前线程的 `SynchronizationContext` 换成它自己的。
+  进程内执行器是在主线程上 `task.GetAwaiter().GetResult()` 同步等 async 用例的,没人去泵 Avalonia 的 Dispatcher,
+  于是**排在 C1a 后面**的 async 用例(实测是 `Ported\WriteJsonTests.cs` 的并发写用例)续体永久排队:
+  整个进程跑完全部用例却卡死在收尾,连汇总行都不打。修法:`C1aFixtures.EnsureAvalonia()` 先把旧的
+  `SynchronizationContext` 存下来,`SetupWithoutStarting()` 之后在 `finally` 里还原(全局静态改动必须还原)。
+  还原后两条通道都正常。
+
+## D-70 Lucide 移植的等价写法(缩放 / 动画 / Asset 缓存 / ToolIcon / Ico.cs)
+
+1. **WPF 的 `LayoutTransform` 在 Avalonia 没有对应属性**:改成把 `size/24` 的缩放**烘进几何**
+   (`Geometry.Transform = new ScaleTransform(s, s)`),并把 `StrokeThickness` 同步乘上 s(2 → 2s)。
+   这样渲染与 WPF 等价(WPF 的 LayoutTransform 一样会缩放描边),而且把 `RenderTransform` 完整留给
+   `Spinner` / `Rotate` 的旋转。烘完缩放后 `Width/Height = size`、旋转原点仍是控件中心 `0.5,0.5`。
+2. **动画只在真正跑起来的应用生命周期下启动**:`Lucide` 的转圈/滑动用 Avalonia `Animation.RunAsync` 实现,
+   但外面套一层「`Application.Current?.ApplicationLifetime is null` 就直接不启动」。
+   原因:离屏(`--smoke`)与测试进程里没有任何东西推进动画时钟,无限动画会一直挂着
+   (C1a 第一次全量跑测试就是这么卡住的);`--smoke` 只渲一帧,本来也用不到动画。
+   真机/桌面路径(`StartWithClassicDesktopLifetime`)不受影响。
+   WPF 的 `Motion.Enabled` 门面属 C2 的 Services,本包用一个 `MotionEnabled` 静态属性顶着,
+   值语义与 WPF 的"关掉动画就直接落位"一致(着色板颜色而不是渐变)。
+3. **`Asset` 用 `Rectangle` + `OpacityMask = ImageBrush`**,与 WPF 的 `Rectangle.OpacityMask` 完全同构
+   (Avalonia 11 的 `Visual.OpacityMask` 接 `IBrush`);PNG 走 `Avalonia.Media.Imaging.Bitmap`(Skia 解码),
+   **没有**绕 `TipCL.Core` 的 `IImageCodec` —— Avalonia 自带 Skia,少一层间接。
+   解码结果按工具名**缓存复用**(位图不可变,可共享);WPF 版每次 new 一个 `BitmapImage`,这一点是本包刻意改的。
+4. **`ToolIcon` 内联了 `AiUiText.IsMcp` 的三行判定**(`mcp__` / `mcp.` / `mcp_`),
+   因为 `TipCL.Pages.Ai` 是 C3 的事,图标这一层不许依赖页面命名空间;C3 落地 AI 页后可以改回调用 `AiUiText.IsMcp`。
+5. **`Services\Ico.cs` 一并按字节级复制进来**:它不在 C1a 的编号清单里,但它是"内置图标字体要替代的那张字形表",
+   而 `Ported\IconFontTests.cs` 的"源码里用到的码点必须在字体里"正是靠它才有意义(67 个字形常量)。
+   若 Lead 认为该归 C1c,直接搬走即可 —— 它没有任何依赖。
+6. **公开签名没有一处被改口味**:`Icon` / `Spinner` / `Asset` / `Rotate` / `Shimmer` / `ToolIcon` 的名字与参数默认值照旧;
+   类型上 `Asset` 由 WPF 的 `FrameworkElement` 变成 Avalonia 的 `Control`,
+   `Icon` / `Spinner` / `Rotate` 的 path 由 `System.Windows.Shapes.Path` 变成
+   `Avalonia.Controls.Shapes.Path` —— 这是框架类型本身,不是签名设计。

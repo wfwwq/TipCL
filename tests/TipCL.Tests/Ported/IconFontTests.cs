@@ -9,12 +9,17 @@ namespace TipCL.Tests;
 
 // 源码里用到的每个图标码位（\uE000-\uF8FF）都必须在内置字体 TipCLIcons.ttf 里，
 // 否则缺 Segoe 图标字体的系统（Win7/8.1、精简版、Wine）会显示成方框。
+// C1a 恢复本文件时只做了 A6 约定的 B 类路径适配(逐条列在 PROGRESS.md 的 C1a 小节):
+//   1. 仓库根标记 TipCL.sln -> TipCL.Mac.sln;
+//   2. 字体资源路径 src/TipCL/... -> src/TipCL.App/...;
+//   3. 扫描根 src/TipCL(Windows 版里同时含界面与 Core)-> src/TipCL.App + src/TipCL.Core。
+// 断言本身一个字未改。
 public class IconFontTests
 {
 	static string RepoRoot()
 	{
 		var d = new DirectoryInfo(AppContext.BaseDirectory);
-		while (d != null && !File.Exists(Path.Combine(d.FullName, "TipCL.sln"))) d = d.Parent;
+		while (d != null && !File.Exists(Path.Combine(d.FullName, "TipCL.Mac.sln"))) d = d.Parent;
 		Assert.NotNull(d);
 		return d.FullName;
 	}
@@ -61,10 +66,15 @@ public class IconFontTests
 	public void EveryGlyphUsedInSourceIsInEmbeddedFont()
 	{
 		string root = RepoRoot();
-		var font = FontCodepoints(Path.Combine(root, "src", "TipCL", "Resources", "fonts", "TipCLIcons.ttf"));
+		var font = FontCodepoints(Path.Combine(root, "src", "TipCL.App", "Resources", "fonts", "TipCLIcons.ttf"));
 		var used = new SortedDictionary<int, string>();
 		var esc = new Regex(@"\\u([Ee][0-9A-Fa-f]{3}|[Ff][0-8][0-9A-Fa-f]{2})");
-		foreach (var f in Directory.EnumerateFiles(Path.Combine(root, "src", "TipCL"), "*.*", SearchOption.AllDirectories)
+		var roots = new[]
+		{
+			Path.Combine(root, "src", "TipCL.App"),
+			Path.Combine(root, "src", "TipCL.Core"),
+		};
+		foreach (var f in roots.SelectMany(r => Directory.EnumerateFiles(r, "*.*", SearchOption.AllDirectories))
 			.Where(p => (p.EndsWith(".cs") || p.EndsWith(".xaml")) && !p.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)))
 		{
 			string text = File.ReadAllText(f);
