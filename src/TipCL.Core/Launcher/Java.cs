@@ -66,18 +66,34 @@ public static class Java
 
 	private static string _PlatformKey()
 	{
-		string oS_NAME = Utils.OS_NAME;
-		string aRCH = Utils.ARCH;
-		switch (oS_NAME)
+		return PlatformKeyFor(Utils.OS_NAME, Utils.ARCH);
+	}
+
+	/// <summary>
+	/// Mojang 运行时清单的平台键(纯函数,OS / 架构都可注入,B2a)。
+	/// <para>
+	/// mac 分支从 Windows 版的 <c>osx</c> / <c>osx-arm64</c> 改成 **<c>mac-os</c> / <c>mac-os-arm64</c>**:
+	/// 线上清单(2026-11-12 实测,<c>https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json</c>)
+	/// 的顶层键是 <c>mac-os</c>(7 个组件)与 <c>mac-os-arm64</c>(4 个),**没有** <c>osx</c> / <c>osx-arm64</c>;
+	/// Windows 版写的旧键会让 mac 走到 <c>InstallMojangRuntime</c> 的「清单中没有平台」直接返回 null。
+	/// </para>
+	/// <para>
+	/// <c>windows</c> / <c>linux</c> / 默认分支与改动前逐字相同(含清单里并不存在的 <c>linux-arm64</c>,
+	/// 那不是本包的事)。
+	/// </para>
+	/// </summary>
+	internal static string PlatformKeyFor(string os, string arch)
+	{
+		switch (os)
 		{
 		case "windows":
-			if (!(aRCH == "x64") && !(aRCH == "arm64"))
+			if (!(arch == "x64") && !(arch == "arm64"))
 			{
 				return "windows-x86";
 			}
-			return "windows-" + aRCH;
+			return "windows-" + arch;
 		case "linux":
-			return aRCH switch
+			return arch switch
 			{
 				"arm64" => "linux-arm64", 
 				"x86" => "linux-i386", 
@@ -85,11 +101,11 @@ public static class Java
 				_ => "linux", 
 			};
 		case "osx":
-			if (!(aRCH == "arm64"))
+			if (!(arch == "arm64"))
 			{
-				return "osx";
+				return "mac-os";
 			}
-			return "osx-arm64";
+			return "mac-os-arm64";
 		default:
 			return "linux";
 		}
@@ -109,12 +125,24 @@ public static class Java
 
 	private static string _AdoptiumOs()
 	{
-		return Pick(Utils.OS_NAME, "windows", "windows", "osx", "mac", "linux", "linux");
+		return AdoptiumOs(Utils.OS_NAME);
+	}
+
+	/// <summary>Adoptium 地址里的 <c>{os}</c>(纯函数,可注入)。mac 用 <c>mac</c>,与改动前一致 —— 线上实测正确。</summary>
+	internal static string AdoptiumOs(string os)
+	{
+		return Pick(os, "windows", "windows", "osx", "mac", "linux", "linux");
 	}
 
 	private static string _AdoptiumArch(string arch = null)
 	{
-		return Pick(arch ?? Utils.ARCH, "x64", "x64", "x86", "x86", "arm64", "aarch64");
+		return AdoptiumArch(arch ?? Utils.ARCH);
+	}
+
+	/// <summary>Adoptium 地址里的 <c>{arch}</c>(纯函数,可注入)。<c>arm64</c> → <c>aarch64</c>,与改动前一致。</summary>
+	internal static string AdoptiumArch(string arch)
+	{
+		return Pick(arch, "x64", "x64", "x86", "x86", "arm64", "aarch64");
 	}
 
 	public static long AdoptiumMajor(long major)
@@ -800,7 +828,7 @@ public static class Java
 			{
 				pyDict = new PyDict();
 			}
-			string text2 = Utils.FindExecutable(text);
+			string text2 = JavaRuntimeFiles.FindJavaUnderRoot(text, Utils.IS_WINDOWS, Utils.IS_MAC);
 			if (text2 != null)
 			{
 				object obj = pyDict.Get("major");
@@ -940,7 +968,7 @@ public static class Java
 		}
 		if (pPath.IsDir())
 		{
-			string text2 = Utils.FindExecutable(pPath.ToString());
+			string text2 = JavaRuntimeFiles.FindJavaUnderRoot(pPath.ToString(), Utils.IS_WINDOWS, Utils.IS_MAC);
 			if (text2 != null)
 			{
 				return text2;
@@ -1125,8 +1153,14 @@ public static class Java
 		}
 	}
 
+	/// <summary>
+	/// Mojang 运行时清单里 <c>executable: true</c> 的条目在非 Windows 上要真的有可执行权限(B2a)。
+	/// 改动前这个方法体是空的,mac 上装完的 <c>jre.bundle/Contents/Home/bin/java</c> 是 0644,根本起不来。
+	/// 权限位取值在 <see cref="JavaRuntimeFiles.ModeForEntry"/> 里(可执行 0755,其余 0644)。
+	/// </summary>
 	private static void Chmod755(string p)
 	{
+		JavaRuntimeFiles.SetExecutable(p);
 	}
 
 	public static string InstallMojangRuntime(DownloadManager dm, string component, Action<string, long, long> on_progress = null, bool force = false)
@@ -1153,7 +1187,7 @@ public static class Java
 		}
 		string text = Py.Str(Py.DictOr(Py.Or(pyDict2.Get("version"), new PyDict())).Get("name", "?"));
 		string text2 = PPath.Join(java_dir, component + "-" + PLATFORM_KEY);
-		string text3 = Utils.FindExecutable(text2);
+		string text3 = JavaRuntimeFiles.FindJavaUnderRoot(text2, Utils.IS_WINDOWS, Utils.IS_MAC);
 		if (text3 != null && !force)
 		{
 			return text3;
@@ -1185,6 +1219,17 @@ public static class Java
 			}
 			else
 			{
+				if (Py.Eq(a, "link"))
+				{
+					// B2a:清单里的 link 条目原来被静默跳过(mac-os-arm64 的 java-runtime-gamma 有 208 个,
+					// 全部形如 legal/java.compiler/LICENSE -> ../java.base/LICENSE)。
+					// 非 Windows 上按 ResolveLinkTarget 的安全检查建软链;Windows 分支行为不变(仍是跳过)。
+					if (!Utils.IS_WINDOWS)
+					{
+						JavaRuntimeFiles.TryCreateRuntimeLink(Utils.AbsPath(text2), item.Key, Py.Str(Py.Or(pyDict5.Get("target"), "")), isWindows: false);
+					}
+					continue;
+				}
 				if (!Py.Eq(a, "file"))
 				{
 					continue;
@@ -1223,7 +1268,7 @@ public static class Java
 				}
 			}
 		}
-		text3 = Utils.FindExecutable(text2);
+		text3 = JavaRuntimeFiles.FindJavaUnderRoot(text2, Utils.IS_WINDOWS, Utils.IS_MAC);
 		if (text3 != null)
 		{
 			Utils.WriteJson(PPath.Join(text2, "runtime.meta.json"), PyDict.Of("kind", "mojang", "name", "Mojang " + component + " (" + text + ")", "component", component, "version", text, "major", MajorObj(GetJavaMajor(text3))));
@@ -1235,11 +1280,7 @@ public static class Java
 
 	private static string ArchiveSuffix()
 	{
-		if (!Utils.IS_WINDOWS)
-		{
-			return ".tar.gz";
-		}
-		return ".zip";
+		return JavaRuntimeFiles.ArchiveSuffixFor(Utils.OS_NAME);
 	}
 
 	public static string InstallAdoptium(DownloadManager dm, long major, Action<string, long, long> on_progress = null, bool force = false, string arch = null)
@@ -1249,7 +1290,7 @@ public static class Java
 		string newValue = _AdoptiumArch(arch);
 		string java_dir = Config.CONFIG.java_dir;
 		string text = PPath.Join(java_dir, "adoptium-" + major + "-" + arch);
-		string text2 = Utils.FindExecutable(text);
+		string text2 = JavaRuntimeFiles.FindJavaUnderRoot(text, Utils.IS_WINDOWS, Utils.IS_MAC);
 		if (text2 != null && !force)
 		{
 			return text2;
@@ -1267,7 +1308,7 @@ public static class Java
 		{
 			Utils.RemoveTree(text);
 			Utils.EnsureDir(text);
-			DownloadManager.ExtractArchive(text4, text);
+			JavaRuntimeFiles.ExtractJavaArchive(text4, text, Utils.IS_MAC);
 		}
 		catch (Exception)
 		{
@@ -1279,7 +1320,7 @@ public static class Java
 		{
 			_SafeUnlink(text4);
 		}
-		text2 = Utils.FindExecutable(text);
+		text2 = JavaRuntimeFiles.FindJavaUnderRoot(text, Utils.IS_WINDOWS, Utils.IS_MAC);
 		if (text2 == null)
 		{
 			Utils.RemoveTree(text);
@@ -1372,12 +1413,24 @@ public static class Java
 
 	private static string _ZuluOs()
 	{
-		return Pick(Utils.OS_NAME, "windows", "windows", "osx", "macos", "linux", "linux");
+		return ZuluOs(Utils.OS_NAME);
+	}
+
+	/// <summary>Azul 地址里的 <c>os</c>(纯函数,可注入)。mac 用 <c>macos</c>,与改动前一致 —— 线上实测正确。</summary>
+	internal static string ZuluOs(string os)
+	{
+		return Pick(os, "windows", "windows", "osx", "macos", "linux", "linux");
 	}
 
 	private static string _ZuluArch(string arch = null)
 	{
-		return Pick(arch ?? Utils.ARCH, "x64", "x64", "x86", "x86", "arm64", "aarch64");
+		return ZuluArch(arch ?? Utils.ARCH);
+	}
+
+	/// <summary>Azul 地址里的 <c>arch</c>(纯函数,可注入)。<c>arm64</c> → <c>aarch64</c>,与改动前一致。</summary>
+	internal static string ZuluArch(string arch)
+	{
+		return Pick(arch, "x64", "x64", "x86", "x86", "arm64", "aarch64");
 	}
 
 	private static string _InstallZulu(DownloadManager dm, long major, Action<string, long, long> on_progress, bool force, string arch)
@@ -1388,12 +1441,12 @@ public static class Java
 		string text2 = _ZuluArch(arch);
 		string java_dir = Config.CONFIG.java_dir;
 		string text3 = PPath.Join(java_dir, "zulu-" + major + "-" + arch);
-		string text4 = Utils.FindExecutable(text3);
+		string text4 = JavaRuntimeFiles.FindJavaUnderRoot(text3, Utils.IS_WINDOWS, Utils.IS_MAC);
 		if (text4 != null && !force)
 		{
 			return text4;
 		}
-		string url = "https://api.azul.com/metadata/v1/zulu/packages?java_version=" + major + "&os=" + text + "&arch=" + text2 + "&java_package_type=jre&archive_type=zip&latest=true";
+		string url = "https://api.azul.com/metadata/v1/zulu/packages?java_version=" + major + "&os=" + text + "&arch=" + text2 + "&java_package_type=jre&archive_type=" + JavaRuntimeFiles.ZuluArchiveTypeFor(Utils.OS_NAME) + "&latest=true";
 		Utils.EnsureDir(java_dir);
 		on_progress?.Invoke("查询 Azul Zulu Java " + major + " (" + arch + ")…", 0L, 1L);
 		object obj;
@@ -1422,7 +1475,7 @@ public static class Java
 			Utils.EnsureDir(text3);
 			on_progress?.Invoke("下载 Zulu Java " + major + " (" + arch + ") 运行时", 0L, 1L);
 			dm.Download(obj2, text6, null, null, force: true);
-			DownloadManager.ExtractArchive(text6, text3);
+			JavaRuntimeFiles.ExtractJavaArchive(text6, text3, Utils.IS_MAC);
 		}
 		catch (Exception)
 		{
@@ -1434,7 +1487,7 @@ public static class Java
 		{
 			_SafeUnlink(text6);
 		}
-		text4 = Utils.FindExecutable(text3);
+		text4 = JavaRuntimeFiles.FindJavaUnderRoot(text3, Utils.IS_WINDOWS, Utils.IS_MAC);
 		if (text4 == null)
 		{
 			Utils.RemoveTree(text3);
@@ -1450,7 +1503,7 @@ public static class Java
 		arch = arch ?? Utils.ARCH;
 		string java_dir = Config.CONFIG.java_dir;
 		string text = PPath.Join(java_dir, "microsoft-" + major + "-" + arch);
-		string text2 = Utils.FindExecutable(text);
+		string text2 = JavaRuntimeFiles.FindJavaUnderRoot(text, Utils.IS_WINDOWS, Utils.IS_MAC);
 		if (text2 != null && !force)
 		{
 			return text2;
@@ -1467,7 +1520,7 @@ public static class Java
 			Utils.RemoveTree(text);
 			Utils.EnsureDir(text);
 			dm.Download(url, text6, null, null, force: true);
-			DownloadManager.ExtractArchive(text6, text);
+			JavaRuntimeFiles.ExtractJavaArchive(text6, text, Utils.IS_MAC);
 		}
 		catch (Exception)
 		{
@@ -1479,7 +1532,7 @@ public static class Java
 		{
 			_SafeUnlink(text6);
 		}
-		text2 = Utils.FindExecutable(text);
+		text2 = JavaRuntimeFiles.FindJavaUnderRoot(text, Utils.IS_WINDOWS, Utils.IS_MAC);
 		if (text2 == null)
 		{
 			Utils.RemoveTree(text);

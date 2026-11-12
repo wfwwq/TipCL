@@ -15,7 +15,9 @@
 | A6 | 测试移植 | ✅ 完成(见下;**搬来 29 个文件 → A 类 15 / B 类 4 / C 类 10;可跑用例 127 条,测试总数 523 → 652,两条通道都 652/652 全绿**) |
 | B1a | mac 平台服务(Keychain / Skia 编解码 / 插件凭据 AES-GCM / 启动接线) | ✅ 完成(见下;**新增 114 条用例,总数 652 → 766,两条通道都 766/766 全绿**) |
 | B1b | 运行时差异修复(SecretStore 读取路径 / 代码页 / 打开文件夹 / 软链接 / CA1416) | ✅ 完成(见下;**新增 45 条用例,总数 766 → 811,两条通道都 811/811 全绿**;CA1416 ×7 → 0) |
-| B2 | mac 逻辑核对 + 单测 | 未开始 |
+| B2a | mac Java 运行时获取(Mojang 平台键 / Adoptium·Zulu mac 包 / 可执行位与链接 / java 定位) | ✅ 完成(见下;**新增 90 条用例,总数 811 → 901,两条通道都 901/901 全绿**) |
+| B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | 未开始 |
+| B2c | NodeRuntime darwin / Terracotta 权限 / adb 路径 / PhoneLink 临时目录 / Preflight 磁盘 / Updater 仅提示 / Shortcut / IsSymlink | 未开始 |
 | B3 | 打包 | 未开始 |
 | C1-C8 | 界面 | 未开始 |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
@@ -1291,3 +1293,206 @@ Lead 认可的取舍:D-37(`TCS2` 文件 + 没有可用凭据库时读取抛 `Pla
 
 - `plugins_set_provider` / `plugins_remove_provider` 是「内存状态先改、密钥后写」,`Set` 抛异常时会部分成功。这是 Windows 版原有的调用顺序,C 阶段接插件页时处理。
 - `GlobalMods.IsSymlink` 对悬空链接的判断留给 B2 在真机清单里核对。
+
+---
+
+## B2a mac Java 运行时获取(Mojang 平台键 / Adoptium·Zulu mac 包 / 可执行位与链接 / java 定位)
+
+> 本包只改 **`src\TipCL.Core\Launcher\Java.cs`**(85 插入 / 32 删除)+ **新增 1 个 Core 文件**
+> `src\TipCL.Core\Launcher\JavaRuntimeFiles.cs`,另加 5 个测试文件。
+> 未改任何第二个从 Windows 复制来的文件;`Java.cs` 里每一处改动见下面第 4 节。
+
+### 1. 第 0 步线上元数据(只读查询)
+
+查询时间:**2026-11-12 19:01–19:02**(另有 18:58 的复现)。响应体留在 `artifacts/b2a/`(**不入库**)。
+联网 GET 共计 **12 个请求**(1 个被第一次脚本自身的管道 bug 浪费,实际有效请求 11 个),全部只读元数据,
+**没有下载任何 Java 压缩包或二进制**。
+
+#### 1.1 Mojang 平台键(`all.json`,HTTP 200 / 13385 字节)
+
+地址:`https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json`
+
+| 顶层键 | 非空组件数 | 组件 |
+|---|---|---|
+| `mac-os` | 7 | alpha, beta, delta, epsilon, gamma, gamma-snapshot, jre-legacy |
+| `mac-os-arm64` | **4** | delta, epsilon, gamma, gamma-snapshot(**没有 jre-legacy / alpha / beta**) |
+| `windows-x64` | 8 | + minecraft-java-exe |
+| `windows-x86` | 6 | |
+| `windows-arm64` | 4 | 与 mac-os-arm64 同 4 个 |
+| `linux` | 7 | |
+| `linux-i386` | 1 | |
+| `gamecore` | 0 | |
+
+**清单里没有 `osx`、`osx-arm64`,也没有 `linux-arm64`** —— Windows 版写的 mac 键是错的,已修。
+
+#### 1.2 文件清单形态(`mac-os-arm64` / `java-runtime-gamma` 与 `mac-os` / `jre-legacy`)
+
+清单地址(从 all.json 取):`…/packages/e0c8d5ccfe8cfb38075ff1b7f6352d7b03fd7868/manifest.json`(97689 字节)、
+`…/packages/78e31aa15b3f437f37263351436f63e0a96e0067/manifest.json`(77882 字节)。
+
+| 统计项 | mac-os-arm64 / java-runtime-gamma | mac-os / jre-legacy |
+|---|---|---|
+| `files` 条目总数 | 437 | 179 |
+| `type=file` / `directory` / `link` | 142 / 87 / **208** | 179 / 0 / **0** |
+| `executable: true` | **29**(28 个在 `bin/`,1 个在 `lib/` = `lib/jspawnhelper`) | 77(含 60 个 `lib/`、11 个 `bin/`,另有几个明显是目录的条目) |
+| `downloads.raw` / `downloads.lzma` | 142 / 135(**每个 file 都有 raw**,lzma 只是额外) | 179 / 142 |
+| **java 的相对路径** | **`jre.bundle/Contents/Home/bin/java`** | **`jre.bundle/Contents/Home/bin/java`** |
+| link 的 target 形态 | 208 条**全是相对路径**且都是 `../…`,0 条绝对路径、0 条逃出安装根;例:<br>`jre.bundle/Contents/Home/legal/java.compiler/ADDITIONAL_LICENSE_INFO -> ../java.base/ADDITIONAL_LICENSE_INFO`<br>`…/legal/java.compiler/ASSEMBLY_EXCEPTION -> ../java.base/ASSEMBLY_EXCEPTION`<br>`…/legal/java.compiler/LICENSE -> ../java.base/LICENSE` | 无 link |
+
+结论:mac 的 Mojang 运行时**必须**处理 `link`(208/437 = 48% 的条目)和 `executable`(否则 `bin/java` 是 0644,起不来);
+`directory` 条目 87 个,现有代码已在建。
+
+#### 1.3 Adoptium(`api.adoptium.net/v3/assets/latest/{major}/hotspot?os=mac&architecture={arch}&image_type=jre`)
+
+| major | arch | 结果 |
+|---|---|---|
+| 8 | **aarch64** | **0 个包**(响应体 3 字节 = `[]`) |
+| 8 | x64 | 1 个:`OpenJDK8U-jre_x64_mac_hotspot_8u512b09.tar.gz` |
+| 17 | aarch64 | 1 个:`OpenJDK17U-jre_aarch64_mac_hotspot_17.0.21_9.tar.gz` |
+| 17 | x64 | 1 个:`OpenJDK17U-jre_x64_mac_hotspot_17.0.21_9.tar.gz` |
+| 21 | aarch64 | 1 个:`OpenJDK21U-jre_aarch64_mac_hotspot_21.0.13_9.tar.gz` |
+| 21 | x64 | 1 个:`OpenJDK21U-jre_x64_mac_hotspot_21.0.13_9.tar.gz` |
+
+→ 包名后缀是 **`.tar.gz`**,与 `ArchiveSuffix()` 在非 Windows 上返回 `.tar.gz` 一致;
+→ 代码里的 `_AdoptiumOs()`=`mac`、`_AdoptiumArch(arm64)`=`aarch64` 都被线上确认**正确**;
+→ **唯一缺口:`major 8 + aarch64` 没有包**(见第 3 节)。
+
+#### 1.4 Azul(`api.azul.com/metadata/v1/zulu/packages`)
+
+| 请求 | 结果 |
+|---|---|
+| `java_version=8,17&os=macos&arch=aarch64,x64&archive_type=tar.gz&latest=true` | 44 条,**全部是 `macosx_x64`**;返回了 8…27 各版本 → **逗号多值语法不被支持**(`java_version` / `arch` 都没被当作筛选条件生效),这条只证明「macos + x64 + tar.gz 有包」 |
+| `java_version=17&os=macos&arch=aarch64&archive_type=zip&latest=true` | 4 条,第一条 `zulu17.70.113-ca-fx-jre17.0.21.0.3-macosx_aarch64.zip` → **mac + aarch64 有包**,且 **`archive_type=zip` 真的给 `.zip`** |
+
+→ 与上一格合起来正是本包要修的矛盾:代码请求 `archive_type=zip`、却把响应按 `ArchiveSuffix()` 落成 `.tar.gz`,
+`DownloadManager.ExtractArchive` 又按**文件名后缀**选解压器 → mac 上拿 zip 的字节走 GZipStream,必然失败(见 4-8)。
+→ **mac + aarch64 + `archive_type=tar.gz` 的组合没查到**(请求预算 12 用完),记在「未验证项」。
+
+### 2. 现有「Mojang 缺组件 → 回退」链路(改前源码 `Java.cs` 1125–1235 / 1300–1370 行)
+
+| # | 位置 | 发生什么 |
+|---|---|---|
+| 1 | `EnsureJavaForVersion` | 先 `PickJavaForVersion` 找已装的;找不到才装 |
+| 2 | 同上 1311 | `version_json.javaVersion.component` **有值且 ≠ `jre-legacy`** → 走 Mojang;`jre-legacy` 或没有 component → 直接 Adoptium |
+| 3 | `InstallMojangRuntime` 1135–1140 | 清单里没有 `PLATFORM_KEY` → `log.Warning("Mojang 运行时清单中没有平台 %s")` + **返回 null**(不抛) |
+| 4 | 同上 1141–1145 | 平台在、但该平台没有这个 component(mac-os-arm64 的 `jre-legacy` / `alpha` / `beta`)→ **返回 null,无任何日志** |
+| 5 | 同上 1146–1153 | manifest 里没有 url → 返回 null |
+| 6 | 同上 1165 | manifest 下载失败 / sha1 校验失败 → **抛 DownloadError** |
+| 7 | 同上 1232 | 装完找不到 java 可执行文件 → `log.Warning(...)` + 返回 null |
+| 8 | `EnsureJavaForVersion` 1321–1324 | 上一步抛异常 → `log.Warning("Mojang 运行时下载失败,回退 Adoptium")` |
+| 9 | 同上 1326–1327 | 无论哪条路到这一步,都调 **`InstallAdoptium(major, arch)`**;`arch` 只在「Windows + x64 + 老版本」时是 `x86`,其余为 null → `Utils.ARCH` |
+| 10 | 没有第三级回退 | Adoptium 失败就是最后的失败(抛异常);**代码里没有「Adoptium 失败 → 换 Zulu」的逻辑**,Zulu 只在用户显式选厂商(`InstallJavaVendor`)时才用 |
+
+**裁决执行结果**:按任务书「不新增改用 x64 `mac-os` 经 Rosetta 运行」的要求,本包**没有**加这种路径;
+`mac-os-arm64` 缺组件时沿用现有链路(第 3/4 条 → 第 9 条)。
+至于「改走另一个厂商」的选择逻辑:**没有加**,理由与线上证据见 D-39 与下面第 6 节「需要 Lead 裁决的事项」。
+
+### 3. 四项各自做了什么
+
+| 项 | 结论 | 依据 |
+|---|---|---|
+| 第 1 项 Mojang 平台键 | **改了**:`osx`→`mac-os`、`osx-arm64`→`mac-os-arm64`;`windows` / `linux` / 默认分支逐字未动;`_PlatformKey()` 改成转调 `internal static PlatformKeyFor(string os, string arch)` | 第 1.1 节线上清单 |
+| 第 2 项 Apple 芯片缺组件时的回退 | **只核对,未改代码**。现有回退链落到 `InstallAdoptium`;Adoptium 在 mac+aarch64 上 17/21 **有**包、**8 没有包**;Zulu 在 mac+aarch64 上至少有 17 的 zip 包,但 **8 的 tar.gz 是否有包未验证** → 按「没有证据就不硬凑」处理,**不新增厂商切换**(D-39) | 第 1.3 / 1.4 节 |
+| 第 3 项 Mojang 运行时落盘 | **改了 3 处**:① `Chmod755` 从**空方法**改成真的 `File.SetUnixFileMode(0755)`(非 Windows);② 原来被 `continue` 掉的 `type: link` 条目,在非 Windows 上按安全检查建相对软链(Windows 分支仍是跳过);③ java 定位统一走新的 `FindJavaUnderRoot(root, isWindows, isMac)`(mac 上先试已知形态,再回落到原来的 `Utils.FindExecutable` 遍历) | 第 1.2 节(208 个 link / 29 个 executable / `jre.bundle/Contents/Home/bin/java`) |
+| 第 4 项 Adoptium / Zulu mac 包 | **改了两处、核对了三处**:OS 名(`mac` / `macos`)、架构名(`aarch64`)、Adoptium 后缀(`.tar.gz`)**都正确,只核对未改**;Zulu 的 `archive_type` 由写死的 `zip` 改成与落盘后缀一致的 **`tar.gz`(只对 mac)**;`.tar.gz` 解压改成 mac 专用实现,**保留 tar 的权限位与软链**(旧实现两者都丢)。Linux 的同类缺陷**原样保留**(红线:只改 mac) | 第 1.3 / 1.4 节 |
+
+### 4. 对 `Java.cs` 的每一处改动(85 插入 / 32 删除)
+
+| # | 位置(改后行号) | 原来 | 改成 | 为什么 |
+|---|---|---|---|---|
+| 1 | 24 | `public static readonly string PLATFORM_KEY = _PlatformKey();` | **未动**(签名、修饰符一字不变) | 任务书要求 |
+| 2 | 67–119 | `_PlatformKey()` 自己 switch;`osx` → `osx` / `osx-arm64` | `_PlatformKey()` = `PlatformKeyFor(Utils.OS_NAME, Utils.ARCH)`;新增 `internal static PlatformKeyFor(string os, string arch)`,mac → `mac-os` / `mac-os-arm64` | 线上清单里没有 `osx`/`osx-arm64`(1.1 节) |
+| 3 | 125–146 | `_AdoptiumOs()` / `_AdoptiumArch()` 内联 `Pick(Utils.OS_NAME, …)` | 拆成 `internal static AdoptiumOs(string os)` / `AdoptiumArch(string arch)` + 两个私有包装;**取值一字未改** | 让 mac 的 OS/架构名能被单测;顺便核对(线上确认正确) |
+| 4 | 839 | `string text2 = Utils.FindExecutable(text);`(`ListInstalledJavas`) | `JavaRuntimeFiles.FindJavaUnderRoot(text, Utils.IS_WINDOWS, Utils.IS_MAC)` | java 定位统一入口 |
+| 5 | 979 | 同上(`_PreferToExe`,用户手工指定的 java 目录) | 同上 | 同上 |
+| 6 | 1153–1161 | `Chmod755(p)` 是**空方法** | `JavaRuntimeFiles.SetExecutable(p)`(非 Windows 上 `File.SetUnixFileMode(p, 0755)`,带 `OperatingSystem.IsWindows()` 守卫) | 清单里 29 个 `executable:true` 的文件在 mac 上必须真的有可执行位,否则 `bin/java` 是 0644 |
+| 7 | 1181 | `string text3 = Utils.FindExecutable(text2);`(Mojang 装前探测) | `FindJavaUnderRoot(...)` | 见 4-4 |
+| 8 | 1222–1232 | `type: link` 落进 `else` 分支的 `if (!Py.Eq(a, "file")) continue;`(**静默跳过**) | 新增 `if (Py.Eq(a, "link"))`:非 Windows 上调 `JavaRuntimeFiles.TryCreateRuntimeLink(...)`(安全检查通过才建相对软链),Windows 分支行为不变 | mac 清单里 208 个 link,原来全被丢掉 |
+| 9 | 1261 | `text3 = Utils.FindExecutable(text2);`(Mojang 装后查找) | `FindJavaUnderRoot(...)` | 见 4-4 |
+| 10 | 1273–1276 | `ArchiveSuffix()` 内联 `if (!Utils.IS_WINDOWS)` | `JavaRuntimeFiles.ArchiveSuffixFor(Utils.OS_NAME)`(**三个平台的返回值一字未变**) | 让后缀可注入、可单测 |
+| 11 | 1283 / 1313 | Adoptium 装前/装后 `Utils.FindExecutable(text)` | `FindJavaUnderRoot(...)` | 见 4-4 |
+| 12 | 1301 | `DownloadManager.ExtractArchive(text4, text);`(Adoptium) | `JavaRuntimeFiles.ExtractJavaArchive(text4, text, Utils.IS_MAC);` | mac 上走保留权限位/软链的解压;Windows/Linux 内部原样转调 `DownloadManager.ExtractArchive` |
+| 13 | 1406–1429 | `_ZuluOs()` / `_ZuluArch()` 内联 `Pick` | 拆成 `internal static ZuluOs(string os)` / `ZuluArch(string arch)` + 私有包装;**取值一字未改**(`macos` / `aarch64` 被线上确认正确) | 同 4-3 |
+| 14 | 1444 / 1478 / 1490 | Zulu 装前/装后 `Utils.FindExecutable(text3)` | `FindJavaUnderRoot(...)` | 见 4-4 |
+| 15 | 1448 | `…&archive_type=zip&latest=true`(**所有平台都写死 zip**) | `…&archive_type=" + JavaRuntimeFiles.ZuluArchiveTypeFor(Utils.OS_NAME) + "&latest=true`(mac → `tar.gz`,Windows/Linux/未知仍 `zip`) | zip 的字节被当成 `.tar.gz` 解压 → 必然失败(1.4 节) |
+| 16 | 1487 | `DownloadManager.ExtractArchive(text6, text3);`(Zulu) | `ExtractJavaArchive(text6, text3, Utils.IS_MAC)` | 同 4-12 |
+| 17 | 1494 / 1504 / 1533 | Microsoft 装前/装后 `Utils.FindExecutable(text)` | `FindJavaUnderRoot(...)` | 见 4-4 |
+| 18 | 1532 | `DownloadManager.ExtractArchive(text6, text);`(Microsoft) | `ExtractJavaArchive(text6, text, Utils.IS_MAC)` | 同 4-12 |
+
+`Utils.FindExecutable(` 在改后的 `Java.cs` 里**已无调用点**;它仍在 `Utils.cs` 里,由新函数转调(以及别的文件继续用)。
+`PLATFORM_KEY` 的使用点(1135/1138/1155/1162/1164 附近的目录名与清单键)**一处未动**,只换了它算出来的值。
+
+### 5. 新文件
+
+| 文件 | 内容 |
+|---|---|
+| `src\TipCL.Core\Launcher\JavaRuntimeFiles.cs`(新,Windows 源里没有对应文件) | ① `ArchiveSuffixFor(os)` / `ZuluArchiveTypeFor(os)`;② `ModeForEntry(bool)` → 0755 / 0644;③ 路径安全检查:`IsInsideRoot` / `ResolveEntryPath` / `ResolveLinkTarget`;④ `FindJavaUnderRoot(root, isWindows, isMac)`;⑤ 落地:`SetExecutable` / `TryCreateRuntimeLink`;⑥ `ExtractJavaArchive(archive, dest, isMac, hooks)` 与 `SafeExtractTarGz`(**`System.Formats.Tar`,没有引包**),带 `TarHooks`(SetMode / CreateLink / Warn / IsWindows)注入点 |
+
+`.tar.gz` 解压现状核对(任务书第 4 项要求先弄清):`DownloadManager.ExtractArchive` **按文件名后缀**分流,
+`.tar.gz` → `Utils.SafeExtractTargz`(**托管代码,不是外部 tar**),而它:
+① 用 `File.WriteAllBytes` 落盘 → **丢掉 tar 的 mode(SafeExtractTargz:`Utils.cs` 1162–1184)**;
+② `type '1'/'2'`(硬链/软链)一律 `continue` → **软链丢失**;③ 入口路径用 `UnderRoot` 做穿越检查(**已满足**)。
+②③ 里的①和②在 mac 上会把 `bin/java` 落成不可执行 —— 所以 mac 分支改用新实现;`Utils.SafeExtractTargz` **没有改**。
+
+### 6. 测试(新增 90 条,总数 811 → 901)
+
+| 文件 | 覆盖 | 用例数 |
+|---|---|---|
+| `tests\TipCL.Tests\B2aPlatformKeyTests.cs` | `PlatformKeyFor` 13 组 × OS/架构(Windows/Linux 逐项对照改前源码 67–96 行)+ 线上顶层键集合里有两个 mac 键、没有 `osx`/`osx-arm64` + `PLATFORM_KEY` = 纯函数 + 目录名拼装 | 17 |
+| `B2aJavaArchiveNamesTests.cs` | Adoptium/Zulu 的 OS 名、架构名、`ArchiveSuffixFor`、`ZuluArchiveTypeFor`、未知键仍抛 `KeyError`、Adoptium 主版本归一化 | 27 |
+| `B2aRuntimePathSafetyTests.cs` | `ModeForEntry`(2 条 + 1 组 Theory)、`IsInsideRoot`(根含自身 / 兄弟前缀陷阱 / 空串 / 大小写)、`ResolveEntryPath`、`ResolveLinkTarget`(正常相对 / 上级但仍在根内 / `../` 逃出 / 绝对路径内外 / 空串 / Windows 跳过)、`TryCreateRuntimeLink` | 23 |
+| `B2aJavaLocatorTests.cs` | 4 种目录树(全是空文件)+ 找不到 / 目录不存在 / 空根 + 「Windows·Linux 分支 = 改动前的 `Utils.FindExecutable`」逐形态钉住 | 14 |
+| `B2aTarExtractionTests.cs` | 现造 tar.gz:`System.Formats.Tar` 写 Ustar:内容/权限位、mode 0 兜底、setuid/setgid 被 mask、相对软链参数、逃出目标的软链被跳过并记日志、条目路径逃出抛 `ValueError`、Windows/Linux 仍走旧解压器、不支持的格式抛 `DownloadError` | 9 |
+
+- 全部用例:**不联网、不起任何外部进程、不实例化 `BackendApi` / `BridgeServer` / `PluginManager`**;
+  临时文件全在 `TestHome.Root` 下;权限位与软链**一律走假委托**,没有真的改权限位或建链接;
+  `TIPCL_HOME` 没有改写(仍由 `ModuleInitializer` 与 `TestHome` 管);
+  没有调 `InstallAdoptium` / `_InstallZulu` / `InstallMojangRuntime` / `FindSystemJavas` 这类会联网、会扫描磁盘的入口。
+- 期望值来源都在注释里标了「源码行为」还是「线上证据」。
+
+### 7. 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | 开工时 `%LOCALAPPDATA%\TipCL` 元信息 | **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,与 Lead 基线三项一致 → 继续 |
+| 2 | `dotnet build-server shutdown` | 退出码 **0**(两个服务器都关闭成功) |
+| 3 | `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 错误 / 1 警告**;另跑一次 `-v:n` 确认警告**只有 SYSLIB0014 ×1**(`Sync\PhoneClient.cs:116`,无 CA1416、无新警告,`NoWarn` 未动) |
+| 4 | `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 **0**,`失败: 0,通过: 901,已跳过: 0,总计: 901`(853 ms;没有 Win32Exception (5),没有超时) |
+| 5 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 **0**,`总计 901 个用例,通过 901,失败 0,跳过 0,不支持 0`,末行 `in-proc 测试全绿` |
+| 6 | `cmd /c "...\TipCL.exe --smoke --theme light --out artifacts\smoke-light.png"` | 退出码 **0**,**3739 字节**(与 A1 / Lead 基线一致) |
+| 7 | `cmd /c "...\TipCL.exe --smoke --theme dark --out artifacts\smoke-dark.png"` | 退出码 **0**,**3751 字节**(与 A1 / Lead 基线一致) |
+| 8 | `%TEMP%` 下 `tipcl*` 目录**名字集合**(两条通道各跑前后各一次) | 86 → 86 与 86 → 86,**两次差集都是空**(第一条命令里出现的 `tipcl-win-smoke` 是**换行分隔快照文件读回时的解析错误**造成的假阳性:该目录 `CreationTime = 2026-11-09 22:53:38`,远早于本次测试;用数组直接比较重跑后差集为空) |
+| 9 | 残留进程 `testhost` / `java` / `javaw` / `tar` / `adb` / `TipCL` | 全部 **0 个** |
+| 10 | 测试跑完后 `%LOCALAPPDATA%\TipCL` 元信息 | **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,与开工时完全一致 |
+| 11 | 字节一致性自检:`src\TipCL.Core\` 下 **244** 个 `.cs`(不含 bin/obj)对 Windows 源比 SHA256 | **一致 230 / 有改动 8 / Windows 源里没有对应文件 6**;改动 8 = 现有 7(A5 的 3 个 + `SecretStore.cs` + `ExtraTools.cs` + `GlobalMods.cs` + `Sysinfo.cs`)+ **本包 `Launcher\Java.cs`**;无对应 6 = 现有 5 + **本包 `Launcher\JavaRuntimeFiles.cs`**(另有 3 个只在 Windows 源里的平台文件:`WinCredSecretStore.cs`、`Wpf\WpfDecodedImage.cs`、`Wpf\WpfImageCodec.cs`,属既有差异) |
+
+### 8. 未验证项(本机是 Windows,没有 Mac)
+
+- **mac 上真机安装并运行 Java 未验证**(没有任何 `.tar.gz` 被下载,也没有起过 `java`)。
+- `File.SetUnixFileMode` / `File.CreateSymbolicLink` 在 mac 上的真实效果未验证(本机只验证到「权限位取值纯函数」
+  与「假委托收到的参数」这一层);
+- **Azul 在 mac + aarch64 上 `archive_type=tar.gz` 是否有包未验证**(请求预算 12 用完):已证实 mac+aarch64 有 zip 包、
+  mac+x64 有 tar.gz 包。若该组合无包,`_InstallZulu` 会抛 `DownloadError("Azul Zulu 没有 Java N (macos/aarch64) 的 JRE 包")`
+  —— 是明确报错,不是静默错解压;
+- Adoptium / Zulu / Mojang 的 mac 运行时**解压后的目录树真机形态**未验证(测试里的树按线上包名与清单键手工摇出);
+- Microsoft 分支在 mac 上的 URL(写死 `.zip`)与落盘后缀(`.tar.gz`)不一致**未核对也未改**(见遗留第 3 条);
+- macOS 的 Gatekeeper / quarantine 属性对解压出的 `java` 的影响未验证。
+
+### 9. 遗留与风险
+
+1. **Apple 芯片上 Java 8 拿不到 Adoptium 原生包**(实测 `major=8 & architecture=aarch64` 返回 0 包)。
+   本包按「没有证据不硬凑」保持现有行为 → 老版本(需要 Java 8)在 Apple 芯片上会**下载失败**。
+   Zulu 在 mac aarch64 上是否有 Java 8 的 tar.gz 包**没查到**(请求预算用完),因此**没有**加「major 8 改走 Zulu」的选择;
+   需要 Lead 裁决(要么给 1 个查询预算,要么接受现状)。
+2. **`Utils.SafeExtractTargz` 的缺陷仍在**(本包未改):丢权限位、丢软链,且 **Linux 也走这条路**
+   (`ArchiveSuffix()` 在 Linux 也是 `.tar.gz`)。红线要求「只改 mac + Linux 行为不变」,所以 mac 用新实现绕过;
+   要不要把它改成 `System.Formats.Tar` 的通用实现(顺带修好 Linux)由 Lead 裁决。
+3. **Microsoft 厂商分支的自洽性没修**:`_InstallMicrosoft` 的 URL 写死 `.zip`,落盘却用 `ArchiveSuffixFor(os)`(mac/Linux 是 `.tar.gz`);
+   与 Zulu 是同一类缺陷,但本包**没有**线上证据说明 `aka.ms/download-jdk/microsoft-jdk-<major>-mac-<arch>.<ext>` 到底给哪种格式,
+   按「拿不准不改」处理,留给 Lead(修法与 Zulu 同型:扩一个可注入纯函数)。
+4. `mode == 0` 的 tar 条目兜底成 **0644**:若某个厂商的 tar 真的把 `bin/java` 的 mode 写成 0,解压后仍不可执行
+   (这种包本来就是坏的,不做猜测性兜底 —— 不额外 chmod 是为了不掩盖解压缺陷)。
+5. `link` 条目在**安装目录整体被移动**后仍然有效(用的是相对目标);但**指向尚未下载的目标**的链接会短暂悬空,
+   最终一致(所有文件下载完才建链)。
+6. 本包的 `Mac` 分支只保证 `mac-os-arm64` 的 4 个组件与 `mac-os` 的 7 个组件;清单将来新增组件(例如再出现 `jre-legacy` 的 arm64 版)
+   不需要改代码,`PLATFORM_KEY` 已经是对的。

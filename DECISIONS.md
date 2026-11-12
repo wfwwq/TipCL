@@ -464,3 +464,79 @@
 (`Utils.IS_WINDOWS = OS_NAME == "windows"`,`OS_NAME` 来自 `RuntimeInformation.IsOSPlatform(OSPlatform.Windows)`,
 Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支换守卫**不改变运行时行为**;
 `_windows`(注入标志)的语义也保持原样,只是额外用 `OperatingSystem.IsWindows()` 满足分析器。
+
+## D-38 mac 的 Mojang 运行时平台键是 `mac-os` / `mac-os-arm64`(不是 `osx` / `osx-arm64`)
+
+- **线上实测**(2026-11-12 18:58 与 19:01,`…/java-runtime/2ec0cc96…/all.json`,HTTP 200 / 13385 字节):
+  顶层键只有 `gamecore` / `linux` / `linux-i386` / `mac-os` / `mac-os-arm64` / `windows-arm64` / `windows-x64` / `windows-x86`。
+  非空组件数:`mac-os` 7、`mac-os-arm64` 4(delta / epsilon / gamma / gamma-snapshot,**没有 jre-legacy / alpha / beta**)。
+- **改动**:`_PlatformKey()` 拆成可注入纯函数 `PlatformKeyFor(string os, string arch)`;mac 分支返回 `mac-os` / `mac-os-arm64`。
+  `windows` / `linux` / 默认分支逐字保持(含清单里并不存在的 `linux-arm64` —— 那不是本包的事,已按红线原样保留)。
+- **为什么不顺手改 Linux 的 `linux-arm64`**:任务书明确「清单里并不存在的 `linux-arm64`,那不是本包的事」,
+  且红线要求 Linux 分支算出来的每个键都不许变。
+
+## D-39 Apple 芯片上 Java 8 的缺口:**不加**厂商切换,保持现有回退链(需要 Lead 裁决)
+
+- **实测事实**:Adoptium `os=mac&architecture=aarch64&image_type=jre` 在 `major=8` 上返回 **0 个包**(响应体 3 字节 `[]`);
+  `major=17` / `21` 都有包。Zulu 侧只查到 `os=macos&arch=aarch64` 在 17 上有 zip 包(4 条),
+  **8 的 tar.gz 是否有包没查到** —— 联网请求预算(≤12)已用完,不重试。
+- **裁决执行**:任务书写「如果现有回退厂商对某个 major 在 mac aarch64 上没有包**而另一个已支持的厂商有**」
+  才加切换。Adoptium 没有包这一半已经证实,但「Zulu 有 Java 8 的 mac aarch64 tar.gz 包」**没有证据**,
+  因此按「拿不准选最保守、不硬凑」处理:**不加**新选择逻辑,保持现有链路
+  (`EnsureJavaForVersion` → Mojang 拿不到 → `InstallAdoptium`),Apple 芯片上需要 Java 8 的老版本会**下载失败**。
+- **同时明确否决的两条路**:
+  1. **不用** `mac-os`(x64)的 Mojang 运行时经 Rosetta 运行 —— 任务书明令禁止静默改变架构;
+  2. **不用** Adoptium 的 `x64` 包在 arm64 上跑 —— 同上,都是静默改架构。
+- **给 Lead 的选项**:①给 1 个查询预算(aarch64 + java_version=8 + archive_type=tar.gz),有包就加一条
+  「mac + arm64 + major≤8 → 改走 zulu」的可注入纯函数 + 单测;②接受现状(失败信息是
+  `Azul Zulu 没有 …` 或 Adoptium 的下载失败)。
+
+## D-40 Zulu 的 `archive_type` 在 mac 上改成 `tar.gz`(Windows / Linux 一字不动)
+
+- **矛盾实测**:`_InstallZulu` 的查询地址写死 `archive_type=zip`,而落盘文件名用 `ArchiveSuffix()`
+  (非 Windows = `.tar.gz`),`DownloadManager.ExtractArchive` 又**按文件名后缀**选解压器 →
+  mac 上会把 zip 的字节交给 `GZipStream`,必然失败。线上实测 `os=macos&arch=aarch64&java_version=17&archive_type=zip`
+  确实回 `.zip` 文件名(`zulu17.70.113-ca-fx-jre17.0.21.0.3-macosx_aarch64.zip`),这个矛盾是真实存在的,不是理论上的。
+- **改法**:`ZuluArchiveTypeFor(string os)`:mac → `tar.gz`,其余(**含 Linux**)→ `zip`。
+  必须只改 mac:Linux 现在也是「请求 zip / 按 .tar.gz 落盘」,**改它会动到 Linux 的 URL 参数**,红线不许。
+  代价是 Linux 的同类缺陷原样保留(已记在 PROGRESS.md 的 B2a 遗留第 2 条)。
+- **风险**:mac + aarch64 + `archive_type=tar.gz` 是否有包**未验证**(预算用尽)。已证实 mac + x64 + tar.gz 有包、
+  mac + aarch64 + zip 有包。若该组合无包,`_InstallZulu` 会抛明确的「Azul Zulu 没有 … 的 JRE 包」,不会静默错解压。
+
+## D-41 `Utils.SafeExtractTargz` 的两处缺口:mac 用新实现绕过,**不改**第二个复制来的文件
+
+- **现状(读了源码,不是猜的)**:`DownloadManager.ExtractArchive` 按后缀分流,`.tar.gz` → `Utils.SafeExtractTargz`
+  (**托管代码,不是外部 `tar`**)。它的入口路径穿越检查(`UnderRoot`)是满足的,但
+  ① `File.WriteAllBytes` 落盘 → **tar 的 mode 丢失**(`bin/java` 变成 0644、`lib/jspawnhelper` 同);
+  ② `type '1'/'2'`(硬链/软链)一律 `continue` → **软链丢失**(mac 的厂商 JRE 里软链是常态形态)。
+- **决定**:任务书要求「若需改,优先用 .NET 8 自带的 `System.Formats.Tar`」,但那是**第二个复制来的文件**;
+  任务书同时要求「发现必须改第二个复制文件就停手、写进 PROGRESS 交 Lead 裁决」。
+  两条约束的交集 → **不动 `Utils.cs`**,在**新文件** `Launcher\JavaRuntimeFiles.cs` 里写 mac 专用解压
+  (`SafeExtractTarGz`,用 `System.Formats.Tar`,不引包),由 `ExtractJavaArchive(..., isMac)` 只在 mac 分支调用;
+  Windows / Linux 原样转调 `DownloadManager.ExtractArchive`(有单测钉住:注入的权限位出口一次都不会被调用)。
+- **代价**:Linux 仍然丢权限位与软链(它的后缀也是 `.tar.gz`)。修法建议已写进 PROGRESS.md 的 B2a 遗留第 2 条。
+- **两个安全细节的取舍**:
+  1. 条目路径逃出目标目录 → **抛 `ValueError`**,与旧实现一致(不是跳过),因为条目路径是压缩包的结构性问题;
+  2. 软链目标逃出目标目录 → **跳过 + 记日志**(任务书明确要求「跳过并记日志」),因为软链只是条目之一,不该让整包解压失败。
+     相对目标**原样保留**(而不是换成绝对路径),这样安装目录整体移动后链接依然有效。
+  3. tar 里的 setuid / setgid / sticky 位一律 mask 掉(只留 0777),不给安装目录种 setuid。
+
+## D-42 java 定位的接缝:`FindJavaUnderRoot(root, isWindows, isMac)`
+
+- **核对结论**:mac 的三种目录形态(`jre.bundle/Contents/Home/bin/java`、`xxx.jre/Contents/Home/bin/java`、
+  厂商 tar 解到根后的 `Contents/Home/bin/java`)原来的 `Utils.FindExecutable` **都能找到**
+  (它先试 `bin` / `jre/bin` / 根,再按层级遍历,目录名 `Contents` / `Home` 不在 skip 表里)—— 所以**不算缺口**。
+- **仍然加了接缝**:mac 分支先按已知形态的**固定顺序**试(快且确定),再回落到原来的遍历(厂商 tar 顶层目录名不定);
+  `isWindows: true` 或 `isMac: false` 时**原样转调 `Utils.FindExecutable`**,Windows / Linux 行为一字不变
+  (有 4 组用例直接钉住「= `Utils.FindExecutable(root)`」)。
+- **为什么参数是三个布尔而不是一个**:测试要在 Windows 上验证 mac 分支,而 `Utils.IS_WINDOWS` / `Utils.IS_MAC`
+  是 `readonly static`(不能注入);把两个平台标志都做成参数,生产代码传 `Utils.IS_WINDOWS` / `Utils.IS_MAC`,
+  Windows / Linux 走的分支与改动前**逐字相同**,mac 分支可在本机单测。
+
+## D-43 Microsoft 分支在 mac 上的同类不一致:只记录,不改(没有线上证据)
+
+- `_InstallMicrosoft` 的 URL 写死 `…-<major>-<os>-<arch>.zip`,落盘却用 `ArchiveSuffixFor(os)`(mac/Linux 是 `.tar.gz`),
+  与 Zulu 是同一类矛盾。
+- **不改的理由**:本包没有查到「`aka.ms/download-jdk/microsoft-jdk-<major>-mac-<arch>` 到底给 `.zip` 还是 `.tar.gz`」
+  的线上证据(请求预算已用完),而且 Microsoft 不在自动回退链里(只有用户显式选厂商时才走)。
+  按「拿不准选最保守」保留原样,把修法(与 Zulu 同型:扩一个可注入纯函数)写进 PROGRESS.md 的 B2a 遗留第 3 条。
