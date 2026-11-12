@@ -84,9 +84,9 @@ public sealed class LibraryPage : PageBase
     /// <summary>页面发起跳转请求（双击版本 → 启动页等）。外壳接线，见 progress/M2-B2.md 依赖申请。</summary>
     public static Action<string>? NavRequested; // 外壳接线（依赖申请见 progress/M2-B2.md）
 
-    // 折叠态与收藏：B0 未提供 UiPrefs（缺口 B），先进程内记忆，B0 落 UiPrefs 后换持久化
-    private static readonly Dictionary<string, bool> Expanded = new();
-    private static readonly Dictionary<string, List<string>> Favorites = new();
+    // 折叠态与收藏(R15):落 UiPrefs -> config.json 的 ui_prefs 键(缺口 B 已补)。
+    // 折叠态键 = "lib:" + 分组键,对齐 Windows 版 Pages/LibraryPage.cs:658,666;
+    // 收藏键 = 实例名 -> 版本 id 列表(VmFavorites)。一律现读现写,不留静态副本。
 
     private readonly StackPanel _folders = new();
     private readonly TextBlock _folderPath = UiClass.Small("");
@@ -500,11 +500,13 @@ public sealed class LibraryPage : PageBase
     private void ToggleGroup(Group g)
     {
         ApplyOpen(g, !g.Open);
-        Expanded["lib:" + g.Key] = g.Open;
+        var prefs = UiPrefs.Load();
+        prefs.SetExpanded(UiPrefs.LIB_PREFIX + g.Key, g.Open);
+        prefs.Save();
     }
 
     private static bool PrefsOpen(string key, bool def)
-        => Expanded.TryGetValue("lib:" + key, out var v) ? v : def;
+        => UiPrefs.Load().GetExpanded(UiPrefs.LIB_PREFIX + key, def);
 
     private Border BuildVerRow(Ver v)
     {
@@ -605,19 +607,13 @@ public sealed class LibraryPage : PageBase
         return s;
     }
 
-    private List<string> Favs()
-    {
-        if (!Favorites.TryGetValue(_folder, out var value))
-            Favorites[_folder] = value = new List<string>();
-        return value;
-    }
-
-    private bool IsFav(string id) => Favs().Contains(id);
+    private bool IsFav(string id) => UiPrefs.Load().IsFavorite(_folder, id);
 
     private void ToggleFav(Ver v)
     {
-        var list = Favs();
-        if (!list.Remove(v.Id)) list.Add(v.Id);
+        var prefs = UiPrefs.Load();
+        prefs.ToggleFavorite(_folder, v.Id);
+        prefs.Save();
         RenderGroups();
     }
 

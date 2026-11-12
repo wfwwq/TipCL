@@ -304,3 +304,15 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 > 定位方法见 D-43:真机点击必须用**窗口相对坐标**(`import -window $WID` 量位置 + `xdotool mousemove --window $WID x y click 1`);用整屏截图反算绝对坐标会偏 20~50px,连点四轮都可能全部落空。
 >
 > 冒烟截图的确定性已按 D-42 加固(捕获前推渲染 pass + 丢弃首帧 + 最小 settle);R8 那条「冷启动首批把上一页帧写进新文件名」在本轮冷启动 16 次里**未复现**,属「已加防御性确定性、未复现原现象」。
+
+### 9.2 「缺口 B」已补:UiPrefs(折叠态 / 版本收藏 / 下载页当前实例)落 config.json(2026-11-13,R15)
+
+| 项 | Windows | Linux(补前) | Linux(补后) | 依据 |
+|---|---|---|---|---|
+| 分组折叠态 | `wpf-ui.json` 的 `Expanded["lib:"/"vm:"+key]` | 进程内静态表(重启即丢) | `config.json` 的 `ui_prefs.expanded`(两种前缀都接) | D-45 |
+| 版本收藏 | `wpf-ui.json` 的 `VmFavorites`(实例 → 版本 id 数组) | 进程内静态表 | `ui_prefs.vm_favorites`,实例库与版本管理**共用同一张表** | D-45 |
+| 下载页当前实例 | `CatalogInstance` | 每次进页都回到第一个 | `ui_prefs.catalog_instance`(记录里的实例不存在时退回第一个) | D-45 |
+| `LastUser` / `Notes` / `Dark` / `Anim` | 同一个 wpf-ui.json | **本来就有等价键**(`last_user` / `ui_notes` / `ui_dark` / `ui_motion`),不重复造 | 同左 | 避免两个真源 |
+| `AnimScale` / `SideWidth` / `SideFrost*` | wpf-ui.json | Linux `Motion` 无缩放因子;v2 外壳无侧栏 | **不适用**(不造没人读的键) | D-45 / §5 |
+
+> 落点为什么不另造 `wpf-ui.json`:Linux 侧只有一个用户配置文件 `config.json`,界面键(`ui_dark` / `ui_motion` / `ui_layout` / `ui_notes` …)都在里面;再开一个文件会让「配置在哪」有两个答案,也拿不到既有的原子写与迁移逻辑。

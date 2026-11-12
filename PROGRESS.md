@@ -424,3 +424,20 @@
 - **验收**:代理连跑 **22/22 全绿**;主 agent **独立连跑 8/8 全绿**(每次 `失败: 0,通过: 334,已跳过: 1,总计: 335`、exit 0,平均 wall **24.2s**;改动前平均 30.7s ⇒ **没有变慢**,修复不含任何串行化)。累计 30 次连续全绿,对照改动前 4/32 ≈ 12.5% 的失败率,「纯靠运气」的概率约 **1.8%**。用例总数前后一致 **335 = 334 passed + 1 skipped**(仍是 `SmokeIntegrationTests.SmokeArg_Renders_MainWindow_To_SmokePng` 的 `[Fact(Skip=…)]`),**没有删用例、没有加 skip、没有放宽断言**。Release 构建 0 条 CS/CA 警告。
 - **证据**:`_cmp/r14-report.md`(现象表 / IL 摘录 / 探针日志 / 最小复现 / 22 次逐次表)、`_cmp/r14-{pre,probe,fix}-test*.txt`、`_cmp/r14-fix-summary*.txt`、`_cmp/r14-repro-{baseline,fixed}.txt`(基线 13/13 失败、修复 9/9 通过,100μs 时间线显示 ~50μs 窗口与调度器归属被纠正)、`_cmp/r14-probe-log-FAIL2.txt`(`FOREIGN-OWNER owner=#10 (session=#0)`)。
 - **留下的权衡/风险**:兜底用反射访问 Avalonia 内部(`Avalonia.AvaloniaLocator.Current` / `_parentScope` / `_registry` / `GetService`);将来升级 Avalonia 若改名会**静默失效**,视作退回「偶发失败」而不是新增失败。`PushFrame` 那一形态只复现出同族机制、未逐帧复现原现场。
+
+### 2026-11-13 M4-H R15 UiPrefs 持久化:补上 D-19 的「缺口 B」(移植代理;主 agent 复核)
+
+- **做了什么**:新增 `src/TipCL.Core/Launcher/UiPrefs.cs`(语义照 Windows `src/TipCL/UiPrefs.cs`,落点改为 `config.json` 的 `ui_prefs` 键)+ 三处接线:`LibraryPage`(折叠态 `lib:`、版本收藏)、`VersionManagePage`(折叠态 `vm:`、与实例库共用同一张收藏表)、`CatalogPage`(当前实例)。两页原先各有一对**进程内静态表(折叠态 + 收藏)已删净**;`Config.cs` 的默认配置补 `ui_prefs`(老配置下次启动按既有迁移逻辑补键并重写一次)。
+- **键布局**:`ui_prefs.expanded`(`lib:` / `vm:` 前缀 → bool)、`ui_prefs.vm_favorites`(实例 → 版本 id 数组,两页共用)、`ui_prefs.catalog_instance`。真落盘片段见 `_cmp/r15-json-home/config.json`(`vm_favorites` + `expanded` + `catalog_instance` 三块都在)。
+- **不重复造的项(避免两个真源)**:`last_user` / `ui_notes` / `ui_dark` / `ui_motion` 本就落同一份 config.json;`AnimScale`(Linux `Motion` 只有 `Enabled`,全仓无全局缩放因子)、`SideWidth`/`SideFrost*`(v2 外壳无侧栏)判为**不适用**。
+- **健壮性**:缺键 / 空字典 / 类型不符 / 坏 JSON 一律取默认值不抛(有专门用例,含真·坏 JSON 文件);写失败只记一行日志。
+- **测试**:335(334+1)→ **343(342+1)**,净增 8 条(prefs 层 6 条 + 页面接线 2 条);**负控**:把 `Load` 临时改回进程内静态缓存 → 3/6 失败(含「收藏必须来自磁盘」那条),按字节还原后 6/6 通过 ⇒ 回归用例有牙。
+- **主 agent 复核**:Release **0 条 CS/CA 警告**;`dotnet test` 独立连跑 2 次均 **343(342+1) 全绿**;磁盘 JSON 片段、负控/正控日志与报告一致;`last_user` / `ui_notes` 的既有键已逐行核对(`LaunchPage.cs:616/927/1031`、`:338/341`);两页静态表 grep 计数 0。
+- **遗留(如实)**:① 每次用户手势都会同步整份重写 config.json,极端占锁最坏约 2.5s 会阻塞 UI 线程(未做防抖/后台写,见 D-45);② **没有点击级 UI 测试** —— 「点星 → 重启 → 收藏还在」是「prefs 往返(用全新 Config 实例从磁盘读回)+ 页面接线 + harness 实操」拼证,不是 GUI 端到端;③ 页面接线测试用反射调私有方法(改名即编译失败,属有意契约)。
+
+### 2026-11-13 M4-H R21 AppImage 组装流程实机打通(主 agent;最终归档待收尾)
+
+- **卡在哪**:`tools/package.sh` 第一步是 `dotnet publish`,而盒子(Ubuntu 24.04.5)**没有 dotnet** ⇒ 这条脚本在盒子上根本走不通,`dist/` 里因此一直只有 `TipCL-linux-x64/` 与 zip、**没有 `.AppImage`**(脚本里 `linuxdeploy` 那段从未被执行过)。
+- **打通后的流程**:本地 `tools/package.ps1 -SkipWin` 出单文件 → 拷到盒子 → 盒子上组装 AppDir(AppRun / desktop / icon 照 `tools/package.sh` 的布局)→ `APPIMAGE_EXTRACT_AND_RUN=1 linuxdeploy-x86_64.AppImage --appdir ... --output appimage`。两个前置条件都是本轮踩出来的:**盒子必须装 `file` 包**(缺了 `appimagetool` 直接报 `file command is missing but required`,已 `apt-get install -y file`),**运行侧用 extract-and-run 免 FUSE**(已验证可用)。
+- **干跑结果(用的是当时的 `tipcl14`)**:`TipCL-x86_64.AppImage` = **38,959,608 B**;`TIPCL_HOME=<隔离沙箱> APPIMAGE_EXTRACT_AND_RUN=1 ./TipCL-x86_64.AppImage --smoke` → **exit 0** + `smoke.png` 60,101 B + 应用日志 **0 WARN**。
+- **归档**:`progress/M4-H-R21-AppImage组装与实机验证.md`(可复现步骤 + 两条前置条件);证据 `_cmp/box-appimage-out.txt`、`_cmp/box-appimage2-out.txt`。最终产物出来后重做一遍,并补一次「不带 extract-and-run 的裸跑」看这台盒子的 FUSE 到底能不能挂。

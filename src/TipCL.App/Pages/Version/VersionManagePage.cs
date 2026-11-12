@@ -5,8 +5,8 @@
 // 行操作:收藏星、隔离开关、卸载、版本设置;双击启动;右键菜单(打开版本/游戏文件夹、存档管理、
 // 重命名、复制、隐藏、桌面快捷方式、导出启动脚本、修复、卸载)。文件夹右键菜单(打开、设为默认、
 // 选择 Java、管理模组、存档管理、导出整合包、重命名、删除)。
-// 降级项(见 DECISIONS D-19):Expanded/VmFavorites 偏好先落进程内静态表
-// (Windows 走 wpf-ui.json,Linux 侧等 UiPrefs 落地后再持久化)。
+// 折叠态与收藏(R15):原「进程内静态表」降级项已补 —— 落 config.json 的 ui_prefs 键
+// (Windows 版落独立文件 wpf-ui.json;Linux 侧沿用唯一用户配置文件,见 TipCL.Core.Launcher.UiPrefs)。
 // M4-H P3.5:「创建桌面快捷方式」已恢复 —— Linux 侧补了真的 CLI 入口(见 DECISIONS D-23)。
 using System;
 using System.Collections.Generic;
@@ -88,9 +88,8 @@ public sealed class VersionManagePage : PageBase
         ("hidden", "隐藏的版本", false),
     };
 
-    // 折叠态与收藏:Windows 落 wpf-ui.json(UiPrefs);Linux 侧 UiPrefs 未落地 → 进程内静态表
-    private static readonly Dictionary<string, bool> Expanded = new();
-    private static readonly Dictionary<string, List<string>> Favorites = new();
+    // 折叠态与收藏(R15):落 UiPrefs -> config.json 的 ui_prefs 键(缺口 B 已补),
+    // 现读现写不留静态副本;折叠态键 = "vm:" + 分组键(对齐 Windows Pages/VersionManagePage.cs:508,516)
 
     private readonly StackPanel _folders = new();
     private readonly TextBlock _folderPath = UiClass.Small("");
@@ -372,11 +371,13 @@ public sealed class VersionManagePage : PageBase
     private void ToggleGroup(Group g)
     {
         ApplyOpen(g, !g.Open);
-        Expanded["vm:" + g.Key] = g.Open;
+        var prefs = UiPrefs.Load();
+        prefs.SetExpanded(UiPrefs.VM_PREFIX + g.Key, g.Open);
+        prefs.Save();
     }
 
     private static bool PrefsOpen(string key, bool def)
-        => Expanded.TryGetValue("vm:" + key, out bool v) ? v : def;
+        => UiPrefs.Load().GetExpanded(UiPrefs.VM_PREFIX + key, def);
 
     private static bool _dummyKeepAwake;
 
@@ -544,18 +545,13 @@ public sealed class VersionManagePage : PageBase
         };
     }
 
-    private List<string> Favs()
-    {
-        if (!Favorites.TryGetValue(_folder, out var list)) Favorites[_folder] = list = new List<string>();
-        return list;
-    }
-
-    private bool IsFav(string id) => Favs().Contains(id);
+    private bool IsFav(string id) => UiPrefs.Load().IsFavorite(_folder, id);
 
     private void ToggleFav(Ver v)
     {
-        var list = Favs();
-        if (!list.Remove(v.Id)) list.Add(v.Id);
+        var prefs = UiPrefs.Load();
+        prefs.ToggleFavorite(_folder, v.Id);
+        prefs.Save();
         RenderGroups();
     }
 

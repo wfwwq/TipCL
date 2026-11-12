@@ -157,6 +157,9 @@ public static class Config
 		pyDict["ui_nav_defaults"] = "";
 		pyDict["ui_nav_style"] = "grouped";
 		pyDict["ui_section_members"] = new PyDict();
+		// 界面偏好(缺口 B):Windows 版单独落 wpf-ui.json;Linux 侧统一进这一份 config.json,
+		// 见 TipCL.Core.Launcher.UiPrefs(expanded / vm_favorites / catalog_instance)
+		pyDict["ui_prefs"] = new PyDict();
 		pyDict["ui_sidebar_width"] = 0L;
 		pyDict["default_java"] = "";
 		pyDict["global_mods_dir"] = "";

@@ -23,6 +23,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Shell;
 using TipCL.App.Ui;
 using TipCL.Core;
+using TipCL.Core.Launcher;
 using UiClass = TipCL.App.Ui.Ui;
 
 namespace TipCL.App.Pages.Download;
@@ -114,7 +115,9 @@ public sealed class CatalogPage : PageBase
         _version.SelectionChanged += (_, _) => { if (!_sync) Run(SearchAsync, "搜索失败"); };
         _inst.SelectionChanged += (_, _) =>
         {
-            if (!_sync) Run(ReloadCurrentAsync, "搜索失败");
+            if (_sync) return;
+            SaveCatalogInstance();
+            Run(ReloadCurrentAsync, "搜索失败");
         };
         _installedVer.SelectionChanged += (_, _) =>
         {
@@ -236,6 +239,18 @@ public sealed class CatalogPage : PageBase
 
     private string CurrentInstance() => _inst.SelectedItem as string ?? "";
 
+    // 下载页当前实例落 config.json 的 ui_prefs.catalog_instance(R15,对齐 Windows UiPrefs.CatalogInstance)。
+    // 写失败只记日志(UiPrefs.Save 内已吞),不影响筛选交互。
+    private void SaveCatalogInstance()
+    {
+        string name = CurrentInstance();
+        if (name.Length == 0) return;
+        var prefs = UiPrefs.Load();
+        if (prefs.CatalogInstance == name) return;
+        prefs.CatalogInstance = name;
+        prefs.Save();
+    }
+
     private string InstalledVersion()
     {
         int i = _installedVer.SelectedIndex;
@@ -283,7 +298,9 @@ public sealed class CatalogPage : PageBase
         _sync = true;
         _inst.Items.Clear();
         foreach (var (name, _) in _instances) _inst.Items.Add(name);
-        _inst.SelectedIndex = _instances.Count > 0 ? 0 : -1;
+        // 恢复上次选中的实例(记的那个已经没了 → 退回第一个)
+        int savedAt = _instances.FindIndex(x => x.Name == UiPrefs.Load().CatalogInstance);
+        _inst.SelectedIndex = _instances.Count > 0 ? Math.Max(savedAt, 0) : -1;
         _sync = false;
         await ReloadFavoritesAsync();
         await ReloadCurrentAsync();

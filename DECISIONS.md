@@ -177,6 +177,8 @@
 - **隔离默认值**:`Config` 的默认配置里 `default_isolation = "all"`(新版本默认隔离),测试断言按这个真实默认写,不硬编码 "none"。
 - **降级项(明确不呈现)**:Windows 的 `SPanel / SmoothScroll / Dlg.Busy / wpf-ui.json(UiPrefs) / PluginActionBar` 在 Linux 侧无对应件——滚动用 `ScrollViewer`+`MaxHeight`,忙碌遮罩不做(进度由任务页呈现),折叠态与版本收藏先进程内静态表,插件动作栏等 P6 插件宿主落地后再接;拖放导入整合包(FileDrop)不呈现。
 
+> ⚠️ **2026-11-13 更正(见 D-45)**:这条里的「折叠态与版本收藏先进程内静态表」已不再成立 —— UiPrefs 已按 Windows 语义补齐并落 `config.json` 的 `ui_prefs` 键(`lib:`/`vm:` 折叠态、`vm_favorites` 版本收藏、`catalog_instance` 下载页当前实例)。其余(SPanel / SmoothScroll / Dlg.Busy / PluginActionBar 不移植、拖放导入不呈现)仍按原判定。
+
 ### D-20 · Java 子页按 Windows JavaPage 对齐 + `Coerce` 的 POCO 陷阱(2026-11-12,移植代理)
 
 - **宿主方式**:Windows 的 `JavaPage` 是独立 PageBase,由设置页内层导航第 3 项挂进内容区;Linux 侧沿用既有做法,把它实现为 `SettingsSubView` 的子类 `JavaView`(标题/副标题由基类给出),页面结构与 Windows 一致。
@@ -371,3 +373,16 @@
 - **纪律**:① 测试里**禁止**再自己 `AppBuilder.Configure<…>().UseHeadless(...).SetupWithoutStarting()` 另起初始化 —— 必须统一走 `TestApp` 的会话,否则会把「归错误线程所有」的实现留在**根** locator 作用域(`AvaloniaLocator` 是进程级静态,不是线程本地);② 会话起来后把「会话线程自己那份 `IDispatcherImpl`」钉进根作用域当兜底(测试代码内、失败可退化为旧行为);③ 修 flaky **必须给机制级证据**(IL / 探针时间线 / 最小复现对照,如基线 13/13 失败 vs 修复 9/9 通过),**不许**用「跑了几次没失败」当结论。
 - **代价与风险**:兜底走反射访问 Avalonia 内部类型与私有字段(`AvaloniaLocator.Current` / `_parentScope` / `_registry`、`GetService`);升级 Avalonia 后改名会**静默失效**,后果是退回偶发失败、不会新增失败。若将来 Avalonia 给出公开入口(或 headless 会话自身保证 UIThread 归属),应改回公开 API。
 - **判据(以后照用)**:验收这类修复要同时给「改动前后的失败率/机制」与「用例总数不变(335 = 334 + 1 skip)、耗时不变差」,三者缺一不可。
+
+### D-45 · UiPrefs 落 config.json(补上 D-19 那条「缺口 B」:折叠态 / 版本收藏 / 下载页当前实例)(R15,2026-11-13,移植代理;主 agent 复核)
+
+- **背景**:Windows 把界面偏好落独立文件 `wpf-ui.json`(`src/TipCL/UiPrefs.cs` + `MainWindow.xaml.cs:1427 LoadUiPrefs` / `:1442 SaveUiPrefs`);Linux 侧当时无对应件,折叠态与版本收藏先进程内静态表(即 D-19 的降级项)。R15 补齐:语义照 Windows,**落点改为同一份 `config.json` 的 `ui_prefs` 对象键**(Linux 只有一个用户配置文件,不另造第二个)。
+- **键布局**(snake_case,与既有界面键同风格):
+  - `ui_prefs.expanded`:`{"<前缀>:<分组键>": bool}`,前缀 `lib:`(实例库)/ `vm:`(版本管理),对应 Windows `Expanded` 的两组键名;
+  - `ui_prefs.vm_favorites`:`{"<实例名>": ["<版本 id>", ...]}`,对应 Windows `VmFavorites`;**实例库与版本管理两页共用同一张表**;
+  - `ui_prefs.catalog_instance`:字符串,对应 Windows `CatalogInstance`。
+- **硬约束**:① 读一律**现读** config.json 的内存投影,**不许在静态字段留副本**(否则又退化成缺口 B);② 缺键 / 空字典 / 类型不符 / config.json 损坏 → 取默认值,**绝不抛**,启动流程不受影响;③ 写失败只记一行日志,不影响交互。
+- **不做镜像的项(避免两个真源)**:`LastUser` → Linux 本就落 `last_user`(`LaunchPage.cs:616/927/1031`);`Notes` → 本就落 `ui_notes`(`:338/341`);`Dark`/`Anim` → 本就有 `ui_dark`/`ui_motion`;`AnimScale` → Linux `Motion` 只有 `Enabled`(全仓无全局动画缩放因子),造一个没人读的键=死配置;`SideWidth`/`SideFrost*` → Linux 无侧栏(同 PARITY §5)。
+- **代价(如实记)**:每次用户手势(点星标 / 切分组 / 换下载页实例)都会**同步整份重写** config.json;正常几毫秒,极端占锁(杀软扫描,本仓库测试曾因 Defender 占锁出过假失败)最坏约 2.5s 会阻塞 UI 线程。Windows 版是关窗时统一保存,没有这个窗口。**本轮未做防抖/后台写,已列为遗留**。
+- **验收**:Release 0 CS/CA 警告;`dotnet test` 由 335(334+1)→ **343(342+1)**,净增 8 条(prefs 层 6 条 + 页面接线 2 条),连跑 3 次全绿(主 agent 独立复跑 2 次亦全绿);8 页冒烟 8/8 exit=0、日志 0 WARN/0 ERROR;**负控**:把 `Load` 临时改回进程内静态缓存 → 6 条里 3 条失败(含「收藏必须来自磁盘」那条),按字节还原并 SHA256 核对后 6/6 通过 —— 证明回归用例有牙。
+- **测试覆盖的边界(如实)**:页面接线用反射调私有方法(改名会编译失败,属有意契约);**没有点击级 UI 测试**,「点星 → 重启 → 收藏还在」这条链由「prefs 层往返(含用全新 Config 实例从磁盘读回)+ 页面接线 + harness 实操」三处拼起来证,**不是** GUI 端到端验过。
