@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using TipCL.Core.Platform;
@@ -71,40 +72,85 @@ public sealed class SecretStore
 		{
 			return new PyDict();
 		}
+		byte[] raw;
 		try
 		{
-			byte[] raw = File.ReadAllBytes(_path);
-			if (raw.Length < 4)
+			raw = File.ReadAllBytes(_path);
+		}
+		catch (Exception)
+		{
+			// 文件本身读不出来(被占用 / 权限不足):沿用「读不出来 → 空表」的原有语义
+			return new PyDict();
+		}
+		if (raw.Length < 4)
+		{
+			return new PyDict();
+		}
+		byte[] head = raw.Take(4).ToArray();
+		byte[] body = raw.Skip(4).ToArray();
+		byte[] plain;
+		if (head.SequenceEqual(MagicDpapi))
+		{
+			if (!_windows || !OperatingSystem.IsWindows())
 			{
 				return new PyDict();
 			}
-			byte[] head = raw.Take(4).ToArray();
-			byte[] body = raw.Skip(4).ToArray();
-			byte[] plain;
-			if (head.SequenceEqual(MagicDpapi))
+			try
 			{
-				if (!_windows)
-				{
-					return new PyDict();
-				}
 				plain = DpapiUnprotect(body);
 			}
-			else if (head.SequenceEqual(MagicAes))
+			catch (Exception)
 			{
-				plain = AesGcmDecrypt(body);
+				return new PyDict();
 			}
-			else
+		}
+		else if (head.SequenceEqual(MagicAes))
+		{
+			// B1b:「取主密钥」这一段的异常**必须原样抛给调用方**,不能吞成空表。
+			// 吞掉的后果是真实的密钥丢失:Set(name, value) 先 ReadAll 再 WriteAll,
+			// 凭据库被锁 / 用户拒绝授权导致读失败、紧接着写成功时,文件会被只有新条目的内容覆盖,
+			// 该插件原有的其它密钥全部消失;Get 也会把「暂时读不到」说成「没存过」。
+			if (!AesGcm.IsSupported)
 			{
-				if (!head.SequenceEqual(MagicPlain))
-				{
-					return new PyDict();
-				}
-				plain = Xor(body);
+				// 支持不了就必须报错(与 AesGcmEncrypt 一致),不能当成空表
+				throw new PlatformNotSupportedException("AES-GCM is not supported on this platform");
 			}
+			if (body.Length < AesNonceSize + AesTagSize)
+			{
+				// 截断密文:先判定再取密钥,免得为一个根本读不出来的文件去碰凭据库(失败时会抛出)
+				return new PyDict();
+			}
+			byte[] key = ReadMasterKey();
+			if (key == null)
+			{
+				// 凭据库里没有主密钥:这份文件确实解不开,按「读不出来」处理(读取路径不创建密钥)
+				return new PyDict();
+			}
+			try
+			{
+				plain = AesGcmDecrypt(body, key);
+			}
+			catch (Exception)
+			{
+				// 认证失败(密文被改 / 换了主密钥 / 密钥不对):沿用「读不出来 → 空表」的原有语义
+				return new PyDict();
+			}
+		}
+		else
+		{
+			if (!head.SequenceEqual(MagicPlain))
+			{
+				return new PyDict();
+			}
+			plain = Xor(body);
+		}
+		try
+		{
 			return (PyJson.Loads(Encoding.UTF8.GetString(plain)) as PyDict) ?? new PyDict();
 		}
 		catch (Exception)
 		{
+			// 内容不是合法 UTF-8 / JSON:沿用「读不出来 → 空表」的原有语义
 			return new PyDict();
 		}
 	}
@@ -116,6 +162,12 @@ public sealed class SecretStore
 		byte[] body;
 		if (_windows)
 		{
+			// 分析器要看到 OperatingSystem.IsWindows() 才认账(CA1416);_windows 是给单测用的注入标志。
+			// 这个组合(说自己是 Windows 但实际不是)只有单测能造出来,行为与 DPAPI 在非 Windows 上一致:报不支持。
+			if (!OperatingSystem.IsWindows())
+			{
+				throw new PlatformNotSupportedException("DPAPI is not supported on this platform");
+			}
 			head = MagicDpapi;
 			body = DpapiProtect(plain);
 		}
@@ -200,6 +252,7 @@ public sealed class SecretStore
 	}
 
 	// DPAPI 单独放在不内联的方法里：非 Windows 上根本不会 JIT 到这里，也就不会去加载 System.Security
+	[SupportedOSPlatform("windows")]
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static byte[] DpapiProtect(byte[] plain)
 	{
@@ -215,32 +268,54 @@ public sealed class SecretStore
 	/// </summary>
 	private byte[] MasterKey()
 	{
-		if (_keyStore == null)
+		byte[] key = ReadMasterKey();
+		if (key != null)
 		{
-			throw new PlatformNotSupportedException("no secret store is available for the plugin master key");
-		}
-		string stored = _keyStore.GetPassword(MasterKeyService, MasterKeyAccount);
-		if (!string.IsNullOrEmpty(stored))
-		{
-			byte[] existing;
-			try
-			{
-				existing = Convert.FromBase64String(stored);
-			}
-			catch (FormatException)
-			{
-				// 不覆盖已有条目:坏掉就坏掉,由调用方看到异常(悄悄换密钥会让旧文件永久读不出来)
-				throw new InvalidDataException("plugin master key in the secret store is not valid base64");
-			}
-			if (existing.Length != MasterKeySize)
-			{
-				throw new InvalidDataException("plugin master key in the secret store is not " + MasterKeySize + " bytes");
-			}
-			return existing;
+			return key;
 		}
 		byte[] created = RandomNumberGenerator.GetBytes(MasterKeySize);
 		_keyStore.SetPassword(MasterKeyService, MasterKeyAccount, Convert.ToBase64String(created));
 		return created;
+	}
+
+	/// <summary>
+	/// 读取用的主密钥:凭据库里没有主密钥就返回 null 且**不创建**(读操作不产生写副作用);
+	/// 凭据库调用失败、主密钥不是合法 Base64 / 长度不是 32 字节 → 异常原样抛给调用方(ReadAll 里不吞)。
+	/// </summary>
+	private byte[] ReadMasterKey()
+	{
+		if (_keyStore == null)
+		{
+			// 没有可用凭据库:连「有没有主密钥」都问不出来。这里报错而不是返回空表,是为了避免上层 Set
+			// 在「读不出来」之后把同一个文件覆盖成 TCS0(写路径在没有凭据库时正是走 TCS0)。
+			throw new PlatformNotSupportedException("no secret store is available for the plugin master key");
+		}
+		string stored = _keyStore.GetPassword(MasterKeyService, MasterKeyAccount);
+		if (string.IsNullOrEmpty(stored))
+		{
+			return null;
+		}
+		return DecodeMasterKey(stored);
+	}
+
+	/// <summary>主密钥的合法性检查:坏掉就抛 <see cref="InvalidDataException"/>,绝不悄悄换一把新的(换钥会让旧文件永久读不出来)。</summary>
+	private static byte[] DecodeMasterKey(string stored)
+	{
+		byte[] existing;
+		try
+		{
+			existing = Convert.FromBase64String(stored);
+		}
+		catch (FormatException)
+		{
+			// 不覆盖已有条目:坏掉就坏掉,由调用方看到异常(悄悄换密钥会让旧文件永久读不出来)
+			throw new InvalidDataException("plugin master key in the secret store is not valid base64");
+		}
+		if (existing.Length != MasterKeySize)
+		{
+			throw new InvalidDataException("plugin master key in the secret store is not " + MasterKeySize + " bytes");
+		}
+		return existing;
 	}
 
 	private byte[] AesGcmEncrypt(byte[] plain)
@@ -258,7 +333,7 @@ public sealed class SecretStore
 		return nonce.Concat(tag).Concat(cipher).ToArray();
 	}
 
-	private byte[] AesGcmDecrypt(byte[] body)
+	private byte[] AesGcmDecrypt(byte[] body, byte[] key)
 	{
 		if (!AesGcm.IsSupported)
 		{
@@ -268,7 +343,6 @@ public sealed class SecretStore
 		{
 			throw new InvalidDataException("TCS2 payload is truncated");
 		}
-		byte[] key = MasterKey();
 		byte[] nonce = body.Take(AesNonceSize).ToArray();
 		byte[] tag = body.Skip(AesNonceSize).Take(AesTagSize).ToArray();
 		byte[] cipher = body.Skip(AesNonceSize + AesTagSize).ToArray();
@@ -278,6 +352,7 @@ public sealed class SecretStore
 		return plain;
 	}
 
+	[SupportedOSPlatform("windows")]
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static byte[] DpapiUnprotect(byte[] data)
 	{

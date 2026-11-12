@@ -25,6 +25,18 @@ public static class GlobalMods
 
 	public static bool _link_file(string dest, string src)
 	{
+		return _link_file(dest, src, Utils.IS_WINDOWS, null);
+	}
+
+	/// <summary>
+	/// B1b:加了平台分支 + 可注入的「建链接」委托(委托为 null 时用 <see cref="CreateSymbolicLinkDefault"/>),
+	/// 这样「非 Windows 分支」在 Windows 机器上也能被测到,而公开的 <see cref="_link_file(string, string)"/>
+	/// 签名与 Windows 行为一字不变。
+	/// 原来是无条件调 kernel32 的 CreateSymbolicLinkW:mac 上抛 DllNotFoundException 被下面的 catch 吞掉,
+	/// 静默退化成复制文件(见 PROGRESS.md 的 A3「运行时差异清点」D2)。建链接失败后回退 File.Copy 的兜底逻辑不变。
+	/// </summary>
+	internal static bool _link_file(string dest, string src, bool isWindows, Func<string, string, bool> link)
+	{
 		string text = Utils.AbsPath(dest);
 		string text2 = Utils.AbsPath(src);
 		if (File.Exists(text) || Directory.Exists(text) || IsSymlink(text))
@@ -34,7 +46,16 @@ public static class GlobalMods
 		Utils.EnsureDir(new PPath(dest).Parent.ToString());
 		try
 		{
-			if (CreateSymbolicLinkW(text, text2, 2))
+			bool flag;
+			if (isWindows)
+			{
+				flag = CreateSymbolicLinkW(text, text2, 2);
+			}
+			else
+			{
+				flag = (link ?? CreateSymbolicLinkDefault)(text, text2);
+			}
+			if (flag)
 			{
 				return true;
 			}
@@ -53,6 +74,13 @@ public static class GlobalMods
 				return false;
 			}
 		}
+	}
+
+	/// <summary>非 Windows 的建链接实现:(链接路径, 目标路径)。.NET 在 Unix 上走 symlink(2)。</summary>
+	private static bool CreateSymbolicLinkDefault(string linkPath, string targetPath)
+	{
+		File.CreateSymbolicLink(linkPath, targetPath);
+		return true;
 	}
 
 	public static long Apply(string game_mods_dir)

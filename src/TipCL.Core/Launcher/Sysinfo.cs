@@ -148,7 +148,9 @@ public static class Sysinfo
 
 	public static string _winreg_value(string path, string name, string dflt = "")
 	{
-		if (!Utils.IS_WINDOWS)
+		// B1b:守卫换成 OperatingSystem.IsWindows(),分析器才认(CA1416);语义与 Utils.IS_WINDOWS 完全等价
+		// —— 两者都是 RuntimeInformation.IsOSPlatform(OSPlatform.Windows)(Utils.cs:347)。
+		if (!OperatingSystem.IsWindows())
 		{
 			return dflt;
 		}

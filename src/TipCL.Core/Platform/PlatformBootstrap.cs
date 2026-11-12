@@ -5,7 +5,8 @@ namespace TipCL.Core.Platform;
 /// <summary>
 /// 平台服务接线(桌面启动与 <c>--smoke</c> 都先调 <see cref="Init()"/>)。
 ///
-/// 这个方法<b>只给 <see cref="PlatformServices"/> 的两个静态属性赋值</b>:
+/// 这个方法<b>只给 <see cref="PlatformServices"/> 的两个静态属性赋值</b>,外加第一句调
+/// <see cref="CodePages.EnsureRegistered()"/>(注册代码页提供程序,是纯内存操作):
 /// 不做任何 I/O、不起进程、不读写数据目录。所有代价与副作用都留到真正用到编解码器 / 凭据库的时候。
 ///
 /// 放在 <c>TipCL.Core</c> 而不是 <c>TipCL.App</c>:平台判定是一个纯函数,测试工程只引用 Core,
@@ -22,6 +23,8 @@ public static class PlatformBootstrap
 	/// <summary>按给定的平台判定接线(可注入,便于单测)。</summary>
 	public static void Init(bool isMacOs)
 	{
+		// B1b:第一句就注册代码页(net8.0 默认没有 437 / 936 / 54936),之后所有取编码的代码才能拿到真编码。
+		CodePages.EnsureRegistered();
 		PlatformServices.ImageCodec = CreateImageCodec();
 		PlatformServices.SecretStore = CreateSecretStore(isMacOs);
 	}

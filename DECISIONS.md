@@ -436,3 +436,31 @@
   被复制来的 Core 源码与既有文件全部完好。
 - **以后的做法**:批量替换一律走 .NET API + 显式编码(`[System.IO.File]::ReadAllText($p,[Text.Encoding]::UTF8)`
   → `WriteAllText(..., new UTF8Encoding($false))`),不要用 `Get-Content`/`Set-Content`。
+
+## D-37 B1b 的四处保守取舍(读取路径的异常语义、代码页、软链、截断)
+
+1. **`TCS2` + 没有可用凭据库 → 读抛 `PlatformNotSupportedException`(不是空表)**。
+   - 任务书规定了「凭据库调用失败」必须原样抛出、「凭据库里没有主密钥」按读不出来返回空表,
+     但没说 `PlatformServices.SecretStore == null`(凭空没有凭据库)算哪一种。
+   - **选了抛**:写路径在没有凭据库时是走 `TCS0`(D-32,不变),如果读路径把「没有凭据库」当成空表,
+     那么 `Set` 就会在「读不出来」之后把已有的 `TCS2` 文件覆盖成只含新条目的 `TCS0` —— 正是本包要修的
+     数据丢失路径。抛出后上层看到异常、文件一个字节不变。
+   - 代价:没接线凭据库的进程读 `TCS2` 会看到异常;mac 上 `PlatformBootstrap.Init()` 一定会接 Keychain,不受影响。
+2. **`CodePages` 不引包**。实测 `System.Text.Encoding.CodePages.dll` 就在本机 net8.0 共享框架里
+   (`C:\Users\Administrator\.dotnet\shared\Microsoft.NETCore.App\8.0.33\`),`TipCL.Core` 直接编译通过 →
+   **没有改 csproj、没有动 `NoWarn`、没有新增警告**。类库里**不用** `[ModuleInitializer]`(会触发 CA2255),
+   注册改由 `PlatformBootstrap.Init(bool)` 第一句调用;**测试工程**用自己的 `[ModuleInitializer]`
+   (`tests\TipCL.Tests\B1bCodePagesTests.cs`)保证「用例执行顺序不影响代码页状态」——
+   没有改 `TestHome.Init()`,也没改 `Utils.Cp437` 的缓存逻辑(D-16 的静态隔离一字未动)。
+3. **`TCS2` 截断密文的判定放在取主密钥之前**。原来 `AesGcmDecrypt` 的判定顺序是
+   IsSupported → 长度 → 取主密钥;新读取路径保持这个顺序,所以一个**截断**的 `TCS2` 文件
+   不会去碰凭据库(凭据库坏了也不影响「截断 → 空表」的结果)。`AesGcmDecrypt` 内部仍保留这两道判断。
+4. **`GlobalMods.IsSymlink` 不改**。复核后认为 `FileInfo.Attributes & FileAttributes.ReparsePoint`
+   在 Unix 上对符号链接成立(.NET 的 Unix 文件状态把链接标成 ReparsePoint),所以非 Windows 下判断正确;
+   唯一边角是「悬空链接」在 Unix 上会走 `File.GetAttributes` 抛异常 → `catch` 返回 false。
+   按任务书「拿不准不要改、留给 B2」处理:**只记录,不改**。
+
+补充记录(不是取舍,是事实):`OperatingSystem.IsWindows()` 与 `Utils.IS_WINDOWS` 语义等价
+(`Utils.IS_WINDOWS = OS_NAME == "windows"`,`OS_NAME` 来自 `RuntimeInformation.IsOSPlatform(OSPlatform.Windows)`,
+Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支换守卫**不改变运行时行为**;
+`_windows`(注入标志)的语义也保持原样,只是额外用 `OperatingSystem.IsWindows()` 满足分析器。

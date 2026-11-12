@@ -796,9 +796,27 @@ public static class ExtraTools
 			dir = Path.Combine(instance.path, kind);
 		}
 		Directory.CreateDirectory(dir);
+		return OpenFolderNow(dir, Utils.IS_WINDOWS);
+	}
+
+	/// <summary>
+	/// 目录已经确定之后的「打开」动作(B1b 从 OpenFolder 里抽出来,便于单测)。
+	/// Windows 分支保持原来那一行(explorer.exe);非 Windows 走 Crash.ShellOpen ——
+	/// 它自己有 mac(open)/ Linux(xdg-open)分支,也认 Crash.ShellOpenHook(测试靠它拦截,绝不真开窗口)。
+	/// 成功 / 失败两种文案与原来完全一致。
+	/// </summary>
+	internal static string OpenFolderNow(string dir, bool isWindows)
+	{
 		try
 		{
-			System.Diagnostics.Process.Start("explorer.exe", "\"" + dir + "\"");
+			if (isWindows)
+			{
+				System.Diagnostics.Process.Start("explorer.exe", "\"" + dir + "\"");
+			}
+			else
+			{
+				Crash.ShellOpen(dir);
+			}
 		}
 		catch (Exception ex)
 		{

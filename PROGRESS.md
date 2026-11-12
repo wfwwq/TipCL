@@ -14,7 +14,7 @@
 | A5 | Plugins + BackendApi + Bridge | ✅ 完成(见下;**19 个待恢复文件全部恢复,`TipCL.Core` 里 0 个被排除编译的文件**) |
 | A6 | 测试移植 | ✅ 完成(见下;**搬来 29 个文件 → A 类 15 / B 类 4 / C 类 10;可跑用例 127 条,测试总数 523 → 652,两条通道都 652/652 全绿**) |
 | B1a | mac 平台服务(Keychain / Skia 编解码 / 插件凭据 AES-GCM / 启动接线) | ✅ 完成(见下;**新增 114 条用例,总数 652 → 766,两条通道都 766/766 全绿**) |
-| B1b | 运行时差异修复(ShellOpen / 去提权 / 其它 A2x) | 未开始 |
+| B1b | 运行时差异修复(SecretStore 读取路径 / 代码页 / 打开文件夹 / 软链接 / CA1416) | ✅ 完成(见下;**新增 45 条用例,总数 766 → 811,两条通道都 811/811 全绿**;CA1416 ×7 → 0) |
 | B2 | mac 逻辑核对 + 单测 | 未开始 |
 | B3 | 打包 | 未开始 |
 | C1-C8 | 界面 | 未开始 |
@@ -1093,3 +1093,170 @@ SkiaSharp 2.88.9 的 `SKCodec.Info.ColorType` 恒为 `Bgra8888`、JPEG 的 EXIF 
 - `GlobalMods._link_file`(26–53 行)无条件调 `CreateSymbolicLinkW`,失败后退化成 `File.Copy`。
 - `Sysinfo._winreg_value`(149 行)用 `Utils.IS_WINDOWS` 做守卫,分析器不认,产生 3 条 CA1416。
 - 代码页:全仓库没有调用 `Encoding.RegisterProvider`;`LauncherPureTests.cs:296` 的用例名是 `Cp437_is_available_or_silently_falls_back_to_utf8`。
+
+---
+
+## B1b 运行时差异修复(SecretStore 读取路径 / 代码页 / 打开文件夹 / 软链接 / CA1416)
+
+> 起点 `a9ca20d`,工作树干净,766/766 全绿;收尾 811/811 全绿,警告 **CA1416 ×7 + SYSLIB0014 ×1 → SYSLIB0014 ×1**。
+> 本包只做任务书点名的 5 项,没有顺手做 B2 的内容。
+
+### 1. 插件 SecretStore 读取路径(B1a 验收时发现的缺陷,最优先)
+
+**缺陷**:`ReadAll()` 整体包在 `catch (Exception)` 里,凭据库调用失败(钥匙串被锁 / 用户拒绝授权)被当成
+「文件读不出来」返回空表;而 `Set(name, value)` 是**先 `ReadAll()` 再 `WriteAll()`** —— 读失败而紧接着写成功时,
+文件会被「只含新条目」的内容覆盖,该插件原有的其它密钥全部丢失;`Get()` 也把「暂时读不到」说成「没存过」。
+附带:读 `TCS2` 时若凭据库里没有主密钥,旧实现会生成并写入一把新密钥(读操作产生写副作用)。
+
+**改法**(`src\TipCL.Core\Plugins\SecretStore.cs`):
+- 主密钥取用拆成两种:`MasterKey()` = 写入用(没有才创建);新增 `ReadMasterKey()` = 读取用
+  (**没有就返回 null,不创建**);Base64 / 32 字节校验抽成 `DecodeMasterKey(string)`,坏掉抛
+  `InvalidDataException` 且不覆盖已有条目(消息与 B1a 相同)。
+- `ReadAll()` 重写:**TCS2 分支不再有 catch-all**。
+  - `AesGcm.IsSupported == false` → 抛 `PlatformNotSupportedException`(不当空表);
+  - 密文长度 < 12 + 16 → 空表(判定放在取主密钥**之前**,免得为一个读不出来的文件去碰凭据库);
+  - 取主密钥阶段的异常(凭据库调用失败 / 主密钥坏 Base64 / 长度不是 32)→ **原样抛给调用方**;
+  - 凭据库里没有主密钥 → 空表(不创建密钥);**没有可用凭据库 → 抛 `PlatformNotSupportedException`**(见 D-37);
+  - 解密认证失败(密文被改 / 换了主密钥)→ 空表;内容不是合法 UTF-8 / JSON → 空表;
+  - `File.ReadAllBytes` 失败(被占用 / 权限)→ 空表(原有语义)。
+  - `TCS0` / `TCS1` / 未知魔数 / 文件太短的现有行为**一字未改**。
+- `AesGcmDecrypt(byte[] body, byte[] key)`:改成接收密钥,不再自己取。
+- **效果**:凭据库失败时 `Get` / `Set` / `Names` 抛异常,磁盘上的文件**逐字节不变**(回归用例钉住)。
+
+**`SecretStore` 的 `Get` / `Names` / `Set` 调用点清单**(`src\TipCL.Core\Plugins\`;**调用方本身未改,只记录**):
+
+| 文件:行 | 调用 | 凭据库异常时的结果 |
+|---|---|---|
+| `BackendApi.Plugins.cs:213` | `m.HostSecrets.Get(...)`(`plugins_providers`) | 异常抛出 → 该次 `plugins_providers` 整体失败;不再把「读不到」说成 `configured:false` |
+| `BackendApi.Plugins.cs:242` | `m.HostSecrets.Set(keyRef, apiKey)`(`plugins_set_provider`) | 抛出 → 调用失败。注意前面 `State.UpsertProvider` 已改内存状态,会留下「记录已改、密钥没写」的部分成功(原有顺序,本包不改) |
+| `BackendApi.Plugins.cs:252` | `m.HostSecrets.Set("provider:"+pid, null)`(`plugins_remove_provider`) | 抛出 → 同上(State 已 `RemoveProvider`)。不会删错、不会覆盖别的密钥 |
+| `PluginManager.cs:1678` | `p.Secrets.Set("config:"+key, v)`(`SetConfig`) | 抛出 → 中止:配置值没写,Node 的 `plugin.configChanged` 与 `config.changed` 都不发 |
+| `PluginManager.cs:1712` | `p.Secrets.Set(name, value)`(`SetCredential`) | 抛出 → 中止,不 `Publish("credentials.updated")` |
+| `PluginManager.cs:1721` | `new HashSet<string>(p.Secrets.Names(), ...)`(`CredentialRows`) | 抛出 → 凭据列表读取失败(UI 看到 RPC 错误),不再把「有凭据」显示成「未配置」 |
+| `PluginHostApi.cs:182` | `p.Secrets.Get(name)`(`credentials.resolve`) | 抛出 → `Invoke` 里没有 catch,带 id 的请求由 RPC 层转成错误响应;插件拿到错误而不是 `value=null` |
+| `PluginLlm.cs:49` | `_mgr.HostSecrets.Get(...) ?? ""`(`SettingsFor`) | 抛出 → 不再走 `key.Length == 0` 的 `not_configured`,插件看到真实错误 |
+
+**没有任何调用点把它 catch 成「密钥为空」后继续往磁盘写**;唯一 catch-all 是
+`PluginHostApi.HandleNotification`(无 id 的通知,ThreadPool)那条路径本来就不回结果。
+
+### 2. 代码页(A3 清点表 E1–E5)
+
+- 新文件 `src\TipCL.Core\Platform\CodePages.cs`:`EnsureRegistered()` 幂等(双检锁)调
+  `Encoding.RegisterProvider(CodePagesEncodingProvider.Instance)`。
+- **不需要引包**:`System.Text.Encoding.CodePages.dll` 在 net8.0 共享框架里
+  (本机 `C:\Users\Administrator\.dotnet\shared\Microsoft.NETCore.App\8.0.33\`),实测直接编译通过 →
+  **没有改任何 csproj、没有动 NoWarn**(见 D-37)。
+- `PlatformBootstrap.Init(bool)` 第一句调它,类注释同步更新(注册是纯内存操作,不做 I/O)。
+- 测试工程新增的 `B1bCodePagesTests.cs` 里**自带 `[ModuleInitializer]`**(`B1bCodePagesModuleInit`)调注册 ——
+  不动 `TestHome.Init()`、不动静态隔离;这样 `Utils.Cp437` 的静态缓存不会被 UTF-8 回落先占住,
+  用例执行顺序不再影响结果。
+- `Utils.cs` / `Java.cs` / `Crash.cs` / `NetResponse.cs` / `Terracotta.cs` 取编码的代码**一行未改**。
+- 类库里**没有**用 `[ModuleInitializer]`(会触发 CA2255)→ 没有新增构建警告。
+- E5(`Terracotta.GbkBytes`)是 private,唯一调用点 `AllowFirewall` 要管理员权限 + 写防火墙规则 →
+  **没有用例**,注册后它的 try 分支自然会拿到 936(结论来自代码阅读)。
+
+### 3. AI 工具「打开文件夹」不再写死 `explorer.exe`
+
+`src\TipCL.Core\Launcher\Ai\ExtraTools.cs`:`OpenFolder` 里「目录已确定之后的打开动作」抽成
+`internal static string OpenFolderNow(string dir, bool isWindows)`,`OpenFolder` 调它;
+`isWindows` 时**保持原来那一行** `Process.Start("explorer.exe", "\"" + dir + "\"")`,非 Windows 走
+`Crash.ShellOpen(dir)`(它自带 mac `open` / Linux `xdg-open` 与 `ShellOpenHook`);
+成功 / 失败两种文案一字未改(`已打开 ` / `打不开:` —— 全角冒号 U+FF1A,测试里用 `\uFF1A` 写死,见 D-24)。
+测试**只测 `isWindows: false`**,并且先用 `Crash.ShellOpenHook` 拦截、`finally` 恢复,**绝不真起进程 / 开窗口**。
+
+### 4. 全局模组软链接(A3 清点表 D2)
+
+`src\TipCL.Core\Launcher\GlobalMods.cs`:公开重载 `_link_file(dest, src)` 签名不变,内部转调新的
+`internal static bool _link_file(string dest, string src, bool isWindows, Func<string,string,bool> link)`;
+Windows 分支仍是 `CreateSymbolicLinkW(text, text2, 2)`,非 Windows 用委托
+(默认 `CreateSymbolicLinkDefault` = `File.CreateSymbolicLink(链接路径, 目标路径)`,Unix 上走 `symlink(2)`);
+建链接失败(抛异常或返回 false)后回退 `File.Copy` + 复制时间戳的兜底逻辑一字未改。
+- `IsSymlink`(13–24 行)复核结论:`.NET` 的 Unix 文件状态把符号链接标成 `FileAttributes.ReparsePoint`,
+  所以非 Windows 下它对 `File.CreateSymbolicLink` 建出来的链接判断**正确** → 不改。
+  唯一边角:悬空链接(目标不存在)在 Unix 上会走 `File.GetAttributes` 抛异常 → catch 返回 false,
+  与 Windows 略有差别,**留给 B2 真机复核**。
+- 测试**不真的创建符号链接**(Windows 上要特权),用假委托验三种情况;公开重载在本机走 Windows 分支,故意不测。
+
+### 5. CA1416 清理(没有扩 NoWarn)
+
+- `Launcher\Sysinfo.cs` 的 `_winreg_value`:`if (!Utils.IS_WINDOWS)` → `if (!OperatingSystem.IsWindows())`。
+  语义等价已核对源码:`Utils.IS_WINDOWS = OS_NAME == "windows"`,而 `OS_NAME` 来自
+  `RuntimeInformation.IsOSPlatform(OSPlatform.Windows)`(Utils.cs:347-358)→ **3 条 CA1416 全消**。
+- `Plugins\SecretStore.cs` 的 DPAPI 两个方法标 `[SupportedOSPlatform("windows")]`,调用点加分析器认识的判断:
+  - 读路径:`if (!_windows || !OperatingSystem.IsWindows()) return new PyDict();`(`_windows` 注入标志语义不变);
+  - 写路径:`if (_windows) { if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException(...); ... }`
+    —— 只有单测能造出「说自己是 Windows 但实际不是」的组合,行为与 DPAPI 在非 Windows 上原来抛的
+    `PlatformNotSupportedException` 一致,Windows 上不触发 → **4 条 CA1416 全消**。
+
+**警告前后对比**(同一条 `dotnet build ... -p:UseSharedCompilation=false -m:1 -v:q -clp:Summary`):
+
+| | CA1416 | SYSLIB0014 | 合计 |
+|---|---|---|---|
+| 改动前 | 7(Sysinfo ×3、SecretStore ×4) | 1(PhoneClient.cs:116) | **8** |
+| 改动后 | **0** | 1(不在本包范围) | **1** |
+
+### 对复制文件的每处改动(共 4 个)
+
+| 文件 | 位置 | 原来 | 改成 | 为什么 |
+|---|---|---|---|---|
+| `Plugins\SecretStore.cs` | `ReadAll()` | 整体 `try/catch (Exception)` → 空表 | TCS2 分支:IsSupported=false 抛、截断 → 空表、取主密钥异常上抛、没有主密钥 → 空表、认证失败 → 空表;文件读取失败与 JSON 坏 → 空表 | 修「读失败 + 写成功 → 覆盖丢密钥」的缺陷 |
+| 同上 | `MasterKey()` 及其内联校验 | 方法内 try/catch(FormatException) + 长度判断,没有就创建 | 新增 `ReadMasterKey()`(读取用,不创建)与 `DecodeMasterKey(string)`;`MasterKey()` = `ReadMasterKey()` + 没有就创建 | 读 / 写两种语义分开;读操作不再产生写副作用 |
+| 同上 | `AesGcmDecrypt(byte[] body)` | 内部自己调 `MasterKey()` | `AesGcmDecrypt(byte[] body, byte[] key)` | 让读取路径先判 IsSupported / 截断,再取密钥 |
+| 同上 | DPAPI 两个方法 | 只有 `[MethodImpl(NoInlining)]` | 加 `[SupportedOSPlatform("windows")]` | 消 CA1416(调用点已加 `OperatingSystem.IsWindows()` 判断) |
+| `Launcher\Ai\ExtraTools.cs` | `OpenFolder`(784–808 行) | 无条件 `Process.Start("explorer.exe", ...)` | 抽出 `internal static OpenFolderNow(dir, isWindows)`:Windows 保持原行,非 Windows 走 `Crash.ShellOpen` | mac 上没有 explorer.exe;复用 Crash 已有分支与钩子 |
+| `Launcher\GlobalMods.cs` | `_link_file`(26–56 行) | 无条件 `CreateSymbolicLinkW` | 加 `internal` 重载(是否 Windows + 建链接委托);非 Windows 用 `File.CreateSymbolicLink` | mac 上 `DllNotFoundException` 被吞 → 静默退化成复制文件 |
+| `Launcher\Sysinfo.cs` | `_winreg_value`(149–175 行) | `if (!Utils.IS_WINDOWS)` | `if (!OperatingSystem.IsWindows())` | 消 3 条 CA1416,语义等价 |
+
+除这 4 个之外**没有改任何复制来的文件**;`Platform\PlatformBootstrap.cs`(B1a 新建、Windows 源里没有)加了 1 行调用 + 注释。
+
+### 测试(新增 45 条用例,总数 766 → 811)
+
+| 文件 | 覆盖 | 用例数 |
+|---|---|---|
+| `tests\TipCL.Tests\B1bSecretStoreReadPathTests.cs` | 第 1 项(缺陷回归:抛异常 + 文件逐字节不变 + 读不创建密钥) | 16 |
+| `B1bCodePagesTests.cs` | 第 2 项(E1–E4,含自带 ModuleInitializer) | 16 |
+| `B1bOpenFolderTests.cs` | 第 3 项(只测 `isWindows: false`,先拦 `ShellOpenHook`) | 4 |
+| `B1bGlobalModsLinkTests.cs` | 第 4 项(假委托,不真建链接) | 6 |
+| `B1bSysinfoTests.cs` | 第 5 项(只读注册表) | 3 |
+
+- **B1a 的 19 条 `B1aPluginSecretStoreAesTests` 一字未改、全部继续通过**:它们里没有
+  「TCS2 + 凭据库失败 → 空表」之类的期望,本次语义变化不需要调整任何一条(逐条复核过)。
+- 新用例不起进程、不联网、不实例化 `BackendApi`;改 `Crash.ShellOpenHook` 的用例都在 `finally` 里恢复;
+  临时文件全在 `TestHome.Root` 下。
+
+### 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | `dotnet build-server shutdown` | 退出码 **0**(这次两个服务器都成功关闭) |
+| 2 | `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:Summary` | 退出码 **0**,**0 错误 / 1 警告**(SYSLIB0014,PhoneClient.cs:116;CA1416 从 7 → 0) |
+| 3 | `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 **0**,`失败: 0,通过: 811,已跳过: 0,总计: 811`(791 ms,没有 Win32Exception (5)) |
+| 4 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 **0**,`总计 811 个用例,通过 811,失败 0,跳过 0,不支持 0`,末行 `in-proc 测试全绿` |
+| 5 | `cmd /c "...\TipCL.exe --smoke --theme light --out artifacts\smoke-light.png"` | 退出码 **0**,**3739 字节**,SHA256 `17F3CD87…017BF`(与 A1 / Lead 验收一致) |
+| 6 | `cmd /c "...\TipCL.exe --smoke --theme dark --out artifacts\smoke-dark.png"` | 退出码 **0**,**3751 字节**,SHA256 `374716FF…38144`(与 A1 / Lead 验收一致) |
+| 7 | `%LOCALAPPDATA%\TipCL` 元信息(开工 / 测试跑完后再量) | **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,前后完全一致,与 Lead 基线一致 |
+| 8 | `%TEMP%` 下 `tipcl*` 目录**名字集合**(两条通道各跑前后各一次) | 85 → 85 与 85 → 85,**两次差集都是空**(测试窗口内没有新目录) |
+| 9 | 残留进程 `testhost` / `java` / `adb` / `TipCL` / `security` | 全部 **0 个**;`explorer` 只有 1 个 PID 9920(22:30:11 启动 = 用户自己的桌面,本包没有弹过资源管理器窗口) |
+| 10 | 字节一致性自检:`src\TipCL.Core\` 下 **243** 个 `.cs`(不含 bin/obj)对 Windows 源比 SHA256 | **一致 231 / 有改动 7 / Windows 源里没有对应文件 5**;改动 7 = A5 的 `Plugins\DotNetPluginContext.cs`、`Plugins\Sdk\PluginSdk.cs`、`Plugins\Sdk\PluginUiRegistry.cs` + `Plugins\SecretStore.cs` + 本包 `Launcher\Ai\ExtraTools.cs`、`Launcher\GlobalMods.cs`、`Launcher\Sysinfo.cs`;无对应 5 = B1a 的 `Platform\Mac\MacKeychainSecretStore.cs`、`Platform\PlatformBootstrap.cs`、`Platform\Skia\SkiaDecodedImage.cs`、`Platform\Skia\SkiaImageCodec.cs` + 本包 `Platform\CodePages.cs` |
+| 11 | 本次改动的 11 个文本文件严格 UTF-8 解码 + U+FFFD 扫描 | 全部合法、**0 个 U+FFFD**、无 BOM(与仓库既有文件一致) |
+
+### 未验证项(本机是 Windows,没有 Mac)
+
+- mac 上 `File.CreateSymbolicLink` / `IsSymlink` 的真实表现(含悬空链接)未验证;
+- mac 上 `Crash.ShellOpen` 真的调 `open` 打开 Finder 未验证(本包只到 `ShellOpenHook` 这一层);
+- mac 上 `AesGcm.IsSupported` 未验证(本机 Windows 实测 true,由 B1a 用例钉住);
+- `CodePagesEncodingProvider` 在 mac 上的注册结果未验证(本机验证的是 net8.0 共享框架里确实有这个程序集,
+  且注册后 437 / 936 / 54936 / gbk / gb2312 / gb18030 都能取到、`Utils.Cp437` 拿到真 437);
+- 真机 Keychain 被锁 / 用户拒绝授权时抛出的异常形态未验证(本包用假凭据库模拟 `OSError`)。
+
+### 遗留与风险
+
+- **TCS2 + 没有可用凭据库**时读会抛 `PlatformNotSupportedException`(不再是空表)。这是保守选择:
+  返回空表会让 `Set` 在「读不出来」之后把文件覆盖成 TCS0,正是本次要修的数据丢失路径。
+  代价是「没接线凭据库的进程读 TCS2」会看到异常;mac 上 `PlatformBootstrap.Init()` 必定接 Keychain,不受影响(见 D-37)。
+- 写路径的 **TCS0 兜底没变**(D-32):没有凭据库时 `Set` 仍写 TCS0 明文 + 混淆,本包不碰。
+- `plugins_set_provider` / `plugins_remove_provider` 在 `Set` 抛异常时会留下「内存状态已改、密钥没写」的部分成功
+  (调用顺序是原有的),本包只记录不改。
+- 覆盖 `Crash.ShellOpenHook` 的用例依赖全程序集串行(`AssemblyInfo.cs` 已关并行),不与其他用例互相干扰;
+  `B1bOpenFolderTests.The_hook_is_restored_after_the_test` 会连带盯住「谁忘了在 finally 里恢复钩子」。
+- `Crash.ReadText` 的 GB18030 回落现在真的能拿到 54936;这条路径是崩溃日志解析,没有别的副作用。
