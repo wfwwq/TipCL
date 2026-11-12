@@ -1496,3 +1496,67 @@ Lead 认可的取舍:D-37(`TCS2` 文件 + 没有可用凭据库时读取抛 `Pla
    最终一致(所有文件下载完才建链)。
 6. 本包的 `Mac` 分支只保证 `mac-os-arm64` 的 4 个组件与 `mac-os` 的 7 个组件;清单将来新增组件(例如再出现 `jre-legacy` 的 arm64 版)
    不需要改代码,`PLATFORM_KEY` 已经是对的。
+
+### Lead 验收(2026-11-12 19:25)
+
+结论:**B2a 通过,带 3 条更正和 2 条留给 B2c 的小修**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| `src/TipCL.Core` 下 `.cs` 对 Windows 源比 SHA256 | 有对应文件的 238 个里 230 一致、8 个有改动(原有 7 个 + `Launcher\Java.cs`);无对应文件的 6 个是原有 5 个 + `Launcher\JavaRuntimeFiles.cs` |
+| `git diff f7e9523..HEAD -- Launcher/Java.cs`(Lead 逐行读过,+85 / −32) | 平台键 mac 分支改为 `mac-os` / `mac-os-arm64`;`windows` / `linux` 分支的键、Adoptium / Zulu 的 OS 名与架构名逐字未变;其余是把调用点转到 `JavaRuntimeFiles` |
+| `JavaRuntimeFiles.cs`(Lead 全文读过,433 行) | 见下方「代码审读」 |
+| 红线文件、`Directory.Build.props`、三个 csproj | 未改;没有新包,`NoWarn` 仍 6 项 |
+| 本次提交改动的文本文件做严格 UTF-8 解码 + 乱码扫描 | 全部合法 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告只有 SYSLIB0014 ×1 |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 901 / 失败 0 / 跳过 0 |
+| `dotnet exec ...\TipCL.Tests.dll`(进程内执行器) | 退出码 0,通过 901 / 失败 0 / 跳过 0 / 不支持 0 |
+| `--smoke` light / dark | 退出码 0 / 0,SHA256 与 A1 相同 |
+| `%LOCALAPPDATA%\TipCL`(测试后) | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| 残留进程 `testhost` / `java` / `javaw` / `tar` / `adb` / `TipCL` | 0 个 |
+| B2a 测试扫描 | 没有联网、起进程、调安装或扫描入口、建真实符号链接、改权限位、改环境变量 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+
+`%TEMP%` 说明:Lead 复跑窗口内出现过一个 `tipcl-tests-14500-…` 目录,随后自行消失。该前缀在本仓库 `src` 与 `tests` 里都不存在,
+同一时刻本机有别的会话在跑 dotnet 构建(命令行里是 Avalonia 11.3.2,本仓库是 11.3.23),判定不是本仓库的测试所建。
+
+**代码审读(`JavaRuntimeFiles.cs` 与 `Java.cs` 1196–1275 行)**:
+
+- 厂商 `tar.gz` 解压:条目路径逃出目标目录会抛 `ValueError`;符号链接先收集、等全部文件写完再建;权限位只保留 0777;调用方在解压前先 `RemoveTree`。这条路径没有发现问题。
+- 路径检查是**词法**的(`Path.GetFullPath`),不解析磁盘上已存在的符号链接。这是防手误的卫生检查,不是安全边界:这些包里的 `java` 本来就会被执行。
+- 硬链接条目会被跳过并记警告。mac 的 JRE 包里有没有硬链接没有核对,列入未验证。
+
+**更正(与上文或与回报不符的地方)**:
+
+1. 上文「遗留」第 5 条括号里的「所有文件下载完才建链」对 Mojang 路径**不成立**。`Java.cs` 1211–1252 行的循环是边遍历清单边建链(1229 行),
+   `DownloadAll` 在 1255 行,即**先建链、后下载文件**。只有厂商 `tar.gz` 路径是文件写完再建链。
+2. 回报说 Windows / Linux 行为逐字不变,对 Linux 不完全准确:`Chmod755` 从空方法变成真设权限、`link` 条目从跳过变成建链,
+   判断条件都是「非 Windows」,所以 Linux 上也生效。这是修正而非退化,且本仓库不出 Linux 版,Lead 接受,但记录在案。
+3. `ZuluArchiveTypeFor` 注释里「mac + aarch64 + tar.gz 未能核对」已由 Lead 补查(见下表),结论是有包。
+
+**Lead 补查的 Azul 元数据**(2026-11-12 19:20,`https://api.azul.com/metadata/v1/zulu/packages`,`os=macos`,`java_package_type=jre`,`latest=true`;5 个只读请求,响应在 `artifacts\lead-b2a\`):
+
+| java_version | arch | archive_type | 条目数 | 第一条文件名 |
+|---|---|---|---|---|
+| 8 | aarch64 | tar.gz | 4 | `zulu8.98.0.111-ca-jre8.0.512-macosx_aarch64.tar.gz` |
+| 8 | aarch64 | zip | 4 | `zulu8.98.0.111-ca-jre8.0.512-macosx_aarch64.zip` |
+| 17 | aarch64 | tar.gz | 4 | `zulu17.70.113-ca-fx-jre17.0.21.0.3-macosx_aarch64.tar.gz` |
+| 21 | aarch64 | tar.gz | 4 | `zulu21.54.109-ca-fx-jre21.0.13.0.3-macosx_aarch64.tar.gz` |
+| 8 | x64 | tar.gz | 4 | `zulu8.98.0.111-ca-fx-jre8.0.512-macosx_x64.tar.gz` |
+
+- 所以 `ZuluArchiveTypeFor("osx") = "tar.gz"` 成立;Apple 芯片的 Java 8 在 Azul 有原生包(Adoptium 没有)。
+- 观察:代码取返回列表的第一条(`Java.cs:1465`),而 17 / 21 的第一条是带 JavaFX 的 `-fx-` 包。这是 Windows 版原有行为,能用但包更大,本包不改。
+
+**对子代理 4 个待裁决事项的裁决**:
+
+1. **Apple 芯片的 Java 8**:证据已补齐(Azul 有原生包),但**现在不加厂商切换**。需要 Java 8 的老版本游戏用的 LWJGL 原生库是否有 arm64 版,
+   决定了原生 arm64 的 Java 8 能不能用;如果原生库只有 x86_64,就必须用 x64 的 Java 经 Rosetta 运行。这件事由 B2b 对版本 JSON 取证后一并裁决。
+2. **`Utils.SafeExtractTargz` 在 Linux 上丢权限位和软链**:不改。本仓库只出 mac 版,mac 走新实现即可。
+3. **Microsoft 厂商分支在 mac 上「地址写死 `.zip`、落盘 `.tar.gz`」**:归 B2c。
+4. PowerShell 执行策略:已知(D-08),无需处理。
+
+**留给 B2c 的两条小修(Mojang 运行时安装循环)**:
+
+- 建链移到 `DownloadAll` 之后,与厂商路径一致。
+- 非 `force` 重跑(上次下载中断后重试是常见路径,此时不会 `RemoveTree`)时,已存在的链接会让 `File.CreateSymbolicLink` 抛异常并被记成警告,
+  `java-runtime-gamma` 一次就是 208 条。改成「链接已存在且目标相同则跳过」。
