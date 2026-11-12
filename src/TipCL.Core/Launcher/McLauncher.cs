@@ -62,6 +62,15 @@ public static class McLauncher
 
 	private static List<string> _expand_args(object args_raw, PyDict placeholders, PyDict features)
 	{
+		return _expand_args(args_raw, placeholders, features, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION);
+	}
+
+	/// <summary>
+	/// B2b:可注入 os / arch / osVersion 的内部重载,让「给定一份 arguments.jvm 列表 + os / arch ->
+	/// 展开后的参数列表」能在 Windows 本机按 mac 的参数测试。逻辑与上面那个私有方法逐字相同。
+	/// </summary>
+	internal static List<string> _expand_args(object args_raw, PyDict placeholders, PyDict features, string os, string arch, string osVersion)
+	{
 		List<string> list = new List<string>();
 		foreach (object item in (Py.Or(args_raw, new List<object>()) as IEnumerable) ?? new List<object>())
 		{
@@ -75,7 +84,7 @@ public static class McLauncher
 			}
 			else
 			{
-				if (!(item is PyDict pyDict) || !Utils.CheckRules(pyDict.Get("rules"), features))
+				if (!(item is PyDict pyDict) || !Utils.CheckRules(pyDict.Get("rules"), features, os, arch, osVersion))
 				{
 					continue;
 				}
@@ -500,6 +509,37 @@ public static class McLauncher
 		return text2;
 	}
 
+	/// <summary>
+	/// B2b:把原来写在 BuildLaunchCommand 里的「这个库要不要进 classpath、进的话路径是什么」抽成
+	/// 可注入 os / arch / osVersion 的内部方法(逻辑逐字搬运,Windows 入参下返回值不变)。
+	/// 抽出来是为了让「没有 natives 字段、靠库名 classifier + rules 区分平台的新式库」在
+	/// osx + x64 / osx + arm64 下的行为能被单测钉住。
+	/// 返回 null 表示这个库不进 classpath(规则不允许 / 没名字 / 只有 natives 而没有 artifact)。
+	/// </summary>
+	internal static string _classpath_path(PyDict item, string libs_dir, string os, string arch, string osVersion)
+	{
+		object obj = item.Get("clientreq");
+		if ((obj is bool && !(bool)obj) || !Utils.CheckRules(item.Get("rules"), null, os, arch, osVersion))
+		{
+			return null;
+		}
+		object o = item.Get("name");
+		if (!Py.Truthy(o))
+		{
+			return null;
+		}
+		PyDict pyDict3 = Py.DictOr(Py.Or(item.Get("downloads"), new PyDict())).Get("artifact") as PyDict;
+		if (Py.Truthy(pyDict3) && Py.Truthy(pyDict3.Get("path")))
+		{
+			return PPath.Join(libs_dir, Py.Str(pyDict3["path"]));
+		}
+		if (Py.Truthy(item.Get("natives")))
+		{
+			return null;
+		}
+		return PPath.Join(libs_dir, Utils.MavenArtifactPath(Py.Str(o)));
+	}
+
 	public static LaunchCommand BuildLaunchCommand(Instance instance, string version_id, PyDict account_props, object java_exe, object memory_mb = null, object width = null, object height = null, IEnumerable<object> extra_game_args = null, object extra_jvm_args = null, string game_directory = null, object authlib_api = null)
 	{
 		memory_mb = memory_mb ?? ((object)4096L);
@@ -540,36 +580,17 @@ public static class McLauncher
 		List<string> list = new List<string>();
 		foreach (PyDict item in Installer.Libs(pyDict2))
 		{
-			object obj = item.Get("clientreq");
-			if ((obj is bool && !(bool)obj) || !Utils.CheckRules(item.Get("rules")))
+			string text13 = _classpath_path(item, text5, Utils.OS_NAME, Utils.ARCH, Utils.OS_VERSION);
+			if (text13 == null)
 			{
 				continue;
-			}
-			object o = item.Get("name");
-			if (!Py.Truthy(o))
-			{
-				continue;
-			}
-			PyDict pyDict3 = Py.DictOr(Py.Or(item.Get("downloads"), new PyDict())).Get("artifact") as PyDict;
-			string value;
-			if (Py.Truthy(pyDict3) && Py.Truthy(pyDict3.Get("path")))
-			{
-				value = PPath.Join(text5, Py.Str(pyDict3["path"]));
-			}
-			else
-			{
-				if (Py.Truthy(item.Get("natives")))
-				{
-					continue;
-				}
-				value = PPath.Join(text5, Utils.MavenArtifactPath(Py.Str(o)));
 			}
 			string text7 = Manifest.LibraryIdentity(item);
 			if (!cpById.ContainsKey(text7))
 			{
 				list.Add(text7);
 			}
-			cpById[text7] = value;
+			cpById[text7] = text13;
 		}
 		List<string> list2 = list.Select((string k) => cpById[k]).ToList();
 		list2.Add(text2);

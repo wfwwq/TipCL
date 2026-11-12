@@ -16,7 +16,7 @@
 | B1a | mac 平台服务(Keychain / Skia 编解码 / 插件凭据 AES-GCM / 启动接线) | ✅ 完成(见下;**新增 114 条用例,总数 652 → 766,两条通道都 766/766 全绿**) |
 | B1b | 运行时差异修复(SecretStore 读取路径 / 代码页 / 打开文件夹 / 软链接 / CA1416) | ✅ 完成(见下;**新增 45 条用例,总数 766 → 811,两条通道都 811/811 全绿**;CA1416 ×7 → 0) |
 | B2a | mac Java 运行时获取(Mojang 平台键 / Adoptium·Zulu mac 包 / 可执行位与链接 / java 定位) | ✅ 完成(见下;**新增 90 条用例,总数 811 → 901,两条通道都 901/901 全绿**) |
-| B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | 未开始 |
+| B2b | Natives classifier / 规则 / `-XstartOnFirstThread` / 启动参数 | ✅ 完成(见下;**新增 137 条用例,总数 901 → 1038,两条通道都 1038/1038 全绿**;三个复制文件只加可注入 OS/ARCH 的 internal 重载 + 一处内联逻辑抽取,Windows 行为用等价钉子逐项钉住;新建 `Launcher\MacNativeSupport.cs`,未接入调用点,留 Lead 裁决 arm64 方案) |
 | B2c | NodeRuntime darwin / Terracotta 权限 / adb 路径 / PhoneLink 临时目录 / Preflight 磁盘 / Updater 仅提示 / Shortcut / IsSymlink | 未开始 |
 | B3 | 打包 | 未开始 |
 | C1-C8 | 界面 | 未开始 |
@@ -1560,3 +1560,198 @@ Lead 认可的取舍:D-37(`TCS2` 文件 + 没有可用凭据库时读取抛 `Pla
 - 建链移到 `DownloadAll` 之后,与厂商路径一致。
 - 非 `force` 重跑(上次下载中断后重试是常见路径,此时不会 `RemoveTree`)时,已存在的链接会让 `File.CreateSymbolicLink` 抛异常并被记成警告,
   `java-runtime-gamma` 一次就是 208 条。改成「链接已存在且目标相同则跳过」。
+
+---
+
+## B2b mac 上的 natives 选择、规则匹配与启动参数
+
+本包做四件事(第 1–4 项)加一份给 Lead 的评估(第 5 项)。**没有**实现「Apple 芯片上改用 x64 Java 经 Rosetta 运行」:
+只取证、给可测试的判定函数、写清改动面,由 Lead 裁决。
+
+### 1. 第 0 步线上版本 JSON 取证(只读,共 9 个请求)
+
+查询时间 **2026-11-12 19:27:43 +08:00**,9 个请求全部 HTTP 200
+(`Invoke-WebRequest -UseBasicParsing -TimeoutSec 30`,响应体按字节存盘;**只访问 `piston-meta.mojang.com`**)。
+
+- 清单 `https://piston-meta.mojang.com/mc/game/version_manifest_v2.json`,279089 字节,`latest.release = **26.3**`。
+- 8 份版本 JSON 地址形如 `https://piston-meta.mojang.com/v1/packages/<sha1>/<id>.json`;响应体与清单留在
+  `artifacts/b2b/`(不入库),聚合结果在 `artifacts/b2b/summary.txt` / `detail.txt`,脚本 `artifacts/b2b/fetch-versions.ps1` /
+  `analyze.ps1`(UTF-8 with BOM,D-12)。
+
+| 版本 | 参数形态 | Java 组件 / 大版本 | mac 的 natives 分类器 | mac 有 arm64 原生库? | `-XstartOnFirstThread` 挂在什么规则下 | LWJGL |
+|---|---|---|---|---|---|---|
+| 1.7.10 | `minecraftArguments`(无 `arguments` 键) | `jre-legacy` / 8 | `natives-osx`(classifiers 里也是 `natives-osx`) | **否** | JSON 里**没有**这个参数 | 2.9 |
+| 1.8.9 | `minecraftArguments` | `jre-legacy` / 8 | `natives-osx` | **否** | 没有 | 2.9 |
+| 1.12.2 | `minecraftArguments` | `jre-legacy` / 8 | `natives-osx`(另有 `java-objc-bridge` 同样 `natives-osx`) | **否** | 没有 | 2.9 |
+| 1.13.2 | `arguments` | `jre-legacy` / 8 | 每个库 `natives.osx = natives-macos`(LWJGL 3.1.6),另 `java-objc-bridge` 是 `natives-osx` | **否** | `arguments.jvm[0]`:`[allow os.name=osx]` → `-XstartOnFirstThread` | 3.1 |
+| 1.16.5 | `arguments` | `jre-legacy` / 8 | `natives-macos`(LWJGL 3.2.1 只有 osx 条目)+ `natives-osx`(`java-objc-bridge`) | **否** | 同上(`arguments.jvm[0]`,`os.name=osx`) | 3.2 |
+| 1.18.2 | `arguments` | `java-runtime-beta` / 17 | `natives-macos` + `natives-osx`,与 1.16.5 同形 | **否** | 同上 | 3.2 |
+| 1.19.4 | `arguments` | `java-runtime-gamma` / 17 | 新式:库名第 4 段 `natives-macos` 与 `natives-macos-arm64`(无 `natives` 字段、无 classifiers) | **是**(7 个原生库全部两套) | 同上 | 3.3 |
+| 26.3(latest) | `arguments` | `java-runtime-epsilon` / 25 | 新式:`natives-macos` + `natives-macos-arm64` | **是**(12 个原生库全部两套,含 `com.mojang:jtracy`) | 同上 | 3.4 |
+
+1.13.2 起 `arguments.jvm` 里带 `rules` 的条目固定是这几条(逐条核对过):
+
+| # | 规则 | 值 |
+|---|---|---|
+| 1 | `[allow os.name=osx]` | `-XstartOnFirstThread` |
+| 2 | `[allow os.name=windows]` | `-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump` |
+| 3 | `[allow os.name=windows, os.version=^10\.]` | `-Dos.name=Windows 10`、`-Dos.version=10.0`(1.13.2–1.19.4;26.3 **没有**这条) |
+| 4 | `[allow os.arch=x86]` | `-Xss1M`(1.19.4 与 26.3 都在) |
+
+其余 jvm 条目都是无 `rules` 的普通字符串(26.3 有 15 条,含 4 个指向 `${natives_directory}/java|jna|lwjgl|netty` 的 `-D` 参数);
+`arguments.jvm` 里**没有任何 `os.arch` 之外的架构相关值**,libraries 里也**没有任何** `os.arch` 规则(8 份 JSON 实测 `OS_ARCH_RULE_HITS = 0`)。
+
+**与 B2a 清单合起来的结论**:`mac-os-arm64` 清单里只有 `java-runtime-delta` / `-epsilon` / `-gamma` / `-gamma-snapshot`
+(**没有** `jre-legacy` / `-alpha` / `-beta`)。所以:
+1.7.10 / 1.8.9 / 1.12.2 / 1.13.2 / 1.16.5(要 Java 8)与 1.18.2(要 `java-runtime-beta`)在 Apple 芯片上**既没有原生 arm64 natives,也没有对应的 arm64 Java 组件**;
+1.19.4(gamma)与 26.3(epsilon)两样都有。
+
+### 2. 第 1 项:规则匹配可注入(`Utils.CheckRules` + `_expand_args`)
+
+- `Utils.CheckRules(object, PyDict)` 保留为转调;新增 `internal CheckRules(rules, features, os, arch, osVersion)`,
+  逻辑逐字搬过去(含「最后一条命中的规则生效」、`os.version` 的 `\A(?:p)` 与 `\A(?:p)\z` 两种正则、非法正则走 `catch (ArgumentException)`)。
+- `McLauncher._expand_args` 原来只能走静态版本(它内部调静态 `CheckRules`),新增
+  `internal _expand_args(args_raw, placeholders, features, os, arch, osVersion)`,原私有方法转调并传 `Utils.*`。
+- 用第 0 步的真实 `arguments.jvm`(1.19.4、26.3 两份完整抄进测试当夹具)断言:按 `osx` 展开包含 `-XstartOnFirstThread`、
+  不含 Windows 的 heapdump / `-Dos.name`;按 `windows` 反之;`os.arch=x86` 的 `-Xss1M` 只在 `arch=x86` 出现。
+- **1.7.10 / 1.8.9 / 1.12.2 的 JSON 没有 `arguments` 键**,所以本包**没有**给它们补 `-XstartOnFirstThread`(红线),测试用空列表钉住。
+
+### 3. 第 2 项:natives 选择可注入 + mac 现状钉子
+
+- `Installer.NativeArchToken()` / `SubstNativeKey(key)` / `SelectNativeClassifier(lib)` 各加一个 internal 重载
+  (入参 `arch` / `arch` / `os + arch`),原 public 方法转调并传 `Utils.ARCH` / `Utils.OS_NAME`、`Utils.ARCH`;
+  **选择结果一个分支都没改**。
+- 钉住的现状(测试名里写明「现状」,`DisplayName = "现状(待 Lead 裁决):osx + arm64 下老式 natives-osx / natives-macos 分类器全部选不到"`):
+  键恰好是 `natives-osx` / `natives-macos` 时 `rank()` 只在 `arch ∈ {x86, x64}` 返回 1,**arm64 一律 0** →
+  1.7.10 / 1.8.9 / 1.12.2 / 1.13.2 / 1.16.5 / 1.18.2 在 Apple 芯片上 `SelectNativeClassifier` 全部返回 `null`。
+  额外发现并钉住:带 `${arch}` 的 Windows 键在 arm64 下换成 `natives-windows-64`,而 `64` 不在 arm64 的后缀表里 → 同样选不到。
+- 新式库(1.19.4 起,库名第 4 段 classifier、**没有** `natives` 字段):`SelectNativeClassifier` 在任何平台都返回 `null`,
+  它们靠 `rules` 进 classpath;为了能按 os/arch 断言这件事,把原来内联在 `McLauncher.BuildLaunchCommand`
+  (改动前 541–573 行)的「这个库进不进 classpath、路径是什么」抽成 `internal McLauncher._classpath_path(lib, libs_dir, os, arch, osVersion)`,
+  行为逐字保留(含 `clientreq=false` 跳过、没有 `name` 跳过、有 `natives` 而没有 artifact 跳过、缺 `artifact.path` 走 maven 路径兜底)。
+  结论:`osx + x64` 与 `osx + arm64` 下 **`natives-macos` 与 `natives-macos-arm64` 两个 jar 都会进 classpath**
+  (二者 `rules` 都是 `allow os.name=osx`),natives 目录不会被它们填充。这是否正确留给真机验证。
+
+### 4. 第 3 项:判定函数「这个版本在 mac 上有没有 arm64 原生库」
+
+新文件 `Launcher\MacNativeSupport.cs`(229 行,纯函数,**不接入任何调用点**):`Analyze(merged_version_json)`
+返回 `MacNativeKind`(`NoMacNatives` / `X64Only` / `Arm64Native` / `Mixed`)+ 小结构(全体 mac 原生库、
+有 arm64 的、只有 x86_64 的清单)。判定口径写在类注释里,依据就是第 0 步的 8 份 JSON:
+
+- 三种 mac natives 写法都认:`natives.osx` 字段、`downloads.classifiers` 里 `natives-osx` / `natives-macos*` 键、
+  以及新式的库名第 4 段 classifier;先按注入的 os / arch 过 `CheckRules`。
+- 库名按 `group:artifact` 归组(1.19.4 起同一个原生库的 x64 / arm64 是**两条独立 library 条目**,不归组会把
+  `Arm64Native` 误判成 `Mixed`)。
+- 8 个版本的结论:1.7.10 / 1.8.9 / 1.12.2 / 1.13.2 / 1.16.5 / 1.18.2 = `X64Only`;1.19.4 / 26.3 = `Arm64Native`。
+
+### 5. 第 4 项:mac 上解压 natives 与 classpath 的核对(只核对,**没有改代码**)
+
+| 项 | 文件:行 | 现状 | mac 上是否正确 | 依据 |
+|---|---|---|---|---|
+| natives 解压是否按扩展名过滤 | `DownloadManager.cs` 1179-1202 | 只排除 `exclude` 前缀与 `/` 结尾的目录条目,**没有**扩展名白名单 | **正确,无需改**:`.dylib` / `.jnilib` 会照常解出 | 实测:自造 zip(含 `liblwjgl.dylib` / `liblwjgl.jnilib` / `lwjgl.dll` / `liblwjgl.so` / `META-INF/MANIFEST.MF`)全部解出 |
+| 「有没有 natives」的判定 | `Installer.cs` 330-348 | 文件名前缀 `lwjgl` 或 `liblwjgl` | **正确**:mac 的 `liblwjgl.dylib` 命中 `liblwjgl` | 实测 ✓;只有 `META-INF` 的目录判 false |
+| classpath 分隔符 | `McLauncher.cs` 597 + 603 的 `classpath_separator` 占位符 | `Path.PathSeparator.ToString()`(不是写死 `;`) | **正确**:mac 上 .NET 给 `:` | 源码;本机只能钉住 Windows 侧的 `;`(测试) |
+| `${natives_directory}` 形态 | `Installer.NativesDir` 350-357 + `PPath` | `PPath.Join(<instance>/versions/<id>, <id>-natives)`;老版本是 `bin/natives` | **正确**:`PPath` 非 Windows 分支用正斜杠、无盘符 | `PPath.cs` 300-313 + 测试 |
+| `-Djava.library.path` | `McLauncher.cs` 615(JSON 缺该参数时补)、1.19.4 的 `${natives_directory}`、26.3 的 `${natives_directory}/java|jna|lwjgl|netty` | 值来自 `PPath`,是合法 mac 路径 | **正确** | 线上 JSON + `PPath` 测试 |
+| 主类启动的工作目录 | `Utils.MakeStartInfo` 1435-1442 | `cwd` 为游戏目录,没有则 `Utils.ROOT` | 与平台无关 | 只记录,不改 |
+| `${launcher_name}` / `${launcher_version}` | `McLauncher.cs` 603 占位符(`TipCL` / `AppInfo.LAUNCHER_VERSION`);666-673 缺省补 `-Dminecraft.launcher.brand=TipCL` 与写死的版本 `1.0.10` | 与平台无关 | 只记录,不改(666-673 的写死版本是 Windows 版原样,不是本包的事) |
+
+### 6. 第 5 项:给 Lead 的评估 —— Apple 芯片上没有 arm64 原生库的版本怎么跑(**不选方案,只列改动面**)
+
+**证据汇总**(第 0 步 + B2a):
+
+| 版本段 | mac 原生库有 arm64? | 需要的 Java 组件在 `mac-os-arm64` 清单里? |
+|---|---|---|
+| 1.7.10 / 1.8.9 / 1.12.2 / 1.13.2 / 1.16.5(Java 8,`jre-legacy`) | 否(LWJGL 2.9 / 3.1.6 / 3.2.x 只有 x86_64) | 否(`mac-os-arm64` 没有 `jre-legacy`;Azul 有 arm64 Java 8 原生包) |
+| 1.18.2(Java 17,`java-runtime-beta`) | 否(LWJGL 3.2.x) | 否(`mac-os-arm64` 没有 `beta`;Azul 有 arm64 Java 17) |
+| 1.19.4(Java 17,`java-runtime-gamma`)及以后 | **是**(LWJGL 3.3+ 每个原生库都有 `natives-macos-arm64`) | 是(`gamma` 在 `mac-os-arm64` 里) |
+| 26.3(Java 25,`java-runtime-epsilon`) | **是** | 是 |
+
+分界线是 **LWJGL 3.2 → 3.3**(1.18.2 → 1.19.4)。也就是:Apple 芯片上「原生 arm64」只能跑 1.19.4 及更新的版本;
+1.18.2 及更老必须让游戏在 x86_64 下跑,而那意味着**Java 也必须是 x64 的**(x86_64 的 `.dylib` 只能被 x64 JVM 加载)。
+
+**若采用「这类版本改用 x64 Java(经 Rosetta)+ x86_64 natives」,需要把下列地方从「读进程架构 `Utils.ARCH`」改成「读本次启动的目标架构」**:
+
+| # | 文件:方法(行) | 现在读什么 | 改动面 |
+|---|---|---|---|
+| 1 | `Installer.SelectNativeClassifier`(`Installer.cs` 257-331,`rank` 302-330) | `Utils.ARCH`(已可注入) | **中**:选择逻辑已参数化,要动的是 6 个调用点把「目标架构」传进来:`Cleaner.cs:46`、`Installer.cs:416`(ExtractNatives)、`Installer.cs:747`(`_install_libraries` 下载 natives jar)、`McLauncher.cs:571-578`(缺失预检)、`OfficialMigrate.cs:149`、`Preflight.cs:283/385` |
+| 2 | `Installer.NativeArchToken` / `SubstNativeKey`(`Installer.cs` 206-231 / 240-254) | `Utils.ARCH`(已可注入) | **小**:调用点 3 处(`Installer.cs:341`、`Installer.cs:758`、`Preflight.cs:294`) |
+| 3 | `Utils.CheckRules` 的 `os.arch`(`Utils.cs` 1303-1373) | `Utils.ARCH`(已可注入) | **小但要全改**:调用点 7 处(`Installer.cs:412/711`、`McLauncher.cs:571-578/583`、`Preflight.cs:256/385`、`MacNativeSupport.cs:112`);若「目标架构」语义上等于 `os.arch`,这些地方都要换 |
+| 4 | `Java.PlatformKeyFor` / `PLATFORM_KEY`(`Java.cs` 24 / 67-96 / 85) | `Utils.ARCH` → `mac-os-arm64` | **小**:x64 回退时键要变 `mac-os`(否则清单里没有 `jre-legacy` / `beta`) |
+| 5 | Java 的安装:`Java.cs` 128-139(Adoptium)、1416-1449(Zulu)、1503+(Microsoft) 的 `arch ?? Utils.ARCH` | `Utils.ARCH` | **小**:入参 `arch` 已经存在,传 `"x64"` 即可;`Java.cs:1335` 的 `_IsLegacy32bit` 目前只在 Windows 生效,不受影响 |
+| 6 | 「已装 Java 的挑选」`Java.JavaUsableFor`(347)/`PickJavaForVersion`(987)/`ListInstalledJavas`(801) | **不看架构**,只看 major | **中**:现状下需要 x64 Java 时**不会**主动排除 arm64 Java;要做到自洽要加「架构偏好」条件 |
+| 7 | 启动参数里与架构有关的值 | 只有 `os.arch` 规则(1.19.4 / 26.3 的 `-Xss1M` 挂 `x86`,mac 用不到)与老式 natives 键里的 `${arch}` | **小**:JSON 没有别的架构相关参数,**不需要**另外加 JVM 参数 |
+| 8 | `Terracotta.cs` 412-413(联机组件自读 `Utils.OS_NAME` / `Utils.ARCH`) | `Utils.*` | B2c 范围,只记在这里 |
+
+**其它可行做法与代价**(按改动从小到大的顺序,不做选择):
+
+1. **只在 Apple 芯片上「拒绝启动并给出提示」**:改动最小(一处判断 + 文案),代价是老版本彻底装不了/跑不了。
+2. **放宽 `rank()`:arm64 下也让 `natives-osx` / `natives-macos` rank=1**(`Installer.cs` rank 一处):
+   改动极小,但选出来的仍是 x86_64 dylib,**单独做没有意义** —— 只有与「x64 Java」一起才有用;
+   单独做会把现在「选不到 → 启动时可能直接崩在 natives」变成「选了 x86_64 dylib → 用 arm64 JVM 加载必然失败」。
+3. **原生 arm64 Java(Azul 有 Java 8 / 17 的 mac aarch64 包)跑老版本**:不可行 —— 老版本的 mac natives 只有 x86_64,
+   arm64 JVM 加载不了;LWJGL 到 3.3 才有 mac arm64 原生库。
+4. **x64 Java(经 Rosetta)+ x86_64 natives**(上表 8 处改动):覆盖面最大(1.7.10 – 1.18.2 全都能跑),
+   代价是要把「目标架构」做成一次启动的显式状态并一路传下去,还要处理「同一台机器上两种架构的 Java 与 natives 并存」
+   (`instances/<id>/libraries` 与 `versions/<id>/<id>-natives` 目前是按实例/版本共享的目录,架构不同必须分目录,否则会互相覆盖)。
+5. **让用户在「Java」页手动选 Java + 手动选架构**:UI 成本,且 natives 侧仍要按同一架构走,等于把 4 的一半做成手动的。
+
+**风险提示(现状下 Apple 芯片上会发生什么,本机未验证)**:`McLauncher.cs` 571-578 的「缺少 natives 就报错」预检
+**不会**触发 —— 它用 `SelectNativeClassifier(lib) != ""` 判断「这个版本需要不需要 natives」,而在 arm64 上这批库全部返回 `null`,
+预检认为「不需要 natives」,于是会带着空的 natives 目录启动,失败发生在 Java 里而不是启动前。
+
+### 7. 对三个复制文件的每处改动(共 3 个文件、+93 / −35 行)
+
+| 文件 | 位置 | 原来是什么 | 改成什么 | 为什么 |
+|---|---|---|---|---|
+| `Launcher\Utils.cs` | 1303-1312(转调)+ 新增 1313-1373 | `CheckRules(object, PyDict)` 直接读 `OS_NAME` / `ARCH` / `OS_VERSION` | public 方法转调新增的 `internal CheckRules(rules, features, os, arch, osVersion)`;内部把三处静态字段换成入参 | 让规则匹配能在 Windows 本机按 mac 参数断言;语义逐字未改 |
+| `Launcher\Installer.cs` | 206-231 | `NativeArchToken()` 读 `Utils.ARCH` | public(206-212)转调 `internal NativeArchToken(arch)`(214-231) | 同上 |
+| `Launcher\Installer.cs` | 240-254 | `SubstNativeKey(key)` 用 `NativeArchToken()` | public(240-243)转调 `internal SubstNativeKey(key, arch)`(248-254) | 同上 |
+| `Launcher\Installer.cs` | 257-331(其中 `rank` 302-330、330 行的 `Utils.ARCH` 换参数) | `SelectNativeClassifier(lib)` 读 `Utils.OS_NAME` / `Utils.ARCH`,`rank` 里也读 `Utils.ARCH` | public(257-261)转调 `internal SelectNativeClassifier(lib, os, arch)`(268-331);内部三处替换成入参,**0/1/2 三档判定一字未改** | 同上;本包**不修** arm64 下选不到老式分类器的现状 |
+| `Launcher\McLauncher.cs` | 64-71(转调)+ 72-103(新重载)+ 87 | `_expand_args`(原 63-94)调静态 `Utils.CheckRules` | 新增 `internal _expand_args(..., os, arch, osVersion)`,原私有方法转调并传 `Utils.*` | 让「arguments.jvm + os/arch → 参数列表」可按 mac 断言 |
+| `Launcher\McLauncher.cs` | 519-542(新增)+ 581-592(调用点) | `BuildLaunchCommand` 里内联的「库进不进 classpath + 路径」循环 | 抽成 `internal _classpath_path(lib, libs_dir, os, arch, osVersion)`,循环改为调用它并传 `Utils.*` | 第 2 项要求「新式库进不进 classpath」也要能按 os/arch 断言;逻辑逐字搬运,Windows 入参下返回值不变(有等价钉子用例) |
+
+三个文件的 public 签名、其它方法、`NoWarn`、csproj、TFM 全部未动。
+
+### 8. 新文件
+
+- `src/TipCL.Core/Launcher/MacNativeSupport.cs`(229 行):第 3 项的纯函数 + `MacNativeKind` + `MacNativeSupportReport`,**未接入调用点**。
+- `tests/TipCL.Tests/B2bCheckRulesTests.cs`、`B2bExpandArgsTests.cs`、`B2bNativeClassifierTests.cs`、`B2bClasspathTests.cs`、
+  `B2bMacNativeSupportTests.cs`、`B2bNativesUnpackTests.cs`:137 条新用例(全部不联网、不起进程;文件操作只在 `TestHome.Dir` 之下)。
+
+### 9. 验证命令与实际结果(全部在本机真实执行过)
+
+| 检查 | 结果 |
+|---|---|
+| 开工前 `%LOCALAPPDATA%\TipCL` 元信息 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与 Lead 基线**一致**(不一致就停手,本次没有出现) |
+| `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 0,0 错误;警告**只有 SYSLIB0014 ×1**(`PhoneClient.cs:116`) |
+| `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0:**通过 1038 / 失败 0 / 跳过 0**(838 ms,没有出现 `Win32Exception (5)`,没有 3 分钟不结束) |
+| `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 0:**1038 通过 / 0 失败 / 0 跳过 / 不支持 0**,与 `dotnet test` 一致 |
+| `%TEMP%` 的 `tipcl*` 目录名字集合(两条通道各取前后各一次) | 测试窗口内**新增 0 个**(本机另有 86 个历史 `tipcl*` 目录,属于别的会话) |
+| `--smoke --theme light / dark` | 退出码 0 / 0;**3739 / 3751 字节**,与 A1 起一直一致 |
+| 测试后 `%LOCALAPPDATA%\TipCL` 元信息 | 9328 个文件 / 889530606 字节 / 2026-11-10 20:42:16,**与开工时逐项一致** |
+| 残留进程 `testhost` / `java` / `javaw` / `adb` / `TipCL` | **0 个** |
+| `src\TipCL.Core\` 全部 `.cs` 对 Windows 源比 SHA256 | 总数 **245**(另含 2 个 `obj\` 生成文件):一致 **227**、有改动 **11**、Windows 源里没有对应文件 **7**。有改动的 11 = 原有 8 个(`Ai\ExtraTools.cs`、`GlobalMods.cs`、`Java.cs`、`Sysinfo.cs`、`Plugins\DotNetPluginContext.cs`、`Plugins\Sdk\PluginSdk.cs`、`Plugins\Sdk\PluginUiRegistry.cs`、`Plugins\SecretStore.cs`)+ 本包 3 个(`Launcher\Utils.cs`、`Launcher\Installer.cs`、`Launcher\McLauncher.cs`);没有对应文件的 7 = 原有 6 个 + 本包 `Launcher\MacNativeSupport.cs` |
+| 联网请求总数(本包) | **9 个**(1 份清单 + 8 份版本 JSON),全部 `piston-meta.mojang.com` 只读 GET,没有下载任何 jar / natives / 二进制 |
+
+### 10. 未验证项(本机是 Windows,没有 Mac)
+
+1. mac 上 `SelectNativeClassifier` / `_classpath_path` / `CheckRules` 的真实调用链(它们现在由 `Utils.OS_NAME` / `Utils.ARCH` 驱动,
+   mac 上取值 `osx` / `arm64` 是推断,推理链:mac 上 `Utils.OS_NAME == "osx"`,`Utils.ARCH` 是进程架构)。
+2. 「1.19.4 起两个 natives jar 都进 classpath」在真机上是否正确(LWJGL 从 classpath 里按架构选 `.dylib`,本机无法验证)。
+3. 老版本在 Apple 芯片上的实际现象(是否崩在 natives、崩在哪一步)。
+4. `MacNativeSupport` 对**整合包 / 模组**版本(继承版本合并后的 JSON)的判定:测试夹具是 vanilla 的 8 份 JSON,
+   模组版本里可能出现本函数没见过的 classifier 写法。
+
+### 11. 遗留与风险
+
+1. **本包没修 arm64 下老式分类器选不到**(红线:只钉现状),所以 Apple 芯片上 1.18.2 及更老的版本仍然装不出 natives;
+   第 5 项把改动面写清了,等 Lead 裁决。
+2. **`natives` 缺失预检在 arm64 上失效**(`McLauncher.cs` 522-528):因为判断依据是先算 `SelectNativeClassifier`,
+   arm64 上全部 null → 预检认为不需要 natives,于是启动失败会发生在 Java 里。这是第 5 项要一起裁决的连带问题。
+3. `-XX:StackShadowPages=32`(26.3)与 `--enable-native-access=ALL-UNNAMED` 是 JSON 给的参数,本包照抄不改;
+   它们在 mac 上能否被 Java 25 接受**未验证**(不是本包能判的)。
+4. `MacNativeSupport` 判定「没有后缀的老式分类器按 x86_64 记」是保守假设,依据是这些版本的 JSON 里没有任何 arm64 字样;
+   若将来发现某个老包其实是 universal 二进制,要改 `_key_arch`。
+5. `_classpath_path` 的抽取改变了 `McLauncher` 内部结构(不改行为),如果 Lead 认为它超出了「只加可注入重载」的范围,
+   回退方式很直接(把方法体搬回循环),测试里对它的断言也要跟着换成对 `Utils.CheckRules` 的断言。

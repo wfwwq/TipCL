@@ -540,3 +540,27 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
 - **不改的理由**:本包没有查到「`aka.ms/download-jdk/microsoft-jdk-<major>-mac-<arch>` 到底给 `.zip` 还是 `.tar.gz`」
   的线上证据(请求预算已用完),而且 Microsoft 不在自动回退链里(只有用户显式选厂商时才走)。
   按「拿不准选最保守」保留原样,把修法(与 Zulu 同型:扩一个可注入纯函数)写进 PROGRESS.md 的 B2a 遗留第 3 条。
+
+## D-44 `MacNativeSupport` 的判定口径:按 `group:artifact` 归组 + 无后缀分类器按 x86_64 记
+
+- **归组**:1.19.4 起 Mojang 把 `natives-macos` 与 `natives-macos-arm64` 写成**两条独立的 library 条目**
+  (库名第 4 段才是 classifier,且没有 `natives` 字段)。如果按「每一条库就是一个原生库」去判,
+  7 个原生库会被数成「7 条有 arm64 + 7 条没有」→ 误判成 `Mixed`。所以按 `group:artifact` 归组,
+  同一组的任一条目带 arm64 就认为这个原生库有 arm64 版本(1.19.4 / 26.3 因此都是 `Arm64Native`)。
+- **无后缀的老式分类器算 x86_64**:`natives-osx` / `natives-macos` 字面上不含架构。依据是第 0 步 8 份 JSON 里
+  1.7.10 / 1.8.9 / 1.12.2 / 1.13.2 / 1.16.5 / 1.18.2 连一个 arm64 字样都没有,对应的 LWJGL 2.9 / 3.1.6 / 3.2.x 在 mac 上只发 x86_64 包。
+  这是保守判定:如果真机上发现某个老包其实是 universal 二进制,要改 `_key_arch`。
+- **不接入调用点**:本函数只配测试,给 Lead 裁决「Apple 芯片上旧版本怎么跑」用(PROGRESS.md 的 B2b 第 5 项)。
+
+## D-45 `McLauncher._classpath_path`:把内联的「库进不进 classpath」抽成可注入方法(逻辑逐字搬运)
+
+- **背景**:红线只允许「加可注入 OS / ARCH 的 internal 重载 + 原有方法转调」这一种形态。但第 2 项明确要求
+  「没有 `natives` 字段、靠库名 classifier + `rules` 区分平台的新式库,进不进 classpath 也要按 `osx + x64` / `osx + arm64` 断言」——
+  这段逻辑当时内联在 `BuildLaunchCommand` 的循环里(改动前 `McLauncher.cs` 541-573 行),没有可注入的入口。
+- **做法**:抽成 `internal static string _classpath_path(PyDict lib, string libs_dir, string os, string arch, string osVersion)`,
+  方法体是那段循环的逐字搬运(含 `clientreq=false` 跳过、没有 `name` 跳过、有 `natives` 而没有 artifact 跳过、
+  缺 `artifact.path` 时用 `Utils.MavenArtifactPath(name)` 兜底),循环改为调用它并传 `Utils.OS_NAME` / `Utils.ARCH` / `Utils.OS_VERSION`。
+- **没有第二份实现**:不在新文件里另写一份「判定函数」,避免两处真相;测试同时用「注入本机三字段 == 注入字面量 windows + x64」
+  的等价钉子把 Windows 行为钉住(见 `B2bClasspathTests`)。
+- **如果 Lead 认为越界**:回退就是把方法体搬回循环,`B2bClasspathTests` 里对 `_classpath_path` 的断言随之换成对
+  `Utils.CheckRules` 的断言 —— 已在 PROGRESS.md 的 B2b 遗留第 5 条写明。

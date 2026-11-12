@@ -1302,6 +1302,16 @@ public static class Utils
 
 	public static bool CheckRules(object rules, PyDict features = null)
 	{
+		return CheckRules(rules, features, OS_NAME, ARCH, OS_VERSION);
+	}
+
+	/// <summary>
+	/// B2b:CheckRules 的可注入重载(内部)。逻辑与上面那个 public 方法逐字相同,
+	/// 只是把静态字段 OS_NAME / ARCH / OS_VERSION 换成入参,便于在 Windows 本机按 mac 的参数做单测。
+	/// 规则语义一律未改:最后一条命中的规则生效;os.version 用 \A(?:p) 或 \A(?:p)\z 两种正则匹配。
+	/// </summary>
+	internal static bool CheckRules(object rules, PyDict features, string os, string arch, string osVersion)
+	{
 		if (!Py.Truthy(rules))
 		{
 			return true;
@@ -1318,11 +1328,11 @@ public static class Utils
 			if (pyDict.ContainsKey("os"))
 			{
 				PyDict pyDict2 = (pyDict["os"] as PyDict) ?? new PyDict();
-				if (pyDict2.ContainsKey("name") && !Py.Eq(pyDict2["name"], OS_NAME))
+				if (pyDict2.ContainsKey("name") && !Py.Eq(pyDict2["name"], os))
 				{
 					flag = false;
 				}
-				if (pyDict2.ContainsKey("arch") && !Py.Eq(pyDict2["arch"], ARCH))
+				if (pyDict2.ContainsKey("arch") && !Py.Eq(pyDict2["arch"], arch))
 				{
 					flag = false;
 				}
@@ -1331,8 +1341,8 @@ public static class Utils
 					try
 					{
 						string text = Py.Str(pyDict2["version"]);
-						bool num = new Regex("\\A(?:" + text + ")", RegexOptions.CultureInvariant).IsMatch(OS_VERSION);
-						bool flag2 = new Regex("\\A(?:" + text + ")\\z", RegexOptions.CultureInvariant).IsMatch(OS_VERSION);
+						bool num = new Regex("\\A(?:" + text + ")", RegexOptions.CultureInvariant).IsMatch(osVersion);
+						bool flag2 = new Regex("\\A(?:" + text + ")\\z", RegexOptions.CultureInvariant).IsMatch(osVersion);
 						if (!(num || flag2))
 						{
 							flag = false;

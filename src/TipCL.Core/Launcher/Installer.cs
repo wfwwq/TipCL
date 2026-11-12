@@ -205,7 +205,15 @@ public class Installer
 
 	public static string NativeArchToken()
 	{
-		if (!(Utils.ARCH == "x86"))
+		return NativeArchToken(Utils.ARCH);
+	}
+
+	/// <summary>
+	/// B2b:可注入 arch 的内部重载。逻辑与原方法逐字相同(只有 x86 是 "32",其余一律 "64")。
+	/// </summary>
+	internal static string NativeArchToken(string arch)
+	{
+		if (!(arch == "x86"))
 		{
 			return "64";
 		}
@@ -231,20 +239,39 @@ public class Installer
 
 	public static string SubstNativeKey(string key)
 	{
+		return SubstNativeKey(key, Utils.ARCH);
+	}
+
+	/// <summary>
+	/// B2b:可注入 arch 的内部重载。逻辑与原方法逐字相同(只替换 ${arch})。
+	/// </summary>
+	internal static string SubstNativeKey(string key, string arch)
+	{
 		if (string.IsNullOrEmpty(key))
 		{
 			return key;
 		}
-		return key.Replace("${arch}", NativeArchToken());
+		return key.Replace("${arch}", NativeArchToken(arch));
 	}
 
 	public static string SelectNativeClassifier(PyDict lib)
 	{
+		return SelectNativeClassifier(lib, Utils.OS_NAME, Utils.ARCH);
+	}
+
+	/// <summary>
+	/// B2b:可注入 os / arch 的内部重载。逻辑与上面那个 public 方法逐字相同。
+	/// 本包**没有**改选择结果,包括这个现状:键恰好等于 natives-osx / natives-macos 时,
+	/// 只有 arch 是 x86 或 x64 才 rank=1,arm64 一律 rank=0(所以 Apple 芯片上只提供
+	/// natives-osx 的旧版本选不到任何 classifier)。是否要改由 Lead 裁决。
+	/// </summary>
+	internal static string SelectNativeClassifier(PyDict lib, string os, string arch)
+	{
 		PyDict pyDict = Py.DictOr(Py.Or(Py.DictOr(Py.Or(lib.Get("downloads"), new PyDict())).Get("classifiers"), new PyDict()));
-		object obj = Py.DictOr(Py.Or(lib.Get("natives"), new PyDict())).Get(Utils.OS_NAME);
-		string text = ((obj == null) ? null : SubstNativeKey(Py.AsStr(obj, "replace")));
-		string[] aliases = ((Utils.OS_NAME == "osx") ? new string[2] { "osx", "macos" } : ((Utils.OS_NAME == "windows") ? new string[1] { "windows" } : ((!(Utils.OS_NAME == "linux")) ? new string[0] : new string[1] { "linux" })));
-		string[] archSuffixes = ((Utils.ARCH == "x64") ? new string[4] { "64", "x64", "x86_64", "amd64" } : ((Utils.ARCH == "x86") ? new string[4] { "32", "x86", "i386", "i686" } : ((!(Utils.ARCH == "arm64")) ? new string[0] : new string[2] { "arm64", "aarch64" })));
+		object obj = Py.DictOr(Py.Or(lib.Get("natives"), new PyDict())).Get(os);
+		string text = ((obj == null) ? null : SubstNativeKey(Py.AsStr(obj, "replace"), arch));
+		string[] aliases = ((os == "osx") ? new string[2] { "osx", "macos" } : ((os == "windows") ? new string[1] { "windows" } : ((!(os == "linux")) ? new string[0] : new string[1] { "linux" })));
+		string[] archSuffixes = ((arch == "x64") ? new string[4] { "64", "x64", "x86_64", "amd64" } : ((arch == "x86") ? new string[4] { "32", "x86", "i386", "i686" } : ((!(arch == "arm64")) ? new string[0] : new string[2] { "arm64", "aarch64" })));
 		if (pyDict.Count == 0)
 		{
 			if (string.IsNullOrEmpty(text) || rank(text) == 0)
@@ -253,7 +280,7 @@ public class Installer
 			}
 			return text;
 		}
-		List<string> list = pyDict.Keys.Select(SubstNativeKey).ToList();
+		List<string> list = pyDict.Keys.Select((string k) => SubstNativeKey(k, arch)).ToList();
 		if (text != null && list.Contains(text) && rank(text) != 0)
 		{
 			return text;
@@ -284,7 +311,7 @@ public class Installer
 				string text4 = "natives-" + text3;
 				if (key == text4)
 				{
-					if (!(Utils.ARCH == "x86") && !(Utils.ARCH == "x64"))
+					if (!(arch == "x86") && !(arch == "x64"))
 					{
 						return 0;
 					}
