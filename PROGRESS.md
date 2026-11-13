@@ -6605,3 +6605,41 @@ no-page **37681 `2603BF6A...342CBD`**、`--page launch --theme dark` **33579 `7D
 2. `tools\c5a-smoke.ps1` 里我加的"页面矩阵"那段第一次跑没输出(脚本在那一块之前退出)—— **不值得再花一轮**,Lead 用他现成的矩阵表即可;脚本其余部分(5 个帧+basis 比对+像素取证)是好的。
 3. **只有真机能验**:安装流程真的起后端任务、剪贴板真读、目录页在真实视口下渲染出行(离屏时容器空、模板不落地,见 D-148)。
 4. **`Ui.VirtualList` 的离屏结论**已按 D-148 记录并在 `README.md` / `docs/MAC-VERIFY.md` 里指向;`EncodingGuardTests` 落地后编码这一项由它覆盖(仓库扫描 + 两条自检),本包不再手工核。
+
+### Lead 验收(2026-11-14 06:20)—— C6a(下载+目录+安装)+ C6b(服务器/时长/反馈/Java/联机)+ Lead 的 D1 修正
+
+结论:**两包均通过**,并且这一窗口里把"等待类假红"这一族**成批清掉**了。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| HEAD / 工作树 | `cb6408d` 之后(验收提交前),**工作树干净**(无未提交、无未跟踪、仓库根无空前缀散落文件) |
+| 红线(`src\TipCL.Core`、`Themes\Palette*.axaml`、`Themes\Palette.cs`、`NavModel/NavConfig`、`Services\UiExt.cs`、`MainWindow.cs`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | `git diff 871ed93 HEAD` 在这些路径上**为空** |
+| **原子四跑 x2**(构建 + 两条通道**同一次锁**,`--no-incremental`) | 轮 1:`BUILD=0` / `VSTEST=0`(3523/3523)/ `INPROC=0`(3523/3523);轮 2:**逐项相同** |
+| 构建 | **0 错误**;**警告 7 = 基线**(`NU1900` x6 + `SYSLIB0014` x1),两轮一致 |
+| **冒烟矩阵(16 帧 + blue,Lead 逐帧实测)** | 首屏/launch light 37681 `2603BF6A...`、launch dark 33579 `7D7AFDD5...`(**未变**);library 43775 `8FBA4C9F...`/40686 `A77F3E6A...`;instance 30057 `36FAEDDE...`/27468 `2C69550D...`;settings 45594 `C19BF1C4...`/43745 `CE33BEFE...`;tasks 27719 `0E591B87...`/24171 `C3EE486E...`;account 33173 `D3F59339...`/29984 `148EB206...`;**新基准:`download` light 30372 `9DDD2E14...`/dark 26725 `D602CC36...`、`multiplayer` light 36078 `95F5DC9F...`/dark 32559 `A6B1AF5D...`**;`--theme blue` = **2**。`download` 已经**不再是"与首屏同帧"**(说明它真的注册成页面了) |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 / 216 / 22 / 10,**与基线完全相同** |
+| `%LOCALAPPDATA%\TipCL` / 桌面 / 图片 / 残留进程 | 9328 / 889530606 / 2026-11-10 20:42:16(**零写入**);桌面 14 项、最新 2026-11-12 19:02:53 与图片 3 项、最新 2026-11-06 **均未变**;**testhost/TipCL/java/adb 0 个** |
+| 编码 | 由 `EncodingGuardTests` 覆盖(仓库扫描 + 两条自检),Lead 另外对改动文件逐字节抽验过:**无 BOM / CR=0 / U+FFFD=0** |
+
+**这一窗口真正花时间的事:"等待类假红"的成批清理**
+
+C6a/C6b 交付后,套件在两条通道上偶发红,而且**每次都换一条**。Lead 的判定是"这不是 N 个独立 bug,而是同一族测试缺陷",于是逐个定位、找到共同特征并**批量修**:
+
+| 红过的用例 | 真因 | 处置 |
+|---|---|---|
+| `C3bVersionSetupTests.Memory_is_written_only_for_positive_numbers` | **顺序假设**:断言"第 3 个请求必须是 `save_version_settings`",并发负载下请求顺序会变(它的等待本来是 10 秒带截止的,不是"等不够") | Lead 改成"等 `save_version_settings` 到达 → 取**最后一个**它的载荷",并把**实际收到的方法清单**拼进失败消息;载荷断言一个没动(`57dbf5d`) |
+| `C6aPagesTests.Catalog_install_picks_a_version_file...` | 在"请求到达"就断言界面状态(续体还没跑) | c4-pages 改成等效果 |
+| `C6aPagesTests.Install_page_refuses_an_empty_instance_name` | `LoadAsync` 续体里的 `Select(0)` 会**重写名字输入框**;用例在续体之前改名字 ⇒ 被覆盖 ⇒ 真的起了安装。它后来改成"等输入框出现版本号",但**那一支依赖 `_autoName` 这个受进程级状态影响的副作用**,不成立时就一直等到超时 | ①c4-pages 改成等效果;②Lead 再改成**"同一轮里设置 + 立刻点击"(中间不插 Settle)**,使晚到的续体没有覆盖窗口,并加 `Assert.Equal("   ", name.Text)` 自证没被覆盖(`cb6408d`) |
+| `C6aPagesTests.Catalog_modpack_install_...` | 同族:等了 `search_modpacks` 请求到达,但把结果填进列表的续体还没跑(46 ms 就断言空集合) | Lead **成批扫描**出三处同族调用点(两处"等请求后断界面"、一处 `Settle(8)` 固定轮数),统一改成"等可观测效果 + 截止时间";断言数 102 → 103,语义未改(`2eff190` / `cb6408d`) |
+
+**Lead 在本窗口做的 D1 项**:
+
+1. **编码守卫**(`tests\TipCL.Tests\EncodingGuardTests.cs`,`e399a88`):全仓库扫描(除 `tools\*.ps1` 外不许 BOM、除 `.sln` 外不许 CR、不许 U+FFFD、必须合法 UTF-8)+ **两条自检**(在临时目录造坏样本,证明扫描器真抓得到)。**自检第一次就抓出了 Lead 自己的夹具错误**:`new UTF8Encoding(true).GetBytes(...)` **根本不输出 BOM**(那个开关只影响 `GetPreamble()`)—— 若只写"仓库扫描"那一条,它会永远绿却测不出 BOM。另删掉一条会**自伤**的启发式规则("不许连续问号",被它自己的描述文本误报)。
+2. **运营规则补到 14 条**(`78538a1`),新增的五条都是**当晚实际造成误判**的:构建失败时 `--no-build` 会静默跑旧二进制(⇒ `BUILD_EXIT != 0` 时后面结果一律作废);"全局前提"随新包落地而失效(第五次);故意替换全局状态的用例**含钉子用例**自己也要在 `finally` 里写回进入前的值;守卫型测试必须"先验证验证器";离屏帧里**列表行不落地**(平台限制)。
+3. **两条测量纪律**:告警计数**只有在 `--no-incremental` 的构建之间才可比**(增量构建不重编未改动工程,它们的告警不会重现 —— Lead 这次就被误导过一次);**追加型 helper 用前必须确认源文件为空**(一次重复追加让 `PROGRESS.md` 涨了 4333B,已字节精确切回)。
+
+**对两包交付物的裁决**:①`MultiplayerPage` 的 `FillActions` **没有逐字保留**反编译器摊开的 `switch`+`goto` 形状,改成按状态名的普通 `switch`(同一组映射与兜底)——**接受**,权威是行为不是反编译形状;②`CatalogPage` 的 `CS0618` 采用**定点点豁免**(窄 `#pragma` + 注释三点 + D-153 跟踪),真 API 迁移单列——**接受**;③c4-dialogs 自报的 12 条 analyzer 告警(它的三个测试文件)**已按 Lead 的行号清单清掉**,断言强度不变。
+
+**测试总数**:3438 -> **3523**(两通道相等、不支持 0)。
+
+**仍然只有真机能验**:安装流程真的起后端任务、真剪贴板/文件面板、列表行在真机真的出现、`multiplayer` 状态圆点与玩家列表、以及 D2 清单里的全部观感项(`docs\MAC-VERIFY.md`)。
