@@ -38,6 +38,7 @@
 | C3d | **外壳补 `FlyToTasks` + `FlyHost`**:13 处页面调用点一次修好(含 C3c 注入缝的接线) | ✅ 完成(见下;**新增 33 个测试方法 / 43 条用例,总数 3086 → 3129,两条通道各连跑 2 次都 3129/3129 全绿**;`--smoke` 与 C3c 基准**逐位相同**(light 37681 `2603BF6A...` / dark 33579 `7D7AFDD5...`),离屏时第一道守卫就把飞行挡掉,冒烟帧里没有 chip;C3c 记的那条"用户可见降级"**已修好**(提交 `a9ad510` 外壳成员 + `b61db8a` 接线);顺带实测两条框架事实:`Avalonia.Controls.Control.IsLoaded` 在 11 里存在、**以 Transform 对象为 `Animation.RunAsync` 目标会抛 `InvalidCastException`**(后者是既有问题,不在本包范围,见小节第 8 节) |
 | C3b | 启动页需要的两个小对话框:`Pages\CrashUi.cs`(崩溃 / 异常退出报告卡)+ `Pages\VersionSetupDialog.cs`(版本设置) | ✅ 完成(见下;**新增 71 条用例,总数 2897 → 2968,两条通道各连跑 2 次都 2968/2968 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书的门面计数复核吻合,但"自包含"不成立 —— 还差两个没移植的小模型 `Models\OpResult.cs` / `Models\VersionSettingsDto.cs`,按"小而自包含就一并搬"字节级搬来,见 D-118;`AiFixWindow`(22.6 KB 整窗)属 AI 全家未移植,「交给 AI 修复」按钮保留 + 注入缝 + 如实提示,请 Lead 裁决,见 D-119) |
 | C3e | **修 `Motion` 的变换动画**:19 处"把 Transform 当 `RunAsync` 目标"的调用点改成"目标给宿主控件" + 失败可观测 | ✅ 完成(见下;**新增 50 条用例,总数 3129 → 3179,两条通道各连跑 2 次都 3179/3179 全绿**;`--smoke` 与 C3c 基准**逐位相同**(light 37681 `2603BF6A...` / dark 33579 `7D7AFDD5...`);受影响的是 13 个方法(`FadeIn` / `HoverLift` / `Pulse` / `Shake` / `Shine` / `Spin` / `PopIn` / `PopOut` / `SlideIn` / `SlideOut` / `PageSwap` + 间接的 `Stagger` / `StaggerItems`),公开签名一个字节没动;顺带修掉同族的第二、三个坑(`Easing` 显式写 null 会静默失效、`IterationCount.Infinite` 配 `RunAsync` 必抛),见 D-132;**用户可见差异只有一条**:`Spin` 每圈交界有一帧级重启) |
+| C4 | **实例管理簇**:`Pages\ModsDialog.cs` + `Pages\SavesDialog.cs` + `Pages\LibraryPage.cs` + `Pages\InstancePage.cs` + `Pages\InstanceDetailPage.cs` 移植并注册 `library` / `instance` | ✅ 完成(见下;**新增 173 条用例 / 162 个方法,总数 3179 → 3352,两条通道各连跑 2 次都 3352/3352 全绿**;首屏两帧与基准**逐位相同**(light 37681 `2603BF6A...` / dark 33579 `7D7AFDD5...`),**新帧基准** = `library` light 42417 `905125C4...` / dark 39268 `FA926F03...`、`instance` light 27484 `92C06E15...` / dark 24511 `F1582051...`;依赖审计**第四次**推翻任务书的"自包含"(还差 7 个 Models DTO + 一个 1956 B 的小对话框,见 D-133);`InstanceDetailPage` 的「设置」分段走注入缝 + 如实占位(**用户可见降级**,见 D-134);按 D-126 还原了 C3c 的一条时代前提(断言只增不减);**两处用户可见的窄窗观感问题请 Lead 裁决**(`instance` 的 Section 标题被压成 0 宽、`library` 两栏在离屏帧里左偏约 44px),见小节第 5 节) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
 ## 仓库现状(截至 A1)
@@ -5941,3 +5942,281 @@ Lead 在 C3d 验收里采纳的 D-130 只是一条线索。子代理**逐个 `Ru
 **裁决 3:接受抖动修复的做法。** 子代理在自查时发现两条通道顺序不同导致进程级计数不可比(`7838def` 改成按动画编号记账),以及中间态断言受逐帧采样抖动影响(`f4ab0bc` 改成 `PropertyChanged` 记账),最后把终态一律改成"条件成立 + 本用例起的动画都收摊"的泵法(`e9eb048`)。它自己留下的 `artifacts\flake-5.txt` 记着修复前那次失败;Lead 的 6 次连跑证明**修复之后是稳定的**。
 
 **只记录、交给 D1 的一条测试卫生问题**:`C3dReachTests` 在关窗时把 4 条飞行 chip 动画留在"挂着"状态(它们只是没人推帧,生产里窗口一关就一起没了)。它会让**进程级的 `RunningAnimations` 总数一直被抬着** —— 以后谁想用那个总数做断言,先看 D-132 最后一条。不影响正确性,归 D1 清理。
+
+---
+
+## C4 实例管理簇:`ModsDialog` + `SavesDialog` + `LibraryPage` + `InstancePage` + `InstanceDetailPage`(2026-11-14)
+
+工作包:把 Windows `Pages\ModsDialog.cs`(7694 B)/ `Pages\SavesDialog.cs`(8351 B)/ `Pages\LibraryPage.cs`(31560 B)/
+`Pages\InstancePage.cs`(16780 B)/ `Pages\InstanceDetailPage.cs`(10450 B)移植到 Avalonia 11 / net8,
+并把**两个导航页**注册好(`library` / `instance`)。**不碰**外壳 / 导航 / 色板 / `Controls.axaml` / 其它页面;
+`src\TipCL.Core` 一字节未改。
+
+### 1. 依赖审计(任务书第四次说"自包含",第四次不成立,见 D-133)
+
+先按任务书要求自己审计:读五个文件的 `using` 与对 `TipCL.Models` / `TipCL.Services` / `TipCL.Pages` 的引用,
+再逐个查 mac 侧有没有。门面计数(`Ui` / `Dlg` / `I18n` / `Motion` / `EnableDrop` / `Thumbs`·`LoaderIcons`)逐项吻合,
+**缺的是模型层与一个小对话框**:
+
+| 缺什么 | 大小 | 处理 |
+|---|---|---|
+| `Models\ModsTarget.cs` | 201 B | `Copy-Item` 字节级搬(SHA256 与 Windows 源一致、无 BOM、LF) |
+| `Models\ModUpdateRow.cs` | 887 B | 同上 |
+| `Models\SaveRow.cs` | 426 B | 同上 |
+| `Models\BackupRow.cs` | 222 B | 同上 |
+| `Models\MediaRow.cs` | 207 B | 同上 |
+| `Models\GlobalModRow.cs` | 183 B | 同上 |
+| `Models\VersionRowDto.cs` | 736 B | 同上 |
+| `Pages\GlobalModsDialog.cs` | 1956 B | **WPF 代码** ⇒ 按同一套换名规则移植(`ModsDialog.cs:77` 的「全局模组」按钮直接调它;不搬就是静默桩)。这是本包**唯一**超出"五个文件"清单的产品文件 |
+
+**按红线停下并报告的一处**:`InstanceDetailPage` 的「设置」分段内嵌 Windows 的 `VersionManagePage`(34490 B 的**整页**,
+属别的工作包)⇒ 本包不搬,走注入缝 + 如实占位,见 D-134。
+
+另有两条**不是缺文件、而是语义**的发现(都不是任务书说的那样),已分别记进 `NavModel` 相关小节与 D-133:
+
+1. `library` 这个 id **在 Windows 与 mac 的导航表里都没有侧栏入口**(`NavModel.PageForNavKey` / `NavSpecs` /
+   `GroupedNav` 里都没有它,WP4 信息架构把它换成了「版本管理」)。它只存在于 `MainWindow.NavDefs`
+   (Windows <c>MainWindow.xaml.cs:109</c>),所以**只能按页面 id 直接切**(`Navigate("library")` / `--smoke --page library`),
+   侧栏点不到 —— **两边一致**,不是移植漏项。`instance` 才是侧栏那一行(`PageForNavKey["instance"]`,
+   行标题「版本管理」,而页面自己的 `Title` 仍是 Windows 的「实例」)。
+2. `InstanceDetailPage` **不是导航页**(Windows 也没有它的 id):它由实例库「实例详情」按钮换进页内容,
+   自己的「返回」再换回去。本包**没有**给它注册 id,并用一条用例把"没人给它注册"钉住。
+
+### 2. 逐文件说明
+
+| 文件 | 移植后 | 要点 |
+|---|---|---|
+| `ModsDialog.cs` | 11626 B | 目标下拉 + 计数 + 模组行(开关/名称/文件名/删除)+ 五个动作钮;`install_mod` 的 `extra.path/instance/name` 三个字段逐字保留;`sync` 标志挡"程序填下拉"那一次;`CheckUpdatesAsync` 的勾选卡、逐项 `apply_mod_update`、失败汇总成 Alert |
+| `SavesDialog.cs` | 12224 B | 三段滚动区(存档 0.4/180 + 备份 150 裸 MaxHeight + 媒体 170 裸 MaxHeight);备份 `Take(20)`、媒体 `Take(60)`;媒体下拉文案 → 三个后端 kind 键;`PickSaveTargetAsync`(0/1 项短路 + 多项弹卡)与私有的 `InstallDatapackAsync` 一起搬 |
+| `GlobalModsDialog.cs` | 3628 B | 见上表;两个按钮 + 开关写 `set_global_mod_enabled` |
+| `LibraryPage.cs` | 43592 B | 左栏文件夹列表 + 右栏按加载器分组折叠的版本列表;WP-U3 的「自定义布局...」(显隐文件夹栏 + 导出/导入布局,直读直写 `"library"` 文档,版本列表恒可见);收藏走 `Prefs.VmFavorites`、折叠走 `Prefs.Expanded["lib:<key>"]`;「上次游玩」由 `get_playtime.sessions` 派生 |
+| `InstancePage.cs` | 23664 B | Section 头 + 实例卡(图标/名称/副行/标签行/启动+模组+存档+更多);220ms 防抖过滤;上下移动选中 / 回车启动;右键 12 项菜单(含两处 `Win?.FlyToTasks`) |
+| `InstanceDetailPage.cs` | 15553 B | 头部(返回/标题/副行/启动)+ 五分段 + 版本下拉 + 更多管理;共享(大锅饭)模式藏前四段并强制切「设置」;四个资源分段各拉各的后端方法 |
+
+注册:`Pages\LibraryPageRegistration.cs` / `Pages\InstancePageRegistration.cs`,都是 `[ModuleInitializer]` + `PageRegistry.Register`
+(与 `LaunchPageRegistration` 同一套,D-125),**没有动外壳**。
+
+### 3. Windows → Avalonia 差异(逐条,完整清单写在每个文件的类注释里)
+
+框架类型换法沿用 C3a/C3b/C3c 那一套(`UIElement`→`Control`、`Visibility`→`IsVisible`、`SetResourceReference`→`UiExt.Dyn`、
+`Style = Ui.S(...)`→`StyleKeys.Apply`、`Mouse*`→`Pointer*`、`Cursors.Hand`→`new Cursor(StandardCursorType.Hand)`、
+`FontWeights.*`→`FontWeight.*`)。本包新增的差异:
+
+| # | Windows 写法 | mac 写法 | 理由 |
+|---|---|---|---|
+| 1 | `MenuItem.IsCheckable = true` | `ToggleType = MenuItemToggleType.CheckBox` | Avalonia 11 把"可勾选"做成三态枚举(本机核过 ref 程序集) |
+| 2 | `ToolTipService.SetShowDuration(控件, 60000)` | **舍去**(留注释) | Avalonia 11.3.23 的 `ToolTip` 只有 `ShowDelay`、**没有** `ShowDuration`(逐名核过);提示照常显示,只是按平台默认时长消失 |
+| 3 | `VisualTreeHelper.GetParent(d)` | `d.GetVisualParent()` | Avalonia 11 **没有 `VisualTreeHelper` 这个类**,等价物是 `Avalonia.VisualTree` 的扩展方法 |
+| 4 | `CheckBox.Checked` / `Unchecked` 两个事件 | 单个 `IsCheckedChanged` + 判 `IsChecked` | Avalonia 11.3 把前两个标记成过时(CS0618),而本工程的告警红线只允许 `SYSLIB0014` ×1(与 `Ui.Check/Switch` 门面同一口径) |
+| 5 | `PreviewKeyDown`(隧道) | `AddHandler(KeyDownEvent, ..., RoutingStrategies.Tunnel)` | Avalonia 的 `KeyDown` 直接订阅只有冒泡段 |
+| 6 | `Keyboard.FocusedElement` | `TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement()` | Avalonia 没有那个静态入口;判据仍"是不是 TextBox" |
+| 7 | `MouseRightButtonUp` | `PointerReleased` + `e.GetCurrentPoint(...).Properties.IsRightButtonPressed` | Avalonia 没有独立的右键按下/抬起两个事件 |
+| 8 | `StackPanel.FocusVisualStyle = null` | **去掉**(留注释) | Avalonia 11 的 `Control` 没有这个属性 |
+| 9 | `ContextMenu.IsOpen = true` | `menu.Open(anchor)` | 见 D-124(无参 `Open()` 会抛) |
+| 10 | `BclExtensions.Contains(s, q, StringComparison)` | `s.Contains(q, StringComparison)` | net48 的补丁扩展在 net8 上是 BCL 自带方法 |
+| 11 | 局部变量名(反编译器风格) | 改成语义名 | 类型/顺序/判据/闭包捕获时机一字不改 |
+
+**测试缝(D-115 / D-127 的口径,都是 internal,公开签名一个字节没动)**:`LibraryPage` 的
+`FoldersVisible` / `InferType` / `SelectFolder` / `FolderPathFor` / `ToggleGroupForTest` / `GroupsNow` /
+`LaunchVerAsync` / `UninstallAsync` / `OpenDetailAsync` / `BuildFolderMenu`;`InstancePage` 的
+`Select` / `SelectedNow` / `HandleNavKey` / `BuildRowMenu`;`InstanceDetailPage` 的
+`ShowSeg` / `ApplyVersionSegs` / `SettingsPageFactory`。**菜单被拆成"建出来"与"弹出"两步**:
+Avalonia 的 `ContextMenu` 一旦 `Open` 就落进独立 popup 宿主,测试既拿不到也点不到菜单项。
+
+### 4. 一处**用户可见的降级**(请 Lead 裁决,见 D-134)
+
+`InstanceDetailPage` 的「设置」分段在 Windows 内嵌 `VersionManagePage`(34490 B 整页,属别的工作包)。
+本包:分段按钮照 Windows 建、点击走新增注入缝 `SettingsPageFactory`;**挂点没接时**那一栏显示一句**如实的占位**
+(「版本管理页还没移植」+ 为什么),不是空白、也不是假装能用。接上工厂就照 Windows 走 `EnsureLoadedAsync` + `OnShown`。
+**这是本包唯一的用户可见降级。**
+
+### 5. 冒烟:新基准 + 两组新帧
+
+| 帧 | 退出码 | 字节 | SHA256 |
+|---|---|---|---|
+| 不带 `--page`(light) | 0 | **37681** | `2603BF6AB2B5D491E2B6AFB34E3EAEDD8A0388B6A6497D33D3F8193492342CBD` = **C3c/C3d/C3e 基准逐位相同** |
+| `--page launch --theme light` | 0 | 37681 | 同上(逐位相同) |
+| `--page launch --theme dark` | 0 | **33579** | `7D7AFDD502D82EE21F7DCEFEF7B12FC2731628D41B4DDF595FD1E1D05F276893` = **基准逐位相同** |
+| **`--page library --theme light`** | 0 | **42417** | `905125C42C62804916C6766FC25BA8DDE0BA472BDA0F093AFA4ED4AB201EB5BD` |
+| **`--page library --theme dark`** | 0 | **39268** | `FA926F0351BBDF1329FFC04E2FC76006224DA4DDC19961B15CDC76A79BFF988B` |
+| **`--page instance --theme light`** | 0 | **27484** | `92C06E150B1D52CDEF6382F5A9E065C9190FCD82A85D38E8A5B847EE58768842` |
+| **`--page instance --theme dark`** | 0 | **24511** | `F15820512ED66E301719D446C393CC2E1E55D0C782E0061BD5028BA7F187CFF2` |
+| `--theme blue` | **2** | 不产出文件 | — |
+
+**确定性**:四个新帧各连跑 2 次,每次**逐位相同**(4/4)。**新基准从此刻起生效**:
+`library` light 42417 `905125C4...` / dark 39268 `FA926F03...`;`instance` light 27484 `92C06E15...` / dark 24511 `F1582051...`。
+旧基准(37681 / 33579)保持不变 —— 新页面**没有**动到首屏(它们没有侧栏入口,外壳首屏仍是启动页)。
+
+**画面里到底有什么(逐帧看 PNG + 逐像素取证,`System.Drawing`)**:
+
+| 帧 | 看到的 |
+|---|---|
+| `library` light | 外壳照旧(标题栏 + 侧栏;侧栏没有「实例库」行,与 Windows 的导航表一致)+ 页面双栏骨架:左栏白卡(「文件夹列表」18pt 加粗、路径行、空的文件夹列表、「添加或导入」+ 四个动作钮:添加已有文件夹 / 导入整合包 / 新建实例 / 导入外部启动器),右栏(「版本选择」21pt 加粗 + 计数「共 0 个版本」+ 过滤框「过滤版本名」+ 「实例详情」「刷新」+ 副说明「双击版本直接启动;行尾可收藏/删除/设置」)+ 右栏中央的**空态**(堆叠图标 + 「这个文件夹还没有版本」+ 「点左侧「添加或导入」,或到「下载」页装一个」) |
+| `library` dark | 同一套结构、深色底(标题栏 27,27,27;页面 26,26,26);明暗两帧 **494980 / 495000** 像素不同(99.996%) |
+| `instance` light | 外壳照旧 + 一张白卡:过滤框「过滤实例名」+ 打开游戏目录 / 导入官方启动器 / 刷新 / **新建实例(Primary,主色 31,122,82)**;卡片下方是页面底色(实例列表为空) |
+| `instance` dark | 同结构深色版;明暗两帧 **494807 / 495000** 像素不同(99.96%) |
+
+**必须让 Lead 知道的两条观感问题(用户可见,都不是"没数据"造成的)**:
+
+1. **`instance` 帧里 Section 的标题与副说明一个字都看不到**(逐像素核过:x=196~520、y=45~135 整块没有任何深色像素)。
+   原因(读源码可定位):`Ui.Section` 是 `Grid("*,Auto")`,右列 Auto 放的是「计数 + 过滤框 + 四个按钮」那一簇(≈640px),
+   而 mac 的页面区域被 196px 侧栏挤到 668px 宽 ⇒ 左列 `*` 被压成 **0 宽**,标题被裁没。
+   Windows 在同样的 900px 窗口里没有侧栏(顶栏页签),页面区域有 900px,所以**碰不到这一条**。这是我们照抄的
+   Windows 组合在 mac 外壳下的**直接后果**。
+2. **`library` 帧里两栏整体比页面区域原点向左偏了约 44px**:左卡片的白色区域实测从 **x=197**(= 侧栏右缘)开始
+   (正确位置应是 196+18=214),右栏标题的首字被左卡片**压住**(放大可读作「本选择」而不是「版本选择」)。
+   机制上最像"两栏 body 的期望宽度超过视口 ⇒ 离屏 `ScrollViewer` 拿到了非零的水平偏移":左卡 `MinWidth=300` +
+   18px 间隔 + 右栏头部那一簇(≈400)≈ 718 > 视口 632,而 `instance` 页没有水平溢出、它的白卡实测在 **220~873**
+   (正是 18px 页边距的位置)且**没有偏移** —— 这条对照很干净。
+
+  ⇒ 两条都请 Lead 裁决(是接受"窄窗下如此",还是后续小包把右栏头部改成可换行 / 让 `MinWidth` 与星号列的关系
+  在 mac 的页面宽度下成立)。**本条的确切机制没有验完**:我准备的布局探针用例(量 `Bounds` / `Offset` / `Extent`)
+  因为共享工作树被别的包改到编译不过而没跑起来(见第 7 节),所以上面是**像素取证 + 源码定位**的结论,
+  不是几何量测的结论。
+
+**另一条口径观察(如实记录,未深究)**:`library` 帧里右栏出现了只有 `RenderGroups` 才会写的两样东西
+(计数「共 0 个版本」与空态)—— 而 `SmokeRunner` 全程 `BridgeReady` 为 false(`--smoke` 只 `SetupWithoutStarting`
++ `new MainWindow`,从不启动后端),按 D-96/C3c 的说法页面**不该**加载。本包没有去改外壳/后端接线(不在红线内),
+只把这个观察记下来(它可能影响 D1 冒烟矩阵的"离屏页面处于载入前状态"这条口径)。
+
+### 6. 测试(新增 **173 条用例** / 162 个测试方法;总数 3179 → **3352**)
+
+| 文件 | 用例 | 覆盖 |
+|---|---|---|
+| `C4Fixtures.cs` | — | 期望值权威副本(`C4Expected`:分组表、两类菜单项、五个分段、媒体 kind 映射…)、`C4Scope`(全局快照:**多了 `InstanceDetailPage.SettingsPageFactory` 与 `PageLayoutStore.DirOverride`**)、`C4LayerHost`(带真窗口的浮层宿主)、`SettingsProbePage`、`C4Files`(泵/找控件/`Dlg.Panel` 卡片/菜单驱动/**假后端参数按 JSON 解码后断言**) |
+| `C4DialogsTests.cs` | **67**(65 方法) | ModsDialog 12 条(标题/目标表/兜底项/行结构/计数/空态/开关两向/删除确认与取消/打开目录/导入降级/畸形行)、`CheckUpdatesAsync` 7 条、GlobalModsDialog 3 条、SavesDialog 20 条(标题两种/行结构/空态/备份 20 上限/媒体 60 上限/三个 kind 映射/备份/还原 `overwrite:true`/删除两种/打开存档/打开媒体/导出降级/目标短路与弹卡/数据包两支/畸形行/三段滚动口径/关动画终态)、面板关闭与三卡自查 2 条 |
+| `C4LibraryTests.cs` | **65**(56 方法) | 注册 6 条(含 `library` 没有侧栏键这条现状)、构造与结构 8 条、加载与状态 6 条、搜索与折叠 6 条、收藏 1 条、布局自定义 5 条、交互 20 条(选中/菜单七项/Java/重命名/删除/双击启动/实例详情换页/卸载/安装流程/拖放上下文/动画残留)、`InferType` 10 条 Theory |
+| `C4InstanceTests.cs` | **41** | InstancePage 15 条(标题/构造/Section 头/加载/卡片/副行/过滤与计数/空态/键盘三类/菜单九项/启动/打开目录两支/新建/导入/卡片复用/停表/载荷形状)、InstanceDetailPage 21 条(头部与 rail/版本下拉两种/共享与隔离/设置分段两条/更多管理/四个分段/空态/返回/启动/行几何)、注册现状 1 条 |
+
+**两条通道跑出来的计数是 3352 = 3179(C3e 基线)+ 173(本包)** —— 与 `--list-tests` 口径逐类相加一致
+(`67 + 65 + 41 = 173`)。
+
+**顺带按 D-126 还原了一条时代前提(断言只增不减)**:`C3cPageStructureTests.Construction_does_not_throw_without_a_backend`
+里那条"注册表里只有启动页"的断言,在本包注册两个页面之后不再成立 —— 处理是**先把前提还原**
+(`PageRegistry.Unregister("instance"/"library")`,`C3cScope` 会在 Dispose 里还原注册表),
+**原来那条断言一字不改地保留**,并**另加**两条"C4 确实注册了它们"的断言。**没有**删测试、没有放宽断言、没有加 Skip。
+
+**测试期实测到的四条(写进 D-135)**:`BridgeClient` 把非 ASCII 转义成 `\uXXXX`(参数断言必须先解析 JSON);
+Avalonia 的 `MenuItem` 在程序化 Click 下**不翻转** `IsChecked`(翻转在指针那条路里,`IMenuItem.RaiseClick` 是 internal);
+220ms 防抖的 `DispatcherTimer` 在离屏泵里不可靠(改成"没立刻变"+"用 `RefreshAsync` 走一遍 `Render`");
+`Now.AddHours(-1)` 这种时间戳凌晨 0~1 点会跨天,曾让 VSTest 通道红、进程内通道绿(已改成与跑测时刻无关的算法)。
+
+### 7. 验证命令与实际结果
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 构建 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 个错误**;警告按类别 = **`NU1900` ×6 + `SYSLIB0014` ×1**(与基线逐项相同;`WarningsOnly` 单独复跑确认过,本包一开始多出来的 CS0108 / xUnit2013 / xUnit2017 已全部改掉) |
+| `dotnet test` 第 1 / 2 次 | `dotnet test TipCL.Mac.sln -c Release --no-build`(锁内跑) | 都是**退出码 0,失败 0 / 通过 3352 / 总计 3352** |
+| 进程内执行器 第 1 / 2 次 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll`(锁内跑) | 都是**退出码 0,总计 3352 / 通过 3352 / 失败 0 / 跳过 0 / 不支持 0** |
+| `--smoke` 八帧 | 见第 5 节的表(全部包在 `tools\with-build-lock.ps1` 里) | 退出码 0×7 + 2×1;四个新帧各复跑一次逐位相同 |
+| `%LOCALAPPDATA%\TipCL` | 开工第一条命令 / 收尾各量一次 | 两次都是 **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16** = Lead 基线逐项相同(**零写入**) |
+| 真实桌面 / 图片 | 收尾 | 桌面 14 项、最新 **2026-11-12 19:02:53**(不变);图片 3 项、最新 **2026-11-06 23:39:03**(零写入) |
+| 残留进程 | `Get-Process testhost,TipCL,java,adb` | **0 个** |
+| `%TEMP%` 下的 `tipcl*` | 收尾 | 总数 **142**(C3d 记的 113);最新几条(`tipcl-tests-*` / `tipcl-det-*` / `tipcl-launch-*` / `tipcl-probe-*`)都落在本包的验证窗口内(**00:32–00:35**),但这些名字在本仓库源码里**一个都不存在**,而本仓库自己的测试隔离目录是 `tests\TipCL.Tests\bin\Release\net8.0\test-home\<guid>`(收尾时 540 个)⇒ 判给并行会话,但**本包无法自证归属**,如实记录 |
+| `src\TipCL.Core` 有没有被动过 | `git diff --name-status b664f4f HEAD -- src/TipCL.Core` | **0 行输出**(空) |
+| Core 对 Windows 源的同一性 | 逐文件 SHA256(受版本控制的 248 个) | **238 有对应 / 216 一致 / 22 有改动 / 10 无对应**,与基线**完全相同** |
+| 编码 | 对本包新增 / 改动的 21 个文本文件逐个 `ReadAllBytes` | 无一例外:**无 BOM、CR=0、U+FFFD=0** |
+
+**共享工作树的一次干扰(如实记录,见 D-136)**:收尾阶段 `src\TipCL.App\Pages\SettingsPage.cs`、
+`FirstRunWizard.cs`、`tests\TipCL.Tests\C5aFixtures.cs` 等**别的工作包**正在写入,树里一度编译不过
+(`CS0103 NormalizeColor` / `CS0165 copy` / `CS0246 IBrush` / `window.Toast` 之类),导致本包的最后一次
+"收尾复测"拿不到干净结论。⇒ 上表里的四条通道与八帧冒烟都是**本包亲自跑出来的**(构建/测试/冒烟全程包在
+`tools\with-build-lock.ps1` 里);布局探针那一条因此**没跑成**,见第 5 节末尾。
+
+### 8. 未验证项
+
+1. **macOS 真机**:渲染观感、`--smoke` 像素、真桌面下两栏页在 900×550 的实际排布、系统红绿灯下的布局 —— 一律**未验证**。
+2. **第 5 节那两条观感问题的确切几何没有量测**(布局探针用例没跑起来):左卡片左缘的精确 x、`ScrollViewer`
+   的 `Offset` / `Extent` / `Viewport`、星号列与 `MinWidth` 的关系 —— 都只有像素取证 + 源码定位的结论。
+3. **`library` 帧里页面被加载这件事的机制未查明**(与 D-96/C3c 的"离屏不加载"口径不符),见第 5 节末尾。
+4. **指针事件薄壳那一层**照 D-115/D-127 同样没有用真输入驱动过(行选中 / 双击版本 / 右键菜单 / 组头折叠走的是
+   同一批 internal 处理器体)。
+5. **对话框的真实弹出与定位**:离屏下 `ContextMenu.Open(anchor)` 与 `Dlg.Panel` 的定位没验(需要真窗口管理器)。
+6. **文件选择器相关的分支**(导入 jar / 导入整合包 / 添加文件夹 / 导出存档 / 导出媒体 / 导出整合包)在离屏里
+   `Dlg.PickFile(s)` / `SaveFile` / `PickFolder` 一律返回 null,所以只验了"如实降级、不写后端"这一半。
+7. **`InstanceDetailPage` 的「设置」分段**只验了"没接工厂时的如实占位"与"接上工厂时的嵌入 + EnsureLoaded + OnShown";
+   真正的 `VersionManagePage` 内容**未验证**(它还没移植)。
+8. **`preferInstance` 的偏好字段是 private**,`LaunchVerAsync` 用例只能侧证"启动页被要求加载过"+ `save_settings` + 切页,
+   没有直接断言 `_preferredVersion` 被写成 `1.20.1`。
+
+### 9. 遗留与风险
+
+1. **第 5 节的两条用户可见观感问题**(instance 帧 Section 标题被压成 0 宽;library 帧两栏内容左偏且左卡被侧栏盖住)
+   —— 请 Lead 裁决,可能要给"窄窗下右栏头部换行"或"两栏比例/最小宽按 mac 页面宽度重算"单开一个小包。
+2. **D-134 的降级**(「设置」分段占位)等版本管理页那一包接上 `SettingsPageFactory` 即可消除。
+3. **`LibraryPage.FolderPathFor` 兜底路径用反斜杠**(照抄 Windows,D-133):mac 上只在"实例没给 Path"那一支显示成
+   Windows 风格;要改请单开小包。
+4. **`Ui.Section` 的 `*,Auto` 在窄页面下会把标题压成 0 宽** —— 这是 C1c 门面的既有行为,凡是用到 `Section` 的
+   页面在 mac 的 196px 侧栏下都可能撞上(本包只记录,没有改门面)。
+5. 本包**没有**给 `library` 加侧栏入口(与 Windows 一致,见第 1 节):要让它出现在侧栏得改导航表(红线外,请 Lead 决定)。
+6. `%TEMP%` 里 29 个新增 `tipcl-*` 目录的归属无法自证(并行会话)。
+
+## C5b:下载任务 / 账号 / 启动向导(「下载」页按 Lead 裁决挂给下一包 C6)
+
+**范围(独占)**:`src\TipCL.App\Pages\TasksPage.cs` / `AccountPage.cs` / `FirstRunWizard.cs` + 两个注册文件
+`TasksPageRegistration.cs` / `AccountPageRegistration.cs`(`[ModuleInitializer]`,D-125),外加
+`src\TipCL.App\Models\` 里的 `AccountSkin.cs` / `SkinUrls.cs`(**字节级搬**)与 `SkinPng.cs`(见下);
+测试是我自己的 `tests\TipCL.Tests\C5bFixtures.cs` + `C5bTasksAccountTests.cs`。**`download` 的注册与导航没碰**(C6 的活)。
+
+### 1. 依赖审计(Lead 的扫描历来不完整,这次先查后动)
+
+| 文件 | 审计结论 |
+|---|---|
+| `TasksPage.cs`(7227 B / 263 行) | **可移植**。mac 侧齐:`TaskStore`(`Added`/`Updated`/`Cleared`/`Rows`/`RunningCount`/`ClearFinished`/`Remove`)/`TaskRow`/`Ui.LogBox`·`Prog`·`Section`·`Empty`/`Motion.Stagger`·`HoverLift`·`Progress`·`FadeIn`/`CrashUi.ShowAsync`/`EnableDrop(() => FileDrop.DropContext.None)`/`BlockHost("tasks")`。要自己解决的两处框架差异:`ScrollToEnd` 与 `VerticalOffset/ExtentHeight/ViewportHeight`(D-128 的模板 `ScrollViewer` 口径)、`SetResourceReference`(既有 `Dyn(...)`)。 |
+| `AccountPage.cs`(17904 B / 582 行) | **可移植**。齐:`AccountRow`/`AuthlibPreset`/`ThumbTile`/`Thumbs.LoadAsync`/`BridgeEvent`/`Dlg` 全套/Ui 全套。缺件三类:① 小而自包含 → 字节级搬 `AccountSkin`(501 B)+`SkinUrls`(141 B);② 框架差异(`Clipboard.SetText`、`RenderSettings` 的最近邻、`PasswordBox`);③ **外壳缺一员**:Windows 的 `_ = AppServices.Window?.SyncAccountChipAsync();` 依赖顶栏账号圆片,而 mac 外壳在 C2b 就故意删了它(MainWindow.cs:40)—— Lead 裁决**整条不写 + 注释 + 登记**,不给外壳加成员。 |
+| `FirstRunWizard.cs`(8667 B / 230 行) | **可移植(带一条注入缝)**。它结尾那句 `AppServices.Window?.GetPage("settings") is SettingsPage → RefreshAsync()` 依赖 **SettingsPage**(由 C5a 移植),Lead 选 (a):做 `FirstRunWizard.SettingsRefresh` 注入缝(与 D-119/D-122/D-131 同口径),**没接就什么都不做**。另:`MaybeShowAsync()` 在 mac 侧没有任何调用点(Windows 是外壳启动时调)—— 不动外壳,如实记成"外壳级缺口"交 Lead。 |
+| `DownloadPage.cs`(7780 B) | **挂起(C6)**。它自己只有 7.8 KB 不是因为简单,而是因为它是 `CatalogPage`(35 KB)+`InstallPage`(15 KB)两个整页的**分段宿主**(`ShowSeg(k)` 直接 `new CatalogPage(Kinds[k])`);做"六段占位"的降级版等于把空页面包装成完成,Lead 已裁决不这么做。 |
+
+### 2. `SkinPng`:报的是"字节级搬",实测**搬不了**(前提不成立,如实记录)
+
+Windows 那份 3878 B 的 `Pages\SkinPng.cs` 整个建立在 WPF 成像 API 上
+(`DrawingVisual` / `DrawingContext.DrawImage` / `CroppedBitmap` / `RenderTargetBitmap` / `BitmapImage.CacheOption`),
+Avalonia 一个同名等价物都没有。所以保留的是**算法与全部常量**(12 个部件的 `(sx,sy,sw,sh,dx,dy,mirror)` 与顺序、
+逻辑画布 16x32、`slim` 的 3 像素臂宽、64x32 旧皮肤的 `height*2 <= width` 分支、输出一律 **128x256**、
+`PixelWidth < 64 → null`),画法换成 `Canvas` + `Image`(裁切 = 整图放大后塞进 `ClipToBounds` 的 Canvas,
+镜像 = `ScaleTransform(-1,1)` + `RenderTransformOrigin(0.5,0)`,最近邻 = `BitmapInterpolationMode.None`),
+最后 `RenderTargetBitmap` 拍图。落点在 `src\TipCL.App\Models\SkinPng.cs`(Windows 在 Pages 下,这里按 Lead 指定的 Models 目录)。
+
+### 3. 落地时踩到的三条框架事实(写进 D-137)
+
+1. `Button.Content` 改了,**`AutomationProperties.Name` 不会跟着变**(`Ui.Btn` 创建时写死的)—— 用自动化名判断"现在显示的是取消还是清除"会拿到过期答案(我第一版就栽在这,修的是**测试期望**,页面代码没动)。
+2. Avalonia 的 `Control.IsVisible` 是**控件自己的**标志,祖先被藏它不会变假;Windows 那边藏的是 `logWrap`(`Visibility.Collapsed`),所以断言要落在**那层壳**上(`Ui.Pane` 的 Border)。
+3. `Dlg.Panel` 推出来的**不是** `DialogCard`,所以 `C3bFiles.WaitDialog()` 对向导必然超时(EL 是给 `Confirm`/`Ask` 用的);面板要按标题泵。
+
+### 4. 验收
+
+| # | 命令(全部经 `tools\with-build-lock.ps1`) | 结果 |
+|---|---|---|
+| 1 | `dotnet build TipCL.Mac.sln -c Release -p:UseSharedCompilation=false -m:1` | 退出码 **0**,**0 个错误** |
+| 2 | `dotnet test TipCL.Mac.sln -c Release --no-build --nologo` 第 1 / 2 次 | 两次都 `失败: 11,通过: 3423,总计: 3434` —— **本包 33 条 0 失败**;11 条全在 c4-pages 名下(C5aSettingsTests / C1aPaletteTests / C3cPageStructureTests) |
+| 3 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` 第 1 / 2 次 | `总计 3434,通过 3424,失败 10` / `总计 3434,通过 3427,失败 7`;**不支持 0**;同一份 DLL 两次失败数不同(10 / 7)⇒ 那 7~11 条是**非确定性**的,不是本包引入 |
+| 4 | `dotnet test ... --filter FullyQualifiedName~C5b`(单独) | 退出码 **0**,`已通过! - 失败: 0,通过: 33,总计: 33` |
+
+`--smoke`(全部走锁;既有两帧**逐字节不变**):
+
+| 帧 | 退出码 | 字节 | SHA256 |
+|---|---|---|---|
+| 不带 `--page` | 0 | **37681** | `2603BF6AB2B5D491E2B6AFB34E3EAEDD8A0388B6A6497D33D3F8193492342CBD` = 基准逐位相同 |
+| `--page launch --theme dark` | 0 | **33579** | `7D7AFDD502D82EE21F7DCEFEF7B12FC2731628D41B4DDF595FD1E1D05F276893` = 基准逐位相同 |
+| `--page tasks`(**新**) | 0 | **27719** | `0E591B87A2B2B9E3CAC7968F1BBFD399DF9A704657506CFE38B3A5EB4E5590E9` |
+| `--page account`(**新**) | 0 | **33173** | `D3F593398D737BE9512A35D4AEBB080AB87379C6EC86C52139A8426E9253BAF6` |
+| `--page download` | 0 | 37681 | 与不带 `--page` **逐位相同** —— 因为 `download` 故意还没注册(C6),`Navigate` 静默不动(与 C3c 记的"其它 id 什么都不切"一致) |
+
+新帧画面(逐帧看过):`tasks` = 外壳(侧栏「下载任务」选中)+ 页面头「下载任务 / 安装、下载、启动都在这里排队」+ 右上「清除已完成」,内容区**空**;
+`account` = 外壳(「账号」选中)+ 页头「账号」+ 五个入口(刷新/统一通行证/皮肤站登录/微软登录/添加离线账号)+ 240 宽头像卡(问号片 + 未登录)。
+两帧里都没出现"空态文案 / 账号卡"这类**加载钩子**产出的内容,原因是 `--smoke` 没有后端 ⇒ `MainWindow.Navigate` 的 `runHooks`(= `BridgeReady`)为假 ⇒ `EnsureLoadedAsync` / `OnShown` 不跑(PageHost.cs:108),所以帧里只有构造函数建的那部分(与 C3c 启动页帧同一道理)。
+
+### 5. 编码(字节级实测,不是断言)
+
+`TasksPage.cs` 11696 B / BOM=False / CR=0 / LF=324 / U+FFFD=0;`AccountPage.cs` 23369 / False / 0 / 664 / 0;
+`FirstRunWizard.cs` 11815 / False / 0 / 281 / 0;`TasksPageRegistration.cs` 1410 / False / 0 / 27 / 0;
+`AccountPageRegistration.cs` 1258 / False / 0 / 26 / 0;`SkinPng.cs` 6607 / False / 0 / 188 / 0;
+`AccountSkin.cs` 501 / False / 0 / 21 / 0;`SkinUrls.cs` 141 / False / 0 / 8 / 0;
+`C5bFixtures.cs` 12622 / False / 0 / 367 / 0;`C5bTasksAccountTests.cs` 42158 / False / 0 / 857 / 0(31 条 `[Fact]` + 1 条 `[Theory]`×2 = 33 条用例)。
+`PROGRESS.md` 与 `DECISIONS.md` 的追加都是**字节拼接**(`[IO.File]::WriteAllBytes`),没有走 `Get-Content | Set-Content`(D-36)。
+
+### 6. 留给 Lead 的
+
+1. **本包四条运行里"本包 0 失败"是确定的**:两次 `--filter` 与四次全量的结果一致。剩下的 7~11 条红全在 c4-pages 名下,而且**同一份 DLL 两次失败数不同**(10 / 7),请它自己判定是"还没调完"还是"测试本身抖"。
+2. `MaybeShowAsync()` 没有调用点、`SettingsRefresh` 注入缝还没接线 —— **都等 SettingsPage 落地后由 Lead 统一接**(我没动外壳)。
+3. `download` 按裁决留给 C6(与 `CatalogPage` + `InstallPage` 一起做)。
