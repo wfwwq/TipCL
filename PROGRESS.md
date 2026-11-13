@@ -3604,7 +3604,7 @@ System.InvalidOperationException : Call from invalid thread
 | 9 | `--smoke --theme dark --out artifacts/c1c-dark.png` | 退出码 0,**3941 字节**,SHA256 `F687E6CD1CE48B078040040775167484890C58A18DFEBF4BD3B6125F151E117E`,**与裁决基准逐位相等** |
 | 10 | 收工后 `%LOCALAPPDATA%\TipCL` | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,**与开工前完全一致** |
 | 11 | 残留进程 `testhost` / `TipCL` / `java` / `adb` / `dotnet` | **0 / 0 / 0 / 0 / 0** |
-| 12 | `%TEMP%` 下 `tipcl*` 目录 | 现存 89 个,**本次会话(08:43 之后)新建 0 个** |
+| 12 | `%TEMP%` 下 `tipcl*` 目录 | 现存的 89 个全是此前会话留下的;**本包自己没建过**:收尾核账时出现过 1 个瞬时的 `tipcl-tests-22360-…`(09:15:24 建、59 秒后自行消失),随后做对照实验:本包单跑一次 `dotnet test` 前后 `tipcl*` 目录数 **89 → 89(0 新增)**。该前缀在本仓库 `src` / `tests` 里不存在(B2a 已记过同一条),同一时刻另有别的会话在跑 dotnet(本机实测 PID 9000 的命令行就是另一条产品线的 `--smoke`),判定不是本包的产物 |
 | 13 | `git diff --name-status d1cfe68 HEAD -- src/TipCL.Core` | **空**;`git diff --name-status -- src/TipCL.Core` 也为空 |
 | 14 | `src\TipCL.Core\*.cs` 对 Windows 源 SHA256(排除 `bin\`/`obj\`) | mac 侧 248 个:有对应物 **238** / 完全一致 **216** / 有改动 **22** / 无对应物 **10**,与基线**完全一致** |
 | 15 | 新增/改动文件里搜 WPF 残留(`System.Windows` / `SetResourceReference` / `PasswordBox` / `DependencyProperty` / `Process.Start`) | 命中全在**注释**里(说明等价物),代码里 0 处 |
@@ -3612,6 +3612,20 @@ System.InvalidOperationException : Call from invalid thread
 **第 8/9 条为什么必须与基准逐位相等**:smoke 走的是 `MainWindow`(空外壳,不建任何页面),而 C1c 全是
 "页面会调用的构建器",没有任何一个被 smoke 路径调用 —— 所以门面加了多少代码都不该改动那两张图。
 结果逐位相等,正好反证了"没有动 C1b 的样式表、没有动窗口"。
+
+### 提交(小步提交,消息前缀 C1c)
+
+| 提交 | 内容 |
+|---|---|
+| `a6190b3` | `C1c(a)` 门面基座:`Clamp` / `UiPrefs` / `BtnKind` / `ToastKind` / `SPanel` / `SmoothScroll` / `UiExt` + `Ui` 的文本·面板·栅格·卡片·按钮构建器(此时 `--smoke` 已与裁决基准逐位一致) |
+| `cfec58d` | `C1c(b)` `Ui` 的输入控件与其余构建器(`VirtualList`/`Input`/`Multi`/`LogBox`/`Pw`/`Combo`/`Check`/`Switch`/`Sld`/`Prog`/`Tag`/`Badge`/`Field`/`Section`/`Empty`/`Skeleton`/`RowCard`/`OpenUrl`/`Sep`/`Spring`) |
+| `dd1c39c` | `C1c` 测试(100 条)+ 本文档 + DECISIONS |
+
+提交后又在 `dd1c39c` 上复跑了一遍完整验收(结果与上表相同):`dotnet build`(0 错误 / 7 警告,NU1900 + SYSLIB0014 ×1)、
+`dotnet test` ×2(退出码 0,失败 0 / 通过 2257 / 总计 2257)、进程内执行器 ×2(退出码 0,不支持 0)、
+`--smoke` 明暗各一次(3956 / `9F93EF3E…` 与 3941 / `F687E6CD…`,与基准逐位相等)、
+`%LOCALAPPDATA%\TipCL` 仍是 9328 / 889530606 / 2026-11-10 20:42:16、`git status` 干净、
+`src\TipCL.Core` 对 `d1cfe68` 与对 HEAD 的 diff 都是空。
 
 ### 测试(新增 100 条,总数 2157 → 2257)
 
