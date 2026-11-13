@@ -121,12 +121,12 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 会话记忆面板(`AiMemoryPanel`,与设置页「记忆」卡同一份 `ai_memory.md`)、上下文占用环(`AiIcons.Ring` + `Usage` + `AiUiText.ContextRatio`)、
 对话持久化到 `ai_chats.json` 并在回页时读回、**`/撤回` 真的接上 `Rewind`**(对话截断 + 文件还原)。
 
-**仍未做(如实)**:1**真模型端到端**(需要真实 API key,属对外调用,留给用户);2`McpServer`(把启动器工具开放给外部 agent)不移植 —— 它依赖 `BackendApi`(D-2 已判无宿主),且 Linux 的写工具要过界面确认回调,外部客户端没有用户点确认只会被自动拒;3`Hooks/AgentPresets`(无插件宿主,同 §7);4`Prompt/Diagnose/Permission/ModConfig` 参考版有独立文件,Linux 侧早在 P5 就并进 `AiData.SYSTEM_PROMPT` / `Crash` + `ToolRunner.Diagnose` / `ToolRunner.Decide` + 权限档位与规则键 / `ToolRunner` 的 `list/read/write_mod_config`,不再另建同名类。`--ai-selftest` 自检由 32 项扩到 **50 项**(新增压缩/检查点/回退/产物/用量/MCP 各条)。
+**仍未做(如实)**:1**真模型端到端**(需要真实 API key,属对外调用,留给用户);2`McpServer`(把启动器工具开放给外部 agent)不移植 —— 它依赖 `BackendApi`(D-2 已判无宿主),且 Linux 的写工具要过界面确认回调,外部客户端没有用户点确认只会被自动拒;3`Hooks/AgentPresets`(无插件宿主,同 §7);4`Prompt/Diagnose/Permission/ModConfig` 参考版有独立文件,Linux 侧早在 P5 就并进 `AiData.SYSTEM_PROMPT` / `Crash` + `ToolRunner.Diagnose` / `ToolRunner.Decide` + 权限档位与规则键 / `ToolRunner` 的 `list/read/write_mod_config`,不再另建同名类。`--ai-selftest` 自检由 32 项扩到 **52 项**(压缩/检查点/回退/产物/用量/MCP 各条,R19 再 +2 条权限理由)。
 
 ## 3. Core / Services
 
 ### 缺失 Core(按 2026-11-12 复核;已搬走的不再列在这里)
-- **AI Agent 子系统的「服务层」部分**:工具链那一半(`Tools` 表 / `ToolCall` / `ToolMeta` / `ToolRunner` / `AiAgent` / `Conflict`)已在 M4-H P5 移植;**服务层那一半已在 M4-H R1 补齐**(`Checkpoint / Rewind / Compact(+CompactState/CompactionResult/AutoConfig/MicroConfig/MicroResult/RapidRefillBlocked) / Tokens / TokenState / Usage / Store / Trace / Artifacts / AiFs / Mcp / McpClient / McpError / StopReason`,见 §2 AI 小节)。仍不移植:`Scheduler`(Linux 的工具循环按顺序执行,没有并发组)、`McpServer`(对外暴露,依赖 `BackendApi`)、`Permission`/`Prompt`/`Diagnose`/`ModConfig`(Linux 侧已有等价实现,不另建同名类)、`Hooks`/`AgentPresets`/`ChatEventLog`(无插件宿主)、`ExtraTools` 的通用 fs 工具面(只留 `config/` 白名单的 `write_mod_config`,不放开任意路径读写)。(`Preview` 原在本清单里,M4-H R5 已补齐:**确认卡的改前改后 diff 预览**见 §2 AI 小节与 D-31。)
+- **AI Agent 子系统的「服务层」部分**:工具链那一半(`Tools` 表 / `ToolCall` / `ToolMeta` / `ToolRunner` / `AiAgent` / `Conflict`)已在 M4-H P5 移植;**服务层那一半已在 M4-H R1 补齐**(`Checkpoint / Rewind / Compact(+CompactState/CompactionResult/AutoConfig/MicroConfig/MicroResult/RapidRefillBlocked) / Tokens / TokenState / Usage / Store / Trace / Artifacts / AiFs / Mcp / McpClient / McpError / StopReason`,见 §2 AI 小节)。仍不移植:`Scheduler`(Linux 的工具循环按顺序执行,没有并发组)、`McpServer`(对外暴露,依赖 `BackendApi`)、`Permission`/`Prompt`/`Diagnose`/`ModConfig`(Linux 侧已有等价实现,不另建同名类;其中 `Permission` 的**裁决理由文案**已按 R19 逐字移植进 `ToolRunner.Decide`,唯一没搬的半部是 `PermissionNote` —— 把当前档位写进系统提示,见 §9.4)、`Hooks`/`AgentPresets`/`ChatEventLog`(无插件宿主)、`ExtraTools` 的通用 fs 工具面(只留 `config/` 白名单的 `write_mod_config`,不放开任意路径读写)。(`Preview` 原在本清单里,M4-H R5 已补齐:**确认卡的改前改后 diff 预览**见 §2 AI 小节与 D-31。)
 - **`Shortcut(ShortcutError)` 已完成**:M4-H P3.5 搬运 `Core/Launcher/Shortcut.cs` 并补了真的 CLI 入口(见 DECISIONS D-23)。
 - **插件宿主运行时不移植(M4-H P6 判定,理由见 §7.2)**:`PluginManager`(宿主运行时半部)`/ PluginHostApi / PluginSessions / PluginTools / PluginLlm / PluginAgentBridge / PluginHooks / LaunchHooks / DotNetPluginContext / JsonRpcPeer / NodeHostProcess / NodeRuntime / SecretStore / Sdk/PluginSdk / Sdk/PluginUiRegistry / BackendApi.Plugins` —— 都需要 Node 宿主或 WPF 契约。**文件级链路已真做**:`PluginDirs / PluginStateStore / PluginManifest / PluginMarket` + 新增 `PluginInstaller`(安装/更新/卸载)+ `PluginHost`(启停落盘/日志/UI 贡献汇总)。
 - **RPC/后端**:`BackendApi / BridgeServer / RpcDispatcher`
@@ -333,3 +333,15 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 **有意保留的差异(不是缺陷,别当回归修掉)**:Linux `News.Fetch` 在「两条源都失败且缓存为空」时返回空列表,而 Windows 版会把最后一个异常抛出(`Core/Launcher/News.cs:89-92`)。原因见 D-47:Linux 侧的调用方是启动页那条 fire-and-forget 的新闻行,抛出等于整页崩。
 
 > 真机(盒子)上的端到端验证——包括点开这个浮层看「分辨率」是否可编辑、真的拉起游戏窗口——并入 R21 的最终 AppImage 验收。
+
+### 9.4 权限确认卡的「为什么」补上了(2026-11-13,R19 / R19b)
+
+| # | 项 | 补前 | 补后 | 依据 |
+|---|---|---|---|---|
+| 1 | 确认卡上的裁决理由(参考版 `Permission.cs:187-252` 的 12 句) | `ToolRunner.Decide` 只给 `allow/ask/deny`;调用点把**标签**塞进 label 槽、第三参恒空 → 卡片那行从不渲染,旧注释把缺陷写成「有意留空」 | `PermissionVerdict(decision, reason)` 一次产出;`Confirm(call, label, reason, preview)` 一路传到 `ConfirmCard`;11 句与参考版逐字相同,`default/custom` 按 `risk == "high"` 分句(**裁决未变**) | D-48 |
+| 2 | `ai_permission_dont_ask` | Linux 的 `Config` 写着默认值,**全仓无消费点**(参考版在 `Agent.cs:571` / `:1149-1152` 消费) | `ToolRunner.ApplyDontAsk`:需要确认的写操作直接拒绝,理由「用户开启了「不询问」模式」(只作用于 `ask`) | D-48 |
+| 3 | 被拒的步骤行 | 泛泛一句「当前权限档位不允许」 | 「已拒绝:&lt;裁决理由&gt;」,由 `AiPage.Summarize` 显示(照参考版把 reason 写进 denied 工具状态);**模型可见文本未变** | D-48 |
+
+> **仍未做(如实)**:参考版 `PermissionNote`(`Permission.cs:256-276`:把当前档位写成 6 句「[权限设置] …」注入系统提示,消费点 `Agent.cs:348` / `:368`)Linux 侧没有。它与上表三条同属「参考版会主动告知模型」的那一面,Linux 侧目前只有裁决本身 —— 属独立条目:要随每轮把档位注入系统消息(会改模型可见文本),不在 R19 范围内。
+>
+> 另一处**有意不搬**:参考版 `PermissionResult` 还带 `rule_id`,Linux 的「一直允许」是按工具名记的进程内集合,没有「按规则记住」的界面入口,搬 `rule_id` 是无消费方的死重(见 D-48)。

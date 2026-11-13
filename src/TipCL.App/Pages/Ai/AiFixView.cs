@@ -386,10 +386,11 @@ internal sealed class AiFixView : Border
     }
 
     /// <summary>
-    /// 权限确认(与 AiPage 同一套语义)。<paramref name="preview"/> 是 Core 算好的「改前改后」预览;
-    /// 第三参留空的原因见 AiPage.ConfirmAsync 的注释。
+    /// 权限确认(与 AiPage 同一套语义,参数含义见 <c>AiPage.ConfirmAsync</c>):
+    /// <paramref name="label"/> 是「做什么」、<paramref name="reason"/> 是权限裁决给出的「为什么需要你确认」,
+    /// <paramref name="preview"/> 是 Core 算好的「改前改后」预览。三者各就各位。
     /// </summary>
-    private async Task<(bool ok, bool always)> ConfirmAsync(ToolCall call, string reason, PyDict? preview)
+    private async Task<(bool ok, bool always)> ConfirmAsync(ToolCall call, string label, string reason, PyDict? preview)
     {
         var waiter = new TaskCompletionSource<(bool, bool)>(TaskCreationOptions.RunContinuationsAsynchronously);
         _confirmWaiter = waiter;
@@ -397,7 +398,7 @@ internal sealed class AiFixView : Border
         {
             _dock.Children.Clear();
             ConfirmCard? card = null;
-            card = new ConfirmCard(call.name, reason, "", Preview.Flatten(preview), ConfirmCard.AllowAlways(call.name),
+            card = new ConfirmCard(call.name, label, reason, Preview.Flatten(preview), ConfirmCard.AllowAlways(call.name),
                 (ok, always, _) =>
                 {
                     _pendingConfirm = null;

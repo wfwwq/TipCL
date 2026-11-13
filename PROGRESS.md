@@ -478,3 +478,39 @@
 - 启动页「内存」滑条仍然只 `Set` 不 `Save`(既有行为,本轮未动)。
 - 分辨率只有「同一个键 + 激活时重读」,**没有**双向监听:设置页与启动页同屏同时改仍会后写覆盖前写(Windows 同样如此)。
 - 未做真机(盒子)验证;盒子上的端到端验证并入 R21 的最终 AppImage 那一步。
+
+## M4-H R19:权限确认卡补上「为什么需要你确认」(2026-11-13,移植代理;主 agent 复核并补做 R19b)
+
+### 一、断的是哪条链
+参考版 `ConfirmCard` 有两个信息槽:**label**(做什么,来自 `Tools.ConfirmLabel` / Linux 的 `Tools.Label`)与 **reason**(为什么这一步要你点,来自 `Permission.Decide` 的 `PermissionResult.reason` —— 12 句中文文案在参考版 `Permission.cs:187-252`,界面侧在 `Pages/AiPage.cs:2583-2620` 取出显示)。Linux 侧 `ToolRunner.Decide` 只返回 `allow / ask / deny`,**没有理由**;`AiPage.ConfirmAsync` 把从 `Tools.Label` 拿到的**标签**塞进了卡片的 label 槽、第三参恒为 `""` —— 于是 `ConfirmCard` 里「非空才渲染」的那行永远不渲染。R19 把这条链接上。
+
+### 二、改了什么
+| 文件 | 改动 |
+|---|---|
+| `Core/Launcher/Ai/ToolRunner.cs` | 新增 `record struct PermissionVerdict(decision, reason)`;`Decide` 返回「裁决 + 理由」(不留无理由重载,调用点全部同步 —— 分开返回正是断链成因);`McpVerdict` 同样带理由;`Confirm` 回调签名加 `reason`(`(call, label, reason, preview)`);`RunAsync` 里那个命名错误的局部变量 `reason`(其实是标签)改名 `label` |
+| `App/Pages/Ai/AiPage.cs` | `ConfirmAsync(call, label, reason, preview)` → `new ConfirmCard(call.name, label, reason, ...)`;**删掉**「第三参在 Linux 侧留空」的过期 doc 注释 |
+| `App/Pages/Ai/AiFixView.cs` | 同上(同一个毛病、同一处过期注释) |
+| `Core/Launcher/Ai/AiSelfTest.cs` | 断言跟新签名,并 +2 条理由断言(自检 50 → **52** 项) |
+| 测试 | 新增 `App/AiConfirmReasonTests.cs`(5)+ `Core/AiPermissionReasonTests.cs`(7);`AiConfirmChainTests.cs` / `AiToolsTests.cs` 跟随签名 |
+
+文案逐字对位核过:11 句与参考版逐字节相同(只读操作 / 免确认模式 / 当前是「只看不动」模式,不能执行这类操作 / 删除操作仍需确认 / 写操作直接执行 / 高风险操作需要确认 / 写操作需要确认 / 规则允许 / 这条操作被你的规则禁止 / 规则要求先询问 / 外部 MCP 工具能力未知,需确认);`default / custom` 档按 `risk == "high"` 分句(判据同参考版 `:250` / `:252`),**裁决本身没变**。本轮主 agent 又抽验了一遍这 12 个字面量确实都在 `ToolRunner.cs` 里。
+
+### 三、主 agent 补的两处收口(R19b)
+1. **`ai_permission_dont_ask` 从「写了没人读」变成真生效**:Linux 的 `Config` 一直写着这个键的默认值(`Config.cs:122`),而全仓没有消费点;参考版在 `Agent.cs:571` + `:1149-1152` 消费它 —— 需要确认的写操作**直接拒绝**,理由「用户开启了「不询问」模式」。现在 `ToolRunner.ApplyDontAsk` 按同一语义叠加(只作用于 `ask`;`allow` / `deny` 保持原样,自定义规则说 allow 也不会被改写)。
+2. **拒绝的理由进步骤行**:被拒时 `call.error` 从泛泛的「当前权限档位不允许」改成「已拒绝:&lt;理由&gt;」,`AiPage.Summarize` 对被拒的调用显示它(照参考版把 reason 写进 denied 工具状态)。模型可见的文本**没动**(仍是 `permission_denied` 的结构化错误),改的只是界面那格。
+
+### 四、主 agent 独立复核(不采信自证)
+| 项 | 主 agent 实测 |
+|---|---|
+| Release 构建 | exit 0,0 条 CS/CA |
+| `dotnet test` ×2 | 每次 **371 = 370 通过 + 1 跳过 + 0 失败**(R16 的 355 → +16:移植代理 12 条 + 主 agent 4 条) |
+| `--ai-selftest` | **通过 52 / 失败 0 / 跳过 0**,exit=0 |
+| 冒烟 8 场(Release,隔离 `TIPCL_HOME`) | **8/8 exit=0 出图、WARN 0、ERROR 0** |
+| 红证据(移植代理) | `_cmp/r19-app-red.txt`(改前 3 失败,`Expected "写操作需要确认" / Actual null` —— 卡片那行根本没渲染)、`_cmp/r19-core-red.txt`(改前 `CS0426` 无 `PermissionVerdict`)、`_cmp/r19-core-mutation-red.txt`(负控:清空两句理由 → 3 失败,已还原) |
+| 红证据(主 agent 的 R19b) | 变异掉 `ApplyDontAsk` 后,主 agent 那 4 条里**正好 2 条红**(不询问开关那条 + 步骤行理由那条),还原后按 SHA256 校验**字节级一致** |
+| 边界 | `ConfirmCard.cs` 一行未改;`docs/` / `PROGRESS.md` / `DECISIONS.md` / `progress/` 由主 agent 写;无 csproj / 依赖改动 |
+
+### 五、如实说明
+- **`PermissionNote`(把当前档位写进系统提示)仍未做**,而参考版是**真的消费**它的(`Agent.cs:348` / `:368`,6 句「[权限设置] …」,见 `Permission.cs:256-276`)。这是本轮新发现的真缺口,已记进 `docs/PARITY.md` §9.4,仍未做 —— 属独立条目(要把档位随每轮注入系统消息,会改模型可见文本)。
+- `PermissionVerdict` 只带 `decision + reason`,**不带**参考版的 `rule_id`:Linux 的「一直允许」是按**工具名**记的(`_alwaysAllowed`),没有「按规则记住」的界面入口,补 `rule_id` 是无消费方的死重。
+- 主 agent 新增用例的第一版里,有一处**半角/全角逗号抄错**(实现与参考版都是全角 `U+FF0C`),已改成断言关键片段;整句逐字符对位由 `Core/AiPermissionReasonTests` 负责。

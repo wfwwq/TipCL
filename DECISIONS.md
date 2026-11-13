@@ -400,3 +400,13 @@
 
 - **新闻的差异**:Windows `Core/Launcher/News.cs:89-92` 在「两条源都失败且缓存为空」时 `ExceptionDispatchInfo.Capture(ex).Throw()`,由调用方(后端 RPC)兜。Linux 侧调用方是启动页那条 fire-and-forget 的新闻行,**抛出会把整页带崩**;故 `News.Fetch` 改为「两条源 → 缓存 → 空列表」全程不抛,只 `Utils.log.Info` 记一笔(具体原因由下层 `DownloadManager.FetchJson` 记 WARNING),`_rows_from` 遇坏结构也返回空(Windows 在那里抛 KeyError / TypeError)。这是**有意的降级差异**,已写进 `docs/PARITY.md` §9.3。
 - **修法选择**:`LaunchPopups._configBody` 的类型从 `Border?` 改成 `Control?` 并去掉 `(Border)` 强转,而不是把 `BuildConfig()` 的返回类型改成 `Border` —— 后者要动那条构造链上的所有 `UiClass` 返回值,收益为零、风险不小;前者是最小改动 + 一条回归用例钉住「浮层能打开、分辨率在里面」。
+
+### D-48 · 权限裁决必须「裁决 + 理由」一起产出;「不询问」开关与拒绝理由都落在 Core 一侧(R19 / R19b,2026-11-13,移植代理;主 agent 复核并补 R19b)
+
+- **背景**:参考版 `Permission.Decide` 返回 `PermissionResult(decision, reason, rule_id)`,界面把 `reason` 显示在确认卡上(`Pages/AiPage.cs:2583-2620`);Linux 侧 `ToolRunner.Decide` 只返回 `allow / ask / deny`,调用点把**标签**当理由传进卡片,卡片那行永远空着(旧注释还写着「第三参留空」,属把缺陷写成设计)。
+- **决定一(接口形状)**:理由与裁决**必须由一次调用一起产出** —— `ToolRunner.PermissionVerdict(decision, reason)`。**不留**「无理由的 `Decide(string)` 重载」:分开返回就是这条链断掉的成因,留着旧重载等于给下次再断一遍留门。调用点只有 `RunAsync` / `AiSelfTest` / 测试,同步改干净。
+- **决定二(不带 rule_id)**:Linux 的「一直允许」是按**工具名**记的进程内集合(`_alwaysAllowed`),界面没有「按某条规则记住」的入口;参考版的 `rule_id` 在 Linux 无消费方,不搬。
+- **决定三(「不询问」开关落点)**:`ai_permission_dont_ask` 在 Linux 的 `Config` 里有默认值却没人读,参考版在 `Agent` 里消费(需要确认的写操作直接拒绝)。修法是把语义叠加在 `ToolRunner.ApplyDontAsk`(Core 侧,裁决的唯一出口),而不是塞进界面 —— 否则「谁在问、谁在拒」又会出现两个真源。只作用于 `ask`:自定义规则说的 `allow`、只读与 `yolo` 的 `allow` 都不受影响。
+- **决定四(拒绝理由只进界面)**:被拒时把理由写进 `ToolCall.error`(「已拒绝:&lt;理由&gt;」)并由 `AiPage.Summarize` 显示;**模型可见**的文本保持原样(仍是 `permission_denied` 的结构化错误)。理由给用户看,不给模型当指令 —— 与「工具结果只是数据」这条硬规矩一致。
+- **未做(如实)**:参考版的 `PermissionNote`(`Permission.cs:256-276`,把当前档位写进系统提示,消费点 `Agent.cs:348` / `:368`)Linux 侧仍然没有 —— 属独立条目(要随每轮把档位注入系统消息,会改模型可见文本),已记进 `docs/PARITY.md` §9.4。
+- **验收**:`dotnet test` **371 = 370 通过 + 1 跳过 + 0 失败**(R16 的 355 → +16),`--ai-selftest` **52 / 0**,8 场冒烟 8/8 exit=0 且 0 WARN/0 ERROR;移植代理的红证据见 `_cmp/r19-*-red.txt`,主 agent 对自己的 `ApplyDontAsk` 做了变异(2 条红)并按 SHA256 字节级还原。

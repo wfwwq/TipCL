@@ -113,16 +113,18 @@ public static class AiSelfTest
         Check("答案摘要可读", Py.S(answer.Get("summary")).Contains("A") && Py.S(answer.Get("summary")).Contains("自定义"),
             Py.S(answer.Get("summary")));
 
-        // 6. 权限档位 → 裁决
+        // 6. 权限档位 → 裁决(裁决与理由一起产出,理由见 Core/AiPermissionReasonTests 的逐档断言)
         var runner = new ToolRunner(api) { PermissionMode = "default" };
-        Check("默认档写操作要问", runner.Decide("install_mod") == "ask");
-        Check("只读永不需要确认", runner.Decide("list_mods") == "allow");
+        Check("默认档写操作要问", runner.Decide("install_mod").decision == "ask");
+        Check("默认档写操作的理由", runner.Decide("install_mod").reason.Length > 0, runner.Decide("install_mod").reason);
+        Check("只读永不需要确认", runner.Decide("list_mods").decision == "allow");
         runner.PermissionMode = "plan";
-        Check("只看不动档拒写", runner.Decide("install_mod") == "deny");
+        Check("只看不动档拒写", runner.Decide("install_mod").decision == "deny");
+        Check("只看不动档理由说明档位", runner.Decide("install_mod").reason.Contains("只看不动"), runner.Decide("install_mod").reason);
         runner.PermissionMode = "yolo";
-        Check("全自动档直接允许", runner.Decide("delete_instance") == "allow");
+        Check("全自动档直接允许", runner.Decide("delete_instance").decision == "allow");
         runner.PermissionMode = "acceptEdits";
-        Check("写直接执行档:删除仍要问", runner.Decide("delete_mod") == "ask" && runner.Decide("install_mod") == "allow");
+        Check("写直接执行档:删除仍要问", runner.Decide("delete_mod").decision == "ask" && runner.Decide("install_mod").decision == "allow");
 
         // 7. 工具执行:只读工具直接跑 + 写工具没接确认回调时被拒绝
         runner.PermissionMode = "default";

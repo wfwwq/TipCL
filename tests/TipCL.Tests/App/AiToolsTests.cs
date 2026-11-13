@@ -118,7 +118,7 @@ public class AiToolsTests
 
         // 接了确认回调且用户点了「本对话都允许」:同一个工具第二次不再问
         int asked = 0;
-        runner.Confirm = (_, _, _) =>
+        runner.Confirm = (_, _, _, _) =>
         {
             asked++;
             return Task.FromResult((true, true));
@@ -142,7 +142,9 @@ public class AiToolsTests
         var write = new ToolCall("p1", "install_mod", new PyDict { ["name"] = "sodium" });
         await runner.RunAsync(write);
         Assert.Equal(ToolCallStatus.DENIED, write.status);
-        Assert.Contains("不允许", write.result + write.error);
+        // R19b 起被拒的步骤行带出裁决理由(照 Windows 的 denied 工具状态),不再是泛泛的「不允许」
+        Assert.Contains("已拒绝", write.error);
+        Assert.Contains("只看不动", write.error);
 
         runner.PermissionMode = "yolo";
         var write2 = new ToolCall("p2", "install_mod", new PyDict { ["name"] = "sodium", ["instance"] = "default" });
@@ -159,8 +161,8 @@ public class AiToolsTests
                 PyDict.Of("tool", "install_mod", "behavior", "deny"),
             });
             runner.PermissionMode = "yolo";
-            Assert.Equal("deny", runner.Decide("install_mod"));
-            Assert.Equal("allow", runner.Decide("install_game"));
+            Assert.Equal("deny", runner.Decide("install_mod").decision);
+            Assert.Equal("allow", runner.Decide("install_game").decision);
         }
         finally
         {

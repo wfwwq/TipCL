@@ -53,29 +53,71 @@ public sealed class ToolRunner
         }
     }
 
-    /// <summary>该工具按当前档位与自定义规则算出的裁决:allow / ask / deny。</summary>
-    public string Decide(string tool)
+    /// <summary>
+    /// 一次权限裁决:<see cref="decision"/> 是 allow / ask / deny,<see cref="reason"/> 是给用户看的
+    /// 中文理由(照 Windows 版 Permission.PermissionResult)。界面把理由显示在确认卡的「为什么需要你确认」
+    /// 那一行 —— 裁决与理由**必须一起产出**:分开返回就会重演「卡片有那一行、调用点却给空」的断链。
+    /// </summary>
+    public readonly record struct PermissionVerdict(string decision, string reason);
+
+    /// <summary>
+    /// 该工具按当前档位与自定义规则算出的裁决(allow / ask / deny)+ 理由。
+    /// 文案与 Windows 版 Permission.Decide 逐字对位;Linux 档位少几档(yolo / plan / acceptEdits /
+    /// default / custom),语义对得上的用同一句,对不上的按 Linux 现有语义写(见各分支注释)。
+    /// </summary>
+    public PermissionVerdict Decide(string tool) => ApplyDontAsk(DecideRaw(tool));
+
+    /// <summary>
+    /// 「不询问」开关(<c>config.json</c> 的 <c>ai_permission_dont_ask</c>):需要确认的写操作**直接拒绝**。
+    /// Windows 版在 Agent 里消费同一个键(<c>Agent.cs:571</c> / <c>:1149-1152</c>),理由文案逐字相同。
+    /// 只作用于 ask —— allow 与 deny 一律保持原样;Linux 侧的 Config 一直写着这个键的默认值,
+    /// 不读它等于「配置里有开关、拉了没反应」。
+    /// </summary>
+    private static PermissionVerdict ApplyDontAsk(PermissionVerdict verdict)
+    {
+        if (verdict.decision == "ask" && Py.Truthy(Config.CONFIG.Get("ai_permission_dont_ask")))
+        {
+            return new PermissionVerdict("deny", "用户开启了「不询问」模式");
+        }
+        return verdict;
+    }
+
+    /// <summary>按档位与自定义规则算出的原始裁决(「不询问」开关由 <see cref="Decide"/> 叠加)。</summary>
+    private PermissionVerdict DecideRaw(string tool)
     {
         string rule = RuleFor(tool);
         if (rule.Length > 0)
         {
-            return rule;
+            // 规则三条理由与 Windows 版逐字相同
+            return rule switch
+            {
+                "allow" => new PermissionVerdict("allow", "规则允许"),
+                "deny" => new PermissionVerdict("deny", "这条操作被你的规则禁止"),
+                _ => new PermissionVerdict("ask", "规则要求先询问"),
+            };
         }
         ToolMetaInfo? meta = ToolMeta.Get(tool);
         if (meta == null)
         {
-            return "deny";
+            // Linux 独有的一支:工具表里没有的名字直接拒(Windows 版 Decide 没有 meta 为空的判断,
+            // 故这句文案是 Linux 自定的,不假装与参考版一致)
+            return new PermissionVerdict("deny", "未知工具");
         }
         if (meta.@readonly)
         {
-            return "allow";
+            return new PermissionVerdict("allow", "只读操作");
         }
         return Mode switch
         {
-            "yolo" => "allow",
-            "plan" => "deny",
-            "acceptEdits" => meta.side_effect == "delete" ? "ask" : "allow",
-            _ => "ask",
+            "yolo" => new PermissionVerdict("allow", "免确认模式"),
+            "plan" => new PermissionVerdict("deny", "当前是「只看不动」模式，不能执行这类操作"),
+            "acceptEdits" => meta.side_effect == "delete"
+                ? new PermissionVerdict("ask", "删除操作仍需确认")
+                : new PermissionVerdict("allow", "写操作直接执行"),
+            // default / custom / 空档:一律要确认,理由按风险等级分句(判据同 Windows 版 default 分支的 risk == "high")
+            _ => meta.risk == "high"
+                ? new PermissionVerdict("ask", "高风险操作需要确认")
+                : new PermissionVerdict("ask", "写操作需要确认"),
         };
     }
 
@@ -114,12 +156,14 @@ public sealed class ToolRunner
     public Func<PyDict, CancellationToken, Task<string>>? Subagent { get; set; }
 
     /// <summary>
-    /// 权限确认回调:返回 true 表示允许执行;always=true 时本次之后不再问同一工具。
-    /// 第三个参数是「改前改后」的预览(<see cref="Preview.ChangePreview"/> 算出来的行;没有可预览的东西时为 null),
-    /// 界面把它摊平后放进确认卡。预览在这里算而不是在页面算:与参考版「后端算好再发事件」同一条口径,
-    /// 也保证只有一份实现(见 DECISIONS D-31)。
+    /// 权限确认回调:参数依次是工具调用、给人看的**标签**(<see cref="Tools.Label">Tools.Label</see>)、
+    /// **裁决理由**(<see cref="Decide">Decide</see> 算出来的「为什么需要你确认」)与「改前改后」的预览。
+    /// 返回 true 表示允许执行;always=true 时本次之后不再问同一工具。
+    /// 预览在这里算而不是在页面算:与参考版「后端算好再发事件」同一条口径,也保证只有一份实现
+    /// (见 DECISIONS D-31);没有可预览的东西时为 null,界面把它摊平成行后放进确认卡。
+    /// 标签与理由是确认卡上的两个槽(卡片也是 label / reason 两行),各就各位 —— 别把标签当理由传。
     /// </summary>
-    public Func<ToolCall, string, PyDict?, Task<(bool ok, bool always)>>? Confirm { get; set; }
+    public Func<ToolCall, string, string, PyDict?, Task<(bool ok, bool always)>>? Confirm { get; set; }
 
     /// <summary>ask_user 回调:收结构化题面,回用户的选择(PyDict:answers/other)。</summary>
     public Func<PyDict, Task<object?>>? AskUser { get; set; }
@@ -164,14 +208,16 @@ public sealed class ToolRunner
         bool readOnly = !mcp && ToolMeta.Get(call.name)!.@readonly;
         if (!readOnly && !_alwaysAllowed.Contains(call.name))
         {
-            string verdict = mcp ? McpVerdict() : Decide(call.name);
-            if (verdict == "deny")
+            PermissionVerdict verdict = mcp ? ApplyDontAsk(McpVerdict()) : Decide(call.name);
+            if (verdict.decision == "deny")
             {
-                call.Mark(ToolCallStatus.DENIED, error: "当前权限档位不允许");
+                // 步骤行右侧那格要说明「为什么被拒」(照 Windows 的 "denied" 工具状态带 reason),
+                // 别再写一句和判定无关的泛泛文案 —— 理由已经由裁决带出来了。
+                call.Mark(ToolCallStatus.DENIED, error: "已拒绝:" + verdict.reason);
                 return ToolErr(call.name, "permission_denied",
                     Mode == "plan" ? "当前是「只看不动」档位,不能执行写操作" : "当前权限档位不允许这一步", "");
             }
-            if (verdict == "ask")
+            if (verdict.decision == "ask")
             {
                 if (Confirm == null)
                 {
@@ -179,7 +225,8 @@ public sealed class ToolRunner
                     return ToolErr(call.name, "permission_denied", "这一步需要用户确认,但界面没有接确认回调", "");
                 }
                 call.Mark(ToolCallStatus.WAITING_PERMISSION);
-                string reason = Tools.Label(call.name, call.args);
+                // 两个槽别混:label 是「做什么」(如「装模组 钠」),reason 是「为什么这一步要你点」
+                string label = Tools.Label(call.name, call.args);
                 PyDict? preview = null;
                 try
                 {
@@ -190,7 +237,7 @@ public sealed class ToolRunner
                     // 预览算不出来就当没有:它是给用户看的辅助信息,不能挡住这一步的执行
                     preview = null;
                 }
-                (bool ok, bool always) = await Confirm(call, reason, preview).ConfigureAwait(false);
+                (bool ok, bool always) = await Confirm(call, label, verdict.reason, preview).ConfigureAwait(false);
                 if (always) _alwaysAllowed.Add(call.name);
                 if (!ok)
                 {
@@ -224,11 +271,11 @@ public sealed class ToolRunner
     }
 
     /// <summary>MCP 工具的裁决：plan 档不动、yolo 档放行，其余都要用户点一下。</summary>
-    private string McpVerdict() => Mode switch
+    private PermissionVerdict McpVerdict() => Mode switch
     {
-        "yolo" => "allow",
-        "plan" => "deny",
-        _ => "ask",
+        "yolo" => new PermissionVerdict("allow", "免确认模式"),
+        "plan" => new PermissionVerdict("deny", "当前是「只看不动」模式，不能执行这类操作"),
+        _ => new PermissionVerdict("ask", "外部 MCP 工具能力未知，需确认"),
     };
 
     /// <summary>

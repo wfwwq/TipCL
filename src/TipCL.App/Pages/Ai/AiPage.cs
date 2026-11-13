@@ -687,6 +687,12 @@ public sealed class AiPage : PageBase
     /// <summary>工具结果的短摘要(给步骤行右侧那格)。</summary>
     private static string Summarize(ToolCall call)
     {
+        if (call.status == ToolCallStatus.DENIED)
+        {
+            // 被拒的步骤行要说明「为什么被拒」:reason 由 Core 的裁决带出(照 Windows 的
+            // SetToolStatus(..., "denied", "[权限] 已拒绝:" + reason)),不再只显示结果 JSON。
+            return string.IsNullOrEmpty(call.error) ? "已拒绝" : call.error;
+        }
         if (call.status == ToolCallStatus.FAILED)
         {
             return "失败";
@@ -860,12 +866,13 @@ public sealed class AiPage : PageBase
     // ───────────────────────────── 停靠区:确认 / 选择题 ─────────────────────────────
 
     /// <summary>
-    /// 权限确认。<paramref name="preview"/> 是 Core 在真的要写之前算好的「改前改后」预览
-    /// (没有可预览的东西时为 null),摊平成行后交给确认卡显示。
-    /// 第三参(参考版从这里带出权限裁决的理由)在 Linux 侧留空:ToolRunner.Decide 只给 allow/ask/deny,
-    /// 没有理由文本,不为此编一句假话——卡片仍显示工具标签 + 预览 + 风险标签。
+    /// 权限确认。三个信息槽与确认卡的三个位置一一对应:<paramref name="label"/> 是这一步「做什么」
+    /// (Core 的 Tools.Label,空则卡片回退到工具名),<paramref name="reason"/> 是权限裁决给出的
+    /// 「为什么需要你确认」;二者不许混着传 —— 卡片上它们是两行(reason 为空时那一行不渲染)。
+    /// <paramref name="preview"/> 是 Core 在真的要写之前算好的「改前改后」预览(没有可预览的东西时为 null),
+    /// 摊平成行后交给确认卡显示。
     /// </summary>
-    private async Task<(bool ok, bool always)> ConfirmAsync(ToolCall call, string reason, PyDict? preview)
+    private async Task<(bool ok, bool always)> ConfirmAsync(ToolCall call, string label, string reason, PyDict? preview)
     {
         var waiter = new TaskCompletionSource<(bool, bool)>(TaskCreationOptions.RunContinuationsAsynchronously);
         _confirmWaiter = waiter;
@@ -873,7 +880,7 @@ public sealed class AiPage : PageBase
         {
             _dock.Children.Clear();
             ConfirmCard? card = null;
-            card = new ConfirmCard(call.name, reason, "", Preview.Flatten(preview),
+            card = new ConfirmCard(call.name, label, reason, Preview.Flatten(preview),
                 ConfirmCard.AllowAlways(call.name),
                 (ok, always, _) =>
                 {

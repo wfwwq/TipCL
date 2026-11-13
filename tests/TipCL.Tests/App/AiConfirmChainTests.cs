@@ -60,9 +60,9 @@ public class AiConfirmChainTests
         var runner = new ToolRunner(new FakeApi()) { Instance = inst, PermissionMode = "default" };
         PyDict? seen = null;
         string label = "";
-        runner.Confirm = (call, reason, preview) =>
+        runner.Confirm = (call, lbl, _, preview) =>
         {
-            label = reason;
+            label = lbl;
             seen = preview;
             return Task.FromResult((false, false));
         };
@@ -94,7 +94,7 @@ public class AiConfirmChainTests
         File.WriteAllBytes(Path.Combine(mods, "sodium.jar"), new byte[1024]);
         var runner = new ToolRunner(new FakeApi()) { Instance = inst, PermissionMode = "default" };
         PyDict? seen = null;
-        runner.Confirm = (_, _, preview) =>
+        runner.Confirm = (_, _, _, preview) =>
         {
             seen = preview;
             return Task.FromResult((false, false));
@@ -114,7 +114,7 @@ public class AiConfirmChainTests
         string inst = NewInstance("runner-read");
         var runner = new ToolRunner(new FakeApi()) { Instance = inst, PermissionMode = "default" };
         int asked = 0;
-        runner.Confirm = (_, _, _) =>
+        runner.Confirm = (_, _, _, _) =>
         {
             asked++;
             return Task.FromResult((true, true));
@@ -164,7 +164,7 @@ public class AiConfirmChainTests
         Assert.NotNull(runner.Confirm);
         var call = new ToolCall("c-" + Guid.NewGuid().ToString("N").Substring(0, 6), "write_mod_config", args);
         PyDict? preview = Preview.ChangePreview(call.name, args, instance);
-        Task<(bool ok, bool always)> waiting = runner.Confirm!(call, Tools.Label(call.name, args), preview);
+        Task<(bool ok, bool always)> waiting = runner.Confirm!(call, Tools.Label(call.name, args), "测试用理由", preview);
         // 页面的确认走 Dispatcher.UIThread.InvokeAsync:排一下队列再找卡(内联执行时这步无副作用)
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
 
