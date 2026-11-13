@@ -724,14 +724,18 @@ public class C6aPagesTests
             using var harness = C4LayerHost.Show();
             InstallPage install = C5aFiles.Mount(harness, new InstallPage("1.20.1", I18n.L("正式版"), () => { }));
             C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 9000);
-
+            // 【时机 · D-152 / 顺序假设】`LoadAsync` 的续体最后会调 `Select(0)`,而 `Select` 在 `_autoName` 为真时
+            // 会**重写名字输入框**(写成版本号)。只等"6 个请求到达"就去改名字,续体回头一跑就把 "   " 覆盖成
+            // "1.20.1" ⇒ 再点「开始安装」就真的起了安装(这条只在 VSTest 通道红的根因就是这个)。
+            // 所以先等一个**续体跑完之后才成立的可观测效果**:输入框里出现了 `Select(0)` 写进去的版本号。
             TextBox name = C5aFiles.Descendants(install).OfType<TextBox>().First();
+            C5aFiles.Pump(() => (name.Text ?? "") == "1.20.1", 9000);
             name.Text = "   ";
             C5aFiles.Settle(2);
             C5aFiles.Click(C5aFiles.ByText(install, I18n.L("开始安装")));
             C5aFiles.Pump(() => toasts.Has(I18n.L("请填写实例名称")), 9000);
-            Assert.Equal(0, api.Count("install_game"));
-            Assert.Equal(0, api.Count("create_instance"));
+            Assert.True(api.Count("install_game") == 0, "空名字不该起安装,实际收到 install_game " + api.Count("install_game") + " 次");
+            Assert.True(api.Count("create_instance") == 0, "空名字不该建实例,实际收到 create_instance " + api.Count("create_instance") + " 次");
         });
     }
 
