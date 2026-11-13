@@ -6236,3 +6236,17 @@ Avalonia 一个同名等价物都没有。所以保留的是**算法与全部常
 1. **本包四条运行里"本包 0 失败"是确定的**:两次 `--filter` 与四次全量的结果一致。剩下的 7~11 条红全在 c4-pages 名下,而且**同一份 DLL 两次失败数不同**(10 / 7),请它自己判定是"还没调完"还是"测试本身抖"。
 2. `MaybeShowAsync()` 没有调用点、`SettingsRefresh` 注入缝还没接线 —— **都等 SettingsPage 落地后由 Lead 统一接**(我没动外壳)。
 3. `download` 按裁决留给 C6(与 `CatalogPage` + `InstallPage` 一起做)。
+
+## 运营规则(2026-11-14 凌晨,多代理并行后补写)
+
+这一晚踩到的坑都很贵,写成规则给后面的人/代理看:
+
+1. **长活必须派给 `spawn_teammate` 的 teammate,不要用 `subagent`。** `interrupt_agent` 只对 teammate 有效;`subagent` 起的子代理**够不到、也停不掉**(它跑在 harness 进程里,没有可 kill 的目标)。这次一个 `subagent` 一路写进了别人的范围、还提交了一棵**编译不过**的树,而 Lead 无法叫停。
+2. **"测试全绿"不等于"树能编译"。** 那棵坏树的提交信息写着 160 条新用例,实际把探针属性命名成 `Loaded`/`Shown`,撞上 Avalonia 的 `Control.Loaded` 事件 ⇒ CS0079。**任何验收都必须先构建、再跑通道**,并且两条通道各跑两次(单通道绿证明不了什么)。
+3. **构建锁要把"构建 + 运行"当作一个整体。** `tools\with-build-lock.ps1` 只锁住它包住的那条命令;如果别人在你 `build` 完之后重建共享 `bin/`,你的 `--no-build` / `dotnet exec` 跑的就是**另一个二进制**(Lead 因此拿到过假红)。现成做法见 `artifacts\lead-verify.cmd`:一个脚本里串起 build + VSTest + 进程内,交给锁一次执行。
+4. **多写入者共树时:绝不 `git add -A`,只 add 自己的路径**;别人的未提交改动**不许** revert/checkout/提交。每个新任务书里都写这一条。
+5. **每落盘一个文件就构建一次。** 攒着最后一起编的代价:一次把全队卡红两回(`TasksPage` 缺 `using Avalonia;`、`FirstRunWizard` 的 `body` 重名、`C5aFixtures` 缺 `Avalonia.Media`)。常见漏项:`Avalonia`(Thickness/GridLength/Point)、`Avalonia.Media`(IBrush/Color)、`TipCL.Services`(`Dyn`/`Ui` 扩展方法)、`TipCL.Themes`、`Avalonia.Styling`(ThemeVariant)。
+6. **判断"文件还在不在被写",只能看字节/哈希,不能看 `Get-Content` 的行数。** PS 5.1 的 `Get-Content` 会把无 BOM 的 UTF-8 当 ANSI 解,**吞掉 LF**(实测 1224 vs 1254 行),造成"别人还在写我的文件"的假信号。凡读文本请带 `-Encoding UTF8`。
+7. **并发负载会让"按固定轮数泵"的异步测试假红。** 遇到不属于自己范围的失败,先 `--filter` 单独复跑;复跑绿了就是并发干扰。长期修法:把固定轮数换成"条件成立 + 有截止时间"的等待。
+8. **探针属性/局部变量名要避开 Avalonia 与 WPF 基类既有成员**(`Loaded`/`Shown`/`body` 这些名字已经各踩一次),否则是编译错误或成员隐藏告警。
+9. **全局状态类的前提断言会被下一个包打破**(「注册表里只有启动页」这类)。既定解法是**还原前提、断言不删**(D-126):先 `Assert.Contains` 钉住新增的 id,再 `Unregister` 把它们摘掉,原来的 `DoesNotContain` 一字不改地留着。
