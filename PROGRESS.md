@@ -4842,3 +4842,40 @@ Lead 在 C2c1 任务书里点名要搬 `Services\Bubble.cs` 与 `Pages\ConfirmCa
 ### 12. 本包没有做的事(红线)
 
 没有移植任何页面(一个页面也没有);没有碰 `Backdrop` / `SideFrost` / `SideFrostEx` / `ImeGuard` / `WebViewHost` / `WebpFallback`、标题栏圆片、下载任务底条(全归 C2c3);没有碰 AI 卡片与 `Pages\Bubble.cs`;没有改 `src\TipCL.Core`(一个字节);没有改色板、`Controls.axaml`、导航模型,也没有改 `Ui` / `UiExt` / `Dlg` / `AppServices` 的任何既有签名;没有删测试、没有改弱断言、没有加 Skip、没有扩 `NoWarn`、没有改 TFM。
+
+### Lead 验收(2026-11-13 14:25)
+
+结论:**C2c2 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 三个提交(`0ae4fb3` / `1ebf6d5` / `56b33ae`) | 工作树干净;无 remote、无 tag;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线(`src\TipCL.Core`、`Themes\`、`NavModel/NavConfig`、`Pages\PageHost/PageRegistry`、`ToastCard`、`DialogCard`、测试隔离三件、`AvaloniaSession`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改(`Pages\PageBase.cs` 是允许的:本包要加 `EnableDrop`) |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告 = `NU1900` x4 + `SYSLIB0014` x1 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0 / 通过 2797 / 总计 2797**(2691 → 2797,+106) |
+| 进程内执行器 第 1 / 2 次 | 都是**退出码 0,通过 2797 / 失败 0 / 不支持 0** |
+| `--smoke` light / dark / bad | 退出码 0 / 0 / **2**;light **21823 `8336CA13...`**、dark **18200 `DBD3C171...`** —— **与基准逐位相同** |
+| **9 个内嵌资源对 Windows 源 SHA256(Lead 独立核对)** | **9 / 9 逐字节一致**(4 张 `preset-*.jpg` + 5 个 `PremiumAssets/*.png`) |
+| **全部改动文件的编码(Lead 按字节核验)** | 无一例外:**无 BOM、CR=0、U+FFFD=0、无连续问号**;子代理自报弄坏过的 `C2c2ThumbsTests.cs` 现在是 23014 字节、794 个汉字可读、无 BOM/CR/乱码 —— 它的重写确实干净 |
+| `PageBase.EnableDrop` 与 `DropVeil`(Lead 抽查源码) | `EnableDrop(Func<FileDrop.DropContext>)` 与 Windows 同名同参;`DropVeil` 的圆角 10 / 内边距 (20,16,20,18) / 描边 2 / 最宽 360 / 淡入 120ms / 淡出 110ms 与 Windows 源逐项对应 |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` / **桌面** / **图片** | 9328 / 889530606 / 2026-11-10 20:42:16;桌面条目 14、最新写入 **2026-11-12 19:02:53**(与开工时相同,**零写入**);图片 3 项、最新 **2026-11-06**(零写入) |
+| 残留进程 / `%TEMP%` 新目录 | 0 个;`tipcl*` 89 → 89 无新增 |
+
+**裁决 1:接受子代理对任务书前提的更正 —— Lead 又写错了一处前提。**
+
+Lead 在任务书里说「内置预设背景已内嵌在 Core 的 `Resources\wallpapers\*.jpg`」。**实测不成立**:mac Core 的 `src\TipCL.Core\Resources\` 只有 `ai` / `locales` / `plugin-host`(A2 就是按这个搬的)。Windows 侧壁纸与 `PremiumAssets` 都是 **App 程序集**的 WPF `<Resource>`(`TipCL.csproj:98` 与 `:106-112`,后者还要 `-p:Premium=true`),**从来不在 Core 里**。
+
+子代理按**描述**办:把 4 张预设 + 5 个加载器图标字节级复制进 `src\TipCL.App\`,用 `AvaloniaResource` 内嵌,URI 改 `avares://`,**Core 一字节未动**。这与 GOAL §3 的「图标字体 `TipCLIcons.ttf`、壁纸、`PremiumAssets` 全部直接内嵌(mac 版无体积红线,只出一个版本,等同 premium)」**完全一致**,做法正确。
+
+**裁决 2:接受 `AccountGate` 的更正。** Lead 把它描述成「路由到账号页 / 提示登录的守卫」;Windows 源码实际是 `IsSentinel` / `ListAsync` / `EnsureAsync` / `CreateOfflineAsync`(弹框建离线用户),**不导航**。按源码搬是对的。
+
+**裁决 3:接受提交顺序偏离**(`FileDrop.SetWallpaperAsync` 要调 `Wallpaper.ReloadAsync`,拆开则没有单个提交能独立编译;(b) 并入 (a))。
+
+**裁决 4:接受 D-36 的第三次误用与它的补救。** 子代理如实报告用 `Get-Content -Raw | Set-Content` 批量替换 `C2c2ThumbsTests.cs` 把中文改坏,随即整份重写并逐字节核验,该文件**未进过任何提交**;Lead 复核确认现在干净。这是这个坑第三次现形(C1b → C2b → C2c2),**不能再靠人肉扫描**:
+
+**新增运营要求(写进 D1)**:D1 必须加一条**自动化守卫测试** —— 扫描全部受版本控制的文本文件,断言「除 `tools\*.ps1`(D-12 要求 BOM)外,任何源文件都不得带 BOM、不得含 CR 字节、不得含 U+FFFD」,发现异常即失败。把 Lead 现在手工做的那一步变成机器做的。
+
+**C2 阶段(外壳)到此结束**:C2a(桥层+基础服务)、C2b(外壳)、C2c1(Toast/对话框卡片)、C2c2(页面级视觉服务)、C2d(后端接线与真实启动验证)。C2c3(`Backdrop`/`SideFrost`/`ImeGuard`/标题栏圆片/下载底条)零页面引用,**降级为可选**,排在页面之后。
+
+**下一步:进入 C3 页面阶段**(顺序照 GOAL:启动 -> 实例库+实例详情 -> 下载+安装 -> 任务 -> 设置 -> 账号 -> Java -> 联机 -> 目录 Catalog -> 版本管理 -> 插件全家 -> AI 全家 -> 其余)。
