@@ -33,19 +33,33 @@ internal static class SmokeRunner
                 .UseSkia()
                 .SetupWithoutStarting();
 
+            // C2b 接线:离屏模式一开,Dlg 的三个挂点(SmokeActive / SmokeAutoAnswer /
+            // SmokeAutoCancelSystemDialog)同时接上,收摊时原样还回去 —— 离屏绝不会卡在对话框上。
+            using IDisposable smoke = SmokeState.Activate();
+
             ThemeVariant variant = options.Dark ? ThemeVariant.Dark : ThemeVariant.Light;
             if (Application.Current is { } application)
             {
                 application.RequestedThemeVariant = variant;
             }
 
-            var window = new MainWindow
+            // C2b:外壳按 UiPrefs 建标题栏/侧栏,这里注入一份默认偏好 —— 离屏像素不许随
+            // 用户数据目录里的 wpf-ui.json 变(生产路径才读盘,见 MainWindow.LoadUiPrefs)。
+            var window = new MainWindow(new UiPrefs())
             {
                 RequestedThemeVariant = variant,
                 PageId = options.Page,
             };
 
             window.Show();
+
+            // --page:页面还没移植(C3)时 Navigate 静默不动,行为与 A1 起的"只解析"一致;
+            // 页面注册进来之后,这里就会真的切过去。
+            if (options.Page.Length > 0)
+            {
+                window.Navigate(options.Page, instant: true);
+            }
+
             window.ApplyThemeVisuals();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
 
