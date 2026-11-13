@@ -108,7 +108,7 @@ public class C5bTasksAccountTests
             Assert.True(C5bFiles.HasText(page, I18n.L("还没有任务")));
             Assert.True(C5bFiles.HasText(page, I18n.L("到「下载」页装个版本或模组试试")));
             // 空的时候概览那句是空串(Windows:list.Count == 0 ⇒ Text = "")
-            Assert.False(C5bFiles.Texts(page).Any(t => (t.Text ?? "").StartsWith(I18n.L("进行中"), StringComparison.Ordinal)));
+            Assert.DoesNotContain(C5bFiles.Texts(page), t => (t.Text ?? "").StartsWith(I18n.L("进行中"), StringComparison.Ordinal));
         });
     }
 
@@ -494,7 +494,7 @@ public class C5bTasksAccountTests
             page.OnEvent(new BridgeEvent { Event = "login_code", Code = "ABCD-EFGH", Uri = "https://microsoft.com/link" });
             C5bFiles.Settle(2);
             Assert.True(C5bFiles.HasText(panel, "ABCD-EFGH"));
-            Assert.True(C5bFiles.Texts(panel).Any(t => (t.Text ?? "").Contains("https://microsoft.com/link", StringComparison.Ordinal)));
+            Assert.Contains(C5bFiles.Texts(panel), t => (t.Text ?? "").Contains("https://microsoft.com/link", StringComparison.Ordinal));
             // 【Windows 源】:finished 成功 ⇒ 关浮层 + Toast「登录成功」+ 重拉
             page.OnEvent(new BridgeEvent { Event = "finished", TaskId = "task-9", Success = true });
             C5bFiles.Pump(() => toasts.Has(I18n.L("登录成功")));

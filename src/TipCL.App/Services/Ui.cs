@@ -603,8 +603,7 @@ public static class Ui
         return border;
     }
 
-    public static Grid Field(string label, Control control, string? hint = null, double labelWidth = 140.0)
-    {
+    public static Grid Field(string label, Control control, string? hint = null, double labelWidth = 140.0)    {
         Grid grid = G(null, $"{labelWidth},*");
         SPanel panel = V(2.0, Txt(label), (hint == null) ? null : Small(hint).Wrap());
         panel.VerticalAlignment = VerticalAlignment.Center;
@@ -632,6 +631,9 @@ public static class Ui
         {
             right.VerticalAlignment = VerticalAlignment.Center;
             grid.Add(right, 0, 1);
+            // C5c:窄页面(被侧栏压到 ~668)下不给左列留位置 —— 摆不开就把右簇挪到第二行。
+            // 宽页面永不触发,所以宽页面的像素一个字节不变。
+            SectionNarrow.Watch(grid, el, right);
         }
         return grid;
     }
@@ -813,5 +815,54 @@ public static class Ui
         {
             Debug.WriteLine("Ui.OpenUrl 失败: " + ex.Message);
         }
+    }
+}
+
+/// <summary>
+/// C5c:让 <see cref="Ui.Section"/> 在**窄页面**下不再是"标题被右列挤成 0 宽"。
+///
+/// 背景(实测):mac 的页面区被 196px 侧栏压到约 <b>668px</b>,而 Windows 版没有侧栏 ⇒ 这个问题只在移植后暴露。
+/// <c>Section</c> 原来是 <c>G(null, "*,Auto")</c>:左列 <c>*</c> 没有最小宽度、右列那一簇(计数 + 搜索框 + 4 个按钮 ≈ 653px)
+/// 也不会收缩 ⇒ 窄页面时左列被算成 <b>0</b>(探针实测:标题宽 0、副说明宽 0,见 C5c 的探针用例)。
+///
+/// 判定用两边的 <c>DesiredSize</c> 自身当阈值(不用猜魔数):**摆不开**(可用宽 &lt; 标题需要 + 右簇需要)才降级,
+/// 摆得开就恢复 —— 所以**宽页面永远走原路,像素一个字节不变**。<see cref="Slack"/> 是回滞带宽:
+/// 没有它,降级/恢复会在阈值上互相触发(改了列宽 → 触发再判 → 又改回去)。
+/// </summary>
+internal static class SectionNarrow
+{
+    /// <summary>回滞带宽(px):进入降级比退出降级苛刻一点,防止在阈值上抖动。</summary>
+    private const double Slack = 6.0;
+
+    /// <summary>盯住这个 Section 的宽度,必要时把右簇换到第二行。</summary>
+    internal static void Watch(Grid grid, Control head, Control right)
+    {
+        // 行 0 = 标题那一块;行 1 = 备用(只在降级时被右簇占)。空行的 Auto 高度是 0,摆得开时不改变任何像素。
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        bool stacked = false;
+        grid.SizeChanged += delegate
+        {
+            double need = head.DesiredSize.Width + right.DesiredSize.Width;
+            double have = grid.Bounds.Width;
+            if (!stacked && have < need - Slack)
+            {
+                // 降级:右簇换到第二行、跨两列、靠右(与原来"贴在标题右边"的观感一致)
+                Grid.SetRow(right, 1);
+                Grid.SetColumn(right, 0);
+                Grid.SetColumnSpan(right, 2);
+                right.HorizontalAlignment = HorizontalAlignment.Right;
+                stacked = true;
+            }
+            else if (stacked && have > need + Slack)
+            {
+                // 恢复:回到"标题左、动作右"的原始两列排布
+                Grid.SetRow(right, 0);
+                Grid.SetColumn(right, 1);
+                Grid.SetColumnSpan(right, 1);
+                right.HorizontalAlignment = HorizontalAlignment.Stretch;
+                stacked = false;
+            }
+        };
     }
 }
