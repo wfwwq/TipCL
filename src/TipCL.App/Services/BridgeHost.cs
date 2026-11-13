@@ -36,6 +36,38 @@ public sealed class BridgeHost : IDisposable
 		internal static string? Root;
 	}
 
+	/// <summary>
+	/// C2d 注入缝:真正造内核的那一行。默认就是生产行为的 <c>new BackendApi(bus)</c>(内核构造时会
+	/// 往 login.live.com 发一次预热请求,见 D-23/D-100)。测试把它换成「先把
+	/// <c>BackendApi.DisableAuthWarmup</c> 置 true 再构造」的工厂,就能在不联网的前提下跑完整条启动路径。
+	/// **生产代码永远不写这个属性**。
+	/// </summary>
+	internal static Func<string, EventBus, BackendApi> ApiFactory { get; set; } = delegate(string root, EventBus bus)
+	{
+		return new BackendApi(bus);
+	};
+
+	/// <summary>
+	/// C2d 注入缝:内核起来之后的收尾那一步。默认 null = 生产行为(紧接着的 MCP + 插件两行);
+	/// 非 null 时只跑注入的这一步并直接返回。测试必须注入一个空实现:生产默认那一步里,
+	/// 插件系统启动 5 秒后会去插件市场拉更新(联网),测试绝不能触发(见 D-101)。
+	/// </summary>
+	internal static Action<BackendApi>? OnCoreStarted { get; set; }
+
+	/// <summary>
+	/// C2d:清掉进程内内核单例缓存。**只有测试收摊时用** —— 生产路径下内核按设计活到进程结束
+	/// (与 Windows 的 <c>CoreState</c> 语义一致,`BridgeServer.Stop` 也不动它)。
+	/// </summary>
+	internal static void ResetCore()
+	{
+		lock (CoreState.Gate)
+		{
+			CoreState.Api = null;
+			CoreState.Bus = null;
+			CoreState.Root = null;
+		}
+	}
+
 	private BridgeServer? _server;
 
 	private int _disposed;
@@ -99,8 +131,15 @@ public sealed class BridgeHost : IDisposable
 				I18nCore.CurrentLang = text;
 			}
 			CoreState.Bus = new EventBus();
-			CoreState.Api = new BackendApi(CoreState.Bus);
+			CoreState.Api = ApiFactory(root, CoreState.Bus);
 			CoreState.Root = root;
+			if (OnCoreStarted != null)
+			{
+				// 测试注入的收尾(MCP 与插件那一步被换掉):跑完就返回,不碰生产那两行。
+				OnCoreStarted(CoreState.Api);
+				bus = CoreState.Bus;
+				return CoreState.Api;
+			}
 			TipCL.Core.Launcher.Ai.McpServer.StartIfEnabled(CoreState.Api);
 			// 插件系统:后台发现并加载插件,不拖慢启动
 			TipCL.Core.Plugins.PluginManager.StartGlobal(CoreState.Api);
@@ -135,7 +174,20 @@ public sealed class BridgeHost : IDisposable
 			catch
 			{
 			}
-			await Task.Delay(100, ct).ConfigureAwait(continueOnCapturedContext: false);
+			try
+			{
+				await Task.Delay(100, ct).ConfigureAwait(continueOnCapturedContext: false);
+			}
+			catch (OperationCanceledException)
+			{
+				// C2d 修的真缺口(用例 Stop_during_start_cancels_and_leaves_no_listener 抓到的):
+				// ct 在健康检查期间被取消时,Task.Delay 会抛出去,原来的写法会**带着已经起来的
+				// 监听器与客户端一起退出** —— 监听 socket 与 bridge-accept 线程就永久留在进程里。
+				// 这里统一收掉再抛,保证"没返回宿主 = 没有监听"。
+				client.Dispose();
+				srv.Stop();
+				throw;
+			}
 		}
 		client.Dispose();
 		srv.Stop();
