@@ -61,6 +61,23 @@ internal sealed class C5aScope : IDisposable
 
     private readonly string _background;
 
+    // 【D-141 同族残留的根因修复】设置页那六个分段注入缝也是**进程级静态**(还有手机同步面板那条):
+    // 用例把它们换成探针页之后必须在收尾时**写回进入前的值** —— 不是"设成 null 就算完",
+    // 将来别的包也会往这几个缝里装东西(本包实测:C5a 漏还原时,C6b 的分段用例一开始就被污染)。
+    private readonly Func<PageBase>? _accountPageFactory;
+
+    private readonly Func<PageBase>? _javaPageFactory;
+
+    private readonly Func<PageBase>? _serversPageFactory;
+
+    private readonly Func<PageBase>? _playtimePageFactory;
+
+    private readonly Func<PageBase>? _feedbackPageFactory;
+
+    private readonly Func<Task>? _firstRunWizardRunner;
+
+    private readonly Func<Task>? _phoneSyncPanelRunner;
+
     private readonly bool _flyAnimation;
 
     private readonly int _flyDurationMs;
@@ -88,6 +105,13 @@ internal sealed class C5aScope : IDisposable
         _extrasDir = SettingsPage.ExtrasDirOverride;
         _themeColor = SettingsPage.VisualThemeColor;
         _background = SettingsPage.Extras.Background;
+        _accountPageFactory = SettingsPage.AccountPageFactory;
+        _javaPageFactory = SettingsPage.JavaPageFactory;
+        _serversPageFactory = SettingsPage.ServersPageFactory;
+        _playtimePageFactory = SettingsPage.PlaytimePageFactory;
+        _feedbackPageFactory = SettingsPage.FeedbackPageFactory;
+        _firstRunWizardRunner = SettingsPage.FirstRunWizardRunner;
+        _phoneSyncPanelRunner = SettingsPage.PhoneSyncPanelRunner;
         _flyAnimation = SettingsPage.Extras.FlyAnimation;
         _flyDurationMs = SettingsPage.Extras.FlyDurationMs;
         // 覆盖层逐条抄下来:不是"清空了事" —— 别的用例(或外壳)先设过什么,收尾时要原样还回去。
@@ -133,6 +157,14 @@ internal sealed class C5aScope : IDisposable
         SettingsPage.Extras.FlyDurationMs = _flyDurationMs;
         SettingsPage.SyncPersistedThemeColor(_themeColor);
         SettingsPage.SyncPersistedBackground(_background);
+        // 六个分段注入缝 + 手机同步面板缝:写回**进入前的值**(null 也照样写回 —— 见字段上的说明)
+        SettingsPage.AccountPageFactory = _accountPageFactory;
+        SettingsPage.JavaPageFactory = _javaPageFactory;
+        SettingsPage.ServersPageFactory = _serversPageFactory;
+        SettingsPage.PlaytimePageFactory = _playtimePageFactory;
+        SettingsPage.FeedbackPageFactory = _feedbackPageFactory;
+        SettingsPage.FirstRunWizardRunner = _firstRunWizardRunner;
+        SettingsPage.PhoneSyncPanelRunner = _phoneSyncPanelRunner;
         // 覆盖层:先全清(把挂上去的那一层摘下来),再把进作用域之前的那些条目写回去。
         PaletteOverride.Reset();
         foreach (KeyValuePair<string, object> pair in _overrideEntries)

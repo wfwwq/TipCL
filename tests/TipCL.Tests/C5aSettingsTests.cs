@@ -521,6 +521,46 @@ public class C5aSettingsTests
         });
     }
 
+    /// <summary>
+    /// 【D-141 同族的钉子 · 跨包回归】设置页的六个分段注入缝(外加手机同步面板缝)是**进程级静态**:
+    /// 用例把它们换成探针页之后,作用域**必须**把进入前的值写回去 —— 否则后一个测试类会莫名看到别人的探针
+    /// (本包实测:C6b 的分段用例一开始就被污染)。这条用例进作用域换掉七个缝、出来逐个对拍。
+    /// </summary>
+    [Fact]
+    public void The_segment_injection_seams_are_restored_when_the_scope_exits()
+    {
+        AvaloniaSession.Run(() =>
+        {
+            Func<PageBase>? beforeAccount = SettingsPage.AccountPageFactory;
+            Func<PageBase>? beforeJava = SettingsPage.JavaPageFactory;
+            Func<PageBase>? beforeServers = SettingsPage.ServersPageFactory;
+            Func<PageBase>? beforePlaytime = SettingsPage.PlaytimePageFactory;
+            Func<PageBase>? beforeFeedback = SettingsPage.FeedbackPageFactory;
+            Func<Task>? beforeWizard = SettingsPage.FirstRunWizardRunner;
+            Func<Task>? beforePhone = SettingsPage.PhoneSyncPanelRunner;
+
+            using (var scope = C5aScope.Capture())
+            {
+                SettingsPage.AccountPageFactory = () => C5aProbePage.Create("账号");
+                SettingsPage.JavaPageFactory = () => C5aProbePage.Create("Java");
+                SettingsPage.ServersPageFactory = () => C5aProbePage.Create("服务器");
+                SettingsPage.PlaytimePageFactory = () => C5aProbePage.Create("时长");
+                SettingsPage.FeedbackPageFactory = () => C5aProbePage.Create("反馈");
+                SettingsPage.FirstRunWizardRunner = () => Task.CompletedTask;
+                SettingsPage.PhoneSyncPanelRunner = () => Task.CompletedTask;
+                Assert.NotNull(SettingsPage.AccountPageFactory);
+            }
+
+            Assert.Same(beforeAccount, SettingsPage.AccountPageFactory);
+            Assert.Same(beforeJava, SettingsPage.JavaPageFactory);
+            Assert.Same(beforeServers, SettingsPage.ServersPageFactory);
+            Assert.Same(beforePlaytime, SettingsPage.PlaytimePageFactory);
+            Assert.Same(beforeFeedback, SettingsPage.FeedbackPageFactory);
+            Assert.Same(beforeWizard, SettingsPage.FirstRunWizardRunner);
+            Assert.Same(beforePhone, SettingsPage.PhoneSyncPanelRunner);
+        });
+    }
+
     /// <summary>【A 类差异】「重新运行启动向导」的接缝:没接 → 如实 Toast;接了 → 真的跑那个 runner。</summary>
     [Fact]
     public void First_run_wizard_seam_toasts_when_unwired_and_runs_when_wired()
