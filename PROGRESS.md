@@ -27,8 +27,9 @@
 | C1b | `Themes/Controls.axaml` 移植 | ✅ 完成(见下;**新增 257 条用例,总数 1900 → 2157,两条通道都 2157/2157 全绿**;64 个 WPF 键全部有落点,40 个具名样式映射成类名;smoke 因隐式 TextBlock 字体变化为 3956/3941,**待 Lead 裁决基准**,见小节第 7/8 条) |
 | C1c | `Services/Ui.cs` / `UiExt.cs` 门面 | ✅ 完成(见下;**新增 100 条用例,总数 2157 → 2257,两条通道各连跑 2 次都 2257/2257 全绿**;`Ui.S` 的返回类型被迫由 `Style` 改成类名、`Pw` 返回 `TextBox`,逐条列在差异表里;smoke 与裁决基准逐位一致) |
 | C2a | 桥层与 WPF-free 基础服务(`AppServices`/`Payload`/`TaskStore`/`TaskRow`/`I18n`/`Fmt`/`FileKinds`/`BridgeEvent`/`BridgeCallException`/`BridgeHost`/`BridgeClient`/`Dlg`/`Motion`) | ✅ 完成(见下;**新增 210 条用例,总数 2257 → 2467,两条通道各连跑 2 次都 2467/2467 全绿**;`src\TipCL.Core` 一行未动;只有进程内一条后端路径,外部 Python 桥已去) |
-| C2b | 外壳:`MainWindow` / 导航 / 页面宿主 / Toast·Dialog·DropVeil 宿主 / 系统菜单与快捷键 | 未开始 |
-| C3-C8 | 页面逐个移植 | 未开始 |
+| C2b | 外壳:`MainWindow` / 导航 / 页面宿主 / Toast·Dialog·DropVeil 宿主 / 系统菜单与快捷键 | ✅ 完成(见下;**新增 79 个测试方法 / 122 条用例,总数 2467 → 2593,两条通道各连跑 2 次都全绿**;C2a 的接线清单除 `ToastSink`(Toast 视觉件属 C2c)与"启动后端"两处外全部落地;smoke 因新增标题栏 / 侧栏 / 页面宿主而变,**新基准 = light 21823 `8336CA13...` / dark 18200 `DBD3C171...`**) |
+| C2c | Toast / Dialog / DropVeil 视觉件 + `FileDrop` / `PageBase.EnableDrop` + Backdrop / Wallpaper / SideFrost / ImeGuard / AccountGate / 下载任务底条(C2b 明确没做的视觉件) | 未开始 |
+| C3-C8 | 页面逐个移植 | 未开始(接入方式:各页面包 `PageRegistry.Register(...)`,页面 id 见表) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
 ## 仓库现状(截至 A1)
@@ -3980,3 +3981,217 @@ D-83 的 C1c 遗留是「`Skeleton` 的横扫与 `SmoothScroll` 的滚轮平滑�
 - `EnsureCore` 的真实启动(真正拉起 `BackendApi` + `BridgeServer`)按 D-23 没有测过;这也是 GOAL 里「后端能否真的跑起来」的最后一个未验证点,归 C2b 的接线验收或 D1。
 
 **给 C2b 的接线清单(必须做,否则外壳不可用)**:`AppServices.Window`、`AppServices.ToastSink`、`Dlg.Host`、`Dlg.BlurTarget`、`Motion.Enabled = <用户开关>`、离屏的 `Dlg.SmokeActive` / `SmokeAutoAnswer` / `SmokeAutoCancelSystemDialog`,以及把 `Ui.Skeleton` 的横扫与 `SmoothScroll` 的滚轮平滑改走 `Motion`。
+
+---
+
+## C2b 应用外壳:窗口装饰 / 导航 / 页面宿主 / 系统菜单与快捷键(2026-11-13)
+
+本包**只做外壳**:没有移植任何页面(C3 才逐页搬),没有画 Toast 卡片 / Dialog 卡片 / DropVeil /
+Backdrop / Wallpaper / SideFrost / ImeGuard / AccountGate / Thumbs / LoaderIcons(属 C2c),
+没有改色板值、没有改 `Controls.axaml` 的一个字符、没有改 `Ui` / `UiExt` 的公开面
+(只在 `Ui.Skeleton` 与 `SmoothScroll` 的滚轮平滑这两处按任务书改走 Motion),
+没有改 `src\TipCL.Core\` 一个字节,没有删改任何既有测试、没有加 `Skip`、没有扩 `NoWarn`。
+
+### 1. 做了什么
+
+1. **导航模型**(照 Windows 源逐行移植、语义一字不改):`NavModel`(默认顺序/置顶/隐藏、
+   6 个分组、两个折叠分区 `download` / `more`、分区成员规则、可见顺序、pin/unpin/reorder/merge
+   的补丁计算)、`NavConfig`(`ui_nav_*` 六个键 + `ui_section_members` 的解析/克隆/打补丁)、
+   `NavDef` / `NavEntry` / `NavEntryKind` / `NavGroup`。
+2. **`PageBase` + 页面宿主**:`Pages\PageBase.cs` 与 Windows 同名同义
+   (`Id` / `Title` / `Api` / `Win` / `EnsureLoadedAsync` / `LoadAsync` / `RefreshAsync` /
+   `OnEvent` / `OnShown` / `OnHidden` / `Toast` / `Run` / `Body` / `ScrollBody`);
+   另抽出一个 `Pages\PageHost.cs`(C2b 唯一的结构性新增),把 Windows 长在 `MainWindow` 里的
+   `_pages` / `_current` / `_currentId` + 换页 + 生命周期那几行搬成可单独测的控件。
+3. **窗口外壳**:900×550(最小 720×480)、46px 标题栏、`ExtendClientAreaToDecorationsHint` +
+   `PreferSystemChrome`(macOS 系统红绿灯)、标题栏内容左侧让出 78px、**不画任何 caption 按钮**;
+   侧栏宽度取 `UiPrefs.SideWidth`(夹在 140~320);右侧是页面宿主 + 页面底纹;删掉了 A1/C1a 的占位
+   底板(那块"居中大标题")。
+4. **系统菜单 + 快捷键**:`NativeMenu`(挂在窗口上:`NativeDock.SetMenu`),两块子菜单
+   「页面」(可见顺序前 9 项,依次挂 ⌘1...⌘9,当前页打勾)与「操作」(AI 助手 ⌘K、设置 ⌘,、
+   刷新 ⌘R、切换深色 / 浅色);另挂隧道阶段的 `KeyDown` 处理(Windows 的 `PreviewKeyDown`),
+   ⌘K 的"对话框开着 / 焦点在输入框里就不抢"规则照抄。
+5. **接线**(C2a 验收清单):见下面第 4 节。
+6. **两个 Motion 遗留点**:`Ui.Skeleton` 的横扫改成 `Motion.Loop(起横扫, 停横扫)`,
+   `SmoothScroll` 的滚轮平滑改回读 `Motion.Enabled`;顺带复核了 `Lucide.MotionEnabled` 的转发。
+
+### 2. 新增 / 改动的文件
+
+新增(共 10 个源文件 + 4 个测试文件):
+
+| 文件 | 来源 |
+|---|---|
+| `src\TipCL.App\NavModel.cs` / `NavConfig.cs` / `NavDef.cs` / `NavEntry.cs` / `NavEntryKind.cs` / `NavGroup.cs` | Windows 源同名文件移植 |
+| `src\TipCL.App\Pages\PageBase.cs` | Windows 源 `Pages\PageBase.cs` 移植 |
+| `src\TipCL.App\Pages\PageHost.cs` / `PageRegistry.cs` | C2b 新增(C0 结构,见 D-94) |
+| `src\TipCL.App\Smoke\SmokeState.cs` | Windows `Smoke.cs` 里"离屏状态 + 对话框自动应答"那一小块(见 D-93) |
+| `src\TipCL.App\Services\ShellCommand.cs` / `ShellShortcuts.cs` | C2b 新增(命令 + 纯函数键位映射) |
+| `tests\TipCL.Tests\C2bFixtures.cs` / `C2bNavTests.cs` / `C2bShellTests.cs` / `C2bWiringTests.cs` | 本包测试(122 条用例) |
+
+改动:`MainWindow.cs`(重写:窗口装饰 + 侧栏 + 页面宿主 + 菜单)、`Smoke\SmokeRunner.cs`
+(离屏接线 + 注入默认偏好 + `--page` 真的尝试切页)、`Services\Ui.cs`(仅 `Skeleton` 那处)、
+`Services\SmoothScroll.cs`(仅滚轮那处)、`Services\AppServices.cs`(只改注释)、
+`tests\TipCL.Tests\TipCL.Tests.csproj`(恢复 `Ported\NavCompatTests.cs` 编译)。
+
+### 3. 导航页面 id 表(与 Windows `MainWindow.NavDefs` 逐字一致)
+
+| # | 页面 id | 标题 | 图标码位 | 导航键(`PageForNavKey`) | 默认可见顺序 | ⌘ 快捷键 |
+|---|---|---|---|---|---|---|
+| 1 | `launch` | 启动 | `\ue7c1` | `launch` | 1 | ⌘1 |
+| 2 | `library` | 实例库 | `\ue80a` | (无,走顶栏/内部入口) | — | — |
+| 3 | `instance` | 版本管理 | `\ue80a` | `instance` | 2 | ⌘2 |
+| 4 | `account` | 账号 | `\ue77b` | `account` | 4 | ⌘4 |
+| 5 | `ai` | AI 助手 | `\ue99a` | `ai` | 5 | ⌘5 |
+| 6 | `multiplayer` | 联机 | `\ue701` | `multiplayer` | 3 | ⌘3 |
+| 7 | `settings` | 设置 | `\ue713` | `settings` | 8 | ⌘8 |
+| 8 | `tasks` | 下载任务 | `\ue9d5` | `tasks` | 6 | ⌘6 |
+| 9 | `download` | 下载 | `\ue896` | (分区键,`PageForNavKey` 里**没有**) | — | — |
+| 10 | `plugins` | 插件 | `\uea86` | `plugins` | 7 | ⌘7 |
+
+默认配置(分组式)下的**可见页面顺序** = `launch` → `instance` → `multiplayer` → `account` →
+`ai` → `tasks` → `plugins` → `settings`(共 8 项,所以默认只用到 ⌘1...⌘8;⌘9 没有第 9 页可去,
+`NavigateIndex` 越界时什么都不做 —— 与 Windows 的 `num < list.Count` 守卫一致)。
+侧栏行表(6 组)是:启动[launch]、库[instance, download, multiplayer]、社区[account]、
+AI 助手[ai]、工具[tasks, more]、设置[settings];`download` 分区默认展开为空、
+`more` 分区默认只剩 `plugins`(其余已被置顶占掉)。
+
+### 4. 接线:C2a 清单的落地情况
+
+| 挂点 | 状态 |
+|---|---|
+| `AppServices.Window` | ✅ 外壳构造时置成本窗口(C2a 放宽成 `Window?`,页面用 `AppServices.Window as MainWindow` / `PageBase.Win`) |
+| `Dlg.Host` | ✅ 接主窗口的 `DialogHost`(跨两行、初始 `IsVisible=false`) |
+| `Dlg.BlurTarget` | ✅ 接 `ContentLayer`(标题栏 + 内容那层,Windows 同名) |
+| `Motion.Enabled` / `Motion.Scale` | ✅ 跟着注入的 `UiPrefs.Anim` / `AnimScale`(夹 0.4~2.2)。注意 `Motion.Enabled` 的 getter 含"有没有时钟",离屏/测试里恒 false(D-69),所以动画开关**不会**让离屏像素变 |
+| `Dlg.SmokeActive` / `SmokeAutoAnswer` / `SmokeAutoCancelSystemDialog` | ✅ 由 `SmokeState.Activate()` 在 `--smoke` 里一次接上三个(收摊原样还原);自动应答优先点「取消/关闭/知道了」这类安全按钮,一个都没有就关浮层,绝不点破坏性按钮(`NeverClick` 16 项照抄) |
+| `AppServices.ToastSink` | ⚠️ **仍为空**(占位,理由见 D-95):Toast 卡片是 C2c 的视觉件,本包不画;为空时 `AppServices.Toast` 只写调试输出(不抛、不改状态) |
+| 后端启动 | ⚠️ **本包不启动**(见 D-96):`MainWindow.BridgeReady` 默认 false,页面能切、能显示,但 `LoadAsync` / `OnShown` 不跑 —— 与 Windows"还没连上后端时不加载页面"的状态一致;后端接线包把它置 true 即可 |
+
+### 5. 从 Windows 复制的文件与对它们的每一处改动
+
+| Windows 源 | 改动 |
+|---|---|
+| `NavModel.cs` | **语义零改动**:逐行照搬(只把反编译出来的 `text2` / `num` 之类改回可读名字,顺手把 `order.Contains(item: top)` 这类反编译残留写法写回正常调用) |
+| `NavConfig.cs` | 同上;`FromJsonString` 那条"测试宿主 STJ 版本差异"的注释保留(它是 `Ported\NavCompatTests` 的入口) |
+| `NavEntry.cs` | 逐字;只删掉反编译器的私有拷贝构造函数(`[CompilerGenerated]`) |
+| `NavEntryKind.cs` / `NavGroup.cs` | 逐字 |
+| `NavDef.cs` | **唯一差异**:`Func<PageBase> Create` → `Func<PageBase>? Create`(mac 侧到 C2b 还没有任何页面,工厂留空、由 `PageRegistry` 注册;见 D-94) |
+| `Pages\PageBase.cs` | 三处:`Win` 由 `protected static` 降为 `internal static`(`MainWindow` 是 internal,public 类型上不能有暴露 internal 类型的 protected 成员,CS0053;程序集内派生页面照样不带前缀直接用);`Toast(...)` 改走 `AppServices.Toast`(外壳的 Toast 方法属 C2c);`Smoke.Note` / `OperationStarted` / `OperationFinished` → `SmokeState.*`(D-93)。**`EnableDrop` 未移植**(它要 `FileDrop.DropContext`,属 C2c,见第 8 节) |
+| `MainWindow.xaml` / `MainWindow.xaml.cs` | 只取"窗口尺寸/标题栏/RootBorder/ContentLayer/TopBar/PageHost/ToastHost/DialogHost + `Navigate` / `GetPage` / `VisibleFlatOrder` / `NavOrderIndex` / `SyncTabs` / `ApplyNavSettings` / `LoadUiPrefs` / `SaveUiPrefs` / `OnShortcut`"这些**外壳自身**的部分;Windows 的 caption 按钮、顶栏页签、AI/主题/账号圆片、Dock、Wallpaper/Backdrop/DropVeil/Bridge 连接逻辑都**没有**搬(分别属 C2c 或后端接线) |
+| `Smoke.cs` | 只取 `Active` / `Note` / `OperationStarted` / `OperationFinished` / `AutoAnswerDialog` / `AutoCancelSystemDialog` 与两张按钮表(`SafeButtons` 35 项、`NeverClick` 16 项照抄);离屏报告落盘、进程守护那些属 D1 |
+| `Smoke\SmokeOptions.cs` / `SmokeRunner.cs` | 只动上面第 4 节那两处(注入默认 `UiPrefs` + `SmokeState.Activate()` + `--page` 真的尝试切页);CLI 契约与退出码一字未改 |
+
+### 6. WPF → Avalonia / mac 特有差异(逐条)
+
+1. **`Smoke` → `SmokeState`**:mac 侧 `TipCL.Smoke` 已经是**命名空间**(`SmokeOptions` /
+   `SmokeRunner` 在里面),同名的类型与命名空间并存直接编译失败(实测 CS0101),
+   所以类名改了、成员名照旧(D-93)。C3 页面里 `Smoke.Active` → `SmokeState.Active`。
+2. **`NavDef.Create` 可空 + `PageRegistry`**:页面工厂从导航表里挪到注册表,理由与用法见 D-94。
+3. **`PageHost` 独立成控件**:Windows 里这段逻辑长在 `MainWindow` 上;mac 侧抽出来是为了在
+   "还没有任何页面"的阶段也能单测缓存/换页/生命周期语义。语义逐条对齐(见第 1 节的 3.)。
+4. **侧栏是 mac 重建的**:Windows 现状是顶栏 5 页签(侧栏已从可视树撤掉),但任务书明确要
+   「侧栏宽度取 `UiPrefs.SideWidth`」,所以按 `NavModel` 的行表重建侧栏;导航数据、页面 id 的
+   绑定关系与 Windows 完全一致。行的视觉用 C1b 已有的 `Tab.Top`(`tab-top`)类选择器,
+   **没有新增任何类名/样式**。
+5. **标题栏右侧不画东西**:Windows 的 AI / 主题 / 账号三块圆片与三个 caption 按钮都不画;
+   主题切换与 AI 入口放在系统菜单的「操作」里(⌘K 与菜单项)。
+6. **`ToastHost` 只留空宿主**、`Dlg.BlurTarget` 用 `Control`(Windows 是 `FrameworkElement`)、
+   `Focusable`/`IsVisible` 等按 C1b/C1c 的既有映射。
+7. **偏好文件名仍是 `wpf-ui.json`**(与 Windows 同名,落在数据目录 `~/.tipcl`)。
+8. `--smoke` **注入默认 `UiPrefs`、不读盘**(离屏像素不随用户数据变);生产路径才读
+   `~/.tipcl/wpf-ui.json`,且 `SaveUiPrefs` 不在启动/切主题时自动调用。
+
+### 7. `--smoke` 对比:旧基准 → 新基准(像素变化的原因)
+
+| 主题 | 旧(A1/C1b/C1c/C2a 基准) | 新(C2b) | 变化原因 |
+|---|---|---|---|
+| light | 3956 字节 `9F93EF3E0775A7D3FC07787F36BCEAE2B855CD24E06420A4BDBEB90DFD628F8C` | **21823 字节** `8336CA136B4F309D8275490578B8759E680AB5A1D8B861659D082802FE60449B` | 窗口不再只有一块随主题变色的底板:现在画 46px 标题栏(品牌方块 + "TipCL")、196px 宽侧栏(6 个分组头 + 9 行条目,每行带图标字形)、右侧页面底纹与空的页面宿主 |
+| dark | 3941 字节 `F687E6CD1CE48B078040040775167484890C58A18DFEBF4BD3B6125F151E117E` | **18200 字节** `DBD3C171D7E176F12F9CE05335E7E96A0CE21F1135A4CC1E2CCADD5564AD604E` | 同上 |
+
+明暗两张**不是**同一个哈希(light ≠ dark),`--page home --theme dark` 与 `--theme dark` 逐字节相同
+(`home` 不是页面 id,`Navigate` 静默不切页 —— 与 C1a/C1b 的 `--page` 行为一致)。
+
+像素取证(用 Pillow 直接读新图,不是肉眼):
+
+- 第 23 行 x∈[1,78] 是纯背景色(light `#FEFEFE` / dark `#1B1B1B`)—— 78px 的红绿灯让位区**没有**画任何内容;
+- 第 23 行 x≈96 是品牌方块的绿(light `(29,108,75)` / dark `(34,109,77)` = `B.LogoFill` 渐变);
+- 第 300 列:y∈[1,45] 是标题栏色(`#FEFEFE` / `#1B1B1B` = `B.TitleBar`),y≥47 才是 `B.PageWash` 渐变 → 标题栏恰好 46px;
+- 第 300 行:x∈[1,195] 是 `B.Side`(`#FAFAFA` / `#1A1A1A`),x≥197 才是页面底纹 → 侧栏 196px(默认 `SideWidth`);
+- 与旧基准逐像素比:light **87.18%**、dark **99.42%** 的像素变了(整窗重画),符合"新增标题栏 + 侧栏 + 页面宿主"的预期。
+
+### 8. 测试(新增 122 条用例;总数 2467 → 2593)
+
+本包新增 **79 个测试方法**(`[Fact]` 35 + 26 + 18),`[Theory]` 展开后共 **122 条用例**
+(67 / 31 / 24);再加上恢复编译的 `Ported\NavCompatTests`(4 条),总数 2467 → 2593。
+
+- `C2bNavTests.cs`(35 个方法 / 67 条用例):页面 id 表逐项对拍、每个导航键都绑到一个页面 id、
+  大小写敏感与"分区键不是页面"、模型常量与 Windows 表逐项相等、四个可见性/顺序规则的用例
+  (分组式行表、默认可见顺序、隐藏规则、精简式的撑条位置)、分组布局的三个分支、
+  pin/unpin/reorder/merge/write 的补丁计算与错误文案、`NavUntouched` 的新旧默认值、
+  `FromJsonString` 的容错、`Clone`/`With` 的深拷贝、`PageRegistry` 的注册/大小写/快照还原。
+- `C2bShellTests.cs`(26 个方法 / 31 条用例):尺寸与最小尺寸、标题栏 46px 与 78px 让位、
+  红绿灯扩展标志、没有 caption 按钮、侧栏宽度跟 `UiPrefs.SideWidth`(含上下限与 0 兜底)、
+  侧栏行表、行控件类型与类名、选中态跟当前页、点条目切页而分区行不切、
+  `ApplyNavSettings` 重建侧栏与菜单、页面宿主为空、未知 id 不切页、宿主换页/生命周期/缓存/
+  `runHooks` 门、`MainWindow.BridgeReady` 门、⌘R 刷新、可见顺序与位次、菜单两块子菜单、
+  页面菜单项的 ⌘1...⌘9 映射与标签、操作菜单四项、程序化触发菜单命令切页、`NavigateIndex`、
+  主题开关、键位映射纯函数、⌘K 的守卫。
+- `C2bWiringTests.cs`(18 个方法 / 24 条用例):`AppServices.Window`、`Dlg.Host`/`BlurTarget`、
+  ToastSink 留空(占位)、`Motion` 用户开关与 4 档倍率夹取、离屏三个挂点接上并还原、
+  离屏 `Confirm`/`Alert` 自动应答、系统文件对话框自动取消(不碰磁盘)、自动应答选按钮策略、
+  离屏记账(只记操作/笔记)、`PageBase.Run` 的失败路径、失败页面的 Smoke 笔记、
+  `Motion.Loop` 关闭时两分支都不走、`Skeleton` 关闭时落静态终态、
+  `SmoothScroll` 的滚轮守卫与"不平滑"、`Lucide.MotionEnabled` 双向转发、Lucide 无时钟下不抛。
+- 另外**恢复** `Ported\NavCompatTests.cs` 的编译(4 条,断言一字未改):导航数据一就位它就能编了。
+
+### 9. 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | 开工前 `%LOCALAPPDATA%\TipCL` 测量 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与 Lead 基线一致 |
+| 2 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 0,**0 错误**;警告 = `NU1900`(镜像服务索引取不到,6 条,纯净度受网络影响)+ `SYSLIB0014` **唯一一处**(`src\TipCL.Core\Launcher\Sync\PhoneClient.cs:116`),与要求一致 |
+| 3 | `dotnet test TipCL.Mac.sln -c Release --no-build` 第 1 次 / 第 2 次 | 都是**退出码 0**:`失败: 0,通过: 2593,已跳过: 0,总计: 2593` |
+| 4 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` 第 1 次 / 第 2 次 | 都是**退出码 0**:`总计 2593 个用例,通过 2593,失败 0,跳过 0,不支持 0` |
+| 5 | `--smoke --theme light` / `--theme dark` / `--page home --theme dark` / `--theme blue` | 退出码 **0 / 0 / 0 / 2**;light 21823 字节 / dark 18200 字节(哈希与原因见第 7 节);`--page home --theme dark` 与 dark 逐字节相同;`blue` 报参数错误并打用法(退出码 2) |
+| 6 | 收工后 `%LOCALAPPDATA%\TipCL` | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,**与开工前完全一致** |
+| 7 | 残留进程 `testhost` / `TipCL` / `java` / `adb`;`%TEMP%` 下 `tipcl*` 目录 | **0 个**;本次会话新建 **0 个**(现存 89 个全是历史遗留,`tipcl-probe` 属别的会话) |
+| 8 | `git diff --name-status 17615cd HEAD -- src/TipCL.Core` | **空** |
+| 9 | `src\TipCL.Core\*.cs` 对 Windows 源 SHA256(排除 `obj\`/`bin\`) | mac 侧 248 个:有对应物 **238** / 完全一致 **216** / 有改动 **22** / 无对应物 **10**,与基线**完全一致** |
+
+### 10. 未验证项(本机是 Windows,没有 Mac)
+
+1. **macOS 真机上的一切**:红绿灯是否正好落在 78px 让位区里、`NativeMenu` 是否真的出现在系统
+   菜单栏(Windows 上 `NativeDock.SetMenu` 不显示菜单,所以本包只做对象层断言)、标题栏拖动是否好用、
+   `ExtendClientAreaTitleBarHeightHint=46` 在 macOS 上的实际效果 —— 全部**未验证**。
+2. **"动画开着"那条分支**:`Motion.Enabled` 需要 `Application.ApplicationLifetime != null`,
+   而 Avalonia 在初始化之后**禁止**再改它(实测抛
+   `InvalidOperationException: It's not possible to change ApplicationLifetime after Application
+   was initialized`),C1b-fix 又只允许 `AvaloniaSession` 一处起平台。所以
+   `Skeleton` 真的横扫、`SmoothScroll` 真的平滑这两条只在**真桌面运行**时才走得到,
+   本包只能验"关掉时落终态"那一半。
+3. **关掉平滑时"立刻滚到目标"**这一步:headless 里 `ScrollViewer` 的 `Extent`/`Viewport` 读到 **0**
+   (实测),基类 `Offset` 会被夹回 0,`MouseWheel` 也不产生系统滚动 → 只验了守卫
+   (`ShouldSmoothWheel == false`)与 `Offset` 的往返(与 C1c 的同名断言同一口径)。
+4. **后端从未真正启动**:`EnsureCore`(真正拉起 `BackendApi` + `BridgeServer`)按 D-23 仍未跑过,
+   这也是 GOAL 里"后端能不能真的跑起来"的最后一个未验证点(见 D-96 的取舍)。
+5. `--smoke` 只截主窗口一帧;菜单、快捷键、对话框在这些用例里都是**对象层 / 程序化触发**,没有一次真实点击或按键。
+
+### 11. 遗留与风险
+
+1. **C2c 要补的视觉件与挂点**:Toast 卡片 + `ToastSink` 接线、DropVeil + `FileDrop` +
+   `PageBase.EnableDrop`(它要 `FileDrop.DropContext`,本包故意没搬)、Backdrop / Wallpaper /
+   SideFrost / ImeGuard / AccountGate / Thumbs / LoaderIcons、下载任务底条(Dock)、
+   标题栏右侧的 AI / 主题 / 账号圆片。
+2. **C3 页面接入方式**:页面包在自己的文件里 `PageRegistry.Register("launch", () => new LaunchPage())`
+   即可(`NavDef.Create` 那一格也留着了);页面 id 必须来自第 3 节那张表,否则 `Navigate` 不会认。
+3. **`BridgeReady` 是页面加载的总闸**:后端接线包必须把它置 true,否则页面永远只是空壳
+   (Windows 的 `_bridgeReady` 同义);这条已经在 PROGRESS 的接线表里标成"待接线包"。
+4. **一个流程失误(如实报告)**:改 `src\TipCL.App\Smoke\SmokeState.cs` 时我误用了
+   `Get-Content ... | Set-Content`(D-36 明确禁止)。当场核验了字节:文件仍是 UTF-8 无 BOM、
+   中文完好(抽查「离屏」「自动应答」都在、无 mojibake、行尾仍是 LF),之后一律改用 edit/write 工具。
+5. `NavDump.cs` **没有搬**:mac 侧没有任何调用点(Windows 也只被 `App.xaml.cs` 的 `--nav-dump`
+   用),D1 若要做 `--nav-dump` 自检需单开小包。
+6. `Motion.Enabled` 的 getter 与 setter 语义不对称(读含时钟、写只写用户开关)**没有改**:
+   C1a 的 `Shimmer` 用例会在无时钟进程里把用户开关置 true 并断言"渐变刷子被建出来",
+   改 getter 会直接把那两条既有用例打红。`Lucide.MotionEnabled` 的转发因此保持 C2a 的样子
+   (读 `Motion.UserEnabled`、写 `Motion.Enabled`),本包只加了两条钉住它语义的用例。

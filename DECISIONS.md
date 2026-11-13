@@ -1233,3 +1233,82 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   属页面阶段(C3+)。本包只搬这两个自足的文件(只依赖 `System.Text.Json` /
   `System.Collections.Generic`),为的是保住 `BridgeEvent` 的公开成员一个不缺。
 - **后续搬 `Models\` 整目录时不要再搬这两个**(会重复定义)。
+
+## D-93 C2b:离屏状态那个静态类在 mac 侧叫 `SmokeState`(不叫 `Smoke`)
+
+- Windows 里它是 `TipCL.Smoke`(根命名空间下的静态类),而 mac 侧 `TipCL.Smoke` **已经是命名空间**
+  (`SmokeOptions` / `SmokeRunner` 在里面)。同名类型与同名命名空间并存会直接编译失败
+  (本机实测 `error CS0101: 命名空间"TipCL"已经包含"Smoke"的定义`)。
+- 处理:成员名照抄(`Active` / `Note` / `OperationStarted` / `OperationFinished` /
+  `AutoAnswerDialog` / `AutoCancelSystemDialog`),类名改成 `SmokeState`,落在同一个 `TipCL.Smoke`
+  命名空间里。**C3 页面里 `Smoke.X` 一律写 `SmokeState.X`**(本包已把 `PageBase` 里的两处改好)。
+- 没有去动 Windows 里那份 `Smoke.cs` 的其它成员(离屏报告落盘、进程守护) —— 那些属 D1。
+
+## D-94 C2b:页面工厂走 `PageRegistry`;`NavDef.Create` 可空
+
+- Windows 的 `MainWindow.NavDefs` 直接把页面类型写死(`() => new LaunchPage()`)。mac 版按 GOAL 是
+  一页一包(C3+),C2b 时页面类还不存在,所以把"页面 id → 建页工厂"抽成
+  `TipCL.Pages.PageRegistry`(注册/注销/快照/还原),`NavDef.Create` 在 mac 侧允许为 null。
+- 为什么不直接 `new` 一个占位页:那等于凭空造页面(任务书明确不许),而且 C3 还得再删。
+- 语义仍然与 Windows 对齐:`GetPage(未知 id)` 返回 null(不抛),`Navigate(未知 id)` 静默不切页;
+  id 一律**序号比较**(大小写敏感)。
+- C3 用法:`PageRegistry.Register("launch", () => new LaunchPage());`(`NavDef.Create` 那一格也留着了,
+  想写死工厂的包可以直接填)。
+
+## D-95 C2b:`AppServices.ToastSink` 仍然留空(不画 C2c 的 Toast 卡片)
+
+- 任务书给了两条路:"最小可用的窗口内 Toast 宿主"或"留调试 sink 并说明"。选后者:
+  Windows 的 Toast 卡片(`MainWindow.Toast`,含 4 张上限、图标/颜色按 kind、进出场动画)是
+  **C2c 的视觉件**,本包画一个最小版等于凭空造视觉,还会白改一次冒烟像素。
+- 现状:`AppServices.Toast(...)` 在没有宿主时只写 `Debug.WriteLine`(不抛、不改状态,与 D-84 的
+  `Ui.OpenUrl` 同一口径);主窗口里那个 `ToastHost` 面板是空占位,给 C2c 用。
+- 影响:C2b/C3 期间页面弹 Toast 看不到东西(只在调试输出里);这是**已知且刻意**的降级。
+  C2c 把外壳的 Toast 方法挂到 `ToastSink` 之后,把 `C2bWiringTests` 里那条"留空"的断言改掉即可。
+
+## D-96 C2b:**不启动后端**;页面加载由 `MainWindow.BridgeReady` 把关
+
+- C2a 的验收说 `EnsureCore` 的真实启动"归 C2b 的接线验收或 D1"。本包选**不做**,理由:
+  1. 任务书给 C2b 的接线清单里没有它(列的是 `Window` / `ToastSink` / `Dlg.Host` / `BlurTarget` /
+     `Motion.Enabled` / 三个离屏挂点);
+  2. 按 D-23,这条路径在测试里不许跑;本机又无法验证"真跑起来"的界面行为,做了也只能标未验证;
+  3. 无人值守下让外壳在启动时拉起 `BackendApi` + `BridgeServer`(网络预热、插件扫描、MCP)
+     风险大于收益,而且会把 `--smoke` 的确定性搭进去。
+- 结果:`MainWindow.BridgeReady` 默认 false,页面能切、能显示,但**不**跑 `LoadAsync` / `OnShown`
+  —— 这正是 Windows"还没连上后端时不加载页面"的状态(Windows 的 `_bridgeReady` 门)。
+  后端接线包只要 `window.BridgeReady = true` 就能打开总闸;这条已写进 PROGRESS 的接线表与遗留。
+
+## D-97 C2b:侧栏是 mac 侧按 `NavModel` 重建的;标题栏右侧不画圆片;Dock 不搬
+
+- Windows 现状是顶栏 5 页签(侧栏已从可视树撤掉),但任务书明确要"侧栏 + 宽度取
+  `UiPrefs.SideWidth`",所以侧栏按 `NavModel.NavItemsFromConfig` 的行表重建(分组头 / 条目的键、
+  标签、顺序、隐藏规则全部与 Windows 一致),宽度夹在 `SideMinWidth=140` ~ `SideMaxWidth=320`。
+  视觉只复用 C1b 已有的 `Tab.Top`(`tab-top`)类选择器,**没有新增类名、没有改样式表**。
+- 标题栏左边照 Windows 画 logo + "TipCL",并让出 78px 给系统红绿灯;**右边什么都不画**:
+  Windows 的 AI / 主题 / 账号圆片与三个 caption 按钮都不要(任务书:不画 Windows 式按钮)。
+  主题切换与 AI 入口因此放进系统菜单的「操作」里。
+- 底部的下载任务条(Dock,`BuildDock`/`SyncDock`)与 Toast 一样属视觉件,**不搬**,留给 C2c。
+
+## D-98 C2b:两个 Motion 遗留点的改法;"动画开着"那条分支在测试进程里不可达
+
+- `Ui.Skeleton`:Windows 就是 `Motion.Loop(起横扫, 停横扫)`,改成一样(新增私有 `StartGlide`);
+  关掉动画时**两分支都不走**(`Motion.Loop` 只在状态翻转时回调),横扫停在起点 -90 = 静态灰条。
+  公开签名一字未动。
+- `SmoothScroll`:守卫改回读 `Motion.Enabled`(用户开关 && 有时钟),并抽了一个 internal 的
+  `ShouldSmoothWheel` 让两条分支能被告知式地验;`AnimateTo` 在没有时钟时**直接落终态**
+  (把偏移设到目标),与"关掉平滑"的观感一致。公开签名一字未动。
+- `Lucide.MotionEnabled` 的转发**保持 C2a 的样子**(读 `Motion.UserEnabled`、写 `Motion.Enabled`):
+  改成读 `Motion.Enabled` 会把 C1a 两条既有用例打红(它们在无时钟进程里把用户开关置 true 并断言
+  "渐变刷子被建出来"),而"不许改弱既有断言"是红线。本包只补了两条钉住它语义的用例。
+- `Motion.Enabled` 需要 `Application.ApplicationLifetime != null`,而 Avalonia **初始化之后禁止再改它**
+  (实测抛 `InvalidOperationException: It's not possible to change ApplicationLifetime after
+  Application was initialized`),C1b-fix 又只允许 `AvaloniaSession` 一处起平台 ⇒
+  "动画开着"那条分支在测试进程里结构上不可达,只能靠真桌面运行验证。已列入未验证项。
+
+## D-99 C2b:偏好文件名仍是 `wpf-ui.json`;`--smoke` 注入默认偏好、不读盘
+
+- `UiPrefs` 与 Windows 同名同文件(`~/.tipcl/wpf-ui.json`,数据目录由 `BridgeHost.FindRoot()` 给),
+  没有改成 mac 风味的新名字:字段与语义与 Windows 完全一致,换名只会让 C3 的偏好读写对不上。
+- `MainWindow(prefs)` 允许注入:`--smoke` 与测试注入一份默认 `UiPrefs`(离屏像素不随用户数据变),
+  只有生产路径才读盘(只读,读不到/读坏一律回默认值,不抛)。
+- `SaveUiPrefs()` 保留但**不在启动 / 切主题时自动调用**:避免在离屏与测试里碰用户数据;
+  将来由设置页(或收尾时的显式保存)调用。

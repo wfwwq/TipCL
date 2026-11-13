@@ -132,23 +132,25 @@ internal sealed class MainWindow : Window
 
 		_prefs = prefs ?? new UiPrefs();
 
-		// ---- 可视树(照 Windows 的 MainWindow.xaml 搭)----
+		// ---- 可视树(照 Windows 的 MainWindow.xaml 搭;Name 也照 Windows 的 x:Name 起名)----
 		_brand = Ui.Txt("TipCL", 14.0, bold: true).VCenter();
 		_topBar = BuildTopBar();
-		_navGrid = new Grid();
+		_navGrid = new Grid { Name = "NavGrid" };
 		_sidebar = BuildSidebar();
-		_host = new PageHost(ResolvePage);
+		_host = new PageHost(ResolvePage) { Name = "PageHostCtl" };
 		_bodyGrid = BuildBody();
 		_contentLayer = BuildContentLayer();
-		_dialogHost = new Grid { IsVisible = false };
+		_dialogHost = new Grid { Name = "DialogHost", IsVisible = false };
 		_toastHost = new StackPanel
 		{
+			Name = "ToastHost",
 			HorizontalAlignment = HorizontalAlignment.Right,
 			VerticalAlignment = VerticalAlignment.Top,
 			Margin = new Thickness(0.0, 12.0, 16.0, 0.0)
 		};
 		_rootBorder = new Border
 		{
+			Name = "RootBorder",
 			CornerRadius = new CornerRadius(8.0),
 			BorderThickness = new Thickness(1.0),
 			Child = BuildRoot()
@@ -314,7 +316,7 @@ internal sealed class MainWindow : Window
 
 	private Grid BuildContentLayer()
 	{
-		Grid layer = new Grid();
+		Grid layer = new Grid { Name = "ContentLayer" };
 		layer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(TitleBarHeight) });
 		layer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1.0, GridUnitType.Star) });
 		layer.Children.Add(_topBar);
@@ -331,7 +333,7 @@ internal sealed class MainWindow : Window
 		area.Children.Add(_host);
 		Border divider = new Border { BorderThickness = new Thickness(0.0, 1.0, 0.0, 0.0) };
 
-		Grid body = new Grid();
+		Grid body = new Grid { Name = "BodyGrid" };
 		body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(SidebarWidth) });
 		body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
 		body.Children.Add(_sidebar);
@@ -362,7 +364,7 @@ internal sealed class MainWindow : Window
 		left.Children.Add(logo);
 		left.Children.Add(_brand);
 
-		Grid row = new Grid();
+		Grid row = new Grid { Name = "TopBarRow" };
 		row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 		row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
 		row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -370,6 +372,7 @@ internal sealed class MainWindow : Window
 
 		Border bar = new Border
 		{
+			Name = "TopBar",
 			Height = TitleBarHeight,
 			BorderThickness = new Thickness(0.0, 0.0, 0.0, 1.0),
 			Child = row
@@ -395,6 +398,7 @@ internal sealed class MainWindow : Window
 		};
 		return new Border
 		{
+			Name = "Sidebar",
 			BorderThickness = new Thickness(0.0, 0.0, 1.0, 0.0),
 			Padding = new Thickness(0.0, 8.0, 0.0, 8.0),
 			Child = scroll

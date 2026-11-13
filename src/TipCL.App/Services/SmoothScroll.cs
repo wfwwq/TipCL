@@ -104,12 +104,19 @@ public sealed class SmoothScroll : ScrollViewer
     }
 
     /// <summary>
+    /// 滚轮要不要走"平滑"这条路:与 Windows 的守卫同一句 —— <c>!Motion.Enabled || ScrollableHeight &lt;= 0</c>
+    /// 时交给基类(系统的滚轮滚动),否则自己做 230ms 的三次缓出。
+    /// 抽成一个可读的成员,是为了让这两条分支能被告知式地验(见 C2b 的用例)。
+    /// </summary>
+    internal bool ShouldSmoothWheel => Motion.Enabled && ScrollableHeight > 0.0;
+
+    /// <summary>
     /// 滚轮:按住时按 230ms 三次缓出滚到目标位置(WPF 版同样用 <c>Motion.Enabled</c> 决定要不要平滑)。
     /// <c>_target</c> 在同一次连续滚动里累计,动画结束后复位(与 WPF 版的 <c>Completed</c> 回调等价)。
     /// </summary>
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
-        if (!Motion.Enabled || ScrollableHeight <= 0.0)
+        if (!ShouldSmoothWheel)
         {
             base.OnPointerWheelChanged(e);
             return;

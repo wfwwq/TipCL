@@ -47,7 +47,9 @@
          src\TipCL.App\Services 了,这个文件现在能编。按 A6 的 B 类路径规则改了 2 处:
          两处 Path.GetTempPath() 改成 TestHome.Root(红线:测试临时文件必须落在仓库内),
          断言一字未改;改动逐条记在 PROGRESS.md 的 C2a 小节。 -->
-    <Compile Remove="Ported\NavCompatTests.cs" />          <!-- using TipCL.Services + TipCL(导航)→ 恢复包 C2(外壳/导航) -->
+    <!-- C2b(2026-11-13):Ported\NavCompatTests.cs 已恢复编译 —— NavModel / NavConfig / NavDef /
+         NavEntry / NavGroup / NavEntryKind 已按 Windows 源移植进 src\TipCL.App,这个文件现在能编。
+         断言一字未改(文件本身未动)。 -->
     <Compile Remove="Ported\PageLayoutTests.cs" />         <!-- using TipCL.Pages → 恢复包 C3(对应页面) -->
     <Compile Remove="Ported\LayoutDefaultTests.cs" />      <!-- 3 条只用 Core,1 条用 TipCL.Pages.DashLayout → 整文件归 C,恢复包 C3(启动页布局) -->
     <Compile Remove="Ported\StaticInitOrderTests.cs" />    <!-- 读 src/TipCL/Pages/SettingsPage.cs 源码 → 恢复包 C3(设置页) -->
