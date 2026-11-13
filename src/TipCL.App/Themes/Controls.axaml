@@ -1,0 +1,983 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+  <!-- C1b:Windows 版 Themes\Controls.xaml 的 Avalonia 移植(控件样式表)。
+       移植约定(WPF 样式键 -> Avalonia 类名)只在一处定义:src\TipCL.App\Themes\StyleKeys.cs。
+       本文件里每条类选择器上方都写着固定的对应注释 "WPF键 -> .类名",每一节都尽量保持
+       Windows 版的书写顺序;WPF 的 ControlTemplate + Trigger 换成 Avalonia 的
+       ControlTheme + 伪类(:pointerover / :pressed / :focus-visible / :checked / :disabled)。
+       哪些地方 WPF 与 Avalonia 没有等价物,见 PROGRESS.md 的 C1b "视觉差异" 表。 -->
+
+  <Styles.Resources>
+    <ResourceDictionary>
+
+      <!-- ==== 令牌(Windows 版同名的 F.* / CR.* / D.* / E.*) ==== -->
+      <!-- F.Icon:内置图标字体(C1a 的 avares 字体族)+ 两个 Windows 系统图标字体兜底,
+           逗号列表本机实测能被 Avalonia 解析(FontFamily.FamilyNames = 三个名字)。 -->
+      <FontFamily x:Key="F.Icon">avares://TipCL/Resources/fonts/TipCLIcons.ttf#TipCL Icons, Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+      <!-- F.Ui / F.Mono:字号列表取自 GOAL.md 第 3 节(mac 字体列表,覆盖 Windows 的写法)。 -->
+      <FontFamily x:Key="F.Ui">PingFang SC, Hiragino Sans GB, Microsoft YaHei UI, sans-serif</FontFamily>
+      <FontFamily x:Key="F.Mono">Menlo, Consolas, monospace</FontFamily>
+      <!-- v2 圆角:控件 8 / 卡片 12 / CR.Pill 只给数字角标 -->
+      <CornerRadius x:Key="CR.Card">12</CornerRadius>
+      <CornerRadius x:Key="CR.Ctl">8</CornerRadius>
+      <CornerRadius x:Key="CR.Pill">999</CornerRadius>
+      <!-- 时长:WPF 的 Duration "0:0:0.13" 在 Avalonia 里用 TimeSpan(Avalonia 的时间线只吃 TimeSpan)。 -->
+      <sys:TimeSpan x:Key="D.Fast">0:0:0.13</sys:TimeSpan>
+      <sys:TimeSpan x:Key="D.Med">0:0:0.22</sys:TimeSpan>
+      <!-- E.Out:WPF 是 CubicEase + EasingMode=EaseOut;Avalonia 没有带 EasingMode 的 CubicEase
+           (反射确认),等价物是 CubicEaseOut,缓动曲线完全一致。 -->
+      <CubicEaseOut x:Key="E.Out" />
+
+      <!-- ==== 按钮共用模板:WPF 的 BtnTpl + Btn.Base -> ControlTheme BtnBase ==== -->
+      <ControlTheme x:Key="BtnBase" TargetType="Button">
+        <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <!-- WPF 的 FocusVisualStyle={x:Null} 在 Avalonia 里对应 FocusAdorner={x:Null},
+             焦点环改由模板内的 Kf 描边画。 -->
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="Button">
+            <Grid Name="Root" RenderTransformOrigin="50%,50%">
+              <Border Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource CR.Ctl}" />
+              <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="{StaticResource CR.Ctl}">
+                <Border.Transitions>
+                  <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{StaticResource D.Fast}" />
+                  </Transitions>
+                </Border.Transitions>
+              </Border>
+              <!-- 键盘焦点环:FocusVisualStyle 被置空,改用模板内 2px 主题色描边(仅键盘焦点显示) -->
+              <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="{StaticResource CR.Ctl}" Opacity="0" IsHitTestVisible="False" />
+              <ContentPresenter Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}" FontWeight="{TemplateBinding FontWeight}" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Ov">
+          <Setter Property="Opacity" Value="0.07" />
+        </Style>
+        <Style Selector="^:pressed /template/ Border#Ov">
+          <Setter Property="Opacity" Value="0.14" />
+        </Style>
+        <Style Selector="^:pressed /template/ Grid#Root">
+          <Setter Property="RenderTransform" Value="scale(0.972)" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#Kf">
+          <Setter Property="Opacity" Value="0.9" />
+        </Style>
+        <Style Selector="^:disabled">
+          <Setter Property="Opacity" Value="0.45" />
+        </Style>
+      </ControlTheme>
+
+      <!-- ==== 窗口按钮模板:WPF 的 Btn.Caption(Btn.CaptionClose 建立在它之上)==== -->
+      <ControlTheme x:Key="BtnCaption" TargetType="Button">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="#00FFFFFF" />
+        <Setter Property="Foreground" Value="{DynamicResource B.CaptionInk}" />
+        <Setter Property="FontFamily" Value="{StaticResource F.Icon}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="Button">
+            <Grid Background="{TemplateBinding Background}">
+              <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" />
+              <ContentPresenter Name="PART_ContentPresenter" HorizontalAlignment="Center" VerticalAlignment="Center" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Ov">
+          <Setter Property="Opacity" Value="0.07" />
+        </Style>
+        <Style Selector="^:pressed /template/ Border#Ov">
+          <Setter Property="Opacity" Value="0.13" />
+        </Style>
+      </ControlTheme>
+
+      <!-- 关闭:模板自带矢量 X(忽略 Content),悬停 #C42B1C 满高 + 白色 -->
+      <ControlTheme x:Key="BtnCaptionClose" TargetType="Button" BasedOn="{StaticResource BtnCaption}">
+        <Setter Property="Template">
+          <ControlTemplate TargetType="Button">
+            <Grid Background="{TemplateBinding Background}">
+              <Border Name="Ov" Background="{DynamicResource B.CaptionHot}" Opacity="0" />
+              <Path Name="Gl" Width="10" Height="10" Stretch="None" Data="M0.5,0.5 L9.5,9.5 M9.5,0.5 L0.5,9.5" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.1" StrokeLineCap="Round" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Ov">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Path#Gl">
+          <Setter Property="Stroke" Value="{DynamicResource B.OnCaptionHot}" />
+        </Style>
+        <Style Selector="^:pressed /template/ Border#Ov">
+          <Setter Property="Opacity" Value="0.82" />
+        </Style>
+      </ControlTheme>
+
+      <!-- ==== 标题栏图标按钮模板:WPF 的 Btn.TitleIcon(Btn.TitleChip 建立在它之上)==== -->
+      <ControlTheme x:Key="BtnTitleIcon" TargetType="Button">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Background" Value="#00FFFFFF" />
+        <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="Button">
+            <Grid Background="#00FFFFFF">
+              <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="{StaticResource CR.Ctl}" />
+              <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="{StaticResource CR.Ctl}" Opacity="0" IsHitTestVisible="False" />
+              <ContentPresenter Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Ov">
+          <Setter Property="Opacity" Value="0.07" />
+        </Style>
+        <Style Selector="^:pointerover">
+          <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        </Style>
+        <Style Selector="^:pressed /template/ Border#Ov">
+          <Setter Property="Opacity" Value="0.13" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#Kf">
+          <Setter Property="Opacity" Value="0.9" />
+        </Style>
+      </ControlTheme>
+
+      <!-- ==== 分段/页签按钮模板(WPF 的 TabItemBtn / Tab.Top / Seg.Item)==== -->
+      <ControlTheme x:Key="TabItemBtnTheme" TargetType="ToggleButton">
+        <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Padding" Value="13,8" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="ToggleButton">
+            <Grid Background="#00FFFFFF">
+              <ContentPresenter Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" />
+              <Border Name="Un" Height="2.5" CornerRadius="2" VerticalAlignment="Bottom" Background="{DynamicResource B.Accent}" Opacity="0" RenderTransformOrigin="50%,50%" RenderTransform="scale(0.3,1)" Margin="6,0" />
+              <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="6" Margin="4,2" Opacity="0" IsHitTestVisible="False" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+          <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        </Style>
+        <Style Selector="^:checked">
+          <Setter Property="Foreground" Value="{DynamicResource B.AccentText}" />
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#Un">
+          <Setter Property="Opacity" Value="1" />
+          <Setter Property="RenderTransform" Value="scale(1,1)" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#Kf">
+          <Setter Property="Opacity" Value="0.9" />
+        </Style>
+      </ControlTheme>
+
+      <ControlTheme x:Key="TabTopTheme" TargetType="ToggleButton">
+        <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+        <Setter Property="Padding" Value="13,0" />
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="ToggleButton">
+            <Grid Background="#00FFFFFF">
+              <ContentPresenter Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" RecognizesAccessKey="True" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" />
+              <Border Name="Bar" Height="2.5" CornerRadius="1.25" Margin="13,0" VerticalAlignment="Bottom" Background="{DynamicResource B.Accent}" Opacity="0" />
+              <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="6" Margin="5,7" Opacity="0" IsHitTestVisible="False" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+          <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        </Style>
+        <Style Selector="^:checked">
+          <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+          <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#Bar">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#Kf">
+          <Setter Property="Opacity" Value="0.9" />
+        </Style>
+      </ControlTheme>
+
+      <ControlTheme x:Key="SegItemTheme" TargetType="ToggleButton">
+        <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+        <Setter Property="Padding" Value="13,6" />
+        <Setter Property="Margin" Value="0,0,4,0" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="ToggleButton">
+            <Grid>
+              <Border Name="Bd" Background="#00FFFFFF" CornerRadius="{StaticResource CR.Ctl}" />
+              <ContentPresenter Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" />
+              <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="{StaticResource CR.Ctl}" Opacity="0" IsHitTestVisible="False" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+          <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        </Style>
+        <Style Selector="^:checked">
+          <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+          <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#Bd">
+          <Setter Property="Background" Value="{DynamicResource B.SegOn}" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#Kf">
+          <Setter Property="Opacity" Value="0.9" />
+        </Style>
+      </ControlTheme>
+
+      <!-- ==== 输入框模板(WPF 的 Input;Input.Multi / Input.Log / Pw 都复用它)==== -->
+      <ControlTheme x:Key="InputTheme" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource B.Accent}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource B.Accent}" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="TextBox">
+            <Grid>
+              <Border Name="Bd" Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="{StaticResource CR.Ctl}" />
+              <Border Name="Fx" BorderBrush="{DynamicResource B.Accent}" BorderThickness="1.4" Opacity="0" CornerRadius="{StaticResource CR.Ctl}">
+                <Border.Transitions>
+                  <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{StaticResource D.Fast}" />
+                  </Transitions>
+                </Border.Transitions>
+              </Border>
+              <!-- 占位文字沿用 WPF 的做法:提示语放 Tag;空文本时才显示 -->
+              <TextBlock Name="Ph" Foreground="{DynamicResource B.InkFaint}" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" IsHitTestVisible="False" Text="{TemplateBinding Tag}" IsVisible="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
+              <!-- Avalonia 的 TextBox 按名字找这个 ScrollViewer 与里面的 TextPresenter
+                   (Fluent 自带主题用的就是 PART_ScrollViewer + PART_TextPresenter,
+                   编译期会检查 TextBox 模板必须带 PART_TextPresenter)。 -->
+              <ScrollViewer Name="PART_ScrollViewer" Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Auto">
+                <TextPresenter Name="PART_TextPresenter" Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" CaretIndex="{TemplateBinding CaretIndex}" SelectionStart="{TemplateBinding SelectionStart}" SelectionEnd="{TemplateBinding SelectionEnd}" SelectionBrush="{TemplateBinding SelectionBrush}" SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}" CaretBrush="{TemplateBinding CaretBrush}" PasswordChar="{TemplateBinding PasswordChar}" TextWrapping="{TemplateBinding TextWrapping}" TextAlignment="{TemplateBinding TextAlignment}" LineHeight="{TemplateBinding LineHeight}" LetterSpacing="{TemplateBinding LetterSpacing}" />
+              </ScrollViewer>
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Bd">
+          <Setter Property="BorderBrush" Value="{DynamicResource B.ScrollHover}" />
+        </Style>
+        <Style Selector="^:focus-within /template/ Border#Fx">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:disabled">
+          <Setter Property="Opacity" Value="0.5" />
+        </Style>
+      </ControlTheme>
+
+      <!-- ==== 滚动条滑块模板(WPF 的 ScrollThumb;ScrollBar 与 Slider 的 Thumb 都走它)==== -->
+      <ControlTheme x:Key="ScrollThumbTheme" TargetType="Thumb">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="Thumb">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}" />
+          </ControlTemplate>
+        </Setter>
+      </ControlTheme>
+
+      <!-- ==== 复选框 / 开关模板(WPF 的 Chk / Switch)==== -->
+      <ControlTheme x:Key="ChkTheme" TargetType="CheckBox">
+        <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="CheckBox">
+            <StackPanel Orientation="Horizontal" Background="#00FFFFFF">
+              <Grid Width="18" Height="18" VerticalAlignment="Center">
+                <Border Name="Bx" CornerRadius="6" Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1.4" />
+                <Border Name="Fill" CornerRadius="6" Background="{DynamicResource B.AccentStrong}" Opacity="0" RenderTransformOrigin="50%,50%" RenderTransform="scale(0.5,0.5)" />
+                <Path Name="Tick" Data="M0,4 L3.4,7.4 L9.4,1" Stroke="{DynamicResource B.OnAccentStrong}" StrokeThickness="1.8" Opacity="0" HorizontalAlignment="Center" VerticalAlignment="Center" StrokeLineCap="Round" />
+              </Grid>
+              <ContentPresenter Name="PART_ContentPresenter" Margin="9,0,0,0" VerticalAlignment="Center" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" FontSize="{TemplateBinding FontSize}" FontFamily="{StaticResource F.Ui}" />
+            </StackPanel>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Bx">
+          <Setter Property="BorderBrush" Value="{DynamicResource B.Accent}" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#Fill">
+          <Setter Property="Opacity" Value="1" />
+          <Setter Property="RenderTransform" Value="scale(1,1)" />
+        </Style>
+        <Style Selector="^:checked /template/ Path#Tick">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:disabled">
+          <Setter Property="Opacity" Value="0.45" />
+        </Style>
+      </ControlTheme>
+
+      <ControlTheme x:Key="SwitchTheme" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="CheckBox">
+            <Grid Width="40" Height="22" Background="#00FFFFFF">
+              <Border Name="Tr" CornerRadius="11" Background="{DynamicResource B.Line}" />
+              <Border Name="TrOn" CornerRadius="11" Background="{DynamicResource B.Accent}" Opacity="0" />
+              <Border Name="Kn" Width="16" Height="16" CornerRadius="8" Background="#FFFFFFFF" HorizontalAlignment="Left" Margin="3,0,0,0" RenderTransform="translate(0px,0px)" BoxShadow="0 1 4 0 #40000000" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:checked /template/ Border#TrOn">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#Kn">
+          <Setter Property="RenderTransform" Value="translate(18px,0px)" />
+        </Style>
+        <Style Selector="^:disabled">
+          <Setter Property="Opacity" Value="0.45" />
+        </Style>
+      </ControlTheme>
+
+      <!-- ==== 下拉框(WPF 的 Combo / ComboItem)==== -->
+      <ControlTheme x:Key="ComboItemTheme" TargetType="ComboBoxItem">
+        <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Grid Margin="4,1">
+              <Border Name="Bd" Background="#00FFFFFF" CornerRadius="{StaticResource CR.Ctl}" />
+              <ContentPresenter Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Bd">
+          <Setter Property="Background" Value="{DynamicResource B.Hover}" />
+        </Style>
+        <Style Selector="^:selected /template/ Border#Bd">
+          <Setter Property="Background" Value="{DynamicResource B.AccentSoft}" />
+        </Style>
+        <Style Selector="^:selected">
+          <Setter Property="Foreground" Value="{DynamicResource B.AccentText}" />
+        </Style>
+      </ControlTheme>
+
+      <ControlTheme x:Key="ComboTheme" TargetType="ComboBox">
+        <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <!-- WPF 的 ItemContainerStyle=ComboItem -> Avalonia 的 ItemContainerTheme -->
+        <Setter Property="ItemContainerTheme" Value="{StaticResource ComboItemTheme}" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <Border Name="Bd" Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="{StaticResource CR.Ctl}" />
+              <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="{StaticResource CR.Ctl}" />
+              <Path Name="Ar" Data="M0,0 L4.5,5 L9,0" Stroke="{DynamicResource B.InkMuted}" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,11,0" RenderTransformOrigin="50%,50%" />
+              <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" Margin="{TemplateBinding Padding}" IsHitTestVisible="False" VerticalAlignment="Center" HorizontalAlignment="Left" Foreground="{TemplateBinding Foreground}" FontSize="13" FontFamily="{StaticResource F.Ui}" />
+              <TextBox Name="PART_EditableTextBox" IsVisible="False" Margin="{TemplateBinding Padding}" Background="#00FFFFFF" BorderThickness="0" Padding="0" VerticalContentAlignment="Center" FontSize="13" Foreground="{DynamicResource B.Ink}" CaretBrush="{DynamicResource B.Accent}" FontFamily="{StaticResource F.Ui}" FocusAdorner="{x:Null}" />
+              <TextBlock Name="Ph" Text="{TemplateBinding Tag}" Foreground="{DynamicResource B.InkFaint}" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" IsHitTestVisible="False" IsVisible="{Binding !HasItems, RelativeSource={RelativeSource TemplatedParent}}" />
+              <Popup Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" VerticalOffset="4">
+                <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="12" MaxHeight="320" Margin="0,0,10,10" BoxShadow="0 3 18 0 #24101820" MinWidth="{Binding $parent[ComboBox].Bounds.Width}">
+                  <ScrollViewer Margin="0,5" VerticalScrollBarVisibility="Auto">
+                    <ItemsPresenter Name="PART_ItemsPresenter" />
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Ov">
+          <Setter Property="Opacity" Value="0.04" />
+        </Style>
+        <Style Selector="^:dropdownopen /template/ Border#Bd">
+          <Setter Property="BorderBrush" Value="{DynamicResource B.Accent}" />
+        </Style>
+        <Style Selector="^:dropdownopen /template/ Path#Ar">
+          <Setter Property="RenderTransform" Value="rotate(180deg)" />
+        </Style>
+        <Style Selector="^:editable /template/ TextBox#PART_EditableTextBox">
+          <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^:editable /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^:disabled">
+          <Setter Property="Opacity" Value="0.5" />
+        </Style>
+      </ControlTheme>
+
+      <!-- ==== 列表行(WPF 的 ListItemRow)==== -->
+      <ControlTheme x:Key="ListItemRowTheme" TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="ListBoxItem">
+            <Grid Margin="0,2">
+              <Border Name="Bd" Background="#00FFFFFF" CornerRadius="8" />
+              <Border Name="Sel" Background="{DynamicResource B.AccentSoft}" CornerRadius="8" Opacity="0" />
+              <ContentPresenter Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Bd">
+          <Setter Property="Background" Value="{DynamicResource B.Hover}" />
+        </Style>
+        <Style Selector="^:selected /template/ Border#Sel">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+      </ControlTheme>
+
+      <!-- ==== 滑块模板(WPF 的 Sld)==== -->
+      <!-- 说明:Avalonia 的 Track **不是** TemplatedControl(没有 Template 属性,编译期就会报),
+            它的三个部件(Thumb / DecreaseButton / IncreaseButton)是直接写在 Slider 模板里的,
+            写法与 WPF 的 Track.Thumb / Track.DecreaseRepeatButton 一样,只是用属性元素形式。 -->
+      <ControlTheme x:Key="SliderTheme" TargetType="Slider">
+        <Setter Property="Height" Value="24" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="Slider">
+            <Grid Background="#00FFFFFF" VerticalAlignment="Center">
+              <Border Height="5" CornerRadius="3" Background="{DynamicResource B.LineSoft}" VerticalAlignment="Center" />
+              <!-- Avalonia 的 Track 不自己拿 Slider 的值:模板里必须把它接上
+                   (本机实测:不接的话 Track 一直是 :vertical / Value=0,滑块不动)。 -->
+              <Track Name="PART_Track" Orientation="{TemplateBinding Orientation}" Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" Value="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                <Track.DecreaseButton>
+                  <RepeatButton Name="PART_DecreaseButton" Focusable="False" IsTabStop="False">
+                    <RepeatButton.Template>
+                      <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="{DynamicResource B.Accent}" Height="5" CornerRadius="3" VerticalAlignment="Center" />
+                      </ControlTemplate>
+                    </RepeatButton.Template>
+                  </RepeatButton>
+                </Track.DecreaseButton>
+                <Track.IncreaseButton>
+                  <RepeatButton Name="PART_IncreaseButton" Focusable="False" IsTabStop="False">
+                    <RepeatButton.Template>
+                      <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="#00FFFFFF" />
+                      </ControlTemplate>
+                    </RepeatButton.Template>
+                  </RepeatButton>
+                </Track.IncreaseButton>
+                <Track.Thumb>
+                  <Thumb Name="PART_Thumb" Width="18" Height="18" Background="#FFFFFFFF" BorderBrush="{DynamicResource B.Accent}" BorderThickness="4" CornerRadius="9" />
+                </Track.Thumb>
+              </Track>
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+        <!-- 注意:Avalonia 不允许连续两个 /template/(运行期抛 "ControlTemplate styles cannot
+             contain multiple template selectors"),所以这里只跳一层 —— 部件就写在上面这份模板里。 -->
+        <Style Selector="^ /template/ Thumb:pointerover">
+          <Setter Property="Width" Value="21" />
+          <Setter Property="Height" Value="21" />
+          <Setter Property="CornerRadius" Value="10.5" />
+        </Style>
+      </ControlTheme>
+
+      <!-- ==== 浮层提示(WPF 的隐式 ToolTip 样式;模板很简单,直接照 WPF 重画)==== -->
+      <ControlTheme x:Key="ToolTipTheme" TargetType="ToolTip">
+        <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+        <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Template">
+          <ControlTemplate TargetType="ToolTip">
+            <Border Background="{DynamicResource B.Paper}" BorderBrush="{DynamicResource B.Line}" BorderThickness="1" CornerRadius="8" Padding="9,6" Margin="6" BoxShadow="0 2 12 0 #21101820">
+              <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}" />
+            </Border>
+          </ControlTemplate>
+        </Setter>
+      </ControlTheme>
+
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <!-- ==== 隐式 TextBlock 样式 -> 类型选择器 TextBlock ==== -->
+  <!-- TextOptions.TextFormattingMode / TextRenderingMode / SnapsToDevicePixels 在 Avalonia 里
+       没有对应属性(渲染器不吃这些开关),这一条差异记在 PROGRESS.md 的差异表里。 -->
+  <Style Selector="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+
+  <!-- T.H1 -> .t-h1 -->
+  <Style Selector="TextBlock.t-h1">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="20" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- v2 页面标题:21px ExtraBold -->
+  <!-- T.PageTitle -> .t-page-title -->
+  <Style Selector="TextBlock.t-page-title">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="21" />
+    <Setter Property="FontWeight" Value="ExtraBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- v2 分组标题:卡片外上方的灰色小字 -->
+  <!-- T.GroupTitle -> .t-group-title -->
+  <Style Selector="TextBlock.t-group-title">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="Margin" Value="4,0,0,6" />
+  </Style>
+
+  <!-- T.H2 -> .t-h2 -->
+  <Style Selector="TextBlock.t-h2">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="17" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- T.H3 -> .t-h3 -->
+  <Style Selector="TextBlock.t-h3">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- T.Muted -> .t-muted -->
+  <Style Selector="TextBlock.t-muted">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <!-- T.Small -> .t-small -->
+  <Style Selector="TextBlock.t-small">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkFaint}" />
+  </Style>
+
+  <!-- T.Mono -> .t-mono -->
+  <Style Selector="TextBlock.t-mono">
+    <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+  </Style>
+
+  <!-- v2 卡片:白底无边框(保留 1px 透明边避免布局位移)、圆角 12。 -->
+  <!-- Card -> .card -->
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource B.Card}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.CardBorder}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{StaticResource CR.Card}" />
+    <Setter Property="Padding" Value="12" />
+  </Style>
+
+  <!-- 分段控件的灰色轨道:里面放若干 Seg.Item -->
+  <!-- Seg.Rail -> .seg-rail -->
+  <Style Selector="Border.seg-rail">
+    <Setter Property="Background" Value="{DynamicResource B.SegRail}" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="3" />
+  </Style>
+
+  <!-- ==== 滚动条 ==== -->
+  <!-- 隐式 Thumb 样式 -> 类型选择器 Thumb(ScrollBar 的滑块与 Slider 的滑块都走这份模板) -->
+  <Style Selector="Thumb">
+    <Setter Property="Theme" Value="{StaticResource ScrollThumbTheme}" />
+    <Setter Property="Background" Value="{DynamicResource B.Scroll}" />
+    <Setter Property="CornerRadius" Value="4" />
+  </Style>
+
+  <!-- ScrollThumb -> .scroll-thumb -->
+  <Style Selector="Thumb.scroll-thumb">
+    <Setter Property="Theme" Value="{StaticResource ScrollThumbTheme}" />
+    <Setter Property="Background" Value="{DynamicResource B.Scroll}" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Margin" Value="3,2" />
+  </Style>
+
+  <!-- ScrollThumb 的悬停/拖动配色(WPF 用的是 IsMouseOver / Thumb.IsDragging 两个 Trigger) -->
+  <Style Selector="Thumb.scroll-thumb:pointerover">
+    <Setter Property="Background" Value="{DynamicResource B.ScrollHover}" />
+  </Style>
+
+  <Style Selector="Thumb.scroll-thumb:pressed">
+    <Setter Property="Background" Value="{DynamicResource B.ScrollHover}" />
+  </Style>
+
+  <!-- ==== 隐式 ScrollBar 样式 -> 类型选择器 ScrollBar ==== -->
+  <!-- WPF 的 ScrollBar 模板(Avalonia 的 ScrollBar 内部结构不同,见 PROGRESS.md 的差异表,
+       所以这里保留 Fluent 的结构,只把配色/宽度与滑块改成 Windows 版的观感)。 -->
+  <Style Selector="ScrollBar">
+    <Setter Property="Background" Value="#00FFFFFF" />
+  </Style>
+
+  <Style Selector="ScrollBar:vertical">
+    <Setter Property="Width" Value="10" />
+    <Setter Property="MinWidth" Value="10" />
+  </Style>
+
+  <Style Selector="ScrollBar:horizontal">
+    <Setter Property="Height" Value="10" />
+    <Setter Property="MinHeight" Value="10" />
+  </Style>
+
+  <!-- 滑块:滚动条里那个 Thumb 的观感由上面的隐式 Thumb 样式给(它的 Background 没有被
+       Fluent 写成本地值,样式能生效;Slider 的 Thumb 不同,所以那边换了 Track 模板)。 -->
+
+  <!-- WPF 模板里那条灰色轨道与上下翻页按钮都是隐形的(0 透明度的空壳),这里同样压掉 -->
+  <Style Selector="ScrollBar /template/ Rectangle#TrackRect">
+    <Setter Property="Opacity" Value="0" />
+  </Style>
+
+  <Style Selector="ScrollBar /template/ RepeatButton">
+    <Setter Property="Opacity" Value="0" />
+  </Style>
+
+  <!-- ==== 按钮变体(每个类自带 Btn.Base 的模板,等价 WPF 的 BasedOn)==== -->
+  <!-- Btn.Base -> .btn-base -->
+  <Style Selector="Button.btn-base">
+    <Setter Property="Theme" Value="{StaticResource BtnBase}" />
+  </Style>
+
+  <!-- Btn.Primary -> .btn-primary -->
+  <Style Selector="Button.btn-primary">
+    <Setter Property="Theme" Value="{StaticResource BtnBase}" />
+    <Setter Property="Background" Value="{DynamicResource B.AccentStrong}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.AccentStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.OnAccentStrong}" />
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+
+  <!-- Btn.Soft -> .btn-soft -->
+  <Style Selector="Button.btn-soft">
+    <Setter Property="Theme" Value="{StaticResource BtnBase}" />
+    <Setter Property="Background" Value="{DynamicResource B.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.AccentSoft2}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.AccentText}" />
+  </Style>
+
+  <!-- Btn.Normal -> .btn-normal -->
+  <Style Selector="Button.btn-normal">
+    <Setter Property="Theme" Value="{StaticResource BtnBase}" />
+    <Setter Property="Background" Value="{DynamicResource B.Paper}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- v2 灰色"管理"按钮 -->
+  <!-- Btn.Ghost -> .btn-ghost -->
+  <Style Selector="Button.btn-ghost">
+    <Setter Property="Theme" Value="{StaticResource BtnBase}" />
+    <Setter Property="Background" Value="#00FFFFFF" />
+    <Setter Property="BorderBrush" Value="#00FFFFFF" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+  </Style>
+
+  <!-- Btn.Danger -> .btn-danger -->
+  <Style Selector="Button.btn-danger">
+    <Setter Property="Theme" Value="{StaticResource BtnBase}" />
+    <Setter Property="Background" Value="{DynamicResource B.DangerSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.DangerSoft}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Danger}" />
+  </Style>
+
+  <!-- Btn.Icon -> .btn-icon -->
+  <!-- (在 WPF 里 BasedOn Btn.Ghost,所以配色与它一致) -->
+  <Style Selector="Button.btn-icon">
+    <Setter Property="Theme" Value="{StaticResource BtnBase}" />
+    <Setter Property="Background" Value="#00FFFFFF" />
+    <Setter Property="BorderBrush" Value="#00FFFFFF" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="Padding" Value="7" />
+    <Setter Property="MinWidth" Value="30" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+
+  <!-- Btn.Chip -> .btn-chip -->
+  <Style Selector="Button.btn-chip">
+    <Setter Property="Theme" Value="{StaticResource BtnBase}" />
+    <Setter Property="Background" Value="{DynamicResource B.Paper2}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.Line}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="Padding" Value="11,5" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+
+    <!-- ==== 隐式选择控件样式(WPF 里是 x:Key="{x:Type X}" 的隐式样式,只把前景色改成主题墨色)==== -->
+  <!-- WPF 的 GroupBox 隐式样式没有移植:Avalonia 11 没有 GroupBox 控件,Windows 版也没有使用点
+       (见 StyleKeys.Unsupported 与 PROGRESS.md 的差异表)。 -->
+  <!-- 隐式 CheckBox 样式 -> 类型选择器 CheckBox -->
+  <Style Selector="CheckBox">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- 隐式 RadioButton 样式 -> 类型选择器 RadioButton -->
+  <Style Selector="RadioButton">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- 隐式 ToggleButton 样式 -> 类型选择器 ToggleButton -->
+  <Style Selector="ToggleButton">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- 隐式 ListBox 样式 -> 类型选择器 ListBox -->
+  <Style Selector="ListBox">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- 隐式 ListBoxItem 样式 -> 类型选择器 ListBoxItem -->
+  <Style Selector="ListBoxItem">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- 隐式 Label 样式 -> 类型选择器 Label -->
+  <Style Selector="Label">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- 隐式 Expander 样式 -> 类型选择器 Expander -->
+  <Style Selector="Expander">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- 隐式 TabItem 样式 -> 类型选择器 TabItem -->
+  <Style Selector="TabItem">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- ==== 窗口按钮 / 标题栏按钮 ==== -->
+  <!-- Btn.Caption -> .btn-caption -->
+  <Style Selector="Button.btn-caption">
+    <Setter Property="Theme" Value="{StaticResource BtnCaption}" />
+  </Style>
+
+  <!-- Btn.CaptionClose -> .btn-caption-close -->
+  <Style Selector="Button.btn-caption-close">
+    <Setter Property="Theme" Value="{StaticResource BtnCaptionClose}" />
+  </Style>
+
+  <!-- Btn.TitleIcon -> .btn-title-icon -->
+  <Style Selector="Button.btn-title-icon">
+    <Setter Property="Theme" Value="{StaticResource BtnTitleIcon}" />
+  </Style>
+
+  <!-- 标题栏账号钮:头像首字母圆 + 名称(复用 Btn.TitleIcon 模板) -->
+  <!-- Btn.TitleChip -> .btn-title-chip -->
+  <Style Selector="Button.btn-title-chip">
+    <Setter Property="Theme" Value="{StaticResource BtnTitleIcon}" />
+    <!-- WPF 的 Width=Auto 在 Avalonia 里是 NaN(宽度按内容自适应)。 -->
+    <Setter Property="Width" Value="NaN" />
+    <Setter Property="Padding" Value="4,0,10,0" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- ==== 线条图标(Stroke 跟随所在控件的 Foreground)==== -->
+  <!-- Ico.Line -> .ico-line -->
+  <Style Selector="Path.ico-line">
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="Stretch" Value="None" />
+    <Setter Property="Stroke" Value="{Binding $parent[Control].Foreground}" />
+    <Setter Property="StrokeThickness" Value="1.7" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="StrokeJoin" Value="Round" />
+  </Style>
+
+    <!-- Ico.Caption -> .ico-caption -->
+  <!-- 注:在 WPF 里 BasedOn Ico.Line;Avalonia 没有样式继承,所以公共部分重复一遍再改三处。
+       WPF 的 StrokeStartLineCap/StrokeEndLineCap 在 Avalonia 合成一个 StrokeLineCap。 -->
+  <Style Selector="Path.ico-caption">
+    <Setter Property="Width" Value="10" />
+    <Setter Property="Height" Value="10" />
+    <Setter Property="Stretch" Value="None" />
+    <Setter Property="Stroke" Value="{Binding $parent[Control].Foreground}" />
+    <Setter Property="StrokeThickness" Value="1.1" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="StrokeJoin" Value="Round" />
+  </Style>
+  <!-- ==== 分段/页签按钮 ==== -->
+  <!-- TabItemBtn -> .tab-item-btn -->
+  <Style Selector="ToggleButton.tab-item-btn">
+    <Setter Property="Theme" Value="{StaticResource TabItemBtnTheme}" />
+  </Style>
+
+  <!-- Tab.Top -> .tab-top -->
+  <Style Selector="ToggleButton.tab-top">
+    <Setter Property="Theme" Value="{StaticResource TabTopTheme}" />
+  </Style>
+
+  <!-- v2 分段控件项(放在 Seg.Rail 里):选中白底 + 粗体 -->
+  <!-- Seg.Item -> .seg-item -->
+  <Style Selector="ToggleButton.seg-item">
+    <Setter Property="Theme" Value="{StaticResource SegItemTheme}" />
+  </Style>
+
+  <!-- ==== 输入框 ==== -->
+  <!-- Input -> .input -->
+  <Style Selector="TextBox.input">
+    <Setter Property="Theme" Value="{StaticResource InputTheme}" />
+  </Style>
+
+  <!-- Input.Multi -> .input-multi -->
+  <Style Selector="TextBox.input-multi">
+    <Setter Property="Theme" Value="{StaticResource InputTheme}" />
+    <Setter Property="AcceptsReturn" Value="True" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+  </Style>
+
+  <!-- Input.Log -> .input-log -->
+  <Style Selector="TextBox.input-log">
+    <Setter Property="Theme" Value="{StaticResource InputTheme}" />
+    <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+    <Setter Property="FontSize" Value="11.5" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="IsReadOnly" Value="True" />
+    <Setter Property="AcceptsReturn" Value="True" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+  </Style>
+
+  <!-- Pw -> .pw -->
+  <!-- WPF 的 Pw 是 PasswordBox;Avalonia 11 没有 PasswordBox(反射确认),密码框是
+       TextBox + PasswordChar,所以这里复用输入框模板,由调用点设置 PasswordChar(见差异表)。 -->
+  <Style Selector="TextBox.pw">
+    <Setter Property="Theme" Value="{StaticResource InputTheme}" />
+  </Style>
+
+  <!-- ==== 下拉框 ==== -->
+  <!-- ComboItem -> .combo-item -->
+  <Style Selector="ComboBoxItem.combo-item">
+    <Setter Property="Theme" Value="{StaticResource ComboItemTheme}" />
+  </Style>
+
+  <!-- Combo -> .combo -->
+  <Style Selector="ComboBox.combo">
+    <Setter Property="Theme" Value="{StaticResource ComboTheme}" />
+  </Style>
+
+  <!-- ==== 复选框 / 开关 ==== -->
+  <!-- Chk -> .chk -->
+  <Style Selector="CheckBox.chk">
+    <Setter Property="Theme" Value="{StaticResource ChkTheme}" />
+  </Style>
+
+  <!-- Switch -> .switch -->
+  <Style Selector="CheckBox.switch">
+    <Setter Property="Theme" Value="{StaticResource SwitchTheme}" />
+  </Style>
+
+  <!-- ==== 滑块 ==== -->
+  <!-- Sld -> .sld -->
+  <!-- WPF 的 Sld 自带整份模板(Avalonia 的 Track 没有 Template,部件写在模板里),所以这里换 Theme。 -->
+  <Style Selector="Slider.sld">
+    <Setter Property="Theme" Value="{StaticResource SliderTheme}" />
+  </Style>
+
+  <!-- ==== 进度条 ==== -->
+  <!-- Prog -> .prog -->
+  <Style Selector="ProgressBar.prog">
+    <Setter Property="Height" Value="6" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Accent}" />
+    <Setter Property="Background" Value="{DynamicResource B.LineSoft}" />
+  </Style>
+
+  <Style Selector="ProgressBar.prog /template/ Border#PART_Indicator">
+    <Setter Property="CornerRadius" Value="3" />
+  </Style>
+
+  <!-- ==== 列表 ==== -->
+  <!-- ListItemRow -> .list-item-row -->
+  <Style Selector="ListBoxItem.list-item-row">
+    <Setter Property="Theme" Value="{StaticResource ListItemRowTheme}" />
+  </Style>
+
+  <!-- PlainList -> .plain-list -->
+  <Style Selector="ListBox.plain-list">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="Background" Value="#00FFFFFF" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    <!-- WPF 的 ItemContainerStyle=ListItemRow -> Avalonia 的 ItemContainerTheme -->
+    <Setter Property="ItemContainerTheme" Value="{StaticResource ListItemRowTheme}" />
+  </Style>
+
+  <!-- ==== 浮层:提示 / 右键菜单 / 菜单项 ==== -->
+  <!-- 隐式 ToolTip 样式 -> 类型选择器 ToolTip -->
+  <Style Selector="ToolTip">
+    <Setter Property="Theme" Value="{StaticResource ToolTipTheme}" />
+  </Style>
+
+  <!-- 隐式 ContextMenu 样式 -> 类型选择器 ContextMenu -->
+  <!-- 只改配色与字体:Avalonia 的 ContextMenu 模板结构(Fluent)与 WPF 差得较多,
+       没有重画外壳,差异见 PROGRESS.md。 -->
+  <Style Selector="ContextMenu">
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <!-- 隐式 MenuItem 样式 -> 类型选择器 MenuItem -->
+  <Style Selector="MenuItem">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+  </Style>
+
+  <Style Selector="MenuItem /template/ Border#PART_LayoutRoot">
+    <Setter Property="CornerRadius" Value="{StaticResource CR.Ctl}" />
+  </Style>
+
+  <Style Selector="MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource B.Hover}" />
+  </Style>
+
+  <Style Selector="MenuItem:selected /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource B.Hover}" />
+  </Style>
+
+</Styles>
