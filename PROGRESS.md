@@ -5547,3 +5547,14 @@ internal 处理器体(不构造 `PointerEventArgs`、不用 Headless 输入模�
 **因此就地派 C3d**:把 `FlyToTasks`(以及它需要的最小 `FlyHost` 可视件)作为**可选成员补进外壳**,并把 C3c 的注入缝接上、把这条降级从文档里划掉。C3d 之后,后续页面照 Windows 直接调外壳成员即可,不再需要各自的注入缝。
 
 **运营备注**:本包用 **Python + Pillow**(`artifacts\c3c-pixel-probe*.py`)做像素取证 —— 能跑、产物在忽略目录里、没入库,所以接受;但 Lead 自己的取证一直用 `System.Drawing`,**后续若要写进交付物,统一用仓库里已有的工具链**,别引入新的运行时依赖。
+### C3c 更正(C3d 追加,2026-11-13):那处「用户可见的降级」已经修好
+
+> 说明:本节第 4 节与第 10 节第 1 条记的那处降级 —— **`MainWindow.FlyToTasks` 在 mac 侧不存在**、
+> 启动页只能用 `LaunchPage.FlyToTasksSeam` 兜住 —— **已在 C3d 修好**。原文一字未删(不改写历史),
+> 只在这里追加更正:
+>
+> 1. 外壳补上 `FlyHost` 画布 + `MainWindow.FlyToTasks(Control, string, string?)`(提交 `a9ad510`);
+> 2. C3c 留的 `LaunchPage.FlyToTasksSeam` 由外壳构造函数接到真成员上、关窗解绑(提交 `b61db8a`);
+> 3. 后续 13 处调用点(CatalogPage / InstallPage / InstancePage / JavaPage / LaunchPage /
+>    MultiplayerPage / VersionManagePage)**直接写 `Win?.FlyToTasks(anchor, text)`** 即可,不必再留缝;
+> 4. Lead 的裁决与全部细节见文末的 **C3d** 小节。
