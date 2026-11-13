@@ -81,20 +81,45 @@ public static class Saves
 		return text;
 	}
 
+	/// <summary>
+	/// 把实例里已装的数据包复制进某个存档的 datapacks。
+	/// 逐条路径(对位表见 _cmp/r18-report.md 任务 B):
+	///   * 源:先看 <see cref="Mods.ContentDir"/>(实例, "datapacks", version_id) —— 隔离版本时是
+	///     &lt;实例&gt;/versions/&lt;版本&gt;/datapacks,与 get_installed_datapacks 带 version 的列表同一个目录;
+	///     那里没有就回退 &lt;实例&gt;/datapacks(存档管理页列的实例共享数据包);
+	///   * 目标:&lt;游戏目录&gt;/saves/&lt;存档&gt;/datapacks/&lt;文件名&gt;,游戏目录按
+	///     <see cref="VersionSettings.GameDir"/>(隔离版本 = &lt;实例&gt;/versions/&lt;版本&gt;,否则 = &lt;实例&gt;);
+	///   * 同名文件就地覆盖(<see cref="LocalFs.Copy2"/> 是 overwrite: true),不产生副本;
+	///   * 目标的 datapacks 目录不存在就建;**存档目录本身不存在则报错** —— 不凭空造一个只有
+	///     datapacks/ 的空壳存档(那种目录在游戏里是个打不开的假世界);
+	///   * 失败一律抛 <see cref="SaveError"/>(数据包不存在 / 非法存档名 / 存档不存在),成功返回目标文件绝对路径。
+	/// </summary>
 	public static string InstallDatapackIntoSave(Instance instance, object filename, object save_name, object version_id = null)
 	{
-		PPath pPath = new PPath(PPath.Join(instance.path, "datapacks", Py.Str(filename))).Resolve();
-		PPath other = new PPath(PPath.Join(instance.path, "datapacks")).Resolve();
-		if (!pPath.Parent.Equals(other) || !pPath.IsFile())
-		{
-			throw new SaveError(Py.Fmt("数据包不存在: {0}", filename));
-		}
+		string text0 = Py.Str(filename);
+		string versionDir = Mods.ContentDir(instance, "datapacks", version_id);
+		string sharedDir = PPath.Join(instance.path, "datapacks");
+		string source = _find_datapack(versionDir, text0)
+			?? (string.Equals(versionDir, sharedDir, StringComparison.Ordinal) ? null : _find_datapack(sharedDir, text0))
+			?? throw new SaveError(Py.Fmt("数据包不存在: {0}", filename));
 		string text = _safe_child(PPath.Join(_game_dir(instance, version_id), "saves"), save_name);
+		if (!LocalFs.IsDir(text))
+		{
+			throw new SaveError(Py.Fmt("存档不存在: {0}", save_name));
+		}
 		string text2 = PPath.Join(text, "datapacks");
 		Utils.EnsureDir(text2);
-		string text3 = PPath.Join(text2, pPath.Name);
-		LocalFs.Copy2(pPath.ToString(), text3);
+		string text3 = PPath.Join(text2, new PPath(source).Name);
+		LocalFs.Copy2(source, text3);
 		return text3;
+	}
+
+	/// <summary>在某个 datapacks 目录里按文件名找一个文件;不在这个目录里(含穿路径的名字)返回 null。</summary>
+	private static string? _find_datapack(string folder, string filename)
+	{
+		PPath pPath = new PPath(folder).Resolve();
+		PPath pPath2 = (pPath / filename).Resolve();
+		return pPath2.Parent.Equals(pPath) && pPath2.IsFile() ? pPath2.ToString() : null;
 	}
 
 	public static List<object> ListMedia(Instance instance, object kind, object version_id = null)

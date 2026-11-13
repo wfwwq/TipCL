@@ -138,18 +138,68 @@ public static class ModsDialog
 
         async Task ImportAsync()
         {
-            string? path = await Dlg.PickFile("导入模组", "*.jar");
-            if (string.IsNullOrWhiteSpace(path)) return;
-            status = "已加入队列";
-            await api.CallAsync<string>("install_mod", new
+            var batch = await ImportJarsFromPickerAsync(api, instance);
+            if (batch.Canceled) return;
+            if (batch.Total == 1)
             {
-                name = Path.GetFileName(path),
-                instance,
-                extra = new { path, instance, name = Path.GetFileName(path) },
-            });
-            ToastHost.Show("已加入队列", Path.GetFileName(path), ToastKind.Success);
+                if (batch.AnyFailed)
+                {
+                    // 单个文件失败:与改动前一致 —— 只提示,不改状态、不重载(原先异常直接冒到外层 Run)
+                    ToastHost.Show("导入失败", batch.Failures[0].Reason, ToastKind.Warning);
+                    return;
+                }
+                status = "已加入队列";
+                ToastHost.Show("已加入队列", batch.Ok[0], ToastKind.Success);
+            }
+            else
+            {
+                status = batch.AnyFailed
+                    ? $"已加入队列 {batch.OkCount} 个(失败 {batch.FailedCount} 个)"
+                    : $"已加入队列 {batch.OkCount} 个";
+                ToastHost.Show(batch.AnyFailed ? "导入失败" : "已加入队列", batch.SummaryText(),
+                    batch.AnyFailed ? ToastKind.Warning : ToastKind.Success);
+            }
             await Reload();
         }
+    }
+
+    /// <summary>
+    /// 「导入 jar」入口:多选后逐个排队(对齐 Windows `ModsDialog` 的 foreach:一个 jar 一个
+    /// install_mod 任务)。取消(空数组)什么都不做、也不报错 —— 返回的 batch 里 Canceled 为真。
+    /// </summary>
+    public static async Task<ImportBatch> ImportJarsFromPickerAsync(IApi api, string instance)
+    {
+        var files = await Dlg.PickFiles("导入模组", "*.jar");
+        return await ImportJarsAsync(api, instance, files);
+    }
+
+    /// <summary>
+    /// 逐个导入 jar(测试直接喂真实临时文件)。只做安装、不碰界面:文案/状态/重载归调用方,
+    /// 单个文件时的提示沿用改动前的逐字行为。
+    /// </summary>
+    public static async Task<ImportBatch> ImportJarsAsync(IApi api, string instance, IReadOnlyList<string> files)
+    {
+        var batch = new ImportBatch(files.Count);
+        foreach (string path in files)
+        {
+            if (string.IsNullOrWhiteSpace(path)) continue;
+            string name = Path.GetFileName(path);
+            try
+            {
+                await api.CallAsync<string>("install_mod", new
+                {
+                    name,
+                    instance,
+                    extra = new { path, instance, name },
+                });
+                batch.Success(name);
+            }
+            catch (Exception ex)
+            {
+                batch.Failure(name, ex.Message);
+            }
+        }
+        return batch;
     }
 
     /// <summary>比对实例模组的可用更新,勾选后逐个应用(照 Windows CheckUpdatesAsync)。</summary>

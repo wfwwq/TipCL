@@ -418,3 +418,16 @@
 - **打开外链的落点**:`MdView.UrlOpener`(`internal static Action<string>`,默认 `OpenExternal`:Windows `ShellExecute` / macOS `open` / Linux `xdg-open`,失败只记不抛)。做成可替换的钩子是**为了测试**:用例里换成收集器,断言「点哪个链接就开哪个 URL」,而不会真的弹浏览器。仓库里各页原本各有一份私有 `OpenUrl`(AccountPage / MultiplayerPage / PluginsPage / PluginHostPage / SettingsPage.Cards),这次**不去统一**(改动面大、收益只是少几份重复),`MdView` 自带一份最小的。
 - **仍然不成立的部分(如实)**:D-22 第 2 条的另一半(`Run` 没有 `Background` → 行内码没有底色)依然存在,没动;链接的悬停态(变色/常亮下划线)也没做 —— 参考版的 `Hyperlink` 自带,这里保持静态样式。
 - **测试边界(如实)**:`App/MdViewLinkTests`(4 条)断言结构(是 `InlineUIContainer` 而不是 `Span`、tooltip 是 URL、光标/下划线/字号在、粗体与列表里的链接也在)与打开链(`OpenLink` → `UrlOpener`),但**没有**真的构造 `PointerReleasedEventArgs` 抬事件;也**没有像素级截图证据**(冒烟态没有任何页面渲染 Markdown 链接,AI 页冒烟是空态)—— 判据是结构与数值断言,不声称「真机看着没问题」。
+
+### D-50 · 多选导入的统一口径;「数据包装进存档」按界面写明的意图落地(三条参考版缺陷不照抄)(R18,2026-11-13,移植代理;主 agent 复核并裁定源目录优先级)
+
+- **多选口径**:参考版有 `Dlg.PickFiles`(`Multiselect = true`,三处使用:下载页导入本地 / 反馈页附件 / 模组对话框导入模组),Linux 侧原先只有单选。补齐时定了三条:
+  1. **取消 = 空数组**(不是 `null`),调用方「什么都不做、也不报错」;
+  2. **单选(N=1)必须逐字沿用改动前的提示 / 状态 / 重载** —— 只有 N>1 才追加汇总,`ImportBatch.Total <= 1` 直接返回空串,从实现上堵住「给单文件加提示」;
+  3. 汇总口径收敛到一处(`Common/ImportBatch.cs`):「导入 N 个:成功 X,失败 Y」+ 逐条「文件名:原因」,三处入口共用,免得各写一套文案。
+  系统对话框本身(`AllowMultiple` 在 GTK/portal 上的表现)**未在真机验证**(无头环境点不了系统对话框),测到的是「多选循环把每个文件都处理了」这一层。
+- **`extra["save"]` 按界面意图落地**:下载页问「装进哪个存档」并把它写进 `extra["save"]`(`Pages/CatalogPage.cs:753`),而参考版 Core **从不读这个键**(主 agent 独立核实:全仓库只有这一处写入) —— 用户选了等于没选。Linux 侧按界面写明的意图实现:装完就地复制进该存档的 `datapacks/`;**失败只记一条带原因的日志**,不把已经装好的数据包报成失败(数据包已经进实例目录,复制只是附加动作)。
+- **源目录优先级(主 agent 裁定)**:`InstallDatapackIntoSave` 的源改为**版本目录优先、实例根回退** —— 带 `version` 的 `get_installed_datapacks` 列的就是 `<实例>/versions/<版本>/datapacks`,「列表里有的包点下去必须能装上」;实例根(`<实例>/datapacks`)是存档管理页列的那个目录,作为回退保留。参考版写死实例根(无视 `version_id`),所以隔离版本下会出现「列表里有、点下去说数据包不存在」。防路径穿越的判据(`_find_datapack` 里「解析后父目录必须仍是该目录」)原样保留。
+- **不凭空造存档**:参考版在存档目录不存在时无条件 `EnsureDir(<游戏目录>/saves/<存档>/datapacks)`,会造出一个只有 `datapacks/` 的空壳存档(游戏里是个打不开的假世界);同文件的 `DeleteSave` / `OpenSave` 是会检查存在性的。Linux 侧改为显式抛 `存档不存在: X`,一个目录都不建 —— 与同文件其它存档操作一个口径。
+- **不动的地方(与参考版一致,避免扩大改动面)**:同名文件就地覆盖(`overwrite: true`)不产生副本;目标 `datapacks` 目录不存在就创建;目标路径与版本隔离游戏目录算法不变;**存档管理页「装数据包」列表仍按实例根列**(要让隔离版本也能从版本目录里选,需要给 `get_installed_datapacks` 带 `version`,属独立条目,已记进 `docs/PARITY.md` §9.6)。
+- **验收**:`dotnet test` **397 = 396 通过 + 1 跳过 + 0 失败**(新增 22 条:多选 13 + 数据包 9);Release App/Core 构建 0 CS/CA;10 场冒烟 exit=0、0 WARN/0 ERROR;红证据 `_cmp/r18-a-red.txt`(多选未接循环时 `Expected 2 Actual 1`)、`_cmp/r18-b-red.txt`(`SaveError : 数据包不存在: dp-iso.zip`)。三条参考版缺陷已进 `docs/PARITY.md` §6 第 8–10 行。

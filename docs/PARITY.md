@@ -183,8 +183,11 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | 5 | `Pages/CatalogPage.cs` 项目介绍页 | 资源包 / 光影 / 数据包的「打开介绍页」跳到**错的网页地址** | `_content_row` 一律按 `kind="mod"` 拼 `modrinth.com/mod/<slug>` | 按真实 kind 拼地址;CurseForge 优先用 `website_url`(D-18) |
 | 6 | `Pages/CatalogPage.cs` 启停模组 | 连点两次启停会报「模组文件不存在」 | 禁用会把文件改名为 `*.disabled`(Core 语义),而页面启停后不重新列一遍,手里还是旧文件名 | 启停成功后重载已装列表(D-18) |
 | 7 | `Pages/LaunchPage.cs` + `Pages/DashHost.cs` | —(不可见) | v2 的 `LaunchPage` 只 `new DashHost()` + `RefreshThemeVisuals()`,**从未把 `_dash` 加进可视树** | Linux 侧不移植 `DashHost` 画布宿主,保留数据模型(P7 / D-19) |
+| 8 | `Pages/CatalogPage.cs:753` + `Core/BackendApi.cs:1606`(下载页「装进存档」) | 装了数据包后**并没有进任何存档** —— 下拉里选「装进哪个存档」等于白选,用户得自己去存档目录复制 | 页面把选择写成 `extra["save"]`,而 Core 侧**没有任何地方读这个键**(`install_datapack` 只把 extra 转给 `_install_content_impl`;全仓库搜 `["save"]` 只有这一处写入,没有读取) | Linux 侧按界面写明的意图落地:装完就地复制进该存档的 `datapacks/`;进不去只记一条带原因的日志(数据包本身已装好)(R18 / D-50) |
+| 9 | `Core/Launcher/Saves.cs:85-86`(`InstallDatapackIntoSave`) | 版本隔离时,列表里明明有这个数据包,点「装进存档」却报「**数据包不存在**」 | 源路径硬编码 `<实例>/datapacks`,无视传进来的 `version_id`;而带 `version` 的 `get_installed_datapacks` 列的是 `<实例>/versions/<版本>/datapacks` | 源目录改为「版本目录优先、实例根回退」,与列表同一个目录(R18 / D-50) |
+| 10 | `Core/Launcher/Saves.cs:92-93` | 选一个不存在的存档名,会**凭空造出一个只有 `datapacks/` 的空壳存档** —— 游戏里是个打不开的假世界 | 无条件 `Utils.EnsureDir(<游戏目录>/saves/<存档>/datapacks)`;而同文件的 `DeleteSave` / `OpenSave` 是会检查存在性的 | 存档目录不存在直接抛 `存档不存在: X`,一个目录都不建(R18 / D-50) |
 
-> 认定方式:以上 1–2、5–6 由「按 Core 真实返回结构取值」的复核发现;3–4 由 P3.5 的移植复核发现(用户点名要求);7 由 P7 的可视树核对发现。
+> 认定方式:以上 1–2、5–6 由「按 Core 真实返回结构取值」的复核发现;3–4 由 P3.5 的移植复核发现(用户点名要求);7 由 P7 的可视树核对发现;8–10 由 R18 的「数据包装进存档」逐条路径对位发现(页面传下去的键**没人读** / 源路径写死不看版本 / 无条件建目录造空壳存档)。
 > 若参考仓库后续修好这些点,本表与相应 DECISIONS 条目应同步更新。
 
 ## 7. 插件宿主全链逐项判定(2026-11-12,M4-H P6)
@@ -353,3 +356,27 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | 回复正文里的链接 | WPF `Hyperlink`(`MdView.cs:367`):可点、点开浏览器、悬停有光标 | 主题色 + 下划线的 `Span` —— **不可点、无光标、无 URL 提示**(D-22 记为平台限制) | `InlineUIContainer` 包一个真 `TextBlock`:手型光标 + URL tooltip + 点击开浏览器(`xdg-open` / `open` / `ShellExecute`) | D-49 |
 | 行内码底色 | `Run` + `Background` | Avalonia 的 `Run` 没有 `Background` → 等宽 + 主题色近似 | **仍未做**(与链接无关的另一半,D-22 第 2 条依旧成立) | D-22 |
 | 链接悬停态 | `Hyperlink` 自带 | 无 | **仍未做**:保持静态样式(下划线常亮) | 如实记录 |
+
+### 9.6 导入多选 + 数据包装进存档(2026-11-13,R18)
+
+**一、多选导入(补上「参考版能多选、Linux 只能单选」的差)**
+
+| 入口 | 参考版 | Linux(补前) | Linux(补后) |
+|---|---|---|---|
+| 下载页「导入本地」(`CatalogPage`) | `Dlg.PickFiles`(`Multiselect = true`,`CatalogPage.cs:952`) | 单选 `PickFile`(`CatalogPage.cs:856`) | 多选:逐文件 `install_*`(path=文件 / source=本地 / name=文件名),多文件时追加汇总「导入 N 个:成功 X,失败 Y」+ 逐条「文件名:原因」 |
+| 反馈页「添加附件」(`FeedbackView`) | 同上(`FeedbackPage.cs:167`) | 单选(`FeedbackView.cs:224`) | 多选:逐文件 `stash_upload` + 同样的汇总口径 |
+| 模组对话框「导入模组」(`ModsDialog`) | 同上(`ModsDialog.cs:36`) | 单选(`ModsDialog.cs:141`) | 多选:逐文件 `install_mod` + 同样的汇总口径 |
+
+> 口径:**取消 = 返回空数组**,三处都「什么都不做、也不报错」;**单选(N=1)逐字沿用改动前的提示 / 状态 / 重载**,只有 N>1 才追加汇总(`Common/ImportBatch.cs` 里 `Total <= 1` 直接返回空串,物理上不可能给单文件加提示)—— 既有测试一条没改。
+
+**二、数据包装进存档:三条参考版缺陷上去之后,这个入口才真的有用**
+
+| # | 补前(Linux = 参考版逐行复制) | 补后 | 依据 |
+|---|---|---|---|
+| 1 | 「装进哪个存档」的 `extra["save"]` 传下去后**没人读** → 选了等于没选(§6 第 8 行) | 装完就地复制进该存档的 `datapacks/`,失败只记一条带原因的日志 | D-50 |
+| 2 | 源路径硬编码 `<实例>/datapacks` → 隔离版本下「列表里有、点下去说没有」(§6 第 9 行) | 版本目录(`<实例>/versions/<版本>/datapacks`)优先、实例根回退 —— 与列表同一个目录 | D-50 |
+| 3 | 存档不存在时凭空造只含 `datapacks/` 的空壳存档(§6 第 10 行) | 抛 `存档不存在: X`,不建任何目录 | D-50 |
+
+**保持不动(两版一致,不算遗漏)**:同名文件就地覆盖(`overwrite: true`,`LocalFs.Copy2`)不产生副本;目标 `<存档>/datapacks` 目录不存在就创建;目标路径与版本隔离游戏目录的算法(`<实例>/versions/<版本>` vs `<实例>`)两版逐行相同。
+
+**未在真机验证(如实)**:系统文件对话框本身(GTK/portal 的 `AllowMultiple`)与下载页「装进存档」下拉**都没在真机点过** —— 无头环境点不了系统对话框;这两处只用 API 契约测试覆盖(`install_datapack` 带 `extra.save` → 等任务 → 断言文件既在实例 `datapacks` 也在存档里,隔离/非隔离两条)。存档管理页的「装数据包」列表**仍按实例根**列(与参考版一致,未改):隔离版本只能从实例共享数据包里选,要让列表也列版本目录需给 `get_installed_datapacks` 带上 `version`,属独立条目。

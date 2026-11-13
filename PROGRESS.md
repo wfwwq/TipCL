@@ -535,3 +535,33 @@
 - 用例断言的是「结构与打开链」,**没有**真的构造 `PointerReleasedEventArgs` 抬一次事件 —— 那 2 行接线靠代码阅读确认;
 - **链接在段落里的像素级排版没有截图证据**:全仓没有任何页面在冒烟态下渲染 Markdown 链接(冒烟态 AI 页是空态),所以只能靠「字号 13.5 一致 + `BaselineAlignment`」这类数值/结构断言兜住,不能声称「真机看着没问题」;
 - 链接的悬停态(变色/下划线常亮)没做 —— 参考版的 `Hyperlink` 自带,这里保持静态样式。
+
+## M4-H R18:导入多选 + 数据包装进存档(2026-11-13,移植代理;主 agent 复核并核实三条参考版缺陷)
+
+### 一、导入多选(参考版能多选,Linux 只能单选)
+- 参考版有 `Dlg.PickFiles`(`Multiselect = true`,`Services/Dlg.cs:452-474`),被三处调用:下载页「导入本地」(`CatalogPage.cs:952`)、反馈页「添加附件」(`FeedbackPage.cs:167`)、模组对话框「导入模组」(`ModsDialog.cs:36`)。
+- Linux 侧三处都是单选 `Dlg.PickFile`。本轮补齐:`Common/Dlg.cs` 新增 `PickFiles`(返回 `Task<string[]>`,**取消 = 空数组**、`AllowMultiple = true`、过滤器与 `PickFile` 同形;另加测试注入点 `PickFilesOverride`,照 `PageLayoutIO.PickFileDialog` 的既有做法,生产从不设置),`PickFile` 一字未动;新增 `Common/ImportBatch.cs` 统一汇总口径。
+- 三处入口改成多选循环,并把「导入一个文件」抽成单文件方法(`CatalogPage.cs:859-913`、`FeedbackView.cs:226-290`、`ModsDialog.cs:170-201`)。**口径**:取消 → 什么都不做、不报错;**单选(N=1)逐字沿用改动前的提示 / 状态 / 重载**;只有 N>1 才追加「导入 N 个:成功 X,失败 Y」+ 逐条「文件名:原因」(`Total <= 1` 直接返回空串,物理上不可能给单文件加提示)。**既有测试一条断言都没改。**
+
+### 二、数据包装进存档:三条参考版缺陷(不照抄,按真实语义实现)
+移植代理先做了逐条路径对位,发现 Core 这段与参考版**逐行相同**(去掉 Linux 头注释后 diff = 0 行),差异都在共享实现里;三条都判定为**参考版缺陷**,已按仓库纪律在 Linux 侧修正并登记:
+
+1. **「装进哪个存档」等于白选**:页面把选择写成 `extra["save"]`(`CatalogPage.cs:753`),而 Core 侧**没有任何地方读这个键**。主 agent 独立核实:全仓库搜 `["save"]` / `Get("save")` 只有这一处**写入**,没有读取(与 `PROGRESS.md:154` 遗留(2) 那句一致)。→ Linux 侧落地:装完就地复制进该存档的 `datapacks/`;进不去只记一条带原因的日志(数据包本身已装好),不把已成功的安装报成失败(`Api.cs:1442-1467`)。
+2. **隔离版本下「列表里有、点下去说没有」**:源路径硬编码 `<实例>/datapacks`,无视 `version_id`(参考版 `Saves.cs:85-86`;主 agent 已核对该行原文),而带 `version` 的 `get_installed_datapacks` 列的是 `<实例>/versions/<版本>/datapacks`。→ 改为**版本目录优先、实例根回退**(`Saves.cs:99-104`),防路径穿越的判据(`_find_datapack`)保留。
+3. **凭空造空壳存档**:存档目录不存在时无条件 `EnsureDir(<游戏目录>/saves/<存档>/datapacks)`(参考版 `:92-93`),游戏里那是个打不开的假世界;同文件的 `DeleteSave`/`OpenSave` 是会检查存在性的。→ 改为显式抛 `存档不存在: X`,一个目录都不建(`Saves.cs:105-109`)。
+
+**保持不动(两版一致)**:同名文件就地覆盖不产生副本;目标 `datapacks` 目录不存在就创建;目标路径与版本隔离游戏目录算法两版逐行相同。
+
+### 三、主 agent 独立复核(不采信自证)
+| 项 | 主 agent 实测 |
+|---|---|
+| Release 构建(App + Core) | 均 exit 0,**0 条 CS/CA**(`TipCL.Linux.sln` 全量编译时另有一条 **既有** `CS8625`(`tests/.../UiPrefsTests.cs:157`),该文件未被本轮触碰,非本次引入) |
+| `dotnet test` ×2 | 每次 **397 = 396 通过 + 1 跳过 + 0 失败**(R16 的 355 → +42:R19/R19b 16 + R17 4 + R18 22) |
+| 冒烟 **10 场**会话(含下载页数据包分段 `SMOKE_SEG=3`、设置页 6 号内层「反馈」、明暗两页) | **10/10 exit=0 出图、WARN 0、ERROR 0** |
+| 三条参考版缺陷的判定 | 主 agent 逐条回参考仓库核对:`Saves.cs:85-86` 源路径写死、`:92-93` 无条件 `EnsureDir`、全仓 `["save"]` 无读取 —— **三条均属实** |
+| 边界 | 未碰 `docs/` / `PROGRESS.md` / `DECISIONS.md` / `progress/`、未碰 `Pages/Ai`(含主 agent 正在改的 `MdView.cs`)与 `LaunchPage*`、无 csproj 改动 |
+
+### 四、如实说明
+- **系统文件对话框本身没在真机点过**(无头环境点不了 GTK/portal 对话框),`AllowMultiple = true` 只有代码与注入点测试覆盖;真机只验证到「多选循环把每个文件都处理了」这一层。
+- 存档管理页的「装数据包」列表**仍按实例根**列(与参考版一致,未改):隔离版本下只能从实例共享数据包里选。要让列表也列版本目录,需要给 `get_installed_datapacks` 带上 `version`,属独立条目。
+- 测试暴露的一条**主 agent 自己的问题**:同一轮里 R17 的 `MdViewLinkTests` 有 2 条假红(**收集器只扫段落顶层** → 粗体/列表里的链接扫不到;断言写 `inner.Text` 而文字在 `Inlines` 的 `Run` 上),已改成递归收集 + 拼接 `Run.Text`,R17 提交前已是 397 全绿。

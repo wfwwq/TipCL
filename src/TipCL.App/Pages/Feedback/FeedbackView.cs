@@ -42,7 +42,7 @@ internal sealed class FeedbackView : SettingsSubView
         // ── 提交反馈 ──
         var submit = U.Btn("提交反馈", BtnKind.Primary, (_, _) => Run(SubmitAsync, "提交失败"), "Send");
         var sysInfo = U.Btn("查看系统信息", BtnKind.Chip, (_, _) => Run(SysInfoAsync, "读取失败"), "Info");
-        var attach = U.Btn("添加附件", BtnKind.Chip, (_, _) => Run(AttachAsync, "附件没能上传"), "Import");
+        var attach = U.Btn("添加附件", BtnKind.Chip, (_, _) => Run(async () => { await AttachAsync(); }, "附件没能上传"), "Import");
         var form = UiClass.V(10,
             UiClass.Section("提交反馈", "会发到开发者的反馈服务,不含账号密码"),
             UiClass.Field("类型", _cat, null, 74),
@@ -219,30 +219,74 @@ internal sealed class FeedbackView : SettingsSubView
         await Dlg.Alert("系统信息", text);
     }
 
-    private async Task AttachAsync()
+    /// <summary>
+    /// 「添加附件」入口:多选后逐个上传(对齐 Windows `FeedbackPage.AttachAsync` 的 foreach)。
+    /// 取消(空数组)什么都不做;单个文件走 <see cref="AttachFilesAsync"/> 的 N=1 分支,提示逐字不变。
+    /// </summary>
+    public async Task AttachAsync()
     {
-        string? path = await Dlg.PickFile("添加附件", "*.png", "*.jpg", "*.log", "*.txt");
-        if (string.IsNullOrWhiteSpace(path)) return;
-        string name = Path.GetFileName(path);
-        byte[] bytes;
-        try { bytes = await Task.Run(() => File.ReadAllBytes(path)); }
-        catch (Exception ex)
+        var files = await Dlg.PickFiles("添加附件", "*.png", "*.jpg", "*.log", "*.txt");
+        await AttachFilesAsync(files);
+    }
+
+    /// <summary>
+    /// 逐个上传附件(测试直接喂真实临时文件)。返回逐文件结果:
+    /// 空数组 = 取消(一条都不上传、也不报错);多选失败最后给一条带文件名与原因的汇总。
+    /// </summary>
+    public async Task<ImportBatch> AttachFilesAsync(IReadOnlyList<string> paths)
+    {
+        var batch = new ImportBatch(paths.Count);
+        foreach (string path in paths)
         {
-            Toast("读不了这个文件", $"{name}:{ex.Message}", ToastKind.Warning);
-            return;
+            if (string.IsNullOrWhiteSpace(path)) continue;
+            string name = Path.GetFileName(path);
+            try
+            {
+                byte[] bytes;
+                try { bytes = await Task.Run(() => File.ReadAllBytes(path)); }
+                catch (Exception ex)
+                {
+                    // 单个文件:与改动前逐字一致(「读不了这个文件」+ 文件名:原因),且不重画附件列表
+                    if (batch.Total == 1)
+                    {
+                        Toast("读不了这个文件", $"{name}:{ex.Message}", ToastKind.Warning);
+                        return batch;
+                    }
+                    batch.Failure(name, ex.Message);
+                    continue;
+                }
+                if (bytes.Length == 0)
+                {
+                    if (batch.Total == 1)
+                    {
+                        Toast("跳过空文件", name, ToastKind.Warning);
+                        return batch;
+                    }
+                    batch.Failure(name, "空文件");
+                    continue;
+                }
+                string stored = await Api.CallAsync<string>("stash_upload", new
+                {
+                    name,
+                    data = Convert.ToBase64String(bytes),
+                }) ?? "";
+                if (stored.Length > 0) { _attachments.Add(stored); batch.Success(name); }
+                else batch.Failure(name, "上传接口没有返回落盘路径");
+            }
+            catch (Exception ex)
+            {
+                // 单个文件:往外抛,交外层 Run(AttachAsync, "附件没能上传") 提示,与改动前一致
+                if (batch.Total == 1) throw;
+                batch.Failure(name, ex.Message);
+            }
         }
-        if (bytes.Length == 0)
+        if (batch.Total > 1)
         {
-            Toast("跳过空文件", name, ToastKind.Warning);
-            return;
+            Toast(batch.AnyFailed ? "部分附件没能上传" : "已添加附件", batch.SummaryText(),
+                batch.AnyFailed ? ToastKind.Warning : ToastKind.Success);
         }
-        string stored = await Api.CallAsync<string>("stash_upload", new
-        {
-            name,
-            data = Convert.ToBase64String(bytes),
-        }) ?? "";
-        if (stored.Length > 0) _attachments.Add(stored);
         RenderAttachments();
+        return batch;
     }
 
     private void RenderAttachments()

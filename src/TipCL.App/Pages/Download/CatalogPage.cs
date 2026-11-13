@@ -137,7 +137,7 @@ public sealed class CatalogPage : PageBase
         var exportAllBtn = U.Btn("全部导出", BtnKind.Chip, (_, _) => Run(() => ExportAllInstalledAsync(_installedNames), "导出失败"), "Export");
         exportAllBtn.IsVisible = ExportKind().Length > 0;
         var linkBtn = U.Btn("链接安装", BtnKind.Chip, (_, _) => Run(InstallFromLinkAsync, "链接安装失败"), "Open");
-        var localBtn = U.Btn("导入本地文件", BtnKind.Chip, (_, _) => ImportLocal(), "Import");
+        var localBtn = U.Btn("导入本地文件", BtnKind.Chip, (_, _) => _ = ImportLocalAsync(), "Import");
         var refreshBtn = U.IconBtn("Refresh", "刷新", (_, _) => Run(ReloadCurrentAsync, "搜索失败"));
 
         var filters = new WrapPanel();
@@ -722,7 +722,10 @@ public sealed class CatalogPage : PageBase
     {
         string inst = CurrentInstance();
         if (inst.Length == 0) return extra;
-        var saves = await Api.TryCallAsync<List<SaveRow>>("list_saves", null, new { instance = inst, version = "" }) ?? new();
+        // 「已装于版本」选了隔离版本时,数据包会装进 <实例>/versions/<版本>/datapacks,存档也挂在那个
+        // 版本下 → 列表必须按同一个 version 取;否则选中「装进存档」会指到一个那个版本里并不存在的存档。
+        string version = InstalledVersion();
+        var saves = await Api.TryCallAsync<List<SaveRow>>("list_saves", null, new { instance = inst, version }) ?? new();
         if (saves.Count == 0) return extra;
         var names = new[] { "不装进存档" }.Concat(saves.Select(s => s.Name)).ToArray();
         var pick = UiClass.Combo(names, names[0], 260);
@@ -848,22 +851,65 @@ public sealed class CatalogPage : PageBase
         await DoInstallAsync(extra);
     }
 
-    private async void ImportLocal()
+    /// <summary>
+    /// 「导入本地文件」入口:多选后逐个导入(对齐 Windows `CatalogPage.ImportLocal`:一个文件一个
+    /// install_* 任务)。取消(空数组)什么都不做;单个文件走 <see cref="ImportLocalFilesAsync"/> 的
+    /// N=1 分支,提示与改动前逐字一致。
+    /// </summary>
+    public async Task ImportLocalAsync()
     {
         try
         {
             var patterns = _kind.LocalFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
-            string? path = await Dlg.PickFile("导入本地" + _kind.Title, patterns.Length > 0 ? patterns : new[] { "*.*" });
-            if (string.IsNullOrWhiteSpace(path)) return;
-            var extra = BaseExtra(System.IO.Path.GetFileName(path));
-            extra["path"] = path;
-            extra["source"] = "本地";
-            await DoInstallAsync(extra);
+            var files = await Dlg.PickFiles("导入本地" + _kind.Title, patterns.Length > 0 ? patterns : new[] { "*.*" });
+            await ImportLocalFilesAsync(files);
         }
         catch (Exception ex)
         {
             Toast("导入失败", ex.Message, ToastKind.Warning);
         }
+    }
+
+    /// <summary>
+    /// 逐个导入选中的本地文件(测试直接喂真实临时文件,不 mock 文件系统)。
+    /// 单个文件失败沿用改动前的「导入失败 + 原话」;多选时逐文件记名,最后给一条汇总。
+    /// </summary>
+    public async Task<ImportBatch> ImportLocalFilesAsync(IReadOnlyList<string> files)
+    {
+        var batch = new ImportBatch(files.Count);
+        foreach (string path in files)
+        {
+            if (string.IsNullOrWhiteSpace(path)) continue;
+            try
+            {
+                await ImportOneLocalAsync(path);
+                batch.Success(System.IO.Path.GetFileName(path));
+            }
+            catch (Exception ex)
+            {
+                batch.Failure(System.IO.Path.GetFileName(path), ex.Message);
+            }
+        }
+        if (batch.Total == 1)
+        {
+            // 单个文件:DoInstallAsync 已经把「已加入队列」报出去了;失败才补一条(与改动前逐字一致)
+            if (batch.AnyFailed) Toast("导入失败", batch.Failures[0].Reason, ToastKind.Warning);
+        }
+        else if (!batch.Canceled)
+        {
+            Toast(batch.AnyFailed ? "导入失败" : "已加入队列", batch.SummaryText(),
+                batch.AnyFailed ? ToastKind.Warning : ToastKind.Success);
+        }
+        return batch;
+    }
+
+    /// <summary>导入一个本地文件(改动前 ImportLocal 的函数体,原样抽出以便循环复用)。</summary>
+    private async Task ImportOneLocalAsync(string path)
+    {
+        var extra = BaseExtra(System.IO.Path.GetFileName(path));
+        extra["path"] = path;
+        extra["source"] = "本地";
+        await DoInstallAsync(extra);
     }
 
     private async Task DeleteInstalledAsync(string filename)

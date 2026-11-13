@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using UiFacade = TipCL.App.Ui.Ui;
@@ -214,6 +215,37 @@ public static class Dlg
             },
         });
         return files.Count > 0 ? files[0].Path.LocalPath : null;
+    }
+
+    /// <summary>
+    /// 测试/无宿主注入点:非 null 时 <see cref="PickFiles"/> 不弹系统文件对话框,直接用注入的实现
+    /// (与 `PageLayoutIO.PickFileDialog` 同一做法,见 Common/Dlg.cs 的对位说明)。生产代码从不设置它。
+    /// </summary>
+    public static Func<string, string[], string[]>? PickFilesOverride { get; set; }
+
+    /// <summary>
+    /// 多选文件(对齐 Windows 版 Dlg.PickFiles:`Multiselect = true`)。
+    /// <para>取消时返回**空数组**(不是 null),调用方据此「什么都不做」;</para>
+    /// <para>文件类型过滤器与 <see cref="PickFile"/> 同形(单个「文件」类型 + Patterns)。</para>
+    /// </summary>
+    public static async Task<string[]> PickFiles(string title = "选择文件", params string[] patterns)
+    {
+        if (PickFilesOverride != null) return PickFilesOverride(title, patterns) ?? Array.Empty<string>();
+        var host = Resolve(null);
+        if (host == null) return Array.Empty<string>();
+        var files = await host.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = true,
+            FileTypeFilter = new[]
+            {
+                new Avalonia.Platform.Storage.FilePickerFileType("文件")
+                {
+                    Patterns = patterns.Length > 0 ? patterns : new[] { "*.*" },
+                },
+            },
+        });
+        return files.Count > 0 ? files.Select(f => f.Path.LocalPath).ToArray() : Array.Empty<string>();
     }
 
     public static async Task<string?> SaveFile(string title, string suggestedName)

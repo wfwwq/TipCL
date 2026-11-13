@@ -1440,7 +1440,31 @@ public sealed class InProcessApi : IApi
         var files = Py.ListOr(Py.Or(res.Get("files"), new List<object>()));
         prog.Log("完成: " + (files.Count > 0 ? string.Join(", ", files.Select(Py.Str)) : Py.Str(extra.Get("name"))));
         if (kind == "datapack")
-            prog.Log("数据包已放到实例 datapacks 目录,请复制到对应存档的 datapacks 文件夹后进入世界。");
+        {
+            // 下载页问的「装进存档」= extra["save"]:选中了哪个存档,装完就地复制进它的 datapacks。
+            // Windows 侧这个键传下去后没人读(参考版缺陷,见 _cmp/r18-report.md 任务 B),
+            // Linux 侧按 Progress 里写明的意图落地:能进就进,进不去只记一条带原因的日志(数据包本身已装好)。
+            string save = Py.S(extra.Get("save"));
+            if (save.Length > 0 && files.Count > 0)
+            {
+                foreach (object f in files)
+                {
+                    try
+                    {
+                        string target = Saves.InstallDatapackIntoSave(inst, f, save, version);
+                        prog.Log("已装进存档 " + save + ": " + target);
+                    }
+                    catch (Exception ex)
+                    {
+                        prog.Log($"没能装进存档 {save}({Py.Str(f)}):{ex.Message}");
+                    }
+                }
+            }
+            else
+            {
+                prog.Log("数据包已放到实例 datapacks 目录,请复制到对应存档的 datapacks 文件夹后进入世界。");
+            }
+        }
     }
 
     /// <summary>install_world 的实现。</summary>
