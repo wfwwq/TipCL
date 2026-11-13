@@ -19,6 +19,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using TipCL.Pages;
 using TipCL.Services;
 using TipCL.Themes;
@@ -46,7 +47,8 @@ namespace TipCL;
 /// <item><c>ToastHost</c> / <c>DialogHost</c> → 右上角 Toast 宿主(C2c1 起画真的卡片:
 /// <see cref="ToastLayer"/> + <see cref="ToastCard"/>,<c>AppServices.ToastSink</c> 在这里接上)、
 /// <c>DialogHost</c> 接给 <c>Dlg.Host</c>;
-/// DropVeil、FlyHost、Wallpaper、下载任务底条(Dock)之属 C2c 的其余部分,本包不画。</item>
+/// <c>FlyHost</c> 从 C3d 起落地(<see cref="FlyToTasks"/> 用的飞行 chip 宿主,见那里的 z 序说明);
+/// DropVeil 由 C2c2 落地;Wallpaper 由 C2c2 落地;下载任务底条(Dock)之属 C2c 的其余部分,本包不画。</item>
 /// </list>
 /// </summary>
 internal sealed class MainWindow : Window
@@ -130,6 +132,13 @@ internal sealed class MainWindow : Window
 	/// <summary>拖放浮层(Windows <c>MainWindow.xaml</c> 的 <c>DropVeil</c> + <c>ShowDropVeil</c>;C2c2)。</summary>
 	private readonly DropVeil _dropVeil;
 
+	/// <summary>
+	/// 「飞向任务页」的 chip 宿主(Windows <c>MainWindow.xaml</c> 的
+	/// <c>&lt;Canvas Name="FlyHost" Grid.Row="0" Grid.RowSpan="2" IsHitTestVisible="False"/&gt;</c>)。
+	/// C3d 落地:<see cref="FlyToTasks"/> 每次调用往这里加一个 chip,动画跑完自己摘掉。
+	/// </summary>
+	private readonly Canvas _flyHost;
+
 	private bool _bridgeReady;
 
 	/// <summary>后端启动器(C2d;null = 还没有人调过 <see cref="ConnectAsync"/>)。</summary>
@@ -177,6 +186,7 @@ internal sealed class MainWindow : Window
 		};
 		_toastLayer = new ToastLayer(_toastHost);
 		_dropVeil = new DropVeil();
+		_flyHost = new Canvas { Name = "FlyHost", IsHitTestVisible = false };
 		_rootBorder = new Border
 		{
 			Name = "RootBorder",
@@ -483,6 +493,13 @@ internal sealed class MainWindow : Window
 		Grid.SetRow(_contentLayer, 0);
 		Grid.SetRowSpan(_contentLayer, 2);
 
+		// 飞行 chip 宿主(Windows 的 FlyHost):**紧跟 ContentLayer、在 DropVeil / Toast / 对话层之下**,
+		// 跨两行铺满整窗 —— 这正是 Windows XAML 的子元素顺序
+		// (ContentLayer → FlyHost → DropVeil → ToastHost → DialogHost),z 序按同一顺序。
+		outer.Children.Add(_flyHost);
+		Grid.SetRow(_flyHost, 0);
+		Grid.SetRowSpan(_flyHost, 2);
+
 		// 拖放浮层:盖在正文之上、Toast / 对话层之下(Windows 的 XAML 顺序也是
 		// ContentLayer → DropVeil → ToastHost → DialogHost)。
 		outer.Children.Add(_dropVeil);
@@ -738,6 +755,105 @@ internal sealed class MainWindow : Window
 
 	/// <summary>Toast 宿主管理器(测试要验堆叠 / 自动关闭 / 计时器不泄漏)。</summary>
 	internal ToastLayer Toasts => _toastLayer;
+
+	// =====================================================================
+	// 飞向任务页(C3d;Windows MainWindow.xaml.cs:1336-1425)
+	// =====================================================================
+
+	/// <summary>飞行 chip 的宿主(Windows 的 <c>FlyHost</c>;测试要验 chip 的建 / 删与几何)。</summary>
+	internal Canvas FlyHostPanel => _flyHost;
+
+	/// <summary>
+	/// 当前侧栏里切到 <c>tasks</c> 页的那一行 —— Windows 的 <c>TabTasks</c> 在 mac 上的等价物
+	/// (D-97:mac 的外壳是侧栏,没有 Windows 的顶栏页签)。行表被配置改没了就是 null
+	/// (Windows 的 <c>TabTasks == null</c> 同一分支)。
+	/// </summary>
+	internal ToggleButton? TasksNavRow()
+	{
+		foreach (Control child in _navGrid.Children)
+		{
+			if (child is ToggleButton row && row.Tag is string key && PageFor(key) == "tasks")
+			{
+				return row;
+			}
+		}
+		return null;
+	}
+
+	/// <summary>
+	/// 在「源控件中心」冒一个小药丸 chip、620ms 飞到「任务页」那一行并淡出
+	/// (Windows <c>MainWindow.FlyToTasks</c>,<c>MainWindow.xaml.cs:1336-1425</c>)。
+	/// 起点 = <paramref name="source"/> 的中心,终点 = 任务导航行的中心。**这就是 13 处页面调用点
+	/// (CatalogPage / InstallPage / InstancePage / JavaPage / LaunchPage / MultiplayerPage /
+	/// VersionManagePage)统一走的那一个成员**,页面侧不再各自留注入缝。
+	///
+	/// 与 Windows 逐条对齐的四道守卫:关掉动画(<see cref="Motion.Enabled"/>)、外壳还没挂进可视树
+	/// (Windows 的 <c>!IsLoaded</c>,Avalonia 侧的等价判据见 <see cref="Motion.Loop"/>)、
+	/// 任务行不存在 / <paramref name="source"/> 或任务行不可见、取不到坐标(Windows 的 try/catch)。
+	/// 任一满足就**什么都不做**。所以 <c>--smoke</c>(离屏没有动画时钟 ⇒ <c>Motion.Enabled</c> 为假)
+	/// 下它一行都不画,冒烟帧不受影响。
+	///
+	/// 动画本身在 <see cref="FlyMotion"/> 里(620ms、四条曲线、跑完摘 chip)。
+	/// </summary>
+	public void FlyToTasks(Control source, string text = "", string? colorKey = null)
+	{
+		if (!Motion.Enabled || !this.IsAttachedToVisualTree())
+		{
+			return;
+		}
+		ToggleButton? target = TasksNavRow();
+		if (target is null || source is null || !source.IsVisible || !target.IsVisible)
+		{
+			return;
+		}
+		Point? from = CentreInShell(source);
+		Point? to = CentreInShell(target);
+		if (from is null || to is null)
+		{
+			return;
+		}
+
+		// 【Windows 源】药丸 chip:圆角 999、内边距 10/4/10/5、11.5 半粗、"B.OnAccentStrong" 文字。
+		Border chip = new Border
+		{
+			CornerRadius = new CornerRadius(999.0),
+			Padding = new Thickness(10.0, 4.0, 10.0, 5.0),
+			Child = Ui.Txt(string.IsNullOrEmpty(text) ? I18n.L("已加入队列") : text, 11.5, bold: true, "B.OnAccentStrong")
+		};
+		chip.Dyn(Border.BackgroundProperty, colorKey ?? "B.AccentStrong");
+		Motion.Shadow(chip, 16.0, 0.3, 3.0);
+		_flyHost.Children.Add(chip);
+
+		// 【Windows 源】chip.Measure(new Size(500, 60)) 之后按 DesiredSize 把 chip 居中到起点。
+		chip.Measure(new Size(500.0, 60.0));
+		Canvas.SetLeft(chip, from.Value.X - chip.DesiredSize.Width / 2.0);
+		Canvas.SetTop(chip, from.Value.Y - chip.DesiredSize.Height / 2.0);
+
+		// 【Windows 源】TransformGroup{ Scale(0.7, 0.7), Translate(0, 0) } + RenderTransformOrigin(0.5, 0.5)。
+		ScaleTransform scale = new ScaleTransform(FlyMotion.ScaleFrom, FlyMotion.ScaleFrom);
+		TranslateTransform move = new TranslateTransform();
+		chip.RenderTransform = new TransformGroup { Children = { scale, move } };
+		chip.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+
+		double dx = to.Value.X - from.Value.X;
+		double dy = to.Value.Y - from.Value.Y;
+		FlyMotion.Start(chip, dx, dy, delegate
+		{
+			// 【Windows 源】Completed:chip 从 FlyHost 摘掉 + 任务行 Pulse 一下。
+			_flyHost.Children.Remove(chip);
+			Motion.Pulse(target);
+		});
+	}
+
+	/// <summary>
+	/// 控件中心在外壳坐标系里的位置(Windows 的 <c>TransformToAncestor(this).Transform(中心)</c>)。
+	/// 控件不在同一棵可视树里 / 还没布局时 <see cref="Visual.TranslatePoint"/> 返回 null,
+	/// 等价于 Windows 那个 <c>catch { return; }</c> 分支。
+	/// </summary>
+	private Point? CentreInShell(Control control)
+	{
+		return control.TranslatePoint(new Point(control.Bounds.Width / 2.0, control.Bounds.Height / 2.0), this);
+	}
 
 	// =====================================================================
 	// 导航

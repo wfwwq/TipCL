@@ -75,8 +75,22 @@ public static class Motion
 
 	public static event Action? EnabledChanged;
 
-	/// <summary>有没有人推进动画时钟:只有真桌面生命周期才算(测试/离屏环境里是 null)。</summary>
-	internal static bool HasClock => Application.Current?.ApplicationLifetime is not null;
+	/// <summary>
+	/// 测试专用:强制"有人在推进动画时钟"(null = 按真桌面生命周期判断,这是默认值)。
+	/// 为什么需要它:headless 会话里 <c>Application.ApplicationLifetime</c> 永远是 null(D-69/D-98),
+	/// <see cref="Enabled"/> 因此在测试里恒为 false,"动画开着"那一支**完全不可达** —— 每个需要验
+	/// 动画的包都只能验"关掉时落终态"那一半。
+	/// 而 headless 的动画时钟确实推得动(C3d 本机实测:620ms 的 <c>Animation.RunAsync</c> 靠
+	/// <c>AvaloniaHeadlessPlatform.ForceRenderTimerTick()</c> 真的跑完并落了终态;
+	/// 同一次探针还量到 <c>DispatcherTimer</c> 在那条泵里**一次都不 Tick**),
+	/// 所以这里给测试一个"假装有时钟"的注入点。
+	/// **纪律:只在作用域内设它、必须在 Dispose 里还原**(见 DECISIONS D-129)。
+	/// </summary>
+	internal static bool? ClockOverride { get; set; }
+
+	/// <summary>有没有人推进动画时钟:只有真桌面生命周期才算(测试/离屏环境里是 null;测试可以经
+	/// <see cref="ClockOverride"/> 强行打开,见那里的说明)。</summary>
+	internal static bool HasClock => ClockOverride ?? (Application.Current?.ApplicationLifetime is not null);
 
 	private static TimeSpan D(double ms)
 	{
