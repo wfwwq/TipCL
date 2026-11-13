@@ -4665,3 +4665,30 @@ Lead 验收时已独立复跑确认「真实往返存在且与 Core 状态交叉
 6. **`C2c1WiringTests` 与 `C2bWiringTests` 都动 `AppServices.ToastSink`**,但它们各自用
    `ShellFixture` 的快照在 `Dispose` 里还原,所以不会串;仍然建议 C3 起页面后复核一次
    "页面里的 Toast 会不会在关窗后还被调到"(现在不会抛,只会静默)。
+
+### Lead 验收(2026-11-13 12:45)
+
+结论:**C2c1 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 三个提交(`2100490` / `dcdfa16` / `2fd5be3`) | 工作树干净;无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线文件(`src\TipCL.Core`、`Themes\`、`NavModel.cs`、`NavConfig.cs`、`Pages\`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告 = `NU1900` x6 + `SYSLIB0014` x1 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0 / 通过 2691 / 总计 2691**(2631 → 2691,+60) |
+| 进程内执行器 第 1 / 2 次 | 都是**退出码 0,通过 2691 / 失败 0 / 不支持 0** |
+| `--smoke` light / dark / bad theme | 退出码 0 / 0 / **2**;light **21823 `8336CA13...`**、dark **18200 `DBD3C171...`** —— **与 C2b 基准逐位相同**(Toast 宿主无卡片时什么都不画,离屏不调 Toast) |
+| **既有测试有没有被改弱(Lead 逐项比对)** | `C2bWiringTests.cs`:**断言 75 → 79、用例 20 → 20、Skip 0 → 0**。被改的那条从 `Assert.Null(AppServices.ToastSink)` + `Assert.Empty(children)` **改成** `Assert.NotNull(...)` + 断言宿主里真的出现一张 `ToastCard` 且 `Title`/`Body`/`Kind` 正确 —— **是加强,不是削弱** |
+| 全部改动文件的编码(Lead 按字节核验) | 11 个文件全部 **无 BOM、CR=0(纯 LF)、无 U+FFFD** |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` / 残留进程 / `%TEMP%` 新目录 | 9328 / 889530606 / 2026-11-10 20:42:16;0 个;`tipcl*` 89 → 89 无新增 |
+
+**裁决:接受子代理对任务书文件名的更正(Lead 写错了)**。
+
+Lead 在 C2c1 任务书里点名要搬 `Services\Bubble.cs` 与 `Pages\ConfirmCard.cs`,并说它们是 Toast 卡片与对话框卡片。**实际上仓库里没有 `Services\Bubble.cs`**;`Pages\Bubble.cs` 是 **AI 对话气泡**(think 折叠 / `MdView` / 编辑撤回),`Pages\ConfirmCard.cs` 是 **AI 工具审批卡**(「助手要执行一个操作,需要你确认」),只被 `AiPage.cs:2614` 与 `AiFixWindow.cs:761` 用到,依赖 `AiIcons` / `AiRisk` / `AiUiText` / `MdView`。搬这两个等于连带搬进 AI 页基础设施,与「本包不许移植任何页面」直接冲突。
+
+子代理按**描述**而不是按错名字搬了真正对的两处:Toast 卡片 = `MainWindow.xaml.cs:1179-1255` 的 `MainWindow.Toast`(Windows 侧就是块内建 Border,没有独立类);对话框卡片 = `Services\Dlg.cs:185-213` 的 `Shell`(C2a 时已内联移植,本包抽成 `DialogCard`)。
+
+**裁决:C2c1 的做法正确,保持。** AI 审批卡与 AI 对话气泡**不单独开包**,归到 **C7+(AI 全家)**,和 AI 页一起搬 —— 那时 `AiIcons`/`MdView` 等依赖自然就位。
+
+**遗留**:4 张 Toast 上限按宿主孩子数算(与 Windows 同口径,退场动画期间连弹第 5 张会「闪一下」);关窗后 `ToastSink` 仍指向旧外壳(Windows 同),本包靠 `Dispose` 保证不抛不留计时器。
