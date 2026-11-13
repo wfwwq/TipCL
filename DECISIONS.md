@@ -2147,3 +2147,42 @@ Windows 的最后一步是 `Process.Start("explorer.exe", "/select,\"<path>\"")`
 - **本包处置**:把 26 处预算**对齐项目默认 9000**(这不是放宽断言,是把预算对齐既有纪律,Lead 已核:C3b/C3c/C3e/C4/C5a 的 `Pump`/`WaitDialog`/`PumpTask` 默认都是 9000)。
 - **长期修法(Lead 记的 D1 待办,本包先记在这)**:把"固定预算的泵"换成**"条件成立 + 有截止时间的等待"**,并把**等待失败时的现场值**(实际观察到的计数 / 文案 / 参数)带进断言消息 —— 这样下次红了一眼能定位。别用"延长等待"把红压下去,那只是把抖动推给下一次。
 - 关联:D-120(泵的计时必须用 `Stopwatch`、上限要明显小于会话 30 秒)、D-141(数调用次数当同步手段)、D-114(不要在会话线程上同步等)。
+
+## D-152 C6a 纪律:"产品在 `await` 之后才产生效果"的路径,用例必须在**请求到达之后再等一个可观测效果**,不能直接断言
+
+- **一天之内咬了两次(同一个根因)**:
+  1. `Install_page_fabric_with_api_queues_the_fabric_api_mod_after_the_game_task`:`InstallPage` 是在
+     `await api.StartTaskAsync("install_game", ...)` **返回之后**才把 `TaskStore.Updated` 的处理器挂上的;
+     用例在"请求到达"(`api.Count("install_game") >= 1`)就构造了"任务完成"事件 ⇒ 处理器还没挂,续体不触发。
+  2. `Catalog_install_picks_a_version_file_then_starts_the_install_task`(只在进程内通道偶发红):搜索的续体
+     (`TryCallAsync` 返回之后才 `ShowRows`)要等 Dispatcher 再跑一轮;用例在"请求到达"就断言列表里有一行 ⇒
+     `Assert.Single` 拿到空集合。
+- **判据(写用例时的自检)**:回后端的调用只证明"请求发出去了";**效果发生在续体里** —— 续体要等
+  `Dispatcher.UIThread.RunJobs()` 再跑一轮(离屏夹具靠 `UiHost.Flush()` 推)。所以断言之前必须再等一个
+  **可观测效果**:列表里出现那一行、控制台上的摘要文案变了、Toast 落下来了(本次用的就是"加入队列"这个
+  Toast,它恰好排在挂处理器之后)。
+- **写法**:`Pump(() => <效果成立>, 9000)` —— 条件成立 + 有截止时间(D-120/D-151),不要写 `Settle(n)` 硬等,
+  也不要在 `Count(<方法>) >= 1` 之后就断言。
+- **关联**:D-114(不要在会话线程上同步等)、D-120(泵的计时与上限)、D-141(数调用次数当同步手段)、
+  D-151(固定预算泵 + 并发负载)。这一族全是同一件事的不同侧面:**等"效果",不要等"动作发出"**。
+
+## D-153 C6a:`IClipboard.GetTextAsync` 的 CS0618 是**定点豁免**(窄 `#pragma`)+ 一条被跟踪的迁移待办
+
+- **是什么**:`CatalogPage.SniffClipboard` 里读剪贴板那一句用了 `IClipboard.GetTextAsync()`,11.3 起标过时。
+- **为什么不当场迁**:过时提示写的是"改用 `ClipboardExtensions.TryGetTextAsync`",但 11.3.2 里那个扩展方法的
+  接收者是 **`Avalonia.Input.IAsyncDataTransfer`** —— 实测改成 `top.Clipboard.TryGetTextAsync()` 直接编译不过:
+  ```
+  error CS1929: "IClipboard"不包含"TryGetTextAsync"的定义,最佳扩展方法重载
+    "AsyncDataTransferExtensions.TryGetTextAsync(IAsyncDataTransfer)" 需要类型为 Avalonia.Input.IAsyncDataTransfer 的接收者
+  ```
+  也就是说这不是"换个名字",而是把取文本路径迁到**异步数据传输**那一套(`IClipboard` 先取 `IAsyncDataTransfer`,
+  再 `TryGetTextAsync`),**错误处理口径会变**;而且剪贴板本来就归 **D2 真机清单**(真机上才验得完整)。
+  把这种有风险的 API 迁移塞进一个页面移植包的收尾,正是本项目一直在避免的事(Lead 裁决)。
+- **现在的处置(定点豁免)**:`#pragma warning disable/restore CS0618` **只圈那一句**(disable 与 restore 紧贴,
+  不圈方法、不圈文件),注释写清"为什么 + 正解是什么 + 这是被跟踪的待办(指向本条)"。
+- **迁移待办**:何时做 = 下一次有人动剪贴板这条路(或 D2 真机节奏里排到它);做完怎么验 =
+  **真机**上走一遍"复制 Modrinth/CurseForge 链接 → 切到目录页 → 搜索框被填上 + Toast 提示",
+  并且**两条离屏剪贴板用例必须重跑**(`Catalog_clipboard_seam_fills_the_search_box` 走注入缝那条,
+  以及 `CrashUi` 的剪贴板缝用例)—— 注入缝优先的那条路不许被这次迁移改坏。
+- **明确不许**:这个 `#pragma` 是**这一处 API 过时的定点豁免**,不是"告警可以关"的先例;不许用它或任何别的方式
+  掩盖别的告警(告警预算除 `NU1900` 外只允许 `SYSLIB0014 ×1`)。

@@ -1332,13 +1332,13 @@ public sealed class CatalogPage : PageBase
 				// Avalonia 的剪贴板读取是异步的;这个方法本身是同步的(Windows 那边也是同步的静态入口),
 				// 所以这里**只发起读取、结果不阻塞界面** —— 拿到之后再走同一条判定。
 				//
-				// 【CS0618,请 Lead 裁决】`GetTextAsync` 在 11.3 已标过时,提示改用
-				// `ClipboardExtensions.TryGetTextAsync` —— 但 11.3.2 里那个扩展方法的接收者是
-				// `Avalonia.Input.IAsyncDataTransfer`(实测编译错误:IClipboard 上没有它,最佳重载要
-				// IAsyncDataTransfer)。也就是说"换名字"其实是要改成**异步数据传输**那一套
-				// (IClipboard.TryGetDataAsync → IAsyncDataTransfer.TryGetTextAsync),属于行为与错误处理
-				// 口径都会变的一次迁移,不该在收尾里顺手做。这里先把旧调用**就地**圈住(作用域极小、
-				// 只包这一句),等有预算时按新 API 迁一次;测试与离屏走的是上面的注入缝,不经过这里。
+				// 【CS0618 定点豁免,见 DECISIONS D-153】三件必须写全的事:
+				// 为什么:11.3 起 `IClipboard.GetTextAsync` 已过时(提示"改用 ClipboardExtensions.TryGetTextAsync");
+				// 正解是什么:那个扩展方法的接收者是 `IAsyncDataTransfer`(不是 IClipboard),所以正解要先把
+				//   IClipboard 取成 IAsyncDataTransfer、再 `TryGetTextAsync` —— 属于异步数据传输那一套迁移,
+				//   错误处理口径会变(实测直接换名字编译不过:CS1929);
+				// 这是被跟踪的待办:DECISIONS D-153 记了"何时做 + 做完怎么验(真机 + 两条离屏剪贴板用例都要重跑)"。
+				// 作用域:只圈下面那一句(diable/restore 紧贴),不圈方法、不圈文件;不许拿它掩盖别的告警。
 #pragma warning disable CS0618
 				Task<string?> pending = top.Clipboard.GetTextAsync();
 #pragma warning restore CS0618
