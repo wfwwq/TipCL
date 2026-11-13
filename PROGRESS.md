@@ -3532,7 +3532,7 @@ System.InvalidOperationException : Call from invalid thread
 
 | 文件 | 说明 |
 |---|---|
-| `src/TipCL.App/Services/Ui.cs` | **新增**(门面,约 850 行) |
+| `src/TipCL.App/Services/Ui.cs` | **新增**(门面,768 行) |
 | `src/TipCL.App/Services/UiExt.cs` | **新增** |
 | `src/TipCL.App/Services/SPanel.cs` | **新增** |
 | `src/TipCL.App/Services/SmoothScroll.cs` | **新增** |
