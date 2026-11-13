@@ -24,6 +24,9 @@ namespace TipCL.Services;
 /// <c>Confirm</c> / <c>Ask</c> / <c>Alert</c> / <c>Prompt</c> / <c>Choose</c> / <c>Form&lt;T&gt;</c> /
 /// <c>Panel</c> / <c>Busy</c> / <c>PickFile</c> / <c>PickFiles</c> / <c>SaveFile</c> / <c>PickFolder</c>。
 /// 方法名、参数名、顺序、默认值与回调形状全部照抄。
+/// 所有卡片式对话框(Confirm / Ask / Alert / Prompt / Choose / Form)都渲染在同一张
+/// <see cref="DialogCard"/> 上(C2c1 把 C2a 内联在 <c>Shell</c> 里的那段提成具名类型,
+/// 结构等价,见 D-107);<see cref="Panel"/> 与 <see cref="Busy"/> 各自的内联卡片照旧。
 ///
 /// 四类移植差异(逐条记在 PROGRESS.md 的 C2a 差异表):
 /// 1. WPF 的 <c>UIElement</c>/<c>FrameworkElement</c> → <c>Control</c>;<c>Visibility</c> → <c>IsVisible</c>;
@@ -187,36 +190,13 @@ public static class Dlg
 		}
 	}
 
+	// 卡片本身在 Services\DialogCard.cs(C2c1 把 C2a 内联在这里的那段逐行等价的搬运提成具名类型,
+	// 好让"对话框卡片"能被单独钉住;控件树、取值、行为一个字没改,见 D-107)。
 	// 行结构 Auto,*,Auto:按钮行(footer)钉在卡片底部,body 行吃剩余高度并在超出时滚动,
 	// 避免高内容把 footer 挤出窗口(WP-S11)。
 	private static Border Shell(string title, Control body, Control? footer, double width)
 	{
-		Grid grid = Ui.G("Auto,*,Auto");
-		grid.Add(Ui.H2(title).VCenter(), 0);
-		ScrollViewer bodyScroll = new ScrollViewer
-		{
-			Content = body,
-			Margin = new Thickness(0.0, 14.0, 0.0, 0.0),
-			VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-			HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
-		};
-		grid.Add(bodyScroll, 1);
-		if (footer is Control ffe)
-		{
-			ffe.Margin = new Thickness(0.0, 14.0, 0.0, 0.0);
-			grid.Add(footer, 2);
-		}
-		Border border = new Border();
-		border.CornerRadius = new CornerRadius(10.0);
-		border.Padding = new Thickness(22.0, 18.0, 22.0, 18.0);
-		border.BorderThickness = new Thickness(1.0);
-		border.MaxWidth = width;
-		border.MinWidth = Math.Min(width, 380.0);
-		border.Child = grid;
-		border.Dyn(Border.BackgroundProperty, "B.GlassStrong");
-		border.Dyn(Border.BorderBrushProperty, "B.GlassBorder");
-		Motion.Shadow(border, 40.0, 0.28, 10.0);
-		return border;
+		return new DialogCard(title, body, footer, width);
 	}
 
 	public static Task<bool> Confirm(string title, string body, string? ok = null, string? cancel = null, bool danger = false)
@@ -227,9 +207,10 @@ public static class Dlg
 	public static Task<bool> Ask(string title, Control body, string? ok = null, string? cancel = null, bool danger = false, double width = 520.0)
 	{
 		TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
-		Button button = Ui.Btn(ok ?? I18n.L("确定"), danger ? BtnKind.Danger : BtnKind.Primary);
-		Button button2 = Ui.Btn(cancel ?? I18n.L("取消"));
-		SPanel footer = Ui.H(8.0, button2, button).Right();
+		DialogCard.ConfirmButtons buttons = DialogCard.ConfirmFooter(ok, cancel, danger);
+		Button button = buttons.Ok;
+		Button button2 = buttons.Cancel;
+		SPanel footer = buttons.Footer;
 		Border card = Shell(title, body, footer, width);
 		Layer layer = null;
 		layer = Push(card, delegate
