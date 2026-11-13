@@ -45,6 +45,6 @@ APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy.AppImage --appdir TipCL.AppDir \
 ## 还差什么(最终收尾时做)
 
 1. 用**最终产物**重跑一遍(本轮之后 R15~R20 还会改代码),把 `dist/TipCL-linux-x64.AppImage` 归档出来;
-2. 补一次**不带 `APPIMAGE_EXTRACT_AND_RUN`** 的裸跑(看这台盒子的 FUSE 到底能不能挂),结果如实写;
+2. ~~补一次**不带 `APPIMAGE_EXTRACT_AND_RUN`** 的裸跑~~ —— **已补测**:直接执行 `./TipCL-x86_64.AppImage --smoke`(带 FUSE)**exit 0**、出 `smoke.png` 568,431 B(launch 页)、应用日志正常 ⇒ **这台盒子的 FUSE 能挂,裸跑可用**;`APPIMAGE_EXTRACT_AND_RUN=1` 只是无 FUSE 环境下的后备。另测 `gio launch <appimage>` 失败(`Unable to load: Key file contains line "ELF…"`)—— 属预期:AppImage 是「按可执行文件直接跑」的形态,不是 `.desktop` 项,别用 `gio launch` 描述它的双击路径;
 3. 确认 `tools/package.sh` 的注释与本文档一致(两点前置条件:`file` 包、FUSE/extract-and-run),必要时把 `file` 缺失与 FUSE 这两条写进脚本的提示文案;
 4. 双击可用性:AppImage 需要 `chmod +x` + 桌面文件里 `Exec` 指向 AppImage 才行,这部分与已归档的 `.desktop` 快捷方式链(D-23)不是同一件事,文档里要写清各自覆盖的路径。
