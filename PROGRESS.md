@@ -5282,3 +5282,27 @@ Lead 在任务书里说「内置预设背景已内嵌在 Core 的 `Resources\wal
   `_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, ...)` 要换成 Avalonia 的
   `Layoutable.MaxHeightProperty`(或走 `Ui.WindowPctConverter` + `Bind`);
   `CrashUi.ShowAsync` / `VersionSetupDialog.ShowAsync` 的调用形状**不用改**。
+
+### Lead 验收(2026-11-13 16:05)
+
+结论:**C3b 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 四个提交(`d9670a6` / `823c3d9` / `246f53e` / `0e578f5`) | 工作树干净;无 remote、无 tag;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线(`src\TipCL.Core`、`Themes\`、`NavModel/NavConfig`、`Services\`、`MainWindow.cs`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改 |
+| **两个新模型对 Windows 源 SHA256** | `OpResult.cs` **一致**、`VersionSettingsDto.cs` **一致**(字节级) |
+| 仓库里有没有残留探针 | `git ls-files` 里 `Zz*` **0 个** |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告码 = `NU1900` x6 + `SYSLIB0014` x1 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0 / 通过 2968 / 总计 2968**(2897 -> 2968,+71) |
+| 进程内执行器 第 1 / 2 次 | 都是**退出码 0,通过 2968 / 失败 0 / 不支持 0** |
+| `--smoke` light / dark / bad | 退出码 0 / 0 / **2**;light **21823 `8336CA13...`**、dark **18200 `DBD3C171...`** —— **与基准逐位相同**(空壳无页面) |
+| 全部改动文件编码 | **无 BOM、CR=0、U+FFFD=0** |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` / 桌面 / 图片 / 残留进程 / `%TEMP%` | 9328 / 889530606 / 2026-11-10 20:42:16(**零写入**);桌面 14 项、最新 2026-11-12 19:02:53(**不变**);图片最新 2026-11-06(**零写入**);残留进程 **0**;`tipcl*` **92 -> 92**(我的复跑没新增) |
+
+**裁决 1:接受依赖前提的第二次更正(Lead 的错)。** Lead 说这两个对话框「自包含」,**又不成立**:还缺 `Models\OpResult.cs`(240B)与 `Models\VersionSettingsDto.cs`(1136B)。子代理按「小而自包含就一并搬」处理,字节级搬进 `src\TipCL.App\Models\`,**Core 一字节未动** —— 正确,且我已核验两者与 Windows 源逐字节一致。这已经是同一类错误的第三次(壁纸位置、Toast/对话框文件身份、自包含判断),**教训:C3+ 的任务书里凡是 Lead 断言「自包含」的地方,子代理都必须自己读一遍依赖再动手**。
+
+**裁决 2:`AiFixWindow` 的降级 —— 接受,挂点留给 C7。** `AiFixWindow`(22.6 KB,整窗)属 AI 全家,现在搬它会连带拖进 `AiIcons`/`MdView` 等基础设施。子代理的做法是:**按钮照 Windows 建**(文案/图标/提示/Primary 全同)、点击走新增注入缝 `CrashUi.AiFixLauncher`、**没接挂点时如实弹 Toast 说暂未实现**。这比「按钮点了没反应」或「桩一个空窗口」都诚实,也符合 GOAL §2.5。**C7 搬 AI 全家时必须把 `AiFixLauncher` 接上**,并复查这条降级消失。
+
+**裁决 3:接受 D-120(对话框等待纪律)。** 子代理如实上报第一版 71 条里有 23 红,拆开只有 1 条断言写错 + 1 条「对话框还开着就等对话框任务」的死等,其余 21 条是会话线程被占死后的连锁超时;根因之一是它第一版按「轮数 x 2ms」计时,把 15 秒预算拖过了会话的 30 秒。修法与 C3+ 纪律已记进 D-120。**这条与 D-113/D-114 一起,是页面阶段必须遵守的三条测试纪律。**
