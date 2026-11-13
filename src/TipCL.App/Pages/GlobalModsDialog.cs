@@ -58,20 +58,15 @@ public static class GlobalModsDialog
 			{
 				string file = row.Filename;
 				CheckBox box = Ui.Switch(row.Enabled);
-				box.Checked += delegate
+				// 【Avalonia 差异】Windows 分别接 Checked / Unchecked;Avalonia 11.3 把这两个标成过时(CS0618),
+				// 等价物是 IsCheckedChanged + 判 IsChecked(与 Ui.Check/Switch 门面同一口径)。初值先设、订阅在后。
+				box.IsCheckedChanged += delegate
 				{
+					bool on = box.IsChecked == true;
 					PageBase.Run(() => api.TryCallAsync<object>("set_global_mod_enabled", new
 					{
 						filename = file,
-						enabled = true
-					}));
-				};
-				box.Unchecked += delegate
-				{
-					PageBase.Run(() => api.TryCallAsync<object>("set_global_mod_enabled", new
-					{
-						filename = file,
-						enabled = false
+						enabled = on
 					}));
 				};
 				Grid grid = Ui.G(null, "Auto,*,Auto");

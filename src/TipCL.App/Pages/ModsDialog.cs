@@ -155,23 +155,29 @@ public static class ModsDialog
 				string file = mod.Filename;
 				// 闭包里用的 ver 是**本次** Reload 那次的目标版本(Windows 也是这么捕获的)
 				CheckBox box = Ui.Switch(mod.Enabled);
-				box.Checked += delegate
+				// 【Avalonia 差异】Windows 分别接 Checked / Unchecked;Avalonia 11.3 把这两个标成过时(CS0618),
+				// 等价物是 IsCheckedChanged + 判 IsChecked(与 Ui.Check/Switch 门面同一口径)。初值先设、订阅在后,
+				// 所以不会多触发一次。
+				box.IsCheckedChanged += delegate
 				{
-					PageBase.Run(() => api.TryCallAsync<object>("enable_mod", new
+					if (box.IsChecked == true)
 					{
-						instance = instance,
-						filename = file,
-						version = ver
-					}));
-				};
-				box.Unchecked += delegate
-				{
-					PageBase.Run(() => api.TryCallAsync<object>("disable_mod", new
+						PageBase.Run(() => api.TryCallAsync<object>("enable_mod", new
+						{
+							instance = instance,
+							filename = file,
+							version = ver
+						}));
+					}
+					else
 					{
-						instance = instance,
-						filename = file,
-						version = ver
-					}));
+						PageBase.Run(() => api.TryCallAsync<object>("disable_mod", new
+						{
+							instance = instance,
+							filename = file,
+							version = ver
+						}));
+					}
 				};
 				Grid row = Ui.G(null, "Auto,*,Auto");
 				row.Add(box.M(0.0, 0.0, 12.0).VCenter(), 0);
