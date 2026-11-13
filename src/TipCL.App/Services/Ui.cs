@@ -1,16 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using Avalonia;
+using Avalonia.Animation;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Styling;
 using TipCL.Themes;
 
 namespace TipCL.Services;
@@ -355,5 +361,443 @@ public static class Ui
     private static void ApplyForeground(Control control, string key)
     {
         control[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(key);
+    }
+
+    /// <summary>
+    /// 虚拟化列表。WPF 版用 <c>FrameworkElementFactory</c> + <c>IValueConverter</c> 造 DataTemplate,
+    /// Avalonia 的等价物是 <c>FuncDataTemplate&lt;T&gt;</c>(工厂直接返回控件,不再绕转换器);
+    /// 容器样式(WPF 的 <c>ItemContainerStyle</c>)在 Avalonia 是 <c>ItemContainerTheme</c>,
+    /// 里面用一份最小 ControlTheme 把模板换成裸 <c>ContentPresenter</c> + 行间距 + 不可聚焦。
+    /// <c>ScrollViewer.SetCanContentScroll</c> 在 Avalonia 没有对应设置(列表本来就虚拟化 + 像素滚动)。
+    /// </summary>
+    public static ListBox VirtualList<T>(Func<T, Control> row, double rowSpacing = 8.0)
+    {
+        ListBox list = new ListBox
+        {
+            Focusable = false,
+            ItemTemplate = new FuncDataTemplate<T>((item, _) => row(item)),
+            ItemContainerTheme = BareContainer(rowSpacing)
+        };
+        StyleKeys.Apply(list, "PlainList");
+        ScrollViewer.SetHorizontalScrollBarVisibility(list, Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled);
+        return list;
+    }
+
+    private static ControlTheme BareContainer(double spacing)
+    {
+        return new ControlTheme(typeof(ListBoxItem))
+        {
+            TargetType = typeof(ListBoxItem),
+            Setters =
+            {
+                // Template 是 TemplatedControl 上的属性,ListBoxItem 继承自 ContentControl。
+                new Setter(ContentControl.TemplateProperty, new FuncControlTemplate<ListBoxItem>((_, _) => new ContentPresenter())),
+                new Setter(Layoutable.MarginProperty, new Thickness(0.0, 0.0, 0.0, spacing)),
+                new Setter(InputElement.FocusableProperty, false),
+            },
+        };
+    }
+
+    public static Border Sep(bool vertical = false)
+    {
+        Border border = new Border();
+        border.Dyn(Border.BackgroundProperty, "B.LineSoft");
+        if (vertical)
+        {
+            border.Width = 1.0;
+            border.VerticalAlignment = VerticalAlignment.Stretch;
+        }
+        else
+        {
+            border.Height = 1.0;
+            border.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
+        return border;
+    }
+
+    public static Control Spring()
+    {
+        return new Border
+        {
+            Width = 0.0,
+            Height = 0.0
+        };
+    }
+
+    public static TextBox Input(string placeholder = "", string text = "", double width = double.NaN)
+    {
+        TextBox textBox = new TextBox
+        {
+            Text = text,
+            Tag = placeholder
+        };
+        StyleKeys.Apply(textBox, "Input");
+        if (!double.IsNaN(width))
+        {
+            textBox.Width = width;
+        }
+        return textBox;
+    }
+
+    public static TextBox Multi(string placeholder = "", string text = "", double height = 90.0)
+    {
+        TextBox textBox = new TextBox
+        {
+            Tag = placeholder,
+            Text = text,
+            Height = height
+        };
+        StyleKeys.Apply(textBox, "Input.Multi");
+        return textBox;
+    }
+
+    public static TextBox LogBox()
+    {
+        TextBox textBox = new TextBox();
+        StyleKeys.Apply(textBox, "Input.Log");
+        return textBox;
+    }
+
+    /// <summary>
+    /// 密码框。**返回类型由 WPF 的 <c>PasswordBox</c> 改成 <c>TextBox</c>**:Avalonia 11 没有
+    /// <c>PasswordBox</c> 控件(见 D-75),C1b 的 <c>Pw</c> 样式也是一份 <c>TextBox.pw</c> 类。
+    /// 掩码字符取 WPF <c>PasswordBox</c> 的默认值 <c>●</c>(U+25CF),调用点若用别的字符直接改
+    /// <c>PasswordChar</c> 即可。
+    /// </summary>
+    public static TextBox Pw(double width = double.NaN)
+    {
+        TextBox textBox = new TextBox
+        {
+            PasswordChar = '\u25cf'
+        };
+        StyleKeys.Apply(textBox, "Pw");
+        if (!double.IsNaN(width))
+        {
+            textBox.Width = width;
+        }
+        return textBox;
+    }
+
+    public static ComboBox Combo(IEnumerable<string>? items = null, string? selected = null, double width = double.NaN, string placeholder = "", bool editable = false)
+    {
+        ComboBox comboBox = new ComboBox
+        {
+            Tag = placeholder,
+            IsEditable = editable
+        };
+        StyleKeys.Apply(comboBox, "Combo");
+        if (items != null)
+        {
+            foreach (string item in items)
+            {
+                comboBox.Items.Add(item);
+            }
+        }
+        if (selected != null && comboBox.Items.Contains(selected))
+        {
+            comboBox.SelectedItem = selected;
+        }
+        else if (comboBox.Items.Count > 0)
+        {
+            comboBox.SelectedIndex = 0;
+        }
+        if (!double.IsNaN(width))
+        {
+            comboBox.Width = width;
+        }
+        return comboBox;
+    }
+
+    public static CheckBox Check(string label, bool value = false, EventHandler<RoutedEventArgs>? changed = null)
+    {
+        CheckBox checkBox = new CheckBox
+        {
+            Content = label,
+            IsChecked = value
+        };
+        StyleKeys.Apply(checkBox, "Chk");
+        if (changed != null)
+        {
+            // WPF 的 Checked / Unchecked 两个事件在 Avalonia 11.3 已标记过时(CS0618);
+            // IsCheckedChanged 的签名与语义在两态控件上完全等价,所以接它。
+            checkBox.IsCheckedChanged += changed;
+        }
+        return checkBox;
+    }
+
+    public static CheckBox Switch(bool value = false, EventHandler<RoutedEventArgs>? changed = null)
+    {
+        CheckBox checkBox = new CheckBox
+        {
+            IsChecked = value,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        StyleKeys.Apply(checkBox, "Switch");
+        if (changed != null)
+        {
+            // 同 Check():用不过时的 IsCheckedChanged。
+            checkBox.IsCheckedChanged += changed;
+        }
+        return checkBox;
+    }
+
+    public static Slider Sld(double min, double max, double value, double tick = 1.0)
+    {
+        Slider slider = new Slider
+        {
+            Minimum = min,
+            Maximum = max,
+            Value = Clamp.Of(value, min, max),
+            TickFrequency = tick,
+            IsSnapToTickEnabled = (tick > 0.0)
+        };
+        StyleKeys.Apply(slider, "Sld");
+        return slider;
+    }
+
+    public static ProgressBar Prog(double value = 0.0)
+    {
+        ProgressBar progressBar = new ProgressBar
+        {
+            Value = value,
+            Maximum = 100.0
+        };
+        StyleKeys.Apply(progressBar, "Prog");
+        return progressBar;
+    }
+
+    public static Border Tag(string text, string fg = "B.InkMuted", string bg = "B.LineSoft")
+    {
+        Border border = new Border
+        {
+            CornerRadius = new CornerRadius(8.0),
+            Padding = new Thickness(6.0, 1.5, 6.0, 2.5),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = Txt(text, 11.0, bold: false, fg)
+        };
+        border.Dyn(Border.BackgroundProperty, bg);
+        return border;
+    }
+
+    public static Border Badge(string text)
+    {
+        TextBlock textBlock = new TextBlock
+        {
+            Text = text,
+            FontSize = 11.0,
+            FontWeight = FontWeight.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        textBlock.Dyn(TextBlock.ForegroundProperty, "B.OnAccentStrong");
+        Border border = new Border
+        {
+            CornerRadius = new CornerRadius(999.0),
+            Padding = new Thickness(6.0, 0.0, 6.0, 1.0),
+            MinWidth = 18.0,
+            Height = 18.0,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = textBlock
+        };
+        border.Dyn(Border.BackgroundProperty, "B.AccentStrong");
+        return border;
+    }
+
+    public static Grid Field(string label, Control control, string? hint = null, double labelWidth = 140.0)
+    {
+        Grid grid = G(null, $"{labelWidth},*");
+        SPanel panel = V(2.0, Txt(label), (hint == null) ? null : Small(hint).Wrap());
+        panel.VerticalAlignment = VerticalAlignment.Center;
+        panel.Margin = new Thickness(0.0, 0.0, 10.0, 0.0);
+        control.VerticalAlignment = VerticalAlignment.Center;
+        grid.Add(panel, 0);
+        grid.Add(control, 0, 1);
+        grid.Margin = new Thickness(0.0, 4.0, 0.0, 4.0);
+        return grid;
+    }
+
+    public static Grid Section(string title, string? sub = null, Control? right = null)
+    {
+        Grid grid = G(null, "*,Auto");
+        TextBlock? subBlock = (sub == null) ? null : Muted(sub);
+        if (subBlock != null)
+        {
+            // WPF 的 TextWrapping.NoWrap 与 CharacterEllipsis 在 Avalonia 里同名。
+            subBlock.TextWrapping = TextWrapping.NoWrap;
+            subBlock.TextTrimming = TextTrimming.CharacterEllipsis;
+        }
+        SPanel el = V(2.0, H2(title), subBlock);
+        grid.Add(el, 0);
+        if (right != null)
+        {
+            right.VerticalAlignment = VerticalAlignment.Center;
+            grid.Add(right, 0, 1);
+        }
+        return grid;
+    }
+
+    public static SPanel Empty(string glyph, string title, string? hint = null)
+    {
+        TextBlock titleBlock = new TextBlock
+        {
+            Text = title,
+            FontSize = 13.0,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        titleBlock.Dyn(TextBlock.ForegroundProperty, "B.InkMuted");
+
+        TextBlock? hintBlock = null;
+        if (hint != null)
+        {
+            hintBlock = new TextBlock
+            {
+                Text = hint,
+                FontSize = 12.0,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 420.0,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            hintBlock.Dyn(TextBlock.ForegroundProperty, "B.InkFaint");
+        }
+
+        SPanel panel = V(8.0, Glyph(glyph, 24.0, "B.InkFaint"), titleBlock, hintBlock);
+        panel.HorizontalAlignment = HorizontalAlignment.Center;
+        panel.VerticalAlignment = VerticalAlignment.Center;
+        panel.Margin = new Thickness(0.0, 24.0, 0.0, 24.0);
+        foreach (Control child in panel.Children)
+        {
+            child.HorizontalAlignment = HorizontalAlignment.Center;
+        }
+        return panel;
+    }
+
+    /// <summary>
+    /// 骨架占位:灰底 + 一道 90px 的白光横扫(WPF 版用 <c>Motion.Loop</c> 起无限动画)。
+    /// **mac 侧的 Motion 门面属 C2**(见 D-70),所以这里用 <c>Lucide.MotionEnabled</c> 这个已有的开关
+    /// 顶上,并且与 Lucide 共用同一条纪律:**只在真正跑起来的应用生命周期下起动画** ——
+    /// 离屏(--smoke)与测试进程里没有东西推进动画时钟,无限动画会把收尾挂住(见 D-69)。
+    /// 被跳过动画时得到的就是一块静态灰条(等价 WPF 关掉动画时的样子)。
+    /// </summary>
+    public static Border Skeleton(double height = 16.0, double width = double.NaN)
+    {
+        Border shell = new Border
+        {
+            Height = height,
+            CornerRadius = new CornerRadius(6.0),
+            ClipToBounds = true
+        };
+        if (!double.IsNaN(width))
+        {
+            shell.Width = width;
+        }
+        shell.Dyn(Border.BackgroundProperty, "B.LineSoft");
+
+        Border glide = new Border
+        {
+            Width = 90.0,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0.0, 0.0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1.0, 0.0, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(0, byte.MaxValue, byte.MaxValue, byte.MaxValue), 0.0),
+                    new GradientStop(Color.FromArgb(120, byte.MaxValue, byte.MaxValue, byte.MaxValue), 0.5),
+                    new GradientStop(Color.FromArgb(0, byte.MaxValue, byte.MaxValue, byte.MaxValue), 1.0),
+                },
+            },
+        };
+
+        TranslateTransform slide = new TranslateTransform(-90.0, 0.0);
+        glide.RenderTransform = slide;
+        shell.Child = glide;
+        StartSkeletonGlide(shell, slide);
+        return shell;
+    }
+
+    private static void StartSkeletonGlide(Border owner, TranslateTransform slide)
+    {
+        if (!Lucide.MotionEnabled || Application.Current?.ApplicationLifetime is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var animation = new Animation
+            {
+                Duration = TimeSpan.FromMilliseconds(1150.0),
+                IterationCount = IterationCount.Infinite,
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0.0), Setters = { new Setter(TranslateTransform.XProperty, -90.0) } },
+                    new KeyFrame { Cue = new Cue(1.0), Setters = { new Setter(TranslateTransform.XProperty, GlideDistance(owner)) } },
+                },
+            };
+
+            _ = animation.RunAsync(slide);
+        }
+        catch (Exception)
+        {
+            // 动画是装饰性的,不把界面带崩(与 Lucide.Run 同一条纪律)。
+        }
+    }
+
+    /// <summary>横扫距离:与 WPF 版的 <c>Math.Max(520, b.ActualWidth + 90)</c> 一致(未布局时按 520)。</summary>
+    private static double GlideDistance(Border owner)
+    {
+        double actual = double.IsNaN(owner.Width) ? 0.0 : owner.Width;
+        return Math.Max(520.0, actual + 90.0);
+    }
+
+    /// <summary>
+    /// 可点击的行卡片。WPF 用的是 <c>MouseButtonEventHandler</c>(<c>MouseLeftButtonUp</c>)与
+    /// <c>Cursors.Hand</c>;Avalonia 的等价物是 <c>PointerReleased</c> + <c>InitialPressMouseButton</c>
+    /// 判左键、<c>new Cursor(StandardCursorType.Hand)</c>。
+    /// </summary>
+    public static Border RowCard(Control content, EventHandler<PointerReleasedEventArgs>? click = null, double padding = 10.0)
+    {
+        Border border = new Border
+        {
+            CornerRadius = new CornerRadius(8.0),
+            Padding = new Thickness(padding),
+            BorderThickness = new Thickness(1.0),
+            Child = content,
+            Cursor = ((click != null) ? new Cursor(StandardCursorType.Hand) : null)
+        };
+        border.Dyn(Border.BackgroundProperty, "B.Paper");
+        border.Dyn(Border.BorderBrushProperty, "B.Line");
+        if (click != null)
+        {
+            border.PointerReleased += delegate(object? sender, PointerReleasedEventArgs e)
+            {
+                // 与 WPF 的 MouseLeftButtonUp 等价:只有左键按下后的抬起才回调。
+                if (e.InitialPressMouseButton == MouseButton.Left)
+                {
+                    click(sender, e);
+                }
+            };
+        }
+        return border;
+    }
+
+    /// <summary>
+    /// 用系统默认程序打开链接。mac 上走 <c>TipCL.Core</c> 的 <c>Crash.ShellOpen</c>
+    /// (非 Windows 分支就是 <c>open &lt;url&gt;</c>,B1 已落地),与 GOAL §3「插件网页界面用系统浏览器打开」一致。
+    /// WPF 版失败时弹 <c>AppServices.Toast</c>;mac 版的 Toast 宿主属 C2,门面这一层不依赖外壳,
+    /// 所以退化成调试输出(不抛异常、不改状态)。
+    /// </summary>
+    public static void OpenUrl(string url)
+    {
+        try
+        {
+            TipCL.Core.Launcher.Crash.ShellOpen(url);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine("Ui.OpenUrl 失败: " + ex.Message);
+        }
     }
 }
