@@ -679,6 +679,11 @@ public static class Ui
     /// 离屏(--smoke)与测试进程里没有东西推进动画时钟,无限动画会把收尾挂住(见 D-69)。
     /// 被跳过动画时得到的就是一块静态灰条(等价 WPF 关掉动画时的样子)。
     /// </summary>
+    /// C2b:上面那套"用 Lucide.MotionEnabled 顶上"的说法**已作废** —— Motion 门面(C2a)落地后,
+    /// 这里改成与 Windows 版 <c>Ui.Skeleton</c> 一样的 <c>Motion.Loop(起横扫, 停横扫)</c>:
+    /// Motion.Loop 自己按「用户开关 && 有人在推进动画时钟 && 可见 && 在树上」判断走哪个分支,
+    /// 关掉时立刻落终态(横扫回到起点,得到静态灰条)。
+    /// </summary>
     public static Border Skeleton(double height = 16.0, double width = double.NaN)
     {
         Border shell = new Border
@@ -719,11 +724,20 @@ public static class Ui
 
     private static void StartSkeletonGlide(Border owner, TranslateTransform slide)
     {
-        if (!Lucide.MotionEnabled || Application.Current?.ApplicationLifetime is null)
+        // C2b:走 Motion 门面(与 Windows 版 Ui.Skeleton 的 Motion.Loop 同一套状态机)。
+        // 动画关掉时(u. a. 离屏 / 测试进程里没有东西推进时钟)立刻走 stop 分支:
+        // 横扫回到起点 -90,看到的就是一块静态灰条。
+        Motion.Loop(owner, delegate
         {
-            return;
-        }
+            StartGlide(owner, slide);
+        }, delegate
+        {
+            slide.X = -90.0;
+        });
+    }
 
+    private static void StartGlide(Border owner, TranslateTransform slide)
+    {
         try
         {
             var animation = new Animation

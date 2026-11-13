@@ -24,7 +24,11 @@ public static class AppServices
 
 	public static Window? Window { get; set; }
 
-	/// <summary>Toast 宿主。C2b 的外壳落地后把它设成自己的 Toast 方法(签名见下);为空时只写调试输出。</summary>
+	/// <summary>
+	/// Toast 宿主。C2b 的外壳落地后**仍然故意留空**(见 D-92):Toast 卡片是 C2c 的视觉件
+	/// (Windows 的 <c>MainWindow.Toast</c> 那一段),本包不画;为空时降级成调试输出
+	/// (不抛异常、不改状态,与 D-84 的 Ui.OpenUrl 同一口径)。C2c 把外壳的 Toast 方法挂上来即可。
+	/// </summary>
 	internal static Action<string, string, ToastKind>? ToastSink { get; set; }
 
 	public static bool Ready => Client != null;

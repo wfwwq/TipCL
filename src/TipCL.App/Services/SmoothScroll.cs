@@ -36,6 +36,9 @@ namespace TipCL.Services;
 /// 2. 滚动上限在 WPF 读 <c>ScrollableHeight</c>,Avalonia 用 <c>Extent.Height - Viewport.Height</c>
 ///    (<c>ScrollViewer</c> 上没有 <c>ScrollableHeight</c>)。
 /// </summary>
+/// C2b 更正:上面"按 Lucide.MotionEnabled 决定"的说法**已作废**,滚轮平滑改走 Motion 门面 ——
+/// 与 WPF 版一样读 <c>Motion.Enabled</c>(用户开关 && 有人在推进动画时钟),没有时钟时直接落终态。
+/// </summary>
 public sealed class SmoothScroll : ScrollViewer
 {
     /// <summary>纵向偏移(WPF 版的 <c>DependencyProperty</c>;见类注释里与基类 <c>Offset</c> 的关系)。</summary>
@@ -106,7 +109,7 @@ public sealed class SmoothScroll : ScrollViewer
     /// </summary>
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
-        if (!Lucide.MotionEnabled || ScrollableHeight <= 0.0)
+        if (!Motion.Enabled || ScrollableHeight <= 0.0)
         {
             base.OnPointerWheelChanged(e);
             return;
@@ -125,10 +128,12 @@ public sealed class SmoothScroll : ScrollViewer
 
     private async void AnimateTo(double from, double to)
     {
-        // 与 Lucide 同一条纪律:只在真正跑起来的应用生命周期下起动画 ——
-        // 离屏(--smoke)与测试进程里没有东西推进动画时钟,长动画会把收尾挂住(见 D-69)。
-        if (Application.Current?.ApplicationLifetime is null)
+        // C2b:与 OnPointerWheelChanged 的守卫同一个判断(Motion 门面把"用户开关"与
+        // "有没有人在推进时钟"两条都算进去了,见 Motion 的类注释与 D-69)。
+        // 没有时钟时不做平滑,直接把偏移落到目标位置 —— 也就是关掉平滑时的终态。
+        if (!Motion.Enabled)
         {
+            SetCurrentValue(OffsetProperty, to);
             _target = -1.0;
             return;
         }
