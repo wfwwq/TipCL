@@ -133,7 +133,9 @@ public class PageLayoutTests
 
 	// ————— PageLayoutStore —————
 
-	private readonly string _tmp = Path.Combine(Path.GetTempPath(), "tipcl_pagelayout_tests_" + Guid.NewGuid().ToString("N"));
+	// C3a:实例临时目录从 Path.GetTempPath() 改成 TestHome.Root(A6 的 B 类路径规则:
+	// 红线要求测试临时文件也落在仓库内);其余一字未改。
+	private readonly string _tmp = Path.Combine(TipCL.Tests.TestHome.Root, "tipcl_pagelayout_tests_" + Guid.NewGuid().ToString("N"));
 
 	private void WithTempDir()
 	{

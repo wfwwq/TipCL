@@ -41,6 +41,12 @@
         A 类(原样通过)/ B 类(最小适配后通过)→ 已从这个 Remove 里删掉;
         C 类(本包搬不了)→ 留在下面,每个都注明原因与恢复包(详见 PROGRESS.md 的 A6 小节)。 -->
   <ItemGroup>
+    <!-- C3a(2026-11-13):Ported\PageLayoutTests.cs 与 Ported\LayoutDefaultTests.cs 已恢复编译 ——
+         C3a 把 Pages\PageBlock.cs / PageLayoutStore.cs / DashCard.cs / DashLayout.cs 按 Windows 源
+         搬进 src\TipCL.App\Pages 了,这两个文件现在能编。
+         PageLayoutTests.cs 按 A6 的 B 类路径规则改了 1 处:实例临时目录从 Path.GetTempPath()
+         改成 TestHome.Root(红线:测试临时文件必须落在仓库内),断言一字未改;
+         LayoutDefaultTests.cs 一字未改。 -->
     <!-- C 类:依赖界面层命名空间(TipCL.Services / Pages / Controls / Themes),随 C 阶段对应页面恢复 -->
     <Compile Remove="Ported\AiChatOpsTests.cs" />          <!-- using TipCL.Pages.Ai → 恢复包 C3(AI 对话页) -->
     <!-- C2a(2026-11-13):Ported\FileKindsTests.cs 已恢复编译 —— C2a 把 FileKinds.cs 搬进
@@ -50,8 +56,6 @@
     <!-- C2b(2026-11-13):Ported\NavCompatTests.cs 已恢复编译 —— NavModel / NavConfig / NavDef /
          NavEntry / NavGroup / NavEntryKind 已按 Windows 源移植进 src\TipCL.App,这个文件现在能编。
          断言一字未改(文件本身未动)。 -->
-    <Compile Remove="Ported\PageLayoutTests.cs" />         <!-- using TipCL.Pages → 恢复包 C3(对应页面) -->
-    <Compile Remove="Ported\LayoutDefaultTests.cs" />      <!-- 3 条只用 Core,1 条用 TipCL.Pages.DashLayout → 整文件归 C,恢复包 C3(启动页布局) -->
     <Compile Remove="Ported\StaticInitOrderTests.cs" />    <!-- 读 src/TipCL/Pages/SettingsPage.cs 源码 → 恢复包 C3(设置页) -->
     <!-- C 类:Windows 专属,与界面层命名空间 + ImageSharp 绑定,mac 版不适用(GOAL:图片走 SkiaSharp) -->
     <Compile Remove="Ported\WebpFallbackTests.cs" />       <!-- TipCL.Services + SixLabors.ImageSharp,恢复包:无(mac 版不适用) -->
