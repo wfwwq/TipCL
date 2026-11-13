@@ -126,6 +126,20 @@ public static class AiSelfTest
         runner.PermissionMode = "acceptEdits";
         Check("写直接执行档:删除仍要问", runner.Decide("delete_mod").decision == "ask" && runner.Decide("install_mod").decision == "allow");
 
+        // 6b. 权限档位 → 系统消息里的那句话(照参考版 Permission.PermissionNote,Permission.cs:256-276;
+        //     位置照参考版:运行时上下文之后、长期记忆之前)。这里只验「这句话真的挂在系统消息上」,
+        //     逐字节的六句对位在 Core/AiPermissionNoteTests 里钉。
+        Check("权限档位写成一句话",
+            ToolRunner.PermissionNote("yolo") != ToolRunner.PermissionNote("default") &&
+            ToolRunner.PermissionNote("yolo").Contains("全自动", StringComparison.Ordinal) &&
+            ToolRunner.PermissionNote("plan").Contains("只看不动", StringComparison.Ordinal),
+            ToolRunner.PermissionNote("default"));
+        string systemText = Py.S(AiAgent.SystemMessage(Py.S(Config.CONFIG.Get("default_instance", "default"))).Get("content"));
+        int noteAt = systemText.IndexOf(ToolRunner.PermissionNote(), StringComparison.Ordinal);
+        Check("权限提示进了系统消息",
+            noteAt > systemText.IndexOf("# 当前状态", StringComparison.Ordinal),
+            "系统消息 " + systemText.Length + " 字,那句话在第 " + noteAt + " 字");
+
         // 7. 工具执行:只读工具直接跑 + 写工具没接确认回调时被拒绝
         runner.PermissionMode = "default";
         runner.Instance = Py.S(Config.CONFIG.Get("default_instance", "default"));

@@ -347,8 +347,11 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | 1 | 确认卡上的裁决理由(参考版 `Permission.cs:187-252` 的 12 句) | `ToolRunner.Decide` 只给 `allow/ask/deny`;调用点把**标签**塞进 label 槽、第三参恒空 → 卡片那行从不渲染,旧注释把缺陷写成「有意留空」 | `PermissionVerdict(decision, reason)` 一次产出;`Confirm(call, label, reason, preview)` 一路传到 `ConfirmCard`;11 句与参考版逐字相同,`default/custom` 按 `risk == "high"` 分句(**裁决未变**) | D-48 |
 | 2 | `ai_permission_dont_ask` | Linux 的 `Config` 写着默认值,**全仓无消费点**(参考版在 `Agent.cs:571` / `:1149-1152` 消费) | `ToolRunner.ApplyDontAsk`:需要确认的写操作直接拒绝,理由「用户开启了「不询问」模式」(只作用于 `ask`) | D-48 |
 | 3 | 被拒的步骤行 | 泛泛一句「当前权限档位不允许」 | 「已拒绝:&lt;裁决理由&gt;」,由 `AiPage.Summarize` 显示(照参考版把 reason 写进 denied 工具状态);**模型可见文本未变** | D-48 |
+| 4 | 参考版 `Permission.PermissionNote`(`Permission.cs:256-276`:把当前档位写成 6 句 `[权限设置] ...`;消费点 `Agent.cs:348` / `:368`) | 模型**不知道**自己处在哪个档位,只能从「刚才那次操作被拒了」反推 ⇒ 两种坏行为:该直接动手时反复问、被拒之后换个工具名重试同一件事 | **已补(R21d)**:`ToolRunner.PermissionNote()` 与参考版 6 句**逐字对位**(独立核对:从参考仓源码正则抽字面量比 SHA256,**6/6 相等**),作为独立段落插在系统消息的**运行时上下文之后、长期记忆之前**;崩溃修复会话同位置一并注入;归一化提出成 `ToolRunner.NormalizeMode`,裁决 / 提示 / 自检共用一份;`--ai-selftest` 52 → **54** 项 | D-57 |
 
-> **仍未做(如实)**:参考版 `PermissionNote`(`Permission.cs:256-276`:把当前档位写成 6 句「[权限设置] …」注入系统提示,消费点 `Agent.cs:348` / `:368`)Linux 侧没有。它与上表三条同属「参考版会主动告知模型」的那一面,Linux 侧目前只有裁决本身 —— 属独立条目:要随每轮把档位注入系统消息(会改模型可见文本),不在 R19 范围内。
+> **仍未做(如实)**:「不询问」在 Linux 侧是**独立开关**(`ai_permission_dont_ask`,见 D-48)而不是档位名,所以那句 dontAsk 提示只在「开关打开 && 档位不是 `yolo` / `plan`」时用,其余档位保持原句 —— 这样提示与真实裁决自洽。
+>
+> **如实登记的两处偏离**:1**别名档位只影响提示文本、不影响裁决** —— 参考版的 `NormalizePermissionMode` 归一化结果**也用于裁决**(`auto` / `acceptEdits` / `autoEdit` / `build` 等 = 写操作直接执行),而 Linux 的裁决只认 `default` / `acceptEdits` / `plan` / `yolo` / `custom` 五档,这些别名走默认分支 = 每次问。只有手改配置或从 Windows 迁过来的配置才会撞上,届时模型读到的描述(「写操作会直接执行」)与真实裁决(ask)不一致。修它必须让 Linux 的裁决也认别名 —— **那是改裁决,没批之前不动**;2`ai_confirm_writes` **刻意不读**:Linux 的 `Decide` 根本不看这个键,读了它这句话就会与真实裁决对着说。
 >
 > 另一处**有意不搬**:参考版 `PermissionResult` 还带 `rule_id`,Linux 的「一直允许」是按工具名记的进程内集合,没有「按规则记住」的界面入口,搬 `rule_id` 是无消费方的死重(见 D-48)。
 

@@ -114,10 +114,18 @@ public sealed class AiAgent
                "- 时间: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm");
     }
 
-    /// <summary>系统消息(身份 + 语言规矩 + 运行时上下文 + 用户让 AI 记住的事)。</summary>
+    /// <summary>系统消息(身份 + 语言规矩 + 运行时上下文 + 权限档位 + 用户让 AI 记住的事)。</summary>
     public static PyDict SystemMessage(string instance, string version = "")
     {
         string content = AiData.SystemPrompt() + "\n\n" + RuntimeContext(instance, version);
+        // 当前权限档位写成一句话告知模型:位置照参考版(Agent.cs:363-372,三条 system 消息的顺序是
+        // 身份 / 当前状态 / 权限设置 / 长期记忆)—— Linux 侧合并成一条,所以它是「运行时上下文之后、
+        // 长期记忆之前」的独立段落。这句话只是**告知**,裁决仍由 ToolRunner.Decide 说了算。
+        string note = ToolRunner.PermissionNote();
+        if (note.Length > 0)
+        {
+            content += "\n\n" + note;
+        }
         string memory = AiMemory.Context();
         if (memory.Length > 0)
         {

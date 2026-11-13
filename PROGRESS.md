@@ -646,3 +646,41 @@
 > **复核时的附带发现(方法层面,一并记)**:这十场冒烟的帧**并非逐位稳定** —— 同一份代码连跑两次,`settings-tab6` 取到 38,573 / 38,579 B 两个值、`plugins-dark` 取到 33,574 / 33,576 B 两个值(而 `launch` 564,149 B 与 `ai` 37,553 B 稳定)。本轮改动只碰 AI 页的 Markdown 渲染(`MdView` 全仓只被 `AiBubble` 使用),用 **A/B 单变量对照**验证:把 `MdView.cs` 还原到改动前重建再跑,`settings-tab6` 两侧 sha256 **完全相同**、`plugins-dark` 两侧互有大小 ⇒ 那点抖动**不是本轮引入的**,是这两页的帧自带少量运行间差异(动画相位 / 抗锯齿一类)。规矩:**拿冒烟帧当回归判据前,先确认那一页是逐位稳定的**;不稳定的页要比像素差或结构断言,别拿 PNG 字节数当等号(本轮主 agent 就是靠这条对照才没把抖动误判成回归)。
 >
 > 本轮最终验收(冻结树上):构建 App/Core exit 0、`dotnet test` **两遍**都 exit 0、`--ai-selftest` exit 0、**十场冒烟全 exit 0 且 0 WARN / 0 ERROR**、真实 `%LOCALAPPDATA%\TipCL` 未被触碰(`config.json` mtime 未变)。
+
+### 2026-11-13 M4-H R21d:权限档位注入系统提示(`PermissionNote`)—— 收掉 R19 明确留的那一条(子代理改,主 agent 复核)
+
+**背景**:PARITY §9.4 从 R19 起挂着一条「仍未做(如实)」:参考版会把当前档位写成 6 句 `[权限设置] ...` 注入系统消息(`Permission.cs:256-276`,消费点 `Agent.cs:348` / `:368`),Linux 侧只有裁决那一面。本轮补上。
+
+**一、做了什么**
+
+| # | 项 | 结果 |
+|---|---|---|
+| 1 | 归一化入口 | 把 `ToolRunner.Mode` 里的档位归一化**原样提出**成 `public static string NormalizeMode(object?)`;裁决 / 提示 / 自检共用一份(**不再有第二个真源**);`Mode` 仍是「实例档位优先、否则读 config、空则 default」,裁决行为未变 |
+| 2 | 6 句提示 | `ToolRunner.PermissionNote(mode, dontAsk)` 与参考版 6 分支逐字对位;核对方式是**从参考仓源码正则抽字面量再比 SHA256**(6/6 相等) |
+| 3 | 注入位置 | `AiAgent.SystemMessage`:**运行时上下文之后、长期记忆之前**的独立段落(参考版是三条 system 消息,Linux 侧向来合并成一条,位置对位);`AiFixView` 的崩溃修复会话抽出 `FixSystemMessage` 同位置注入 |
+| 4 | 自检 | `--ai-selftest` 52 → **54** 项(「权限档位写成一句话」「权限提示进了系统消息」) |
+| 5 | 回归 | 新增 `tests/TipCL.Tests/Core/AiPermissionNoteTests.cs`(7 个 Fact:档位→句子矩阵、位置、**裁决不变**) |
+
+**二、边界(本轮刻意没做)**
+
+- **只补「告知」,不动「裁决」**:`Decide` 的裁决 / 理由 / 拒绝文案一律未动(D-48 冻结),并有用例锁住。
+- **别名档位只影响提示文本**:参考版的归一化结果也用于裁决(`auto` / `acceptEdits` / … = 写操作直接执行),Linux 的裁决只认本地五档 ⇒ 手改配置或 Windows 迁来的配置会出现「提示说会直接执行、实际每次问」。修它 = 改裁决,**等批**(已记进 PARITY §9.4 与 D-57)。
+- **`ai_confirm_writes` 刻意不读**:Linux 的裁决不看这个键,读了这句提示就会与真实裁决对着说。
+- 子代理路径(`AiAgent.cs:404` 强制 plan)读到的是用户配置档位、不是它自己的 plan 档 —— 与参考版同源(读 settings),未改。
+
+**三、主 agent 的独立复核(不只信子代理的报告)**
+
+| 项 | 结果 |
+|---|---|
+| 6 句逐字节 | 我自己从参考仓 `Permission.cs` 与 Linux `ToolRunner.cs` 各正则抽 6 个字面量比 SHA256:**6/6 相等**,且两侧都只有这 6 句(无多无少) |
+| 全量测试 | **416 = 415 通过 + 1 跳过 + 0 失败**(基线 409,本轮 +7) |
+| 自检 | `--ai-selftest` exit 0,**通过 54 / 失败 0**(那句提示在第 2089 字、系统消息共 2166 字 ⇒ 位置断言成立) |
+| 构建 / 冒烟 | Release 0 CS/CA(仅 2 条 NU1900 镜像噪声);`SMOKE_PAGE=ai` exit 0 / PNG 37,553 B / 0 WARN 0 ERROR;真实 `%LOCALAPPDATA%\TipCL` 未动 |
+| 编码 | 五个文件均 UTF-8 **无 BOM / LF**(bareLF:ToolRunner 727 / AiAgent 695 / AiSelfTest 370 / AiFixView 476 / 测试 246) |
+| 轮次标签 | 子代理自报「R20」⇒ 已统一改成 **R21d**(测试文件 2 处) |
+
+**四、遗留(如实)**
+
+- 上面那条**别名档位与裁决不一致**:只在手改配置 / Windows 迁来的配置里出现,修它要改裁决(未批)。
+- 子代理(被强制 plan 的子执行器)看到的是用户配置档位 —— 要让它看到自己的档,得给 `SystemMessage` 加「按 runner 档位」的口子,本轮按参考版口径没加。
+- 该轮的 7 条新用例里,**`AiFixView` 那条的位置断言没有拿到红证据**(helper 与接线是同一笔改动):判别力依据是 `[权限设置]` 在整仓只出现在 `ToolRunner.cs` 一处,所以改动前的拼法不可能含这句话。

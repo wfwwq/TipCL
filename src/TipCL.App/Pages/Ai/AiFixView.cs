@@ -95,6 +95,16 @@ internal sealed class AiFixView : Border
     /// <summary>执行器本身(内部只读,用途同 AiPage.Runner:给确认链路的回归测试驱动)。</summary>
     internal ToolRunner Runner => _runner;
 
+    /// <summary>
+    /// 修复会话的系统消息:身份 + 本次约定 + 运行时上下文 + 权限档位那句话。
+    /// 那句话的位置照参考版(Agent.cs:363-372;参考版两条路径都经过 Agent._system_messages):
+    /// 运行时上下文**之后**、长期记忆之前 —— 这条会话不注入长期记忆,所以它在末尾。
+    /// 单独抽出来是为了让「位置」这一条可测(AiFixView 不注入 BackendApi,只能靠这个方法验)。
+    /// </summary>
+    internal static string FixSystemMessage(PyDict report, string instance, string version)
+        => AiFixChat.FixSystemPrompt(report) + "\n\n"
+            + AiAgent.RuntimeContext(instance, version) + "\n\n" + ToolRunner.PermissionNote();
+
     private string BuildHeadSub()
     {
         string instance = Py.S(_report.Get("instance"));
@@ -116,8 +126,8 @@ internal sealed class AiFixView : Border
         {
             return;
         }
-        _history.Add(PyDict.Of("role", "system", "content", AiFixChat.FixSystemPrompt(_report) + "\n\n"
-            + AiAgent.RuntimeContext(_runner.Instance, Py.S(_report.Get("version")))));
+        _history.Add(PyDict.Of("role", "system", "content",
+            FixSystemMessage(_report, _runner.Instance, Py.S(_report.Get("version")))));
         Add(Append("assistant", "我已经看到这次的崩溃报告。先读一下日志和模组,再告诉你原因。"));
         _ = RunAgentAsync(AiFixChat.OpeningMessage(_report, InterfaceLabel()));
     }

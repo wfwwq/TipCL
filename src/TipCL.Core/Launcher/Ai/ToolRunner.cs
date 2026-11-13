@@ -40,18 +40,19 @@ public sealed class ToolRunner
     /// </summary>
     public string PermissionMode { get; set; } = "";
 
-    private string Mode
+    /// <summary>
+    /// 档位归一化(config.json 的 ai_permission_mode 原始值 → 实际档位名;空 / 缺失 → default)。
+    /// 裁决(<see cref="Mode"/>)、给模型看的权限提示、自检都走这一份 —— 不另造第二套:
+    /// 两份真源一定会漂(这也正是本轮把「归一化」从 Mode 里提出来做公开静态方法的原因)。
+    /// </summary>
+    public static string NormalizeMode(object? raw)
     {
-        get
-        {
-            if (PermissionMode.Length > 0)
-            {
-                return PermissionMode;
-            }
-            string configured = Py.S(Config.CONFIG.Get("ai_permission_mode", "default"));
-            return configured.Length > 0 ? configured : "default";
-        }
+        string mode = Py.S(raw);
+        return mode.Length > 0 ? mode : "default";
     }
+
+    private string Mode
+        => PermissionMode.Length > 0 ? PermissionMode : NormalizeMode(Config.CONFIG.Get("ai_permission_mode", "default"));
 
     /// <summary>
     /// 一次权限裁决:<see cref="decision"/> 是 allow / ask / deny,<see cref="reason"/> 是给用户看的
@@ -142,6 +143,44 @@ public sealed class ToolRunner
 
     /// <summary>当前实例(工具参数里没写 instance 时用)。</summary>
     public string Instance { get; set; } = "";
+
+    /// <summary>
+    /// 当前权限档位写成一句话,给模型看(照 Windows 版 Permission.PermissionNote,Permission.cs:256-276;
+    /// 参考版的消费点在 Agent.cs:348 / :368,作为一条独立的 system 消息)。
+    /// 键位一律用 Linux 自己那一份:档位走 <see cref="NormalizeMode"/>(和裁决同一个入口),
+    /// 「不询问」走 ai_permission_dont_ask —— **不读 ai_confirm_writes**:Linux 的裁决根本不看那个键,
+    /// 读了它这句话就会与真实裁决对着说(见 6 句的档位归属)。
+    /// </summary>
+    public static string PermissionNote()
+        => PermissionNote(Config.CONFIG.Get("ai_permission_mode", "default"),
+                          Py.Truthy(Config.CONFIG.Get("ai_permission_dont_ask")));
+
+    /// <summary>
+    /// 档位 → 那句话(档位名与参考版 PermissionNote 的 switch 逐字对位;句中的全角标点也是照抄的)。
+    /// <paramref name="dontAsk"/> 是 config 的 ai_permission_dont_ask:Linux 侧「不询问」是一个**独立开关**
+    /// 而不是档位名,它把「需要确认」直接改成「拒绝」(D-48),所以模型看到的档位描述也要跟着换,
+    /// 否则模型会以为还有确认卡可等。yolo(全放行)与 plan(本来就拒)两档下这个开关不生效,保持原句更准。
+    /// 别名(bypassPermissions / auto / autoEdit / build / edit)照参考版给同一句:Linux 的裁决只有
+    /// default / acceptEdits / plan / yolo / custom 五档,遇到这些别名走默认分支 —— 这是「告知」这一面的
+    /// 对位,不改裁决(裁决的回归见 Core/AiPermissionReasonTests)。
+    /// </summary>
+    public static string PermissionNote(object? mode, bool dontAsk = false)
+    {
+        string name = NormalizeMode(mode);
+        if (dontAsk && name is not ("yolo" or "plan"))
+        {
+            name = "dontAsk";
+        }
+        return name switch
+        {
+            "yolo" or "bypassPermissions" => "[权限设置] 用户选了「全自动」：写操作直接执行，不会弹确认。你仍要先用一句话说明将要做什么。",
+            "plan" => "[权限设置] 用户选了「只看不动」：你只能查看和诊断，不能安装/删除/改配置。",
+            "auto" or "acceptEdits" or "autoEdit" or "build" => "[权限设置] 写操作会直接执行；删除实例、删除模组前仍会先询问，要等用户点了才执行。",
+            "dontAsk" => "[权限设置] 用户选了「不询问」：需要确认的写操作会被直接拒绝，只读查看照常。",
+            "edit" => "[权限设置] 文件类修改直接执行；安装、删除、启动前会弹确认，要等用户点了才执行。",
+            _ => "[权限设置] 安装、删除、禁用、改配置、启动这类写操作执行前都会弹确认，用户点了才会真的执行；查看类操作不弹。被拒绝时不要重复发起同一操作，改为说明原因。",
+        };
+    }
 
     /// <summary>
     /// 已连上的 MCP server(由 AiAgent 在每轮开始时按 config 的 ai_mcp_servers 连好)。
