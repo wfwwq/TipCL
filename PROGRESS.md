@@ -6340,3 +6340,84 @@ A 类占位与"切段才建"(探针页计数)、D 类三个注入缝、加载与
 4. **设置页的自动保存防抖**(500ms `DispatcherTimer`)在离屏泵里未必 Tick(D-129),所以用例走 `SaveNowAsync()` 内部入口;
    "真桌面上防抖真的会触发"这条只有真机能验。
 5. 全量套件里 `C4LibraryTests.Library_folder_layout_defaults_to_two_columns` 那一条的抖动不是本包的,留给它的作者。
+
+## C5c:窄页面(668px)下的两处布局缺陷 + 一条待查异常
+
+**来源**:C4 代理收尾时自己发现的;Lead 认可并派给我,**要求在门面层修一次**(与 C3d `FlyToTasks`、C3e `Motion` 同一条道理)。
+
+### 1. 先用探针把几何量出来(不靠截图猜)
+
+新增 `tests\TipCL.Tests\C5cLayoutProbeTests.cs`(3 条):把页面放进**固定 668 宽的宿主**、窗口 900×550(与 `--smoke` 同尺寸),
+读 `Bounds` / `ScrollViewer.Offset` / `Extent` / `Viewport` / `TranslatePoint` / `Grid.GetRow`。
+
+**缺陷 1(实例页标题被压成 0 宽)**:修复前实测 `页面宽=668 标题宽=0 副说明宽=0 右簇宽=653`。
+根因确认:`Ui.Section` 是 `G(null,"*,Auto")`,左列 `*` 没有最小宽度、右列那一簇(计数 + 搜索 + 4 个按钮 ≈ 653px)不收缩 ⇒ 左列被算成 0。
+像素佐证:`instance` 帧标题区(196-520,45-135)深色像素 **153 → 510**(修复前那点像素是别的东西,标题整块没画出来)。
+
+**缺陷 2(库页内容左偏)**:探针实测 `Offset=(0,0) Extent=0 Viewport=0 左卡起x=-30 左卡宽=300 左卡布局x=-48 列宽=205/18/409`。
+**机制与"水平偏移"的猜想不同,真机制是**:左卡 `MinWidth = 300`(`LibraryPage.cs:232`,2026-11-07 为"窄窗别占太多"留的地板),
+而左列是**星列** —— 668 页面区里那条星列只有 **205** 宽 ⇒ 300 宽的卡片**溢出自己的格子**;
+Avalonia 把"宽于格子的子元素"居中摆放 ⇒ 左移 `(205-300)/2 ≈ 48`(探针实测布局 x = **-48**,与算式逐位吻合)。
+用户可见结果:卡片压掉 18px 左页边距(像素实测:**修复前白卡白像素从 x=196 起 → 修复后从 x=216 起**,196+18=214 加边框即 216),
+同时向右多占 95px **盖住右栏标题的头几个字**(Lead 观察到的那一条)。
+
+**缺陷 3(待查异常)结论:`PageHost` 的门闸没漏开,两边说法都成立,不是 bug。**
+- `PageHost.Navigate(..., runHooks)` 只在 `runHooks` 为真时才 `EnsureLoadedAsync + OnShown`(PageHost.cs:108);
+- `MainWindow.Navigate` 传的是 `BridgeReady`(MainWindow.cs:883),而 `BridgeReady` 默认 false、`--smoke` **不调** `StartBackend()`
+  (MainWindow.cs:427 的注释就写着"离屏 --smoke 不走这里")⇒ 冒烟里**确实不跑加载钩子**(与本包 C5b 的报告一致);
+- 但 `--page library` 那一帧里的计数与空态**不是加载钩子画出来的**:`LibraryPage` 的**构造函数**里就调了 `RenderGroups()`
+  (`LibraryPage.cs:244`,那是搜索框 `TextChanged` 也复用的重绘入口)⇒ 帧里的"共 N 个版本"与空态是构造期就写好的。
+  C4 代理的观察与 C5b 的结论因此**并不矛盾**,门闸行为符合 D-96/D-102 的口径。
+
+### 2. 修法(两处,理由与影响面)
+
+**缺陷 1 —— 修在门面 `Ui.Section`(所有用它的页面一次受益)**:新增 `internal static class SectionNarrow`(同文件 `Ui.cs`)。
+- 判定阈值**自校准**:用两边的 `DesiredSize` 自身当门槛 —— 可用宽 < 标题需要 + 右簇需要 就降级(把右簇换到第二行、跨两列、靠右),
+  `Slack = 6px` 是**回滞带**(没有它会在阈值上互相触发:改列宽 → 触发再判 → 又改回去);
+- 摆得开就恢复原样 ⇒ **宽页面永远走原路、像素不变**;
+- 没有在每个页面各打一个补丁,也没有写死"页面窄于 X 就怎样"的魔数。
+
+**缺陷 2 —— 修在 `LibraryPage` 自己的两栏配方(这是"页面配方"而不是门面问题)**:把 300 的地板**同时写到列上**
+(`body.ColumnDefinitions[0].MinWidth = 300`),让卡片**正好填满自己的列** ⇒ 既不越界(左)也不越位(右)。
+- 为什么不动那三条 Windows 几何:`LibraryPage` 的列定义(`*,18,2*`)与左卡 `MinWidth=300 / MaxWidth=380 / Top`
+  是 Windows `LibraryPage.cs:239-266` 的几何,`C4LibraryTests.Library_folder_layout_defaults_to_two_columns` 正钉着它们;
+  我第一版是"把卡片地板降到 0"(更简单),它把这条 C4 用例打红了 —— **改用"列兑现地板"之后两边都成立**(C4 用例绿 + 缺陷消失)。
+- 代价与验证:右列从 409 收到 314,探针新增一条断言**右栏内容不得宽于自己的列**(实测不超),冒烟帧也逐帧看过。
+
+### 3. 验收
+
+**冒烟矩阵(7 页 × 明暗 + 首屏 + `--theme blue`,全部走锁;before = 我开工前自己跑的基线,与 Lead 给的数字逐位相同)**
+
+| 帧 | before | 最终 | 结论 |
+|---|---|---|---|
+| 不带 `--page` / `launch` light | 37681 `2603BF6A…` | 37681 `2603BF6A…` | **逐字节不变** |
+| 不带 `--page` / `launch` dark | 33579 `7D7AFDD5…` | 33579 `7D7AFDD5…` | **逐字节不变** |
+| `settings` light / dark | 45594 `C19BF1C4…` / 43745 `CE33BEFE…` | 同 | **不变**(那一处 Section 没有右簇) |
+| `tasks` light / dark | 27719 `0E591B87…` / 24171 `C3EE486E…` | 同 | **不变**(右簇窄,摆得开 ⇒ 不降级) |
+| `account` light / dark | 33173 `D3F59339…` / 29984 `148EB206…` | 同 | **不变**(同上) |
+| `instance` light / dark | 27484 `92C06E15…` / 24511 `F1582051…` | **30057 / 27468** | 变了 = 缺陷 1 修好(标题与副说明画出来了) |
+| `library` light / dark | 42417 `905125C4…` / 39268 `FA926F03…` | **变**(见下) | 变了 = 缺陷 2 修好(白卡回到 18px 页边距) |
+| `--theme blue` | 退出码 2 | 退出码 2 | 参数校验未受影响 |
+
+只有**两处缺陷页**变了,其余全部逐字节相同 —— 这正是"修法只在缺陷处生效"的证据。
+
+**原子四跑**(`artifacts\lead-verify.cmd`,构建 + 两条通道在**同一次锁**里,连跑两轮):
+
+| 轮 | BUILD | VSTEST | INPROC | 说明 |
+|---|---|---|---|---|
+| 1 | **0** | 1(1 条红) | 1(同一条) | 唯一红 = `C4LibraryTests.Library_folder_layout_defaults_to_two_columns` |
+| 2 | **0** | 1(同上) | 1(同上) | 逐项相同 ⇒ 确定性 |
+
+那条红是**我第一版修法**打出来的(见上);改成"列兑现地板"之后单独复跑该用例 **0 失败**(证据在 `artifacts\c5c-c4lib.txt`)。
+**本包的用例两条通道全绿**:`C5b` 33/33、`C5c` 探针 3/3,两轮都是 `[FAIL]` 计数为 **0**。
+
+### 4. 编码(字节级实测)
+
+`Ui.cs` 31966 B / BOM=False / CR=0 / LF=868 / U+FFFD=0;`LibraryPage.cs` 44661 / False / 0 / 1239 / 0;
+`C5cLayoutProbeTests.cs` 12716 / False / 0 / 236 / 0;`C5bTasksAccountTests.cs` 42163 / False / 0 / 857 / 0。
+
+### 5. 遗留
+
+1. 告警基线:`xUnit2012` 的两条来自我的 `C5bTasksAccountTests.cs`,已按 Lead 要求改成 `Assert.Contains/DoesNotContain`;本轮构建只剩 `NU1900`(取漏洞源失败,本机网络环境造成,条数随构建波动:基线 6、我这次 8)+ `SYSLIB0014` 未见(该工程本轮未重建)。
+2. `SectionNarrow` 的降级是"整簇换行",**没有做**"右簇内部再折行"(按钮组在极窄时会整组下移,不会各自换行)—— 668 下够用,更窄的窗口(如 500)没验。
+3. 缺陷 2 的修法在**更窄**窗口(页面区 < 300+18+右列最小)下的行为没有实测:那种宽度下两栏本来就摆不开,应当像 `Section` 一样降级堆叠;本包没做(不在 Lead 点名的范围内)。
