@@ -3347,3 +3347,128 @@ PNG 自然不同。这不是样式写错,也不是窗口外观被改(窗口仍�
 - 处理:派 **C1b-fix** 修复(专用 Dispatcher 线程会话,所有碰 Avalonia 的用例体经它执行),要求**两个通道各连跑两次**都是 0 失败才收尾。
 
 **给后续所有包的运营规则(务必遵守)**:测试里一切 Avalonia 工作(构造控件/刷子、加载样式、`Geometry.Parse`、`FontManager`)**必须**经统一会话在 Dispatcher 线程上执行;单通道绿不足以收尾,必须 `dotnet test` 与进程内执行器**两通道都绿**。
+
+---
+
+## C1b-fix 测试基建修复:专用 Dispatcher 线程会话(2026-11-13)
+
+本包**只改测试工程**,`src\` 一个字节没动,没有删/弱化任何断言,没有加 `Skip`,没有扩 `NoWarn`,没有动 C1b 样式表内容。
+
+### 症状(Lead 报的,本机复现一致)
+
+`dotnet test TipCL.Mac.sln -c Release --no-build` 退出码 1,失败 65(Lead)/ **93、95(本机三次实跑)**,
+失败用例全是同一个异常:
+
+```
+System.InvalidOperationException : Call from invalid thread
+   at Avalonia.Threading.Dispatcher.<VerifyAccess>g__ThrowVerifyAccess|16_0()
+   at Avalonia.Threading.Dispatcher.VerifyAccess()
+   at Avalonia.AvaloniaObject.VerifyAccess()
+   at Avalonia.Controls.Button..ctor()
+   at TipCL.Tests.C1bRuntimeStylesTests.Button_variant_classes_use_palette_colours() ... C1bRuntimeStylesTests.cs(281,0)
+```
+
+**分布随「谁抢到 Dispatcher 线程」变**:本机测到 `C1bRuntimeStylesTests` 56 + `C1aLucideTests` 30 + `C1aPaletteTests` 7 = 93,
+另一次 95;Lead 那次是 `C1bRuntimeStylesTests` 56 + `C1aPaletteTests` 7 + `C1bStyleKeysTests` 2 = 65。
+**同一份代码、同一条命令,3 次连跑的结果是 93 失败 / 0 失败 / 95 失败** —— 这就是上一包「两通道一致 2157/2157」的错误来源。
+
+### 根因(复核了 Lead 的诊断,并补齐了它没说的那一层)
+
+1. `AppBuilder.SetupWithoutStarting()` 把 `Dispatcher.UIThread` 绑在**第一个调用它的线程**上,
+   而 `AvaloniaObject.VerifyAccess()` 只认那一个线程。
+2. xunit v2 走 VSTest(testhost)通道时**每个测试类跑在自己的 worker 线程上**,所以「哪个类先碰到
+   Avalonia,哪个类就独占 Dispatcher 线程」,其它类里构造控件必抛 `VerifyAccess`。
+3. Lead 说「C1a 只做几何解析(不查 Dispatcher)所以看起来是绿的」——**这一句只对了一半**:
+   几何/资源字典/字体这些**确实**要平台,而且 `Geometry.Parse` 本身不查 Dispatcher;
+   真正决定成败的是「用例体所在的线程是不是 Dispatcher 线程」。所以 C1a 的 `C1aLucideTests`
+   (24 处 `Geometry.Parse` + 控件构造)在**它抢到 Dispatcher 线程时**就绿,抢不到就红 ——
+   本机亲眼见到它一次性红 30 条,正是这一层。
+4. 进程内执行器(`Program.Main`)全程在主线程上同步跑,平台也起在主线程上,
+   所以**它永远绿** —— 不是它更严,而是它根本没撞上这个问题。
+
+### 设计(照任务书实现,未改方案)
+
+新增 `tests/TipCL.Tests/AvaloniaSession.cs`:
+
+- 一个**后台线程**(`IsBackground = true`,名字 `TipCL-Avalonia-Session`)在 `ThreadMain` 里
+  `AppBuilder.Configure<TipCL.App>().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).UseSkia().SetupWithoutStarting();`,
+  然后 `Ready.Set()` 并进泵循环;起平台失败会把异常带回 `Ensure()` 的调用方。
+- 泵循环:`Queue.TryTake(timeout 2ms)` 取一个工作项执行 -> `Dispatcher.UIThread.RunJobs()` -> 循环
+  (空闲时也每 2ms 跑一次 Dispatcher 的排队工作,布局/绑定/样式/渲染定时器回调都靠它)。
+- `Ensure()`:幂等、锁保护,等 `Ready`(上限 30s),起平台时的异常原样抛出。
+- `Run<T>(Func<T>)` / `Run(Action)`:把用例体投到会话线程,用 `ManualResetEventSlim` 同步等结果
+  (上限 30s,超时抛 `TimeoutException`,消息写明是会话超时);异常经
+  `ExceptionDispatchInfo.Capture(ex).Throw()` 在调用线程**原样重抛**(类型/消息/原始栈都保留)。
+- **不引新依赖**:没有 `Avalonia.Headless.XUnit`(进程内执行器不展开 collection/fixture,见 D-05/A6),
+  也没有依赖 `IClassFixture`/`ICollectionFixture` —— 纯静态入口,直接反射调用照样工作。
+- `C1aFixtures.EnsureAvalonia()` 退化成 `AvaloniaSession.Ensure()` 的转发(只为保留 `Hosted.Show` 等老调用点),
+  `SetupWithoutStarting()` 从此在整个测试工程里**只有一处**调用(已 grep 确认)。
+- 平台整个挪到会话线程后,调用线程的 `SynchronizationContext` 一个字都不用动
+  (老写法那段「存下来再还原」的代码随之删除,连带删掉两行不再使用的 `using`)。
+
+### 改了哪些文件
+
+| 文件 | 改动 |
+|---|---|
+| `tests/TipCL.Tests/AvaloniaSession.cs` | **新增**(会话线程 + 泵循环 + `Run`) |
+| `tests/TipCL.Tests/C1aFixtures.cs` | `EnsureAvalonia()` 改成转发;删掉本线程起平台的老代码与两行无用 `using`;注释写明历史与原因 |
+| `tests/TipCL.Tests/C1aIconFontTests.cs` | 2 条(`AssetLoader` / `FontManager`)经会话 |
+| `tests/TipCL.Tests/C1aLucideTests.cs` | 24 条(全部 `Geometry.Parse` / 控件构造 / Transform / Brush / Asset)经会话 |
+| `tests/TipCL.Tests/C1aPaletteTests.cs` | 9 条(色板解析、刷子、渐变、兜底色、变体跟随)经会话 |
+| `tests/TipCL.Tests/C1bRuntimeStylesTests.cs` | 全部 38 条经会话(它们的用例体都在构造控件/开窗口/RunJobs);`Hosted.Show`/`Dispose` 因此与用例体在同一线程上 |
+| `tests/TipCL.Tests/C1bStyleKeysTests.cs` | 2 条(唯一构造 `Button` 的两条)经会话;其余 15 条是纯表检查,**不**经会话(不需要平台就不会被线程问题影响) |
+
+`Hosted`、`ByName`、`ColourOf`、`Pseudo` 这些辅助逻辑一行未改,只是现在都在会话线程上被调用。
+
+### 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | 开工前 `%LOCALAPPDATA%\TipCL` 测量 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与 Lead 基线一致 |
+| 2 | 修复前 `dotnet test` **3 次连跑** | 退出码 1 / 0 / 1,失败 **93 / 0 / 95**(重现了 Lead 的 65 那类失败,只是分布不同) |
+| 3 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 0,**0 错误**;警告只有 `NU1900`(镜像超时,6 条)与 `SYSLIB0014` **唯一一处**(`src/TipCL.Core/Launcher/Sync/PhoneClient.cs:116`) |
+| 4 | `dotnet test TipCL.Mac.sln -c Release --no-build` **第 1 次** | 退出码 **0**:`Passed!  - Failed:     0, Passed:  2157, Skipped:     0, Total:  2157, Duration: 1 s - TipCL.Tests.dll (net8.0)` |
+| 5 | 同上 **第 2 次** | 退出码 **0**,同上逐字一致(总计 2157,失败 0) |
+| 6 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` **第 1 次** | 退出码 **0**:`总计 2157 个用例,通过 2157,失败 0,跳过 0,不支持 0`,末尾 `in-proc 测试全绿` |
+| 7 | 同上 **第 2 次** | 退出码 **0**,同上逐字一致;**不支持 0**;总数与 `dotnet test` 的 2157 相等 |
+| 8 | `dotnet test` **追加连跑 12 次**(抗抖动证据) | **12 / 12 全绿**,每次都是 `Failed: 0, Passed: 2157, Total: 2157`(修复前 3 次里有 2 次红) |
+| 9 | `--smoke --theme light --out artifacts/c1bfix-light.png` | 退出码 0,**3956 字节**,SHA256 `9F93EF3E0775A7D3FC07787F36BCEAE2B855CD24E06420A4BDBEB90DFD628F8C` —— **与裁决 1 的基准逐位相等** |
+| 10 | `--smoke --theme dark --out artifacts/c1bfix-dark.png` | 退出码 0,**3941 字节**,SHA256 `F687E6CD1CE48B078040040775167484890C58A18DFEBF4BD3B6125F151E117E` —— **与裁决 1 的基准逐位相等** |
+| 11 | 收工后 `%LOCALAPPDATA%\TipCL` | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,**与开工前完全一致** |
+| 12 | 残留进程 `testhost` / `TipCL` / `java` / `adb` | **0 / 0 / 0 / 0** |
+| 13 | `%TEMP%` 下 `tipcl*` 目录 | 本次会话(08:25 之后)新建 **0 个**(现存 95 个全是 2026-11-07..11-13 00:15 别的包/会话留下的;`tipcl-probe` 也不是本包的) |
+| 14 | `src\TipCL.Core\*.cs` 对 Windows 源 SHA256(排除 `obj\`/`bin\`) | mac 侧 248 个:有对应物 **238** / 完全一致 **216** / 有改动 **22** / 无对应物 **10**,与基线**完全一致** |
+| 15 | `git diff --stat -- src` | **空**(`src\` 无任何改动) |
+
+### 为什么上一包「两通道一致 2157/2157」是错的(直说)
+
+上一包**只看到了一次结果就当成结论**。这条失败路径**取决于线程调度**:同一个命令连跑 3 次能得到
+93 红 / 0 红 / 95 红。上一包看到的两次绿灯很可能是调度运气,而不是「基线本来就是绿的」;
+它也没有意识到进程内执行器**结构上不可能**复现这个问题(它全程在主线程上跑,平台也起在主线程上),
+所以「两条通道一致」这句话在那次报告里根本没有信息量。
+本包因此把**抗抖动**当成验收条件的一部分:除了任务书要求的各连跑两次,还额外把 `dotnet test` 连跑了
+12 次(全绿),并且先在前一版代码上复现出红,再证明修复后不再红。
+
+### 未验证项
+
+1. **修复后的 `dotnet test` 只在 Windows 上、只有本机这一个 VSTest 组合上验过**;Lead 机器上的
+   `testhost` 调度与线程池参数未必与这里相同 —— 但本设计的成立条件与调度无关:平台线程 == 用例线程。
+2. **会话线程的超时分支(30s)没有真跑过**:没有刻意制造死锁来验证那条报错文案与退出行为。
+3. **`AvaloniaSession` 的泵循环在空闲时不回收**:进程退出靠 `IsBackground = true`,没有优雅收摊
+   (队列从不 `CompleteAdding`)。测试进程本来就是一次性进程,判定为可接受。
+4. **用例体必须同步**这条纪律靠约定:**如果将来有 Avalonia 用例体是 `async` 且把续体投回
+   Dispatcher,会在会话线程上自锁**,30 秒后报会话超时。本项目的 Avalonia 用例全是同步的。
+5. macOS 真机(见 C1b 小节的未验证项)与本次修复无关,仍未验证。
+
+### 遗留与风险
+
+1. **`C1aFixtures.EnsureAvalonia()` 这个老名字保留了**,现在只是转发。老包的调用点很多,
+   改名会让 diff 变大;后续包如果愿意,可以统一改成 `AvaloniaSession.Run(...)`,但**不要**再让
+   任何一处自己起平台。
+2. **新增的 9 处会话切换**会带来每条约 1~3ms 的线程往返开销(2157 条用例的总时长仍在 1 秒级),
+   没有做性能优化,也没有必要。
+3. `AvaloniaSession.cs` 里的 `Run<T>` 与 `Run(Action)` 是**同一套实现**(后者转调前者),
+   没有重复逻辑;`TimeoutMilliseconds` 是 `internal const`,便于将来调。
+4. 探针/一次性脚本都在 `artifacts\`(git 忽略)下,`tests\TipCL.Tests` 里**没有**留任何 `Zz*ProbeTests.cs`
+   或其它临时文件(已按任务书核对)。
+

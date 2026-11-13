@@ -329,114 +329,137 @@ public class C1aPaletteTests
     }
 
     // ---- 以下用例要真起 Avalonia(headless + Skia)才看得到色板解析结果 ----
+    // C1b-fix:本小节的每条用例体都在 AvaloniaSession 的会话线程上执行 —— 平台(与 Dispatcher.UIThread)
+    // 就起在那个线程上,所以资源字典求值与刷子构造的 VerifyAccess 恒过,两个测试通道结论一致。
 
     [Fact]
     public void Palette_resolves_every_key_in_both_theme_variants()
     {
         C1aFixtures.EnsureAvalonia();
-        foreach (ThemeVariant variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+        AvaloniaSession.Run(() =>
         {
-            foreach (string key in Palette.Keys)
+            foreach (ThemeVariant variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
             {
-                Assert.True(Palette.TryGet(key, variant, out object? value), "unresolved key: " + key + " in " + variant);
-                Assert.NotNull(value);
-                Assert.True(value is IBrush || value is Color, "unexpected value type for " + key + ": " + value.GetType().Name);
+                foreach (string key in Palette.Keys)
+                {
+                    Assert.True(Palette.TryGet(key, variant, out object? value), "unresolved key: " + key + " in " + variant);
+                    Assert.NotNull(value);
+                    Assert.True(value is IBrush || value is Color, "unexpected value type for " + key + ": " + value.GetType().Name);
+                }
             }
-        }
+        });
     }
 
     [Fact]
     public void Palette_returns_the_colour_resources_as_avalonia_colours()
     {
         C1aFixtures.EnsureAvalonia();
-        Assert.Equal(Color.Parse("#F5F5F5"), Palette.Color("C.Canvas", ThemeVariant.Light));
-        Assert.Equal(Color.Parse("#FFFFFF"), Palette.Color("C.Paper", ThemeVariant.Light));
-        Assert.Equal(Color.Parse("#2E9B6B"), Palette.Color("C.Accent", ThemeVariant.Light));
-        Assert.Equal(Color.Parse("#161616"), Palette.Color("C.Canvas", ThemeVariant.Dark));
-        Assert.Equal(Color.Parse("#1E1E1E"), Palette.Color("C.Paper", ThemeVariant.Dark));
-        Assert.Equal(Color.Parse("#79C8A3"), Palette.Color("C.AccentText", ThemeVariant.Dark));
+        AvaloniaSession.Run(() =>
+        {
+            Assert.Equal(Color.Parse("#F5F5F5"), Palette.Color("C.Canvas", ThemeVariant.Light));
+            Assert.Equal(Color.Parse("#FFFFFF"), Palette.Color("C.Paper", ThemeVariant.Light));
+            Assert.Equal(Color.Parse("#2E9B6B"), Palette.Color("C.Accent", ThemeVariant.Light));
+            Assert.Equal(Color.Parse("#161616"), Palette.Color("C.Canvas", ThemeVariant.Dark));
+            Assert.Equal(Color.Parse("#1E1E1E"), Palette.Color("C.Paper", ThemeVariant.Dark));
+            Assert.Equal(Color.Parse("#79C8A3"), Palette.Color("C.AccentText", ThemeVariant.Dark));
+        });
     }
 
     [Fact]
     public void Palette_returns_brushes_with_the_pinned_colour_and_opacity()
     {
         C1aFixtures.EnsureAvalonia();
-        var mask = (ISolidColorBrush)Palette.Brush("B.Mask", ThemeVariant.Light);
-        Assert.Equal(Color.Parse("#1A1A1A"), mask.Color);
-        Assert.Equal(0.34, mask.Opacity, 10);
+        AvaloniaSession.Run(() =>
+        {
+            var mask = (ISolidColorBrush)Palette.Brush("B.Mask", ThemeVariant.Light);
+            Assert.Equal(Color.Parse("#1A1A1A"), mask.Color);
+            Assert.Equal(0.34, mask.Opacity, 10);
 
-        var maskDark = (ISolidColorBrush)Palette.Brush("B.Mask", ThemeVariant.Dark);
-        Assert.Equal(Color.Parse("#000000"), maskDark.Color);
-        Assert.Equal(0.54, maskDark.Opacity, 10);
+            var maskDark = (ISolidColorBrush)Palette.Brush("B.Mask", ThemeVariant.Dark);
+            Assert.Equal(Color.Parse("#000000"), maskDark.Color);
+            Assert.Equal(0.54, maskDark.Opacity, 10);
 
-        var glass = (ISolidColorBrush)Palette.Brush("B.GlassBorder", ThemeVariant.Light);
-        Assert.Equal(Color.Parse("#BFDCCF"), glass.Color);
-        Assert.Equal(0.68, glass.Opacity, 10);
+            var glass = (ISolidColorBrush)Palette.Brush("B.GlassBorder", ThemeVariant.Light);
+            Assert.Equal(Color.Parse("#BFDCCF"), glass.Color);
+            Assert.Equal(0.68, glass.Opacity, 10);
 
-        var title = (ISolidColorBrush)Palette.Brush("B.TitleSep", ThemeVariant.Light);
-        Assert.Equal(0.1, title.Opacity, 10);
+            var title = (ISolidColorBrush)Palette.Brush("B.TitleSep", ThemeVariant.Light);
+            Assert.Equal(0.1, title.Opacity, 10);
+        });
     }
 
     [Fact]
     public void Palette_keeps_eight_digit_argb_colours_transparent()
     {
         C1aFixtures.EnsureAvalonia();
-        var lightCardBorder = (ISolidColorBrush)Palette.Brush("B.CardBorder", ThemeVariant.Light);
-        Assert.Equal((byte)0x00, lightCardBorder.Color.A);
-        Assert.Equal((byte)0xFF, lightCardBorder.Color.R);
-        Assert.Equal((byte)0xFF, lightCardBorder.Color.G);
-        Assert.Equal((byte)0xFF, lightCardBorder.Color.B);
+        AvaloniaSession.Run(() =>
+        {
+            var lightCardBorder = (ISolidColorBrush)Palette.Brush("B.CardBorder", ThemeVariant.Light);
+            Assert.Equal((byte)0x00, lightCardBorder.Color.A);
+            Assert.Equal((byte)0xFF, lightCardBorder.Color.R);
+            Assert.Equal((byte)0xFF, lightCardBorder.Color.G);
+            Assert.Equal((byte)0xFF, lightCardBorder.Color.B);
 
-        var darkCardBorder = (ISolidColorBrush)Palette.Brush("B.CardBorder", ThemeVariant.Dark);
-        Assert.Equal((byte)0x0F, darkCardBorder.Color.A);
+            var darkCardBorder = (ISolidColorBrush)Palette.Brush("B.CardBorder", ThemeVariant.Dark);
+            Assert.Equal((byte)0x0F, darkCardBorder.Color.A);
+        });
     }
 
     [Fact]
     public void Palette_returns_gradient_brushes_with_three_stops()
     {
         C1aFixtures.EnsureAvalonia();
-        var banner = Assert.IsType<LinearGradientBrush>(Palette.Brush("B.BannerFill", ThemeVariant.Light));
-        Assert.Equal(3, banner.GradientStops.Count);
-        Assert.Equal(Color.Parse("#237F59"), banner.GradientStops[0].Color);
-        Assert.Equal(0.0, banner.GradientStops[0].Offset, 10);
-        Assert.Equal(Color.Parse("#1F7A52"), banner.GradientStops[1].Color);
-        Assert.Equal(0.52, banner.GradientStops[1].Offset, 10);
-        Assert.Equal(Color.Parse("#185F40"), banner.GradientStops[2].Color);
-        Assert.Equal(1.0, banner.GradientStops[2].Offset, 10);
+        AvaloniaSession.Run(() =>
+        {
+            var banner = Assert.IsType<LinearGradientBrush>(Palette.Brush("B.BannerFill", ThemeVariant.Light));
+            Assert.Equal(3, banner.GradientStops.Count);
+            Assert.Equal(Color.Parse("#237F59"), banner.GradientStops[0].Color);
+            Assert.Equal(0.0, banner.GradientStops[0].Offset, 10);
+            Assert.Equal(Color.Parse("#1F7A52"), banner.GradientStops[1].Color);
+            Assert.Equal(0.52, banner.GradientStops[1].Offset, 10);
+            Assert.Equal(Color.Parse("#185F40"), banner.GradientStops[2].Color);
+            Assert.Equal(1.0, banner.GradientStops[2].Offset, 10);
 
-        var wash = Assert.IsType<LinearGradientBrush>(Palette.Brush("B.PageWash", ThemeVariant.Dark));
-        Assert.Equal(3, wash.GradientStops.Count);
-        Assert.Equal(Color.Parse("#161616"), wash.GradientStops[0].Color);
+            var wash = Assert.IsType<LinearGradientBrush>(Palette.Brush("B.PageWash", ThemeVariant.Dark));
+            Assert.Equal(3, wash.GradientStops.Count);
+            Assert.Equal(Color.Parse("#161616"), wash.GradientStops[0].Color);
+        });
     }
 
     [Fact]
     public void Unknown_palette_key_falls_back_to_neutral_grey_instead_of_throwing()
     {
         C1aFixtures.EnsureAvalonia();
-        foreach (string key in new[] { "B.Nope", "C.Nope", "B.", "", "not-a-key" })
+        AvaloniaSession.Run(() =>
         {
-            Assert.False(Palette.TryGet(key, ThemeVariant.Light, out _), "unexpectedly resolved: " + key);
-            IBrush brush = Palette.Brush(key, ThemeVariant.Light);
-            var solid = Assert.IsType<SolidColorBrush>(brush);
-            Assert.Equal(Palette.FallbackColor, solid.Color);
-            Assert.Equal(Palette.FallbackColor, Palette.Color(key, ThemeVariant.Light));
-        }
+            foreach (string key in new[] { "B.Nope", "C.Nope", "B.", "", "not-a-key" })
+            {
+                Assert.False(Palette.TryGet(key, ThemeVariant.Light, out _), "unexpectedly resolved: " + key);
+                IBrush brush = Palette.Brush(key, ThemeVariant.Light);
+                var solid = Assert.IsType<SolidColorBrush>(brush);
+                Assert.Equal(Palette.FallbackColor, solid.Color);
+                Assert.Equal(Palette.FallbackColor, Palette.Color(key, ThemeVariant.Light));
+            }
 
-        Assert.Equal(Color.Parse("#808080"), Palette.FallbackColor);
+            Assert.Equal(Color.Parse("#808080"), Palette.FallbackColor);
+        });
     }
 
     [Fact]
     public void Light_and_dark_resolve_different_values_for_the_same_key()
     {
         C1aFixtures.EnsureAvalonia();
-        foreach (string key in new[] { "B.Canvas", "B.Paper", "B.Ink", "B.Accent", "B.BannerFill", "C.Canvas" })
+        AvaloniaSession.Run(() =>
         {
-            object? light = null;
-            object? dark = null;
-            Assert.True(Palette.TryGet(key, ThemeVariant.Light, out light));
-            Assert.True(Palette.TryGet(key, ThemeVariant.Dark, out dark));
-            Assert.NotEqual(Describe(light), Describe(dark));
-        }
+            foreach (string key in new[] { "B.Canvas", "B.Paper", "B.Ink", "B.Accent", "B.BannerFill", "C.Canvas" })
+            {
+                object? light = null;
+                object? dark = null;
+                Assert.True(Palette.TryGet(key, ThemeVariant.Light, out light));
+                Assert.True(Palette.TryGet(key, ThemeVariant.Dark, out dark));
+                Assert.NotEqual(Describe(light), Describe(dark));
+            }
+        });
     }
 
     /// <summary>
@@ -462,26 +485,30 @@ public class C1aPaletteTests
     public void Palette_current_variant_follows_the_application_requested_variant()
     {
         C1aFixtures.EnsureAvalonia();
-        Application? app = Application.Current;
-        Assert.NotNull(app);
-        ThemeVariant? original = app!.RequestedThemeVariant;
-        try
+        AvaloniaSession.Run(() =>
         {
-            app.RequestedThemeVariant = ThemeVariant.Dark;
-            Assert.Equal(ThemeVariant.Dark, Palette.Current);
-            Assert.Equal(Color.Parse("#161616"), Palette.Color("C.Canvas"));
+            Application? app = Application.Current;
+            Assert.NotNull(app);
+            ThemeVariant? original = app!.RequestedThemeVariant;
+            try
+            {
+                app.RequestedThemeVariant = ThemeVariant.Dark;
+                Assert.Equal(ThemeVariant.Dark, Palette.Current);
+                Assert.Equal(Color.Parse("#161616"), Palette.Color("C.Canvas"));
 
-            app.RequestedThemeVariant = ThemeVariant.Light;
-            Assert.Equal(ThemeVariant.Light, Palette.Current);
-            Assert.Equal(Color.Parse("#F5F5F5"), Palette.Color("C.Canvas"));
+                app.RequestedThemeVariant = ThemeVariant.Light;
+                Assert.Equal(ThemeVariant.Light, Palette.Current);
+                Assert.Equal(Color.Parse("#F5F5F5"), Palette.Color("C.Canvas"));
 
-            // Default(跟随系统)按浅色处理 —— 与 A1 的占位色判定同一套规则。
-            app.RequestedThemeVariant = ThemeVariant.Default;
-            Assert.Equal(ThemeVariant.Light, Palette.Current);
-        }
-        finally
-        {
-            app.RequestedThemeVariant = original;
-        }
+                // Default(跟随系统)按浅色处理 —— 与 A1 的占位色判定同一套规则。
+                app.RequestedThemeVariant = ThemeVariant.Default;
+                Assert.Equal(ThemeVariant.Light, Palette.Current);
+            }
+            finally
+            {
+                // 全局静态改动必须在 finally 里还原(此处同时也保证会话线程上的 Application 状态不残留)。
+                app.RequestedThemeVariant = original;
+            }
+        });
     }
 }

@@ -3,10 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Xml.Linq;
-using Avalonia;
-using Avalonia.Headless;
 
 namespace TipCL.Tests;
 
@@ -31,10 +28,6 @@ internal static class C1aFixtures
     /// <summary>色板键总数(7 个 C.* 颜色 + 54 个刷子)。</summary>
     internal const int PaletteKeyCount = 61;
 
-    private static readonly object InitGate = new object();
-
-    private static bool _avaloniaReady;
-
     /// <summary>
     /// 起一次 headless Avalonia(<c>UseHeadlessDrawing = false</c> + Skia)。
     ///
@@ -43,35 +36,25 @@ internal static class C1aFixtures
     /// <c>InvalidOperationException: Unable to locate 'Avalonia.Platform.IPlatformRenderInterface'</c>
     /// (本机实测,A1 的 smoke 也是同一套配置)。
     ///
-    /// **关键**:Avalonia 建 Dispatcher 时会顺手把当前线程的 <c>SynchronizationContext</c> 换成它自己的。
-    /// 本进程的测试执行器是在**主线程上同步阻塞**等 <c>async</c> 用例的
-    /// (<c>task.GetAwaiter().GetResult()</c>),没有人去泵 Avalonia 的 Dispatcher —— 于是后面那些
-    /// <c>async Task</c> 用例(实测是 <c>Ported\WriteJsonTests.cs</c> 的并发写用例)的续体会永久排队、整个进程卡死。
-    /// 所以这里把旧的 SynchronizationContext **存下来、设完立刻还原**(全局静态改动必须在 finally 里还原)。
+    /// **C1b-fix 起这里只做转发**:平台与 <c>Dispatcher.UIThread</c> 一律由
+    /// <see cref="AvaloniaSession"/> 在自己的**专用后台线程**上起(那才是 Dispatcher 线程),
+    /// 本方法只是 <see cref="AvaloniaSession.Ensure"/> 的别名,供 <c>Hosted.Show</c> 之类的老调用点继续用。
+    ///
+    /// 历史与原因(为什么不能在本线程直接 <c>SetupWithoutStarting()</c>):
+    /// - 原先的写法把 <c>Dispatcher.UIThread</c> 绑在**第一个调用它的那个线程**上。xunit v2 走 VSTest
+    ///   通道时每个测试类跑在自己的 worker 线程上,于是「哪个类先碰到 Avalonia 哪个类就独占 Dispatcher
+    ///   线程」,其它类里构造控件必抛 <c>Call from invalid thread</c>(C1b 打回的真因,见 PROGRESS.md 的
+    ///   C1b-fix 小节)。当时两条通道一条绿一条红、同一条通道还时绿时红,就是线程调度决定的。
+    /// - 老写法还要把当前线程的 <c>SynchronizationContext</c> 换回来:Avalonia 起 Dispatcher 时会顺带
+    ///   把当前线程的上下文换掉,而本进程的测试执行器是在主线程上同步阻塞等 <c>async</c> 用例的
+    ///   (实测是 <c>Ported\WriteJsonTests.cs</c> 的并发写用例),留着 Avalonia 的上下文会让续体永久排队。
+    ///   现在把平台整个挪到会话线程上,调用线程的 <c>SynchronizationContext</c> 一个字都不用动。
+    ///
+    /// **纪律**:<c>SetupWithoutStarting()</c> 在整个测试工程里只有 <c>AvaloniaSession</c> 一处调用。
     /// </summary>
     internal static void EnsureAvalonia()
     {
-        lock (InitGate)
-        {
-            if (_avaloniaReady)
-            {
-                return;
-            }
-
-            SynchronizationContext? previous = SynchronizationContext.Current;
-            try
-            {
-                AppBuilder.Configure<TipCL.App>()
-                    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-                    .UseSkia()
-                    .SetupWithoutStarting();
-                _avaloniaReady = true;
-            }
-            finally
-            {
-                SynchronizationContext.SetSynchronizationContext(previous);
-            }
-        }
+        AvaloniaSession.Ensure();
     }
 
     /// <summary>从测试输出目录往上找仓库根(找 <c>TipCL.Mac.sln</c>)。</summary>

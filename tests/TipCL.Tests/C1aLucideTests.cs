@@ -70,11 +70,15 @@ public class C1aLucideTests
     public void Every_public_path_data_constant_parses_with_avalonia_and_has_non_zero_bounds(string name)
     {
         C1aFixtures.EnsureAvalonia();
-        string data = ConstantValue(name);
-        Assert.False(string.IsNullOrWhiteSpace(data), name + " is empty");
-        Geometry geometry = Geometry.Parse(data);
-        Assert.True(geometry.Bounds.Width > 0.0, name + " has zero width: " + geometry.Bounds);
-        Assert.True(geometry.Bounds.Height > 0.0, name + " has zero height: " + geometry.Bounds);
+        // C1b-fix:Geometry.Parse 要平台;会话线程上平台与 Dispatcher.UIThread 是同一个线程。
+        AvaloniaSession.Run(() =>
+        {
+            string data = ConstantValue(name);
+            Assert.False(string.IsNullOrWhiteSpace(data), name + " is empty");
+            Geometry geometry = Geometry.Parse(data);
+            Assert.True(geometry.Bounds.Width > 0.0, name + " has zero width: " + geometry.Bounds);
+            Assert.True(geometry.Bounds.Height > 0.0, name + " has zero height: " + geometry.Bounds);
+        });
     }
 
     [Fact]
@@ -126,197 +130,233 @@ public class C1aLucideTests
     public void Icon_keeps_the_24_unit_geometry_and_scales_stroke_and_bounds()
     {
         C1aFixtures.EnsureAvalonia();
-        Geometry reference = Geometry.Parse(Lucide.ChevronRight);
-        double expectedWidth = reference.Bounds.Width / 24.0 * 16.0;
+        AvaloniaSession.Run(() =>
+        {
+            Geometry reference = Geometry.Parse(Lucide.ChevronRight);
+            double expectedWidth = reference.Bounds.Width / 24.0 * 16.0;
 
-        ShapePath icon = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
-        Assert.Equal(16.0, icon.Width);
-        Assert.Equal(16.0, icon.Height);
-        Assert.Equal(16.0 / 24.0 * 2.0, icon.StrokeThickness, 10);
-        Assert.Equal(expectedWidth, icon.Data!.Bounds.Width, 6);
-        Assert.Equal(Stretch.None, icon.Stretch);
-        Assert.Equal(PenLineCap.Round, icon.StrokeLineCap);
-        Assert.Equal(PenLineJoin.Round, icon.StrokeJoin);
-        Assert.False(icon.IsHitTestVisible);
+            ShapePath icon = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
+            Assert.Equal(16.0, icon.Width);
+            Assert.Equal(16.0, icon.Height);
+            Assert.Equal(16.0 / 24.0 * 2.0, icon.StrokeThickness, 10);
+            Assert.Equal(expectedWidth, icon.Data!.Bounds.Width, 6);
+            Assert.Equal(Stretch.None, icon.Stretch);
+            Assert.Equal(PenLineCap.Round, icon.StrokeLineCap);
+            Assert.Equal(PenLineJoin.Round, icon.StrokeJoin);
+            Assert.False(icon.IsHitTestVisible);
 
-        ShapePath full = Lucide.Icon(Lucide.ChevronRight);
-        Assert.Equal(16.0, full.Width);
-        Assert.Equal(16.0 / 24.0 * 2.0, full.StrokeThickness, 10);
+            ShapePath full = Lucide.Icon(Lucide.ChevronRight);
+            Assert.Equal(16.0, full.Width);
+            Assert.Equal(16.0 / 24.0 * 2.0, full.StrokeThickness, 10);
+        });
     }
 
     [Fact]
     public void Icon_at_design_size_does_not_scale_the_geometry()
     {
         C1aFixtures.EnsureAvalonia();
-        ShapePath icon = Lucide.Icon(Lucide.Trash2, 24.0, "B.Ink");
-        Geometry reference = Geometry.Parse(Lucide.Trash2);
-        Assert.Equal(reference.Bounds, icon.Data!.Bounds);
-        Assert.Equal(2.0, icon.StrokeThickness, 10);
+        AvaloniaSession.Run(() =>
+        {
+            ShapePath icon = Lucide.Icon(Lucide.Trash2, 24.0, "B.Ink");
+            Geometry reference = Geometry.Parse(Lucide.Trash2);
+            Assert.Equal(reference.Bounds, icon.Data!.Bounds);
+            Assert.Equal(2.0, icon.StrokeThickness, 10);
+        });
     }
 
     [Fact]
     public void Icon_uses_the_palette_brush_key_and_falls_back_for_unknown_keys()
     {
         C1aFixtures.EnsureAvalonia();
-        var ink = Assert.IsType<SolidColorBrush>(Lucide.Icon(Lucide.Eye, 16.0, "B.Ink").Stroke);
-        Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), ink.Color);
+        AvaloniaSession.Run(() =>
+        {
+            var ink = Assert.IsType<SolidColorBrush>(Lucide.Icon(Lucide.Eye, 16.0, "B.Ink").Stroke);
+            Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), ink.Color);
 
-        var fallback = Assert.IsType<SolidColorBrush>(Lucide.Icon(Lucide.Eye, 16.0, "B.Nope").Stroke);
-        Assert.Equal(Palette.FallbackColor, fallback.Color);
+            var fallback = Assert.IsType<SolidColorBrush>(Lucide.Icon(Lucide.Eye, 16.0, "B.Nope").Stroke);
+            Assert.Equal(Palette.FallbackColor, fallback.Color);
+        });
     }
 
     [Fact]
     public void Icon_centres_the_rotation_origin_for_the_spinner()
     {
         C1aFixtures.EnsureAvalonia();
-        ShapePath icon = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
-        Assert.Equal(0.5, icon.RenderTransformOrigin.Point.X, 10);
-        Assert.Equal(0.5, icon.RenderTransformOrigin.Point.Y, 10);
-        Assert.Equal(RelativeUnit.Relative, icon.RenderTransformOrigin.Unit);
+        AvaloniaSession.Run(() =>
+        {
+            ShapePath icon = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
+            Assert.Equal(0.5, icon.RenderTransformOrigin.Point.X, 10);
+            Assert.Equal(0.5, icon.RenderTransformOrigin.Point.Y, 10);
+            Assert.Equal(RelativeUnit.Relative, icon.RenderTransformOrigin.Unit);
+        });
     }
 
     [Fact]
     public void Spinner_is_the_loader_circle_with_a_rotate_transform()
     {
         C1aFixtures.EnsureAvalonia();
-        ShapePath spinner = Lucide.Spinner(16.0);
-        Geometry reference = Geometry.Parse(Lucide.LoaderCircle);
-        double scale = 16.0 / 24.0;
-        Assert.Equal(reference.Bounds.Width * scale, spinner.Data!.Bounds.Width, 4);
-        Assert.Equal(reference.Bounds.Height * scale, spinner.Data!.Bounds.Height, 4);
-        var rotate = Assert.IsType<RotateTransform>(spinner.RenderTransform);
-        Assert.Equal(0.0, rotate.Angle, 10);
-        var stroke = Assert.IsType<SolidColorBrush>(spinner.Stroke);
-        Assert.Equal(Palette.Color("B.AccentDeep", ThemeVariant.Light), stroke.Color);
+        AvaloniaSession.Run(() =>
+        {
+            ShapePath spinner = Lucide.Spinner(16.0);
+            Geometry reference = Geometry.Parse(Lucide.LoaderCircle);
+            double scale = 16.0 / 24.0;
+            Assert.Equal(reference.Bounds.Width * scale, spinner.Data!.Bounds.Width, 4);
+            Assert.Equal(reference.Bounds.Height * scale, spinner.Data!.Bounds.Height, 4);
+            var rotate = Assert.IsType<RotateTransform>(spinner.RenderTransform);
+            Assert.Equal(0.0, rotate.Angle, 10);
+            var stroke = Assert.IsType<SolidColorBrush>(spinner.Stroke);
+            Assert.Equal(Palette.Color("B.AccentDeep", ThemeVariant.Light), stroke.Color);
+        });
     }
 
     [Fact]
     public void Spinner_defaults_to_the_accent_deep_key()
     {
         C1aFixtures.EnsureAvalonia();
-        var stroke = Assert.IsType<SolidColorBrush>(Lucide.Spinner().Stroke);
-        Assert.Equal(Palette.Color("B.AccentDeep", ThemeVariant.Light), stroke.Color);
+        AvaloniaSession.Run(() =>
+        {
+            var stroke = Assert.IsType<SolidColorBrush>(Lucide.Spinner().Stroke);
+            Assert.Equal(Palette.Color("B.AccentDeep", ThemeVariant.Light), stroke.Color);
+        });
     }
 
     [Fact]
     public void Rotate_snaps_to_90_degrees_when_motion_is_off_and_restores_the_flag()
     {
         C1aFixtures.EnsureAvalonia();
-        bool original = Lucide.MotionEnabled;
-        try
+        AvaloniaSession.Run(() =>
         {
-            Lucide.MotionEnabled = false;
-            ShapePath chevron = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
-            Lucide.Rotate(chevron, true);
-            var rotate = Assert.IsType<RotateTransform>(chevron.RenderTransform);
-            Assert.Equal(90.0, rotate.Angle, 10);
+            bool original = Lucide.MotionEnabled;
+            try
+            {
+                Lucide.MotionEnabled = false;
+                ShapePath chevron = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
+                Lucide.Rotate(chevron, true);
+                var rotate = Assert.IsType<RotateTransform>(chevron.RenderTransform);
+                Assert.Equal(90.0, rotate.Angle, 10);
 
-            Lucide.Rotate(chevron, false);
-            Assert.Equal(0.0, rotate.Angle, 10);
-        }
-        finally
-        {
-            Lucide.MotionEnabled = original;
-        }
+                Lucide.Rotate(chevron, false);
+                Assert.Equal(0.0, rotate.Angle, 10);
+            }
+            finally
+            {
+                Lucide.MotionEnabled = original;
+            }
 
-        Assert.Equal(original, Lucide.MotionEnabled);
+            Assert.Equal(original, Lucide.MotionEnabled);
+        });
     }
 
     [Fact]
     public void Rotate_creates_the_rotate_transform_when_the_path_has_none()
     {
         C1aFixtures.EnsureAvalonia();
-        bool original = Lucide.MotionEnabled;
-        try
+        AvaloniaSession.Run(() =>
         {
-            Lucide.MotionEnabled = false;
-            ShapePath chevron = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
-            Assert.Null(chevron.RenderTransform);
-            Lucide.Rotate(chevron, true);
-            Assert.IsType<RotateTransform>(chevron.RenderTransform);
-        }
-        finally
-        {
-            Lucide.MotionEnabled = original;
-        }
+            bool original = Lucide.MotionEnabled;
+            try
+            {
+                Lucide.MotionEnabled = false;
+                ShapePath chevron = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
+                Assert.Null(chevron.RenderTransform);
+                Lucide.Rotate(chevron, true);
+                Assert.IsType<RotateTransform>(chevron.RenderTransform);
+            }
+            finally
+            {
+                Lucide.MotionEnabled = original;
+            }
+        });
     }
 
     [Fact]
     public void Rotate_ignores_a_null_chevron()
     {
-        Lucide.Rotate(null!, true);
+        AvaloniaSession.Run(() => Lucide.Rotate(null!, true));
     }
 
     [Fact]
     public void Rotate_starts_an_animation_when_motion_is_on_without_throwing()
     {
         C1aFixtures.EnsureAvalonia();
-        bool original = Lucide.MotionEnabled;
-        try
+        AvaloniaSession.Run(() =>
         {
-            Lucide.MotionEnabled = true;
-            ShapePath chevron = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
-            Lucide.Rotate(chevron, true);
-            Assert.IsType<RotateTransform>(chevron.RenderTransform);
-        }
-        finally
-        {
-            Lucide.MotionEnabled = original;
-        }
+            bool original = Lucide.MotionEnabled;
+            try
+            {
+                Lucide.MotionEnabled = true;
+                ShapePath chevron = Lucide.Icon(Lucide.ChevronRight, 16.0, "B.Ink");
+                Lucide.Rotate(chevron, true);
+                Assert.IsType<RotateTransform>(chevron.RenderTransform);
+            }
+            finally
+            {
+                Lucide.MotionEnabled = original;
+            }
+        });
     }
 
     [Fact]
     public void Shimmer_off_restores_the_plain_palette_brush()
     {
         C1aFixtures.EnsureAvalonia();
-        var text = new TextBlock { Text = "TipCL" };
-        Lucide.Shimmer(text, false, "B.Ink");
-        var brush = Assert.IsType<SolidColorBrush>(text.Foreground);
-        Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), brush.Color);
+        AvaloniaSession.Run(() =>
+        {
+            var text = new TextBlock { Text = "TipCL" };
+            Lucide.Shimmer(text, false, "B.Ink");
+            var brush = Assert.IsType<SolidColorBrush>(text.Foreground);
+            Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), brush.Color);
+        });
     }
 
     [Fact]
     public void Shimmer_on_builds_a_five_stop_gradient_and_off_restores_it()
     {
         C1aFixtures.EnsureAvalonia();
-        bool original = Lucide.MotionEnabled;
-        var text = new TextBlock { Text = "TipCL", Foreground = Palette.Brush("B.Ink") };
-        try
+        AvaloniaSession.Run(() =>
         {
-            Lucide.MotionEnabled = true;
-            Lucide.Shimmer(text, true, "B.Ink");
-            var gradient = Assert.IsType<LinearGradientBrush>(text.Foreground);
-            Assert.Equal(5, gradient.GradientStops.Count);
-            Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), gradient.GradientStops[0].Color);
-            Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), gradient.GradientStops[4].Color);
-            Assert.NotEqual(gradient.GradientStops[0].Color, gradient.GradientStops[2].Color);
+            bool original = Lucide.MotionEnabled;
+            var text = new TextBlock { Text = "TipCL", Foreground = Palette.Brush("B.Ink") };
+            try
+            {
+                Lucide.MotionEnabled = true;
+                Lucide.Shimmer(text, true, "B.Ink");
+                var gradient = Assert.IsType<LinearGradientBrush>(text.Foreground);
+                Assert.Equal(5, gradient.GradientStops.Count);
+                Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), gradient.GradientStops[0].Color);
+                Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), gradient.GradientStops[4].Color);
+                Assert.NotEqual(gradient.GradientStops[0].Color, gradient.GradientStops[2].Color);
 
-            Lucide.Shimmer(text, false, "B.Ink");
-            var restored = Assert.IsType<SolidColorBrush>(text.Foreground);
-            Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), restored.Color);
-        }
-        finally
-        {
-            Lucide.MotionEnabled = original;
-        }
+                Lucide.Shimmer(text, false, "B.Ink");
+                var restored = Assert.IsType<SolidColorBrush>(text.Foreground);
+                Assert.Equal(Palette.Color("B.Ink", ThemeVariant.Light), restored.Color);
+            }
+            finally
+            {
+                Lucide.MotionEnabled = original;
+            }
+        });
     }
 
     [Fact]
     public void Shimmer_with_motion_off_never_builds_a_gradient()
     {
         C1aFixtures.EnsureAvalonia();
-        bool original = Lucide.MotionEnabled;
-        var text = new TextBlock { Text = "TipCL", Foreground = Palette.Brush("B.Ink") };
-        try
+        AvaloniaSession.Run(() =>
         {
-            Lucide.MotionEnabled = false;
-            Lucide.Shimmer(text, true, "B.Ink");
-            Assert.IsType<SolidColorBrush>(text.Foreground);
-        }
-        finally
-        {
-            Lucide.MotionEnabled = original;
-        }
+            bool original = Lucide.MotionEnabled;
+            var text = new TextBlock { Text = "TipCL", Foreground = Palette.Brush("B.Ink") };
+            try
+            {
+                Lucide.MotionEnabled = false;
+                Lucide.Shimmer(text, true, "B.Ink");
+                Assert.IsType<SolidColorBrush>(text.Foreground);
+            }
+            finally
+            {
+                Lucide.MotionEnabled = original;
+            }
+        });
     }
 
     [Theory]
@@ -412,36 +452,45 @@ public class C1aLucideTests
     public void Asset_returns_a_shape_filled_with_the_palette_brush_and_masked_by_the_png()
     {
         C1aFixtures.EnsureAvalonia();
-        Control asset = Lucide.Asset("ask_user", 16.0, "B.AccentDeep");
-        var rectangle = Assert.IsType<ShapeRectangle>(asset);
-        Assert.Equal(16.0, rectangle.Width);
-        Assert.Equal(16.0, rectangle.Height);
-        var fill = Assert.IsType<SolidColorBrush>(rectangle.Fill);
-        Assert.Equal(Palette.Color("B.AccentDeep", ThemeVariant.Light), fill.Color);
+        AvaloniaSession.Run(() =>
+        {
+            Control asset = Lucide.Asset("ask_user", 16.0, "B.AccentDeep");
+            var rectangle = Assert.IsType<ShapeRectangle>(asset);
+            Assert.Equal(16.0, rectangle.Width);
+            Assert.Equal(16.0, rectangle.Height);
+            var fill = Assert.IsType<SolidColorBrush>(rectangle.Fill);
+            Assert.Equal(Palette.Color("B.AccentDeep", ThemeVariant.Light), fill.Color);
 
-        var mask = Assert.IsType<ImageBrush>(rectangle.OpacityMask);
-        var bitmap = Assert.IsType<Bitmap>(mask.Source);
-        Assert.Equal(128, bitmap.PixelSize.Width);
-        Assert.Equal(128, bitmap.PixelSize.Height);
-        Assert.Equal(Stretch.Uniform, mask.Stretch);
-        Assert.False(rectangle.IsHitTestVisible);
+            var mask = Assert.IsType<ImageBrush>(rectangle.OpacityMask);
+            var bitmap = Assert.IsType<Bitmap>(mask.Source);
+            Assert.Equal(128, bitmap.PixelSize.Width);
+            Assert.Equal(128, bitmap.PixelSize.Height);
+            Assert.Equal(Stretch.Uniform, mask.Stretch);
+            Assert.False(rectangle.IsHitTestVisible);
+        });
     }
 
     [Fact]
     public void Asset_falls_back_to_a_spinner_for_an_unknown_tool()
     {
         C1aFixtures.EnsureAvalonia();
-        Control asset = Lucide.Asset("no_such_tool");
-        Assert.IsType<ShapePath>(asset);
+        AvaloniaSession.Run(() =>
+        {
+            Control asset = Lucide.Asset("no_such_tool");
+            Assert.IsType<ShapePath>(asset);
+        });
     }
 
     [Fact]
     public void Asset_returns_the_same_cached_bitmap_for_repeated_calls()
     {
         C1aFixtures.EnsureAvalonia();
-        var first = Assert.IsType<ImageBrush>(Assert.IsType<ShapeRectangle>(Lucide.Asset("ask_user")).OpacityMask);
-        var second = Assert.IsType<ImageBrush>(Assert.IsType<ShapeRectangle>(Lucide.Asset("ask_user")).OpacityMask);
-        Assert.Same(first.Source, second.Source);
+        AvaloniaSession.Run(() =>
+        {
+            var first = Assert.IsType<ImageBrush>(Assert.IsType<ShapeRectangle>(Lucide.Asset("ask_user")).OpacityMask);
+            var second = Assert.IsType<ImageBrush>(Assert.IsType<ShapeRectangle>(Lucide.Asset("ask_user")).OpacityMask);
+            Assert.Same(first.Source, second.Source);
+        });
     }
 
     [Fact]

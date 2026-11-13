@@ -129,19 +129,27 @@ public class C1bStyleKeysTests
     [Fact]
     public void Apply_adds_the_class_names_to_a_control_once()
     {
-        var button = new Button();
-        StyleKeys.Apply(button, "Btn.Primary", "Btn.Chip");
-        StyleKeys.Apply(button, "Btn.Primary");
-        Assert.Equal(new[] { "btn-primary", "btn-chip" }, button.Classes.ToArray());
+        // C1b-fix:构造 Button 要走 Avalonia 会话线程(控件构造会查 Dispatcher,见 AvaloniaSession 的注释)。
+        AvaloniaSession.Run(() =>
+        {
+            var button = new Button();
+            StyleKeys.Apply(button, "Btn.Primary", "Btn.Chip");
+            StyleKeys.Apply(button, "Btn.Primary");
+            Assert.Equal(new[] { "btn-primary", "btn-chip" }, button.Classes.ToArray());
+        });
     }
 
     [Fact]
     public void Apply_tolerates_unknown_keys_and_null_control()
     {
-        var button = new Button();
-        StyleKeys.Apply(button, "No.Such.Key", "F.Ui");
-        Assert.Empty(button.Classes);
-        StyleKeys.Apply(null!, "Btn.Primary");
+        // C1b-fix:同上,这条也要会话线程。
+        AvaloniaSession.Run(() =>
+        {
+            var button = new Button();
+            StyleKeys.Apply(button, "No.Such.Key", "F.Ui");
+            Assert.Empty(button.Classes);
+            StyleKeys.Apply(null!, "Btn.Primary");
+        });
     }
 
     /// <summary>表里的每个键都必须真的出现在 Windows 源里(钉死的 64 个键之内)。</summary>

@@ -124,32 +124,41 @@ public class C1aIconFontTests
     public void Icon_font_is_embedded_under_the_avares_uri_the_app_declares()
     {
         C1aFixtures.EnsureAvalonia();
-        using Stream embedded = AssetLoader.Open(new Uri("avares://TipCL/Resources/fonts/TipCLIcons.ttf"));
-        Assert.NotNull(embedded);
-        using var buffer = new MemoryStream();
-        embedded.CopyTo(buffer);
-        Assert.Equal(
-            Convert.ToHexString(SHA256.HashData(buffer.ToArray())),
-            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(FontPath))));
+        // C1b-fix:AssetLoader 要 Avalonia 平台,所以这一段走会话线程,
+        // 平台与 Dispatcher.UIThread 在同一个线程上(见 AvaloniaSession 的注释)。
+        AvaloniaSession.Run(() =>
+        {
+            using Stream embedded = AssetLoader.Open(new Uri("avares://TipCL/Resources/fonts/TipCLIcons.ttf"));
+            Assert.NotNull(embedded);
+            using var buffer = new MemoryStream();
+            embedded.CopyTo(buffer);
+            Assert.Equal(
+                Convert.ToHexString(SHA256.HashData(buffer.ToArray())),
+                Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(FontPath))));
+        });
     }
 
     [Fact]
     public void Icon_font_resolves_through_the_avalonia_font_manager()
     {
         C1aFixtures.EnsureAvalonia();
-        var typeface = new Typeface(Palette.IconFont);
-        Assert.True(
-            FontManager.Current.TryGetGlyphTypeface(typeface, out IGlyphTypeface? glyph),
-            "avares font family did not resolve: " + Palette.IconFontUri);
-        Assert.NotNull(glyph);
-        Assert.Equal("TipCL Icons", glyph!.FamilyName);
-
-        foreach (ushort codepoint in C1aFixtures.SampledIconCodepoints)
+        // C1b-fix:FontManager / Typeface 都是平台侧对象,同样走会话线程。
+        AvaloniaSession.Run(() =>
         {
+            var typeface = new Typeface(Palette.IconFont);
             Assert.True(
-                glyph.TryGetGlyph(codepoint, out _),
-                "no glyph for U+" + codepoint.ToString("X4") + " through the Avalonia font manager");
-        }
+                FontManager.Current.TryGetGlyphTypeface(typeface, out IGlyphTypeface? glyph),
+                "avares font family did not resolve: " + Palette.IconFontUri);
+            Assert.NotNull(glyph);
+            Assert.Equal("TipCL Icons", glyph!.FamilyName);
+
+            foreach (ushort codepoint in C1aFixtures.SampledIconCodepoints)
+            {
+                Assert.True(
+                    glyph.TryGetGlyph(codepoint, out _),
+                    "no glyph for U+" + codepoint.ToString("X4") + " through the Avalonia font manager");
+            }
+        });
     }
 
     [Fact]

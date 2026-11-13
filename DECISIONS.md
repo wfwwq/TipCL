@@ -1052,3 +1052,29 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   (`Application.RequestedThemeVariant`)在 `Hosted.Dispose` 里还原。
 - 写用例时踩到 `xUnit2013`(`Assert.Equal(0, X.Count())`),已按分析器建议改成 `Assert.Empty`,
   现在全仓警告只有 NU1900 与 SYSLIB0014。
+
+## D-79 测试里一切 Avalonia 工作都走 `AvaloniaSession`(专用 Dispatcher 线程)
+
+- **根因(C1b-fix 实测定性)**:`AppBuilder.SetupWithoutStarting()` 把 `Dispatcher.UIThread` 绑在
+  **第一个调用它的线程**上,而 `AvaloniaObject.VerifyAccess()` 只认那一个线程。xunit v2 走 VSTest
+  (testhost)通道时每个测试类跑在自己的 worker 线程上,于是「哪个类先碰到 Avalonia,哪个类就独占
+  Dispatcher 线程」,其它类里构造控件(`new Button()` 就进 `AvaloniaObject..ctor`)必抛
+  `System.InvalidOperationException : Call from invalid thread`。
+- **这条路径是调度相关的,所以同一份代码会时绿时红**(本机实跑:同一命令 3 次 -> 93 失败 / 0 失败 /
+  95 失败;失败的类随「谁抢到 Dispatcher 线程」变,亲眼见过 56+30+7 与 Lead 报的 56+7+2 两种分布)。
+  进程内执行器全程在主线程上跑,所以它一直是绿的 —— 这不是「另一条通道更严」,而是它根本没撞上这个问题。
+- **设计**:`tests/TipCL.Tests/AvaloniaSession.cs` 用一个**后台线程**起平台 + 泵循环
+  (取队列 -> `Dispatcher.UIThread.RunJobs()` -> 歇 2ms),用例体经 `Run<T>(Func<T>)` / `Run(Action)`
+  在该线程上执行并同步取回结果(`ManualResetEventSlim`,上限 30s,超时抛 `TimeoutException`);
+  异常用 `ExceptionDispatchInfo.Capture(ex).Throw()` **原样重抛**(类型/消息/原始栈都保留,
+  xunit 报的是真实断言消息,不是包装异常)。
+- **纪律**:`SetupWithoutStarting()` 在整个测试工程里**只有 AvaloniaSession 一处**调用;
+  `C1aFixtures.EnsureAvalonia()` 退化成 `AvaloniaSession.Ensure()` 的转发(保留给 `Hosted.Show` 等老调用点)。
+  用例体必须**同步** —— 在会话线程上阻塞等一个要把续体投回同一个 Dispatcher 的 Task 会自锁。
+- **不引新依赖**:没有用 `Avalonia.Headless.XUnit`(进程内执行器不展开 collection / fixture 特性,见 A6),
+  也没有依赖 `IClassFixture` / `ICollectionFixture` —— 会话是纯静态入口,直接反射调用照样工作。
+  将来若要引它,前提是先让进程内执行器支持 collection/fixture,否则两条通道不再可比。
+- **为什么不把「测试里的 Avalonia 工作」放在测试线程上、只让平台线程跑泵**:那样 `VerifyAccess` 仍在测试
+  线程上抛;Dispatcher 线程与「构造控件的线程」必须是同一个,没有第三种写法。
+- **实测证据**:修完后 `dotnet test` **连跑 12 次全绿**(修复前 3 次里有 2 次红);两条通道各连跑 2 次都是
+  2157/2157、0 失败。
