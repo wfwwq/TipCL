@@ -25,6 +25,11 @@ namespace TipCL.Tests;
 /// 快照还原(D-69);对话框一律"先推出来再点"(D-113);等待一律"条件成立 + 有截止时间"(D-120);
 /// 后端是按方法名路由的回环假后端(不起真后端、不出网、不启外部进程);
 /// 读剪贴板走注入缝、**绝不碰真剪贴板**(C6a 的 D 类差异)。
+///
+/// <b>等待预算</b>:一律对齐项目既有的默认 <c>timeoutMs = 9000</c>(C3b/C3c/C3e/C4/C5a 的 <c>Pump</c> 都是它)。
+/// 纪律(Lead 记的 D1 待办):**"固定预算的泵"在并发负载下天生会假红** —— 这是本项目第四次踩到
+/// (两条通道顺序不同 / 别人重建共享 bin / 并发跑测试 / 全量 3512 条一起跑的负载)。长期修法是把
+/// "固定预算"换成"条件成立 + 有截止时间的等待",并把等待失败的**现场值**带进断言消息;本包先把预算对齐。
 /// </summary>
 public class C6aPagesTests
 {
@@ -296,7 +301,7 @@ public class C6aPagesTests
             DownloadPage page = C5aFiles.Mount(harness, new DownloadPage());
             C5aFiles.Load(page);
             page.ShowSeg(1);
-            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 9000);
             ListBox list = C5aFiles.Find<ListBox>(page, "结果列表");
             C5aFiles.Settle(8);
 
@@ -331,14 +336,14 @@ public class C6aPagesTests
             page.ShowSeg(segment);
             C5aFiles.Settle(2);
 
-            C5aFiles.Pump(() => api.Count(method) >= 1, 5000);
+            C5aFiles.Pump(() => api.Count(method) >= 1, 9000);
             Assert.Equal("", C5aFiles.ParamAt(api, method, "query"));
             // 【Windows 源】<c>:127</c>:来源下拉的初值是种类的 DefaultSource(有默认来源的种类就不是「全部」)
             Assert.Equal(source, C5aFiles.ParamAt(api, method, "source"));
             Assert.True(C5aFiles.ParamHas(api, method, "\"game_version\""));
             Assert.True(C5aFiles.ParamHas(api, method, "\"category\""));
             // 空结果 → 该种类自己的空态文案(逐个种类的话术不同)
-            C5aFiles.Pump(() => C5aFiles.HasText(page, I18n.L(emptyText)), 5000);
+            C5aFiles.Pump(() => C5aFiles.HasText(page, I18n.L(emptyText)), 9000);
             Assert.True(C5aFiles.HasButton(page, I18n.L("重置条件")));
         });
     }
@@ -356,18 +361,18 @@ public class C6aPagesTests
             C5aFiles.Load(page);
             page.ShowSeg(1);
             C5aFiles.Settle(2);
-            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 9000);
 
             // 游戏版本框(可编辑)打上 1.20.1,再选一个类型(第 2 项 = 优化)
             // 先改类型(会触发一次搜索),泵到这一次的 category 到位;再改游戏版本,泵到两样都到位。
             ComboBox type = C5aFiles.Descendants(page).OfType<ComboBox>()
                 .First(c => c.Items.OfType<object>().Any(o => (o.ToString() ?? "") == I18n.L("优化")));
             type.SelectedIndex = 1;
-            C5aFiles.Pump(() => C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "category") == "优化", 5000);
+            C5aFiles.Pump(() => C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "category") == "优化", 9000);
             ComboBox version = C5aFiles.Descendants(page).OfType<ComboBox>()
                 .First(c => c.Items.OfType<object>().Any(o => (o.ToString() ?? "") == "1.20.1"));
             version.Text = "1.20.1";
-            C5aFiles.Pump(() => api.Count("search_mods") >= 2 && C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "game_version") == "1.20.1", 5000);
+            C5aFiles.Pump(() => api.Count("search_mods") >= 2 && C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "game_version") == "1.20.1", 9000);
             int last = api.Count("search_mods") - 1;
             Assert.Equal("1.20.1", C5aFiles.ParamAt(api, "search_mods", last, "extra", "game_version"));
             Assert.Equal("优化", C5aFiles.ParamAt(api, "search_mods", last, "extra", "category"));
@@ -397,7 +402,7 @@ public class C6aPagesTests
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
 
             catalog.SetMode(CatalogPage.Mode.Installed);
-            C5aFiles.Pump(() => api.Count(method) >= 1, 5000);
+            C5aFiles.Pump(() => api.Count(method) >= 1, 9000);
             // 参数里的中文在原文里是 \uXXXX 转义(BridgeClient 的 STJ 编码器),按 JSON 取值才比得上
             Assert.Equal("甲", C5aFiles.ParamAt(api, method, "instance"));
             // 未安装任何东西 ⇒ 空态文案(逐个种类的话术)
@@ -421,7 +426,7 @@ public class C6aPagesTests
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
 
             catalog.SetMode(CatalogPage.Mode.Favorites);
-            C5aFiles.Pump(() => C5aFiles.HasText(page, I18n.L("还没有收藏")), 5000);
+            C5aFiles.Pump(() => C5aFiles.HasText(page, I18n.L("还没有收藏")), 9000);
             Assert.True(api.Count("catalog_favorites") >= 1);
         });
     }
@@ -442,13 +447,13 @@ public class C6aPagesTests
             page.ShowSeg(1);
             C5aFiles.Settle(2);
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
-            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 9000);
             // 数据在(行控件在离屏不会实例化 —— 见机制探针那条用例)
             Assert.Single(C5aFiles.Find<ListBox>(page, "结果列表").Items);
             // 驱动"点那颗星"那一层(处理器体,D-115 / D-127;真机走同一段代码)
             CatalogItem item = new CatalogItem { Name = "JEI", Slug = "jei", Source = "Modrinth" };
             Task toggle = catalog.ToggleFavRowForTest(item);
-            C5aFiles.Pump(() => api.Count("toggle_favorite") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("toggle_favorite") >= 1, 9000);
             C5aFiles.PumpTask(toggle);
             Assert.Equal("JEI", C5aFiles.ParamAt(api, "toggle_favorite", "item", "name"));
             Assert.Equal("Modrinth", C5aFiles.ParamAt(api, "toggle_favorite", "item", "source"));
@@ -471,19 +476,19 @@ public class C6aPagesTests
             DownloadPage page = C5aFiles.Mount(harness, new DownloadPage());
             C5aFiles.Load(page);
             page.ShowSeg(1);
-            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 9000);
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
             Assert.Single(C5aFiles.Find<ListBox>(page, "结果列表").Items);
 
             // 驱动"点这一行的安装"那一层(D-115 / D-127),再推卡片(D-113)
             Task install = catalog.InstallRowForTest(new CatalogItem { Name = "JEI", Slug = "jei", Source = "Modrinth" });
-            C5aFiles.Pump(() => api.Count("list_catalog_files") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("list_catalog_files") >= 1, 9000);
             C3bFiles.WaitDialog();
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last(c => c.Title == I18n.L("选择版本文件 · JEI"));
             C5aFiles.Click(C5aFiles.ByText(card, I18n.L("安装所选")));
             C5aFiles.PumpTask(install);
 
-            C5aFiles.Pump(() => api.Count("install_mod") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("install_mod") >= 1, 9000);
             Assert.Equal("JEI", C5aFiles.ParamAt(api, "install_mod", "name"));
             Assert.True(C5aFiles.ParamHas(api, "install_mod", "\"filename\":\"jei-1.jar\""));
         });
@@ -503,17 +508,17 @@ public class C6aPagesTests
             DownloadPage page = C5aFiles.Mount(harness, new DownloadPage());
             C5aFiles.Load(page);
             page.ShowSeg(2);
-            C5aFiles.Pump(() => api.Count("search_modpacks") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("search_modpacks") >= 1, 9000);
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
             Assert.Single(C5aFiles.Find<ListBox>(page, "结果列表").Items);
 
             Task install = catalog.InstallRowForTest(new CatalogItem { Name = "史诗整合", Slug = "epic", Source = "Modrinth" });
-            C5aFiles.Pump(() => api.Count("list_catalog_files") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("list_catalog_files") >= 1, 9000);
             C3bFiles.WaitDialog();
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last(c => c.Title == I18n.L("选择版本文件 · 史诗整合"));
             C5aFiles.Click(C5aFiles.ByText(card, I18n.L("安装最新")));
             C5aFiles.PumpTask(install);
-            C5aFiles.Pump(() => api.Count("install_modpack") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("install_modpack") >= 1, 9000);
             Assert.Equal("Modrinth", C5aFiles.ParamAt(api, "install_modpack", "source"));
         });
     }
@@ -539,7 +544,7 @@ public class C6aPagesTests
             CatalogPage.ClipboardReader = () => "https://modrinth.com/mod/jei";
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
             catalog.OnShown();
-            C5aFiles.Pump(() => toasts.Has(I18n.L("识别到剪贴板链接")), 5000);
+            C5aFiles.Pump(() => toasts.Has(I18n.L("识别到剪贴板链接")), 9000);
             TextBox search = C5aFiles.Descendants(page).OfType<TextBox>().First(t => (t.Tag as string ?? "").StartsWith(I18n.L("搜索"), StringComparison.Ordinal));
             Assert.Equal("https://modrinth.com/mod/jei", search.Text);
 
@@ -587,7 +592,7 @@ public class C6aPagesTests
             using var api = C6aFiles.Api();
             using var harness = C4LayerHost.Show();
             InstallPage install = C5aFiles.Mount(harness, new InstallPage("1.20.1", I18n.L("正式版"), () => { }));
-            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 5000);
+            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 9000);
 
             foreach (string name in new[] { "不安装", "Fabric", "Forge", "NeoForge", "Quilt" })
             {
@@ -618,7 +623,7 @@ public class C6aPagesTests
             using var api = C6aFiles.Api();
             using var harness = C4LayerHost.Show();
             InstallPage install = C5aFiles.Mount(harness, new InstallPage("1.20.1", I18n.L("正式版"), () => { }));
-            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 5000);
+            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 9000);
 
             // 首屏 = 纯原版:名称就是版本号,摘要只有版本,估算 30 MB
             Assert.True(C5aFiles.HasText(install, I18n.L("· 约 {0} MB", 30)));
@@ -645,12 +650,12 @@ public class C6aPagesTests
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
             InstallPage install = C5aFiles.Mount(harness, new InstallPage("1.20.1", I18n.L("正式版"), () => { }));
-            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 5000);
+            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 9000);
             install.Select(2); // Forge(0=不安装 / 1=Fabric / 2=Forge / 3=NeoForge / 4=Quilt)
             C5aFiles.Settle(2);
 
             C5aFiles.Click(C5aFiles.ByText(install, I18n.L("开始安装")));
-            C5aFiles.Pump(() => api.Count("install_game") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("install_game") >= 1, 9000);
             Assert.Equal(1, api.Count("create_instance"));
             Assert.Equal("Forge 1.20.1", C5aFiles.ParamAt(api, "create_instance", "name"));
             Assert.Equal("1.20.1", C5aFiles.ParamAt(api, "install_game", "version"));
@@ -674,18 +679,18 @@ public class C6aPagesTests
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
             InstallPage install = C5aFiles.Mount(harness, new InstallPage("1.20.1", I18n.L("正式版"), () => { }));
-            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 5000);
+            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 9000);
             install.Select(1); // Fabric(默认勾着 Fabric API)
             C5aFiles.Settle(2);
 
             C5aFiles.Click(C5aFiles.ByText(install, I18n.L("开始安装")));
-            C5aFiles.Pump(() => api.Count("install_game") >= 1, 5000);
+            C5aFiles.Pump(() => api.Count("install_game") >= 1, 9000);
             Assert.Equal(0, api.Count("install_mod"));
 
             // 【时机】"请求到达" ≠ "续体跑完":InstallPage 是在 `await StartTaskAsync` **之后**才把
             // TaskStore.Updated 的处理器挂上的(Windows 同)。所以先等一个可观测的效果 ——
             // 加入队列的 Toast(它在挂完处理器之后才发)—— 再去构造"任务完成"的事件。
-            C5aFiles.Pump(() => toasts.Has(I18n.L("已加入队列")), 5000);
+            C5aFiles.Pump(() => toasts.Has(I18n.L("已加入队列")), 9000);
 
             // 任务完成 ⇒ 续体排 Fabric API(先核对任务行真的进了 finished + Success:
             // Windows 的 TaskStore.Handle("finished") 只在行取得到时才写这两个字段并抛 Updated)
@@ -711,13 +716,13 @@ public class C6aPagesTests
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
             InstallPage install = C5aFiles.Mount(harness, new InstallPage("1.20.1", I18n.L("正式版"), () => { }));
-            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 5000);
+            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 9000);
 
             TextBox name = C5aFiles.Descendants(install).OfType<TextBox>().First();
             name.Text = "   ";
             C5aFiles.Settle(2);
             C5aFiles.Click(C5aFiles.ByText(install, I18n.L("开始安装")));
-            C5aFiles.Pump(() => toasts.Has(I18n.L("请填写实例名称")), 5000);
+            C5aFiles.Pump(() => toasts.Has(I18n.L("请填写实例名称")), 9000);
             Assert.Equal(0, api.Count("install_game"));
             Assert.Equal(0, api.Count("create_instance"));
         });
