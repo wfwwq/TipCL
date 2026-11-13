@@ -1609,3 +1609,96 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   Avalonia 的 `Layoutable.MaxHeight` 默认值是 `PositiveInfinity` 而不是 `NaN`。
 - 结论(给 C3+ 的后续包):**驱动对话框的用例,只想"点了之后的效果"就用 `Settle`;要等任务就在
   关掉卡片之后再等;泵一律按真实时间设上限,且必须明显小于会话的 30 秒。**
+## D-121 C3c:任务书"这两个文件自包含"的前提(第三次)不成立——还差 6 个 Models DTO 与 hero.jpg
+
+- 事实:`Pages\LaunchPage.cs` 除了门面(`Ui` / `I18n` / `Dlg` / `Motion` / `AppServices` / `TaskStore` /
+  `AccountGate` / `Wallpaper` / `CrashUi` / `VersionSetupDialog` / `BlockHost` / `DashHost` / `SmoothScroll`)之外,
+  还引用 **6 个在 mac 侧根本不存在的模型**:`JavaOption`(201 B)/ `ModEntry`(272 B)/ `NewsRow`(183 B)/
+  `PreflightItem`(230 B)/ `PreflightResult`(216 B)/ `AuthlibPreset`(143 B),以及一个**嵌入资源** `PremiumAssets\hero.jpg`
+  (275898 B,Windows csproj 里是**无条件**嵌入的 `<Resource>`,C2c2 只搬了 5 个加载器图标 PNG)。
+- 处理:6 个 DTO 用 `Copy-Item` **字节级**搬进 `src\TipCL.App\Models\`(SHA256 与 Windows 源一致、无 BOM、LF);
+  `hero.jpg` 同样字节级复制进 `src\TipCL.App\PremiumAssets\` 并在 csproj 里加 `<AvaloniaResource>`
+  (URI `avares://TipCL/PremiumAssets/hero.jpg`,对应 Windows 的 `pack://application:,,,/TipCL;component/PremiumAssets/hero.jpg`)。
+  `src\TipCL.Core` 一字节未动。
+- 这是同一类问题的**第三次**(C3a 的模型层 D-117、C3b 的两个 DTO D-118、本包的 6 个 DTO + 1 个资源)。
+  教训重申:**C3+ 的任务书里凡是断言"自包含"的地方,子代理都必须自己逐条读依赖再动手**;
+  Lead 也该把"依赖扫描"从"数门面引用次数"改成"编译一次看看缺什么"。
+
+## D-122 C3c:`MainWindow.FlyToTasks` 在 mac 侧不存在——注入缝 + 用户可见降级(请 Lead 裁决)
+
+- 事实:Windows 的启动页在「修复当前版本」后会调 `Win.FlyToTasks(_launchBtn, "修复中")`
+  (`MainWindow.xaml.cs:1336`)播一个"飞向任务页"的小动画。mac 的外壳(C2b)没搬 `FlyHost`/Dock(D-97),
+  也**没有**这个成员;而全仓库还有 **13 处**同类调用点(InstancePage / VersionManagePage / InstallPage /
+  JavaPage / CatalogPage / MultiplayerPage / PluginsPage / TasksPage 等),后续每个页面包都会撞上它。
+- 本包的选择(保守 + 不越红线):**不动外壳**。页面照 Windows 建,任务照跑(`repair_version`)+ 照常 Toast;
+  飞行动画走新增注入缝 `LaunchPage.FlyToTasksSeam`(`Action<Control, string>`),挂点没接时**不播**。
+- 这是一处**用户可见的降级**(修复时少一个小动画),已在 `LaunchPage` 类注释、PROGRESS 的 C3c 第 4 节写明。
+  **请 Lead 裁决**:是把 `FlyToTasks` 作为可选成员补进外壳(推荐 —— 一次修好 13 处调用点),
+  还是接受这条降级并在每个页面包里重复同样的注入缝。
+
+## D-123 C3c:WPF 的 `ActualHeight` + `SetBinding` → Avalonia 的 `Bounds.Height` + `Bind`
+
+- C3a 的 Lead 验收点名了 `LaunchPage` 里 `_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, ...)`
+  这一处要换。实测下来是**两个**改动,不是一个:
+  1. Avalonia 11 **没有 `SetBinding`**,等价物是 `AvaloniaObject.Bind(property, binding)`(返回可释放的订阅句柄);
+  2. 把属性换成 `Layoutable.MaxHeightProperty` 之后,**绑 `"ActualHeight"` 依然不生效** —— 本机实测
+     `MaxHeight` 一直留在默认的 `PositiveInfinity`(页面明明已经排过版,`Bounds.Height ≈ 480`)。
+     改成 `"Bounds.Height"` 才生效(用例:`Blocks_max_height_binding_exists_and_follows_the_page_height`,
+     断言 `MaxHeight == page.Bounds.Height × 0.62`)。
+- 这个路径**不是新发明**:C1c 的 `SmoothScroll.BindWindowMaxHeight` 早就把"窗口 ActualHeight"翻译成
+  `Bounds.Height` 了(那里也留了同样的注释)。浮层的 `MakePopup` 也改成 `Source = PageBase.Win` + `"Bounds.Height"`
+  (用例 `Popup_max_height_follows_the_host_window` 钉住 `MaxHeight == 窗口高 × 0.86`)。
+- 附带结论:那条订阅的**源是页面自己、目标是页面的孩子**,引用图完全在页面内部,不会把页面挂到外部根上;
+  句柄存进 `_blocksMaxHeightBinding`(只留给测试看,生产路径不释放,Windows 的 `SetBinding` 同样是"活到进程结束")。
+
+## D-124 C3c:`ContextMenu.IsOpen = true`(WPF)→ `ContextMenu.Open(anchor)`(Avalonia)——无参 `Open()` 会抛异常
+
+- WPF 的「更多操作」是 `menu.PlacementTarget = anchor; menu.IsOpen = true;`。Avalonia 的
+  `MenuBase.IsOpen` 的 **setter 不可见**(`CS0272`),文档给的两个入口是 `ContextMenu.Open()` 与 `Open(Control)`。
+- **本机实测:`menu.Open()`(无参)抛 `ArgumentNullException("control")`** —— 它要去解析 PlacementTarget 的宿主,
+  离屏/测试里解析不到。**这是页面用例抓到的真 bug**:真实点击「更多操作」会直接崩,而 `--smoke` 点不到它,
+  只有"驱动页面自己的入口"的用例能发现。修法:`menu.Open(anchor)`(锚点显式传进去,与 WPF 的语义一致)。
+- 记在这里也是给后续页面提个醒:**WPF 里 `IsOpen = true` 的地方,在 Avalonia 要确认是有参的 `Open(target)`**。
+
+## D-125 C3c:启动页用 `[ModuleInitializer]` 自注册,不动外壳
+
+- 外壳的构造函数第一件事就是 `Navigate("launch", instant: true)`(与 Windows 首屏一致),而在 mac 侧页面工厂
+  只能来自 `PageRegistry`(D-94),所以注册必须发生在"任何人碰这个程序集之前"——模块初始化器正好是那一刻。
+- 备选方案都被红线挡掉:写进 `Program` / `App` / `MainWindow` 都要改外壳文件;写进页面类型的静态构造函数
+  则太晚(那时外壳已经 `Navigate` 过了)。
+- 文件:`src\TipCL.App\Pages\LaunchPageRegistration.cs`,成员 `LaunchPageRegistration.PageId = "launch"` 与
+  `Register()`(幂等,`PageRegistry.Register` 对同一 id 是覆盖)。测试里也可以直接调它。
+- 副作用(已核):`C2bShellTests` 里两条"还没有页面注册所以宿主是空的"用例因此不再成立,按 D-126 处理。
+
+## D-126 C3c:C2b 那两条"宿主是空的"用例按新契约拆分(断言只增不减)
+
+- `Page_host_starts_empty_because_no_page_is_registered_yet` 断的是"还没有页面注册"这个**时代前提**;
+  启动页注册进来之后,外壳首屏就是启动页,这个前提按设计作废。
+- 处理(没有删测试、没有放宽断言、没有加 Skip):
+  1. `Page_host_opens_the_registered_launch_page`:**新契约**,断言更多(当前页 id / 类型 / 宿主内容同一个实例);
+  2. `Page_host_starts_empty_when_the_launch_page_is_unregistered`:用 `RegistryScope` + `PageRegistry.Unregister("launch")`
+     把前提还原,**原来的三条断言一字不改**地保留;
+  3. `Navigate_to_an_unknown_id_does_nothing_and_does_not_throw` 同样先 `Unregister("launch")` 再跑原断言
+     (它要验的是"未知 id 不切页 + 大小写敏感",与启动页在不在无关)。
+- 全量用例数因此 **+1**(一条拆成两条):2968 + 117 + 1 = **3086**。
+
+## D-127 C3c:非按钮控件的点击,驱动它调用的那个 internal 处理器体(同 D-115 的口径)
+
+- 启动页里有一批"不是按钮"的可点区域:大标题行(开实例切换浮层)、新闻卡(开公告浮层)、两个玻璃钮(配置 / 联机)、
+  实例切换浮层里的实例行与版本行、便签/分辨率输入框的 `LostFocus`。
+- 构造 `PointerReleasedEventArgs` / `LostFocusEventArgs` 属于任务书禁止的"模拟真实输入设备"(而且这些 args 的
+  构造函数在 Avalonia 11 里并不都公开)。所以沿用 C3a 的做法:**事件处理器只留薄壳,处理器体抽成 internal 成员**,
+  用例驱动那一层。本包新增的成员:`OpenMultiplayer` / `CommitNotes` / `CommitDisplayPrefs` /
+  `PickInstanceFromSwitch` / `PickVersionFromSwitch`(`PickInstanceForTest` / `PickVersionForTest` 是它们的一行转发)、
+  以及 `ApplyHeroTone` 由 private 降为 internal、`ShowMoreMenu` 由 private 降为 internal。
+- 代价如实记:那一层"事件真的会调到它"没有用真输入验过(PROGRESS 的未验证项里写了)。
+- 顺带:按钮(`Button.Click`)、菜单项(`MenuItem.ClickEvent`)仍然用 `RaiseEvent` 真驱动,不走上面这套。
+
+## D-128 C3c:Avalonia 的 `TextBox` 没有 `VerticalOffset` / `ScrollToEnd()` —— 日志自动滚动改走模板里的 `ScrollViewer`
+
+- Windows 的 `AppendLog` 里有一句 `_log.VerticalOffset >= _log.ExtentHeight - _log.ViewportHeight - 24.0`(判断"是不是
+  停在底部")加一句 `_log.ScrollToEnd()`。Avalonia 的 `TextBox` **这四个成员都没有**(只有 `CaretIndex` /
+  `SelectionStart` 之类),它们长在 `TextBox` 模板里那根 `ScrollViewer` 上。
+- 做法:`GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault()` 取到就用它的
+  `Offset.Y / Extent.Height / Viewport.Height / ScrollToEnd()` 做同一件事;**取不到(还没套模板 / 离屏)就跳过自动滚动**
+  —— 日志内容照旧刷新,只是不追底。这是"降级但如实",不是静默丢功能(行缓冲 2500 的上限与裁剪逻辑一字未改,用例钉住)。

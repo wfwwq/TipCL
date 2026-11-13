@@ -32,7 +32,8 @@
 | C2c2 | 页面级视觉服务:拖放(FileDrop / PageBase.EnableDrop / DropVeil)+ Wallpaper + AccountGate + Thumbs·ThumbTile + LoaderIcons(原「剩下的视觉件」里属本包的那半) | ✅ 完成(见下;**新增 106 条用例,总数 2691 → 2797,两条通道各连跑 2 次都全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书说"预设已内嵌在 Core"实测不成立,见 D-108) |
 | C2c3 | 其余视觉件:Backdrop / SideFrost / SideFrostEx / ImeGuard / WebViewHost / WebpFallback / 标题栏圆片 / 下载任务底条 | 未开始 |
 | C2d | 进程内后端接线与验收(可关的登录预热 / `BackendBootstrap` 状态机 / 真启停 / 真 RPC 往返 / `BridgeReady` 开闸) | ✅ 完成(见下;**新增 38 条用例,总数 2593 → 2631,两条通道都 2631/2631 全绿**;`src\TipCL.Core` 只动 `BackendApi.cs` 一个文件(+20/-4);**后端真的起在 `127.0.0.1:0` 上并跑通了真 RPC 与真 SSE**,`BridgeReady` 改由真启动路径打开;顺带修掉"取消启动会漏监听器"的真缺口;smoke 与 C2b 基准逐位相同) |
-| C3-C8 | 页面逐个移植 | 未开始(接入方式:各页面包 `PageRegistry.Register(...)`,页面 id 见表) |
+| C3-C8 | 页面逐个移植 | 进行中(C3c 起;**第一个真实页面 = 启动页**,接入方式:各页面包 `PageRegistry.Register(...)` 注册页面 id) |
+| C3c | **启动页**:`Pages\LaunchPage.cs`(58.4 KB)+ `Pages\LaunchPage.Popups.cs`(9.5 KB)移植并注册为 `launch` | ✅ 完成(见下;**新增 117 条用例,C2b 的"空宿主"那条拆成两条(+1),总数 2968 → 3086,两条通道各连跑 2 次都 3086/3086 全绿**;`--smoke` 因为页面第一次真的有内容而合法变更为 **light 37681 `2603BF6A...` / dark 33579 `7D7AFDD5...`**;实测还差 **6 个 Models DTO** 与 **hero.jpg**(C2c2 漏的那张),按"小而自包含就一并搬"字节级搬来 —— **Lead 说"这些文件自包含"第三次不成立**,见 D-121;`MainWindow.FlyToTasks` 在 mac 侧不存在 → 注入缝 + 用户可见降级,见 D-122 请 Lead 裁决;页面用例抓到一个真 bug:`ContextMenu.Open()` 无参调用会抛 `ArgumentNullException`,见 D-124) |
 | C3a | 区块 / 仪表盘布局框架:`Pages\BlockHost.cs` + `Pages\DashHost.cs`(含它们真正依赖的布局模型:`Pages\PageBlock.cs`、`PageLayoutStore.cs`、`PageLayoutIO.cs`、`DashCard.cs`、`DashLayout.cs`) | ✅ 完成(见下;**新增 100 条用例,总数 2797 → 2897,两条通道各连跑 2 次都 2897/2897 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书说"这两个文件应该自包含"**实测不成立** —— 还差 5 个没移植的模型/存储文件,按"小而自包含就一并搬"的规定搬了,见 D-117) |
 | C3b | 启动页需要的两个小对话框:`Pages\CrashUi.cs`(崩溃 / 异常退出报告卡)+ `Pages\VersionSetupDialog.cs`(版本设置) | ✅ 完成(见下;**新增 71 条用例,总数 2897 → 2968,两条通道各连跑 2 次都 2968/2968 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书的门面计数复核吻合,但"自包含"不成立 —— 还差两个没移植的小模型 `Models\OpResult.cs` / `Models\VersionSettingsDto.cs`,按"小而自包含就一并搬"字节级搬来,见 D-118;`AiFixWindow`(22.6 KB 整窗)属 AI 全家未移植,「交给 AI 修复」按钮保留 + 注入缝 + 如实提示,请 Lead 裁决,见 D-119) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
@@ -5305,4 +5306,211 @@ Lead 在任务书里说「内置预设背景已内嵌在 Core 的 `Resources\wal
 
 **裁决 2:`AiFixWindow` 的降级 —— 接受,挂点留给 C7。** `AiFixWindow`(22.6 KB,整窗)属 AI 全家,现在搬它会连带拖进 `AiIcons`/`MdView` 等基础设施。子代理的做法是:**按钮照 Windows 建**(文案/图标/提示/Primary 全同)、点击走新增注入缝 `CrashUi.AiFixLauncher`、**没接挂点时如实弹 Toast 说暂未实现**。这比「按钮点了没反应」或「桩一个空窗口」都诚实,也符合 GOAL §2.5。**C7 搬 AI 全家时必须把 `AiFixLauncher` 接上**,并复查这条降级消失。
 
-**裁决 3:接受 D-120(对话框等待纪律)。** 子代理如实上报第一版 71 条里有 23 红,拆开只有 1 条断言写错 + 1 条「对话框还开着就等对话框任务」的死等,其余 21 条是会话线程被占死后的连锁超时;根因之一是它第一版按「轮数 x 2ms」计时,把 15 秒预算拖过了会话的 30 秒。修法与 C3+ 纪律已记进 D-120。**这条与 D-113/D-114 一起,是页面阶段必须遵守的三条测试纪律。**
+**裁决 3:接受 D-120(对话框等待纪律)。** 子代理如实上报第一版 71 条里有 23 红,拆开只有 1 条断言写错 + 1 条「对话框还开着就等对话框任务」的死等,其余 21 条是会话线程被占死后的连锁超时;根因之一是它第一版按「轮数 x 2ms」计时,把 15 秒预算拖过了会话的 30 秒。修法与 C3+ 纪律已记进 D-120。**这条与 D-113/D-114 一起,是页面阶段必须遵守的三条测试纪律。**---
+
+## C3c 启动页:`LaunchPage` + `LaunchPage.Popups` 移植并注册(2026-11-13)
+
+工作包:把 Windows `Pages\LaunchPage.cs`(58383 字节 / 1922 行)与 `Pages\LaunchPage.Popups.cs`(9479 字节 / 338 行)
+移植到 Avalonia 11 / net8,**注册成页面 id `launch`,让空壳变成真的应用**。
+**不碰**外壳 / 导航 / 调色板 / 样式表 / 其它页面;`src\TipCL.Core` 一字节未改。
+
+### 1. 这个页面做什么(与 Windows 同样的形状,WP-U3 之后的现状)
+
+- **背景层**:当前实例(含版本隔离目录)`screenshots` 里最新的一张截图 → 没有就用内嵌 `hero.jpg` 全景图 →
+  两张渐变遮罩(左→右、下→上);都没有就只是页面底色。tone 随"有没有图"整体切换
+  (`ApplyHeroTone`:白字 + 半透明白玻璃块 ↔ 主题纸色 + 主题字色 + 主按钮柔光)。
+- **英雄区**(左对齐、最大宽 680、边距 56/0/24/0):绿点 + 「就绪 · 游戏目录」/ 大标题(实例名,点开实例切换浮层)/
+  小标签行(加载器 · Java · 内存 · 模组数)/ 主操作行(48 高「启动游戏」+ 同尺寸「停止」+ 配置钮 + 联机钮)/
+  进度行(空闲时收起,状态一变就出现)。
+- **内容区块**(`BlockHost("launch", ...)`,contentMargin 56/0/24/18):`news` 默认可见,
+  `tasks` / `playtime` / `notes` / `log` 默认收起;整块 MaxHeight 绑页面高度的 62%。
+- **三个浮层**(`LaunchPage.Popups.cs`):启动配置(实例/版本/用户/Java/内存/分辨率/直连 + 微软登录/皮肤站/更多操作/
+  更多设置)、实例切换(搜索 + 当前标记 + 版本子行 + 管理 + 打开实例库)、公告(新闻列表)。
+- **数据与状态机**:`FillCardData`(实例/账号/设置/版本/Java/模组数)、启动前的预检与多开确认、
+  `OnEvent` 的 `game_started` / `game_exited` / `progress` / `log` / `finished` / `crash` / `login_*`,
+  日志缓冲上限 2500 行,失败时弹 C3b 的崩溃卡(`gameError: true`)。
+
+页面能处在的状态(本包按这些状态写了用例):**没有后端**(离屏现实:`AppServices.Client` 为 null → 只有静态布局)、
+**已加载但没实例**、**有实例没版本**、**有实例有版本**、**正在启动/运行中**(进度条 + 停止钮)、
+**跑完/失败**、**崩溃卡**、**切页离开**。
+
+### 2. 从 Windows 复制/搬迁的文件,与那 6 个补上的依赖(依赖扫描的更正)
+
+**Lead 说"这两个文件自包含、依赖都已移植"——第三次不成立。** 实测还差:
+
+| 缺什么 | 大小 | 处理 |
+|---|---|---|
+| `Models\JavaOption.cs` | 201 B | `Copy-Item` 字节级搬进 `src\TipCL.App\Models\`(SHA256 与 Windows 源一致) |
+| `Models\ModEntry.cs` | 272 B | 同上 |
+| `Models\NewsRow.cs` | 183 B | 同上 |
+| `Models\PreflightItem.cs` | 230 B | 同上 |
+| `Models\PreflightResult.cs` | 216 B | 同上 |
+| `Models\AuthlibPreset.cs` | 143 B | 同上 |
+| `PremiumAssets\hero.jpg` | **275898 B** | 启动页默认背景;**Windows 侧无条件嵌入的 `<Resource>`,C2c2 只搬了 5 个加载器图标,漏了这张**。字节级复制 + `<AvaloniaResource>` 内嵌(GOAL §3 说"壁纸、PremiumAssets 全部直接内嵌") |
+
+任务书列的 `Ui.` / `I18n.` / `Dlg.` / `Motion.` 门面引用逐项复核**全部吻合**(C1c/C2a 已经同名同参),
+缺的只有**模型层与资源**,与 C3a(D-117)/C3b(D-118)是同一类问题 —— 见 D-121。
+
+另外发现两个**服务层缺口**:
+1. `PageBase.Win.FlyToTasks(...)`(Windows `MainWindow.xaml.cs:1336`,另有 13 处调用点在后续页面里)在 mac 侧**不存在**;
+2. `Wallpaper` / `AccountGate` / `TaskStore` / `SmoothScroll.BindWindowMaxHeight` / `CrashUi` / `VersionSetupDialog`
+   这些都在,调用形状一字未改。
+
+### 3. Windows → Avalonia 差异(逐条,完整清单在 `LaunchPage.cs` 的类注释里)
+
+框架类型换法(与 C3a/C3b 同一套):`UIElement`/`FrameworkElement` → `Control`;`Visibility` → `IsVisible`;
+`MouseLeftButtonUp`/`MouseEnter`/`MouseLeave` → `PointerReleased`/`PointerEntered`/`PointerExited`;
+`Cursors.Hand` → `new Cursor(StandardCursorType.Hand)`;`FontWeights.*` → `FontWeight.*`;
+`SetResourceReference` → `UiExt.Dyn`;`Style = Ui.S(...)` → `StyleKeys.Apply`;
+`BitmapSource` → `Bitmap` + 统一走 `ImageDecode`(Skia);`SolidColorBrush.Freeze()` 去掉;
+`LinearGradientBrush.StartPoint` 在 Avalonia 是 `RelativePoint`。
+
+本包特有的四处**机械但必须改**的点:
+
+| # | Windows 写法 | mac 写法 | 理由 |
+|---|---|---|---|
+| 1 | `_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, new Binding("ActualHeight"){Source=this,...})` | `_blocks.Root.Bind(Layoutable.MaxHeightProperty, new Binding("Bounds.Height"){Source=this,...})` | 两个原因:**Avalonia 没有 `SetBinding`**(等价物是 `AvaloniaObject.Bind`),而且**绑 `ActualHeight` 根本不生效**(本机实测:MaxHeight 一直留在 ∞)。`Bounds.Height` 是 C1c 的 `SmoothScroll.BindWindowMaxHeight` 已经定下的等价路径。这就是 C3a 的 Lead 验收点名的那一处 |
+| 2 | `menu.PlacementTarget = anchor; menu.IsOpen = true;` | `menu.PlacementTarget = anchor; menu.Open(anchor);` | `MenuBase.IsOpen` 的 setter 在 Avalonia 不可见;而**无参 `Open()` 会抛 `ArgumentNullException("control")`** —— 这是页面用例抓到的**真 bug**(「更多操作」按钮点下去会崩),不是"移植风味"问题。见 D-124 |
+| 3 | `DependencyPropertyDescriptor...AddValueChanged(_status/_prog, syncStatus)` | `PropertyChanged` 事件 + 判 `e.Property`,并且**进可视树订阅 / 出可视树退订** | WPF 那套 `DependencyPropertyDescriptor` 在 Avalonia 没有;订阅挂在长命页面对象上必须能摘(见第 6 节泄漏纪律) |
+| 4 | `_log.VerticalOffset/ExtentHeight/ViewportHeight/ScrollToEnd()` | 取 `_log` 模板里那根 `ScrollViewer` 的 `Offset/Extent/Viewport/ScrollToEnd()` | Avalonia 的 `TextBox` 没有这四个成员;**取不到(还没套模板)就跳过自动滚动**,日志内容照旧刷新 |
+
+其余忠实保留(不"顺手"修):`_user`(Player)这个字段在 Windows 的这一版里**没有放进配置面板**;
+`_dash`(旧卡片画布 `DashHost`)字段保留但**不挂可视树**、页面也**不订阅它的变更**;
+`_prog.BeginAnimation(RangeBase.ValueProperty, null)` 那行去掉(进度动画统一由 `Motion.Progress` 管);
+`ShowMoreMenu` / `HideBlock` 等一批 private 降为 internal 只为能被**告知式地驱动**(同 D-115);
+`MicrosoftLoginAsync` 的「复制代码」复用 C3b 的剪贴板唯一入口 `CrashUi.CopyAsync`(离屏/测试不碰真剪贴板)。
+
+**`#if IMMERSIVE` 的标题栏沉浸那段没有移植**:Windows 的默认构建(`-p:Immersive=true` 才定义 `IMMERSIVE`)
+里它根本不参与编译,而 mac 的外壳是系统红绿灯 + 侧栏,没有 Windows 的 `TopBar`/`WallHost` 结构。
+`OnHidden` 因此与 Windows 的默认构建一样**不重写**(用例钉住了"调它什么都不做")。
+
+### 4. 一处**用户可见的降级**(请 Lead 裁决,见 D-122)
+
+Windows 的「修复当前版本」在启动任务后会调 `Win.FlyToTasks(_launchBtn, "修复中")` 播一个"飞向任务页"的小动画。
+mac 的外壳没搬 `FlyHost`(C2b/D-97 的既有结论),而红线是**不许动外壳**,所以:
+
+- 页面照 Windows 建:任务照跑(`repair_version`)+ 照常 Toast;
+- 那个飞行动画走新增注入缝 `LaunchPage.FlyToTasksSeam`(签名 `Action<Control, string>`),**挂点没接时就不播**;
+- 这不是静默桩:已在类注释、本节、D-122 里写明,并请 Lead 裁决(要么把 `FlyToTasks` 加进外壳,
+  要么接受这条降级 —— 注意**后续 13 处调用点**(InstancePage / VersionManagePage / InstallPage / JavaPage /
+  CatalogPage / MultiplayerPage / PluginsPage …)都会撞上同一个洞)。
+
+### 5. 注册方式(不动外壳)
+
+`src\TipCL.App\Pages\LaunchPageRegistration.cs`:`[ModuleInitializer]` 在**模块加载时**调
+`PageRegistry.Register("launch", () => new LaunchPage())`。为什么不是别处:
+外壳的构造函数第一件事就是 `Navigate("launch", instant: true)`(与 Windows 首屏一致),注册必须在那之前发生;
+写进 `Program`/`App`/`MainWindow` 都要改外壳文件(红线)。`--smoke` 只 `new MainWindow`,所以它同样自动生效。
+见 D-125。
+
+### 6. 测试(新增 117 条用例;C2b 的一条拆成两条,总数 2968 → 3086)
+
+| 文件 | 条数 | 覆盖 |
+|---|---|---|
+| `C3cFixtures.cs` | — | 期望值权威副本 + `C3cScope`(全局快照:**多了 `PageRegistry` / `LaunchPage.FlyToTasksSeam` / `TaskStore`**)+ `C3cToasts` + **按方法名路由**的回环假后端 `C3cFakeApi` + `C3cTaskStore`(任务队列作用域)+ 小工具 |
+| `C3cPageStructureTests.cs` | 36 | 注册(模块初始化器 / 大小写敏感 / 幂等 / 外壳首屏 / 同实例复用)、无后端构造不抛、区块 specs、根 Grid、英雄区几何、类名 token、动态资源取色、内嵌 hero 能解码、背景回退到 hero、订阅生命周期 |
+| `C3cPageStateTests.cs` | 57 | 加载(实例/账号/设置/版本/Java/模组数/新闻/时长/任务卡)、5 处状态文案、`LoaderChip` 7 组 Theory、Java 标签 3 组 Theory、点启动→`preflight_launch`→`launch_game` 参数逐项、`ExtraArgs` 3 组 Theory、多开确认两支、预检三支、失败还原、`game_*`/`progress`/`log`/`finished` 事件、日志 2500 上限、崩溃卡、别人的任务事件被忽略、`PreferInstance`/`LaunchNowAsync`、Java/分辨率/便签写回 |
+| `C3cPageLayoutTests.cs` | 24 | 三个浮层(切换行/搜索过滤/版本与实例选中/没版本的提示/公告壳/几何/窗口百分比 MaxHeight/dev 摘取挂点)、更多菜单 7 项顺序与两项真点击、区块显隐/重排/重置**落盘到注入目录并重载复现**、DashHost 不落盘、关动画时立刻到位、计时器与订阅不留 |
+
+**为什么自己写了个"按方法名路由"的假后端**:C2a 的 `FakeBridgeServer` 按"第几个请求"给预置响应,
+而本页在 `FillCardData` 里既 await 一串调用、又 fire-and-forget 起 `ReloadJavaAsync(scan:true)` /
+`LoadNewsAsync` / `LoadPlaytimeAsync`,到达顺序天生不确定 —— 按序号发响应必然时绿时红(D-103 记过的同类病)。
+新夹具仍是 `TcpListener` 绑 `127.0.0.1:0`(不是 `HttpListener`,D-27),不起真后端、不出网、不启外部进程。
+
+**驱动方式**:按钮走 `RaiseEvent`;**非按钮控件的点击**(标题行 / 新闻卡 / 玻璃钮 / 实例行 / 版本行)走页面为此留的
+internal 处理器体(不构造 `PointerEventArgs`、不用 Headless 输入模拟 —— 同 D-115);
+对话框走 `DlgHarness` + `C3bFiles.WaitDialog()`(先把卡片泵出来再点,D-113);
+所有等待都是"一边泵 Dispatcher 一边看条件"(Stopwatch 计时、9 秒上限,D-120)。
+
+**抓到的真 bug(1 个)**:`ContextMenu.Open()` 无参调用抛 `ArgumentNullException("control")`
+—— 「更多操作」菜单在真实点击下必崩(冒烟里点不到,只有页面用例能发现)。修法是 `Open(anchor)`。
+
+**C2b 两条用例按新契约拆分(断言只增不减)**:`Page_host_starts_empty_because_no_page_is_registered_yet`
+断的是"还没有页面注册"那个前提,启动页注册之后它**不再成立**。拆成
+`Page_host_opens_the_registered_launch_page`(新契约,断言更多)+
+`Page_host_starts_empty_when_the_launch_page_is_unregistered`(用 `RegistryScope`+`Unregister("launch")` 把前提还原,
+**原来的三条断言一字未改**);`Navigate_to_an_unknown_id...` 同样先 `Unregister("launch")` 再跑原断言。
+**没有删测试、没有放宽断言、没有加 Skip**。见 D-126。
+
+### 7. 验证命令与实际结果(本机 Windows,全部由本包亲自执行)
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 构建 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 个错误**;**7 个警告**(用 `WarningsOnly` 取出:唯一警告码 = `NU1900` ×6 + `SYSLIB0014` ×1,与基线逐项相同) |
+| `dotnet test` 第 1 / 2 次 | `dotnet test TipCL.Mac.sln -c Release --no-build` | 都是**退出码 0,失败 0 / 通过 3086 / 总计 3086**(47 秒 / 次) |
+| 进程内执行器 第 1 / 2 次 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 都是**退出码 0,总计 3086 / 通过 3086 / 失败 0 / 跳过 0 / 不支持 0** |
+| 用例分布 | 按类过滤各跑一次 | `C3cPageStructureTests` 36 / `C3cPageStateTests` 57 / `C3cPageLayoutTests` 24 = **117** |
+| `--smoke`(不带 `--page`) | `TipCL.exe --smoke --out artifacts\c3c-baseline-nopage.png` | 退出码 **0**,**37681 字节**,SHA256 `2603BF6AB2B5D491E2B6AFB34E3EAEDD8A0388B6A6497D33D3F8193492342CBD` —— 与 light **逐位相同**(外壳首屏就是启动页) |
+| `--smoke --page launch --theme light` | 同上加 `--page launch` | 退出码 **0**,**37681 字节**,`2603BF6A...` |
+| `--smoke --page launch --theme dark` | 同上 `--theme dark` | 退出码 **0**,**33579 字节**,`7D7AFDD502D82EE21F7DCEFEF7B12FC2731628D41B4DDF595FD1E1D05F276893` |
+| `--smoke --theme blue` | 同上 `--theme blue` | 退出码 **2**(参数错,符合预期),不产出文件 |
+| 冒烟确定性 | light 连跑 5 次 / dark 连跑 3 次(含重复实验) | **每次都逐位相同**(light 5/5、dark 3/3) |
+| `src\TipCL.Core` 有没有被动过 | `git diff --name-status 652ed74 HEAD -- src/TipCL.Core` | **0 行输出**(空) |
+| Core 对 Windows 源的同一性 | 逐文件 SHA256(mac `src\TipCL.Core\**\*.cs` ↔ Windows `src\TipCL\Core\**\*.cs`) | **248 个受版本控制的源文件:238 有对应 / 216 一致 / 22 有改动 / 10 无对应**;把 `obj\Release\net8.0\` 下 2 个自动生成文件也算进去则是 **250 / 238 / 216 / 22 / 12** —— 两种口径都与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` | 开工时 / 收工时各量一次 | 两次都是 **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,与 Lead 基线逐项相同(**零写入**) |
+| 真实桌面 / 图片 | 收工时 | 桌面 14 项、最新写入 **2026-11-12 19:02:53**(不变);图片 3 项、最新 **2026-11-06 23:39:03**(零写入) |
+| 残留进程 | `Get-Process testhost,TipCL,java,adb` | **0 个** |
+| `%TEMP%` 下的 `tipcl*` | 收工时 `Get-ChildItem $env:TEMP -Force -Filter 'tipcl*'` | 总数 **104**(Lead 基线 89/92,差值是别的产品线留下的,见 B2a/C2c2/C3a 的同类记录);**本包窗口内(15:55–17:30)没有任何 `tipcl*` 条目被新建或改写**(按 LastWriteTime 过滤 70 分钟,命中 0 条) |
+| 编码 | 对本包新增 / 改动的 15 个文本文件逐个 `ReadAllBytes` | 无一例外:**无 BOM(前 3 字节不是 `EF BB BF`)、CR=0、U+FFFD=0**;`LaunchPage.cs` 里 27 处、`Popups.cs` 6 处、两个测试文件 3 处 `??` **全部逐行核对过是 C# 空合并运算符**,不是乱码 |
+| 提交 | 4 个提交 | `9955768`(6 个模型 + hero.jpg + csproj)/ `319ca0e`(页面 + 浮层 + 注册)/ `34c3814`(36 条结构用例)/ `068396f`(116 条状态·浮层·布局用例 + 真 bug 修复 + C2b 拆分),文档提交见下一小节;每次 `git add -A` 前都 `git status --short` 确认没有 `Zz*` 或仓库根散落文件 |
+
+**为什么 (a)/(b)/(c) 三个提交并成了两个**:任务书要求 "页面骨架 → 动态逻辑 → 浮层" 分三次提交,
+但页面骨架里的 `BuildHero` 就调了 `SyncHero` / `OpenConfigPopup` / `OpenSwitchPopup` / `OpenNewsPopup`,
+把动态方法与浮层拆出去会让**没有任何一个中间提交能编译**(要能编译就得写桩,而写桩是红线)。
+所以按"每个提交必须能编译"的原则并成 `319ca0e` 一个(内容仍是完整的页面 + 浮层 + 注册)。
+
+### 8. 冒烟:新基准、以及"画面里到底有什么"(像素取证)
+
+**新基准(本包合法变更,因为空壳第一次有了真实内容)**:
+
+| 帧 | 字节 | SHA256 |
+|---|---|---|
+| light(含 `--smoke` 不带 `--page`) | **37681** | `2603BF6AB2B5D491E2B6AFB34E3EAEDD8A0388B6A6497D33D3F8193492342CBD` |
+| dark | **33579** | `7D7AFDD502D82EE21F7DCEFEF7B12FC2731628D41B4DDF595FD1E1D05F276893` |
+
+旧基准(light 21823 / dark 18200)作废:那一版是**没有任何页面的空壳**。
+
+**像素取证**(`artifacts\c3c-pixel-probe*.py`,Pillow 采样;900×550):
+
+| 区域 | light 主色 | dark 主色 | 说明 |
+|---|---|---|---|
+| 标题栏整条 | `(254,254,254)` + `(207,227,218)` + `(38,38,38)` | `(27,27,27)` + `(59,74,66)` + `(237,237,237)` | 外壳:白/深底 + 绿色 logo 片 + 反色标题字 |
+| 侧栏 | `(250,250,250)` + `(38,38,38)` | `(26,26,26)` + `(237,237,237)` | 外壳:导航分组「启动/库/下载/社区/AI 助手/工具/更多」+ 选中项 |
+| 英雄区大标题 | `(243,243,243)` + **2282 个 `(38,38,38)` 像素** | `(25,25,25)` + **2347 个 `(237,237,237)` 像素** | 「选择实例」的深/浅色大字 |
+| 主按钮「启动游戏」 | **`(31,122,82)`** + 362 个白像素 | **`(38,122,86)`** + 362 个白像素 | 主题主色的 48 高按钮 + 白色图文 |
+| 页面空白右半 | `(246,246,246)` 一片 | `(26,26,26)` 一片 | **纯页面底色,没有 hero 全景图**(见下) |
+| 底边新闻卡 | `(244,244,244)` | `(26,26,26)` | 新闻卡本体(带「新闻」主色小标签) |
+| 明暗两帧差异 | **494469 / 495000 像素不同(99.9%)** | | light/dark 确实不同 |
+
+**为什么冒烟里没有 hero 全景图(诚实说明,不是 bug)**:`--smoke` 的离屏外壳 `BridgeReady` 是 false(D-96),
+所以 `EnsureLoadedAsync` / `OnShown` 都不跑,而背景是在 `SyncBanner` / `OnShown` 里刷的 —— 于是离屏那一帧
+是"页面刚建好、还没刷背景"的**载入前状态**。解码与应用这条链路本身**已经用测试走通**
+(`Background_falls_back_to_the_embedded_hero_when_there_is_no_screenshot`:没有截图时背景落到内嵌 hero.jpg,
+`OnImageNow == true` 且 `Image.Source != null`)。真桌面上的观感只能等真机验证。
+
+### 9. 未验证项(本机是 Windows,没有 Mac)
+
+- **macOS 真机**:渲染、`--smoke` 像素、Skia 解码 hero.jpg 的表现、系统红绿灯下的实际布局 —— 本机一律验不了。
+- **浮层里那些 `DynamicResource` 底色**:离屏下浮层内容不挂进窗口的资源树,`Border.Background` 解析出来是 **null**,
+  所以"浮层的纸色 / 描边色"本机**没有验**(只验了几何:圆角 12 / 描边 1 / 内边距 12 / 宽高 / MaxHeight 绑窗口百分比)。
+- **指针事件薄壳那一层**:`PointerReleased` / `PointerEntered` / `PointerExited` 的订阅是照 Windows 语义写的,
+  但用例驱动的是它们调用的同一批 internal 成员(不构造 Pointer 事件、不用 Headless 输入模拟,同 D-115),
+  所以"点下去真的会走到那里"没有用真输入验过。
+- **上下文菜单与三个浮层的真实弹出**:用例只验了"菜单项 / 浮层内容建出来了、状态正确",
+  离屏下 `ContextMenu.Open(anchor)` 的**真实弹出与定位**没验(它需要真窗口管理器)。
+- **`_log` 的自动滚动**:只在"模板里的 ScrollViewer 取得到"时才滚;离屏/未套模板时跳过,这条分支没有真输入验过。
+- **`ufeff` 之外的字符集问题**:无。
+
+### 10. 遗留与风险
+
+1. **`MainWindow.FlyToTasks` 缺口**(D-122):mac 的外壳没有它,启动页用注入缝 + 不播动画兜住;
+   后续 13 处调用点(InstancePage / VersionManagePage / InstallPage / JavaPage / CatalogPage /
+   MultiplayerPage / PluginsPage / TasksPage 等)会撞上同一个洞,**请 Lead 早裁决**。
+2. **`--smoke --page <其它 id>` 仍然什么都不切**:其它页面还没注册,`Navigate` 静默不动(与 A1 起的行为一致)。
+3. **`_user`(Player)输入框没有落进配置面板**:这是 Windows 这一版的现状(字段保留),不是移植漏项;
+   将来做设置页/账号页时若要用它,记得 Windows 也没用。
+4. **旧卡片画布(`DashHost`)不落盘**:页面不订阅 `DashHost.Changed`,与 Windows 一致;若将来要让它持久化,
+   得同时补页面侧的订阅与 `DashLayout` 的存取(本包只钉住了现状)。
+5. **C2c3 的视觉件**(Backdrop / SideFrost / ImeGuard / 标题栏圆片 / 下载任务底条)仍未搬,与启动页无关。
+6. **`hero.jpg` 是 275898 字节的嵌入资源**:GOAL 说 mac 无体积红线,所以直接嵌入;
+   但它是"启动页默认背景"的唯一来源,真机上如果 Skia 解不出来会静默回退到纯底色(用例只在本机 Windows 验过解码成功)。

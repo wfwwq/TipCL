@@ -696,6 +696,30 @@ public class C3cPageStructureTests
         });
     }
 
+    /// <summary>【Windows 源】<c>RefreshBackground</c>:没有截图、用户也没设壁纸时,背景落到内嵌 hero.jpg
+    /// (全异步:先 <c>Task.Run</c> 解码、续体回 Dispatcher 才 <c>ApplyHeroTone(true)</c>)。
+    /// 这条用例把"解码 + 应用"整条链路走完 —— 也是 <c>--smoke</c> 那一帧"只有纸色底"的解释依据
+    /// (离屏截图在续体跑起来之前就抓帧了,见 PROGRESS 的 C3c 冒烟小节)。</summary>
+    [Fact]
+    public void Background_falls_back_to_the_embedded_hero_when_there_is_no_screenshot()
+    {
+        AvaloniaSession.Run(() =>
+        {
+            using var scope = C3cScope.Capture();
+            LaunchPage.ResetHeroCache();
+            var page = new LaunchPage();
+            using var ui = UiHost.Show(page);
+            // 背景是在 SyncBanner / OnShown 里刷的(构造时不调),这里走公开的 OnShown 入口
+            page.OnShown();
+            C3cFiles.Pump(() => page.OnImageNow);
+            Assert.True(page.OnImageNow);
+            Assert.NotNull(page.BackgroundImageNow);
+            Grid root = Assert.IsType<Grid>(page.Content);
+            Assert.True(Assert.IsType<Image>(root.Children[0]).IsVisible);
+            Assert.True(Assert.IsType<Grid>(root.Children[1]).IsVisible);
+        });
+    }
+
     /// <summary>【Windows 源】<c>pack://...</c> 在 mac 侧是 <c>avares://TipCL/PremiumAssets/hero.jpg</c>。</summary>
     [Fact]
     public void Hero_uri_matches_the_mac_embedded_resource()
