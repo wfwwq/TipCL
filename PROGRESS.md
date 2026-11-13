@@ -33,6 +33,7 @@
 | C2c3 | 其余视觉件:Backdrop / SideFrost / SideFrostEx / ImeGuard / WebViewHost / WebpFallback / 标题栏圆片 / 下载任务底条 | 未开始 |
 | C2d | 进程内后端接线与验收(可关的登录预热 / `BackendBootstrap` 状态机 / 真启停 / 真 RPC 往返 / `BridgeReady` 开闸) | ✅ 完成(见下;**新增 38 条用例,总数 2593 → 2631,两条通道都 2631/2631 全绿**;`src\TipCL.Core` 只动 `BackendApi.cs` 一个文件(+20/-4);**后端真的起在 `127.0.0.1:0` 上并跑通了真 RPC 与真 SSE**,`BridgeReady` 改由真启动路径打开;顺带修掉"取消启动会漏监听器"的真缺口;smoke 与 C2b 基准逐位相同) |
 | C3-C8 | 页面逐个移植 | 未开始(接入方式:各页面包 `PageRegistry.Register(...)`,页面 id 见表) |
+| C3a | 区块 / 仪表盘布局框架:`Pages\BlockHost.cs` + `Pages\DashHost.cs`(含它们真正依赖的布局模型:`Pages\PageBlock.cs`、`PageLayoutStore.cs`、`PageLayoutIO.cs`、`DashCard.cs`、`DashLayout.cs`) | ✅ 完成(见下;**新增 100 条用例,总数 2797 → 2897,两条通道各连跑 2 次都 2897/2897 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书说"这两个文件应该自包含"**实测不成立** —— 还差 5 个没移植的模型/存储文件,按"小而自包含就一并搬"的规定搬了,见 D-117) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
 ## 仓库现状(截至 A1)
@@ -4879,3 +4880,206 @@ Lead 在任务书里说「内置预设背景已内嵌在 Core 的 `Resources\wal
 **C2 阶段(外壳)到此结束**:C2a(桥层+基础服务)、C2b(外壳)、C2c1(Toast/对话框卡片)、C2c2(页面级视觉服务)、C2d(后端接线与真实启动验证)。C2c3(`Backdrop`/`SideFrost`/`ImeGuard`/标题栏圆片/下载底条)零页面引用,**降级为可选**,排在页面之后。
 
 **下一步:进入 C3 页面阶段**(顺序照 GOAL:启动 -> 实例库+实例详情 -> 下载+安装 -> 任务 -> 设置 -> 账号 -> Java -> 联机 -> 目录 Catalog -> 版本管理 -> 插件全家 -> AI 全家 -> 其余)。
+---
+
+## C3a 区块 / 仪表盘布局框架(2026-11-13)
+
+工作包:**把 Windows `Pages\BlockHost.cs` 与 `Pages\DashHost.cs` 移植到 Avalonia 11 / net8**,
+目标是让随后的 `LaunchPage`(C3b)移植变成机械劳动。**不碰** `LaunchPage.cs`、不碰外壳 / 导航 /
+调色板 / 样式表、不碰 `Backdrop` / `SideFrost` / `ImeGuard` / `WebViewHost*`、`src\TipCL.Core` 一字节未改。
+
+### 1. 这两个宿主是什么、干什么
+
+**`BlockHost`(区块宿主,WP-U1 冻结契约)** —— 把一页的内容切成若干 `BlockSpec`(稳定英文 id +
+已过 `I18n.L` 的标题 + 页面自建的内容控件 + 默认可见性),然后:
+
+- 常态:按布局文档的顺序渲染**非隐藏**的块,视觉零装饰(间距 10、外边距默认 (18,14,18,16) 对齐
+  `PageBase.ScrollBody`),默认渲染与旧版逐像素等价;
+- 右键「自定义布局...」(specs ≥ 2 才有这一项)进编辑态:每块顶部出现操作条(拖拽手柄 + 标题 +
+  隐藏按钮),底部出现「已隐藏的区块」托盘(点 chip 恢复)与悬浮工具条(完成编辑 / 重置本页 /
+  导出布局 / 导入布局);
+- 拖拽重排是**交换即落位**(与相邻块中点比 Y,可一次跨多格),不做动画插值,所以
+  `Motion.Enabled = false` 时行为完全一致;
+- 任何变更都即时组装 `PageLayoutDoc` → `PageLayoutStore.Save` → 触发 `Changed`;退出编辑再存一次。
+
+**`DashHost`(自由画布仪表盘宿主)** —— 卡片坐标是 [0,1] 归一化矩形(X/Y/W/H),`Z` 决定前后。
+它自己实现 `Panel` 的测量 / 排布:每张卡按归一化矩形落位(宽高各留 10px 缝,下限 40×30)。
+编辑态可见八向缩放手柄(11×11、圆角 3、描边 1.5,锚在 0 / 0.5 / 1 的交点上)、整卡拖拽蒙版、
+移除按钮;`Snap`(=`Grid > 0`)打开时拖拽按未缩放像素吸附到 `Grid` 网格,并铺一层瓷砖底纹。
+内容由 `ContentFactory` 按 type 造一次并缓存。`AddCard` 先找左上 / 右上 / 左下 / 右下四个候选空位,
+找不到才落到 (0.05,0.05)。
+
+### 2. 这一包交付的完整成员清单(C3b 的页面就靠这些)
+
+**`BlockHost`(`TipCL.Pages`,public 面 = 页面能用的全部):**
+
+| 成员 | 说明 |
+|---|---|
+| `BlockHost(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null)` | 唯一构造;`contentMargin` 为 null 时用 (18,14,18,16) |
+| `BlockSpec { string Id; string Title; Control? Content; bool DefaultVisible = true; }` | Windows 的 `UIElement? Content` → `Control? Content` |
+| `Control Root` | 页面把它挂进自己的 Grid(LaunchPage 是 `root.Add(_blocks.Root, 1)`) |
+| `event Action? Changed` | 任何布局变更(顺序 / 显隐 / 重置 / 导入 / 拖拽收尾)都会发 |
+
+**`BlockHost.BlockCard`(internal 嵌套,页面不直接用)** `Spec` / `SetEdit(bool)` / `RefreshTint()`。
+
+**`DashHost`(public 面):** `DashHost()`、`Load(DashLayout)`、`Rebuild()`、`AddCard(string)`、
+`RemoveCard(DashCard)`、`Has(string)`、`NotifyChanged()`、`MinPx(string)`、`SnapV(double, double)`、
+`BringToTop(CardView)`、`RefreshThemeVisuals()`、`Layout`、`EditMode`、`MinSizes`、
+`ContentFactory`(字段)、`TitleFactory`(字段)、`event Action? Changed`、
+重写 `MeasureOverride` / `ArrangeOverride`。嵌套 `DashHost.CardView`:`Card` / `SetContent(string, Control?)` /
+`SetEdit(bool)` / `RefreshTheme()`。
+
+**布局模型(页面与外壳都可能用到):** `PageLayoutDoc`(`CurrentVersion` / `Version` / `Blocks` /
+`Default` / `Normalize` / `FromJson` / `ToDict` / `ToJson`)、`BlockState`、
+`PageLayoutStore`(`Kind` / `DirOverride` / `DirPath` / `FilePath` / `Load` / `LoadAll` / `Save` /
+`ExportJson` / `ParseImport`)、`PageLayoutIO`(`ExportToFileDialog` / `ImportFromFileDialog`)、
+`DashCard`、`DashLayout`(`Version` / `GridChoices` / `Grid` / `Items` / `Snap` / `VisibleItems` /
+`NextZ` / `Normalize` / `FromJson` / `Parse` / `Default`)。
+
+**新增的 mac 侧成员(不影响上面任何签名):** 为了让"拖拽 / 缩放状态机"能被测试直接驱动,把
+`BlockHost` 的一批 private 降为 `internal`(见 D-115),另加只读快照 `OrderNow` / `HiddenNow` /
+`EditNow` / `CardsNow` / `CardOf(id)` / `TrayIdsNow` / `TrayShownNow` / `BarShownNow` /
+`DraggingNow` / `DragSourceNow`,以及 `DashHost.CardView` 的 `GrabCore` / `DragTo` / `DropNow` /
+`ModeNow` / `EditMaskNow` / `HandleLayerNow` / `CloseNow` / `BodyNow` / `TitleNow` / `EditNow` 与
+`DashHost.ViewsNow` / `GridLayerNow` / `ContentsNow`、`PageLayoutStore.ResetCache()`(模拟重启重读盘)。
+
+### 3. Windows → Avalonia 差异(逐条 + 理由)
+
+`BlockHost.cs`:
+
+1. 框架类型:`UIElement` / `FrameworkElement` → `Control`;`Visibility.Collapsed` → `IsVisible = false`;
+   `MouseButtonEventArgs` → `PointerPressedEventArgs`、`MouseEventArgs` → `PointerEventArgs`、
+   `MouseLeftButtonUp` → `PointerReleased`、`LostMouseCapture` → `PointerCaptureLost`;
+   `CaptureMouse()` / `ReleaseMouseCapture()` / `IsMouseCaptured` → `IPointer.Capture(元素)` / `Capture(null)`
+   (Avalonia 的捕获挂在"指针"而不是控件上)。
+2. 光标:`Cursors.SizeAll` → `new Cursor(StandardCursorType.SizeAll)` —— Avalonia 11 **没有** `Cursors`
+   静态类(`Avalonia.Base.dll` 里查无此串),`Ui.RowCard` 已经是这个写法。
+3. 事件阶段:WPF 用 `PreviewMouseLeftButtonDown`(隧道)。Avalonia 的 `Button` 类处理器会把
+   `PointerPressed` / `PointerReleased` 标记为已处理,所以本类统一用
+   `AddHandler(事件, 处理器, RoutingStrategies.Bubble, handledEventsToo: true)`;
+   `PointerCaptureLost` 是 **Direct** 路由事件,用两参重载订阅。三个处理器都存成字段,
+   `AddHandler` / `RemoveHandler` 用同一个委托实例(不泄漏)。
+4. 主题变更:Windows 订的是 **App 级** `App.ThemeVisualsChanged`;**mac 的 `App` 根本没有这个事件**
+   (C2b 起外壳走 `ActualThemeVariantChanged` + `ApplyThemeVisuals` 自己刷,见
+   `MainWindow.cs:1066` 的注释)。所以改成订控件自己的 `StyledElement.ActualThemeVariantChanged`
+   —— 同样是"有效主题变体变了"这一刻,同样在 `Loaded` 订阅 / `Unloaded` 取消 / 订阅后立刻刷一次,
+   与 Windows 逐行对应。
+5. 取主题色:`Application.Current.TryFindResource("B.Accent") as SolidColorBrush` →
+   `Palette.TryGet("B.Accent", Palette.Current, out ...)`;取不到时**沿用 Windows 的兜底绿**
+   `Color.FromRgb(46,155,107)`(不是 `Palette.FallbackColor` 的灰)。
+6. Toast:`AppServices.Window?.Toast(...)` → `AppServices.Toast(...)`(C2a 起的统一门面,
+   没有宿主时降级成调试输出)。
+7. `Ui.G("Auto", "*")` 后面写 `grid.Add(_bodyWrap, 1)`(只定义了 1 行却放进第 2 行)——**Windows 源本身
+   的写法,逐字照抄**,并用用例钉住实际落位(WPF 与本机 Avalonia 都把越界行号夹到最后一行)。
+8. "内容已挂在别的 ContentControl 上就先摘下来":Windows 判的是 `Parent is ContentControl`;
+   Avalonia 里内容控件的 `Parent` 是模板里的 **ContentPresenter**(不是 ContentControl),
+   所以两种父级都认,并用 `TemplatedParent` 认出"是不是自己这具 ContentControl"。
+
+`DashHost.cs`:
+
+1. 第 1 条同上(坐标 / 指针捕获换法)。
+2. 光标映射:SizeNS → `SizeNorthSouth`、SizeWE → `SizeWestEast`、SizeNWSE → `TopLeftCorner`、
+   SizeNESW → `TopRightCorner`、SizeAll → `SizeAll`(Avalonia 的 `StandardCursorType` 用角标命名,
+   语义同为"沿该对角线缩放")。
+3. `Rect.IntersectsWith` → `Rect.Intersects`(同名不同词);其余几何算式一字未改。
+4. 网格底纹:WPF 的 `DrawingBrush` 用 `Viewport` + `ViewportUnits.Absolute` 定瓷砖尺寸;Avalonia 的
+   `DrawingBrush` 没有 `Viewport`,等价物是 `SourceRect` / `DestinationRect` 都取 (0,0,grid,grid) 的
+   **Absolute** 相对矩形 + `Stretch.Fill`。渲染意图一致(每 grid 像素一道主题色细线),
+   像素级细节在 mac 上无法与 WPF 对比(已实测:本机 Avalonia 取到的是 `RelativeUnit.Absolute`
+   的 16×16 瓷砖)。
+5. 主题变更、取主题色同 BlockHost 的第 4 / 5 条。
+6. `CardView.SetContent` 复用了 `BlockHost.DetachFromForeignHost` 这一份实现(Windows 在两个文件里
+   各写了一遍同样的判断;这里只留一份,免得两处漂移)。
+7. 拖拽 / 缩放入口拆成"事件薄壳 + internal 状态机"(见 D-115)。
+
+`PageLayoutStore.cs`(新搬的模型层):
+
+1. 数据目录:Windows 用 `BridgeHost.FindRoot()`(payload 根);mac 版没有 payload,
+   `BridgeHost.FindRoot()` 就是 `Utils.ResolveRoot()`(`~/.tipcl`,`TIPCL_HOME` 可覆盖),
+   调用形状与 try/catch 兜底一字未改。
+2. **原子落盘**:Windows 是 `File.Replace(tmp, path, null)`,mac 改成
+   `File.Move(tmp, path, overwrite: true)` —— 见 D-116。语义不变(先写 `.tmp` 再改名,不留半截文件),
+   而且没有"只在一个平台上跑得到"的分支。
+
+### 4. 必须更正的任务书前提(2 条)
+
+1. **「这两个文件自包含,依赖都已移植」不成立。** 实测 `Pages\BlockHost.cs` 还引用了
+   `PageLayoutDoc` / `BlockState` / `PageLayoutStore` / `PageLayoutIO`,`Pages\DashHost.cs` 还引用了
+   `DashCard` / `DashLayout` —— 这 **5 个类型在 mac 侧根本还不存在**(分别在 Windows 的
+   `Pages\PageBlock.cs`、`PageLayoutStore.cs`、`PageLayoutIO.cs`、`DashCard.cs`、`DashLayout.cs`)。
+   它们都很小(2.5–6.9 KB)、纯 `System.Text.Json`、不碰界面类型,所以按任务书"小而自包含就一并搬"
+   的规定**一起搬了**(见 D-117)。任务书列的那几个 `Ui.` / `I18n.` / `SPanel` / `Ico.` /
+   `AppServices` / `Motion.` 计数器是对的,但**漏了模型层这一整块**。
+   附带收益:仓库里本来就有的两个 Windows 测试文件 —— `Ported\PageLayoutTests.cs`(15 条)与
+   `Ported\LayoutDefaultTests.cs`(5 条)—— 因此**恢复了编译**,本轮新增用例里有 20 条来自它们
+   (`PageLayoutTests.cs` 只按 A6 的 B 类规则改了 1 处:临时目录从 `Path.GetTempPath()` 改成
+   `TestHome.Root`,断言一字未改;`LayoutDefaultTests.cs` 一字未改)。
+2. **`BlockHost.BlockCard` 的网格定义是真的对不上**:`Ui.G("Auto", "*")` 只定义了 1 行,紧接着
+   `grid.Add(_bodyWrap, 1)` 放进第 2 行(`DashHost` 同位置写的是 `Ui.G("Auto,*")`,两行,
+   说明这是 Windows 源里的笔误)。**没有借移植之机改它**:逐字照抄,并用用例钉住实际落位
+   —— WPF 与 Avalonia 都把越界行号夹到最后一行(实测本机 Avalonia 的卡片高度 = 该行内容高度,
+   与"两行"写法在常态下视觉等价:操作条常态收起,只占 0 高度)。
+
+### 5. 验证命令与实际结果(本机 Windows,全部由本包亲自执行)
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 构建 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 个错误**;**7 个警告**(用 `WarningsOnly` 逐个取出来看:唯一警告码只有 `NU1900` ×6 + `SYSLIB0014` ×1 —— `NU1900` 是 4 个工程 × 2 个 Logger 上下文,`SYSLIB0014` 仍只有 `TipCL.Core\Launcher\Sync\PhoneClient.cs:116` 那一处) |
+| `dotnet test` 第 1 / 2 次 | `dotnet test TipCL.Mac.sln -c Release --no-build` | 都是**退出码 0,失败 0 / 通过 2897 / 总计 2897**(2797 → 2897,+100) |
+| 进程内执行器 第 1 / 2 次 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 都是**退出码 0,通过 2897 / 失败 0 / 不支持 0** |
+| `--smoke` light | `TipCL.exe --smoke --theme light --out artifacts\c3a-smoke-light.png` | 退出码 **0**,**21823 字节**,SHA256 `8336CA136B4F309D8275490578B8759E680AB5A1D8B861659D082802FE60449B` —— **与 C2b 基准逐位相同** |
+| `--smoke` dark | `... --theme dark ...` | 退出码 **0**,**18200 字节**,SHA256 `DBD3C171D7E176F12F9CE05335E7E96A0CE21F1135A4CC1E2CCADD5564AD604E` —— **逐位相同** |
+| `--smoke` blue | `... --theme blue ...` | 退出码 **2**(参数错,符合预期),不产出文件 |
+| `src\TipCL.Core` 有没有被动过 | `git diff --name-status 145dbac HEAD -- src/TipCL.Core` | **0 行输出**(空) |
+| Core 对 Windows 源的同一性 | 逐文件 SHA256(mac `src\TipCL.Core\**\*.cs` ↔ Windows `src\TipCL\Core\**\*.cs`) | **238 有对应 / 216 一致 / 22 有改动 / 10 无对应**(与基线完全相同)。口径说明:这 10 是指**源文件**;若把 `obj\Release\net8.0\` 下 2 个自动生成文件也算进去,总数的分母会变成 250 / 12,本包两种口径都取到了同一批文件 —— 即"改动的 22 个"一字未变 |
+| `%LOCALAPPDATA%\TipCL` | 开工时 / 收工时各量一次 | 两次都是 **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,与 Lead 给的基线逐项相同(零写入) |
+| 真实桌面 / 图片 | 收工时 | 桌面 14 项、最新写入 **2026-11-12 19:02:53**(与基线相同);图片最新写入 **2026-11-06 23:39:03**(与基线同日,零写入)。图片的**条目数**我量到 5 而 Lead 报 3 —— 差别只在"算不算 `-Force` 才看得见的隐藏项",最新写入时间一致 |
+| 残留进程 / `%TEMP%` | `Get-Process testhost,TipCL,java,adb` / `Get-ChildItem $env:TEMP -Directory -Filter tipcl*` | 进程 **0 个**;`tipcl*` 目录 **91 个**(Lead 基线 89)。**对照实验**:单跑一次 `--smoke` 前后 **91 → 91(0 新增)**;多出来的 2 个是 14:46:59 建的 `tipcl-smoke-d340b8b0` / `tipcl-smokecwd-9b09662d`,这两个名字在本仓库 `src` / `tests` 里**根本不存在**(`smokecwd` 全仓库零命中),与 B2a / C2c2 记过的"同机还有别的产品线在跑 `--smoke`"是同一现象 |
+| 编码 | 对 7 个新源文件 + 4 个新测试文件 + 2 个改动文件逐个 `ReadAllBytes` | **无 BOM、CR=0、U+FFFD=0**;汉字可 grep(`C3aBlockHostTests.cs` 1669 个、`C3aDashHostTests.cs` 981 个、`C3aLayoutModelTests.cs` 576 个、`C3aFixtures.cs` 304 个);`Ported\PageLayoutTests.cs` 改后 9051 字节、303 个汉字、无 BOM / CR / 乱码 |
+| 提交 | 3 个提交 | `4107699`(BlockHost + 模型层)/ `ae171ce`(DashHost + DashCard/DashLayout)/ `7a5a451`(100 条用例 + 恢复两个 Ported 文件);每个 `git add -A` 前都 `git status --short` 确认过没有 `Zz*.cs` 或仓库根下的散落文件 |
+
+新增用例的分布:`C3aBlockHostTests`(37 条)/ `C3aDashHostTests`(29 条)/ `C3aLayoutModelTests`(14 条)
+共 80 条新写的,加上恢复编译的 20 条(`Ported\PageLayoutTests` 15 条 + `Ported\LayoutDefaultTests` 5 条)
+= **100 条**(2797 → 2897,与实际增量逐条对得上)。
+
+### 6. 测试怎么驱动布局(不模拟真实输入设备)
+
+- 每条碰 Avalonia 的用例体都走 `AvaloniaSession.Run(...)`(D-79 / C1b-fix),没有第二个
+  `SetupWithoutStarting`,`AvaloniaSession.cs` 一字未改;控件要"进真可视树 + 真布局"时用 C1c 已有的
+  `UiHost.Show(...)`(它内部就是 `Dispatcher.UIThread.RunJobs` + `ForceRenderTimerTick` 那一套)。
+- **块拖拽**:驱动 `BlockHost.BeginDragCore(card, src, null)` / `DragTo(y)` / `EndDrag(src)`
+  这一层状态机;真实事件处理器(`BeginDrag` / `OnDragMove` / `OnDragEnd`)只多做两件事 ——
+  从事件对象里取坐标、判左键 —— 然后调同一批成员。**没有**构造 `PointerPressedEventArgs`,
+  也**没有**用 `Avalonia.Headless` 的鼠标模拟(那属于"模拟真实输入设备")。
+- **卡片拖拽 / 缩放**:驱动 `CardView.GrabCore(mode, point, pointer, captureTarget)` / `DragTo(point)` /
+  `DropNow()`,真实处理器(`OnGrabMove`、八向手柄的 `PointerPressed`、`OnDragMove`、`OnDrop`)
+  同样只是取坐标 + 判左键。
+- 几何用例分两种宿主:离屏(没排过布局)宿主→ `H()` 全走 120 兜底,可以写精确期望值
+  (MidY(0)=60 / MidY(1)=190 / MidY(2)=320);挂进窗口的宿主→ 期望值从 `host.Bounds` 与
+  `host.MidY(...)` 现算,不猜像素。
+- 动画:全程 `Motion.Enabled == false`(`Motion.HasClock` 需要真桌面生命周期),所以
+  `StaggerItems` 直接返回、没有任何计时器被挂上;用例断言"再推一次时钟状态不变"、
+  `Opacity == 1`、`RenderTransform == null`、拖拽结束后 `DraggingNow == false` /
+  `DragSourceNow == null`、重复收尾不重复通知。
+- 落盘全部走 `C3aHome` 注入的 `PageLayoutStore.DirOverride`(`TestHome.Root` 之下),
+  Dispose 里还原并丢缓存,不与 `Ported\PageLayoutTests` 串扰(全程序集本就关了并行)。
+
+### 7. 未验证 / 遗留
+
+- **macOS 真机未验证**:渲染、`--smoke` 像素、`File.Move(overwrite: true)` 在 APFS 上的行为、
+  `Utf8JsonWriter` 缩进输出在 mac 上的换行符(本机实测是 CRLF;**同一个 API**,但本机只能验 Windows)。
+- **真实指针路径未在真输入下验证**:`AddHandler(..., handledEventsToo: true)` 那一套是按
+  `Button` 类处理器会标记已处理的语义推导的;本机只验证了状态机(处理器薄壳的行为等价性未用真输入驱动)。
+- `PointerCaptureLost` 是 Direct 事件、两参重载能收到 —— 本机没构造过该事件。
+- 主题切换:用例直接调 `RefreshThemeVisuals()` / `RefreshTint()` 验效果,
+  `ActualThemeVariantChanged` 在真桌面切主题时是否真的传到宿主**未验证**(它需要真桌面生命周期)。
+- `DashHost` 的 `private const double Gap = 10.0` 在 Windows 源里其实**没被用到**(排布用的是字面量
+  10.0)—— 逐字保留,`ArrangeOverride` 里的 10.0 也照抄,没有"顺手改成 Gap"。
+- `DashHost.CardView` 里同一 type 的两张卡会共享同一份内容控件(Windows 也是这个行为:
+  `Cached(type)` 只造一次),后建的那张会把内容从先建的卡上摘过去 —— 已用例钉住现状,
+  页面移植时按 type 区分即可。
+- C3a 没有接线到任何页面或外壳,所以 `--smoke`(空壳、无页面)逐位不变是**应该**的。
+- 下一包(C3b)要注意两处机械但必须改的调用点:`LaunchPage` 里
+  `_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, ...)` 要改成 Avalonia 的
+  `Layoutable.MaxHeightProperty`(或直接用 `Ui.WindowPctConverter` 那套 `Bind`),
+  `_hero` / 内容边距 `new Thickness(56,0,24,18)` 照抄即可。

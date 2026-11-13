@@ -1507,3 +1507,54 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
 - `Thumbs.FetchAsync` 里有 `await Task.Run(解码)`:在会话线程上 `await` 会捕获 Avalonia 的 `SynchronizationContext`,续体被投回同一个线程;而会话线程正被用例体占着(`GetResult()` 阻塞)→ 自锁,30 秒超时。
 - 修法(**只改测试**):`C2c2Files.RunOffThread(() => Thumbs.LoadAsync(url, px))` = `Task.Run(...)` 起在池上再同步取结果 —— 池上没有 Dispatcher 的 `SynchronizationContext`,续体留在池上;这也与生产环境一致(UI 线程不阻塞、取图照常回来)。
 - **没有**为了测试去给 `Thumbs` 加 `ConfigureAwait(false)`:那会改动产品行为(续体线程),而 Windows 源码也没有这么写。
+## D-115 C3a:拖拽 / 缩放的注入缝是"事件薄壳 + internal 状态机",测试驱动状态机
+
+- 事实:`BlockHost` 与 `DashHost` 的拖拽 / 缩放逻辑 100% 是"从事件对象里取坐标 + 判左键",其余全是纯算术状态机。
+  Windows 版把两者揉在同一个方法里(`OnDragMove` 里既 `e.GetPosition(...)` 又算几何)。
+- 做法:事件的取坐标 / 判左键留在事件处理器里,状态机抽成 internal 成员,真实处理器调它们:
+  - `BlockHost`:`BeginDragCore(BlockCard, Control src, IPointer?)` / `DragTo(double y)` / `EndDrag(Control src)`
+    —— 真实路径 `BeginDrag` / `OnDragMove` / `OnDragEnd` / `OnDragLost` 只做
+    `e.Pointer`、`e.GetPosition(_list).Y`、`e.GetCurrentPoint(_list).Properties.IsLeftButtonPressed` 三件事;
+  - `DashHost.CardView`:`GrabCore(string? mode, Point grabPoint, IPointer?, IInputElement?)` /
+    `DragTo(Point)` / `DropNow()` —— 真实路径 `Grab` / `OnDragMove` / `OnDrop` 同样只取坐标 + 判左键。
+- `BlockHost` 里一批 private 因此降为 internal(`EnterEdit` / `ExitEdit` / `HideBlock` / `Restore` /
+  `ResetPage` / `MoveVisible` / `MidY` / `H` / `VisibleIndexOf` / `VisibleCount` / `VisibleSpecs` /
+  `Persist` / `ApplyDoc` / `Render` / `InsertVisual` / `KnownIds` / `VisibleIds` / `DefaultDoc` /
+  `ApplyStored` / `RefreshThemeVisuals`),并加了若干只读快照(`OrderNow` / `HiddenNow` / `EditNow` /
+  `CardsNow` / `CardOf` / `TrayIdsNow` / …)。**public 面一个签名都没动** —— 页面的调用形状与 Windows 完全一致。
+- **没有**为了测试去构造 `PointerPressedEventArgs` / `PointerEventArgs`,**也没有**用
+  `Avalonia.Headless` 的鼠标模拟(那属于任务书禁止的"模拟真实输入设备")。代价如实记在
+  PROGRESS 的"未验证"里:事件薄壳那一层没有真输入驱动过,`handledEventsToo: true` 的等价性是按
+  Avalonia `Button` 类处理器会标记已处理的语义推导的。
+
+## D-116 C3a:`PageLayoutStore` 的原子落盘改用 `File.Move(overwrite: true)`
+
+- Windows 源:`File.WriteAllText(tmp, ...)` 之后 `if (File.Exists(path)) File.Replace(tmp, path, null); else File.Move(tmp, path);`
+- mac 侧:`File.Move(tmp, path, overwrite: true)` 一步到底。
+- 理由(保守选项):`File.Replace` 在 **Unix** 上的支持情况在本机(Windows)无法验证 —— 它要么正常工作、
+  要么抛 `PlatformNotSupportedException`,而 `Save` 外层把异常**全部吞掉**(那是 Windows 的设计:
+  "写不进去也不能崩 UI"),于是真出问题时的表现会是"布局静默不落盘"。`File.Move(overwrite: true)`
+  是 .NET 文档里跨平台的原子改名(Windows 走 `MoveFileEx(REPLACE_EXISTING)`),而且**不引入
+  "只在某个平台跑得到"的分支**,风险最低。
+- 语义没变:先写 `.tmp` 再改名,不留半截文件;用例钉住了"连存两次后文件是最新那份、目录里没有 `.tmp`"。
+- 另一个未知项照实记:`.NET 8` 的 `Utf8JsonWriter` 在 `WriteIndented = true` 时,本机实测输出的是
+  **CRLF**。红线里的"CR=0"针对**受版本控制的源文件**,运行时数据文件的换行符不在其内;
+  mac 上是否同样 CRLF 本机不可验证(同一个 API,行为由运行时决定)。
+
+## D-117 C3a:任务书"BlockHost/DashHost 自包含"的前提不成立(如实记录,按"小而自包含就一并搬"处理)
+
+- 任务书的依赖扫描只数了 `Ui.` / `I18n.` / `SPanel` / `Ico.` / `AppServices` / `Motion.` 这些**门面**
+  引用(那些确实都已移植),**漏了布局模型层**:`Pages\BlockHost.cs` 还要 `PageLayoutDoc` / `BlockState` /
+  `PageLayoutStore` / `PageLayoutIO`,`Pages\DashHost.cs` 还要 `DashCard` / `DashLayout` —— 这 5 个类型
+  在 mac 侧**完全不存在**(分别在 Windows 的 `Pages\PageBlock.cs`、`PageLayoutStore.cs`、
+  `PageLayoutIO.cs`、`DashCard.cs`、`DashLayout.cs`,合计 2.5–6.9 KB,纯 `System.Text.Json`)。
+- 处理:按任务书"小而自包含就一并搬并说明"的规定一起搬进 `src\TipCL.App\Pages\`(命名空间 `TipCL.Pages`,
+  与 Windows 一致),`src\TipCL.Core` 一字节未动。
+- 附带收益:仓库里早就存在的两个 Windows 测试文件 `Ported\PageLayoutTests.cs` 与
+  `Ported\LayoutDefaultTests.cs`(之前因 `using TipCL.Pages` 被 `Compile Remove`)因此恢复编译,
+  贡献 20 条用例(前者的实例临时目录按 A6 的 B 类规则从 `Path.GetTempPath()` 改成 `TestHome.Root`,
+  断言一字未改)。
+- 顺带记一个 Windows 源自身的笔误(不修,只钉):`BlockHost.BlockCard` 写
+  `Ui.G("Auto", "*")`(**只定义 1 行**)之后又 `grid.Add(_bodyWrap, 1)`;同位置的 `DashHost` 写的是
+  `Ui.G("Auto,*")`(2 行)。WPF 与 Avalonia 都会把越界行号夹到最后一行,所以两边行为一致;
+  移植逐字照抄,并用用例钉住实际落位(常态操作条收起、只占 0 高度,视觉等价)。
