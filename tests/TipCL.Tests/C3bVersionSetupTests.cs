@@ -51,11 +51,46 @@ public class C3bVersionSetupTests
     }
 
     private static JsonElement SavedPayload(C3bBackend backend)
-    {
-        backend.Need(3);
-        Assert.Equal("save_version_settings", C3bFiles.Method(backend.RequestAt(2)));
-        return C3bFiles.Params(backend.RequestAt(2)).GetProperty("data");
-    }
+	{
+		// 【D1 修正 2026-11-14】原来这里断的是"第 3 个请求就是 save_version_settings" —— 那是一条
+		// **顺序假设**,并发负载下会假红(VSTest 通道偶发、进程内通道不复现;本项目运营规则第 7 条)。
+		// 改成"等效果":等 save_version_settings 真的到达(有截止时间)再取它的载荷,
+		// 并把**实际收到的调用清单**带进失败信息,下次一眼能定位。
+		// 载荷断言(下面调用方那一堆)一个都没改。
+		C3bFiles.Pump(() => SaveRequestIndex(backend) >= 0, timeoutMs: 9000);
+		int at = SaveRequestIndex(backend);
+		Assert.True(at >= 0, "没等到 save_version_settings;实际收到的调用:" + MethodList(backend));
+		return C3bFiles.Params(backend.RequestAt(at)).GetProperty("data");
+	}
+
+	/// <summary>最后一个 <c>save_version_settings</c> 请求的下标(没有则 -1)。</summary>
+	private static int SaveRequestIndex(C3bBackend backend)
+	{
+		int found = -1;
+		for (int i = 0; i < backend.RequestsCount; i++)
+		{
+			if (C3bFiles.Method(backend.RequestAt(i)) == "save_version_settings")
+			{
+				found = i;
+			}
+		}
+		return found;
+	}
+
+	/// <summary>把假后端收到的方法名拼成一行,只用于失败信息。</summary>
+	private static string MethodList(C3bBackend backend)
+	{
+		System.Text.StringBuilder sb = new System.Text.StringBuilder("[");
+		for (int i = 0; i < backend.RequestsCount; i++)
+		{
+			if (i > 0)
+			{
+				sb.Append(", ");
+			}
+			sb.Append(C3bFiles.Method(backend.RequestAt(i)));
+		}
+		return sb.Append(']').ToString();
+	}
 
     // ---------------------------------------------------------------- 卡片与控件形状
 
