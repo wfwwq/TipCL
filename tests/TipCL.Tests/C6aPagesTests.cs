@@ -332,6 +332,8 @@ public class C6aPagesTests
                 .First(c => c.Items.OfType<object>().Any(o => (o.ToString() ?? "") == I18n.L("优化")));
             type.SelectedIndex = 1;
             C5aFiles.Pump(() => C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "category") == "优化", 5000);
+            ComboBox version = C5aFiles.Descendants(page).OfType<ComboBox>()
+                .First(c => c.Items.OfType<object>().Any(o => (o.ToString() ?? "") == "1.20.1"));
             version.Text = "1.20.1";
             C5aFiles.Pump(() => api.Count("search_mods") >= 2 && C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "game_version") == "1.20.1", 5000);
             int last = api.Count("search_mods") - 1;
@@ -585,7 +587,8 @@ public class C6aPagesTests
 
             install.Select(1); // Fabric
             C5aFiles.Settle(2);
-            Assert.True(C5aFiles.HasText(install, "Fabric 1.20.1"));      // 名称自动跟卡走
+            // 名称在**输入框**里(不是 TextBlock),所以按 TextBox.Text 断言
+            Assert.Equal("Fabric 1.20.1", C5aFiles.Descendants(install).OfType<TextBox>().First().Text);
             Assert.True(C5aFiles.HasText(install, "1.20.1 + Fabric 0.15.11")); // 摘要整句(加载器 + 推荐版本)
             Assert.True(C5aFiles.HasText(install, I18n.L("· 约 {0} MB", 33))); // 30 + 1 + 2(Fabric API)
             Assert.True(C5aFiles.HasText(install, I18n.L("将新建实例")));
