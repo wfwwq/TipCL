@@ -28,7 +28,8 @@
 | C1c | `Services/Ui.cs` / `UiExt.cs` 门面 | ✅ 完成(见下;**新增 100 条用例,总数 2157 → 2257,两条通道各连跑 2 次都 2257/2257 全绿**;`Ui.S` 的返回类型被迫由 `Style` 改成类名、`Pw` 返回 `TextBox`,逐条列在差异表里;smoke 与裁决基准逐位一致) |
 | C2a | 桥层与 WPF-free 基础服务(`AppServices`/`Payload`/`TaskStore`/`TaskRow`/`I18n`/`Fmt`/`FileKinds`/`BridgeEvent`/`BridgeCallException`/`BridgeHost`/`BridgeClient`/`Dlg`/`Motion`) | ✅ 完成(见下;**新增 210 条用例,总数 2257 → 2467,两条通道各连跑 2 次都 2467/2467 全绿**;`src\TipCL.Core` 一行未动;只有进程内一条后端路径,外部 Python 桥已去) |
 | C2b | 外壳:`MainWindow` / 导航 / 页面宿主 / Toast·Dialog·DropVeil 宿主 / 系统菜单与快捷键 | ✅ 完成(见下;**新增 79 个测试方法 / 122 条用例,总数 2467 → 2593,两条通道各连跑 2 次都全绿**;C2a 的接线清单除 `ToastSink`(Toast 视觉件属 C2c)与"启动后端"两处外全部落地;smoke 因新增标题栏 / 侧栏 / 页面宿主而变,**新基准 = light 21823 `8336CA13...` / dark 18200 `DBD3C171...`**) |
-| C2c | Toast / Dialog / DropVeil 视觉件 + `FileDrop` / `PageBase.EnableDrop` + Backdrop / Wallpaper / SideFrost / ImeGuard / AccountGate / 下载任务底条(C2b 明确没做的视觉件) | 未开始 |
+| C2c1 | Toast 卡片 + 真实 `ToastSink` 接线 + 对话框卡片(`Dlg` 的 confirm/message 卡) | ✅ 完成(见下;**新增 60 条用例,总数 2631 → 2691,两条通道各连跑 2 次都 2691/2691 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书点名的 `Pages\Bubble.cs` / `Pages\ConfirmCard.cs` 实为 AI 页组件、按红线未搬,见 D-104) |
+| C2c2 | 剩下的视觉件:`FileDrop` / `PageBase.EnableDrop` + DropVeil + Backdrop / Wallpaper / SideFrost / ImeGuard / AccountGate / Thumbs / LoaderIcons / 标题栏圆片 / 下载任务底条 | 未开始 |
 | C2d | 进程内后端接线与验收(可关的登录预热 / `BackendBootstrap` 状态机 / 真启停 / 真 RPC 往返 / `BridgeReady` 开闸) | ✅ 完成(见下;**新增 38 条用例,总数 2593 → 2631,两条通道都 2631/2631 全绿**;`src\TipCL.Core` 只动 `BackendApi.cs` 一个文件(+20/-4);**后端真的起在 `127.0.0.1:0` 上并跑通了真 RPC 与真 SSE**,`BridgeReady` 改由真启动路径打开;顺带修掉"取消启动会漏监听器"的真缺口;smoke 与 C2b 基准逐位相同) |
 | C3-C8 | 页面逐个移植 | 未开始(接入方式:各页面包 `PageRegistry.Register(...)`,页面 id 见表) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
@@ -4444,3 +4445,223 @@ Lead 验收时已独立复跑确认「真实往返存在且与 Core 状态交叉
 
 1. C2d 的四个测试类原先互相改进程级注入缝,导致 VSTest 通道时绿时红(它自己见过 1~115 条失败)。已归到同一个 xunit collection 并修掉 3 处「取决于别的用例先跑过什么」的断言(D-103)。**这与 C1b 那个 Dispatcher 线程问题是同一类病:进程级共享状态 + 通道间调度差异**。后续包凡是要动进程级注入缝,必须走同一 collection,并且用例之间不许有顺序依赖。
 2. 它收尾时的抖动里至少有一次是**并发构建**造成的(另一个会话在 12:08:03-06 重建同一产物目录)。**结论:Lead 做验收复跑时,必须确认没有子代理还在构建**(本轮 Lead 的复跑都在子代理提交之后,四次均绿)。
+---
+
+## C2c1 Toast 卡片、真实 ToastSink 与对话框卡片(2026-11-13)
+
+本包只做 **Toast 卡片 + `AppServices.ToastSink` 接线 + 对话框卡片**这三件事:
+没有移植任何页面,没有碰色板值 / `Controls.axaml` / 导航 / `Smoke\` / `Pages\PageBase.cs`,
+**`src\TipCL.Core\` 一个字节没有动**,没有改 `Ui` / `UiExt` 的公开面,没有删改任何既有测试、
+没有加 `Skip`、没有扩 `NoWarn`、没有引新 NuGet 包。
+唯一改到的既有测试是 `C2bWiringTests` 里那条"ToastSink 留空"的断言 ——
+**D-95 明确要求 C2c 改它**,本包按 D-95 把它改成"接上之后"的语义(**改强**,见 D-106 第 4 条)。
+
+### 1. 先说要紧的:任务书点名的两个文件在仓库里不是那个东西(如实报告,D-104)
+
+| 任务书写的 | 仓库里实际是 | 本包怎么处理 |
+|---|---|---|
+| `Services\Bubble.cs`(the toast bubble) | **没有这个文件**。`Pages\Bubble.cs`(454 行)是 **AI 对话气泡**:`<think>` 折叠、`MdView` 渲染、编辑 / 撤回 / 重发 / 投票,依赖 `AiIcons` / `ThinkFold` / `AiPage` | 未搬(属 AI 全家 C7+ 的页面组件;红线"不许移植任何页面") |
+| `Pages\ConfirmCard.cs`(the confirm/message card) | 文件在,但它是 **AI 工具审批卡**「助手要执行一个操作,需要你确认」,只被 `Pages\AiPage.cs:2614` 与 `Pages\AiFixWindow.cs:761` 用到;依赖 `AiRisk` / `ToolMeta` / `AiUiText` / `AiIcons` / `MdView.Mono` | 未搬(同上,且它**不是** `Dlg` 的卡片) |
+| 「the toast card」 | 真正的 Toast 卡片是 `MainWindow.xaml.cs:1179-1255` 的 **`MainWindow.Toast`** 方法体(Windows 侧没有独立类) | **已逐项移植**(`ToastCard` + `ToastLayer` + `MainWindow.Toast`) |
+| 「the dialog card, make `Dlg`'s card path render through it」 | 真正的确认/消息卡片是 `Services\Dlg.cs:185-213` 的 **`Shell`**(`Confirm`/`Ask`/`Alert`/`Prompt`/`Choose`/`Form` 共用);C2a 已把它内联移植进 mac 的 `Dlg.cs` | **提成具名类型 `DialogCard`**(构造与取值一字不变),`Dlg` 的所有卡片式对话框现在都渲染在它上面 |
+
+按"描述"而不是"文件名"办事,是无人值守下最保守的一支:**任务书的两条要求在冲突**
+(既要搬 `ConfirmCard.cs`,又不许移植任何页面 —— 而它只能连长在 AI 页基础设施上才编译得过)。
+裁决建议写在 D-104 末尾(若 Lead 认为必须搬,需要先派一个"AI 视觉基础设施"小包)。
+
+### 2. 做了什么
+
+1. **Toast 卡片**(`Services\ToastCard.cs`,新增):
+   - `ToastCard : Border` —— Windows 那块卡片的逐项移植:左侧 3px 色条(圆角 2、取色 = kind 的颜色令牌)、
+     图标字形(`Ico.Success/Warning/Error/Info`,15px)、标题(13px、半粗、换行)+ 正文两行,
+     正文面板 `MaxWidth = 300`、行距 2、图标与文字间距 10;卡片圆角 8、内边距 (12,10,14,11)、
+     描边 1、下边距 8(**这就是堆叠间距**)、`B.GlassStrong` 底 + `B.GlassBorder` 描边、
+     `Motion.Shadow(card, 22, 0.14, 4)`、手型光标。
+     kind → (图标码位, 颜色令牌) 用 `ToneOf(kind)` 单点表出;正文空白不加那一行、
+     超过 220 字截断补 `...`;自动关闭时长 `Error ? 7s : 4s`。
+   - `ToastLayer : IDisposable` —— Windows `ToastHost` 那一摊的管理器:最多 4 张(满了先顶掉最老的)、
+     每张进 `Motion.SlideIn`、关闭走 `Motion.SlideOut` 后从宿主里摘掉、点一下(左键)关掉、
+     悬停暂停 / 移开续上;`Cards` / `LiveTimerCount` 两个观察口给测试用(D-106)。
+2. **`ToastSink` 接线**(`MainWindow.cs`):
+   - 新增 `MainWindow.Toast(string title, string body = "", ToastKind kind = ToastKind.Info)` ——
+     Windows 同名方法的逐行移植:非 UI 线程先 `Dispatcher.UIThread.Post` 回来,再交给 `ToastLayer`;
+   - 构造函数里的"服务接线"块新增 `AppServices.ToastSink = Toast;`,并挂
+     `Closed → _toastLayer.Dispose()`(关窗即收摊,不留计时器);
+   - 另外两个 internal 小成员:`MainWindow.Toasts`(拿 `ToastLayer`)与 `MainWindow.ClearToasts()`。
+3. **对话框卡片**(`Services\DialogCard.cs`,新增 + `Dlg.cs` 两处小改):
+   - `DialogCard : Border` —— Windows `Dlg.Shell` 那块卡片:标题(H2)+ 正文(滚动)+ footer
+     的 `Auto,*,Auto` 三行、圆角 10、内边距 (22,18,22,18)、描边 1、
+     `MinWidth = Min(width, 380)` / `MaxWidth = width`、玻璃底 + 玻璃描边、40/0.28/10 阴影;
+   - `DialogCard.ConfirmFooter(ok, cancel, danger)` 装 Windows `Ask` 的那对按钮(取消在前、
+     右对齐、间距 8、危险时确定用 `btn-danger`),`Dlg.Ask` 现在直接用它;
+   - `Dlg.Shell` 从"内联建 Border"改成 `return new DialogCard(...)`(控件树、取值、行为一字不变);
+   - `Panel` / `Busy` 各自的内联卡片**保持原样**(Windows 也是这么写的),用例明确断言这一点。
+4. **离屏安全**:`Dlg.SmokeActive` / `SmokeAutoAnswer` / `SmokeAutoCancelSystemDialog` 一个字没碰;
+   `ToastLayer` 的默认计时器在没有时钟时**不挂**(见 D-105),所以 `--smoke` 与测试进程里
+   既不会"卡住"也不会留残留计时器;`AppServices.Toast` 在没有宿主时照旧只写调试输出(不抛、不改状态)。
+
+### 3. 新增 / 改动的文件
+
+| 文件 | 改动 |
+|---|---|
+| `src\TipCL.App\Services\ToastCard.cs` | **新增**:`ToastTimer` 委托 + `ToastCard` + `ToastLayer`(13592 字节) |
+| `src\TipCL.App\Services\DialogCard.cs` | **新增**:`DialogCard` + `DialogCard.ConfirmButtons`(5645 字节) |
+| `src\TipCL.App\MainWindow.cs` | **改**:`_toastLayer` 字段 + 构造里 `ToastSink = Toast` / `Closed → Dispose` + `Toast` / `ClearToasts` / `Toasts` 三个成员 + 两处文档注释 |
+| `src\TipCL.App\Services\Dlg.cs` | **改**:`Shell` 改成返回 `DialogCard`;`Ask` 用 `DialogCard.ConfirmFooter`;类注释补一句 |
+| `tests\TipCL.Tests\C2c1Fixtures.cs` | **新增**:期望值权威副本 + `FakeToastTimer` + `ToastHarness` + 程序化输入助手 |
+| `tests\TipCL.Tests\C2c1ToastTests.cs` | **新增**:Toast 卡片与宿主 23 个方法(`[Fact]` 20 + `[Theory]` 3)/ 29 条用例 |
+| `tests\TipCL.Tests\C2c1WiringTests.cs` | **新增**:ToastSink 接线 11 个方法 / 11 条用例 |
+| `tests\TipCL.Tests\C2c1DialogCardTests.cs` | **新增**:对话框卡片 20 个方法 / 20 条用例 |
+| `tests\TipCL.Tests\C2bWiringTests.cs` | **改 1 个方法**:`Toast_host_panel_exists_but_the_C2b_shell_leaves_the_toast_sink_unwired` → `Toast_host_panel_is_wired_to_the_real_card_layer`(按 D-95,断言改强) |
+
+**没有改**:`src\TipCL.Core\`(整个目录)、`Themes\`(色板 + `Controls.axaml` + `StyleKeys`)、
+`Services\Ui.cs` / `UiExt.cs` / `Motion.cs` / `AppServices.cs`、`Pages\`(全部)、`Smoke\`、
+`NavModel`/`NavConfig` 等导航文件、`AvaloniaSession.cs`、测试隔离三件、`Directory.Build.props`、
+`TipCL.Mac.sln`、`.gitignore`。
+
+### 4. 公开面(逐条)
+
+| 成员 | 级别 | 说明 |
+|---|---|---|
+| `MainWindow.Toast(string, string, ToastKind)` | `internal`(Windows 是 `public`,mac 的 `MainWindow` 本身是 internal) | Toast 入口;参数名 / 顺序 / 默认值与 Windows 一致 |
+| `MainWindow.Toasts` → `ToastLayer` | `internal` 新成员 | 观察口(测试断言堆叠 / 计时器) |
+| `MainWindow.ClearToasts()` | `internal` 新成员 | 一次收干净(窗口关闭与外壳动作可用) |
+| `AppServices.ToastSink` | 既有 `internal` 静态,现在由外壳赋值 | 值从 null 变成外壳的 `Toast`(C2a 的 D-88 / C2b 的 D-95 在此收口) |
+| `ToastCard`(构造 + `Kind`/`Glyph`/`Tone`/`Title`/`Body`/`AccentBar`/`Icon`/`TitleBlock`/`BodyBlock`/`BodyPanel`/`Row`/`BodyShown` + 静态 `ToneOf`/`AutoCloseDelay`/`BuildBody` + 5 个尺寸常量) | `internal` 新类型 | Windows 没有对应类型(它是 `MainWindow.Toast` 里的局部变量),这是本包唯一的"结构性新增" |
+| `ToastLayer`(`MaxCards`/`Host`/`Cards`/`LiveTimerCount`/`Show`/`Close`/`CloseAll`/`Dispose`) | `internal` 新类型 | 同上;注入缝是构造参数 `ToastTimer? schedule` |
+| `ToastTimer` 委托 | `internal` 新类型 | `IDisposable? (TimeSpan delay, Action onFire)`;返回 null = 这次没有起计时器 |
+| `DialogCard`(构造 + `ConfirmWidth`/`MinWidthFloor`/`SectionGap`/`CardCornerRadius`/`CardPadding`/`FooterSpacing` + `Title`/`TitleBlock`/`BodyControl`/`BodyScroll`/`FooterRow`/`Layout` + 静态 `ConfirmFooter` + `ConfirmButtons`) | `internal` 新类型 | 内容是 Windows `Dlg.Shell` 的等价搬运 |
+| `Dlg` 的公开面 | **零改动** | 21 个公开成员的名字 / 签名 / 默认值 / 回调形状一字未动 |
+
+### 5. 从 Windows 复制了什么、对它们改了哪几处
+
+**没有"整文件复制"**:两个 Windows 源文件(`Pages\Bubble.cs` / `Pages\ConfirmCard.cs`)按 D-104 未搬,
+搬的是**两段方法体**,逐条差异如下:
+
+1. Toast 卡片(源 `MainWindow.xaml.cs:1179-1255`,`MainWindow.Toast`):
+   - `SetResourceReference(Border.XxxProperty, key)` → `UiExt.Dyn`(C2a/C1c 的既有映射);
+   - `Cursors.Hand` → `new Cursor(StandardCursorType.Hand)`;
+   - `MouseLeftButtonUp` → `PointerReleased` + 只认 `e.InitialPressMouseButton == MouseButton.Left`;
+   - `Ui.V(2.0, ...)` / `Ui.H(10.0, ...)` / `Ui.Txt` / `Ui.Muted` / `Ui.Glyph` 全部原样调用;
+   - `DispatcherTimer` 那段搬进 `ToastLayer.Arm/Pause`,**默认在无时钟进程里不挂**(D-105);
+   - 顶掉最老一张时顺手把它自己的计时器一起停掉(D-105 的收严);
+   - `Ui.H2(title)`(对话框卡片)等调用原样。
+2. 对话框卡片(源 `Services\Dlg.cs:185-213`,`Dlg.Shell`):
+   - 控件树、行定义、内边距、圆角、描边、宽度夹取、取色键、阴影参数**逐项相同**(只是从
+     `private static Border Shell(...)` 的方法体搬进 `DialogCard` 的构造函数);
+   - `ScrollViewer` 的 4 个属性(含 WPF 的 `ScrollBarVisibility`)原样;
+   - `Shell` 现在 `return new DialogCard(title, body, footer, width);`。
+
+### 6. Windows → Avalonia / mac 特有差异(逐条)
+
+1. **Toast 卡片不是控件类**:Windows 里它是 `MainWindow.Toast` 的局部变量,mac 侧提成 `ToastCard`
+   类型才能离开窗口单测(与 C2a 提 `Dlg.Push`、C2b 提 `PageHost` 同一套做法,D-106)。
+2. **宿主管理提成 `ToastLayer`**:Windows 把"4 张上限 / 进退场 / 自动关闭 / 悬停暂停"内联在窗口方法里。
+3. **自动关闭的默认计时器在离屏/测试里不挂**(D-105):`Motion.HasClock` 作闸;真桌面与 Windows 一致。
+4. **顶掉最老一张时连计时一起停**(D-105):Windows 只 `RemoveAt(0)`,那张卡的计时器会多转 4~7 秒。
+5. **对话框卡片提成 `DialogCard`**(D-107):C2a 的内联版逐行等价搬运;`Panel`/`Busy` 保持内联。
+6. 其余框架差异(`Visibility`→`IsVisible`、`FrameworkElement`→`Control`、`Cursor`、`PointerPressed/Released`)
+   沿用 C2a 已经落地的映射表,本包没有新增映射。
+
+### 7. 测试(新增 60 条;总数 2631 → 2691)
+
+四个新文件共 **54 个测试方法**,`[Theory]` 展开后 **60 条用例**:
+
+- `C2c1ToastTests.cs`(23 个方法 / 29 条):四种 kind 的图标码位 + 颜色令牌 + 图标字体(4 条)、
+  卡片几何(圆角/内边距/描边/下边距/底色/描边色/三个孩子/色条宽/正文面板宽/光标)、
+  两处间距、标题与正文的显示、正文空白不加行(2 条)、超 220 字截断、正好 220 字不截断、
+  进宿主(右上角 StackPanel + 边距)、三张卡的堆叠顺序与间距、4 张上限顶掉最老的、
+  顶掉时自己那张表的停法、4 秒 ×3 + 7 秒的延时、到点关掉且不留计时器、点一下只关一张并重排、
+  右键不关、悬停暂停 / 移开续上、`Motion.Enabled == false` 的进场与关闭都同步落终态、
+  重复关同一张是 no-op、`Dispose` 收摊(A-18 类泄漏断言)、默认计时器在无时钟下不挂、默认 kind 是 Info。
+- `C2c1WiringTests.cs`(11 个方法 / 11 条):`AppServices.Toast` 在外壳浮层里出卡片、
+  默认参数、6 次 Toast 堆叠后剩 4 张且顺序正确、没有窗口不抛、关窗后不抛且不留计时器、
+  跨线程调用被投回 UI 线程、sink 在夹具收摊后还原且不再往旧外壳塞、`window.Toast` 的默认参数、
+  点一下撤掉外壳里的卡片、`ClearToasts` 一次收干净、`Dlg.Form` 的「填写有误」现在能出声。
+- `C2c1DialogCardTests.cs`(20 个方法 / 20 条):卡片几何与三行布局、`Min(width,380)` 两个分支、
+  标题/正文与滚动容器的属性、确认片的按钮组(取消在前、危险/普通两种取变体)、
+  确定解析 true、取消解析 false、Esc = 取消、点遮罩 = 取消、Alert 一个按钮且关掉算 true、
+  Prompt 去空格 / 取消 null、Choose 每项一个按钮 + 取消 -1、Form 返回 collect 的值、
+  Form 抛异常时卡片不关、`Layer.Card` 指回自己那张、关掉卡片不留挂着的动画、
+  默认按钮文案与 `I18n.L` 同键、`Panel` 的卡片不是 `DialogCard`、最后一层关掉时撤模糊。
+- 纪律:碰 Avalonia 的用例体**一律**经 `AvaloniaSession.Run(...)`(D-79),
+  事件全部 `RaiseEvent` 程序化触发(**没有模拟输入设备**),自动关闭由注入的 `FakeToastTimer`
+  确定性驱动(**没有 `Thread.Sleep` 去等 4 秒**),宿主窗口 / 全局开关(`Motion.Enabled`、
+  `RequestedThemeVariant`、`Dlg.Host`/`BlurTarget`、`AppServices.ToastSink`)/计时器
+  全部在 `using` / `finally` 里收干净。
+
+写用例时踩到 5 处我自己的期望写错(都不是产品代码的 bug,记下来免得后人重踩):
+
+1. **无时钟进程里 `LiveTimerCount` 恒 0**:默认计时器在测试里根本不挂(D-105),
+   我一开始按"托盘里应该有一个计时器"写,四条用例一起红 —— 改成"无时钟 = 0",
+   4 秒 / 7 秒那条改由注入的假计时器验;
+2. **`Cursor` 没有值相等语义**:`Assert.Equal(new Cursor(StandardCursorType.Hand), card.Cursor)` 报
+   `Expected: Hand Actual: Hand`(比的是引用),改成按 `ToString()` 对拍标准光标名;
+3. **`card.BodyPanel` 是纵向**(`Ui.V(2.0, 标题, 正文)`),我一开始写成 `Horizontal`;
+4. **`Dlg.Alert` 返回的是 `Task` 不是 `Task<bool>`**(Windows 侧签名就是 `Task`),
+   所以"关掉算 true"只能断言"任务完成 + 浮层关了",不能读 `Result`;
+5. **遮罩那一路要点左键按下才算**:`Dlg.Push` 的遮罩处理读
+   `e.GetCurrentPoint(mask).Properties.IsLeftButtonPressed`,而 `new PointerPointProperties()` 全是 false,
+   所以要用双参构造 `new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed)`
+   才能表达"左键按下";顺带发现 `PointerPressedEventArgs` 的第 8 个参数是 `int clickCount`,**不是** `MouseButton`。
+
+另外首轮构建带出 4 条 `xUnit2017` + 1 条 `xUnit2000`(用 `Assert.True(coll.Contains(x))` 之类),
+已按分析器的建议改成 `Assert.Contains` / 参数顺序对调,警告回到"只有 NU1900 + SYSLIB0014 ×1"。
+
+### 8. 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | 开工前 `%LOCALAPPDATA%\TipCL` 测量 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与 Lead 基线一致 |
+| 2 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 错误**;**7 个警告 = `NU1900` ×6 + `SYSLIB0014` ×1**(按警告码分组核过;首轮的 5 条 xUnit 分析器警告已清零) |
+| 3 | `dotnet test TipCL.Mac.sln -c Release --no-build` 第 1 次 | 退出码 **0**:`已通过! - 失败: 0,通过: 2691,已跳过: 0,总计: 2691,持续时间: 12 s - TipCL.Tests.dll (net8.0)` |
+| 4 | 同上 第 2 次 | 退出码 **0**,同上逐字一致 |
+| 5 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` 第 1 次 | 退出码 **0**:`总计 2691 个用例,通过 2691,失败 0,跳过 0,不支持 0`,末尾 `in-proc 测试全绿` |
+| 6 | 同上 第 2 次 | 退出码 **0**,同上逐字一致;**不支持 0** |
+| 7 | `--smoke --theme light` | 退出码 **0**,**21823 字节**,SHA256 `8336CA136B4F309D8275490578B8759E680AB5A1D8B861659D082802FE60449B` |
+| 8 | `--smoke --theme dark` | 退出码 **0**,**18200 字节**,SHA256 `DBD3C171D7E176F12F9CE05335E7E96A0CE21F1135A4CC1E2CCADD5564AD604E` |
+| 9 | `--smoke --theme blue` | 退出码 **2**(参数错误,打印用法 —— 与 C2b/C2d 一致) |
+| 10 | 收工后 `%LOCALAPPDATA%\TipCL` | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,**与开工前完全一致** |
+| 11 | 残留进程 `testhost` / `TipCL` / `java` / `adb` | **0 / 0 / 0 / 0**(并逐个核过没有监听端口) |
+| 12 | `%TEMP%` 下 `tipcl*` 目录 | **89 个**,本次会话新建 **0 个**(最近改写的 `tipcl-probe` 是 12:14 由**另一会话**维护的,它有完整的 launcher home 目录树;本包用例的数据全部落在 `tests\TipCL.Tests\bin\Release\net8.0\test-home\<guid>` 下) |
+| 13 | `git diff --name-status 27da085 HEAD -- src/TipCL.Core` | **空** |
+| 14 | `src\TipCL.Core\*.cs` 对 Windows 源 SHA256(排除 `obj\`/`bin\`) | mac 侧 248 个:有对应物 **238** / 完全一致 **216** / 有改动 **22** / 无对应物 **10**,与基线**完全一致** |
+| 15 | 新建 / 修改文件的字节级编码核验(`ReadAllBytes`:BOM = 前 3 字节 `EF BB BF`;CR = 有没有 `0x0D`;另数 U+FFFD) | 9 个文件全部 **BOM=False / CR=0(纯 LF)/ U+FFFD=0**,与仓库其它 `.cs` 一致 |
+
+**第 7/8 条为什么与 C2b 基准逐位相同**:本包新增的 Toast 层在**没有 Toast 的时候什么都不画**
+(宿主 `ToastHost` 面板本来就是 C2b 建好的空 StackPanel,`ToastLayer` 不弹卡就不往它里面加东西,
+`--smoke` 路径也不会调 `AppServices.Toast`),标题栏 / 侧栏 / 页面底纹一行未动 ⇒ 像素不变。
+
+### 9. 未验证项(本机是 Windows,没有 Mac)
+
+1. **macOS 真机**:Toast 在 Avalonia.Native 下的观感(`BoxShadow` 的 22/0.14/4、右上角堆叠与
+   屏幕边缘的距离)、真桌面下 `Motion.SlideIn/SlideOut` 的动画播放、`DispatcherTimer` 真的到点
+   (本包的 4 秒 / 7 秒只在注入的假计时器上验过,**没有一次真实的 4 秒等待**)、悬停暂停的手感 ——
+   全部**未验证**。
+2. **"动画开着"那条分支在测试进程里结构上不可达**(`Motion.Enabled` 需要真生命周期,而 Avalonia
+   初始化后禁止再改 `ApplicationLifetime`,C1b-fix 又只允许 `AvaloniaSession` 一处起平台),
+   所以两条测试只验了"关掉动画时同步落终态"那一半。
+3. **`PageBase.EnableDrop` / `FileDrop` 未接**(属 C2c2),所以 C3 的拖拽路径在本包之后仍然不可用。
+4. **`Dlg` 的文件/文件夹选择路径**照旧未验证(需要真桌面 `IStorageProvider`)。
+5. `Point(0,0)` 的合成指针事件只走到**事件路由**这一层,没有经过平台输入栈
+   (headless 下不许模拟输入设备,这是红线要求的行为)。
+
+### 10. 遗留与风险
+
+1. **AI 工具审批卡(`Pages\ConfirmCard.cs`)没有搬**(D-104):它要 `AiRisk` / `ToolMeta` /
+   `AiUiText` / `AiIcons` / `MdView`,属 AI 全家(C7+)。**建议**:AI 页那包一起搬,
+   或者先派一个"AI 视觉基础设施"小包。**这一条需要 Lead 裁决**。
+2. **`Pages\Bubble.cs`(AI 对话气泡)也没有搬**:同上,属 AI 页(AiPage 那一包)。
+3. **`ProfileWidgets` / 下载任务底条 / 标题栏圆片 / DropVeil / Backdrop / Wallpaper / SideFrost /
+   ImeGuard / AccountGate / Thumbs / LoaderIcons** 仍属 C2c2(本包没碰)。
+4. **`ToastLayer` 的 4 张上限在"退场动画进行中"时按宿主孩子数算**(与 Windows 同口径):
+   真桌面下如果连着弹 5 张,第 5 张会把最老那张直接摘掉(而不是等它退完场)。行为与 Windows 一致,
+   但观感上可能出现一次"闪一下";要改成等退场可以先记进 D 阶段。
+5. **`AppServices.ToastSink` 在窗口关闭后仍指着那个外壳**(Windows 也是"方法长在窗口上",
+   没有反注册这一步)。本包的做法是:`Closed → ToastLayer.Dispose()` 把计时器与孩子清掉,
+   之后再来 Toast 只会往一个不在可视树上的面板加控件(不抛、不改状态,用例钉住了)。
+   若 Lead 认为该在 `Closed` 里把 sink 置空,**不要在 `MainWindow` 里直接置空** —— 多个窗口
+   (测试里就是多个)会互相把对方的 sink 清掉;正确做法是"只有 sink 还指着我时才清",本包没有做。
+6. **`C2c1WiringTests` 与 `C2bWiringTests` 都动 `AppServices.ToastSink`**,但它们各自用
+   `ShellFixture` 的快照在 `Dispose` 里还原,所以不会串;仍然建议 C3 起页面后复核一次
+   "页面里的 Toast 会不会在关窗后还被调到"(现在不会抛,只会静默)。

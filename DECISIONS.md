@@ -1386,3 +1386,80 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
 4. **用例体一律 `async Task` + `await`**(不用 `.GetAwaiter().GetResult()`):否则 xUnit1031 会给 66 条警告
    (实测),而"NU1900 之外只允许 SYSLIB0014 一处"是硬要求。Avalonia 用例体仍必须同步(那条走
    `AvaloniaSession` + `ConnectBlocking`)。
+
+## D-104 C2c1:任务书点名的两个文件与仓库里的实际内容不符(如实记录,不擅自改口径)
+
+- 任务书写「port `Services/Bubble.cs`(the toast bubble)」与「port `Pages/ConfirmCard.cs`(the
+  confirm/message card)」。实测 `D:\项目\tipcl\windos\tipcl\src\TipCL\`:
+  1. **没有** `Services\Bubble.cs` 这个文件。`Pages\Bubble.cs`(454 行)是 **AI 对话气泡**:
+     `<think>` 折叠、Markdown 渲染(`MdView`)、编辑 / 撤回 / 重发 / 投票,依赖
+     `AiIcons` / `ThinkFold` / `AiPage` —— 属 AI 全家(C7+);
+  2. `Pages\ConfirmCard.cs`(271 行)是 **AI 工具审批卡**「助手要执行一个操作,需要你确认」,
+     只被 `Pages\AiPage.cs:2614` 与 `Pages\AiFixWindow.cs:761` 用到,依赖
+     `AiRisk` / `ToolMeta` / `AiUiText` / `AiIcons` / `MdView.Mono` —— 同样属 AI 全家。
+     **它不是 `Dlg` 的卡片**;
+  3. **真正的 Toast 卡片**是 `MainWindow.xaml.cs:1179-1255` 的 `MainWindow.Toast`(块内建的 Border),
+     Windows 侧没有把它做成独立类;
+  4. **真正的"确认 / 消息卡片"**是 `Services\Dlg.cs:185-213` 的 `Shell`(`Confirm` / `Ask` /
+     `Alert` / `Prompt` / `Choose` / `Form` 共用),C2a 已经**逐行等价**地移植进 mac 的 `Dlg.cs`。
+- **取舍(无人值守下最保守的一支)**:按"描述"而不是"文件名"办事 —— 移植 3 与 4;
+  **不**移植 1、2。理由是它们只能连带移植 `AiIcons` / `AiRisk` / `AiUiText` / `MdView` 等 AI 页
+  基础设施才编译得过,而任务书同时写着「do NOT port any page」、红线也写着"不许移植任何页面":
+  **这两条要求在 `ConfirmCard.cs` 上是直接冲突的**,而"不搬"这一支不违反任何一条红线。
+- **留给 Lead 裁决**:若确实要 C2c1 就搬 AI 审批卡,需要先派一个"AI 视觉基础设施"小包
+  (`AiIcons` / `AiRisk` / `AiUiText` / `MdView` 的 Markdown 渲染),否则它在 mac 侧编译不过。
+  本包按红线选择不做,并把两条都记进 PROGRESS 的遗留(需要裁决)。
+
+## D-105 C2c1:Toast 的自动关闭计时器 —— 离屏/测试里不挂,顶掉最老一张时顺手停表
+
+- **默认计时器只在真桌面挂**:`ToastLayer.DefaultTimer` 以 `Motion.HasClock`
+  (`Application.Current?.ApplicationLifetime is not null`)作闸。理由:离屏 `--smoke` 与测试进程里
+  没有人推进 Dispatcher 的时钟 —— Windows 那边同样收不到 `Tick`(**行为等价**),但它会**留着**
+  一个注册在 Dispatcher 上的 `DispatcherTimer` 句柄;mac 侧干脆不挂,"没有计时器"就是"没有泄漏"。
+  真桌面生命周期下与 Windows 完全一致(到点先 `Stop()` 再关卡片,错误 7 秒、其余 4 秒)。
+- **4 秒 / 7 秒怎么验**:`ToastLayer` 的构造函数收一个注入缝
+  `delegate IDisposable? ToastTimer(TimeSpan delay, Action onFire)`(返回 `null` = 这次没起计时器)。
+  用例注入 `FakeToastTimer`(记账 + 手动点火),于是"到点关掉"确定性地验,**不用 `Thread.Sleep`**、
+  也不会留下真实计时器;`LiveTimerCount` 直接断言"还挂着的计时器数"。
+- **顶掉最老一张时顺手停表**(本包对 Windows 的唯一一处收严):Windows 的
+  `while (ToastHost.Children.Count >= 4) ToastHost.Children.RemoveAt(0);` 只摘孩子,
+  那张卡片的计时器会一直转到自己到点(最长 7 秒)才在 `Tick` 里被 `Stop()` 收掉。
+  mac 侧在顶掉时连计时一起 `Dispose` —— 对外行为等价(那张卡已经不在宿主里,`Kill()` 本来也
+  只检查 `Contains`),但"没有活的计时器"这条纪律能直接断言。
+- **窗口关闭即收摊**:`MainWindow` 的构造里挂 `Closed → ToastLayer.Dispose()`(停掉所有计时器 + 清空宿主),
+  所以关窗之后再有人 `AppServices.Toast(...)` 也不会留残留计时器(有用例钉住)。
+
+## D-106 C2c1:Toast 提成 `ToastLayer` + `ToastCard`;`AppServices.ToastSink` 在这里接上
+
+1. **结构**:`Services\ToastCard.cs` 里两个类型 —— `ToastCard`(那块卡片:色条 / 图标 / 标题 / 正文,
+   几何与取色照 Windows 抄)与 `ToastLayer`(宿主管理:4 张上限、进 `Motion.SlideIn`、
+   退场 `Motion.SlideOut` 后摘掉、点一下关掉、悬停暂停、计时器收摊)。理由与 C2a 提 `Dlg.Push`、
+   C2b 提 `PageHost` 一样:离开窗口才能单独钉住"堆叠 / 自动关闭 / 不泄漏"。
+2. **接线**:`MainWindow` 构造里 `AppServices.ToastSink = Toast;`,而 `MainWindow.Toast(string, string,
+   ToastKind)` 是 Windows `MainWindow.Toast` 的逐行移植(非 UI 线程先 `Dispatcher.UIThread.Post` 回来)。
+   这条把 C2a 的 D-88、C2b 的 D-95 两处"刻意的静默"收口:`Dlg.Form` 的「填写有误」、
+   页面里所有 `AppServices.Toast(...)`、`PageBase.Toast` 从这一刻起都出声。
+3. **没有窗口也不会炸**(红线要求):`AppServices.ToastSink` 为空时照旧只写 `Debug.WriteLine`
+   (D-88 的口径不变);外壳关掉之后 sink 还指着那个关闭窗口时,也只是往一个不在可视树上的
+   `StackPanel` 加控件(没有时钟 ⇒ `Motion` 落终态),用例两个分支都钉住了。
+4. `C2bWiringTests` 里那条"ToastSink 留空"的断言按 **D-95 的明确指示**改成"接上之后"的语义:
+   原来断言 `Assert.Null(AppServices.ToastSink)` + "调一次 Toast 后宿主仍然空",现在断言
+   sink 非空 + "调一次就在宿主里出对应 kind 的卡片"。**改强,不是改弱**;没有删用例、没有加 `Skip`。
+
+## D-107 C2c1:"对话框卡片" = Windows `Dlg.Shell` 那块,提成 `DialogCard`
+
+- `Services\DialogCard.cs` 的 `DialogCard` 就是 Windows `Dlg.Shell`(`Dlg.cs:185-213`)那块 Border:
+  标题(H2)+ 正文(滚动)+ footer 的 `Auto,*,Auto` 三行、圆角 10、内边距 (22,18,22,18)、描边 1、
+  `MinWidth = Min(width, 380)` / `MaxWidth = width`、玻璃底 + 玻璃描边、40/0.28/10 阴影。
+  C2a 已经把它内联在 `Dlg.cs` 的 `Shell` 里,本包只是**逐行等价地搬运**(构造与取值一字不变),
+  让 `Confirm` / `Ask` / `Alert` / `Prompt` / `Choose` / `Form` 都渲染在这一个具名类型上,
+  并让它能被单独钉住(标题 / 正文 / 按钮组 / 宽度 / 取色 / 三行布局)。
+- `DialogCard.ConfirmFooter(ok, cancel, danger)` 装的是 Windows `Dlg.Ask` 那对按钮(取消在前、
+  右对齐、间距 8、危险操作时确定用 `btn-danger`),`Dlg.Ask` 现在直接用它。
+- **`Panel` 与 `Busy` 保持各自的内联卡片**(Windows 也是这么写的:内边距 (20,16,20,18)、
+  宽度夹 420、标题旁有关闭按钮)。用例明确断言"`Panel` 的 `Layer.Card` **不是** `DialogCard`",
+  免得以后有人以为所有对话框都走同一个卡片。
+- **公开面零改动**:`Dlg` 的公开成员名字 / 签名 / 默认值 / 回调形状一个字没动;
+  `DialogCard` / `ToastCard` / `ToastLayer` / `ToastTimer` 全是新增的 `internal` 成员。
+- **顺带更正 C2b 的一条链**:D-95 说"C2c 把外壳的 Toast 方法挂到 `ToastSink`" —— 实际落地的是
+  `AppServices.ToastSink = Toast`(外壳的方法),不是"外壳另开一个 Toast 方法"的第二种写法。
