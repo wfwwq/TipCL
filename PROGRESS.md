@@ -25,7 +25,7 @@
 | B3 | 打包 | ✅ 完成(见下;**新增 116 条用例,总数 1680 → 1796,两条通道都 1796/1796 全绿**;`tools\package.ps1` + 打包器实跑通过:443 条目、85,812,352 字节 tar.gz、两次运行 SHA256 完全一致;审草稿时改了两处 —— tar 从 Pax 换 Ustar(确定性)、暂存目录只删 `TipCL.app`) |
 | C1a | 主题色板 + 图标字体 + Lucide 图标(Avalonia 移植) | ✅ 完成(见下) |
 | C1b | `Themes/Controls.axaml` 移植 | ✅ 完成(见下;**新增 257 条用例,总数 1900 → 2157,两条通道都 2157/2157 全绿**;64 个 WPF 键全部有落点,40 个具名样式映射成类名;smoke 因隐式 TextBlock 字体变化为 3956/3941,**待 Lead 裁决基准**,见小节第 7/8 条) |
-| C1c | `Services/Ui.cs` / `UiExt.cs` 门面 | 未开始 |
+| C1c | `Services/Ui.cs` / `UiExt.cs` 门面 | ✅ 完成(见下;**新增 100 条用例,总数 2157 → 2257,两条通道各连跑 2 次都 2257/2257 全绿**;`Ui.S` 的返回类型被迫由 `Style` 改成类名、`Pw` 返回 `TextBox`,逐条列在差异表里;smoke 与裁决基准逐位一致) |
 | C2-C8 | 外壳 + 页面 | 未开始 |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
@@ -3495,4 +3495,175 @@ System.InvalidOperationException : Call from invalid thread
    没有重复逻辑;`TimeoutMilliseconds` 是 `internal const`,便于将来调。
 4. 探针/一次性脚本都在 `artifacts\`(git 忽略)下,`tests\TipCL.Tests` 里**没有**留任何 `Zz*ProbeTests.cs`
    或其它临时文件(已按任务书核对)。
+
+---
+
+## C1c `Services/Ui.cs` / `UiExt.cs` 门面移植(Avalonia 11)
+
+本包**只做门面**:没有建任何页面(C2+),没有改 C1b 的样式表内容一个字,没有改色板,没有改 `MainWindow.cs` /
+`SmokeRunner`,没有改 `src\TipCL.Core\` 一个字节,没有改任何既有测试,没有删/弱化断言,没有加 `Skip`,
+没有扩 `NoWarn`,没有引新 NuGet 包。
+
+### 做了什么
+
+1. **`src/TipCL.App/Services/Ui.cs`(新建)** —— Windows 版 `Services\Ui.cs`(693 行 / 约 40 个构建器)的门面。
+   公开成员**一个不缺**:`S` `Res` `Txt` `H1` `H2` `H3` `Muted` `Small` `Mono` `Glyph` `V` `H` `G` `Card` `Pane`
+   `WindowPctOf` `Scroll` `VirtualList<T>` `Sep` `Spring` `Btn` `IconBtn` `Input` `Multi` `LogBox` `Pw` `Combo`
+   `Check` `Switch` `Sld` `Prog` `Tag` `Badge` `Field` `Section` `Empty` `Skeleton` `RowCard` `OpenUrl`
+   + 嵌套的 `WindowPctConverter`。
+2. **`src/TipCL.App/Services/UiExt.cs`(新建)** —— `Dyn` / 两种 `M` / `W` / `MinW` / `Hh` / `At` / `Add` /
+   `Left` / `Right` / `Center` / `Stretch` / `VCenter` / `VTop` / `Wrap` / `Trim` / `Tip` / `Tag2` / `Hide` / `Show` /
+   `Shown` / `Str` / `Fill`,方法名与参数默认值照抄。
+3. **`src/TipCL.App/Services/SPanel.cs`(新建)** —— 量/排逻辑逐条对齐 WPF 那份(间距 = Spacing ×(可见子项数 − 1),
+   隐藏子项不量不排不占间距);`Orientation` / `Spacing` 加了 `InvalidateMeasure()`(公开成员不变)。
+4. **`src/TipCL.App/Services/SmoothScroll.cs`(新建)** —— `Offset` / `OffsetProperty` / `BindWindowMaxHeight`
+   + 滚轮平滑(230ms 三次缓出)。
+5. **字节级复制**(`Copy-Item`,SHA256 逐项校验相等):`Services\BtnKind.cs`、`Services\ToastKind.cs`;
+   **`UiPrefs.cs`** 与 **`Clamp.cs`** 按 Windows 的位置放到 `src\TipCL.App\` 根(namespace `TipCL`)。
+   `Clamp` 不在任务书清单里,但 `Ui.Sld` / `SmoothScroll` 依赖它(见 D-85)。
+6. **WPF 机制 → mac 等价物**:`Style="{StaticResource X}"` → `StyleKeys.Apply(control, "X")`(加类名);
+   `SetResourceReference` → `DynamicResourceExtension`(真动态资源,主题变体切换会重取);
+   `Visibility` → `IsVisible`;`ToolTip` 属性 → `ToolTip.SetTip`;`Cursors.Hand` → `new Cursor(StandardCursorType.Hand)`;
+   `AutomationProperties.SetName` 同名可用。
+7. 明确**没有移植**的两处 WPF 专属:`VirtualList` 的 `ScrollViewer.SetCanContentScroll`(Avalonia 本来就虚拟化)
+   与 `SmoothScroll` 的 `CanContentScroll` / `PanningMode`(见 D-82)。
+
+### 新增/修改文件
+
+| 文件 | 说明 |
+|---|---|
+| `src/TipCL.App/Services/Ui.cs` | **新增**(门面,约 850 行) |
+| `src/TipCL.App/Services/UiExt.cs` | **新增** |
+| `src/TipCL.App/Services/SPanel.cs` | **新增** |
+| `src/TipCL.App/Services/SmoothScroll.cs` | **新增** |
+| `src/TipCL.App/Services/BtnKind.cs` | **新增**(字节级复制) |
+| `src/TipCL.App/Services/ToastKind.cs` | **新增**(字节级复制) |
+| `src/TipCL.App/UiPrefs.cs` | **新增**(字节级复制) |
+| `src/TipCL.App/Clamp.cs` | **新增**(字节级复制;见 D-85) |
+| `tests/TipCL.Tests/C1cFixtures.cs` | **新增**(挂窗口的 `UiHost` + 期望值权威副本) |
+| `tests/TipCL.Tests/C1cUiTests.cs` | **新增**(文本 / 图标 / 面板 / 栅格 / 卡片 / 按钮 / S·Res / 百分比 / 滚动 / `UiExt`) |
+| `tests/TipCL.Tests/C1cUiInputTests.cs` | **新增**(输入控件 + Field/Section/Empty/Skeleton/RowCard) |
+
+没有改 `MainWindow.cs`、`Smoke\`、`Themes\`(C1b 的 `Controls.axaml` / `StyleKeys.cs` / `Palette*` 一行未动)、
+`App.cs`、`src\TipCL.Core\`、测试隔离三件、`Directory.Build.props`、`TipCL.Mac.sln`。
+
+### WPF → Avalonia 差异表(公开成员里有必要改动的**全部**)
+
+| Windows 公开面 | mac 侧 | 原因 / 等价物 |
+|---|---|---|
+| `Ui.S(string) : Style` | `Ui.S(string) : string`(**类名**) | Avalonia 没有"按键取 Style 挂控件"的机制;返回空壳 Style = 桩(见 D-80) |
+| 全部方法的 `UIElement` / `FrameworkElement`(参数与返回) | `Control` | Avalonia 没有这两个类型;`Control` 是 L1 的对应物(D-70 同一口径) |
+| `V(double, params UIElement?[])` / `H(...)` | `V(double, params Control?[])` | 同上(参数类型;名字/顺序/默认值不变) |
+| `Spring() : FrameworkElement` | `Spring() : Control` | 同上 |
+| `Btn(text, kind, RoutedEventHandler?, glyph)` | `Btn(text, kind, `**`EventHandler<RoutedEventArgs>?`**`, glyph)` | Avalonia 没有 `RoutedEventHandler`;lambda 调用点写法不变 |
+| `IconBtn(..., RoutedEventHandler?, size)` | `IconBtn(..., `**`EventHandler<RoutedEventArgs>?`**`, size)` | 同上 |
+| `RowCard(content, MouseButtonEventHandler?, padding)` | `RowCard(content, `**`EventHandler<PointerReleasedEventArgs>?`**`, padding)` | `MouseLeftButtonUp` → `PointerReleased`(内部判 `InitialPressMouseButton == Left`,语义等价) |
+| `Pw(double) : PasswordBox` | `Pw(double) : `**`TextBox`** | Avalonia 11 没有 `PasswordBox`(D-75);掩码走 `PasswordChar` = `●`(U+25CF,WPF 默认值) |
+| `Scroll(UIElement content, double) : SmoothScroll` | `Scroll(Control content, double) : SmoothScroll` | 参数类型 |
+| `VirtualList<T>(Func<T, UIElement>, double) : ListBox` | `VirtualList<T>(Func<T, Control>, double) : ListBox` | 参数类型;**实现**从 WPF `FrameworkElementFactory`+`IValueConverter` → `FuncDataTemplate<T>`,`ItemContainerStyle` → `ItemContainerTheme`(签名不变) |
+| `Card/Pane/Tag/Badge/Skeleton/RowCard` 的 `UIElement?` 参数 | `Control?` | 参数类型 |
+| `Field(string, UIElement, string?, double)` / `Section(string, string?, UIElement?)` | `Field(string, Control, ...)` / `Section(string, string?, Control?)` | 参数类型 |
+| `UiExt.At<T>(this T, ...) where T : UIElement` | `where T : Control` | 同上 |
+| `UiExt.Dyn<T>(this T, DependencyProperty, string)` | `Dyn<T>(this T, AvaloniaProperty, string)` | `DependencyProperty` 在 Avalonia 是 `AvaloniaProperty`;内部用 `DynamicResourceExtension` |
+| `UiExt.Hide/Show/Shown`(`Visibility`) | `IsVisible` | Avalonia 11 没有 `Visibility` 属性 |
+| `UiExt.Shown(this UIElement) : bool` | `Shown(this Control) : bool` | 参数类型 |
+| `SmoothScroll.Offset : double` | `new double Offset`(**同名隐藏基类**) | Avalonia 的 `ScrollViewer` 自带 `Vector Offset`(D-82) |
+| `SmoothScroll.BindWindowMaxHeight(double, double)` | 签名不变 | 新增**internal** 可注入重载 `(Window? host, pct, floor)` 供单测(D-85) |
+| `Ui.WindowPctOf(double, double)` | 签名不变 | 新增 **internal** 纯算术重载 `(pct, floor, hostHeight)`(D-85);宿主高度改读 `Bounds.Height`(D-82) |
+| `Ui.GlyphFont`(internal 字段) | internal 字段 + 新增 internal const `GlyphFontUri` | 值 = `avares://TipCL/Resources/fonts/TipCLIcons.ttf#TipCL Icons, Segoe Fluent Icons, Segoe MDL2 Assets`(与 `Controls.axaml` 的 `F.Icon` 同一串) |
+| `Check` / `Switch` 的 `changed` | 签名不变 | 内部接 `IsCheckedChanged`(WPF 的 `Checked`/`Unchecked` 在 Avalonia 11.3 已过时,CS0618;见 D-81) |
+
+**新增的公开面**(Windows 没有):一个也没有(`GlyphFontUri` 是 internal)。
+
+### 降级与观感差异(逐条列,不静默丢)
+
+1. **Skeleton 的横扫动画**:WPF 用 `Motion.Loop`(无限循环);mac 侧 Motion 门面属 C2,改成
+   "`Lucide.MotionEnabled` + 只在真生命周期下起 1150ms 无限动画"。**离屏(`--smoke`)与测试进程里不起动画**
+   (否则收尾会被挂住,见 D-69),此时得到一块静态灰条(等价 WPF 关掉动画)。
+2. **SmoothScroll 的滚轮平滑**:同上;`MotionEnabled` 关掉或没有生命周期时退回系统滚动。
+   另:`CanContentScroll` / `PanningMode` 无对应属性(未移植,见 D-82)。
+3. **滚轮步进换算**:WPF 每格 `Delta` 是 120、Avalonia 是 1.0,所以先 `× 120` 再乘 WPF 那 0.95。
+   **这个换算没有在真机上验过滚轮一格的实际位移**(本机没有驱动真实滚轮)。
+4. **`OpenUrl` 失败不弹 Toast**(宿主属 C2):只 `Debug.WriteLine`,不抛异常、不改状态(D-84)。
+5. **`VirtualList` 的 `SetCanContentScroll(true)`**:Avalonia 没有对应设置(列表本来就虚拟化 + 像素滚动)。
+6. **`RowCard` 只认左键**(`PointerReleased` + `InitialPressMouseButton`),与 WPF 的 `MouseLeftButtonUp` 等价。
+7. **`Pw` 的掩码字符**由 WPF 默认的 `●` 显式写上(mac 侧是 `TextBox.PasswordChar`)。
+
+### 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | 开工前 `%LOCALAPPDATA%\TipCL` 测量 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与 Lead 基线一致 |
+| 2 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 错误**;7 条警告 = `NU1900`(镜像超时)+ `SYSLIB0014` **唯一一处**(`src\TipCL.Core\Launcher\Sync\PhoneClient.cs:116`);**没有 CS/CA/IDE/xUnit 警告**(按警告码分组核过) |
+| 3 | `dotnet test TipCL.Mac.sln -c Release --no-build` **第 1 次** | 退出码 **0**:`已通过! - 失败: 0,通过: 2257,已跳过: 0,总计: 2257` |
+| 4 | 同上 **第 2 次** | 退出码 **0**,同上逐字一致 |
+| 5 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` **第 1 次** | 退出码 **0**:`总计 2257 个用例,通过 2257,失败 0,跳过 0,不支持 0`,末尾 `in-proc 测试全绿` |
+| 6 | 同上 **第 2 次** | 退出码 **0**,同上逐字一致;**不支持 0**;总数与 `dotnet test` 相等 |
+| 7 | `dotnet test` **追加连跑 4 次**(抗抖动证据) | **4 / 4 全绿**,每次都是 `失败 0 / 通过 2257 / 总计 2257` |
+| 8 | `--smoke --theme light --out artifacts/c1c-light.png` | 退出码 0,**3956 字节**,SHA256 `9F93EF3E0775A7D3FC07787F36BCEAE2B855CD24E06420A4BDBEB90DFD628F8C`,**与裁决基准逐位相等** |
+| 9 | `--smoke --theme dark --out artifacts/c1c-dark.png` | 退出码 0,**3941 字节**,SHA256 `F687E6CD1CE48B078040040775167484890C58A18DFEBF4BD3B6125F151E117E`,**与裁决基准逐位相等** |
+| 10 | 收工后 `%LOCALAPPDATA%\TipCL` | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,**与开工前完全一致** |
+| 11 | 残留进程 `testhost` / `TipCL` / `java` / `adb` / `dotnet` | **0 / 0 / 0 / 0 / 0** |
+| 12 | `%TEMP%` 下 `tipcl*` 目录 | 现存 89 个,**本次会话(08:43 之后)新建 0 个** |
+| 13 | `git diff --name-status d1cfe68 HEAD -- src/TipCL.Core` | **空**;`git diff --name-status -- src/TipCL.Core` 也为空 |
+| 14 | `src\TipCL.Core\*.cs` 对 Windows 源 SHA256(排除 `bin\`/`obj\`) | mac 侧 248 个:有对应物 **238** / 完全一致 **216** / 有改动 **22** / 无对应物 **10**,与基线**完全一致** |
+| 15 | 新增/改动文件里搜 WPF 残留(`System.Windows` / `SetResourceReference` / `PasswordBox` / `DependencyProperty` / `Process.Start`) | 命中全在**注释**里(说明等价物),代码里 0 处 |
+
+**第 8/9 条为什么必须与基准逐位相等**:smoke 走的是 `MainWindow`(空外壳,不建任何页面),而 C1c 全是
+"页面会调用的构建器",没有任何一个被 smoke 路径调用 —— 所以门面加了多少代码都不该改动那两张图。
+结果逐位相等,正好反证了"没有动 C1b 的样式表、没有动窗口"。
+
+### 测试(新增 100 条,总数 2157 → 2257)
+
+- `tests/TipCL.Tests/C1cFixtures.cs`:`UiHost`(挂真窗口 + 推一次渲染计时器 + 还原 `RequestedThemeVariant`)、
+  `C1cExpected`(颜色/字重取值助手与**权威副本**)。C1b 那份 `Hosted` 是私有嵌套类,不能复用,所以这里另立一个。
+- `tests/TipCL.Tests/C1cUiTests.cs`(76 条:**按执行器打印的用例数**计,理论展开后):文本 6 个构建器的类名/字号/字重/前景色、
+  `Txt` 默认值与 bold、`Glyph` 的字体族与 4 个 `Ico` 码位、`V`/`H` 的顺序与**真布局里的间距**、
+  `G` 的行列定义与 5 个 Parse 分支、`Add`/`At` 的附加属性、`Card`/`Pane`/`Sep`/`Spring`/`Tag`/`Badge`、
+  7 个 `BtnKind` 的类名 + Primary 配色 + 图文结构 + 自动化名 + 点击回调、`IconBtn`、`S`/`Res` 的未知键兜底、
+  `WindowPctOf` 5 组、`WindowPctConverter` 的算术与 DoNothing、`Scroll` 的三项属性、`SmoothScroll.Offset`
+  与 MaxHeight 绑定、`VirtualList`(模板/裸容器**真生成出来**/行工厂真被调用/横向滚动条禁用)、
+  `UiExt` 的 11 组链式调用与语义。
+- `tests/TipCL.Tests/C1cUiInputTests.cs`(24 条):`Input`/`Multi`/`LogBox`/`Pw`/`Combo`/`Check`/`Switch`/`Sld`/`Prog`
+  的值、类名、类样式生效后的属性与回调;`Field`/`Section`/`Empty`/`Skeleton`/`RowCard` 的结构、颜色与点击。
+- **纪律**:所有碰 Avalonia 的用例体一律经 `AvaloniaSession.Run(...)`(D-79);程序化触发事件用
+  `RaiseEvent`(Btn 用 `Button.ClickEvent`,RowCard 自己造 `PointerReleasedEventArgs`),**不模拟输入设备**;
+  全局静态(`RequestedThemeVariant`)在 `UiHost.Dispose` 里还原;没有涉及文件、网络、进程、URL 的用例。
+- **6 条期望值一开始写错、已按实测改正**(不是代码 bug,记下来免得后人重踩):
+  1. `Field` 的栅格**只有两列没有行定义**(Windows 源就是 `G(null, "160,*")`);
+  2. 裸 `TextBlock` 的默认前景不是 null 而是 Avalonia 的 Black(Windows 的隐式 TextBlock 样式同样**不设**
+     Foreground,所以不断言颜色才是对的);
+  3. SPanel 作为窗口内容会被拉满,断言"面板自身尺寸"没意义,改成断言**子项位置**;
+  4. `B.BannerFill` 是**渐变刷**,不能用于颜色断言;
+  5. 色板里没有 `B.OkSoft`,只有 `B.Ok` / `B.OnOk`;
+  6. 断言了不存在的 `B.OkOn` 键 —— 已换成真实键。
+
+### 未验证项
+
+1. **macOS 真机**(Avalonia.Native / CoreText):字体族 `PingFang SC` / `Menlo` / 图标字体能否命中、控件观感、动画观感 ——
+   本机是 Windows,一律未验证。
+2. **真实滚轮平滑滚动的观感与每格位移**(没有驱动真实滚轮/指针);只验了 `Offset` 的设值与 MaxHeight 绑定算术。
+3. **真生命周期下的动画**:`Skeleton` 的横扫与 `SmoothScroll` 的缓出动画在测试与 `--smoke` 里**按设计不启动**,
+   所以它们的实际播放效果本机未验证(只验了静态形态与不启动路径)。
+4. **`OpenUrl` 未在测试里调用**(红线:测试不许起进程、不许开 URL),所以"真能打开浏览器"这一条未验证;
+   它转调的 `Crash.ShellOpen` 的 mac 分支是 B1 的既有实现。
+5. **`WindowPctOf` 从"当前主窗口"取高度这条路径未验证**:测试进程里没有 `ApplicationLifetime`,
+   只验了可注入高度的纯算术与绑定接线。
+6. **mac 上 `●`(U+25CF)在默认字体里是否有字形**:未验证(掩码字符取自 WPF 的默认值)。
+7. `PasswordChar` 的显示效果、`TextBox` 密码框的可访问性(读屏)未验证。
+
+### 遗留与风险
+
+1. **`Ui.S` 的返回类型变了(见 D-80)**:C2..C8 的页面不能照抄 `Style = Ui.S(x)`,要用 `StyleKeys.Apply`。
+   若 Lead 认为公开面必须保 `Style`,回退成本很小(见 D-80 的代价说明)——**这是本包唯一需要 Lead 复核的取舍**。
+2. **`Pw` 的调用点**要按 `TextBox` 处理(Avalonia 没有 `PasswordBox`);`Password` 属性不存在,取文本用 `Text`。
+3. **Motion 门面(C2)落地后**应把 `Skeleton` 的横扫与 `SmoothScroll` 的滚轮平滑改成走 Motion,并复核
+   `Lucide.MotionEnabled` 这个替身是否还该留着。
+4. **C2 接线后要复核三处**:`Ui.OpenUrl` 的失败提示(应换成 Toast)、`Ui.WindowPctOf` 的宿主高度来源
+   (现在是"桌面生命周期的主窗口")、`UiExt.Tip` / `ToolTip.SetTip` 与 C2 的 ToolTip 宿主是否有交互。
+5. `Clamp.cs` / `UiPrefs.cs` / `BtnKind.cs` / `ToastKind.cs` 是字节级复制来的:**后续包的清单里若再出现
+   这四个文件,不要重复搬**(否则会变成"文件名冲突"或重复定义)。
+6. `SPanel` 的两个属性加了 `InvalidateMeasure()`,这是相对 WPF 原版的一处**行为增强**(WPF 那份没有);
+   公开成员(类型/名字)不变,已记在 D-82 之外的类注释里。
+
 

@@ -1078,3 +1078,65 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   线程上抛;Dispatcher 线程与「构造控件的线程」必须是同一个,没有第三种写法。
 - **实测证据**:修完后 `dotnet test` **连跑 12 次全绿**(修复前 3 次里有 2 次红);两条通道各连跑 2 次都是
   2157/2157、0 失败。
+
+## D-80 `Ui.S(string)` 的返回类型由 WPF 的 `Style` 改成类名字符串
+
+- **为什么不能照抄**:WPF 的 `Style = S("Btn.Primary")` 是"按键取一份 Style 挂到控件上";Avalonia 没有这套机制
+  (样式靠选择器命中,`Control` 上既没有 `Style` 属性,`Style` 对象也没法"给控件加一个类")。
+- **两条候选**:(a) 仍然返回一个 `Avalonia.Styling.Style` —— 那只能是空壳,什么也不做,等于把功能桩掉
+  (GOAL §2.5 明令禁止);(b) 如实返回 C1b 的类名,调用点用 `StyleKeys.Apply(control, "Btn.Primary")`
+  或 `control.Classes.Add(Ui.S("Btn.Primary"))`。
+- **选了 (b)**:`Ui.S("Btn.Primary") == "btn-primary"`,认不出的键返回空串(与 `StyleKeys.Map` 一致,不抛)。
+  这属于"公开面被迫变化",已逐条写进 PROGRESS.md 的 C1c 差异表。
+- **代价 / 给 Lead 的提醒**:C2..C8 的页面不能照抄 Windows 的 `Style = S(x)` 写法(会编译不过),要用
+  `StyleKeys.Apply`。若 Lead 认为该保留 `Style` 返回类型,回退成本很小(改签名 + 把 `Ui` 内部的
+  `StyleKeys.Apply` 换成别的形态),但那样就有一个"什么也不做的门面方法"留在公开面上。
+
+## D-81 `Pw` 返回 `TextBox`;`Check` / `Switch` 用 `IsCheckedChanged`
+
+- `Pw` 按 D-75 的裁决改成 `TextBox` + `PasswordChar`,掩码字符取 WPF `PasswordBox` 的默认值 `●`(U+25CF),
+  调用点若要别的字符直接改 `PasswordChar`;类名仍是 C1b 的 `Pw -> .pw`。
+- `CheckBox.Checked` / `Unchecked` 在 Avalonia 11.3 上**已标记 `[Obsolete]`**(实测 CS0618 ×4),
+  等价且不过时的写法是 `ToggleButton.IsCheckedChanged`(`EventHandler<RoutedEventArgs>`,签名相同),
+  所以 `Check` / `Switch` 的 `changed` 参数接它 —— **公开签名一个字没改**(WPF 侧本来就是两个事件都接)。
+- 验收口径里的"警告只许 NU1900 + SYSLIB0014 ×1"因此保持,没有扩 `NoWarn`、也没有用 `#pragma`。
+
+## D-82 `SmoothScroll` / `WindowPctOf` 在 Avalonia 上的四处框架差异
+
+1. **`Offset` 与基类同名**:Avalonia 的 `ScrollViewer` 自带 `Vector Offset`,而 WPF 版的
+   `SmoothScroll.Offset` 是 `double`;保持 WPF 的公开类型,用 `new` 显式隐藏基类成员(类型不同,不能 override)。
+   `OffsetProperty`(静态字段)同样 `new`。设值经 `OnPropertyChanged` 转成基类的 `Vector`(等价 WPF 的
+   `ScrollToVerticalOffset`)。
+2. **`Window.ActualHeight` 在 Avalonia 不存在**(反射确认:只有 `Visual.Bounds`),所以
+   `Ui.WindowPctOf` 用 `Bounds.Height`,`BindWindowMaxHeight` 的绑定路径写 `Bounds.Height`。
+3. **`CanContentScroll` / `PanningMode` 没有对应属性**:Avalonia 本来就是像素滚动,触控板平移归平台手势层,
+   这两项没有移植(不影响滚动本身)。
+4. **滚动上限**:WPF 读 `ScrollableHeight`,Avalonia 用 `Extent.Height - Viewport.Height`。
+
+## D-83 骨架屏与平滑滚动的动画暂时挂在 `Lucide.MotionEnabled` 上
+
+- WPF 用 `Motion.Loop`(骨架横扫)与 `Motion.Enabled`(滚轮平滑);**mac 侧的 Motion 门面属 C2**(D-70),
+  所以 C1c 复用 `Lucide` 已经暴露的 `MotionEnabled` 开关,并沿用 Lucide 那条纪律:
+  **只在真正跑起来的应用生命周期下起动画**(`Application.Current?.ApplicationLifetime is null` 就不起)——
+  离屏(`--smoke`)与测试进程里没有东西推进动画时钟,无限/长动画会把收尾挂住(D-69 的实测教训)。
+- 被跳过动画时:Skeleton 得到一块静态灰条(等价 WPF 关掉动画),SmoothScroll 退回 `base.OnPointerWheelChanged`
+  的系统滚动。**没有静默少功能**:两者都是"关掉动画时的样子"。
+- C2 落地 `Motion` 后应该把这两处改成走 Motion(已写进 PROGRESS.md 的 C1c 遗留)。
+
+## D-84 `Ui.OpenUrl` 走 `Crash.ShellOpen`,失败只有调试输出
+
+- mac 的"用系统程序打开"已经在 B1 落地(`TipCL.Core.Launcher.Crash.ShellOpen` 的非 Windows 分支就是
+  `open <url>`),所以 `OpenUrl` 直接转调它,并**不再自己 `Process.Start`**(与红线"测试不许起进程"也天然一致)。
+- WPF 版失败时弹 `AppServices.Toast`;mac 版的 Toast 宿主属 C2,门面这一层不许依赖外壳,所以退化成
+  `Debug.WriteLine`(**不抛异常、不改状态**)。C2 接线 Toast 后应把这一行换成真提示。
+
+## D-85 C1c 附带搬进来的两个小文件与两个可注入重载
+
+1. **`src\TipCL.App\Clamp.cs`**:Windows 位置是工程根 `src\TipCL\Clamp.cs`(namespace `TipCL`),
+   是 `Ui.Sld` 夹值与 `SmoothScroll` 夹滚轮目标用的泛型小工具,**字节级复制**(ASCII,无 WPF 依赖)。
+   它不在任务书的编号清单里,但 `Ui.cs` 依赖它 —— 若 Lead 认为该归别处,直接搬走即可。
+2. **`src\TipCL.App\UiPrefs.cs`**:任务书点名要的纯 POCO,字节级复制。
+3. **两个 internal 可注入重载**(只为单测,不改公开面):
+   `Ui.WindowPctOf(pct, floor, hostHeight)`(纯算术)与
+   `SmoothScroll.BindWindowMaxHeight(host, pct, floor)`(离屏/测试进程里 `ApplicationLifetime` 是 null,
+   公开入口拿不到宿主窗口)。公开入口转调它们,行为不变。
