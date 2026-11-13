@@ -49,7 +49,7 @@ public class C3eMotionTests
             Assert.Equal(0.0, el.Opacity);
             Assert.Equal(C3eExpected.FadeInFromY, move.Y);
 
-            stage.Pump(() => el.Opacity >= 1.0 && Math.Abs(move.Y) < 1e-6);
+            stage.PumpSettled(() => el.Opacity >= 1.0 && Math.Abs(move.Y) < 1e-6);
 
             C3eFiles.Reached(1.0, el.Opacity, "FadeIn 的不透明度");
             C3eFiles.Reached(0.0, move.Y, "FadeIn 的竖直位移");
@@ -74,7 +74,7 @@ public class C3eMotionTests
             stage.Add(el);
 
             Motion.FadeIn(el, C3eExpected.FadeInMs, C3eExpected.FadeInFromY);
-            stage.Pump(() => el.Opacity >= 1.0 && C3eFiles.Translate(el).Y == 0.0);
+            stage.PumpSettled(() => el.Opacity >= 1.0 && C3eFiles.Translate(el).Y == 0.0);
 
             Assert.Same(group, el.RenderTransform);
             Assert.Equal(2, group.Children.Count);
@@ -108,7 +108,7 @@ public class C3eMotionTests
             Assert.Equal(0, Motion.RunningAnimationsSinceReset);
             Assert.Equal(0, Motion.StartedAnimations);
 
-            stage.Pump(() => el.Opacity >= 1.0 && el.RenderTransform is not null && C3eFiles.Translate(el).Y == 0.0);
+            stage.PumpSettled(() => el.Opacity >= 1.0 && el.RenderTransform is not null && C3eFiles.Translate(el).Y == 0.0);
             C3eFiles.Reached(1.0, el.Opacity, "延时 FadeIn 的不透明度");
             C3eFiles.Reached(0.0, C3eFiles.Translate(el).Y, "延时 FadeIn 的竖直位移");
             C3eFiles.Ended("延时 FadeIn");
@@ -128,7 +128,7 @@ public class C3eMotionTests
             Motion.HoverLift(hover, C3eExpected.HoverScale, C3eExpected.HoverLiftPx);
 
             C2c1Input.Enter(hover);
-            stage.Pump(() =>
+            stage.PumpSettled(() =>
             {
                 ScaleTransform sc = C3eFiles.Scale(hover);
                 return Math.Abs(sc.ScaleX - C3eExpected.HoverScale) < 1e-9
@@ -157,9 +157,9 @@ public class C3eMotionTests
             Motion.HoverLift(hover, C3eExpected.HoverScale, C3eExpected.HoverLiftPx);
 
             C2c1Input.Enter(hover);
-            stage.Pump(() => Math.Abs(C3eFiles.Translate(hover).Y + C3eExpected.HoverLiftPx) < 1e-9);
+            stage.PumpSettled(() => Math.Abs(C3eFiles.Translate(hover).Y + C3eExpected.HoverLiftPx) < 1e-9);
             C2c1Input.Leave(hover);
-            stage.Pump(() =>
+            stage.PumpSettled(() =>
             {
                 ScaleTransform sc = C3eFiles.Scale(hover);
                 return Math.Abs(sc.ScaleX - 1.0) < 1e-9 && Math.Abs(C3eFiles.Translate(hover).Y) < 1e-9;
@@ -190,7 +190,7 @@ public class C3eMotionTests
             Assert.Equal(22.0, hover.BoxShadow[0].Blur);
             Assert.Equal(3.0, hover.BoxShadow[0].OffsetY);
             Assert.Equal((byte)41, hover.BoxShadow[0].Color.A);
-            stage.Pump(() => Math.Abs(C3eFiles.Translate(hover).Y + C3eExpected.HoverLiftPx) < 1e-9);
+            stage.PumpSettled(() => Math.Abs(C3eFiles.Translate(hover).Y + C3eExpected.HoverLiftPx) < 1e-9);
             C3eFiles.Ended("HoverLift 阴影");
         });
     }
@@ -210,7 +210,7 @@ public class C3eMotionTests
 
             ScaleTransform scale = C3eFiles.Scale(el);
             using C3eWatcher watch = C3eWatcher.Watch(scale, ScaleTransform.ScaleXProperty);
-            stage.Pump(() => Math.Abs(scale.ScaleX - 1.0) < 1e-9 && Motion.RunningAnimationsSinceReset == 0);
+            stage.PumpSettled(() => Math.Abs(scale.ScaleX - 1.0) < 1e-9);
 
             Assert.True(watch.Writes > 0, "Pulse 应当真的写过缩放值");
             Assert.True(watch.Max > 1.0, "Pulse 应当真的鼓起来过,实际最大写值 " + watch.Max);
@@ -237,7 +237,7 @@ public class C3eMotionTests
 
             TranslateTransform move = C3eFiles.Translate(el);
             using C3eWatcher watch = C3eWatcher.Watch(move, TranslateTransform.XProperty);
-            stage.Pump(() => Math.Abs(move.X) < 1e-9 && Motion.RunningAnimationsSinceReset == 0);
+            stage.PumpSettled(() => Math.Abs(move.X) < 1e-9);
 
             Assert.True(watch.Writes > 0, "Shake 应当真的写过位移值");
             Assert.True(watch.Min < -1.0, "Shake 应当真的抖到左边过(第一个关键帧是 −7),实际最小写值 " + watch.Min);
@@ -273,7 +273,7 @@ public class C3eMotionTests
                 Motion.Shine(layer, tx, 800.0);
                 Assert.Same(tx, layer.RenderTransform);
 
-                stage.Pump(() => Math.Abs(tx.X - expectedEnd) < 1e-6 && Motion.RunningAnimationsSinceReset == 0);
+                stage.PumpSettled(() => Math.Abs(tx.X - expectedEnd) < 1e-6);
 
                 C3eFiles.Reached(expectedEnd, tx.X, "Shine 横扫的终点");
                 C3eFiles.Reached(0.0, tx.Y, "Shine 不该动竖直位移");
@@ -310,6 +310,7 @@ public class C3eMotionTests
 
             using C3eWatcher watch = C3eWatcher.Watch(rot, RotateTransform.AngleProperty);
             Assert.True(Motion.RunningAnimationsSinceReset >= 1, "Spin 起来之后应当有一条动画在跑");
+            // 转起来是无限循环,所以"转过多少"这条只能边泵边看(不能用"收摊"泵法)
             stage.Pump(() => watch.Max > C3eExpected.SpinDegrees / 4.0);
             // 至少转完两圈:证明"一圈跑完接着下一圈"这条重启路径真的接上了
             stage.Pump(() => Motion.StartedAnimations - before >= 3);
@@ -342,7 +343,7 @@ public class C3eMotionTests
             ScaleTransform scale = C3eFiles.Scale(el);
             Assert.Equal(C3eExpected.PopInFrom, scale.ScaleX);
             Assert.Equal(0.0, el.Opacity);
-            stage.Pump(() =>
+            stage.PumpSettled(() =>
                 Math.Abs(scale.ScaleX - 1.0) < 1e-9 && Math.Abs(scale.ScaleY - 1.0) < 1e-9 && el.Opacity >= 1.0);
 
             C3eFiles.Reached(1.0, scale.ScaleX, "PopIn 的 ScaleX");
@@ -368,7 +369,7 @@ public class C3eMotionTests
             Motion.PopOut(el, () => done = true);
 
             ScaleTransform scale = C3eFiles.Scale(el);
-            stage.Pump(() => done && Math.Abs(scale.ScaleX - C3eExpected.PopOutTo) < 1e-9 && el.Opacity <= 1e-9);
+            stage.PumpSettled(() => done && Math.Abs(scale.ScaleX - C3eExpected.PopOutTo) < 1e-9 && el.Opacity <= 1e-9);
 
             C3eFiles.Reached(C3eExpected.PopOutTo, scale.ScaleX, "PopOut 的 ScaleX");
             C3eFiles.Reached(C3eExpected.PopOutTo, scale.ScaleY, "PopOut 的 ScaleY");
@@ -394,7 +395,7 @@ public class C3eMotionTests
             TranslateTransform move = C3eFiles.Translate(el);
             Assert.Equal(C3eExpected.SlideInFromX, move.X);
             Assert.Equal(0.0, el.Opacity);
-            stage.Pump(() => Math.Abs(move.X) < 1e-9 && el.Opacity >= 1.0);
+            stage.PumpSettled(() => Math.Abs(move.X) < 1e-9 && el.Opacity >= 1.0);
 
             C3eFiles.Reached(0.0, move.X, "SlideIn 的 X");
             C3eFiles.Reached(0.0, move.Y, "SlideIn 不该动竖直位移");
@@ -419,7 +420,7 @@ public class C3eMotionTests
             Motion.SlideOut(el, () => done = true, C3eExpected.SlideOutToX);
 
             TranslateTransform move = C3eFiles.Translate(el);
-            stage.Pump(() => done && Math.Abs(move.X - C3eExpected.SlideOutToX) < 1e-9 && el.Opacity <= 1e-9);
+            stage.PumpSettled(() => done && Math.Abs(move.X - C3eExpected.SlideOutToX) < 1e-9 && el.Opacity <= 1e-9);
 
             C3eFiles.Reached(C3eExpected.SlideOutToX, move.X, "SlideOut 的 X");
             C3eFiles.Reached(0.0, el.Opacity, "SlideOut 的不透明度");
@@ -451,14 +452,14 @@ public class C3eMotionTests
 
             TranslateTransform move = C3eFiles.Translate(first);
             using C3eWatcher watch = C3eWatcher.Watch(move, TranslateTransform.YProperty);
-            stage.Pump(() => ReferenceEquals(host.Content, second));
+            stage.PumpSettled(() => ReferenceEquals(host.Content, second));
 
             Assert.True(watch.Writes > 0, "旧页应当真的被写过位移");
             Assert.True(watch.Min < -1.0, "旧页应当先向上滑出去(Y 写值到过 −8),实际最小写值 " + watch.Min);
             C3eFiles.Reached(1.0, first.Opacity, "旧页被 Reset 回了不透明度 1");
             C3eFiles.Reached(0.0, move.Y, "旧页被 Reset 回了位移 0");
 
-            stage.Pump(() => second.Opacity >= 1.0 && C3eFiles.Translate(second).Y == 0.0);
+            stage.PumpSettled(() => second.Opacity >= 1.0 && C3eFiles.Translate(second).Y == 0.0);
             C3eFiles.Reached(1.0, second.Opacity, "新页的不透明度");
             C3eFiles.Reached(0.0, C3eFiles.Translate(second).Y, "新页的位移");
             C3eFiles.TargetMustNotBeATransform("PageSwap");
@@ -485,14 +486,13 @@ public class C3eMotionTests
 
             TranslateTransform move = C3eFiles.Translate(first);
             using C3eWatcher watch = C3eWatcher.Watch(move, TranslateTransform.YProperty);
-            stage.Pump(() => ReferenceEquals(host.Content, second));
+            stage.PumpSettled(() => ReferenceEquals(host.Content, second));
 
             Assert.True(watch.Writes > 0, "后退时旧页应当真的被写过位移");
             Assert.True(watch.Max > 1.0, "后退时旧页应当向下滑出去(Y 写值到过 +8),实际最大写值 " + watch.Max);
             // 换页之后新页还要 FadeIn(不透明度 250ms + 位移 310ms):等它整条收摊再断言
-            stage.Pump(() => second.Opacity >= 1.0
-                && C3eFiles.Translate(second).Y == 0.0
-                && Motion.RunningAnimationsSinceReset == 0);
+            stage.PumpSettled(() => second.Opacity >= 1.0
+                && C3eFiles.Translate(second).Y == 0.0);
             C3eFiles.Reached(1.0, second.Opacity, "后退时新页的不透明度");
             C3eFiles.Reached(0.0, C3eFiles.Translate(second).Y, "后退时新页的位移");
             C3eFiles.Ended("PageSwap 后退");
@@ -520,7 +520,7 @@ public class C3eMotionTests
             stage.Frame();
             Motion.Stagger(host, 20.0, 120.0, 8.0);
 
-            stage.Pump(() => children.All(c =>
+            stage.PumpSettled(() => children.All(c =>
                 c.RenderTransform is not null &&
                 Math.Abs(c.Opacity - 1.0) < 1e-9 &&
                 C3eFiles.Translate(c).Y == 0.0));
@@ -550,7 +550,7 @@ public class C3eMotionTests
 
             Motion.StaggerItems(items, 20.0, 120.0, 8.0);
 
-            stage.Pump(() => items.All(c =>
+            stage.PumpSettled(() => items.All(c =>
                 c.RenderTransform is not null &&
                 Math.Abs(c.Opacity - 1.0) < 1e-9 &&
                 C3eFiles.Translate(c).Y == 0.0));
@@ -572,7 +572,7 @@ public class C3eMotionTests
             ProgressBar bar = stage.Add(new ProgressBar { Minimum = 0.0, Maximum = 100.0, Value = 0.0 });
 
             Motion.Progress(bar, 80.0);
-            stage.Pump(() => Math.Abs(bar.Value - 80.0) < 1e-9);
+            stage.PumpSettled(() => Math.Abs(bar.Value - 80.0) < 1e-9);
 
             C3eFiles.Reached(80.0, bar.Value, "Progress 的 Value");
             Assert.Equal("RangeBase.Value", Motion.LastPropertyName);
@@ -596,7 +596,7 @@ public class C3eMotionTests
             Motion.AnimateWidth(el, 180.0, 80.0, () => widthDone = true);
             Motion.AnimateHeight(el, 90.0, 80.0, () => heightDone = true);
 
-            stage.Pump(() => widthDone && heightDone);
+            stage.PumpSettled(() => widthDone && heightDone);
             C3eFiles.Reached(180.0, el.Width, "AnimateWidth 的宽度");
             C3eFiles.Reached(90.0, el.Height, "AnimateHeight 的高度");
             C3eFiles.Ended("AnimateWidth/Height");
@@ -616,7 +616,7 @@ public class C3eMotionTests
             bool done = false;
 
             Motion.CountUp(text, 0.0, 42.0, "0", 200.0, () => done = true);
-            stage.Pump(() => done && text.Text == "42");
+            stage.PumpSettled(() => done && text.Text == "42");
 
             Assert.Equal("42", text.Text);
             C3eFiles.Reached(0.0, Motion.RunningAnimationsSinceReset, "CountUp 不该留动画(它走定时器)");
@@ -850,7 +850,7 @@ public class C3eMotionTests
             bool done = false;
 
             Motion.RunForTest(C3eFiles.GoodAnimation(), el, () => done = true);
-            stage.Pump(() => done);
+            stage.PumpSettled(() => done);
 
             Assert.Equal(1, Motion.StartedAnimations);
             Assert.Equal(0, Motion.RunningAnimationsSinceReset);
@@ -901,7 +901,7 @@ public class C3eMotionTests
 
             Border el = stage.Add(C3eFiles.Card());
             Motion.FadeIn(el, C3eExpected.FadeInMs, C3eExpected.FadeInFromY);
-            stage.Pump(() => el.Opacity >= 1.0 && C3eFiles.Translate(el).Y == 0.0);
+            stage.PumpSettled(() => el.Opacity >= 1.0 && C3eFiles.Translate(el).Y == 0.0);
 
             C3eFiles.Reached(1.0, el.Opacity, "失败之后 FadeIn 仍然到位");
             Assert.True(Motion.StartedAnimations - before >= 2, "失败之后仍然起过动画");
@@ -921,7 +921,7 @@ public class C3eMotionTests
             Border el = stage.Add(C3eFiles.Card());
 
             Motion.FadeIn(el, C3eExpected.FadeInMs, C3eExpected.FadeInFromY);
-            stage.Pump(() => C3eFiles.Translate(el).Y == 0.0 && el.Opacity >= 1.0);
+            stage.PumpSettled(() => C3eFiles.Translate(el).Y == 0.0 && el.Opacity >= 1.0);
 
             Assert.Equal("TranslateTransform.Y", Motion.LastPropertyName);
             Assert.Contains("Border", Motion.LastTargetType!, StringComparison.Ordinal);
@@ -963,7 +963,7 @@ public class C3eMotionTests
 
             C3eFiles.RunAffected(which, stage);
 
-            stage.Pump(() => Motion.StartedAnimations > before && Motion.RunningAnimationsSinceReset == 0);
+            stage.PumpSettled(() => Motion.StartedAnimations > before);
             C3eFiles.TargetMustNotBeATransform(which);
             Assert.True(Motion.LastError is null, which + " 报错:" + Motion.LastError);
             C3eFiles.Ended(which);
@@ -992,7 +992,7 @@ public class C3eMotionTests
                 Motion.FadeIn(card, C3eExpected.FadeInMs, C3eExpected.FadeInFromY);
             }
 
-            stage.Pump(() => cards.All(c => c.Opacity >= 1.0));
+            stage.PumpSettled(() => cards.All(c => c.Opacity >= 1.0));
             stage.Frames(6);
 
             Assert.Equal(0, Motion.RunningAnimationsSinceReset);
@@ -1018,6 +1018,7 @@ public class C3eMotionTests
                 Motion.Spin(owner, rot, 0.08);
                 using (C3eWatcher watch = C3eWatcher.Watch(rot, RotateTransform.AngleProperty))
                 {
+                    // 无限循环,只能用"写没写过值"证明它真的在转(不能用"收摊"泵法)
                     stage.Pump(() => watch.Writes > 0);
                     Assert.True(watch.Max > 1.0, "关窗之前 Spin 应当真的转过,实际最大写值 " + watch.Max);
                 }

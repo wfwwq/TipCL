@@ -129,6 +129,18 @@ internal sealed class C3eStage : IDisposable
         }
     }
 
+    /// <summary>
+    /// 泵到"条件成立 **且** 本用例起的动画都收摊"。
+    ///
+    /// **只验终值不够**:<c>FillMode.Forward</c> 会在最后一个 tick 就把终值写上去,而任务本身可能还差一次收尾 ——
+    /// 那样 <see cref="C3eFiles.Ended"/> 里的"还有几条没结束"会偶发红(本包实测:进程内执行器 6 次里红 1 次,
+    /// 报"HoverLift 离开 → 本用例起的动画还有 3 条没结束")。所以终态一律用这个泵法。
+    /// </summary>
+    internal void PumpSettled(Func<bool> until, int timeoutMs = 9000)
+    {
+        Pump(() => until() && Motion.RunningAnimationsSinceReset == 0, timeoutMs);
+    }
+
     /// <summary>空推若干帧(给"没动画也该结束"的用例用)。</summary>
     internal void Frames(int count = 8)
     {
