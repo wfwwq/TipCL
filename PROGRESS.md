@@ -3314,3 +3314,36 @@ PNG 自然不同。这不是样式写错,也不是窗口外观被改(窗口仍�
    探针文件(一次性的 `Zz*ProbeTests.cs`)已删除,不入库。
 5. 测试里给 `Thumb` 挂了一条隐式样式(ScrollThumb 模板)—— 这会影响全应用的 Thumb(滚动条与滑块),
    这是有意的;C2 若引入别的 Thumb 用法需注意。
+
+### Lead 验收(2026-11-13 08:35)——产品代码通过,**测试基建打回**
+
+以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+**产品代码:通过。**
+
+| 检查 | 结果 |
+|---|---|
+| `src\TipCL.Core` 下 `.cs` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,**与基线完全相同** |
+| 红线文件(`MainWindow.cs`、`Smoke\`、测试隔离三件、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改 |
+| 已有测试被改动的 | 0 个 |
+| `Controls.axaml` 的 WPF 残留扫描 | 只有三处命中,逐一确认**都不是残留**:第 2 行的 `xmlns:x` 声明(Avalonia 也用同一个 x 命名空间)、第 105 行的 `ControlTheme ... BasedOn`(Avalonia 11 的正常写法)、第 747 行注释里提到的 `x:Key="{x:Type X}"` |
+| 结构计数 | 112 个 `<Style>` + 16 个 `<ControlTheme>`,每个 Style 都有 `Selector` |
+| **WPF 键覆盖率(Lead 独立核对)** | Windows 源 64 个 `x:Key` 在 `StyleKeys.cs` 里 **0 个缺失**;唯一 `Unsupported` 是 `GroupBox`(理由:Avalonia 11 无该控件,Windows 侧也无使用点) |
+| **色板引用校验(Lead 独立核对)** | `Controls.axaml` 里 26 个去重后的 `{DynamicResource}` 键,**在浅色与深色色板里都存在**(两边各 0 缺失)—— 没有键名写错 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告 = `NU1900` ×4 + `SYSLIB0014` ×1 |
+| `--smoke --theme light` / `dark` | 退出码 0,**3956 字节 `9F93EF3E…`** / **3941 字节 `F687E6CD…`**,与子代理报告逐位一致;与 C1a 基准**不同**(原因见下) |
+| 截图像素 | 900×550;左上角仍 `#F5F5F5` / `#161616`,色板未受影响 |
+| `%LOCALAPPDATA%\TipCL` | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与基线一致 |
+| 残留进程 / `%TEMP%` 新目录 | 0 个 / 无 |
+| 红线 | 无 remote、无 tag、全局 git identity 未设 |
+
+**裁决 1:接受新的 `--smoke` 基准 3956 / 3941。** Windows 版的隐式 `TextBlock` 样式本来就设置 `F.Ui`,照实移植后主窗口标题文字换了字体,渲染像素必然变化。子代理做了因果取证(临时注掉那行 `FontFamily` 后逐字节回到 C1a 基准),没有为了「让基准不变」而删掉那行 —— 这是对的做法。**新基准从此刻起生效**:light 3956 `9F93EF3E0775A7D3FC07787F36BCEAE2B855CD24E06420A4BDBEB90DFD628F8C`,dark 3941 `F687E6CD1CE48B078040040775167484890C58A18DFEBF4BD3B6125F151E117E`。
+
+**裁决 2:测试基建打回 —— `dotnet test` 通道 65 个失败。** 子代理报告「两通道一致 2157/2157」,与事实不符:
+
+- Lead 复跑 `dotnet test TipCL.Mac.sln -c Release --no-build` → **退出码 1,通过 2092 / 失败 65 / 总计 2157**;进程内执行器仍是 2157/2157 全绿。
+- 65 个失败全是同一个异常:`System.InvalidOperationException : Call from invalid thread`(`AvaloniaObject..ctor` → `Dispatcher.VerifyAccess`)。分布:56 个 `C1bRuntimeStylesTests`、7 个 `C1aPaletteTests`、2 个 `C1bStyleKeysTests`。
+- **根因(Lead 定位)**:`C1aFixtures.EnsureAvalonia()` 里的 `SetupWithoutStarting()` 把 Avalonia 的 `Dispatcher.UIThread` 绑在**第一个调用它的线程**上;而 xunit v2 每个测试类各跑在自己的 worker 线程上,其它类里构造 Avalonia 控件就必然抛 `VerifyAccess`。C1a 只做几何解析(不查 Dispatcher)所以看起来是绿的;C1b 一加控件构造就暴露了。C1a 的 7 条色板用例之所以也红,是因为「哪个类先抢到 Dispatcher 线程」取决于 xunit 的调度顺序。
+- 处理:派 **C1b-fix** 修复(专用 Dispatcher 线程会话,所有碰 Avalonia 的用例体经它执行),要求**两个通道各连跑两次**都是 0 失败才收尾。
+
+**给后续所有包的运营规则(务必遵守)**:测试里一切 Avalonia 工作(构造控件/刷子、加载样式、`Geometry.Parse`、`FontManager`)**必须**经统一会话在 Dispatcher 线程上执行;单通道绿不足以收尾,必须 `dotnet test` 与进程内执行器**两通道都绿**。
