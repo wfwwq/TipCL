@@ -888,6 +888,16 @@ public sealed partial class SettingsPage : PageBase
     /// <summary>当前内嵌的子页(Windows 的 <c>_sub</c>);分段 0/3 没有子页。</summary>
     private PageBase? _sub;
 
+    /// <summary>
+    /// 各段内嵌子页的实例缓存(Windows 是 <c>_views[1] ??= new AccountPage()</c> —— mac 侧因为要经注入缝,
+    /// 单独用一个数组存,**不能**和 <see cref="_views"/>(段视图)共用一个格子:
+    /// 分段 6 的段视图是个 Grid(上标题卡 + 下内嵌页),两者共用一个格子会让 Grid 被内嵌页顶掉(本包实测踩到)。
+    /// </summary>
+    private readonly PageBase?[] _subs = new PageBase?[7];
+
+    /// <summary>「反馈与关于」那一段的视图(Grid;懒建一次)。</summary>
+    private Grid? _aboutView;
+
     private ToggleButton NavBtn(int i, string label)
     {
         ToggleButton b = new ToggleButton
@@ -937,7 +947,7 @@ public sealed partial class SettingsPage : PageBase
         {
             return null;
         }
-        if (_views[i] is PageBase built)
+        if (_subs[i] is PageBase built)
         {
             return built;
         }
@@ -952,7 +962,7 @@ public sealed partial class SettingsPage : PageBase
         PageBase? page = factory?.Invoke();
         if (page != null)
         {
-            _views[i] = page;
+            _subs[i] = page;
         }
         return page;
     }
@@ -960,19 +970,16 @@ public sealed partial class SettingsPage : PageBase
     /// <summary>这一段的视图(分段 0/3/6 是块宿主或组合,其余是子页;子页缺件时给如实占位)。</summary>
     private Control ViewFor(int i)
     {
-        if (_views[i] is Control cached)
+        switch (i)
         {
-            return cached;
+            case 0:
+            case 3:
+                return _views[i]!;
+            case 6:
+                return _aboutView ??= BuildAboutView();
+            default:
+                return SubPageFor(i) ?? MissingSectionFor(i);
         }
-        Control built = i switch
-        {
-            0 => (Control)_views[0]!,
-            3 => (Control)_views[3]!,
-            6 => BuildAboutView(),
-            _ => SubPageFor(i) ?? MissingSectionFor(i),
-        };
-        _views[i] = built;
-        return built;
     }
 
     /// <summary>「反馈与关于」视图:顶层是 Grid 双行(上标题卡 + 下反馈页),边距仍由内部自管(宿主边距传 0 防叠加)。</summary>
@@ -1146,24 +1153,34 @@ public sealed partial class SettingsPage : PageBase
         ToolTip.SetTip(thumb, I18n.L(label));
         thumb.PointerReleased += delegate
         {
-            try
-            {
-                string dst = Wallpaper.ReleasePreset(file);
-                if (string.IsNullOrEmpty(dst))
-                {
-                    _bgInfo.Text = I18n.L("预设背景应用失败:") + file;
-                    return;
-                }
-                _bgPath.Text = dst;
-                _bgFolder.Clear();
-                PageBase.Run(ApplyWallpaperAsync, I18n.L("壁纸没能应用"));
-            }
-            catch (Exception ex)
-            {
-                _bgInfo.Text = I18n.L("预设背景应用失败:") + ex.Message;
-            }
+            PickPreset(file);
         };
         return thumb;
+    }
+
+    /// <summary>
+    /// 点一个内置预设背景缩略图(Windows 是 <c>thumb.MouseLeftButtonUp</c> 里的那一段:
+    /// 释放到数据目录 → 填进壁纸文件框 → 走既有壁纸管线)。
+    /// 【C5a 测试缝】同 <see cref="PickSwatch"/>:处理器体抽成 internal 成员(D-127)。
+    /// </summary>
+    internal void PickPreset(string file)
+    {
+        try
+        {
+            string dst = Wallpaper.ReleasePreset(file);
+            if (string.IsNullOrEmpty(dst))
+            {
+                _bgInfo.Text = I18n.L("预设背景应用失败:") + file;
+                return;
+            }
+            _bgPath.Text = dst;
+            _bgFolder.Clear();
+            PageBase.Run(ApplyWallpaperAsync, I18n.L("壁纸没能应用"));
+        }
+        catch (Exception ex)
+        {
+            _bgInfo.Text = I18n.L("预设背景应用失败:") + ex.Message;
+        }
     }
 
     // ================================================================= AI 视觉 / 记忆 / MCP
@@ -1448,13 +1465,24 @@ public sealed partial class SettingsPage : PageBase
             string pick = hex;
             border.PointerReleased += delegate
             {
-                _color = pick;
-                BuildSwatches();
-                ApplyVisuals(_color, KeyOf(_bg));
-                QueueSave();
+                PickSwatch(pick);
             };
             _swatches.Children.Add(border);
         }
+    }
+
+    /// <summary>
+    /// 点一个主题色色块(Windows 是 <c>border.MouseLeftButtonUp</c> 里的那一段)。
+    /// 【C5a 测试缝】事件处理器只留薄壳、处理器体抽成 internal 成员 —— 同 D-115 / D-127 的口径:
+    /// 用例不构造 <c>PointerReleasedEventArgs</c>(它的构造函数在 Avalonia 11 里不公开,
+    /// 硬 <c>RaiseEvent</c> 一个 <c>RoutedEventArgs</c> 会 InvalidCastException,本包实测踩到)。
+    /// </summary>
+    internal void PickSwatch(string hex)
+    {
+        _color = hex;
+        BuildSwatches();
+        ApplyVisuals(_color, KeyOf(_bg));
+        QueueSave();
     }
 
     /// <summary>【Windows 源】<c>:1123-1147</c>:外壳改了主题 / 主题色时把本页的控件同步过来(不再反向触发)。</summary>

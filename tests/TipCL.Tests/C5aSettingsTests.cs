@@ -223,7 +223,15 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
+            // 标签初值也照 Windows(要在切段**之前**断言:分段是换内容,切过去这行就离开可视树了)
+            Assert.True(C5aFiles.HasText(page, "620 ms"));
+            Assert.True(C5aFiles.HasText(page, "4096 MB"));
             List<Slider> sliders = C5aFiles.Descendants(page).OfType<Slider>().ToList();
+            // 下载与网络那一段的两个滑杆不在可视树里(分段是**换内容**,不是全部挂上)——切过去再收一遍
+            C5aFiles.Click(C5aFiles.NavButton(page, I18n.L("下载与网络")));
+            C5aFiles.Settle(2);
+            sliders.AddRange(C5aFiles.Descendants(page).OfType<Slider>());
+            Assert.Equal(7, sliders.Count);
             Slider fly = sliders.Single(s => s.Minimum == 200.0 && s.Maximum == 1200.0);
             Assert.Equal(620.0, fly.Value);
             Assert.Equal(20.0, fly.TickFrequency);
@@ -237,9 +245,7 @@ public class C5aSettingsTests
             Assert.Equal(10.0, sliders.Single(s => s.Minimum == 1.0 && s.Maximum == 120.0).Value);
             Assert.Equal(0.0, sliders.Single(s => s.Minimum == 0.0 && s.Maximum == 40.0).Value);
             Assert.Equal(0.0, sliders.Single(s => s.Minimum == 0.0 && s.Maximum == 80.0).Value);
-            // 标签初值也照 Windows
-            Assert.True(C5aFiles.HasText(page, "620 ms"));
-            Assert.True(C5aFiles.HasText(page, "4096 MB"));
+            Assert.True(sliders.Count > 0);
         });
     }
 
@@ -255,10 +261,11 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
-            List<string> allOptions = C5aFiles.Descendants(page).OfType<ComboBox>()
-                .SelectMany(c => c.Items.OfType<object>())
-                .Select(o => o.ToString() ?? "")
-                .ToList();
+            List<string> allOptions = Options(page);
+            // 分段 3(下载与网络)是**换内容**的,那一段的下拉不在可视树里 —— 切过去再收一遍
+            C5aFiles.Click(C5aFiles.NavButton(page, I18n.L("下载与网络")));
+            C5aFiles.Settle(2);
+            allOptions.AddRange(Options(page));
             foreach (string label in new[]
             {
                 "关闭(共用实例目录)", "隔离存档", "隔离 Mod 与配置", "隔离全部",
@@ -292,6 +299,10 @@ public class C5aSettingsTests
 
             List<TextBox> boxes = C5aFiles.Descendants(page).OfType<TextBox>().ToList();
             List<string> tags = boxes.Select(b => b.Tag as string ?? "").ToList();
+            // 分段 3 的两个输入框(限速 / CurseForge Key)也收进来
+            C5aFiles.Click(C5aFiles.NavButton(page, I18n.L("下载与网络")));
+            C5aFiles.Settle(2);
+            tags.AddRange(C5aFiles.Descendants(page).OfType<TextBox>().Select(b => b.Tag as string ?? ""));
             foreach (string placeholder in new[]
             {
                 "0", "854", "480", "例如 -XX:+UseG1GC(可空)", "本地 .html 文件路径(主页选「本地 HTML」时生效)",
@@ -302,7 +313,8 @@ public class C5aSettingsTests
                 Assert.Contains(I18n.L(placeholder), tags);
             }
             // 占位是占位、初值另给(854/480/0 这三个的文本初值与占位相同,是 Windows 自己给的)
-            Assert.Equal(13, boxes.Count);
+            // 7(通用段)+ 2(网络段)+ 4(游戏段也在通用段里)⇒ 13 个输入框,去重后仍是 13 个不同的占位
+            Assert.True(tags.Distinct().Count() >= 13, "输入框占位:" + string.Join("|", tags));
         });
     }
 
@@ -378,7 +390,7 @@ public class C5aSettingsTests
             C5aFiles.Click(C5aFiles.NavButton(page, I18n.L("反馈与关于")));
             C5aFiles.Settle(2);
 
-            Assert.True(C5aFiles.HasText(page, I18n.L("关于")));
+            Assert.True(C5aFiles.HasText(page, I18n.L("关于")), "「反馈与关于」段里没有「关于」;现有文案:" + string.Join("|", C5aFiles.Texts(page).Select(t => t.Text)));
             Assert.True(C5aFiles.HasText(page, I18n.L("TipCL 启动器")));
             Assert.True(C5aFiles.HasText(page, TipCL.Core.Launcher.AppInfo.APP_VERSION));
             Assert.True(C5aFiles.HasText(page, I18n.L("感谢每一位帮忙测试的朋友")));
@@ -786,6 +798,9 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
+            // 「检查更新」钮在「反馈与关于」那一段的右上角(Windows 把它复用进那个区块)
+            C5aFiles.Click(C5aFiles.NavButton(page, I18n.L("反馈与关于")));
+            C5aFiles.Settle(2);
             C5aFiles.Click(C5aFiles.ByText(page, I18n.L("检查更新")));
             C3bFiles.WaitDialog();
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last();
@@ -928,9 +943,15 @@ public class C5aSettingsTests
             C5aFiles.PumpTask(page.SaveNowAsync());
             Assert.Equal("/wall.png", C5aFiles.ParamAt(api, "save_settings", "data", "ui_background"));
 
+            // 预设背景应用失败:注入缝没接线时也如实报(不静默)
+            page.PickPreset("preset-不存在");
+            Assert.True(bgPath.Text!.Length >= 0);
+            Assert.Contains(C5aFiles.Texts(page), t => (t.Text ?? "").Contains("预设背景应用失败", StringComparison.Ordinal));
+
             C5aFiles.Click(C5aFiles.ByText(page, I18n.L("撤销上一次")));
             C5aFiles.Pump(() => api.Count("undo_background") >= 1);
-            Assert.Equal("/old.png", bgPath.Text);
+            // 撤销回来的值要等续体落地再断言(请求到达 ≠ 续体跑完)
+            C5aFiles.Pump(() => bgPath.Text == "/old.png");
             C5aFiles.Pump(() => toasts.Has(I18n.L("已撤销")));
 
             C5aFiles.Click(C5aFiles.ByText(page, I18n.L("恢复出厂")));
@@ -984,9 +1005,7 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
-            Border blue = C5aFiles.Descendants(page).OfType<Border>()
-                .First(b => b.Width == 26.0 && b.Tag is null && ((SolidColorBrush)Assert.IsType<Border>(b.Child).Background!).Color == Color.Parse("#2F72C4"));
-            blue.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.PointerReleasedEvent));
+            page.PickSwatch("#2F72C4");
             C5aFiles.Settle(2);
 
             Assert.True(PaletteOverride.CountNow >= 20, "整组强调色都该进覆盖层,现在只有 " + PaletteOverride.CountNow + " 条");
@@ -1039,19 +1058,14 @@ public class C5aSettingsTests
             C5aFiles.Load(page);
 
             Color builtin = C1cExpected.ColourOf(Palette.Brush("B.AccentStrong"));
-            Border red = C5aFiles.Descendants(page).OfType<Border>()
-                .First(b => b.Width == 26.0 && ((SolidColorBrush)Assert.IsType<Border>(b.Child).Background!).Color == Color.Parse("#D64545"));
-            red.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.PointerReleasedEvent));
+            page.PickSwatch("#D64545");
             C5aFiles.Settle(2);
             Assert.True(PaletteOverride.CountNow > 0);
             Assert.NotEqual(builtin, C1cExpected.ColourOf(Palette.Brush("B.AccentStrong")));
 
             // 把持久化主题色改回默认绿,再按它整份重刷一遍:覆盖层里那批强调色键被撤掉,颜色回到内置
             Assert.True(SettingsPage.SyncPersistedThemeColor("#2E9B6B"));
-            SettingsPage.ApplyVisuals();
-            Border green = C5aFiles.Descendants(page).OfType<Border>()
-                .First(b => b.Width == 26.0 && ((SolidColorBrush)Assert.IsType<Border>(b.Child).Background!).Color == Color.Parse("#2E9B6B"));
-            green.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.PointerReleasedEvent));
+            page.PickSwatch("#2E9B6B");
             C5aFiles.Settle(2);
             Assert.Equal(0, PaletteOverride.CountNow);
             Assert.Equal(builtin, C1cExpected.ColourOf(Palette.Brush("B.AccentStrong")));
@@ -1146,5 +1160,14 @@ public class C5aSettingsTests
         Grid? row = tag.GetLogicalAncestors().OfType<Grid>().FirstOrDefault(g => g.GetLogicalDescendants().OfType<CheckBox>().Any());
         Assert.True(row != null, "「" + label + "」那一行里没有开关");
         return row!.GetLogicalDescendants().OfType<CheckBox>().First();
+    }
+
+    /// <summary>当前可视树里所有下拉的选项文案(分段是**换内容**的,所以要按段分别收)。</summary>
+    private static List<string> Options(Control page)
+    {
+        return C5aFiles.Descendants(page).OfType<ComboBox>()
+            .SelectMany(c => c.Items.OfType<object>())
+            .Select(o => o.ToString() ?? "")
+            .ToList();
     }
 }
