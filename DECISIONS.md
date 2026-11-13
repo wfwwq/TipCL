@@ -1140,3 +1140,96 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
    `Ui.WindowPctOf(pct, floor, hostHeight)`(纯算术)与
    `SmoothScroll.BindWindowMaxHeight(host, pct, floor)`(离屏/测试进程里 `ApplicationLifetime` 是 null,
    公开入口拿不到宿主窗口)。公开入口转调它们,行为不变。
+
+## D-86 C2a:外部 Python 桥的边界与 `FindRoot` 的落点(秒级可查,不再有第二种根)
+
+- **背景**:任务书要求 mac 版只去掉外部 Python 桥,进程内 `BackendApi` + `RpcDispatcher` +
+  `BridgeServer` + `BridgeClient` 原样保留。
+- **删掉的分支**(逐条列在 PROGRESS.md 的 C2a 第 3 条表里):`StartExternalAsync` 整段、
+  `TIPCL_BRIDGE`/`TIPCL_BRIDGE_EXE` 两条早退、`FindPython`/`PythonCandidates`/`RegisteredPythons`/
+  `ProbePython`、`FindNativeBridge`/`LooksLikeRoot`/`WalkUp`/`QuoteArg`/`Tail`/`PortRegex`/`KillTree`、
+  `Payload.EmbeddedPython()`、以及只有外部桥用的那个 `BridgeHost(BridgeClient, Process, ...)` 私有构造。
+- **`FindRoot` 的替代**:Windows 会先看 `TIPCL_HOME`,再往上找"带 `bridge\server.py` 或
+  `native\data\catalog.json`"的 payload 根,最后落 `Payload.EnsureRoot()`。mac 侧没有 payload 根,
+  于是直接 `NormalizeRoot(Utils.ResolveRoot())` —— GOAL §3 的数据目录(`~/.tipcl`,`TIPCL_HOME` 可覆盖)。
+  隔离测试进程里 `TIPCL_HOME` 指向 `TestHome.Root`,**有用例钉住这条等式**。
+- **`Payload` 的处境**:按任务书清单搬了,但 `DefaultRoot` 由 `%LOCALAPPDATA%\TipCL` 改成
+  `Utils.ResolveRoot()`。不改的话在 mac 上会得到一个 `~/.local/share/TipCL` 的**第二数据根**,
+  而且 `EnsureRoot()` 里的 `CleanupLegacy` 会在那个根下删 `mclauncher` —— 都不该发生。
+  改完之后它在 mac 侧**没有调用点**(Windows 是 `FindRoot` 的最后兜底),这是事实上的死代码;
+  它是 `internal` 类,删了不影响公开面(留给 C2b 决定,已写进遗留)。
+
+## D-87 C2a:`I18n` 的词表来源改成 Core 内嵌资源;`I18nCheck` 不搬
+
+- Windows 的 `I18n.EnsureTables()` 从磁盘读:先 `root\mclauncher\locales`,开发态回退
+  `root\src\TipCL\Resources\locales`。mac 版没有外部 payload,词表按 GOAL **内嵌进 `TipCL.Core`**
+  (LogicalName 与 Windows csproj 一致,A2 已落地),所以改成 `CoreResources.ListDir("locales")` +
+  `ReadText` —— 与被搬进 Core 的 `I18nCore.LoadStrings()` **同一份数据、同一套资源名**。
+  用例里做了一次交叉对拍:`I18n.L(k)` 必须等于 `I18nCore.Tr(k)`(同一个键、同一种语言)。
+- **`I18n.LocalesDir` 的语义变了**(公开成员名/类型不变):现在报 `TipCL.Core.Resources.locales`
+  这个资源位置,因为 mac 上没有磁盘词表目录(*如实反映*比硬塞一个假路径强)。
+- **`I18nCheck.cs`(469 行)没有搬**:它是开发期的源码扫描器,依赖 `PyPath.GetRelativePath`
+  与 Windows 的仓库布局(`root\src\TipCL`),不满足任务书"小且自足"的条件。
+  但 `I18n.L()` 会调它的 `HasCjk`,所以把这**一个助手按原样搬进 `I18n`**(internal)。
+
+## D-88 C2a:`AppServices.Window` 的静态类型与 `Toast` 的宿主委托
+
+- `public static MainWindow? Window` 在 mac 上**编译不过**:mac 的 `MainWindow` 是 `internal`
+  (CS0053:公开成员不能暴露 internal 类型),而 `MainWindow.cs` 属 C2b、本包不许改。
+- 取舍:保留成员名 `Window`,静态类型放宽成 Avalonia 的 `Window`。同程序集里外壳与页面写
+  `AppServices.Window as MainWindow` 照样能拿到外壳(C2b 落地后即可)。
+- `Toast` 不再直接 `Window?.Toast(...)`(外壳类还没有这个方法),改走新增的 **internal**
+  `ToastSink` 委托;宿主为空时 `Debug.WriteLine` —— 与 D-84 的 `Ui.OpenUrl` 同一口径
+  (不抛异常、不改状态)。代价:**外壳接线前所有 Toast 都是静默的**(已写进遗留)。
+
+## D-89 C2a:`Dlg` 的文件对话框走 `IStorageProvider` 的同步等待 + 过滤器解析
+
+- WPF 的 `OpenFileDialog`/`SaveFileDialog`/`FolderBrowserDialog` 是同步的;Avalonia 只有
+  `IStorageProvider` 的异步 API。mac 侧选了**最保守的等价物**:提交任务后一边
+  `Dispatcher.UIThread.RunJobs()` 一边 `Thread.Sleep(1)` 等它完成(上限 10 分钟),
+  即"自己实现 WPF 的嵌套消息循环"。公开签名一字未改。
+- 过滤器串照旧是页面的 WPF 语法(`标签|模式;模式`),新增 `internal static FilePickerFileType[]
+  ParseFilter(string)` 转成 Avalonia 的类型;`*.*` 映射成 `*`(Avalonia 的"全部文件")。
+  这是个纯函数,有用例逐条钉住。
+- **拿不到提供者就返回 null**(离屏 / 测试 / 还没起窗口),只写调试输出:不抛、不起进程、不弹窗。
+  离屏那两条自动取消挂点(`Dlg.SmokeActive` / `SmokeAutoAnswer` / `SmokeAutoCancelSystemDialog`)
+  是可注入的,因为 mac 的 `Smoke\` 里没有对应的入口,而 `Smoke\` 不属本包。
+
+## D-90 C2a:`Motion.Enabled` 合并"用户开关 + 有没有时钟";`Lucide.MotionEnabled` 变成转发别名
+
+- WPF 的 `Motion.Enabled` = 用户开关 && `SystemParameters.ClientAreaAnimation` && 非远程会话。
+  Avalonia 没有 `SystemParameters`,而本项目早就有一条更硬的纪律(D-69/D-83):
+  **只有真桌面生命周期里才起动画**(离屏/测试里没人推进时钟,无限动画会把收尾挂住)。
+  于是 mac 的 `Enabled = _enabled && (Application.Current?.ApplicationLifetime is not null)`,
+  `UserEnabled` 仍是纯净的用户开关,`set` 的语义(值变了才发 `EnabledChanged`)与 Windows 一致。
+- 所有成员在 `!Enabled` 时**立刻落终态**(不是什么都不做):与 WPF 关掉动画时的样子一致,
+  也不会把控件留在 `Opacity = 0` 的中间态。副作用是**关闭浮层变成同步的** —— 有用例利用这一点。
+- `Lucide.MotionEnabled` 由「临时替身」改成 **`Motion` 用户开关的转发别名**(读 `UserEnabled`、
+  写 `Motion.Enabled`),名字/类型不变 → 全应用只剩一个动画开关;`Lucide.Shimmer` 的无限高光动画
+  改成走 `Motion.Loop`(与 Windows 版一一对应)。
+- **`Ui.Skeleton` 与 `SmoothScroll` 没改**:任务书开头明确"不许改 `Ui` 门面",这两处的 Motion 接线
+  留给 C2b(它们现在读的是那个转发别名,行为与 C1c 完全一致)。
+- 逐帧缓动(Avalonia 的 `KeyFrame` 只有 `KeySpline`、`BackEaseOut` 没有 `Amplitude`)收成整段缓动,
+  用 `CubicEaseOut` / `SineEaseInOut` 近似 WPF 的 `CubicEase` / `QuadraticEase`。
+
+## D-91 C2a:桥的用例用 `TcpListener` 假后端;全角标点在"键"上又现形两次
+
+- 桥的请求/响应帧与 SSE 是真的走 socket 验的:自建 `FakeBridgeServer`(`TcpListener` 绑
+  `IPAddress.Loopback:0`,**不是 `HttpListener`**,D-27),按预置顺序回包并把请求原文(头 + 体)
+  记下来供断言;每个用例 `finally` 里 Dispose。**绝不实例化 `BackendApi`/`BridgeServer`/`PluginManager`,
+  绝不调 `BridgeHost.StartAsync`**(D-23);`BridgeEvent` 的反序列化另有纯 `JsonSerializer` 用例。
+- **D-58(全角标点抄不进字面量)这次踩在"键"上,两次**:
+  1. `TaskStore` 的默认状态键是 `排队中…` —— 省略号是 **U+2026**,不是三个 ASCII 点;
+  2. `FileKinds.ModpackProbe.LoaderLabel("")` 的键用**全角括号** U+FF08/U+FF09。
+  两条都是"Expected 与 Actual 打印出来一模一样"的失败,只有转成 `\uXXXX` 才看得出差别。
+  **教训:凡是与词表键比较的字面量,一律用 `\uXXXX` 写,或改成比较 `I18n.L(同一个键)`。**
+- 另外记两条写用例时的常识坑:`Fmt.Duration` 的小时分支只覆盖 `< 24 小时`(25 小时走天分支);
+  `BridgeEvent.Payload` **不是**普通反序列化填的(真路径上由 `BridgeClient.Dispatch` 把根元素
+  `Clone()` 塞进去),纯反序列化用例要自己在 JSON 里带 `payload` 字段。
+
+## D-92 C2a:`Models\` 只搬 `CrashReport.cs` + `CrashAction.cs`
+
+- `BridgeEvent.Crash` 的类型是 `TipCL.Models.CrashReport`,而 mac 侧整个 `Models\`(45 个 DTO)
+  属页面阶段(C3+)。本包只搬这两个自足的文件(只依赖 `System.Text.Json` /
+  `System.Collections.Generic`),为的是保住 `BridgeEvent` 的公开成员一个不缺。
+- **后续搬 `Models\` 整目录时不要再搬这两个**(会重复定义)。

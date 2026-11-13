@@ -43,7 +43,10 @@
   <ItemGroup>
     <!-- C 类:依赖界面层命名空间(TipCL.Services / Pages / Controls / Themes),随 C 阶段对应页面恢复 -->
     <Compile Remove="Ported\AiChatOpsTests.cs" />          <!-- using TipCL.Pages.Ai → 恢复包 C3(AI 对话页) -->
-    <Compile Remove="Ported\FileKindsTests.cs" />          <!-- using TipCL.Services → 恢复包 C2/C3(基础 Services 落地后) -->
+    <!-- C2a(2026-11-13):Ported\FileKindsTests.cs 已恢复编译 —— C2a 把 FileKinds.cs 搬进
+         src\TipCL.App\Services 了,这个文件现在能编。按 A6 的 B 类路径规则改了 2 处:
+         两处 Path.GetTempPath() 改成 TestHome.Root(红线:测试临时文件必须落在仓库内),
+         断言一字未改;改动逐条记在 PROGRESS.md 的 C2a 小节。 -->
     <Compile Remove="Ported\NavCompatTests.cs" />          <!-- using TipCL.Services + TipCL(导航)→ 恢复包 C2(外壳/导航) -->
     <Compile Remove="Ported\PageLayoutTests.cs" />         <!-- using TipCL.Pages → 恢复包 C3(对应页面) -->
     <Compile Remove="Ported\LayoutDefaultTests.cs" />      <!-- 3 条只用 Core,1 条用 TipCL.Pages.DashLayout → 整文件归 C,恢复包 C3(启动页布局) -->

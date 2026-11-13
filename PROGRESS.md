@@ -26,7 +26,9 @@
 | C1a | 主题色板 + 图标字体 + Lucide 图标(Avalonia 移植) | ✅ 完成(见下) |
 | C1b | `Themes/Controls.axaml` 移植 | ✅ 完成(见下;**新增 257 条用例,总数 1900 → 2157,两条通道都 2157/2157 全绿**;64 个 WPF 键全部有落点,40 个具名样式映射成类名;smoke 因隐式 TextBlock 字体变化为 3956/3941,**待 Lead 裁决基准**,见小节第 7/8 条) |
 | C1c | `Services/Ui.cs` / `UiExt.cs` 门面 | ✅ 完成(见下;**新增 100 条用例,总数 2157 → 2257,两条通道各连跑 2 次都 2257/2257 全绿**;`Ui.S` 的返回类型被迫由 `Style` 改成类名、`Pw` 返回 `TextBox`,逐条列在差异表里;smoke 与裁决基准逐位一致) |
-| C2-C8 | 外壳 + 页面 | 未开始 |
+| C2a | 桥层与 WPF-free 基础服务(`AppServices`/`Payload`/`TaskStore`/`TaskRow`/`I18n`/`Fmt`/`FileKinds`/`BridgeEvent`/`BridgeCallException`/`BridgeHost`/`BridgeClient`/`Dlg`/`Motion`) | ✅ 完成(见下;**新增 210 条用例,总数 2257 → 2467,两条通道各连跑 2 次都 2467/2467 全绿**;`src\TipCL.Core` 一行未动;只有进程内一条后端路径,外部 Python 桥已去) |
+| C2b | 外壳:`MainWindow` / 导航 / 页面宿主 / Toast·Dialog·DropVeil 宿主 / 系统菜单与快捷键 | 未开始 |
+| C3-C8 | 页面逐个移植 | 未开始 |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
 ## 仓库现状(截至 A1)
@@ -3257,6 +3259,7 @@ Lead 说明:
     图标/子菜单那一套按 Fluent 的。
 16. **GroupBox**:Avalonia 11 没有该控件,未移植(Windows 版全仓库也没有使用点,grep 确认)。
 
+
 ### 新增/修改文件
 
 - 新增 `src/TipCL.App/Themes/Controls.axaml`、`src/TipCL.App/Themes/StyleKeys.cs`
@@ -3307,6 +3310,14 @@ PNG 自然不同。这不是样式写错,也不是窗口外观被改(窗口仍�
    ProgressBar 的不确定态动效 —— 这些的观感与 Windows 版不完全一致。
 3. **C1c 的接线成本**:`Ui.cs` / `UiExt.cs` 里的 `Style="{StaticResource X}"` 都要换成类名(建议直接用
    `StyleKeys.Apply` / `StyleKeys.Classes`);`Pw` 的调用点要改成 `TextBox` + `PasswordChar`;
+   标题栏那套(`Btn.Caption*` / `Btn.TitleIcon`)属 C2。
+4. **探针结论已经写进实现**:Avalonia 不允许连续两个 `/template/`(运行期抛
+   `ControlTemplate styles cannot contain multiple template selectors`),跨两层模板取部件必须重画外层模板;
+   `Track` 不是 TemplatedControl;`TextBox` 模板必须有 `PART_ScrollViewer` + `PART_TextPresenter`(编译期强制)。
+   探针文件(一次性的 `Zz*ProbeTests.cs`)已删除,不入库。
+5. 测试里给 `Thumb` 挂了一条隐式样式(ScrollThumb 模板)—— 这会影响全应用的 Thumb(滚动条与滑块),
+   这是有意的;C2 若引入别的 Thumb 用法需注意。
+
 ### Lead 验收(2026-11-13 09:20)
 
 结论:**C1c 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
@@ -3332,15 +3343,6 @@ PNG 自然不同。这不是样式写错,也不是窗口外观被改(窗口仍�
 **C1 完成**:C1a(色板/图标字体/Lucide)、C1b(Controls.axaml + 类名映射)、C1b-fix(测试会话)、C1c(Ui/UiExt 门面)。下一步 C2(外壳)。
 
 ---
-
-## C2a Bridge 与基础服务
-   标题栏那套(`Btn.Caption*` / `Btn.TitleIcon`)属 C2。
-4. **探针结论已经写进实现**:Avalonia 不允许连续两个 `/template/`(运行期抛
-   `ControlTemplate styles cannot contain multiple template selectors`),跨两层模板取部件必须重画外层模板;
-   `Track` 不是 TemplatedControl;`TextBox` 模板必须有 `PART_ScrollViewer` + `PART_TextPresenter`(编译期强制)。
-   探针文件(一次性的 `Zz*ProbeTests.cs`)已删除,不入库。
-5. 测试里给 `Thumb` 挂了一条隐式样式(ScrollThumb 模板)—— 这会影响全应用的 Thumb(滚动条与滑块),
-   这是有意的;C2 若引入别的 Thumb 用法需注意。
 
 ### Lead 验收(2026-11-13 08:35)——产品代码通过,**测试基建打回**
 
@@ -3708,3 +3710,242 @@ System.InvalidOperationException : Call from invalid thread
    公开成员(类型/名字)不变,已记在 D-82 之外的类注释里。
 
 
+
+---
+
+## C2a 桥层与 WPF-free 基础服务(Avalonia 11 移植)
+
+本包只做**桥层 + 基础服务**:没有建外壳/窗口/导航(那是 C2b),没有搬任何页面,没有改色板 /
+`Controls.axaml` / `Ui`·`UiExt` 的公开面,没有改 `MainWindow.cs` / `Smoke\`,没有改 `src\TipCL.Core`
+一个字节(收尾对拍为证)。`Ui.cs` 只按任务书要求改了 **`Skeleton` 之外的 Lucide 那一层**
+(见第 6 条),`App.cs` 只加了一行 `I18n.Init`(见第 7 条)。
+
+### 1. 先纠正任务书里的一条事实:Core 侧并没有桥的客户端
+
+任务书说「`src\TipCL.Core` 里已经有 `BackendApi`、`RpcDispatcher`、`BridgeServer`、`BridgeClient`、
+`BridgeEvent`、`BridgeCallException`」。**实测不是**:
+
+| 类型 | Windows 侧的位置 | mac 的 `src\TipCL.Core` |
+|---|---|---|
+| `BackendApi` | `Core\BackendApi.cs` | **有**(A5) |
+| `RpcDispatcher` | `Core\RpcDispatcher.cs` | **有**(A5) |
+| `BridgeServer` | `Core\BridgeServer.cs` | **有**(A5) |
+| `EventBus` | `Core\EventBus.cs` | **有**(A5) |
+| `BridgeClient` / `BridgeEvent` / `BridgeCallException` | `Services\`(**App 侧**,不在 Core) | **没有**(本包才搬) |
+
+所以本包不存在「App 侧薄包装 Core 侧同名类型」的情况:这三个文件是**从 Windows 的 `Services\`
+原样搬进 `src\TipCL.App\Services\`** 的,命名空间仍是 `TipCL.Services`(与 Windows 一致),
+Core 侧的 `BridgeServer` 照旧被 `BridgeHost` 当服务端用。
+
+### 2. 搬了什么(按任务书清单)
+
+| 文件 | 处理 | 改动 |
+|---|---|---|
+| `Services\Fmt.cs` | **字节级复制** | 无 |
+| `Services\FileKinds.cs` | **字节级复制** | 无 |
+| `Services\TaskRow.cs` | **字节级复制** | 无 |
+| `Services\TaskStore.cs` | **字节级复制** | 无(依赖的 `I18n` / `Fmt` / `Clamp` 都已就位) |
+| `Services\BridgeEvent.cs` | **字节级复制** | 无(依赖 `TipCL.Models.CrashReport`,见下) |
+| `Services\BridgeCallException.cs` | **字节级复制** | 无 |
+| `Services\Payload.cs` | 最小改动 | `DefaultRoot` 改指 `Utils.ResolveRoot()`;删 `EmbeddedPython()` |
+| `Services\I18n.cs` | 最小改动 | 词表改读 Core 内嵌资源;搬进 `HasCjk`(原在 `I18nCheck`) |
+| `Services\AppServices.cs` | 最小改动 | `Window` 静态类型 + `ToastSink`(见差异表) |
+| `Models\CrashReport.cs`、`Models\CrashAction.cs` | **字节级复制** | 无 |
+| `Services\BridgeClient.cs` | **字节级复制** | 无 |
+| `Services\BridgeHost.cs` | 大改(只剩进程内一条路) | 见第 3 条 |
+| `Services\Dlg.cs` | 移植到 Avalonia | 见差异表 |
+| `Services\Motion.cs` | 移植到 Avalonia | 见差异表 |
+
+**`Models\` 只搬了两个文件**:`BridgeEvent.Crash` 的类型是 `TipCL.Models.CrashReport`,而 mac 侧
+整个 `Models\` 目录(45 个 DTO)属页面阶段(C3+),本包只搬 `CrashReport.cs` + `CrashAction.cs`
+这两个自足的(`System.Text.Json` + `System.Collections.Generic`)来保住 `BridgeEvent` 的公开成员。
+**后续搬 `Models\` 整目录时不要再搬这两个**(会重复定义)。
+
+### 3. 去掉的外部 Python 桥分支(逐条)
+
+| Windows 成员/分支 | 为什么去掉 | 替代物 |
+|---|---|---|
+| `BridgeHost.StartExternalAsync`(整段 120 行:起进程、读端口、`EnableRaisingEvents`、30 秒超时、失败 `KillTree`) | GOAL 决定 mac 版**没有**外部 Python 桥 | `StartAsync` 只保留 `StartInProcessAsync` |
+| `StartAsync` 里的 `TIPCL_BRIDGE` / `TIPCL_BRIDGE_EXE` 两条早退分支 | 同上 | 直接走进程内 |
+| `FindPython` / `PythonCandidates` / `RegisteredPythons`(注册表)/ `ProbePython` | 只为外部桥选解释器;`RegisteredPythons` 还是 `Microsoft.Win32.Registry`(Windows 专属 API) | 全删 |
+| `Payload.EmbeddedPython()`(`<root>\runtime\python\python.exe`) | 外部桥的内嵌解释器;mac 上没有,也没有调用点 | 全删(成员一起删) |
+| `FindNativeBridge` / `LooksLikeRoot` / `WalkUp` / `QuoteArg` / `Tail` / `PortRegex` / `KillTree`(`taskkill /T /F`) | 只服务于「往上找 payload 根 / 起原生桥 / 解析它的 stdout」 | 全删 |
+| `BridgeHost.FindRoot` 的「往上一层层找 payload 根」 | mac 版没有 payload 根 | `NormalizeRoot(Utils.ResolveRoot())` —— GOAL 的数据目录(`~/.tipcl`,`TIPCL_HOME` 可覆盖);隔离进程里就是 `TestHome.Root`(有用例钉住) |
+| 外部桥那台 `BridgeHost(BridgeClient, Process, ...)` 的私有构造 + `_proc` 字段 + `Dispose` 里的杀进程 | 没有子进程了 | 只留进程内构造与 `server.Stop()` |
+| 私有类 `CoreState` / `EnsureCore`(进程内那条路) | **保留,逐字未改** | 进程内路径与 Windows 完全一致(`TIPCL_HOME` → `Utils.SetRoot` → `Config.Reset` → `Guard.Install` → `I18nCore` → `EventBus` → `BackendApi` → `McpServer.StartIfEnabled` → `PluginManager.StartGlobal`) |
+
+一条给 C2b 的提醒(D-23 里也记着):`EnsureCore` → `new BackendApi(...)` 的构造函数会**无条件**
+向 `login.live.com` 发预热请求,所以真启动时那次联网是**预期行为**,不是本包引入的。
+
+### 4. 公开面差异表(有必要的全部;其余一字未改)
+
+| Windows 公开面 | mac 侧 | 原因 |
+|---|---|---|
+| `AppServices.Window : MainWindow?` | `Window? Window`(Avalonia 的窗口基类) | mac 的 `MainWindow` 是 `internal`(CS0053:公开成员不能暴露 internal 类型);同程序集里 `AppServices.Window as MainWindow` 照样能取到外壳 |
+| `AppServices.Toast` 直接 `Window?.Toast(...)` | 走新增的 **internal** `ToastSink` 委托,宿主为空时 `Debug.WriteLine` | 外壳类(C2b)还没落地,本包不能凭空依赖它的成员;降级口径与 D-84 的 `Ui.OpenUrl` 一致 |
+| `I18n.LocalesDir` = 磁盘目录 | = 内嵌资源位置(`TipCL.Core.Resources.locales`) | mac 没有外部 payload,**词表按 GOAL 内嵌进 Core**(与被搬进 Core 的 `I18nCore` 同一份资源);成员名与类型不变 |
+| `I18n.EnsureTables` 从磁盘读 | 从 `CoreResources.ListDir("locales")` 读 | 同上 |
+| `I18nCheck.HasCjk` | `I18n.HasCjk`(internal) | `I18nCheck.cs` 是开发期源码扫描器(469 行,依赖 `PyPath` 与仓库布局),本包**没有整体搬**(见遗留);只把 `L()` 用到的这一个助手按原样搬进来 |
+| `Payload.DefaultRoot` = `%LOCALAPPDATA%\TipCL` | `Utils.ResolveRoot()` | 非 Windows 上 `LocalApplicationData` 是 `~/.local/share`,那不是 GOAL 的数据目录;照抄会凭空多出**第二个数据根**,而且 `EnsureRoot` 的 `CleanupLegacy` 会在那个目录下删 `mclauncher` |
+| `Dlg.Host : Grid?` / `Layer.Root : Grid` / `Layer.Card : Border` | 同名同类型(Avalonia 也有 `Grid`/`Border`) | 无差异 |
+| `Dlg.BlurTarget : UIElement?` | `Control?` | Avalonia 没有 `UIElement` |
+| `Dlg.Ask/Alert/Prompt/Choose/Form/Panel/Busy` 的 `UIElement` 参数 | `Control` | 同上(名字/顺序/默认值/回调形状不变) |
+| `Dlg.PickFile/PickFiles/SaveFile/PickFolder` | **签名一字未改** | 内部改走 `IStorageProvider`(见下) |
+| `Dlg` 的 `Smoke.Active` / `Smoke.AutoAnswerDialog` / `Smoke.AutoCancelSystemDialog` 调用 | 改成可注入挂点 `Dlg.SmokeActive` / `SmokeAutoAnswer` / `SmokeAutoCancelSystemDialog`(internal) | mac 的 `Smoke\` 里没有这两个入口,而 `Smoke\` 属 C2b/D1(本包不许改);未接线时这一步不生效(离屏自动答问暂时不触发) |
+| `Motion.FadeIn(UIElement, ...)` 等 20 个方法的 `UIElement`/`FrameworkElement` | `Control` | 与 C1c 同一口径(D-70) |
+| `Motion.Loop(FrameworkElement, ...)` | `Loop(Control, ...)` | `owner.IsLoaded` → "在可视化树上或已 Loaded" |
+| `Motion.Shadow<T> where T : UIElement` | `where T : Control` | 同上;`Border` 走 `BoxShadow`、其余走 `Visual.Effect` |
+| `Motion.Enabled` 的 `get` = `_enabled && SystemParameters.ClientAreaAnimation && !IsRemoteSession` | `_enabled && 有桌面生命周期` | Avalonia 没有 `SystemParameters`;「有没有人推进时钟」这条与 D-83 的纪律合流(测试/离屏一律算关) |
+| WPF `BackEase(Amplitude=0.4)` / `QuadraticEase` | `CubicEaseOut` / `SineEaseInOut` | Avalonia 的 `BackEaseOut` 没有 `Amplitude`,且 `KeyFrame` 没有逐帧 `Easing`(只有 `KeySpline`),所以逐帧缓动收成整段缓动 |
+
+**新增的公开面**:一个也没有(`AppServices.ToastSink`、`Dlg.SmokeActive`/`SmokeAutoAnswer`/
+`SmokeAutoCancelSystemDialog`、`I18n.HasCjk`、`BridgeHost` 的 4 个 internal 助手、`Dlg.ParseFilter`
+都是 internal)。`BridgeHost.ClientBaseUrl` / `NewToken` / `NormalizeRoot` 由 private 提为 internal —— 只为单测。
+
+### 5. 降级与观感差异
+
+1. **文件/文件夹对话框**:WPF 的 `Microsoft.Win32.OpenFileDialog` / `SaveFileDialog` /
+   `FolderBrowserDialog` 是**同步** API;Avalonia 只有 `IStorageProvider` 的**异步** API。mac 侧在等它的同时
+   把 Dispatcher 的排队工作跑掉(等价 WPF 的同步嵌套消息循环),过滤器串仍是 WPF 的 `标签|模式;模式`
+   语法,由 `Dlg.ParseFilter` 转成 `FilePickerFileType[]`(`*.*` → `*`)。
+   **拿不到提供者时(离屏/测试/还没起窗口)返回 null 并只写调试输出**,不抛异常、不起进程。
+2. **`Dlg.Alert` 的 `TextBox.VerticalScrollBarVisibility`**:Avalonia 的 `TextBox` 没有这个属性,
+   改用 `ScrollViewer.SetVerticalScrollBarVisibility(textBox, Auto)` 附加属性(是"尽力而为":
+   TextBox 模板认不认这条附加属性本机没验,见未验证项)。
+3. **卡片 MaxHeight 的绑定**:WPF 绑 `Window.ActualHeight`(converter ×0.9);mac 侧绑**宿主 Grid 的
+   `Bounds.Height`**(Avalonia 没有 `ActualHeight`,D-82 同一口径)。
+4. **`Motion` 的真动画**:`Animation.RunAsync` + 终态填充(与 Lucide 的做法一致,D-70)。
+   真生命周期下的播放效果本机没法验;测试里验的是"关掉动画 = 立刻落终态"这条路。
+5. **`Dlg` 的浮层动画**:`Motion.Fade/PopIn/PopOut` 在离屏/测试里都算"关掉动画",所以关闭是**同步**完成的
+   —— 这不是"桩",正是 WPF 关掉动画时的行为。
+
+### 6. `Lucide` 的那一处改动(任务书点名)
+
+D-83 的 C1c 遗留是「`Skeleton` 的横扫与 `SmoothScroll` 的滚轮平滑在 Motion 落地后要改成走 Motion」。
+本包落到能落的部分:
+
+- `Lucide.MotionEnabled` 由「Motion 的临时替身」改成 **Motion 用户开关的转发别名**
+  (读 `Motion.UserEnabled`、写 `Motion.Enabled`),名字/类型不变 → **全应用只剩一个动画开关**;
+- `Lucide.Shimmer` 的无限高光动画由自带的 `Run(animation, slide)` 改成 **`Motion.Loop`**
+  (与 Windows 版的 `Motion.Loop(tb, start, stop)` 一一对应):只在真生命周期里起、卸载或关掉动画时停。
+- **`Ui.Skeleton` 与 `SmoothScroll` 没有改**:任务书开头明确写"不许改 `Ui` 门面",所以这两处的接线
+  **留给 C2b**(它们现在仍在用 `Lucide.MotionEnabled` 这个转发别名,行为与 C1c 一致:
+  测试/离屏下都不起动画)。这条要请 C2b 收尾时一并处理,已写进遗留。
+
+### 7. `App.cs` 的接线
+
+只加了一句 `I18n.Init((ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Args)`,
+位置在 `OnFrameworkInitializationCompleted`(即所有样式安装**之后**),所以
+`FluentTheme → Palette → Controls.axaml` 的安装顺序一字未动;`--smoke` 走的是
+`SetupWithoutStarting()`,根本不进这个方法,所以**冒烟基准不受影响**(实测逐位一致)。
+它只读数据目录里的 `config.json`,不落盘、不建目录。
+
+### 8. 新增/修改文件
+
+| 文件 | 说明 |
+|---|---|
+| `src/TipCL.App/Models/CrashReport.cs`、`CrashAction.cs` | 新增(字节级复制) |
+| `src/TipCL.App/Services/Fmt.cs`、`FileKinds.cs`、`TaskRow.cs`、`TaskStore.cs`、`BridgeEvent.cs`、`BridgeCallException.cs`、`BridgeClient.cs` | 新增(字节级复制) |
+| `src/TipCL.App/Services/Payload.cs`、`I18n.cs`、`AppServices.cs` | 新增(最小改动,见差异表) |
+| `src/TipCL.App/Services/BridgeHost.cs` | 新增(只剩进程内一条路) |
+| `src/TipCL.App/Services/Dlg.cs`、`Motion.cs` | 新增(Avalonia 移植) |
+| `src/TipCL.App/Services/Lucide.cs` | 改:`MotionEnabled` 转成转发别名;`Shimmer` 走 `Motion.Loop`(公开面不变) |
+| `src/TipCL.App/App.cs` | 改:加一句 `I18n.Init`(样式安装顺序不变) |
+| `tests/TipCL.Tests/C2aServicesTests.cs` | 新增(Fmt 35 条 + I18n 16 条) |
+| `tests/TipCL.Tests/C2aTaskStoreFileKindsTests.cs` | 新增(TaskStore/TaskRow 17 条 + FileKinds 35 条) |
+| `tests/TipCL.Tests/C2aBridgeTests.cs` | 新增(BridgeHost 8 + BridgeEvent 5 + BridgeClient 15) |
+| `tests/TipCL.Tests/C2aDlgMotionTests.cs` | 新增(Dlg 25 + Motion 14) |
+| `tests/TipCL.Tests/TipCL.Tests.csproj` | 改:`Ported\FileKindsTests.cs` 放回编译(A6 的 C 类 → 已恢复) |
+| `tests/TipCL.Tests/Ported/FileKindsTests.cs` | 改 2 处:`Path.GetTempPath()` → `TestHome.Root`(A6 的 B 类路径规则,红线:临时文件不出仓库);另加 `using TipCL.Tests;`;断言一字未改 |
+
+**没有改**:`src\TipCL.Core\`(整个目录)、`Themes\`(色板 + `Controls.axaml` + `StyleKeys`)、
+`Ui.cs` / `UiExt.cs`、`MainWindow.cs`、`Smoke\`、测试隔离三件(`TestHomeIsolation.cs` /
+`AssemblyInfo.cs` / `Program.cs`)、`Directory.Build.props`、`TipCL.Mac.sln`、`.gitignore`。
+
+### 9. 测试(新增 210 条,总数 2257 → 2467)
+
+- 纪律:两条通道各连跑 2 次全绿;碰 Avalonia 的用例体**一律**经 `AvaloniaSession.Run(...)`(D-79),
+  没有第二处 `SetupWithoutStarting`;事件用 `RaiseEvent` 程序化触发,**不模拟输入设备**;
+  全局静态(`I18n.Current` / `CultureInfo.CurrentUICulture` / `Motion.Enabled` / `Dlg.Host` /
+  `Dlg.SmokeActive` / `I18nCore.CurrentLang` / `TaskStore` 的事件)全部在 `finally` 里还原。
+- `TaskStore` 的用例在 finally 里"退订事件 + 清空整张表 + 断言行数回到进入时的值"(不留跨用例污染)。
+- 桥的用例用 **`TcpListener` 绑 127.0.0.1:0** 的假后端(**不是 `HttpListener`**,D-27),
+  每个用例 `finally` 里 Dispose;**绝不实例化 `BackendApi` / `BridgeServer` / `PluginManager`,
+  绝不调 `BridgeHost.StartAsync`**(D-23)。
+- 写测试时抓到 **4 处我自己的期望写错**(不是产品代码的 bug,记下来免得后人重踩):
+  1. `Fmt.Duration` 的小时分支只到 24 小时,`90061` 秒(25 小时)走的是**天**分支(改成 9000 秒验小时分支);
+  2. `TaskStore.Newest` 在没有未完成行时退化成"最后一行",所以把 r1/r2 都完成之后是 **r2** 不是 r1;
+  3. `Dlg.Panel` 的 `onClose` **只在关闭时**回调,`Push` 时不动它(我原先以为 Push 里会调一次);
+  4. `BridgeEvent.Payload` **不是**普通反序列化填的 —— 真路径上由 `BridgeClient.Dispatch` 把根元素
+     `Clone()` 塞进去;所以纯反序列化用例要自己给 JSON 带一个 `payload` 字段。
+- **D-58 又现形两次**(全角标点抄不进字面量,这次是**键**):
+  `TaskStore` 的默认状态键是 `排队中…`(**U+2026**,不是三个 ASCII 点);
+  `FileKinds.ModpackProbe.LoaderLabel("")` 的键用的是**全角括号** `（`/`）`(U+FF08/U+FF09)。
+  两条都改成 `\uXXXX` 转义后才绿。
+
+### 10. 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | 开工前 `%LOCALAPPDATA%\TipCL` 测量 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与 Lead 基线一致 |
+| 2 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 错误**;7 条警告 = `NU1900`×6 + `SYSLIB0014` **唯一一处**,按警告码分组核过(首轮踩到 `xUnit1031`×10 / `xUnit2031`×2,已把桥的用例改成 `async`+`await`、把 `Assert.Single(x.Where(...))` 改成带谓词的重载,现在是 0) |
+| 3 | `dotnet test TipCL.Mac.sln -c Release --no-build` **第 1 / 2 次** | 都是退出码 **0**:`已通过! - 失败: 0,通过: 2467,已跳过: 0,总计: 2467,持续时间: 2 s` |
+| 4 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` **第 1 / 2 次** | 都是退出码 **0**:`总计 2467 个用例,通过 2467,失败 0,跳过 0,不支持 0`,末尾 `in-proc 测试全绿`;**不支持 0**;总数与 `dotnet test` 相等 |
+| 5 | `--smoke --theme light --out artifacts\c2a-light.png` | 退出码 0,**3956 字节**,SHA256 `9F93EF3E0775A7D3FC07787F36BCEAE2B855CD24E06420A4BDBEB90DFD628F8C` —— **与裁决基准逐位相等** |
+| 6 | `--smoke --theme dark --out artifacts\c2a-dark.png` | 退出码 0,**3941 字节**,SHA256 `F687E6CD1CE48B078040040775167484890C58A18DFEBF4BD3B6125F151E117E` —— **与裁决基准逐位相等** |
+| 7 | 收工后 `%LOCALAPPDATA%\TipCL` | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,**与开工前完全一致** |
+| 8 | 残留进程 `testhost` / `TipCL` / `java` / `adb` | **0 / 0 / 0 / 0** |
+| 9 | `%TEMP%` 下本次会话(09:15 之后)新建的 `tipcl*` 目录 | **0 个**(现存 89 个全是此前会话留下的) |
+| 10 | `git diff --name-status dd1c39c HEAD -- src/TipCL.Core` | **空** |
+| 11 | `src\TipCL.Core\*.cs` 对 Windows 源 SHA256(排除 `bin\`/`obj\`) | mac 侧 248 个:有对应物 **238** / 完全一致 **216** / 有改动 **22** / 无对应物 **10**,与基线**完全一致** |
+| 12 | 新增/修改文件里搜 WPF 残留(`System.Windows` / `DependencyProperty` / `SetResourceReference` / `PasswordBox`) | 命中全在**注释**里(说明等价物),代码里 0 处 |
+
+**第 5/6 条为什么必须与基准逐位相等**:`--smoke` 走 `SetupWithoutStarting()`,既不起桌面生命周期,
+也进不了 `OnFrameworkInitializationCompleted`(所以 `I18n.Init` 不执行),窗口与样式一行未动 ——
+逐位相等正是"没动样式表、没动窗口"的反证。
+
+### 11. 提交(小步提交,消息前缀 C2a)
+
+| 提交 | 内容 |
+|---|---|
+| `70b7443` | `C2a(a)` WPF-free 基础服务(`AppServices` / `Fmt` / `FileKinds` / `TaskRow` / `TaskStore` / `I18n` / `Payload` / `BridgeEvent` / `BridgeCallException` + `Models` 的 `CrashReport`/`CrashAction`) |
+| `c12c9ff` | `C2a(b)` 桥对(仅进程内的 `BridgeHost` + `BridgeClient`) |
+| `1c4679f` | `C2a(c)` `Dlg` 与 `Motion` 的 Avalonia 移植 + `Lucide.MotionEnabled` 转发 + `App.cs` 的 `I18n.Init` |
+| 本次 | `C2a(d)` 测试(210 条)+ 本文档 + DECISIONS |
+
+### 12. 未验证项(本机是 Windows,没有 Mac)
+
+1. **macOS 真机**:Avalonia.Native 下的浮层观感、阴影(`BoxShadow` / `DropShadowEffect`)、
+   文件对话框(`IStorageProvider` 的 NSOpenPanel/NSSavePanel)、`ScrollViewer` 附加属性在 TextBox 上的效果 —— 一律未验证。
+2. **真生命周期下的动画播放**(`Motion` 的 20 个方法在 `Enabled = true` 时的实际观感、
+   时长、缓动):测试与 `--smoke` 里没有时钟,按设计全走"关掉动画"分支;本机**没有验过**播放效果。
+3. **`Motion.Loop` 的"已挂载元素立刻起动画"这条路**(我用 `IsAttachedToVisualTree()` 代替 WPF 的
+   `IsLoaded`):离屏下 `start` 不会被调用,所以这条分支没有真跑过。
+4. **`WaitForPicker` 的嵌套消息循环**:测试里 `Provider()` 恒为 null,这条路径(以及 10 分钟超时分支)未跑过。
+5. **`i18n` 词表的全量对拍**:只做了"App 表 == Core 表"的交叉抽样(找到的键),没有逐键比对 100%。
+6. **`EnsureCore` 的真实启动路径**(会造 `BackendApi` → 联网预热):按 D-23 红线**没有**在测试里跑过,
+   只测了它的纯静态邻居。
+7. `--smoke` 只验了 Windows 上的 Avalonia 渲染;离屏自动答问(`Dlg.SmokeAutoAnswer`)没有接线,未验证。
+
+### 13. 遗留与风险
+
+1. **`Ui.Skeleton` 与 `SmoothScroll` 还没有走 `Motion`**(任务书不许改 `Ui` 门面):
+   它们现在读 `Lucide.MotionEnabled`(已是 Motion 的转发别名),行为与 C1c 一致。
+   **C2b 接线时把这两处改成 `Motion.Loop` / `Motion.Enabled` 即可**,顺手复核还要不要留
+   `Lucide.MotionEnabled` 这个名字(它现在只是个转发别名,页面/外壳一旦不用就可以删)。
+2. **C2b 必须做的三处接线**:① `AppServices.Window = 外壳`(并设 `AppServices.ToastSink`);
+   ② `Dlg.Host` / `Dlg.BlurTarget`;③ `Motion.Enabled = _prefs.Anim`(Windows 在 `MainWindow` 1437 行做这件事)。
+   还有离屏那两条:`Dlg.SmokeActive` / `SmokeAutoAnswer` / `SmokeAutoCancelSystemDialog`。
+3. **`Payload` 现在没有调用点**:`BridgeHost.FindRoot` 改走 `Utils.ResolveRoot()` 之后,
+   `Payload.EnsureRoot()` 在 mac 侧没有调用者(Windows 是 `FindRoot` 的最后兜底)。
+   本包按任务书清单把它搬进来了(且 `DefaultRoot` 已对齐 mac 数据目录),但它是**事实上的死代码**;
+   若 C2b 认为该删,直接删掉即可(它是 `internal` 类,不影响任何公开面)。
+4. **`I18nCheck.cs` 没有搬**(469 行,开发期源码扫描器):它依赖 `PyPath.GetRelativePath` 与
+   Windows 的仓库布局(`root\src\TipCL`),不满足任务书"小且自足"的条件。已把 `L()` 需要的
+   `HasCjk` 搬进 `I18n`。**若 D1 想要 `--i18n-check`,需要单开一个小包**(mac 的布局是 `src\TipCL.App`)。
+5. **`AppServices.Toast` 目前只写调试输出**:外壳落地前,`Dlg.Form` 的"填写有误"提示、页面里
+   所有 `AppServices.Toast(...)` 都是**静默**的(C2b 设了 `ToastSink` 才出声)。
+6. `Motion` 的逐帧缓动被收成整段缓动(WPF 的 `BackEase`/`QuadraticEase` 在 Avalonia 侧没有对等物),
+   观感会有细微差别;`Shine` 的 7 秒节拍、`HoverLift` 的阴影强度是照 WPF 的数值写的,未在真机校验。
+7. `%TEMP%` 下那 89 个 `tipcl*` 目录是历史遗留(此前会话留下),本包运行期间**没有**新增;
+   `tipcl-probe` 属别的会话(D-61)。

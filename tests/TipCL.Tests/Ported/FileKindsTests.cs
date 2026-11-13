@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using TipCL.Services;
+using TipCL.Tests;
 using Xunit;
 
 public class FileKindsTests
@@ -34,7 +35,7 @@ public class FileKindsTests
 	[MemberData(nameof(PluginZips))]
 	public void PluginZipIsRecognized(bool nested)
 	{
-		string dir = Path.Combine(Path.GetTempPath(), "filekinds-" + Path.GetRandomFileName());
+		string dir = Path.Combine(TestHome.Root, "filekinds-" + Path.GetRandomFileName());
 		Directory.CreateDirectory(dir);
 		try
 		{
@@ -54,7 +55,7 @@ public class FileKindsTests
 	[Fact]
 	public void NonPluginZipIsNotPlugin()
 	{
-		string dir = Path.Combine(Path.GetTempPath(), "filekinds-" + Path.GetRandomFileName());
+		string dir = Path.Combine(TestHome.Root, "filekinds-" + Path.GetRandomFileName());
 		Directory.CreateDirectory(dir);
 		try
 		{
