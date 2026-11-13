@@ -495,9 +495,12 @@ public sealed class InProcessApi : IApi
                 return Playtime.GetTotalPlaytime();
             case "format_playtime":
                 return Playtime.FormatDuration(args.Get("seconds"));
+            // 线上新闻(照 Windows BackendApi.cached_news / fetch_news:同一份 News 语义 + 同一份缓存文件)。
+            // fetch_news 跑在 CallAsync 的线程池线程上,内部以「两条源 → 缓存 → 空」降级,不抛。
             case "cached_news":
+                return News.LoadCached();
             case "fetch_news":
-                return new List<object>();
+                return News.Fetch();
 
             // —— 账号(设置页「账号」内层导航)——
             case "get_account_rows":

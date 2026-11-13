@@ -118,6 +118,17 @@ public static class LaunchCore
         object memoryMb = args.Get("memory_mb");
         object width = args.Get("width");
         object height = args.Get("height");
+        // 启动页之外的入口(联机大厅直连 / 崩溃页重试)不带宽高:按设置里的 default_resolution 兜底。
+        // Windows 是每条调用链各自把 Config 的 width/height 传进来(BackendApi._launch_into_server:4854),
+        // Linux 收在这里,结果一致但只有一处。
+        if (!Py.Truthy(width) || !Py.Truthy(height))
+        {
+            var (defW, defH) = LaunchResolution.Read();
+            if (!Py.Truthy(width))
+                width = defW;
+            if (!Py.Truthy(height))
+                height = defH;
+        }
         Log("内存: " + Py.Str(memoryMb) + " MB | 分辨率: " + Py.Str(width) + "x" + Py.Str(height));
 
         PyDict prep = LaunchFlow.Prepare(inst, version, ArgList(args.Get("extra_game_args")), memoryMb);

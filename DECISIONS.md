@@ -386,3 +386,17 @@
 - **代价(如实记)**:每次用户手势(点星标 / 切分组 / 换下载页实例)都会**同步整份重写** config.json;正常几毫秒,极端占锁(杀软扫描,本仓库测试曾因 Defender 占锁出过假失败)最坏约 2.5s 会阻塞 UI 线程。Windows 版是关窗时统一保存,没有这个窗口。**本轮未做防抖/后台写,已列为遗留**。
 - **验收**:Release 0 CS/CA 警告;`dotnet test` 由 335(334+1)→ **343(342+1)**,净增 8 条(prefs 层 6 条 + 页面接线 2 条),连跑 3 次全绿(主 agent 独立复跑 2 次亦全绿);8 页冒烟 8/8 exit=0、日志 0 WARN/0 ERROR;**负控**:把 `Load` 临时改回进程内静态缓存 → 6 条里 3 条失败(含「收藏必须来自磁盘」那条),按字节还原并 SHA256 核对后 6/6 通过 —— 证明回归用例有牙。
 - **测试覆盖的边界(如实)**:页面接线用反射调私有方法(改名会编译失败,属有意契约);**没有点击级 UI 测试**,「点星 → 重启 → 收藏还在」这条链由「prefs 层往返(含用全新 Config 实例从磁盘读回)+ 页面接线 + harness 实操」三处拼起来证,**不是** GUI 端到端验过。
+
+### D-46 · 启动分辨率只留一个真源:`config.json` 的 `default_resolution`(R16,2026-11-13,移植代理;主 agent 复核)
+
+- **背景**:Windows 把这对值最终落到 config 的 `width` / `height`,再由 `get_settings` 派生出 `default_resolution`(`Core/BackendApi.cs:4125` 读 / `:4339` 写),启动页读写的是这个**派生键**(`Pages/LaunchPage.cs:881` / `:1002`);Linux 侧设置页读写的本来就是 `default_resolution` 本身(`Pages/Settings/SettingsPage.SaveLoad.cs:99` / `:322`,形如 `[宽, 高]`)。
+- **决定**:Linux 侧只保留 `default_resolution` 一个真源,启动页与设置页读写同一个键、同一份 `config.json`;**不**再派生 / 回写 `width` / `height`(两个键并存必然有一处先过期,「双改」时互相覆盖)。`Config.cs:107` 把 `default_resolution = [854,480]` 写进 DEFAULT_CONFIG,Windows 的 `width` / `height` 键保留但无人读。
+- **入口位置**:照 Windows 放「启动配置」浮层的「更多设置」折叠区(Java → 内存 → 分辨率 → 直连)。不放 chip 行(那行是只读摘要,Windows 也没有)、不放设置页(那儿没有「启动前顺手改一下」的位置)。
+- **读值语义**:设置里的值不合法(缺键 / 非两元序列 / 非数字 / ≤0)一律回落 854×480(Windows 默认值);半坏值**逐槽位**回落(`[1280,"x"]` → 1280×480)。手输非法文本同样回落并**把归一化结果写回输入框**。
+- **不做双向监听**:启动页在 `OnActivate` 与首次填充时重读设置。设置页与启动页同屏同时改,后写覆盖前写 —— 与 Windows 同(它也在页面激活 / 保存时取一次)。
+- **验收**:`tests/TipCL.Tests/App/LaunchResolutionTests.cs` 5 条 —— 两页共用同一个键(含「换全新 Config 实例从磁盘读回」)、坏值回落、页面框 ↔ 设置键、启动链边界(版本设置的 `window_width/height` 优先)、**配置浮层必须打得开且「分辨率」在「更多设置」组里**(就是抓那个强转崩溃的回归)。
+
+### D-47 · 新闻抓取:Linux 侧一律降级不抛(与 Windows 的有意差异);`LaunchPopups` 强转崩溃去掉强转而不是改返回类型(R16,2026-11-13,移植代理;主 agent 复核)
+
+- **新闻的差异**:Windows `Core/Launcher/News.cs:89-92` 在「两条源都失败且缓存为空」时 `ExceptionDispatchInfo.Capture(ex).Throw()`,由调用方(后端 RPC)兜。Linux 侧调用方是启动页那条 fire-and-forget 的新闻行,**抛出会把整页带崩**;故 `News.Fetch` 改为「两条源 → 缓存 → 空列表」全程不抛,只 `Utils.log.Info` 记一笔(具体原因由下层 `DownloadManager.FetchJson` 记 WARNING),`_rows_from` 遇坏结构也返回空(Windows 在那里抛 KeyError / TypeError)。这是**有意的降级差异**,已写进 `docs/PARITY.md` §9.3。
+- **修法选择**:`LaunchPopups._configBody` 的类型从 `Border?` 改成 `Control?` 并去掉 `(Border)` 强转,而不是把 `BuildConfig()` 的返回类型改成 `Border` —— 后者要动那条构造链上的所有 `UiClass` 返回值,收益为零、风险不小;前者是最小改动 + 一条回归用例钉住「浮层能打开、分辨率在里面」。

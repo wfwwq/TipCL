@@ -49,7 +49,7 @@
 ### 启动 / 实例库 / 实例详情
 | Windows | Linux | 状态 |
 |---|---|---|
-| `LaunchPage.cs` / `LaunchPage.Popups.cs` | `Pages/Launch/LaunchPage.cs` / `LaunchPopups.cs` | 🔷 Java 下拉/chip 已补(2026-11-10);「分辨率」字段与线上新闻待补 |
+| `LaunchPage.cs` / `LaunchPage.Popups.cs` | `Pages/Launch/LaunchPage.cs` / `LaunchPopups.cs` | ✅ Java 下拉/chip 已补(2026-11-10);「分辨率」字段与线上新闻已补(R16,2026-11-13,见 §9.3) |
 | `LibraryPage.cs` | `Pages/Library/LibraryPage.cs` | ✅ |
 | `InstanceDetailPage.cs` | `Pages/Library/InstanceDetailPage.cs` | ✅ |
 | `InstancePage.cs`(版本管理) | 不移植:Windows 侧该页**未注册进 NavDefs**(只剩静态 `SetDefaultAsync` 被引用),顶级页由 `VersionManagePage` 承担 | n/a |
@@ -316,3 +316,20 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | `AnimScale` / `SideWidth` / `SideFrost*` | wpf-ui.json | Linux `Motion` 无缩放因子;v2 外壳无侧栏 | **不适用**(不造没人读的键) | D-45 / §5 |
 
 > 落点为什么不另造 `wpf-ui.json`:Linux 侧只有一个用户配置文件 `config.json`,界面键(`ui_dark` / `ui_motion` / `ui_layout` / `ui_notes` …)都在里面;再开一个文件会让「配置在哪」有两个答案,也拿不到既有的原子写与迁移逻辑。
+
+### 9.3 启动页补全:分辨率字段 + 线上新闻(2026-11-13,R16)
+
+| # | 项 | 补前 | 补后 | 依据 |
+|---|---|---|---|---|
+| 1 | 启动页「分辨率」入口(§2 第 52 行的 🔷) | 无入口;启动写死 `width=854 / height=480` | 配置浮层「更多设置」里的 `宽 × 高`(Java → 内存 → 分辨率 → 直连),与设置页「默认分辨率」共享 `config.json` 的 `default_resolution`;启动页取框里的值,联机直连 / 崩溃页重试按该键兜底 | D-46 |
+| 2 | 线上新闻(`cached_news` / `fetch_news`) | 空桩 `return new List<object>();`(启动页永远「暂无新闻」) | 真抓 mojang 新闻源(v2 → 老版兜底)+ 落盘缓存 `cache/news.json`,最多 12 条、正文 160 字截断,行字段与参考版一致 | §2 第 52 行 |
+
+**同期修掉一条只在点开浮层时才暴露的移植缺陷**(与 §9 表同性质,但属 Linux 侧新发现):
+
+| # | 现象 | 根因 | 处置 | 验收 |
+|---|---|---|---|---|
+| 4 | 启动页点齿轮:进程抛 `InvalidCastException`,**「启动配置」浮层(实例 / 版本 / 用户 / 内存)一个都打不开** | `LaunchPopups.OpenConfigPopup` 里 `_configBody = (Border)BuildConfig();`,而 `BuildConfig()` 返回的是 `Control`(实际 `StackPanel`) | 字段类型改 `Control?`、去掉强转 | `App/LaunchResolutionTests.ConfigPopup_OpensAndExposesTheResolutionField`(先红后绿,红色证据 `_cmp/r16-test-popup-red.txt`);主 agent 12 场冒烟含该页 0 WARN |
+
+**有意保留的差异(不是缺陷,别当回归修掉)**:Linux `News.Fetch` 在「两条源都失败且缓存为空」时返回空列表,而 Windows 版会把最后一个异常抛出(`Core/Launcher/News.cs:89-92`)。原因见 D-47:Linux 侧的调用方是启动页那条 fire-and-forget 的新闻行,抛出等于整页崩。
+
+> 真机(盒子)上的端到端验证——包括点开这个浮层看「分辨率」是否可编辑、真的拉起游戏窗口——并入 R21 的最终 AppImage 验收。

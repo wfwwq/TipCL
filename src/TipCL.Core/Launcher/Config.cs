@@ -102,6 +102,9 @@ public static class Config
 		pyDict["download_segments"] = 4L;
 		pyDict["width"] = 854L;
 		pyDict["height"] = 480L;
+		// 启动分辨率:启动页与设置页共用这一个键(R16)。width/height 是 Windows 侧的存储键,
+		// Linux 侧保留只为兼容老 config.json,读写一律走 default_resolution,见 LaunchResolution。
+		pyDict["default_resolution"] = Py.L(854L, 480L);
 		pyDict["microsoft_client_id"] = "00000000402b5328";
 		pyDict["curseforge_api_key"] = "";
 		pyDict["github_proxy_prefixes"] = Py.L("https://gitproxy.mrhjx.cn/", "https://ghproxy.vip/", "https://gh-proxy.com/", "https://v6.gh-proxy.org/", "https://cdn.gh-proxy.com/");

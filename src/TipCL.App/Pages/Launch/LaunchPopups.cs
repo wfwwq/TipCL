@@ -30,7 +30,7 @@ public sealed partial class LaunchPage
 
     private TextBox? _switchSearch;
 
-    private Border? _configBody;
+    private Control? _configBody;
 
     // 统一外壳：圆角 12、边 1、投影；MaxHeight 在打开时按窗口高度 86% 收口
     private static Border PopShell(Control content, double width, double maxHeight, Thickness margin)
@@ -74,7 +74,9 @@ public sealed partial class LaunchPage
     private void OpenConfigPopup()
     {
         if (_configBody == null)
-            _configBody = (Border)BuildConfig();
+            // BuildConfig 返回的是 StackPanel(不是 Border):这里原来强转成 Border,
+            // 一点齿轮就 InvalidCastException,整个「启动配置」浮层(含分辨率)都打不开
+            _configBody = BuildConfig();
         if (_configPopup == null)
         {
             var head = UiClass.Txt("启动配置", 15, bold: true);
@@ -104,6 +106,7 @@ public sealed partial class LaunchPage
     }
 
     // 常用的只有实例/版本/用户；内存、直连收进「更多设置」，默认折叠
+    // 排列照 Windows 版 BuildConfig(1504):Java → 内存 → 分辨率 → 直连
     private Control BuildConfig()
     {
         var memRow = UiClass.G(null, "*,Auto");
@@ -113,9 +116,14 @@ public sealed partial class LaunchPage
         _memLbl.Margin = new Thickness(10, 0, 0, 0);
         _memLbl.VerticalAlignment = VerticalAlignment.Center;
 
+        var times = UiClass.Txt("×");
+        times.VerticalAlignment = VerticalAlignment.Center;
+        var resRow = UiClass.H(6, _wBox, times, _hBox);
+
         var advanced = UiClass.V(9,
             UiClass.Field("Java", _java, labelWidth: 58),
             UiClass.Field("内存", memRow, labelWidth: 58),
+            UiClass.Field("分辨率", resRow, labelWidth: 58),
             UiClass.Field("直连", _server, labelWidth: 58));
         advanced.IsVisible = false;
         Button? toggle = null;

@@ -62,6 +62,12 @@ public sealed partial class LaunchPage : PageBase
 
     private readonly TextBlock _memLbl = UiClass.Txt("4096 MB", 12, bold: true);
 
+    // 游戏分辨率(照 Windows 版 _wBox/_hBox):与设置页「默认分辨率」共用设置键 default_resolution,
+    // 入口与 Windows 一样落在配置浮层的「更多设置」区(见 LaunchPopups.BuildConfig)
+    private readonly TextBox _wBox = UiClass.Input("854", "854", 74);
+
+    private readonly TextBox _hBox = UiClass.Input("480", "480", 74);
+
     private readonly ProgressBar _prog = new() { Height = 4, Width = 320, Maximum = 100, Opacity = 0.92, IsVisible = false };
 
     private readonly TextBlock _status = UiClass.Txt("就绪", 12);
@@ -587,6 +593,8 @@ public sealed partial class LaunchPage : PageBase
     protected override void OnActivate()
     {
         SyncHero();
+        // 设置页可能刚改过分辨率:回到启动页就同步过来,免得两个入口各拿一份旧值互相覆盖
+        ApplyResolution();
         ApplyHeroTone(_onImage);
         _ = RefreshBackgroundAsync();
         _ = SyncTaskStateAsync();
@@ -621,6 +629,7 @@ public sealed partial class LaunchPage : PageBase
             catch { }
             _mem.Value = Math.Clamp(mem, 1024, 32768);
             _memLbl.Text = $"{(int)_mem.Value} MB";
+            ApplyResolution();
         }
         finally
         {
@@ -663,6 +672,28 @@ public sealed partial class LaunchPage : PageBase
         foreach (var it in items)
             cb.Items.Add(it);
         cb.SelectedItem = keep != null && items.Contains(keep) ? keep : (items.Count > 0 ? items[0] : null);
+    }
+
+    // ————— 分辨率(与设置页共用 default_resolution;照 Windows FillCardData:881 / SaveDisplayPrefsAsync:995) —————
+
+    /// <summary>把设置里的 default_resolution 灌进宽/高输入框;缺键或值不可用时回落 854×480。</summary>
+    private void ApplyResolution()
+    {
+        var (w, h) = LaunchResolution.Read();
+        _wBox.Text = w.ToString(CultureInfo.InvariantCulture);
+        _hBox.Text = h.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>宽/高输入框 → 设置键 default_resolution 并立即落盘(设置页读的就是这个键)。</summary>
+    private void SaveResolution()
+    {
+        if (_syncing)
+            return;
+        var (w, h) = LaunchResolution.ParseText(_wBox.Text, _hBox.Text);
+        LaunchResolution.Write(w, h);
+        // 归一化回框里:手输 "abc" 之后不该还显示原文,避免下次再拿它去写一遍
+        _wBox.Text = w.ToString(CultureInfo.InvariantCulture);
+        _hBox.Text = h.ToString(CultureInfo.InvariantCulture);
     }
 
     // ————— Java 选择(照 Windows ReloadJavaAsync / SaveJavaAsync / SelectedJava) —————
@@ -928,6 +959,9 @@ public sealed partial class LaunchPage : PageBase
         Config.CONFIG.Set("last_user_instance", instance);
         try
         {
+            // 分辨率取配置浮层里的宽×高(照 Windows LaunchAsync:1401-1402);版本设置里的
+            // window_width/height 优先级更高,由 LaunchFlow.ResolveResolution 处理。
+            var (resW, resH) = LaunchResolution.ParseText(_wBox.Text, _hBox.Text);
             var args = new PyDict
             {
                 ["instance"] = instance,
@@ -935,8 +969,8 @@ public sealed partial class LaunchPage : PageBase
                 ["account"] = account,
                 ["username"] = account,
                 ["memory_mb"] = (int)_mem.Value,
-                ["width"] = 854,
-                ["height"] = 480,
+                ["width"] = resW,
+                ["height"] = resH,
                 ["extra_game_args"] = ExtraArgs()!,
             };
             var row = await Api.StartTaskAsync("启动游戏", async (prog, ct) =>
@@ -1030,6 +1064,11 @@ public sealed partial class LaunchPage : PageBase
         };
         _user.LostFocus += (_, _) => Config.CONFIG.Set("last_user", _user.Text ?? "");
         _server.LostFocus += (_, _) => Config.CONFIG.Set("direct_server", _server.Text ?? "");
+        // 分辨率:离开输入框(或回车)即落盘(照 Windows _wBox/_hBox.LostFocus → SaveDisplayPrefsAsync)
+        _wBox.LostFocus += (_, _) => SaveResolution();
+        _hBox.LostFocus += (_, _) => SaveResolution();
+        _wBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) SaveResolution(); };
+        _hBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) SaveResolution(); };
     }
 
     private void OnApiEvent(ApiEvent ev)

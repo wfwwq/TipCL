@@ -441,3 +441,40 @@
 - **打通后的流程**:本地 `tools/package.ps1 -SkipWin` 出单文件 → 拷到盒子 → 盒子上组装 AppDir(AppRun / desktop / icon 照 `tools/package.sh` 的布局)→ `APPIMAGE_EXTRACT_AND_RUN=1 linuxdeploy-x86_64.AppImage --appdir ... --output appimage`。两个前置条件都是本轮踩出来的:**盒子必须装 `file` 包**(缺了 `appimagetool` 直接报 `file command is missing but required`,已 `apt-get install -y file`),**运行侧用 extract-and-run 免 FUSE**(已验证可用)。
 - **干跑结果(用的是当时的 `tipcl14`)**:`TipCL-x86_64.AppImage` = **38,959,608 B**;`TIPCL_HOME=<隔离沙箱> APPIMAGE_EXTRACT_AND_RUN=1 ./TipCL-x86_64.AppImage --smoke` → **exit 0** + `smoke.png` 60,101 B + 应用日志 **0 WARN**。
 - **归档**:`progress/M4-H-R21-AppImage组装与实机验证.md`(可复现步骤 + 两条前置条件);证据 `_cmp/box-appimage-out.txt`、`_cmp/box-appimage2-out.txt`。最终产物出来后重做一遍,并补一次「不带 extract-and-run 的裸跑」看这台盒子的 FUSE 到底能不能挂。
+
+## M4-H R16:启动页「分辨率」+ 线上新闻(2026-11-13,移植代理;主 agent 独立复核)
+
+两件事一起做,因为都落在启动页;顺手修掉一个把新入口挡死的既有 bug。
+
+### 一、启动页「分辨率」(补上 §2 第 52 行那个 🔷)
+- 新 `src/TipCL.Core/Launcher/LaunchResolution.cs`(90 行):`Parse`(设置里的 `[宽,高]` → 宽高;缺键 / 不是两元序列 / 元素非数字或 ≤0 **逐槽位**回落 854×480)、`ParseText`(输入框文本,同样回落)、`Read()` / `Write()`(写后立即落盘)、`ToPositive`。
+- `Config.cs:107`:DEFAULT_CONFIG 增 `default_resolution = [854,480]`;Windows 侧的 `width` / `height` 键**保留但 Linux 不读不写**(只为兼容老 config.json)。
+- `LaunchPage.cs`:`_wBox` / `_hBox`(74 宽,与 Windows 同);`ApplyResolution()` 在 `OnActivate`(:594)与首次填充(:630)把设置灌进框;`SaveResolution()` 在 **LostFocus + Enter** 时写回设置并归一化回框;`LaunchAsync`(:960-973)不再写死 854 / 480。
+- 入口位置照 Windows:`LaunchPopups.BuildConfig` 的「更多设置」折叠区,排列 **Java → 内存 → 分辨率 → 直连**(与 Windows `BuildConfig:1504` 同序);没塞进 chip 行(那行是只读摘要,Windows 也没有分辨率 chip)、也没塞进设置页(缺「启动前顺手改一下」的位置)。
+- 兜底:`LaunchCore.cs:121-131` 对**不带** width / height 的入口(联机大厅直连、崩溃页重试)按 `default_resolution` 补 —— Windows 是每条调用链各自传(`BackendApi._launch_into_server:4854`),Linux 收在唯一一处。
+
+### 二、线上新闻(`cached_news` / `fetch_news` 从空桩接上真数据)
+- 新 `src/TipCL.Core/Launcher/News.cs`(163 行):两条源 `launchercontent.mojang.com/v2/javaPatchNotes.json` → `.../javaPatchNotes.json`;缓存 `<ROOT>/cache/news.json`(= `$TIPCL_HOME/cache/news.json`,与 Windows `PPath.Join(Utils.ROOT,"cache","news.json")` 同名同层);最多 12 行;正文 >160 字截到 160 + `...`;行字段 `{title, body, version, image, date}`(title←title|version|id,body←shortText|body|subtitle,image←image.url|image|cardBackground,date←date|updated_at 前 10 位)。HTTP 走仓库自带 `DownloadManager.FetchJson(url, 15)` → `Net.Request`,**没引新包**。
+- `Api.cs:498-503`:`cached_news → News.LoadCached()`、`fetch_news → News.Fetch()`;`fetch_news` 跑在 `CallAsync` 的线程池线程上,不占 UI 线程。页面侧 `LaunchPage.FillNews` 一行没改(数据结构与参考版一致)。
+- **与 Windows 的有意差异(见 D-47)**:Windows 在「两条源都失败且缓存为空」时把最后一个异常抛出(`News.cs:89-92`);Linux 侧调用方是启动页那条 fire-and-forget 的新闻行,抛出会把整页带崩,故改为**只记日志 + 返回空**(页面显示「暂无新闻」)。`_rows_from` 遇坏载荷同样返回空而不抛 KeyError / TypeError。
+
+### 三、顺手修掉的既有 bug(挡在分辨率入口前面的那个)
+`LaunchPopups.OpenConfigPopup` 原本是 `_configBody = (Border)BuildConfig();`,而 `BuildConfig()` 返回 `Control`(实际 `StackPanel`)→ 一点齿轮就 `InvalidCastException`,**整个「启动配置」浮层(实例 / 版本 / 用户 / 内存 / 分辨率)在 Linux 上根本打不开**。处置:字段改 `Control?`、去掉强转(`LaunchPopups.cs:33` / `:76-79`),并加回归用例(先写失败用例拿到 `Unable to cast object of type 'Avalonia.Controls.StackPanel' to type 'Avalonia.Controls.Border'`,见 `_cmp/r16-test-popup-red.txt`)。**不改 `BuildConfig` 的返回类型**,避免动到那条链上的其它调用点。
+
+### 四、主 agent 独立复核(不采信自证)
+| 项 | 主 agent 实测 |
+|---|---|
+| Release 构建 | exit 0,**0 条 CS/CA**(4 行 NU1900 华为云镜像噪声) |
+| `dotnet test` ×2 | 每次 **355 = 354 通过 + 1 跳过 + 0 失败**(R15 的 343 → +12 条新用例) |
+| 冒烟 **12 场**会话(比移植代理的 8 场更宽:6 页 + 2 明暗 + `tasks` + 下载 3/5 分段 + 设置 0 号内层) | **12/12 exit=0 出图、WARN 0、ERROR 0** |
+| 新闻真实网络(**主 agent 自己抓**) | HTTP 200、260,536 B、首条 `Minecraft 26.4 Snapshot 8`(date `2026-11-10`);产品代码在**全新 sandbox** 里现抓写出 `cache/news.json` 3,918 B / 12 行 / 首条 body 长度 163(=160+「...」) |
+| 视觉 | `_cmp/lead-r16-smoke/launch/smoke.png` 底部真显示「新闻 Minecraft 26.4 Snapshot 8 ›」 |
+| 真实用户数据 | `%LOCALAPPDATA%\TipCL` 全部 mtime 未变(`config.json` 仍 `2026-11-08 17:13:58`,profiles 内无任何今日文件) |
+| Windows 参考仓库 | 6 小时内 **0 个文件**被改 |
+| 依赖白名单 | 无 csproj 改动 |
+
+### 五、如实说明的边界
+- 兜底源 `.../javaPatchNotes.json` 未被单独走到(主源成功时不会请求它);「不可达」路径是移植代理用 `TIPCL_HTTP_REPLAY` 指向死端口真跑出来的,不是拔网线。
+- 启动页「内存」滑条仍然只 `Set` 不 `Save`(既有行为,本轮未动)。
+- 分辨率只有「同一个键 + 激活时重读」,**没有**双向监听:设置页与启动页同屏同时改仍会后写覆盖前写(Windows 同样如此)。
+- 未做真机(盒子)验证;盒子上的端到端验证并入 R21 的最终 AppImage 那一步。
