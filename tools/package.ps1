@@ -72,3 +72,5 @@ if (-not $SkipWin) {
 Write-Host "`n打包完成。" -ForegroundColor Green
 Write-Host "Linux 产物使用: chmod +x dist/TipCL-linux-x64/TipCL.App && ./dist/TipCL-linux-x64/TipCL.App"
 Write-Host "AppImage 组装见 tools/package.sh（需在 Linux 上跑）。"
+Write-Host "  AppImage 组装也可以拆开做: 本机发布 dist/TipCL-linux-x64/TipCL.App, 拷到 Linux 上跑 tools/package.sh --appimage-only"
+Write-Host "  前置条件(见脚本注释): file 包必须装; 没有 /dev/fuse 时给 linuxdeploy 与产物前缀 APPIMAGE_EXTRACT_AND_RUN=1"

@@ -163,7 +163,7 @@ public sealed class TasksPage : PageBase
             card.Expanded = !card.Expanded;
             if (card.Expanded)
             {
-                card.Log.Text = row.Log.ToString();
+                card.Log.Text = row.LogText;
                 card.Log.CaretIndex = card.Log.Text?.Length ?? 0;
                 logWrap.IsVisible = true;
                 Motion.FadeIn(logWrap, 200, 8);

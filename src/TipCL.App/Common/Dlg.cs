@@ -33,31 +33,54 @@ public static class Dlg
     public static Task<bool> Confirm(string title, string body, string? ok = null, string? cancel = null, bool danger = false, Window? owner = null)
         => Ask(title, new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap }, ok, cancel, danger, owner: owner);
 
-    public static Task Alert(string title, string body, Window? owner = null)
-        => Ask(title, new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap }, "确定", null, false, owner: owner);
+    /// <summary>
+    /// 提示框(照 Windows 版 Dlg.Alert):只有**一个「知道了」按钮**,内部结果**恒为 true** ——
+    /// 点按钮、Esc、直接关窗都算「知道了」(参考版 Alert 的 dismiss 回调同样是 TrySetResult(true))。
+    /// <para>此前这里是 <c>Ask(..., cancel: null)</c>:会多渲染一个「取消」按钮,关掉还会被当成取消。
+    /// 6 个调用点(CatalogPage / VersionManagePage / SavesDialog / ModsDialog / FirstRunWizard /
+    /// FeedbackView)都是 <c>await Dlg.Alert(...)</c>,且返回值类型本就是不暴露值的 <see cref="Task"/>,
+    /// 所以单按钮 + 恒 true 是安全的。</para>
+    /// </summary>
+    public static async Task Alert(string title, string body, Window? owner = null)
+        => await AskCore(title, new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap }, "知道了", null, false, 460, owner, dismissIsOk: true);
 
     /// <summary>通用问答框：自定义内容体 + 确定/取消。</summary>
-    public static async Task<bool> Ask(string title, Control body, string? ok = null, string? cancel = null, bool danger = false, double width = 460, Window? owner = null)
+    public static Task<bool> Ask(string title, Control body, string? ok = null, string? cancel = null, bool danger = false, double width = 460, Window? owner = null)
+        => AskCore(title, body, string.IsNullOrEmpty(ok) ? "确定" : ok, string.IsNullOrEmpty(cancel) ? "取消" : cancel, danger, width, owner);
+
+    /// <summary>
+    /// Ask / Alert 的实现体。<paramref name="cancelLabel"/> 为 null 即**不建取消按钮**(Alert 的单按钮形态);
+    /// <paramref name="dismissIsOk"/> 决定「直接关窗 / Esc」算确定还是取消(Alert 恒 true)。
+    /// 拆到私有层是为了不动 <see cref="Ask"/> 的公开签名。
+    /// </summary>
+    private static async Task<bool> AskCore(string title, Control body, string okLabel, string? cancelLabel, bool danger, double width, Window? owner, bool dismissIsOk = false)
     {
         var host = Resolve(owner);
         if (host == null) return false;
-        var okBtn = new Button { Content = string.IsNullOrEmpty(ok) ? "确定" : ok };
+        var okBtn = new Button { Content = okLabel };
         okBtn[!Button.BackgroundProperty] = Res.Bind(danger ? "B.Danger" : "B.AccentStrong");
         okBtn[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
-        var cancelBtn = new Button { Content = string.IsNullOrEmpty(cancel) ? "取消" : cancel };
+        var cancelBtn = cancelLabel == null ? null : new Button { Content = cancelLabel };
         var result = new TaskCompletionSource<bool>();
-
-        okBtn.Click += (_, _) => result.TrySetResult(true);
-        cancelBtn.Click += (_, _) => result.TrySetResult(false);
-
-        var win = BuildDialog(title, body, width, new StackPanel
+        var row = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Children = { cancelBtn, okBtn },
-        });
-        win.Closed += (_, _) => result.TrySetResult(false);
+        };
+        if (cancelBtn != null)
+            row.Children.Add(cancelBtn);
+        row.Children.Add(okBtn);
+
+        var win = BuildDialog(title, body, width, row);
+        // 键盘习惯照 Windows 版:Enter = 确定;有取消按钮时 Esc = 取消,单按钮时 Esc 也算「知道了」
+        okBtn.IsDefault = true;
+        if (cancelBtn != null) cancelBtn.IsCancel = true;
+        else okBtn.IsCancel = true;
+        okBtn.Click += (_, _) => Finish(result, true, win);
+        if (cancelBtn != null)
+            cancelBtn.Click += (_, _) => Finish(result, false, win);
+        win.Closed += (_, _) => result.TrySetResult(dismissIsOk);
         AnyOpen = true;
         await win.ShowDialog(host);
         AnyOpen = false;
@@ -74,9 +97,9 @@ public static class Dlg
         if (host == null) return -1;
         var result = new TaskCompletionSource<int>();
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        var made = new Button[buttons.Length];
         for (int i = 0; i < buttons.Length; i++)
         {
-            int idx = i;
             bool primary = i == buttons.Length - 1;
             var b = new Button { Content = buttons[i] };
             if (primary)
@@ -84,10 +107,18 @@ public static class Dlg
                 b[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
                 b[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
             }
-            b.Click += (_, _) => result.TrySetResult(idx);
+            made[i] = b;
             row.Children.Add(b);
         }
         var win = BuildDialog(title, body, width, row);
+        // 点击处理要等 win 存在才挂(要在同一个处理器里关窗,见 Finish)
+        for (int i = 0; i < made.Length; i++)
+        {
+            int idx = i;
+            made[i].Click += (_, _) => Finish(result, idx, win);
+        }
+        if (made.Length > 0)
+            made[^1].IsDefault = true;   // 最后一个按钮是主按钮(照 Windows 版 BtnKind.Primary):Enter 走它
         win.Closed += (_, _) => result.TrySetResult(-1);
         AnyOpen = true;
         await win.ShowDialog(host);
@@ -107,6 +138,7 @@ public static class Dlg
         var close = new Button { Content = "关闭" };
         close[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
         close[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
+        close.IsCancel = true;   // 只补 Esc:面板体里常有输入框,Enter 不该等于「关闭」,故不设 IsDefault
         var footer = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -135,6 +167,7 @@ public static class Dlg
         var close = new Button { Content = "关闭" };
         close[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
         close[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
+        close.IsCancel = true;   // 只补 Esc:面板体里常有输入框,Enter 不该等于「关闭」,故不设 IsDefault
         var footer = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -175,7 +208,14 @@ public static class Dlg
         }
     }
 
-    /// <summary>单行输入框。</summary>
+    /// <summary>
+    /// 单行输入框。取消(或直接关窗)返回 null,确定返回输入内容(可能是空串)。
+    /// <para>对照 Windows 版 <c>Dlg.Prompt</c>:那边 footer 是 <c>Ui.H(8, button2, button)</c> ——
+    /// **取消 + 确定两个按钮**(取消 → null,确定 → 输入内容)。本移植版此前只放了确定按钮,
+    /// 用户没有「反悔」出口(Esc 也无效),这里按 Windows 版补齐。
+    /// (另一处未对齐的细节:Windows 版确定时会对文本 <c>Trim()</c>,本版仍原样返回 —— 改它会波及
+    /// 所有调用方的空串/空格判定,不在本次修复范围内。)</para>
+    /// </summary>
     public static async Task<string?> Prompt(string title, string label, string initial = "", string? placeholder = null, Window? owner = null)
     {
         var host = Resolve(owner);
@@ -184,11 +224,24 @@ public static class Dlg
         var okBtn = new Button { Content = "确定" };
         okBtn[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
         okBtn[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
+        var cancelBtn = new Button { Content = "取消" };
         var result = new TaskCompletionSource<string?>();
-        okBtn.Click += (_, _) => result.TrySetResult(box.Text);
-        box.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) result.TrySetResult(box.Text); };
 
-        var win = BuildDialog(title, WrapField(label, box), 460, okBtn);
+        var win = BuildDialog(title, WrapField(label, box), 460, new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { cancelBtn, okBtn },
+        });
+        okBtn.IsDefault = true;
+        cancelBtn.IsCancel = true;
+        okBtn.Click += (_, _) => Finish(result, box.Text, win);
+        cancelBtn.Click += (_, _) => Finish<string?>(result, null, win);
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key == Avalonia.Input.Key.Enter) Finish(result, box.Text, win);
+        };
         win.Closed += (_, _) => result.TrySetResult(null);
         AnyOpen = true;
         await win.ShowDialog(host);
@@ -273,6 +326,23 @@ public static class Dlg
     }
 
     // ───────────────────────────── 内部 ─────────────────────────────
+
+    /// <summary>
+    /// 收尾一次对话框交互:先落地结果,**再关窗**。
+    /// <para>顺序不能反:每个对话框都在 <c>win.Closed</c> 上挂了「兜底 = 取消」的 TrySetResult,
+    /// 而 TaskCompletionSource 只认第一次设置 —— 先 Close() 会让兜底抢答(点「确定」却拿到 false);
+    /// 先设结果,兜底那次自然成了空操作。</para>
+    /// <para>也正因为 TCS 只认首次,「已经收尾过」就用 TrySetResult 的返回值判断:
+    /// 键盘上 Enter 可能同时触发输入框 KeyDown 与 IsDefault 按钮,重复调用不会重复关窗。</para>
+    /// <para>为什么必须显式关窗:Windows 参考版用 WinForms 图层,设 DialogResult / 图层 Close 会顺带
+    /// 关掉图层;移植成 Avalonia 独立窗口后这一步没人代劳。漏掉它的症状就是——按钮点了窗口不动、
+    /// <c>await win.ShowDialog(host)</c> 永不返回、调用方以为用户「没作答」。</para>
+    /// </summary>
+    private static void Finish<T>(TaskCompletionSource<T> tcs, T value, Window win)
+    {
+        if (!tcs.TrySetResult(value)) return;
+        win.Close();
+    }
 
     private static StackPanel WrapField(string label, Control input)
         => new()

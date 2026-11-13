@@ -565,3 +565,46 @@
 - **系统文件对话框本身没在真机点过**(无头环境点不了 GTK/portal 对话框),`AllowMultiple = true` 只有代码与注入点测试覆盖;真机只验证到「多选循环把每个文件都处理了」这一层。
 - 存档管理页的「装数据包」列表**仍按实例根**列(与参考版一致,未改):隔离版本下只能从实例共享数据包里选。要让列表也列版本目录,需要给 `get_installed_datapacks` 带上 `version`,属独立条目。
 - 测试暴露的一条**主 agent 自己的问题**:同一轮里 R17 的 `MdViewLinkTests` 有 2 条假红(**收集器只扫段落顶层** → 粗体/列表里的链接扫不到;断言写 `inner.Text` 而文字在 `Inlines` 的 `Run` 上),已改成递归收集 + 拼接 `Run.Text`,R17 提交前已是 397 全绿。
+
+### 2026-11-13 M4-H R21b 真机最终验收:两条只在真机暴露的 P0 + 最终 AppImage(主 agent;移植代理修,主 agent 复核)
+
+**一、真机验收发现两条 P0(都已修,都在真机复验)**
+
+| # | 现象 | 根因 | 修法 | 真机验收 |
+|---|---|---|---|---|
+| 1 | 首启「同意门」点「同意」/「暂不同意」**窗口纹丝不动**(此前只能 `xdotool windowclose` 硬关,调用方还把结果当成「取消」写进配置) | `Dlg.Ask / Choose / Prompt` 只 `TrySetResult`、**没有人关窗**(Windows 参考版是 WinForms 图层,`DialogResult` / `layer.Close()` 会顺带关掉图层) | 私有 `Finish<T>`:先落结果(用 `TrySetResult` 的返回值判「已收尾」)、再 `win.Close()`;`Alert` 改单按钮「知道了」;`Prompt` 补「取消」 | 点「同意」→ 对话框消失 + `config.json` 写 `feedback_consent: true` + 进程存活 + 无功能异常 |
+| 2 | 启动配置浮层里**除文字外一片空白**(实例/版本/用户/Java/内存滑块/分辨率输入框全看不见),而主窗口里同一批控件正常 | `MakePopup` 造的 `Popup` **没挂进页面树** → 隐式 `ControlTheme` 的宿主链断掉(显式主题与 `Application` 级 `Res.Bind` 不受影响,所以呈「显式主题能画、隐式主题画不出」) | `MakePopup` 把 Popup 加进页面根面板;拿不到面板时记 WARN,不静默退化 | 浮层完整渲染(实例 `.minecraft` / 版本 / 用户 `Player` 占位 / Java `自动选择` / 内存滑块 + `4096 MB` / 分辨率 `854 × 480` / 直连 `ip:port` 占位);**在浮层里改分辨率真的落盘** |
+
+**二、最终 AppImage 与真机端到端**
+
+- 本地 `tools/package.ps1 -SkipWin` → 盒子上组装(流程见 `progress/M4-H-R21-AppImage组装与实机验证.md`):`TipCL-x86_64.AppImage` = **38,967,800 B**,sha256 **`1176a917607d8b16fca60c600a09c71a5c2a7d74957ea04a430e27b38ca1ee8e`**。
+- **裸跑(FUSE,不带 `APPIMAGE_EXTRACT_AND_RUN`)**:`TIPCL_HOME=<隔离沙箱> ./TipCL-x86_64.AppImage --smoke` → **exit 0**、`smoke.png` 574,076 B、应用日志 **0 WARN / 0 ERROR**。
+- **组装这一步现在是一条脚本命令**(不再是手工敲的说明):`tools/package.sh` 新增 `--appimage-only`(本机发布、盒子组装的分工),在盒子上真跑一次 → `linuxdeploy` 末尾 `Success`、产物 **38,967,800 B**(与归档件同尺寸,sha256 不同属预期:squashfs 写 mtime)、随后裸 FUSE `--smoke` **exit 0** / `smoke.png` 574,566 B / 0 WARN 0 ERROR。**这一跑当场揪出这条分支从来没对过**:linuxdeploy 的 `--desktop-file` / `--icon-file` 只写了文件名,而脚本是 `cd dist` 之后调它的(那两个文件在 AppDir 里)⇒ `ERROR: No such file or directory: tipcl.png`;改成 AppDir 内路径后出包成功(见 D-55)。
+- **GUI 端到端(隔离 HOME:`first_run=false`、无 `feedback_consent` 键)**:同意门弹出 → 点「同意」关窗并落盘 → 主窗口正常(启动游戏 / 齿轮 / 联机 / chips `Java 自动`+`4 GB` / 新闻行「Minecraft 26.4 Snapshot 8」)→ 齿轮打开「启动配置」→ 展开「更多设置」→ 分辨率字段改成 1600 × 900 → `config.json` 的 `default_resolution` 逐次变化 → 复原 854 × 480;全程无功能异常(唯一噪声是 Avalonia X11 的 AppMenu DBus 无主任务异常,见下方遗留第 1 条)、进程存活。
+- **R16 的「分辨率」在真机上是真的能改**(两条路径分别证到):设置页「通用 → 默认分辨率」(独立于浮层缺陷)`[854,480] → 1920×480 → 1920×1080 → 复原 854×480`;浮层内 `[854,900] → 1600 → [1600,480] → 900 → [1600,900] → 复原 [854,480]`。两处写的是**同一个** `config.json` 键。
+- **主 agent 的独立复核(不只信移植代理的报告)**:`dotnet test` 403 = 402 通过 + 1 跳过 + 0 失败(上一轮基线 402);`SMOKE_PROBE=popup-theme` exit 0(真实浮层 10/10,反证组 C 仍 0/5)、`SMOKE_PROBE=dialog-close` exit 0;Release 构建 0 CS/CA(只有 2 条 NU1900 镜像噪声);**布局不动**用单变量对照证:还原两个文件构建跑 4 次 + 装回修复版跑 4 次,8/8 张 launch 页 `smoke.png` 逐位相同(`070d6ad6682d6a86…`,564,149 B)。
+
+**三、本轮顺带立下的两条真机测试纪律(已进 DECISIONS D-52)**
+
+1. 盒子是非 UTF-8 locale 时 `xdotool search --name '<中文>'` **静默返回空**(不是没有窗口):改用 `xdotool search --onlyvisible --name ''` 枚举 + shell `case` glob 做字节匹配。
+2. 点「非可聚焦区域」(浮层标题、设置页标签)**不会**把焦点从 TextBox 上移走 ⇒ 验证「离开输入框即落盘」必须点**另一个输入框**,否则会得出「保存没生效」的假结论。
+
+**四、验收把第二遍测试跑绿的过程里,抓到一处真竞态(参考版同款,Linux 侧先修)**
+
+上面「主 agent 的独立复核」写着 `dotnet test` 403 全绿 —— 那是**第一遍**。最终验收把全量测试连跑两遍,第二遍炸在一条看起来完全无关的用例上(`MultiPickImportTests.Catalog_ImportLocal_TwoFiles_ImportsEach`),异常是 `System.InvalidOperationException: Collection was modified; enumeration operation may not execute`,栈是 `TaskStore.RunningCount` ← `TasksPage.Sync` ← `TaskStore.Handle` 的 UI 回调。根因:`TaskStore._rows` 是普通 `List<TaskRow>`,工作线程在半路增删、UI 线程同时遍历,**两边都没锁**;Windows 参考版是**同一份无锁写法**,所以是参考版同款缺陷(记进 PARITY §6 第 11 行)。处置:Linux 侧改成「私有锁 + `ToArray()` 快照」,`TaskRow.Append` 的 `StringBuilder` 一并加行内锁并给页面一个 `LogText` 快照;新增并发回归用例,把 `TaskStore.cs` 单独还原时 **3/3 红**、装回加锁版 **3/3 绿**,全量连跑 3 遍全绿(404 = 403 通过 + 1 跳过 + 0 失败)。见 PARITY §9.9 与 DECISIONS D-54。
+
+> 方法上的收获和这一轮的两条真机纪律一样重要:**「一次绿」不等于稳**,概率性缺陷只有连跑两三遍才露头;而且**看异常栈的行号**才能确认自己跑的到底是哪份代码(这一轮踩过一次 MSBuild 因 mtime 判定「最新」而跳过编译的坑,详见 D-54)。
+
+**五、收尾时踩到的工具坑(已进 DECISIONS D-53)**
+
+`tools/package.ps1` 是**带 BOM 的 UTF-8**,而 BOM 正是它在 Windows PowerShell 5.1 下能按 UTF-8 解码的前提。收尾时用编辑工具给它补两行提示,**工具静默丢掉了 BOM** —— 同一份脚本立刻从 0 个语法错误变成 18 个(`[Parser]::ParseFile` 实测:HEAD 0 错 → 掉 BOM 18 错 → BOM 放回去 0 错),而 `git diff` 看起来只是「加了两行」。改用追加式写入(`[IO.File]::AppendAllText`)后复验:PS 5.1 默认解码 0 错、`powershell -File tools/package.ps1 -SkipWin -SkipLinux` exit 0 且三行收尾提示中文不乱码;并把本轮全部改动文件(3 个源码 + 1 个测试 + 1 个脚本 + 3 个文档)逐个与 HEAD 比过 BOM,确认一个都没掉。
+
+**六、遗留(如实,不写成已做)**
+
+- **真机 GUI 会话里有「无主任务异常」噪声(9 条)**:盒子的 XFCE 没有 `com.canonical.AppMenu.Registrar` 这个 DBus 服务,而 Avalonia 的 X11 / FreeDesktop 集成**每开一个新窗口**都会去注册它(是 Avalonia 自己的调用:Linux 侧代码里没有任何 DBus / AppMenu / FreeDesktop 引用),于是每开一次浮层就落一条 `unhandled(Task)` + `AggregateException(DBusException: The name com.canonical.AppMenu.Registrar was not provided)`,后来这个会话累积到 24 条同一条消息。进程与功能都不受影响,**无头冒烟(不开窗口)是 0 条** ⇒ 「0 WARN / 0 ERROR」只对冒烟会话成立,不能拿它代表 GUI 会话。处置:如实记账、**不改代码** —— 要消掉它得在 `AppLog` 的无主任务异常处理器里按异常类型过滤,那属于日志降噪而不是修 bug,留给后续决策(证据:`_cmp/r22-gui.log`)。
+- 「启动游戏」只做到「按 `default_resolution` 拼出启动命令并过 CLI 预检」这一层,**没有真的拉起游戏进程**(盒子上无账号、也不该真下 JVM;判据口径见 D-35)。
+- **浮层的关闭行为三条都测过(先证「浮层确实开着」+「按键确实送得到」,再下结论)**:**按 `Esc` 不关闭**(4 次独立按键全部 `POPUP_AFTER_ESC=1`,且同一次会话里正向对照成立:把 `zzz` 打进浮层的「用户」输入框有 72px 字形变化、Esc 之后再输 `Q` 仍有 91px 变化 ⇒ 键确实送到了浮层,只是没人处理它;源码侧交叉 `LaunchPopups.MakePopup` 只设 `IsLightDismissEnabled = true`,全仓 `Escape` 只在 `AiPage.cs:273`);**浮层标题栏的 `×` 会关闭**(悬停出「关闭」tooltip,点击后 `POPUP_AFTER_X=0`,4 次可复现);**点浮层外 light-dismiss 会关闭**(`OUTSIDE_CLICK_AT=420,700` 经 `getmouselocation` 证实落在主窗口上,`POPUP_AFTER_OUTSIDE=0`,页面仍停在「启动」页未误切)。与 R21 记录一致,本轮未改 Esc。
+  > 「让浮层自己持有 X 输入焦点再按 Esc」这个变体**测不出**:浮层是 override-redirect 窗口,xfwm4 不接管,`xdotool` 无法把 X 焦点交给它(强行 `windowfocus` 会先把焦点给 WM 的隐藏窗并让浮层失焦自关,属混淆,不计证据)。
+  >
+  > 上一轮那条「按 Esc 不关」的结论当时其实**没有证据**(检测脚本报浮层窗口数=0,而截图里浮层根本没打开);这一轮重做时还纠掉了两个取证方法错误:`xdotool getwindowfocus --shell` 在本机 xdotool 上不支持(之前的 `FOCUS_*` 打印的其实是「指针下的窗口」),以及 **PNG 的 md5 不能判画面**(`import` 会写 tEXt 时间戳,静止画面 md5 也不同;像素比较必须逐像素差)。
+- 本地归档 `dist/TipCL-linux-x64.AppImage` 走 rsh 分片拉取:**6 MB 分片会 `h2 protocol error`,2 MB 可用**(与 push 侧的经验一致)。

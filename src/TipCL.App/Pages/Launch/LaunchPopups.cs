@@ -51,15 +51,42 @@ public sealed partial class LaunchPage
         return b;
     }
 
+    /// <summary>
+    /// 建浮层。**必须把 Popup 挂进页面树**,否则浮层里的控件一个都画不出来。
+    ///
+    /// 机制:Avalonia 11 的隐式 ControlTheme(FluentTheme 里的 {x:Type TextBox} / {x:Type ComboBox} /
+    /// {x:Type Slider} 等)走「控件 → 逻辑/可视父链 → TopLevel → Application.Styles」这条宿主链查找
+    /// (<c>TryFindResource</c>,连 IStyleHost.Styles 一起查)。没挂树的 Popup 拿不到宿主,它的 Child
+    /// 继承不到任何样式:TextBox/ComboBox/Slider 模板为空、量出 0×0、整行空白;而 TextBlock 不需要模板、
+    /// <c>Ui.Btn/Switch/Multi</c> 是构造时直接赋了 ControlTheme 对象、<c>Dyn()</c> 走 Application 级
+    /// 资源观察绑定 —— 这三类照常显示。**「显式主题能画、隐式主题画不出」正是这条链断掉的指纹**,
+    /// 与真机浮层截图逐条吻合(逐像素扫描:只剩 TextBlock 与显式主题按钮)。
+    ///
+    /// 挂树后 Popup 由主窗口的 OverlayLayer 承载(探针里 Child 的 <c>GetVisualRoot()</c> == MainWindow),
+    /// 宿主链完整。回归探针:<c>SMOKE_PROBE=popup-theme</c>(Session/SmokeRunner.cs)。
+    /// Popup 自身在布局里不占位(浮层内容渲染在 OverlayLayer,不在它的布局槽里):挂树前后
+    /// launch 页的 smoke.png 逐位一致,对启动页布局没有影响。
+    /// </summary>
     private Popup MakePopup(Control target, PlacementMode mode, Border shell)
     {
-        return new Popup
+        var p = new Popup
         {
             PlacementTarget = target,
             Placement = mode,
             IsLightDismissEnabled = true,
             Child = shell,
         };
+        if (Content is Panel host)
+        {
+            if (!host.Children.Contains(p))
+                host.Children.Add(p);
+        }
+        else
+        {
+            // 不该发生(BuildHero 把内容设成根 Grid):没挂树 = 浮层里靠隐式主题的控件又画不出来
+            AppLog.Warn("启动页浮层没能挂进页面树,浮层里的输入控件会渲染不出来");
+        }
+        return p;
     }
 
     // 打开时按窗口高度收口浮层总高（对应 Windows 版 WindowPctConverter(0.86)）
@@ -376,4 +403,29 @@ public sealed partial class LaunchPage
         BoundShell(_newsPopup);
         _newsPopup.IsOpen = true;
     }
+
+    // ————— 冒烟探针入口(SMOKE_PROBE=popup-theme 专用,产品流程不调用) —————
+    // 让探针直接开到**真实**的「启动配置」浮层,而不是另造一个仿制品:浮层里出事的正是
+    // 这批靠隐式 ControlTheme 取模板的控件(TextBox/ComboBox/Slider),换仿制品就验不到真路径。
+
+    /// <summary>探针:打开真实「启动配置」浮层并返回它。</summary>
+    internal Popup OpenConfigPopupForProbe()
+    {
+        OpenConfigPopup();
+        return _configPopup!;
+    }
+
+    /// <summary>探针:配置浮层里那些「没有显式 Theme」的数据控件(界面名 + 控件)。</summary>
+    internal (string Label, Control Control)[] ConfigProbeControls() => new (string, Control)[]
+    {
+        ("实例 ComboBox", _inst),
+        ("版本 ComboBox", _ver),
+        ("用户 TextBox", _user),
+        ("直连 TextBox", _server),
+        ("Java ComboBox", _java),
+        ("内存 Slider", _mem),
+        ("内存数值 TextBlock", _memLbl),
+        ("分辨率宽 TextBox", _wBox),
+        ("分辨率高 TextBox", _hBox),
+    };
 }

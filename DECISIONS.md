@@ -431,3 +431,51 @@
 - **不凭空造存档**:参考版在存档目录不存在时无条件 `EnsureDir(<游戏目录>/saves/<存档>/datapacks)`,会造出一个只有 `datapacks/` 的空壳存档(游戏里是个打不开的假世界);同文件的 `DeleteSave` / `OpenSave` 是会检查存在性的。Linux 侧改为显式抛 `存档不存在: X`,一个目录都不建 —— 与同文件其它存档操作一个口径。
 - **不动的地方(与参考版一致,避免扩大改动面)**:同名文件就地覆盖(`overwrite: true`)不产生副本;目标 `datapacks` 目录不存在就创建;目标路径与版本隔离游戏目录算法不变;**存档管理页「装数据包」列表仍按实例根列**(要让隔离版本也能从版本目录里选,需要给 `get_installed_datapacks` 带 `version`,属独立条目,已记进 `docs/PARITY.md` §9.6)。
 - **验收**:`dotnet test` **397 = 396 通过 + 1 跳过 + 0 失败**(新增 22 条:多选 13 + 数据包 9);Release App/Core 构建 0 CS/CA;10 场冒烟 exit=0、0 WARN/0 ERROR;红证据 `_cmp/r18-a-red.txt`(多选未接循环时 `Expected 2 Actual 1`)、`_cmp/r18-b-red.txt`(`SaveError : 数据包不存在: dp-iso.zip`)。三条参考版缺陷已进 `docs/PARITY.md` §6 第 8–10 行。
+
+### D-51 · 对话框点击必须「先落结果、再关窗」:一行 `Finish` 收口 Ask / Choose / Prompt(R21b,2026-11-13,移植代理;主 agent 复核 + 真机复验)
+
+- **事实**:真机首启的「同意门」点「同意」/「暂不同意」窗口不动,`await win.ShowDialog(host)` 永不返回;此前只能 `xdotool windowclose` 硬关,而关窗会走 `win.Closed` 上那条「兜底 = 取消」——于是**用户点了「同意」,配置里却写 `feedback_consent: false`**。根因:Windows 参考版 `Dlg` 是 WinForms 图层,设 `DialogResult` / `layer.Close()` 顺带关掉图层;移植成 Avalonia 独立 `Window` 后,三处点击只 `TrySetResult`、**没有任何人关窗**。
+- **修法**:私有 `Finish<T>(tcs, value, win)` —— 先 `TrySetResult`(**返回值 false 即「已经收尾过」直接 return**,键盘 Enter 同时触发输入框 `KeyDown` 与 `IsDefault` 按钮时不会重复关窗),再 `win.Close()`。顺序不可反:TCS 只认第一次设置,先 `Close()` 会让兜底抢答。`Ask` 的公开签名一字未改(实现体下沉到私有 `AskCore`)。
+- **同批对齐的两处**:1`Prompt` 补「取消」(→ `null`)+ `IsCancel`,与参考版 footer「取消 + 确定」一致(此前只有确定,没有反悔出口);2`Alert` 改**单按钮「知道了」+ 内部结果恒 `true`**(照参考版:Esc / 直接关窗都算「知道了」),此前是 `Ask(..., cancel: null)` 会多画一个取消按钮、关窗还被当成取消。6 个调用点全是 `await Dlg.Alert(...)`,返回类型本就是 `Task`、值不外露,不存在兼容问题。
+- **`Panel` / `OpenPanel` 为什么不用改**:它们本来就是 `close.Click += … win.Close()`,只补 `IsCancel = true`(Esc = 关闭);**不设 `IsDefault`** —— 面板体里常有输入框,Enter 不该等于「关闭」。
+- **验收(真机 + 测试双层)**:真机点「同意」→ 对话框消失 + `config.json` 写 `feedback_consent: true` + 进程存活 + 0 unhandled;`SMOKE_PROBE=dialog-close`(点确定 `Task=True` / 点取消 `Task=False` / 只关窗 `Task=False`)exit 0;`App/DlgCloseTests` 6 条(含 Alert 单按钮)。**红证据**:临时删掉 `Finish` 里的 `win.Close()` → 4/5 红;临时把 `Alert` 还原成 `Ask(..., cancel: null)` → Alert 那条红。
+- **教训**:凡是「平台自带语义代劳了一步」的地方,移植时要显式问一句「这一步在新平台上谁做」。WinForms 图层的 `DialogResult` 是隐式副作用,换成独立 `Window` 后必须手动补,而**症状会伪装成「用户没作答」**(await 不返回 ⇒ 调用方超时/默认值),极难从表面现象归因。
+
+### D-52 · 浮层里的隐式主题控件画不出来 = 宿主链断了:`Popup` 必须挂进页面树(R21b,2026-11-13,移植代理;主 agent 复核 + 真机复验)
+
+- **事实**:启动页齿轮打开「启动配置」浮层后,**除 TextBlock 与外,实例 / 版本 / 用户 / Java / 内存滑块 / 分辨率输入框全部空白**(真机像素扫描:整行只剩 `×` 与 `4096 MB` 这类文字),而同一份 AppImage 的主窗口与设置页里同批控件完全正常。
+- **根因(Avalonia 机制)**:隐式 `ControlTheme`(`FluentTheme` 里的 `{x:Type TextBox}` / `ComboBox` / `Slider`)走 **`TryFindResource`**,要沿「控件 → 逻辑/可视父链 → `TopLevel` → `Application.Styles`」查宿主;`MakePopup` 造的 `Popup` **从没挂进任何视觉/逻辑树**,它的 `Child` 继承不到宿主 ⇒ 模板为空、量出 0×0。反过来说:显式赋 `ControlTheme` 的控件(`Ui.Btn` / `Ui.Switch` / `Ui.Multi`)与走 `Application.GetResourceObservable` 的 `Res.Bind` **不需要**这条链,所以照常显示 —— **「显式主题画得出、隐式主题画不出」是宿主链断掉的指纹**,按这个指纹才定位到 `MakePopup`(全仓唯一的 `new Popup`)。
+- **修法**:`MakePopup` 把 `Popup` 加进页面根面板(`Content is Panel host → host.Children.Add(p)`),并**在拿不到面板时记一条 WARN**——不许静默退化成「浮层又能点又空白」。一份改动覆盖启动页三个浮层。
+- **不动布局的证明**:`Popup` 挂进树后由主窗口 `OverlayLayer` 承载,自身不占布局格。用**单变量对照**验:还原 `LaunchPopups.cs` / `SmokeRunner.cs` 到 `HEAD` 构建跑 4 次、装回修复版再跑 4 次,8/8 张 launch 页 `smoke.png` **逐位相同**(`070d6ad6682d6a86…`,564,149 B)。
+- **真机观感变化(如实)**:浮层仍是独立的 override-redirect X 窗口(374×493),但控件挂在主窗口宿主链上;点浮层外 light-dismiss 正常关闭且那次点击照常落到被点的页签;按 `Esc` 仍不关浮层(沿用 R21 记录,未改)。
+- **真机测试纪律(本轮踩出来的两条)**:1盒子是非 UTF-8 locale 时 `xdotool search --name '<中文>'` **静默返回空**(窗口明明在屏幕上)→ 改用 `--onlyvisible --name ''` 枚举 + shell `case` glob 做字节匹配;2点「非可聚焦区域」(浮层标题、设置页标签)**不会**让 TextBox 失焦 ⇒ 验证「离开输入框即落盘」必须点**另一个输入框**;3rsh 分片传输 **6 MB 会 `h2 protocol error`,2 MB 可用**。
+- **教训**:把「控件画不出来」先当**样式/宿主链**问题查,不要先怀疑数据或可见性;取证方式用「同形控件 × 在树/不在树」的**单变量对照**(本轮的 A/C 与 B/D 两组),比在真机上反复点更早、更准地定住根因。
+
+### D-53 · 本仓的 `.ps1` 有「必须留着 BOM」的:`tools/package.ps1` 掉 BOM 就会语法错(R21b,2026-11-13,主 agent 实测)
+
+- **事实**:`tools/package.ps1` 是**带 UTF-8 BOM** 的(HEAD 首三字节 `EF BB BF`),而这不是历史遗留 —— Windows PowerShell 5.1 对**无 BOM** 的 `.ps1` 一律按系统 ANSI 码页解码;文件里的中文让字节流错位之后,末行的引号被吞进未闭合字符串,整份脚本从「**0 个语法错误**」变成「**18 个**」。实测三段:`[Parser]::ParseFile` 在 HEAD 上 **0**;同一份文件把 BOM 去掉后 **18**;把 BOM 放回去又回到 **0**。也就是说 **BOM 就是这份脚本能在 `powershell -File` 下跑起来的前提**。
+- **怎么踩上的**:收尾时想给它补两行使用提示,用了编辑工具 —— 工具**静默丢掉了 BOM**(单独实测:一个 `EF BB BF` 开头的文件被编辑工具改一次后,首三字节变成 `41 41 41`,LF 与内容都没变)。结果脚本在 PS 5.1 下直接语法错,而 `git diff` 看起来只有「加了两行」。
+- **规矩**:1需要 BOM 的文件(**现在只有 `PROGRESS.md` 与 `tools/package.ps1`**)只用**追加式**写入(`[IO.File]::AppendAllText` + `UTF8Encoding($false)`;追加不会碰文件已有的 BOM),或者改完**逐字节验首三字节**;2凡是被编辑工具动过的文件,收尾时都要回头对一遍 BOM 与 EOL —— 本轮把 8 个改动文件(3 个源码 + 1 个测试 + 1 个脚本 + 3 个文档)逐个与 HEAD 比过,确认一个都没掉;3`.ps1` 的编码风格别动:`tools/*.ps1` 保留 BOM,`_cmp/*.ps1`(辅助脚本,盒子/pwsh 两边跑)**一律纯 ASCII** —— 它们本来就没有 BOM,加中文反而会踩同一个坑。
+- **验收**:`tools/package.ps1` 追加两行提示后,`ParseFile` 在 PS 5.1 默认解码下 **0 错**(UTF-8 显式解码也 0 错),`powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -SkipWin -SkipLinux` **exit 0** 且三行收尾提示都正常打印(中文不乱码 ⇒ 确实是按 UTF-8 解码的)。
+- **教训**:「文件编码」这件事在 Windows PowerShell 5.1 上不是风格问题而是**可执行性问题**;而**编辑工具的静默规范化**(掉 BOM、可能还有 EOL)是这类问题的放大器 —— 结论不是「别用编辑工具」,而是「改完必须用字节级断言回查」,和文档追加时验 EOL 是同一套纪律。
+
+### D-54 · `TaskStore` 的队列必须「锁 + 快照」:UI 线程遍历撞上工作线程增删就是 `Collection was modified`(R21b,2026-11-13,主 agent 在验收里抓到并修)
+
+- **事实**:R21b 最终验收把 `dotnet test` 连跑两遍,第二遍炸了 —— 失败的是一条看起来完全无关的用例(`MultiPickImportTests.Catalog_ImportLocal_TwoFiles_ImportsEach`),异常 `System.InvalidOperationException: Collection was modified; enumeration operation may not execute`,栈是 `TaskStore.RunningCount` ← `TasksPage.Sync` ← `TaskStore.Handle` 的 `Emit` 回调。第一遍是绿的 ⇒ **概率命中的真竞态**,不是测试自身的毛病。
+- **根因**:`TaskStore._rows` 是普通 `List<TaskRow>`,而它**同时被两条线程碰**:`Emit` 的设计本身说明「任务工作体跑在线程池上」(下载 / 安装 / AI 都在后台线程上 `Handle`),`Add` / `ClearFinished` / `Remove` 就地增删;UI 线程则在 `RunningCount` / `Rows` / `Newest` / `Get` 里遍历(任务角标、任务页、启动页任务卡都读)。`List<T>` 的枚举器只在「结构未变」时有效,撞上就抛。
+- **这是参考版同款的缺陷**:Windows `Services/TaskStore.cs:9/13/15/17/27` 是**同一份无锁写法**(`Rows => _rows`、`RunningCount => _rows.Count(...)`),所以不是移植引入的回归;Linux 侧先修,参考仓库保持只读(记进 PARITY §6 第 11 行)。
+- **修法**:`TaskStore` 加一把私有锁 `_gate`,`Rows` / `RunningCount` / `Newest` / `Get` / `Add` / `ClearFinished` / `Remove` 全部收进去;`Rows` 改为返回 **`ToArray()` 快照**(调用方遍历期间不再受增删影响;`.Reverse().ToList()` / `.Count` / `Assert.Contains` 这些既有用法语义不变);`Emit` 一律放在**锁外**(不持锁去碰调度器)。顺带把 `TaskRow.Append` 的 `StringBuilder` 用行内锁护住,新增 `LogText` 快照属性 —— 页面原来是 `row.Log.ToString()`(UI 线程)撞工作线程的 `Append`,同一类问题、更隐蔽(`TasksPage` 两处改走 `LogText`)。行内标量(`Status` / `Speed` / `Progress` / `Finished`)不动:字符串引用与 `double` 在 x64 上写入原子,读到的只是「旧值或新值」。
+- **红/绿证据(单变量)**:新增 `TaskStoreTests.Concurrent_Mutations_And_Reads_Do_Not_Throw`(4 工作线程 × 120 轮 `task_added → progress → log → finished → Remove`,UI 线程同时循环读角标 / 快照 / `Newest` / `Get` / 每行 `LogText`)。把 `TaskStore.cs` **单独还原**到改动前(只补一个 `LogText` 转发属性让它能编译):**3/3 红**,全是 `Collection was modified`,栈顶落在 `TaskStore.Get` ← `Handle`;装回加锁版:**3/3 绿**(每次约 110 ms);全量 `dotnet test` **连跑 3 遍全绿** 404 = 403 通过 + 1 跳过 + 0 失败(上一轮基线 403 = 402 + 1)。
+- **踩到的第二个坑(记下来免得再上当)**:`Copy-Item` 会**继承源文件的 LastWriteTime** —— 把备份拷回来得到的文件可能比上一次构建还旧,MSBuild 判定「最新」直接跳过编译,`dotnet test` 于是仍在跑旧 DLL(症状:加锁版还报同一处 `FirstOrDefault`,而该行源码早已不存在,差点让我把「红」当成「绿跑不过」)。规矩:改完源码把 LastWriteTime 置为当前时间(或 `-t:Rebuild`)再验;**判断在跑哪份代码要看异常栈的行号/符号,不能只看命令成功**。
+- **教训**:「UI 线程读、后台线程写」的进程内共享集合,必须是**锁 + 快照**两件套;测试里出现一次这类异常别当「偶发」放过 —— 它离产品里的崩溃只差一次真的下载任务。另外:**一次绿不等于稳**,连续两遍/三遍才看得出概率性缺陷。
+
+### D-55 · 没被执行过的分支就是没验证过的分支:`package.sh` 的 linuxdeploy 分支自 M3-C2 起就是坏的(R21b,2026-11-13,主 agent 在盒子上真跑一次才发现)
+
+- **事实**:`tools/package.sh` 从 M3-C2 写下来起,AppImage 那一段(`linuxdeploy --appdir dist/TipCL.AppDir --desktop-file=tipcl.desktop --icon-file=tipcl.png --output appimage`)**从来没有被真正执行过** —— 本地不是 Linux、盒子上没有 dotnet,所以一直只有「注释里那串手工命令」在真机上被用过。R21b 收尾时给脚本加了 `--appimage-only`(跳过 publish,用现成的单文件组装),第一次在盒子上真跑:
+  `linuxdeploy` 一路走到最后一步,然后 `ERROR: No such file or directory: tipcl.png`,**exit 1**。
+- **根因**:脚本是 `(cd dist && "$LD_BIN" …)` 之后才调 linuxdeploy 的,而 `tipcl.desktop` / `tipcl.png` 被放在 `dist/TipCL.AppDir/` 里 —— 相对 `dist` 根本不存在。手工那份命令之所以能成,是因为它是从 AppDir 的**父目录**跑、并且写的是 `TipCL.AppDir/tipcl.desktop`(见 `_cmp/box/r22-assemble.sh`)。
+- **修法**:两处调用(直接跑 + extract-and-run 后备)与「未检测到 linuxdeploy」时打印的命令,全部改成 `TipCL.AppDir/tipcl.desktop` / `TipCL.AppDir/tipcl.png`(注释里的出包命令同步改成 `dist/TipCL.AppDir/...`)。
+- **验收**:盒子上 `bash tools/package.sh --appimage-only` → **exit 0**、`linuxdeploy` 末尾 `Success`、产物 `dist/TipCL-linux-x64.AppImage` = **38,967,800 B**(与归档件同尺寸)、随后裸 FUSE `--smoke` **exit 0** / `smoke.png` 574,566 B / **0 WARN 0 ERROR**;本地用假 linuxdeploy 把四条路径(直接成功 / 失败→extract-and-run / 缺单文件 / 坏参数)也各跑了一遍。
+- **教训**:1**文档里、脚本里写下的命令,必须至少照着跑通一次** —— 「代码写了」和「命令可执行」是两件事,而这类缺陷只会以「照抄命令能成、跑脚本不成」的形式藏在缝隙里;2**给一条从没跑过的分支加一个「我能跑它」的入口(这里是 `--appimage-only`),本身就是一种验证手段**;3反过来,凡是「只在某个环境里才走得到」的分支,记得把它变成**在任何环境都能被跑到**的形状(拆参数、分离 publish 与组装),否则它永远是「看起来有」。
+
+

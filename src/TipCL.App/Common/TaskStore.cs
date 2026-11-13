@@ -19,6 +19,8 @@ public enum TaskPhase
 /// </summary>
 public sealed class TaskRow
 {
+    private readonly object _logGate = new();
+
     public int LogLines;
 
     public string Id { get; init; } = "";
@@ -41,13 +43,27 @@ public sealed class TaskRow
 
     public StringBuilder Log { get; } = new StringBuilder();
 
+    /// <summary>
+    /// 日志正文的快照。页面上在 UI 线程读它,而 <c>Append</c> 跑在任务的工作线程上 ——
+    /// <see cref="StringBuilder"/> 不是线程安全的,直接 <c>Log.ToString()</c> 会和 Append 撞车
+    /// (撕裂的文本,极端情况抛异常)。读的只是一行要显示的摘要,给个快照最省事。
+    /// </summary>
+    public string LogText
+    {
+        get
+        {
+            lock (_logGate) return Log.ToString();
+        }
+    }
+
     /// <summary>派生阶段：Finished → Finished；Indeterminate 且 Progress≤0 视为排队。</summary>
     public TaskPhase Phase => Finished ? TaskPhase.Finished
         : (Indeterminate && Progress <= 0 && LogLines == 0 ? TaskPhase.Queued : TaskPhase.Running);
 
     public void Append(string line)
     {
-        if (!string.IsNullOrEmpty(line))
+        if (string.IsNullOrEmpty(line)) return;
+        lock (_logGate)
         {
             Log.AppendLine(line);
             LogLines++;
@@ -104,16 +120,55 @@ public static class TaskMsg
 /// <summary>任务队列：状态机 + 计数角标，事件驱动 UI 刷新。</summary>
 public static class TaskStore
 {
+    /// <summary>
+    /// <c>_rows</c> 的守卫。这个列表**同时被 UI 线程和任务的工作线程碰**（见 D-54）:
+    /// 工作线程在 <c>Add</c> / <c>ClearFinished</c> / <c>Remove</c> 里增删,UI 线程在
+    /// <c>RunningCount</c> / <c>Rows</c> / <c>Newest</c> / <c>Get</c> 里遍历 —— 不加锁时
+    /// 就是 <c>InvalidOperationException: Collection was modified</c>（R21b 验收跑第二遍
+    /// 测试时真的撞上过一次,栈顶 <c>RunningCount</c> ← <c>TasksPage.Sync</c>）。
+    /// </summary>
+    private static readonly object _gate = new();
+
     private static readonly List<TaskRow> _rows = new List<TaskRow>();
 
     public const string PlaceholderTitle = "任务";
 
-    public static IReadOnlyList<TaskRow> Rows => _rows;
+    /// <summary>队列快照。给的是 <c>ToArray()</c> 的结果,调用方遍历期间不受增删影响。</summary>
+    public static IReadOnlyList<TaskRow> Rows
+    {
+        get
+        {
+            lock (_gate) return _rows.ToArray();
+        }
+    }
 
     /// <summary>未完成任务数（角标）。</summary>
-    public static int RunningCount => _rows.Count((TaskRow r) => !r.Finished);
+    public static int RunningCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                int n = 0;
+                foreach (TaskRow r in _rows)
+                    if (!r.Finished) n++;
+                return n;
+            }
+        }
+    }
 
-    public static TaskRow? Newest => _rows.LastOrDefault((TaskRow r) => !r.Finished) ?? _rows.LastOrDefault();
+    public static TaskRow? Newest
+    {
+        get
+        {
+            lock (_gate)
+            {
+                for (int i = _rows.Count - 1; i >= 0; i--)
+                    if (!_rows[i].Finished) return _rows[i];
+                return _rows.Count > 0 ? _rows[_rows.Count - 1] : null;
+            }
+        }
+    }
 
     /// <summary>事件统一回到 UI 线程派发(任务工作体跑在线程池)。</summary>
     private static void Emit(Action a)
@@ -131,14 +186,25 @@ public static class TaskStore
     /// <summary>任何变化（新增/更新/清理）都会触发，供角标一处订阅。</summary>
     public static event Action? Changed;
 
-    public static TaskRow? Get(string id) => _rows.FirstOrDefault((TaskRow r) => r.Id == id);
+    public static TaskRow? Get(string id)
+    {
+        lock (_gate)
+        {
+            foreach (TaskRow r in _rows)
+                if (r.Id == id) return r;
+            return null;
+        }
+    }
 
     /// <summary>手动入队一个任务（页面本地任务也走这里）。</summary>
     public static TaskRow Add(string id, string title)
     {
         var row = new TaskRow { Id = id, Title = string.IsNullOrEmpty(title) ? PlaceholderTitle : title };
-        _rows.Add(row);
-        if (_rows.Count > 60) _rows.RemoveRange(0, _rows.Count - 60);
+        lock (_gate)
+        {
+            _rows.Add(row);
+            if (_rows.Count > 60) _rows.RemoveRange(0, _rows.Count - 60);
+        }
         Emit(() => { Added?.Invoke(row); Changed?.Invoke(); });
         return row;
     }
@@ -205,15 +271,21 @@ public static class TaskStore
 
     public static void ClearFinished()
     {
-        _rows.RemoveAll((TaskRow r) => r.Finished);
+        lock (_gate) _rows.RemoveAll((TaskRow r) => r.Finished);
         Emit(() => { Cleared?.Invoke(); Changed?.Invoke(); });
     }
 
     public static bool Remove(string id)
     {
-        var row = Get(id);
-        if (row == null || !row.Finished) return false;
-        _rows.Remove(row);
+        TaskRow? row;
+        lock (_gate)
+        {
+            row = null;
+            foreach (TaskRow r in _rows)
+                if (r.Id == id) { row = r; break; }
+            if (row == null || !row.Finished) return false;
+            _rows.Remove(row);
+        }
         Emit(() => { Cleared?.Invoke(); Changed?.Invoke(); });
         return true;
     }

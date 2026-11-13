@@ -186,8 +186,9 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | 8 | `Pages/CatalogPage.cs:753` + `Core/BackendApi.cs:1606`(下载页「装进存档」) | 装了数据包后**并没有进任何存档** —— 下拉里选「装进哪个存档」等于白选,用户得自己去存档目录复制 | 页面把选择写成 `extra["save"]`,而 Core 侧**没有任何地方读这个键**(`install_datapack` 只把 extra 转给 `_install_content_impl`;全仓库搜 `["save"]` 只有这一处写入,没有读取) | Linux 侧按界面写明的意图落地:装完就地复制进该存档的 `datapacks/`;进不去只记一条带原因的日志(数据包本身已装好)(R18 / D-50) |
 | 9 | `Core/Launcher/Saves.cs:85-86`(`InstallDatapackIntoSave`) | 版本隔离时,列表里明明有这个数据包,点「装进存档」却报「**数据包不存在**」 | 源路径硬编码 `<实例>/datapacks`,无视传进来的 `version_id`;而带 `version` 的 `get_installed_datapacks` 列的是 `<实例>/versions/<版本>/datapacks` | 源目录改为「版本目录优先、实例根回退」,与列表同一个目录(R18 / D-50) |
 | 10 | `Core/Launcher/Saves.cs:92-93` | 选一个不存在的存档名,会**凭空造出一个只有 `datapacks/` 的空壳存档** —— 游戏里是个打不开的假世界 | 无条件 `Utils.EnsureDir(<游戏目录>/saves/<存档>/datapacks)`;而同文件的 `DeleteSave` / `OpenSave` 是会检查存在性的 | 存档目录不存在直接抛 `存档不存在: X`,一个目录都不建(R18 / D-50) |
+| 11 | `Services/TaskStore.cs:9/13/15/17/27`(参考版;Linux 初版逐行照搬) | 有任务在跑的时候打开「任务」页,偶发**整块崩一下**:UI 线程抛 `Collection was modified; enumeration operation may not execute`(栈:`TaskStore.RunningCount` ← `TasksPage.Sync`) | `_rows` 是普通 `List<TaskRow>`,而 `Emit` 的设计本身说明「任务工作体跑在线程池上」:工作线程在 `Add` / `ClearFinished` / `Remove` 里增删,UI 线程在 `RunningCount` / `Rows` / `Newest` / `Get` 里遍历,**两边都没有锁** | Linux 侧改成「私有锁 + `ToArray()` 快照」(遍历期间不受增删影响),并把 `TaskRow.Append` 的 `StringBuilder` 一并加行内锁、新增 `LogText` 快照属性给页面读(R21b / D-54);**参考仓库保持只读** |
 
-> 认定方式:以上 1–2、5–6 由「按 Core 真实返回结构取值」的复核发现;3–4 由 P3.5 的移植复核发现(用户点名要求);7 由 P7 的可视树核对发现;8–10 由 R18 的「数据包装进存档」逐条路径对位发现(页面传下去的键**没人读** / 源路径写死不看版本 / 无条件建目录造空壳存档)。
+> 认定方式:以上 1–2、5–6 由「按 Core 真实返回结构取值」的复核发现;3–4 由 P3.5 的移植复核发现(用户点名要求);7 由 P7 的可视树核对发现;8–10 由 R18 的「数据包装进存档」逐条路径对位发现(页面传下去的键**没人读** / 源路径写死不看版本 / 无条件建目录造空壳存档)。11 由 R21b 的最终验收发现(连跑两遍 `dotnet test` 的第二遍真炸了) —— 红/绿各 3 次的单变量对照见 D-54。
 > 若参考仓库后续修好这些点,本表与相应 DECISIONS 条目应同步更新。
 
 ## 7. 插件宿主全链逐项判定(2026-11-12,M4-H P6)
@@ -336,6 +337,8 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 **有意保留的差异(不是缺陷,别当回归修掉)**:Linux `News.Fetch` 在「两条源都失败且缓存为空」时返回空列表,而 Windows 版会把最后一个异常抛出(`Core/Launcher/News.cs:89-92`)。原因见 D-47:Linux 侧的调用方是启动页那条 fire-and-forget 的新闻行,抛出等于整页崩。
 
 > 真机(盒子)上的端到端验证——包括点开这个浮层看「分辨率」是否可编辑、真的拉起游戏窗口——并入 R21 的最终 AppImage 验收。
+>
+> **R21b 补记(2026-11-13,见 §9.7 / §9.8)**:这两条在 R21 的真机验收里落实了 —— 「点开这个浮层看「分辨率」是否可编辑」**已在真机证到并落盘**(在浮层里改成 1600 × 900,`config.json` 的 `default_resolution` 逐次变化,最后复原 `854 × 480`;设置页那条路径另测到 `1920 × 1080`);但同一轮真机先撞出两条**只在真机暴露的 P0** —— 对话框点任何按钮都不关窗(§9.7)、浮层里除文字外的控件全画不出来(§9.8)—— 都已修掉并在真机复验。**「真的拉起游戏窗口」仍未做**(判据口径见 D-35):只做到「按 `default_resolution` 拼出启动命令并过 CLI 预检」。
 
 ### 9.4 权限确认卡的「为什么」补上了(2026-11-13,R19 / R19b)
 
@@ -380,3 +383,65 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 **保持不动(两版一致,不算遗漏)**:同名文件就地覆盖(`overwrite: true`,`LocalFs.Copy2`)不产生副本;目标 `<存档>/datapacks` 目录不存在就创建;目标路径与版本隔离游戏目录的算法(`<实例>/versions/<版本>` vs `<实例>`)两版逐行相同。
 
 **未在真机验证(如实)**:系统文件对话框本身(GTK/portal 的 `AllowMultiple`)与下载页「装进存档」下拉**都没在真机点过** —— 无头环境点不了系统对话框;这两处只用 API 契约测试覆盖(`install_datapack` 带 `extra.save` → 等任务 → 断言文件既在实例 `datapacks` 也在存档里,隔离/非隔离两条)。存档管理页的「装数据包」列表**仍按实例根**列(与参考版一致,未改):隔离版本只能从实例共享数据包里选,要让列表也列版本目录需给 `get_installed_datapacks` 带上 `version`,属独立条目。
+
+### 9.7 对话框点按钮不关窗:移植时漏掉的一步(2026-11-13,R21b 真机发现;移植代理修,主 agent 复核)
+
+真机首启的「同意门」点「同意」/「暂不同意」**窗口纹丝不动**(只能 `xdotool windowclose` 硬关,调用方还因此把结果当成「取消」写进配置)。三条同源缺陷一并修掉:
+
+| # | 现象 | 根因 | 处置 | 验收 |
+|---|---|---|---|---|
+| 1 | `Ask` / `Choose` / `Prompt` 点任何按钮都不关窗,`await ShowDialog(host)` 永不返回 | Windows 参考版用 WinForms 图层:设 `DialogResult` / `layer.Close()` 会顺带关掉图层。移植成 Avalonia 独立 `Window` + `ShowDialog` 后**只 `TrySetResult`、没有人关窗**;`win.Closed` 上那条「兜底 = 取消」还会把结果覆盖成取消 | 新增私有 `Finish<T>(tcs, value, win)`:先 `TrySetResult`(**返回 false 即「已收尾」直接返回**,键盘 Enter 同时触发输入框与默认按钮时不会重复关窗),再 `win.Close()`;三处点击全部改走它 | 真机:点「同意」→ 对话框消失、`config.json` 写 `feedback_consent: true`、进程存活、无功能异常(唯一噪声见 PROGRESS 本轮遗留:XFCE 缺 AppMenu DBus 服务的无主任务异常);`SMOKE_PROBE=dialog-close` 三种收尾(点确定 → `Task=True` / 点取消 → `Task=False` / 只关窗 → `Task=False`)exit 0;`App/DlgCloseTests` 6 条 |
+| 2 | `Dlg.Prompt` 只有「确定」,用户没有反悔出口(Esc 也无效) | 移植时 footer 只放了确定按钮;参考版是 `Ui.H(8, button2, button)` —— **取消 + 确定** | 补「取消」(→ `null`)+ `cancelBtn.IsCancel = true`,`box` 的 Enter 走 `Finish` | 同上(单元测试覆盖 Prompt 的确定 / 取消两条路) |
+| 3 | `Dlg.Alert` 多渲染一个「取消」,关掉还被当成取消 | 实现是 `Ask(..., cancel: null)`;参考版 `Alert` 只有**一个「知道了」按钮**,内部结果**恒 `true`**(Esc / 直接关窗都算「知道了」) | `Alert` 改走私有 `AskCore(..., cancelLabel: null, dismissIsOk: true)`;**`Ask` 的公开签名一字未改** | 6 个调用点(`CatalogPage` / `VersionManagePage` / `SavesDialog` / `ModsDialog` / `FirstRunWizard` / `FeedbackView`)全是 `await Dlg.Alert(...)`,返回类型本就是 `Task`、值不外露 |
+
+> 顺序不能反:`win.Closed` 上挂着「兜底 = 取消」的 `TrySetResult`,而 TCS **只认第一次设置** —— 先 `Close()` 会让兜底抢答(点「确定」却拿到 `false`)。`Finish` 里「先设结果、再关窗」正是为此。
+>
+> `Panel` / `OpenPanel` 不受这条影响(它们本来就是 `close.Click += … win.Close()`),只补了 `close.IsCancel = true`(Esc = 关闭);**不设 `IsDefault`** —— 面板体里常有输入框,Enter 不该等于「关闭」。
+
+### 9.8 启动配置浮层里的输入控件全画不出来:`Popup` 没挂进页面树(2026-11-13,R21b 真机发现;移植代理修,主 agent 复核)
+
+**现象(真机)**:启动页点齿轮,浮层**打开了**(标题「启动配置」、分组标签、`4096 MB`、`×` 都在),但**实例 / 版本 / 用户 / Java / 内存滑块 / 分辨率两个输入框一片空白**;同一份 AppImage 的主窗口里 ComboBox / Slider / TextBox 全部正常(设置页「通用」逐项可见)。
+
+**根因**:`MakePopup` 只 `new Popup { PlacementTarget, Placement, IsLightDismissEnabled, Child }` 然后 `IsOpen = true`,**从没挂进任何视觉 / 逻辑树**。Avalonia 11 的**隐式 `ControlTheme`**(FluentTheme 里的 `{x:Type TextBox}` / `{x:Type ComboBox}` / `{x:Type Slider}`)走 `TryFindResource`,要沿「控件 → 逻辑/可视父链 → TopLevel → `Application.Styles`」查宿主链;没挂树的 Popup 没有宿主 ⇒ 模板为空、量出 0×0。而**显式**赋 `ControlTheme` 的控件(`Ui.Btn` / `Ui.Switch` / `Ui.Multi`)与走 `Application.GetResourceObservable` 的 `Res.Bind` 都不需要这条链,所以照常显示 —— 「显式主题画得出、隐式主题画不出」正是宿主链断掉的指纹,与真机截图逐条吻合。
+
+**修法**:`MakePopup` 把 `Popup` 加进页面根面板(`Content is Panel host → host.Children.Add(p)`);拿不到面板时记一条 WARN,**不静默退化成「浮层又能点又空白」**。一份改动覆盖启动页三个浮层(它是全仓唯一的 `new Popup`)。
+
+**结构级证据(`SMOKE_PROBE=popup-theme`,主 agent 独立复跑 exit 0)**:
+
+| 组 | 是什么 | 修复前 | 修复后 |
+|---|---|---|---|
+| A | 同形裸控件挂进主窗口已有面板 | 5/5 有模板 + 有尺寸 | 5/5 |
+| B | **真实**「启动配置」浮层里的数据控件 | **0/10**(模板=无、Bounds=0×0) | **10/10**(如 分辨率宽/高 = 74×45) |
+| C | 同形控件放进**不挂树**的 Popup(修复前的形状) | 0/5 | 0/5(**故意保留的反证组**) |
+| D | 同形控件放进**挂树**的 Popup | 5/5 | 5/5 |
+
+**不占位、不动布局(主 agent 单变量对照)**:把 `LaunchPopups.cs` / `SmokeRunner.cs` 还原到 `HEAD` 构建后跑 4 次冒烟,再装回修复版跑 4 次,8/8 张 `SMOKE_PAGE=launch` 的 `smoke.png` **逐位相同**(`070d6ad6682d6a86…`,564,149 B)。
+
+**真机像素级证据(R21b 最终 AppImage)**:`_cmp/r22-popup-fixed.png`(实例 `.minecraft` / 版本 / 用户 `Player` 占位 / 更多设置 / 微软登录 / 皮肤站)、`_cmp/r22-popup-more-fixed.png`(展开后 Java `自动选择`、内存滑块 + `4096 MB`、分辨率 `854 × 480`、直连 `ip:port` 占位);浮层内改分辨率 → `config.json` 的 `default_resolution` 真的变了:`[854,900] → 1600 → [1600,480] → 900 → [1600,900] → 复原 [854,480]`(见 §9.3 的真机补证)。
+
+> **真机观感的一处变化(如实记,不是缺陷)**:浮层仍然是一个**独立的 override-redirect X 窗口**(`xdotool` 能看到 374×493 的无名窗口),但它的控件现在挂在主窗口的宿主链上;点浮层外(如顶部「设置」页签)**light-dismiss 正常关闭**且该次点击照常落到页签上。此前那种「浮层里除 TextBlock 外一片空白」的形态已不复现。
+
+### 9.9 `TaskStore` 的队列竞态:参考版同款的坑,Linux 侧先修了(2026-11-13,R21b)
+
+**发现方式值得记一笔**:不是真机点出来的,是**最终验收把 `dotnet test` 连跑两遍** —— 第一遍绿、第二遍炸,而且炸在一条看起来完全无关的用例上(多选导入):
+
+```
+失败 TipCL.Tests.App.MultiPickImportTests.Catalog_ImportLocal_TwoFiles_ImportsEach
+System.InvalidOperationException : Collection was modified; enumeration operation may not execute.
+   at System.Linq.Enumerable.Count[TSource](...)
+   at TipCL.App.Common.TaskStore.get_RunningCount() in Common/TaskStore.cs:line 114
+   at TipCL.App.Pages.TasksPage.Sync(TaskRow row) in Pages/TasksPage.cs:line 202
+```
+
+**性质**:`TaskStore._rows` 是普通 `List<TaskRow>`,而 `Emit` 的设计(「任务工作体跑在线程池上」)决定了它会被两条线程同时碰 —— 工作线程增删、UI 线程遍历。**参考版是同一份无锁写法**(Windows `Services/TaskStore.cs:9/13/15/17/27`),所以这不是移植引入的回归,而是**参考版同款的缺陷**(记进 §6 第 11 行);Linux 侧先修,参考仓库不动(D-54)。
+
+**修法与证据**:`Rows` / `RunningCount` / `Newest` / `Get` / `Add` / `ClearFinished` / `Remove` 全部收进一把私有锁,`Rows` 改为返回 `ToArray()` 快照;`TaskRow.Append` 的 `StringBuilder` 另加一把行内锁并新增 `LogText`(页面原来是在 UI 线程 `row.Log.ToString()`,撞工作线程的 `Append`,同一类问题、更隐蔽)。
+
+| 项 | 单变量证据 |
+|---|---|
+| 新回归用例 | `TaskStoreTests.Concurrent_Mutations_And_Reads_Do_Not_Throw`:4 个工作线程 × 120 轮 `task_added → progress → log → finished → Remove`,UI 线程同时读角标 / 快照 / `Newest` / `Get` / 每行 `LogText` |
+| 红(把 `TaskStore.cs` 单独还原到改动前) | **3/3 失败**,异常就是 `Collection was modified`,栈顶 `TaskStore.Get` ← `Handle` |
+| 绿(装回加锁版) | **3/3 通过**(每次约 110 ms) |
+| 全量 | `dotnet test` 连跑 **3 遍全绿**:404 = 403 通过 + 1 跳过 + 0 失败(上一轮基线 403 = 402 + 1) |
+
+> 附带记一条工具坑(与源码无关,但会让人误判结论):`Copy-Item` 会把源文件的 LastWriteTime **一起带过去**,于是「把备份拷回来」得到的文件可能比上一次构建还旧 ⇒ MSBuild 判定「最新」直接跳过编译,`dotnet test` 仍在跑旧 DLL —— 症状是「加锁版」还报同一处 `FirstOrDefault`,而那一行源码早已不存在。判断「到底在跑哪份代码」要看异常栈里的行号与符号,不能只看命令成功。

@@ -144,4 +144,67 @@ public class TaskStoreTests
         Assert.Equal(10.0, TaskMsg.Clamp(11, 5, 10));
         Assert.Equal(7.0, TaskMsg.Clamp(7, 5, 10));
     });
+
+    /// <summary>
+    /// 并发回归:任务的工作线程在增删队列(task_added / finished / remove)时,UI 线程同时在
+    /// 遍历队列(角标 <c>RunningCount</c>、页面 <c>Rows</c> / <c>Newest</c> / <c>Get</c>,
+    /// 以及展开任务卡时读日志文本)。没加锁的版本必炸
+    /// <c>InvalidOperationException: Collection was modified; enumeration operation may not execute</c>
+    /// —— R21b 验收跑第二遍 <c>dotnet test</c> 时真撞上过(栈顶 <c>TaskStore.RunningCount</c> ←
+    /// <c>TasksPage.Sync</c>,失败用例 <c>MultiPickImportTests.Catalog_ImportLocal_TwoFiles_ImportsEach</c>)。
+    /// 这是产品码里的真竞态,不是测试自身的问题:下载/安装任务都在线程池上跑。
+    /// </summary>
+    [Fact]
+    public Task Concurrent_Mutations_And_Reads_Do_Not_Throw() => TestApp.RunAsync(async () =>
+    {
+        TaskStore.ClearFinished();
+        const int Workers = 4;
+        const int Rounds = 120;
+        var errors = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+        var workers = new Task[Workers];
+        for (int w = 0; w < Workers; w++)
+        {
+            int id = w;
+            workers[w] = Task.Run(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < Rounds; i++)
+                    {
+                        string key = $"race-{id}-{i}";
+                        TaskStore.Handle(new TaskEvent { Event = "task_added", TaskId = key, Title = "并发任务" });
+                        TaskStore.Handle(new TaskEvent { Event = "progress", TaskId = key, Message = "下载中  |  1 MB/s", Current = i, Total = Rounds });
+                        TaskStore.Handle(new TaskEvent { Event = "log", TaskId = key, Text = "行" + i });
+                        TaskStore.Handle(new TaskEvent { Event = "finished", TaskId = key, Success = true });
+                        TaskStore.Remove(key);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Enqueue(ex);
+                }
+            });
+        }
+
+        // UI 线程这一侧持续读:只要队列的遍历被工作线程的增删撞上,这里就会抛。
+        int reads = 0;
+        while (!Task.WhenAll(workers).IsCompleted)
+        {
+            _ = TaskStore.RunningCount;
+            foreach (TaskRow r in TaskStore.Rows)
+            {
+                _ = r.Phase;
+                _ = r.LogText;
+            }
+            _ = TaskStore.Newest;
+            _ = TaskStore.Get("race-0-0");
+            reads++;
+            await Task.Delay(1);
+        }
+
+        await Task.WhenAll(workers);
+        TaskStore.ClearFinished();
+        Assert.True(reads > 0, "读循环一次都没跑到,这个用例没意义");
+        Assert.Empty(errors);
+    });
 }
