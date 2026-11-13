@@ -16,6 +16,9 @@ public static class AppLog
     private static StreamWriter? _writer;
     private static string? _file;
 
+    /// <summary>「桌面缺少 AppMenu 服务」这条已知噪声只记一次(见 IsBenignDesktopNoise)。</summary>
+    private static bool _desktopNoiseLogged;
+
     /// <summary>日志文件路径(未初始化或打开失败时为 null)。</summary>
     public static string? FilePath => _file;
 
@@ -44,7 +47,20 @@ public static class AppLog
             Error("unhandled(AppDomain)", e.ExceptionObject as Exception);
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
         {
-            Error("unhandled(Task)", e.Exception);
+            if (IsBenignDesktopNoise(e.Exception))
+            {
+                // 已知无害的桌面集成噪声:只留**一条** WARN 备查(每开一个窗口都记一条会淹掉日志),
+                // 之后同类直接忽略。**不吞**信息 —— 那条 WARN 里带着完整原因。
+                if (!_desktopNoiseLogged)
+                {
+                    _desktopNoiseLogged = true;
+                    Warn("unhandled(Task) 已知无害(桌面缺少 AppMenu 服务,后续同类不再记):" + Flatten(e.Exception));
+                }
+            }
+            else
+            {
+                Error("unhandled(Task)", e.Exception);
+            }
             e.SetObserved();
         };
 
@@ -74,6 +90,54 @@ public static class AppLog
     private static string SafeRoot()
     {
         try { return Utils.ROOT; } catch (Exception) { return "?"; }
+    }
+
+    /// <summary>
+    /// 已知无害的「桌面集成噪声」判定:盒子(XFCE)上没有 <c>com.canonical.AppMenu.Registrar</c> 这个
+    /// DBus 服务,而 Avalonia 的 X11/FreeDesktop 集成**每开一个新窗口**都会去注册它 —— 于是每开一次
+    /// 浮层/对话框就落一条「无主任务异常」(R21b 实测:一次会话 24 条,全是同一条消息)。它不动进程、
+    /// 不影响功能,却把「0 unhandled」这个信号淹掉了。
+    ///
+    /// 判定口径**收得很紧**:必须是 <c>AggregateException</c> 包里**每一个**内层异常都是
+    /// Tmds.DBus 的 DBusException,并且消息里带 <c>ServiceUnknown</c> 与
+    /// <c>com.canonical.AppMenu.Registrar</c>。其余任何未观察异常照旧按 ERROR 记。
+    /// 类型用<strong>字符串比较</strong>而不是引用 Tmds.DBus 类型:那个包是 Avalonia 的传递依赖,
+    /// 不该为了让日志降噪而在 Core/App 里硬绑一个我们并不直接使用的类型。
+    /// </summary>
+    internal static bool IsBenignDesktopNoise(Exception? ex)
+    {
+        if (ex is not AggregateException agg || agg.InnerExceptions.Count == 0)
+        {
+            return false;
+        }
+        foreach (Exception inner in agg.InnerExceptions)
+        {
+            if (inner.GetType().FullName != "Tmds.DBus.Protocol.DBusException")
+            {
+                return false;
+            }
+            string text = Flatten(inner);
+            if (!text.Contains("ServiceUnknown", StringComparison.Ordinal)
+                || !text.Contains("com.canonical.AppMenu.Registrar", StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>异常(含内层)压成一行文本,给日志与人看。</summary>
+    private static string Flatten(Exception ex)
+    {
+        var sb = new System.Text.StringBuilder();
+        Exception? cur = ex;
+        while (cur != null)
+        {
+            if (sb.Length > 0) sb.Append(" ---> ");
+            sb.Append(cur.GetType().FullName).Append(": ").Append(cur.Message);
+            cur = cur.InnerException;
+        }
+        return sb.ToString();
     }
 }
 

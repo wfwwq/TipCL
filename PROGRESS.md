@@ -750,3 +750,35 @@ R21b 归档的 AppImage 之后,R21c~R21e 都改了 `src/`,归档件却没重打 
 - 构建 App/Core exit 0;`dotnet test` 两遍(其中一遍带上面那条修复前的偶发红,修复后连跑 4 遍全绿):**432 = 431 通过 + 1 跳过 + 0 失败**;
 - `--ai-selftest` exit 0(54 项);十场冒烟全 exit 0 且 **0 WARN / 0 ERROR**;真实 `%LOCALAPPDATA%\TipCL` 未被触碰(`config.json` mtime 未变);
 - 编码:`News.cs` / `NewsTests.cs` 均 UTF-8 无 BOM + LF;归档件哈希与盒子上逐位一致。
+
+### 2026-11-13 M4-H R21g:下载页「装进存档」全链路真机跑通 + 未观察异常分流 + 第三次重打产物
+
+**一、上一段「没打中的一步」补上了:全链路真机跑通(有证据)**
+
+上次两次点不中下拉项,是因为「弹层没被枚举到」。这次换了个办法:**开下拉前后 diff 可见窗口列表** → 弹层本身就是独立 X 窗口(`X=470 Y=439 WIDTH=260 HEIGHT=82`)→ 点第 2 项(「WorldDlg」)→ 按「继续」:
+
+- 应用日志:`[task-36600c118e80] 已装进存档 WorldDlg: <home>/.minecraft/saves/WorldDlg/datapacks/Veinminer-2.1.0.jar`;
+- 磁盘:`<实例>/datapacks/Veinminer-2.1.0.jar`(正常安装)+ `<存档>/datapacks/Veinminer-2.1.0.jar`(R18 那步复制);
+- **存档里那份 md5 `1ed783e89ecc8628f057c860a6b94e35` 与源文件逐字节相同**(与 R21e 存档管理入口那次同一个 md5)。
+
+⇒ 下载页 → 存档下拉 → `extra.save` → 复制进存档,这条链在真机上**完整成立**;`PARITY §9.6` 里那两条「未在真机验证」现在只剩「隔离版本分支」与「存档管理其余 chip」。
+
+**二、未观察任务异常分流(见 D-62)**
+
+`AppLog` 的 `UnobservedTaskException` 处理器加一条**收得很窄**的分流:「桌面缺少 `com.canonical.AppMenu.Registrar`」那条(必须是 `AggregateException` 且每个内层都是 `Tmds.DBus.Protocol.DBusException` 且消息含 `ServiceUnknown` + 服务名)降级成**一条** WARN,其余任何未观察异常照旧 ERROR。新增 `App/AppLogDesktopNoiseTests`(5 条负例:普通异常 / 形状像但类型不对 / 混合 `AggregateException` / 缺片段 / null)。
+
+**如实记**:这条的**正向分支没能复现** —— 两次真机会话(一次连贯操作、一次连开 16 个窗口 + 等 90 秒)里 `unhandled` / `WARN` / `ERROR` **全是 0**;上一轮那 24 条的现场是 R21b 的会话(同一台盒子),现象真实但无法按需复现。改动保守:匹配不上时行为与改动前完全一致。
+
+**三、第三次重打产物(按 D-60 的规矩)**
+
+| 项 | 值 |
+|---|---|
+| 发布 → 盒子 `--appimage-only` 组装 | `PACKAGE_EXIT=0`,裸 FUSE 冒烟 **exit 0**、0 WARN / 0 ERROR |
+| 新产物 | **38,971,896 B**,sha256 **`40b83cb7174fdf131dfb82dd097833c58e2278ce70dedf71832fac752dc6dd00`**(与 R21f 那份不同 —— 含本轮 `AppLog` 改动);rsh 20 片拉回后本地 sha256 与盒子逐位一致 |
+| 说明 | 「最终产物」的 sha256 以本节为准:R21b `1176a917…` / R21f `42bce41e…` / 本轮 `40b83cb7…`,文档里凡提产物都带 hash(D-60) |
+
+**四、本轮验证数**
+
+- 全量 `dotnet test`:**432 = 431 通过 + 1 跳过 + 0 失败**(新增 5 条噪声负例;R21f 修掉偶发红后连跑 4 遍全绿);
+- Release 构建 **0 警告 0 错误**;`--ai-selftest` exit 0(54 项);十场冒烟全 exit 0 且 **0 WARN / 0 ERROR**;
+- 真机会话三次(复测下拉 / 噪声尝试 / 拉产物),应用全程存活、未碰真实 `%LOCALAPPDATA%\TipCL`。
