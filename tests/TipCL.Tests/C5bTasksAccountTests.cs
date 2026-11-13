@@ -43,6 +43,16 @@ public class C5bTasksAccountTests
             string.Equals(AutomationProperties.GetName(b), text, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// 只看**可见文案**(<c>Button.Content</c>)。为什么不能连带看自动化名:<c>Ui.Btn</c> 在创建时把文字写进
+    /// <c>AutomationProperties.Name</c>,之后 <c>Content</c> 被改(「取消」→「清除」)自动化名**不会跟着变**,
+    /// 用它判断"现在显示的是哪个词"会得到过期答案(本包实测踩到)。
+    /// </summary>
+    private static bool HasButtonText(Control root, string text)
+    {
+        return C5bFiles.Descendants(root).OfType<Button>().Any(b => string.Equals(b.Content as string, text, StringComparison.Ordinal));
+    }
+
     private static TasksPage NewTasksPage(C5bLayerHost harness)
     {
         C5bFiles.LayoutDir();
@@ -157,8 +167,8 @@ public class C5bTasksAccountTests
             C5bFiles.AddTask("bad", "失败的", finished: true, success: false);
             TasksPage page = NewTasksPage(harness);
             page.OnShown();
-            Assert.True(HasButtonNamed(page, I18n.L("清除")));
-            Assert.False(HasButtonNamed(page, I18n.L("取消")));
+            Assert.True(HasButtonText(page, I18n.L("清除")));
+            Assert.False(HasButtonText(page, I18n.L("取消")));
             Assert.True(Button(page, I18n.L("崩溃分析")).IsVisible);
             ProgressBar bar = C5bFiles.Find<ProgressBar>(page, "进度条");
             // 【Windows 源】跑完且失败 ⇒ 进度条染成 B.Danger;这里只钉「不是 indeterminate 就是真值」
@@ -246,14 +256,17 @@ public class C5bTasksAccountTests
             TasksPage page = NewTasksPage(harness);
             page.OnShown();
             TextBox log = C5bFiles.Find<TextBox>(page, "日志框");
-            Assert.False(log.IsVisible);
+            // 【Windows 源】控制的是那层 logWrap(Ui.Pane 的 Border)的 Visibility,不是 TextBox 自己的 ——
+            // Avalonia 的 IsVisible 只是控件自己的标志,不会因为祖先被藏就变假,所以要断言那层壳。
+            Border logWrap = log.GetVisualAncestors().OfType<Border>().First();
+            Assert.False(logWrap.IsVisible);
             C5bFiles.Click(Button(page, I18n.L("日志")));
             C5bFiles.Settle(2);
-            Assert.True(log.IsVisible);
+            Assert.True(logWrap.IsVisible);
             Assert.Contains("第一行日志", log.Text ?? "", StringComparison.Ordinal);
             C5bFiles.Click(Button(page, I18n.L("日志")));
             C5bFiles.Settle(2);
-            Assert.False(log.IsVisible);
+            Assert.False(logWrap.IsVisible);
         });
     }
 
@@ -582,7 +595,7 @@ public class C5bTasksAccountTests
             using var toasts = new C3cToasts();
             using var harness = C5bLayerHost.Show();
             using var api = new C3cFakeApi().Route("get_settings", "{\"root\":\"/tmp/game\"}");
-            Task<bool> running = RunWizard(api);
+            Task running = RunWizard();
             Control panel = C5bFiles.PanelCard(I18n.L("欢迎使用 TipCL"));
             Assert.Equal(560.0, ((Border)panel).MaxWidth);
             Assert.True(C5bFiles.HasText(panel, I18n.L("三步就能开始玩")));
@@ -608,7 +621,7 @@ public class C5bTasksAccountTests
             using var toasts = new C3cToasts();
             using var harness = C5bLayerHost.Show();
             using var api = new C3cFakeApi().Route("get_settings", "{}");
-            Task<bool> running = RunWizard(api);
+            Task running = RunWizard();
             Control panel = C5bFiles.PanelCard(I18n.L("欢迎使用 TipCL"));
             C5bFiles.Click(Button(panel, I18n.L("下一步")));
             C5bFiles.Settle(2);
@@ -641,7 +654,7 @@ public class C5bTasksAccountTests
             using var toasts = new C3cToasts();
             using var harness = C5bLayerHost.Show();
             using var api = new C3cFakeApi().Route("get_settings", "{\"root\":\"/tmp/game\"}");
-            Task<bool> running = RunWizard(api);
+            Task running = RunWizard();
             Control panel = C5bFiles.PanelCard(I18n.L("欢迎使用 TipCL"));
             C5bFiles.Click(Button(panel, I18n.L("跳过向导")));
             C5bFiles.PumpTask(running);
@@ -669,7 +682,7 @@ public class C5bTasksAccountTests
                 return Task.CompletedTask;
             };
             using var api = new C3cFakeApi().Route("get_settings", "{\"root\":\"/tmp/old\"}").Route("set_game_dir", "\"/tmp/new\"");
-            Task<bool> running = RunWizard(api);
+            Task running = RunWizard();
             Control panel = C5bFiles.PanelCard(I18n.L("欢迎使用 TipCL"));
             // 第二步:把游戏目录改成 /tmp/new
             C5bFiles.Click(Button(panel, I18n.L("下一步")));
@@ -707,7 +720,7 @@ public class C5bTasksAccountTests
             using var harness = C5bLayerHost.Show();
             FirstRunWizard.SettingsRefresh = null;
             using var api = new C3cFakeApi().Route("get_settings", "{}");
-            Task<bool> running = RunWizard(api);
+            Task running = RunWizard();
             Control panel = C5bFiles.PanelCard(I18n.L("欢迎使用 TipCL"));
             for (int i = 0; i < 3; i++)
             {
@@ -808,18 +821,14 @@ public class C5bTasksAccountTests
 
     // ================================================================ 小工具
 
-    /// <summary>起一次向导并返回它那个还没收尾的任务(调用方负责点按钮 / PumpTask)。</summary>
-    private static Task<bool> RunWizard(C3cFakeApi api)
+    /// <summary>
+    /// 起一次向导并返回它那个还没收尾的任务(调用方负责点按钮 / <c>PumpTask</c>)。
+    /// **不能**在这里等 <c>DialogCard</c>:向导推的是 <c>Dlg.Panel</c>,它不是 <c>DialogCard</c>
+    /// (等它必然超时)—— 卡片交给 <see cref="C5bFiles.PanelCard"/> 按标题泵出来。
+    /// </summary>
+    private static Task RunWizard()
     {
-        Task running = FirstRunWizard.ShowAsync();
-        C3bFiles.WaitDialog();
-        return Wrap(running);
-
-        static async Task<bool> Wrap(Task inner)
-        {
-            await inner;
-            return true;
-        }
+        return FirstRunWizard.ShowAsync();
     }
 
     /// <summary>等到 <c>Dlg.Ask</c> 那张卡出现并返回它(向导那句 Ask 与别处不一样:它自己就是 <c>DialogCard</c>)。</summary>
