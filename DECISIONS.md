@@ -199,7 +199,7 @@
 ### D-22 · AI 子系统移植口径(M4-H P5,2026-11-12,移植代理)
 
 - **Markdown 渲染换宿主**:Windows 的 `MdView` 是 WPF `RichTextBox` + `FlowDocument`(段落/列表/表格都是文档对象);Avalonia 没有对应物 → 改为「解析成块 → 逐个渲染成控件」:段落用 `TextBlock.Inlines`(Avalonia 11 支持 `Run/Bold/Italic/Span/LineBreak/InlineUIContainer`),列表按 `ItemDepth` 缩进、引用用左边框容器、表格用 `Grid`。**只换渲染宿主,不改 Markdown 语义**——`MdParser` 原样搬运,行为由 10 个 xunit 用例锁定。
-- **行内元素的两处差距**:①`Span` 在 Avalonia 里不是 `Control`,没有 `Cursor`/`ToolTip`/`Click` → 链接目前只有主题色 + 下划线,URL 不弹提示、不可点(AI 页把整条回复的纯文本复制留给气泡的复制钮);②`Run` 没有 Background → 行内码没有底色,用等宽 + `B.AccentText` 近似。两条都记在 PROGRESS 遗留里,不假装做过。
+- **行内元素的两处差距**:①`Span` 在 Avalonia 里不是 `Control`,没有 `Cursor`/`ToolTip`/`Click` → 链接目前只有主题色 + 下划线,URL 不弹提示、不可点(AI 页把整条回复的纯文本复制留给气泡的复制钮;**2026-11-13 更正:R17 已用 `InlineUIContainer` 把链接做成可点,见 D-49**);②`Run` 没有 Background → 行内码没有底色,用等宽 + `B.AccentText` 近似。两条都记在 PROGRESS 遗留里,不假装做过。
 - **`InternalsVisibleTo`**:给 `TipCL.App` 加 `<InternalsVisibleTo Include="TipCL.Tests" />`(Core 侧早已有同样一条)。AI 子系统整族都是 `internal`(与 Windows 一致),不开这条就没法给解析链/气泡写测试。只放宽可见性:不加依赖、不改行为、不改打包产物。
 - **思考段**:Core 的流式把推理内容包成 `<think>…</think>`(`AssembleStreamWrapsReasoningInThinkTags` 已锁),页面按这两个标签切分增量:标签内进「思考」折叠块,标签外进正文 Markdown。
 - **端点键名以 Core 为准**:`Client.ResolveEndpoint` 返回 `mode`(builtin|custom)/`model`/`url`/`headers`,没有 `label`/`configured`;页面按 `mode` 显示「内置网关 / 自定义端点」,并用「能否解析出端点」判断是否已配置(解析抛 `AIClientError` → 显示引导而不是点了没反应)。这类「按想象中的键读后端」是本轮第二次踩(前一次是 `List<PyDict>`),统一按 Core 真实输出取键。
@@ -410,3 +410,11 @@
 - **决定四(拒绝理由只进界面)**:被拒时把理由写进 `ToolCall.error`(「已拒绝:&lt;理由&gt;」)并由 `AiPage.Summarize` 显示;**模型可见**的文本保持原样(仍是 `permission_denied` 的结构化错误)。理由给用户看,不给模型当指令 —— 与「工具结果只是数据」这条硬规矩一致。
 - **未做(如实)**:参考版的 `PermissionNote`(`Permission.cs:256-276`,把当前档位写进系统提示,消费点 `Agent.cs:348` / `:368`)Linux 侧仍然没有 —— 属独立条目(要随每轮把档位注入系统消息,会改模型可见文本),已记进 `docs/PARITY.md` §9.4。
 - **验收**:`dotnet test` **371 = 370 通过 + 1 跳过 + 0 失败**(R16 的 355 → +16),`--ai-selftest` **52 / 0**,8 场冒烟 8/8 exit=0 且 0 WARN/0 ERROR;移植代理的红证据见 `_cmp/r19-*-red.txt`,主 agent 对自己的 `ApplyDontAsk` 做了变异(2 条红)并按 SHA256 字节级还原。
+
+### D-49 · Markdown 链接改用 `InlineUIContainer` 做成可点(D-22 那条平台限制不再成立)(R17,2026-11-13,主 agent)
+
+- **背景**:参考版 `Pages/Ai/MdView.cs:367` 用 WPF `Hyperlink`(可点、`RequestNavigate` 开浏览器);P5 移植时判定「Avalonia 的 `Span` 不是 `Control`,没有 `Cursor`/`ToolTip`/`Click`」,链接只能主题色 + 下划线(D-22 第 2 条)。
+- **更正**:该判定只对 `Span` 成立 —— Avalonia 的 **`Inline` 可以是控件宿主**(`InlineUIContainer`)。链接改成 `InlineUIContainer` + 内部 `TextBlock`:下划线/主题色/字号照旧,另加手型光标、URL tooltip(`ToolTip.SetTip`)、`PointerReleased` → 打开外链。**视觉不变,只增加交互**。
+- **打开外链的落点**:`MdView.UrlOpener`(`internal static Action<string>`,默认 `OpenExternal`:Windows `ShellExecute` / macOS `open` / Linux `xdg-open`,失败只记不抛)。做成可替换的钩子是**为了测试**:用例里换成收集器,断言「点哪个链接就开哪个 URL」,而不会真的弹浏览器。仓库里各页原本各有一份私有 `OpenUrl`(AccountPage / MultiplayerPage / PluginsPage / PluginHostPage / SettingsPage.Cards),这次**不去统一**(改动面大、收益只是少几份重复),`MdView` 自带一份最小的。
+- **仍然不成立的部分(如实)**:D-22 第 2 条的另一半(`Run` 没有 `Background` → 行内码没有底色)依然存在,没动;链接的悬停态(变色/常亮下划线)也没做 —— 参考版的 `Hyperlink` 自带,这里保持静态样式。
+- **测试边界(如实)**:`App/MdViewLinkTests`(4 条)断言结构(是 `InlineUIContainer` 而不是 `Span`、tooltip 是 URL、光标/下划线/字号在、粗体与列表里的链接也在)与打开链(`OpenLink` → `UrlOpener`),但**没有**真的构造 `PointerReleasedEventArgs` 抬事件;也**没有像素级截图证据**(冒烟态没有任何页面渲染 Markdown 链接,AI 页冒烟是空态)—— 判据是结构与数值断言,不声称「真机看着没问题」。

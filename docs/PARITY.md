@@ -345,3 +345,11 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 > **仍未做(如实)**:参考版 `PermissionNote`(`Permission.cs:256-276`:把当前档位写成 6 句「[权限设置] …」注入系统提示,消费点 `Agent.cs:348` / `:368`)Linux 侧没有。它与上表三条同属「参考版会主动告知模型」的那一面,Linux 侧目前只有裁决本身 —— 属独立条目:要随每轮把档位注入系统消息(会改模型可见文本),不在 R19 范围内。
 >
 > 另一处**有意不搬**:参考版 `PermissionResult` 还带 `rule_id`,Linux 的「一直允许」是按工具名记的进程内集合,没有「按规则记住」的界面入口,搬 `rule_id` 是无消费方的死重(见 D-48)。
+
+### 9.5 Markdown 链接从「画得像」变成「真能点」(2026-11-13,R17)
+
+| 项 | 参考版 | Linux(补前) | Linux(补后) | 依据 |
+|---|---|---|---|---|
+| 回复正文里的链接 | WPF `Hyperlink`(`MdView.cs:367`):可点、点开浏览器、悬停有光标 | 主题色 + 下划线的 `Span` —— **不可点、无光标、无 URL 提示**(D-22 记为平台限制) | `InlineUIContainer` 包一个真 `TextBlock`:手型光标 + URL tooltip + 点击开浏览器(`xdg-open` / `open` / `ShellExecute`) | D-49 |
+| 行内码底色 | `Run` + `Background` | Avalonia 的 `Run` 没有 `Background` → 等宽 + 主题色近似 | **仍未做**(与链接无关的另一半,D-22 第 2 条依旧成立) | D-22 |
+| 链接悬停态 | `Hyperlink` 自带 | 无 | **仍未做**:保持静态样式(下划线常亮) | 如实记录 |

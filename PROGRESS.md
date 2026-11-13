@@ -514,3 +514,24 @@
 - **`PermissionNote`(把当前档位写进系统提示)仍未做**,而参考版是**真的消费**它的(`Agent.cs:348` / `:368`,6 句「[权限设置] …」,见 `Permission.cs:256-276`)。这是本轮新发现的真缺口,已记进 `docs/PARITY.md` §9.4,仍未做 —— 属独立条目(要把档位随每轮注入系统消息,会改模型可见文本)。
 - `PermissionVerdict` 只带 `decision + reason`,**不带**参考版的 `rule_id`:Linux 的「一直允许」是按**工具名**记的(`_alwaysAllowed`),没有「按规则记住」的界面入口,补 `rule_id` 是无消费方的死重。
 - 主 agent 新增用例的第一版里,有一处**半角/全角逗号抄错**(实现与参考版都是全角 `U+FF0C`),已改成断言关键片段;整句逐字符对位由 `Core/AiPermissionReasonTests` 负责。
+
+## M4-H R17:Markdown 链接真的能点了(2026-11-13,主 agent)
+
+**背景**:参考版 `MdView.cs:367` 用 WPF 的 `Hyperlink` —— 天生可点、点开浏览器。P5 移植时 Avalonia 的 `Span` 不是 `Control`(没有 `Cursor` / `ToolTip` / 事件),于是链接只能画成「主题色 + 下划线」,`DECISIONS.md` D-22 把它记成一条平台限制(「不可点、不弹 URL 提示」)。
+
+**改法**:Avalonia 里 **`Inline` 可以是控件宿主** —— `InlineUIContainer`。链接改用 `InlineUIContainer`,里面放一个真 `TextBlock`(同样的下划线 + `B.AccentText` 主题色,字号 13.5 与段落一致),挂上:
+- `Cursor = Hand`(悬停能看出可点)、`ToolTip` = URL(悬停看到地址);
+- `PointerReleased` → `MdView.OpenLink(url)` → `MdView.UrlOpener`(默认按平台走 `xdg-open` / `open` / Windows `ShellExecute`;测试里换成收集器,**不会真弹浏览器**)。
+
+空 URL 直接忽略;打不开浏览器只当没打开,不抛(与各页私有的 `OpenUrl` 同一套做法)。**视觉不变,只增加交互。**
+
+**测试**:`tests/TipCL.Tests/App/MdViewLinkTests.cs` 4 条 —— ①链接渲染成 `InlineUIContainer`(不是 `Span`),显示人读文字、tooltip 是 URL、光标/下划线/字号都在;②点击走 `OpenLink` → `UrlOpener`,空 URL 不进打开器;③粗体/斜体/删除线/纯文本没被带偏(且没有链接时不出现宿主控件);④**粗体里与列表里的链接**同样可点。
+
+**我自己在这里踩的两个坑(如实记)**:
+1. 测试第一版的收集器**只扫段落顶层**的行内元素 —— 粗体里的链接、列表项里的链接都扫不到,于是那两条用例假红(移植代理跑全量时先看到,我自己复核也复现了)。改成递归收集(控制树 + 行内树);
+2. 断言写了 `inner.Text == "文档"`,但文字是加在 `Inlines` 里的 `Run` 上(`Text` 属性为 null),同样假红。改成拼接 `Run.Text`。
+
+**未覆盖(如实)**:
+- 用例断言的是「结构与打开链」,**没有**真的构造 `PointerReleasedEventArgs` 抬一次事件 —— 那 2 行接线靠代码阅读确认;
+- **链接在段落里的像素级排版没有截图证据**:全仓没有任何页面在冒烟态下渲染 Markdown 链接(冒烟态 AI 页是空态),所以只能靠「字号 13.5 一致 + `BaselineAlignment`」这类数值/结构断言兜住,不能声称「真机看着没问题」;
+- 链接的悬停态(变色/下划线常亮)没做 —— 参考版的 `Hyperlink` 自带,这里保持静态样式。

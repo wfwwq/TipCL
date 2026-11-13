@@ -5,6 +5,7 @@
 // 输入框是两个平台真正不一样的地方,渲染结果(字号 / 缩进 / 配色)按 Windows 的值对齐。
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -303,16 +304,66 @@ internal sealed class MdView : UserControl
             }
             case MdInlineKind.Link:
             {
-                // Avalonia 的 Span 不是 Control:没有 Cursor/ToolTip/Click。
-                // 链接只保留主题色 + 下划线,URL 由调用方在气泡上以纯文本呈现(见 D-22)。
-                var link = new Span { TextDecorations = TextDecorations.Underline };
-                link[!TextElement.ForegroundProperty] = Res.Bind("B.AccentText");
-                AddInlines(link.Inlines, x.Children);
-                return link;
+                // R17:Avalonia 的 Span 不是 Control(没有 Cursor / ToolTip / 事件),但 **Inline 可以是
+                // InlineUIContainer** —— 里面放一个真控件,链接就真的能点(对齐参考版用 WPF Hyperlink 的行为;
+                // D-22 记的「链接不可点」这一条平台限制因此不再成立)。
+                var inner = new TextBlock
+                {
+                    TextDecorations = TextDecorations.Underline,
+                    FontSize = 13.5,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                inner[!TextBlock.ForegroundProperty] = Res.Bind("B.AccentText");
+                AddInlines(inner.Inlines!, x.Children);
+                // 只对真的点了链接的按下动作做响应;失败不抛(打不开浏览器时用户还能自己复制)
+                inner.Cursor = new Cursor(StandardCursorType.Hand);
+                ToolTip.SetTip(inner, x.Url);
+                inner.PointerReleased += (_, e) =>
+                {
+                    OpenLink(x.Url);
+                    e.Handled = true;
+                };
+                return new InlineUIContainer { Child = inner, BaselineAlignment = BaselineAlignment.Center };
             }
             default:
                 return null;
         }
+    }
+
+    /// <summary>
+    /// 打开外链。默认交给系统浏览器(`xdg-open` / `open` / Windows 的 ShellExecute);
+    /// 测试把它替换成收集器,免得真弹浏览器(与各页私有的 OpenUrl 同一套做法)。
+    /// </summary>
+    internal static Action<string> UrlOpener { get; set; } = OpenExternal;
+
+    /// <summary>按当前平台调系统命令打开 URL;失败只当没打开(不影响对话)。</summary>
+    private static void OpenExternal(string url)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            else
+            {
+                Process.Start(OperatingSystem.IsMacOS() ? "open" : "xdg-open", new[] { url });
+            }
+        }
+        catch (Exception)
+        {
+            // 打不开浏览器不算致命:用户可手动复制地址
+        }
+    }
+
+    /// <summary>链接被点击:空 URL 忽略,其余交给 <see cref="UrlOpener"/>。</summary>
+    internal static void OpenLink(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return;
+        }
+        UrlOpener(url);
     }
 
     /// <summary>代码块(照 Windows 版 MdView.CodeBlock:深底 + 语言标签 + 复制钮 + 横向滚动只读框)。</summary>
