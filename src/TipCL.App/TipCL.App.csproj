@@ -29,6 +29,23 @@
     <AvaloniaResource Include="Resources\fonts\TipCLIcons.ttf" />
   </ItemGroup>
 
+  <!-- C2c2:内置预设背景(设置 → 壁纸 → 预设背景;Windows 侧是 WPF 的 <Resource Include="Resources\wallpapers\*.jpg">)。
+       任务书说这些"已经内嵌在 Core 的 Resources\wallpapers 里",实测 **Core 里没有**(Core 只嵌了
+       locales / ai / plugin-host),所以按 Windows 的做法嵌进 App。 -->
+  <ItemGroup>
+    <AvaloniaResource Include="Resources\wallpapers\*.jpg" />
+  </ItemGroup>
+
+  <!-- C2c2:加载器官方图标(Windows 侧只在 -p:Premium=true 时嵌入;GOAL 定了 mac 等同 premium,所以恒嵌)。
+       forge_gh.png 实为 JPEG 内容,解码按文件内容识别,扩展名不影响(与 Windows csproj 的注释同)。 -->
+  <ItemGroup>
+    <AvaloniaResource Include="PremiumAssets\grass.png" />
+    <AvaloniaResource Include="PremiumAssets\fabric_gh.png" />
+    <AvaloniaResource Include="PremiumAssets\forge_gh.png" />
+    <AvaloniaResource Include="PremiumAssets\neoforge_gh.png" />
+    <AvaloniaResource Include="PremiumAssets\quilt_gh.png" />
+  </ItemGroup>
+
   <!-- C1a:色板与图标系统的用例要看 internal 的 Palette / LucideAssets(与 D-19 同一手法)。 -->
   <ItemGroup>
     <InternalsVisibleTo Include="TipCL.Tests" />
