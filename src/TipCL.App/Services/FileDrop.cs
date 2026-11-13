@@ -72,6 +72,8 @@ internal static class FileDrop
 
 	private static DropVeil? _veil;
 
+	private static bool _cancelledAfterLeave;
+
 	/// <summary>拖放浮层(还没 <see cref="Attach"/> 时是 null)。</summary>
 	internal static DropVeil? Veil => _veil;
 
@@ -80,6 +82,13 @@ internal static class FileDrop
 
 	/// <summary>正在被拖拽(拖进来之后、离开或落点之前)。</summary>
 	internal static bool Dragging { get; private set; }
+
+	/// <summary>
+	/// 这一轮拖拽已经"离开过窗口"了吗。离开之后再落点等于"拖走了":Windows 靠事件路由
+	/// (拖到窗口外松手时窗口收不到 <c>Drop</c>),mac 侧显式记一笔,于是
+	/// "拖出去 = 取消"这条语义可以确定性地验;重新拖进来(<see cref="DragEnter"/>)会清掉。
+	/// </summary>
+	internal static bool DragCancelled => _cancelledAfterLeave;
 
 	/// <summary>拖放总闸:false 时既不出浮层也不接文件(测试 / 离屏要整关时用它)。</summary>
 	internal static bool Enabled { get; set; } = true;
@@ -101,6 +110,7 @@ internal static class FileDrop
 	{
 		_window = window;
 		_veil = veil;
+		ResetDragState();
 	}
 
 	/// <summary>外壳关窗时摘掉(静态引用不留活窗口)。</summary>
@@ -110,6 +120,7 @@ internal static class FileDrop
 		{
 			_window = null;
 			_veil = null;
+			ResetDragState();
 		}
 	}
 
@@ -120,9 +131,10 @@ internal static class FileDrop
 	internal static bool DragEnter(IReadOnlyList<string>? paths)
 	{
 		bool hasFiles = paths is { Count: > 0 };
-		if (hasFiles)
+		if (hasFiles && CanDrop)
 		{
 			Dragging = true;
+			_cancelledAfterLeave = false;
 		}
 
 		return SetVeil(hasFiles);
@@ -138,7 +150,16 @@ internal static class FileDrop
 	internal static bool DragLeave()
 	{
 		Dragging = false;
+		_cancelledAfterLeave = true;
 		return SetVeil(false);
+	}
+
+	/// <summary>把这一轮的拖拽状态清干净(挂新窗口 / 测试收尾用;不碰口子与总闸)。</summary>
+	internal static void ResetDragState()
+	{
+		Dragging = false;
+		_cancelledAfterLeave = false;
+		_veil?.Show(false);
 	}
 
 	/// <summary>
@@ -147,9 +168,13 @@ internal static class FileDrop
 	/// </summary>
 	internal static bool Drop(IReadOnlyList<string>? paths)
 	{
+		// 拖出去松手 = 取消:Windows 那边窗口根本收不到这次 Drop(指针已经不在窗口上),
+		// mac 侧用离开标记把同一条语义钉住。
+		bool cancelled = _cancelledAfterLeave;
 		Dragging = false;
+		_cancelledAfterLeave = false;
 		_veil?.Show(false);
-		if (!CanDrop)
+		if (cancelled || !CanDrop)
 		{
 			return false;
 		}

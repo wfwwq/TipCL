@@ -1463,3 +1463,47 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   `DialogCard` / `ToastCard` / `ToastLayer` / `ToastTimer` 全是新增的 `internal` 成员。
 - **顺带更正 C2b 的一条链**:D-95 说"C2c 把外壳的 Toast 方法挂到 `ToastSink`" —— 实际落地的是
   `AppServices.ToastSink = Toast`(外壳的方法),不是"外壳另开一个 Toast 方法"的第二种写法。
+## D-108 C2c2:内置预设背景与加载器图标**不在 Core 里**(任务书的前提不成立,按描述搬)
+
+- 任务书说「内置预设背景已内嵌在 Core 的 `Resources\wallpapers\*.jpg` —— 查 `TipCL.Core.CoreResources`,不要重复嵌入」。**实测不成立**:mac 的 `src\TipCL.Core\Resources\` 只有 `ai` / `locales` / `plugin-host`(`CoreResourcesTests` 钉的就是这三处);Windows 侧那 4 张 JPG 是 `src\TipCL\TipCL.csproj:98` 的 WPF `<Resource>`(App 程序集),用 `pack://application:,,,/TipCL;component/Resources/wallpapers/…` 读(`SettingsPage.cs:643`);`PremiumAssets\*` 同一条(`TipCL.csproj:106-112`,而且**只有 `-p:Premium=true` 才嵌**)。
+- **取舍**:按"描述"办 —— 把 4 张预设与 5 个加载器图标**字节级复制**进 `src\TipCL.App\`(SHA256 与 Windows 源逐项相同),用 `AvaloniaResource` 内嵌,URI 换成 `avares://TipCL/…`。**不改 Core**(红线)。mac 只出一个版本,所以加载器图标恒嵌(GOAL §3 "等同 premium")。
+- 回到页面层的取址口:`Wallpaper.Presets` / `PresetUri(name)` / `PresetPath(name)` / `ReleasePreset(name)` / `OpenPreset(name)` —— 正好替掉 `SettingsPage` 里那三行 `pack://` 拼串 + `GetResourceStream` + `File.Create`,C3+ 的设置页移植因此仍是机械的。未知预设名:拼出来的 URI 打不开 → `OpenPreset` 给 null、`ReleasePreset` 给空串(Windows 那边是 `GetResourceStream` 抛异常、页面在 catch 里报「预设背景应用失败」—— 同一结果,不抛给用户)。
+
+## D-109 C2c2:视频壁纸在 mac 侧**不支持**,做成注入缝且绝不假装放上了
+
+- Windows 用 WPF `MediaElement` 静音循环播 mp4(`Wallpaper.cs:293-347`)。**Avalonia 11 没有内建媒体播放器**,要支持得引 LibVLCSharp 之类的新依赖(超出本包授权,而且 mac 真机也验不了)。
+- 形状:`internal interface IVideoHost { Start(path); SetActive(bool); Stop(); }` + `Wallpaper.VideoHost`(默认 null)。null 时 `SetSource(video)` 记 `Error = 「macOS 版还不支持视频壁纸:」+path` 并保持 `Active = false`;接上之后走 Windows 那条路(起播 / 跟窗口激活播停 / 换图或收摊先停)。
+- **不许假装成功**:`FileDrop.SetWallpaperAsync` 在 `ReloadAsync` 之后检查 `Wallpaper.Error`,非空就把原因当结果返回(于是 Toast 报真原因)。这是本包对 Windows 的一处收严。
+
+## D-110 C2c2:拖放的注入缝、`EnableDrop` 的可访问性,以及"拖出去 = 取消"
+
+- **类型可访问性**:`FileDrop` 与 `DropContext` 降为 `internal`,`PageBase.EnableDrop` 由 `protected` 降为 `internal`。理由是硬约束:mac 的 `MainWindow` 是 internal,`public static Task HandleAsync(MainWindow, …)` 会 CS0051;`protected` 成员也不能暴露 internal 的 `DropContext`。页面全在同一个程序集里派生,调用形状(`EnableDrop(() => new FileDrop.DropContext{…})` / `FileDrop.HandleAsync(win, paths, ctx())`)一字未变。
+- **注入缝**:`Sink`(落点投递口)、`DragEnter/DragOver/DragLeave/Drop`(程序化入口,"拖的是什么"由调用方给)、`Enabled`(总闸)、`ReadyGate`(后端有没有连上,默认 `AppServices.Ready` = Windows 的 `_bridgeReady`)、`SkinApplier`(皮肤那一步在 Windows 直连 `AccountPage`)。测试因此不需要真实输入设备,也不需要后端。
+- **"拖出去 = 取消"**:Windows 靠事件路由(指针离开窗口后松手,窗口收不到 `Drop`)。mac 侧 `DragLeave` 记 `_cancelledAfterLeave`,`Drop` 看到标记就拒绝并清标记,`DragEnter` 清标记 —— 语义等价,而且可断言。**注意不要**把它当成"必须有 DragEnter 才收 Drop":标记初值是 false,所以即便某个平台只发 `DragOver`+`Drop`,照收。
+- **总闸与就绪闸分开**:`Enabled` 是"整关"(测试/离屏用),`ReadyGate` 是"后端连上没有"。两者都真时才出浮层、才接文件 —— 与 Windows `ShowDropVeil` 头一句 `if (!_bridgeReady) on = false;` 一致。
+
+## D-111 C2c2:缩略图走 Core 的 Skia 编解码器;两个计时器都与 D-105 同口径
+
+- **解码**:`Thumbs` / `Wallpaper` / `LoaderIcons` / `ThumbTile` 的解码统一收进 `Services\ImageDecode.cs` —— 走 `TipCL.Core.Platform.PlatformServices.ImageCodec`(B1a 的 `SkiaImageCodec`),再交给 Avalonia 的 `Bitmap` 显示。好处:WebP / EXIF 方向 / 坏数据全由 Core 那一个实现负责(Windows 侧散在 `WebpFallback`+`BitmapImage` 两处),坏数据一律 null(与 Windows 的 `catch { return null; }` 同)。
+- **路径来源**:`Thumbs` 的"这张图在本地是哪个文件"做成 `IThumbStore`(`BridgeThumbStore` = Windows 的 `thumb_path` / `ensure_thumb` 两条;`LocalThumbStore` = 根目录 + `sha1(url).img`,给测试与离线场景)。**缓存根因此可注入**,测试一律给 `TestHome.Root` 下的目录 —— 红线:绝不碰用户的图片/缓存。
+- **轮播计时器**:`Wallpaper.TimerFactory` 注入缝,默认实现与 C2c1 的 Toast 计时器同一口径 —— `Motion.HasClock` 为假(离屏 `--smoke` / 测试进程)时**不挂计时器**,于是"没有残留计时器"本身可以断言;真桌面下就是 Windows 的那个 `DispatcherTimer`(到点换一张、不停表)。
+- **`Trim` 的一处小改**:Windows 的 `foreach (_mem.Keys.Take(_mem.Count - 300))` 在 .NET 8 的 `ConcurrentDictionary` 上会边走边改集合,先 `ToList()` 再删(语义不变)。
+
+## D-112 C2c2:我自己踩了 D-36(用 PowerShell 的 `Get-Content | Set-Content` 改中文文件),如实记录
+
+- 过程:为把 `C2c2ThumbsTests.cs` 里十几处 `.GetAwaiter().GetResult()` 换成 `C2c2Files.RunOffThread(...)`,我图快用了
+  `(Get-Content -Raw $f) -replace … | Set-Content -Encoding utf8 $f`:结果中文被读坏(乱码 + BOM),`Select-String` 连"缩略图"都匹配不到了 —— **与 D-36 描述的坑一模一样**。
+- 处理:立刻用 `write` 工具把该文件整份重写(内容我有完整备份),然后**逐字节核验**:无 BOM、CR=0、U+FFFD=0、中文可 grep、`dotnet build` 0 错误、用例全绿。**该文件没有进过任何提交**(损坏发生在提交之前)。
+- 之后的文档更新一律改成"先用 `write` 工具写成 `artifacts\*` 临时文件 → 用 `[System.IO.File]::WriteAllBytes/ReadAllBytes` 按字节拼接/替换整行",再逐字节复核。**结论重申:D-36 不是建议,是硬规则。**
+
+## D-113 C2c2:测试里驱动 `Dlg.Ask` 必须"先把对话框推出来、再点按钮"
+
+- 事实:`Dlg.Ask` 的顺序是 `layer = Push(card, …)` **然后** `button.Click += …`;而离屏的 `Dlg.SmokeAutoAnswer` 恰恰是在 `Push` **里面**被调(`Dlg.cs:158-164`)。所以在 `SmokeAutoAnswer` 里点"确定",TrySetResult 的处理器还没装上 —— 点了也白点(只有 `Push` 给的 `onDismiss` = 取消那条路是通的)。
+- 后果(本包实测):一条 `Ensure_creates_an_offline_account_when_signed_out` 因此死等 30 秒 → `AvaloniaSession` 超时 → **会话线程被占死**,后续每条用例都跟着超时(看起来像"整批卡死",实际只有一个用例的写法错)。
+- 正确写法(见 `C2c2Files.Dialog()` / `Click()`):`Task t = AccountGate.EnsureAsync();` → `DialogCard card = C2c2Files.Dialog();`(内部先 `UiHost.Flush()`,把 `await` 的续体推进到"对话框已推出")→ `C2c2Files.Click(card, I18n.L("创建并继续"));` → `C2c2Files.Pump(() => t.IsCompleted);` → 再读结果。C3+ 驱动 `Dlg.Ask` 的用例照这个来。
+
+## D-114 C2c2:在会话线程上同步等 `Thumbs.LoadAsync` 会自锁(D-79 的一个新实例)
+
+- `Thumbs.FetchAsync` 里有 `await Task.Run(解码)`:在会话线程上 `await` 会捕获 Avalonia 的 `SynchronizationContext`,续体被投回同一个线程;而会话线程正被用例体占着(`GetResult()` 阻塞)→ 自锁,30 秒超时。
+- 修法(**只改测试**):`C2c2Files.RunOffThread(() => Thumbs.LoadAsync(url, px))` = `Task.Run(...)` 起在池上再同步取结果 —— 池上没有 Dispatcher 的 `SynchronizationContext`,续体留在池上;这也与生产环境一致(UI 线程不阻塞、取图照常回来)。
+- **没有**为了测试去给 `Thumbs` 加 `ConfigureAwait(false)`:那会改动产品行为(续体线程),而 Windows 源码也没有这么写。

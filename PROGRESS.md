@@ -29,7 +29,8 @@
 | C2a | 桥层与 WPF-free 基础服务(`AppServices`/`Payload`/`TaskStore`/`TaskRow`/`I18n`/`Fmt`/`FileKinds`/`BridgeEvent`/`BridgeCallException`/`BridgeHost`/`BridgeClient`/`Dlg`/`Motion`) | ✅ 完成(见下;**新增 210 条用例,总数 2257 → 2467,两条通道各连跑 2 次都 2467/2467 全绿**;`src\TipCL.Core` 一行未动;只有进程内一条后端路径,外部 Python 桥已去) |
 | C2b | 外壳:`MainWindow` / 导航 / 页面宿主 / Toast·Dialog·DropVeil 宿主 / 系统菜单与快捷键 | ✅ 完成(见下;**新增 79 个测试方法 / 122 条用例,总数 2467 → 2593,两条通道各连跑 2 次都全绿**;C2a 的接线清单除 `ToastSink`(Toast 视觉件属 C2c)与"启动后端"两处外全部落地;smoke 因新增标题栏 / 侧栏 / 页面宿主而变,**新基准 = light 21823 `8336CA13...` / dark 18200 `DBD3C171...`**) |
 | C2c1 | Toast 卡片 + 真实 `ToastSink` 接线 + 对话框卡片(`Dlg` 的 confirm/message 卡) | ✅ 完成(见下;**新增 60 条用例,总数 2631 → 2691,两条通道各连跑 2 次都 2691/2691 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书点名的 `Pages\Bubble.cs` / `Pages\ConfirmCard.cs` 实为 AI 页组件、按红线未搬,见 D-104) |
-| C2c2 | 剩下的视觉件:`FileDrop` / `PageBase.EnableDrop` + DropVeil + Backdrop / Wallpaper / SideFrost / ImeGuard / AccountGate / Thumbs / LoaderIcons / 标题栏圆片 / 下载任务底条 | 未开始 |
+| C2c2 | 页面级视觉服务:拖放(FileDrop / PageBase.EnableDrop / DropVeil)+ Wallpaper + AccountGate + Thumbs·ThumbTile + LoaderIcons(原「剩下的视觉件」里属本包的那半) | ✅ 完成(见下;**新增 106 条用例,总数 2691 → 2797,两条通道各连跑 2 次都全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书说"预设已内嵌在 Core"实测不成立,见 D-108) |
+| C2c3 | 其余视觉件:Backdrop / SideFrost / SideFrostEx / ImeGuard / WebViewHost / WebpFallback / 标题栏圆片 / 下载任务底条 | 未开始 |
 | C2d | 进程内后端接线与验收(可关的登录预热 / `BackendBootstrap` 状态机 / 真启停 / 真 RPC 往返 / `BridgeReady` 开闸) | ✅ 完成(见下;**新增 38 条用例,总数 2593 → 2631,两条通道都 2631/2631 全绿**;`src\TipCL.Core` 只动 `BackendApi.cs` 一个文件(+20/-4);**后端真的起在 `127.0.0.1:0` 上并跑通了真 RPC 与真 SSE**,`BridgeReady` 改由真启动路径打开;顺带修掉"取消启动会漏监听器"的真缺口;smoke 与 C2b 基准逐位相同) |
 | C3-C8 | 页面逐个移植 | 未开始(接入方式:各页面包 `PageRegistry.Register(...)`,页面 id 见表) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
@@ -4691,4 +4692,153 @@ Lead 在 C2c1 任务书里点名要搬 `Services\Bubble.cs` 与 `Pages\ConfirmCa
 
 **裁决:C2c1 的做法正确,保持。** AI 审批卡与 AI 对话气泡**不单独开包**,归到 **C7+(AI 全家)**,和 AI 页一起搬 —— 那时 `AiIcons`/`MdView` 等依赖自然就位。
 
-**遗留**:4 张 Toast 上限按宿主孩子数算(与 Windows 同口径,退场动画期间连弹第 5 张会「闪一下」);关窗后 `ToastSink` 仍指向旧外壳(Windows 同),本包靠 `Dispose` 保证不抛不留计时器。
+**遗留**:4 张 Toast 上限按宿主孩子数算(与 Windows 同口径,退场动画期间连弹第 5 张会「闪一下」);关窗后 `ToastSink` 仍指向旧外壳(Windows 同),本包靠 `Dispose` 保证不抛不留计时器。## C2c2 页面级视觉服务:拖放 / 背景 / 缩略图 / 加载器图标 / 账号守卫(2026-11-13)
+
+### 1. 先纠正任务书里的一条事实:内置预设背景与加载器图标**都不在 Core 里**
+
+任务书写「内置预设背景已内嵌在 Core 的 `Resources\wallpapers\*.jpg` —— 查 `TipCL.Core.CoreResources`,不要重复嵌入」。实测**不成立**:
+
+| 检查 | 实测结果 |
+|---|---|
+| mac 的 `src\TipCL.Core\Resources\` | 只有 `ai` / `locales` / `plugin-host` 三个目录(`CoreResourcesTests` 钉的就是这三处),**没有 wallpapers,也没有 PremiumAssets** |
+| Windows 侧的嵌法 | `src\TipCL\TipCL.csproj:98` 的 WPF `<Resource Include="Resources\wallpapers\*.jpg" />`(App 程序集!),读取走 `pack://application:,,,/TipCL;component/Resources/wallpapers/…`(`SettingsPage.cs:643`) |
+| 加载器图标 | 同一条:Windows 是 `TipCL.csproj:106-112` 的 `<Resource Include="PremiumAssets\*"/>`,**premium 才嵌**;Core 里同样没有 |
+
+所以按**描述**而不是按错误的前提办:4 张预设 JPG 与 5 个加载器图标**字节级复制**(`Copy-Item`,与 Windows 源 SHA256 逐项相同,见第 6 节)进 `src\TipCL.App\`,用 `AvaloniaResource` 内嵌,URI 由 `pack://application:,,,/TipCL;component/…` 换成 `avares://TipCL/…`。
+**`src\TipCL.Core` 一个字节没动**(`git diff --name-status 876d57d HEAD -- src/TipCL.Core` 为空;Core 身份仍是 238 有对应 / 216 一致 / 22 有改动 / 10 无对应)。
+
+另一处口径更正:任务书把 `AccountGate` 描述成"路由到账号页 / 提示登录的守卫"。**实测 Windows 源码不是这样**:它不导航、不开账号页,而是 `IsSentinel`(名字算不算没登录)+ `ListAsync`(列真账号)+ `EnsureAsync`(挑一个,没有就现开一个离线用户)+ `CreateOfflineAsync`(弹「创建离线用户」再调后端 `add_offline_account`)。本包照源码搬(与 C2c1 处理"文件名与描述不符"同一条纪律)。
+
+### 2. 做了什么
+
+1. **拖放**:`Services\FileDrop.cs`(Windows 同名文件的公开面:`DropContext` / `HandleAsync` / `ImportModpackAsync`,私有那几个也逐个搬)+ 新增的"浮层那一半"(Windows 长在 `MainWindow` 里:`PreviewDragEnter/Over/Leave/Drop` → `ShowDropVeil`、`OnDragOver`/`OnDrop`);
+   - `Services\DropVeil.cs`:Windows `MainWindow.xaml:78-86` 那块 `<Border Name="DropVeil">` 提成具名控件(卡片圆角 10 / 内边距 (20,16,20,18) / 描边 2 / 图标 30 / 标题 15 SemiBold / 提示 12 最宽 360 / 淡入 120ms 淡出 110ms / 文案 `松手就装`);
+   - `Pages\PageBase.EnableDrop(Func<FileDrop.DropContext>)`:与 Windows 同名同参,外加 mac 侧的 `EnableDrop(bool)` 开关与 `DropEnabled` / `DropContextNow()`;
+   - 外壳接线:`MainWindow` 里 `DragDrop.SetAllowDrop(this, true)` + 四个 `DragDrop.*Event` 处理器 + `FileDrop.Attach(this, _dropVeil)`,浮层插在正文之上、Toast / 对话层之下(与 Windows 的 XAML 顺序一致);关窗 `Reset()` + `Detach()`。
+2. **背景管线**:`Services\Wallpaper.cs`(Windows 公开面 `Error` / `Active` / `ChromeInvalidated` / `Attach` / `SetWindowActive` / `ReloadAsync` / `SetSource` / `SetEffects` / `OnThemeChanged` / `Shutdown` 一个不少)+ `Services\ImageDecode.cs`(统一走 Core 的 `PlatformServices.ImageCodec` = B1a 的 `SkiaImageCodec`,坏数据一律 null);外壳里新增 `WallHost`(铺满内容层、在标题栏之下)与 `PageWash`(有壁纸时透明),`Activated`/`Deactivated` → `Wallpaper.SetWindowActive`,后端就绪后 `ReloadAsync`(Windows `MainWindow.xaml.cs:357` 同)。
+3. **账号守卫**:`Services\AccountGate.cs`(公开面 `IsSentinel` / `ListAsync` / `EnsureAsync` / `CreateOfflineAsync` / `ValidName`)+ 两个注入缝(`RowSource` / `AccountCreator`)。
+4. **缩略图**:`Services\Thumbs.cs`(`Cached` / `LoadAsync`,8 路闸门、400 → 300 裁剪、5 分钟失败冷却、in-flight 合并照搬)+ `Services\ThumbTile.cs`(圆角方块 / 首字母回落 / `SetUrl` / `SetImage` / 180ms 淡入 / token 丢过期请求)。
+5. **加载器图标**:`Services\LoaderIcons.cs` = Windows 的 **premium 那一支**(GOAL 定了 mac 等同 premium):文件名表、解码宽度 `clamp(ceil(size)*2, 32, 96)`、按 `文件名|px` 缓存已解码位图;名字不认识 → 无图标 → 首字母方块(premium 的回落,与 Windows 一致)。
+6. 顺手补了两个必需的 DTO(都是 WPF-free 的纯模型,从 Windows `Models\` 字节级复制):`Models\AccountRow.cs`、`Models\InstanceInfo.cs`。
+
+### 3. 新增 / 改动的文件
+
+| 文件 | 改动 |
+|---|---|
+| `src\TipCL.App\Services\FileDrop.cs` | **新增**(Windows `Services\FileDrop.cs` 的等价搬迁 + 本包新增的拖放驱动那一半) |
+| `src\TipCL.App\Services\DropVeil.cs` | **新增**(Windows `MainWindow.xaml` 的 `DropVeil` 提成具名类型) |
+| `src\TipCL.App\Services\Wallpaper.cs` | **新增**(Windows `Services\Wallpaper.cs` 的等价搬迁 + 预设解析/注入缝) |
+| `src\TipCL.App\Services\ImageDecode.cs` | **新增**(mac 专有:统一走 Core 的 Skia 编解码器) |
+| `src\TipCL.App\Services\AccountGate.cs` | **新增**(Windows `Services\AccountGate.cs` 的等价搬迁) |
+| `src\TipCL.App\Services\Thumbs.cs` | **新增**(Windows `Services\Thumbs.cs` 的等价搬迁 + 路径来源注入缝) |
+| `src\TipCL.App\Services\ThumbTile.cs` | **新增**(Windows `Services\ThumbTile.cs` 的等价搬迁) |
+| `src\TipCL.App\Services\LoaderIcons.cs` | **新增**(Windows premium 支的等价搬迁) |
+| `src\TipCL.App\Models\AccountRow.cs`、`InstanceInfo.cs` | **新增**(从 Windows `Models\` 字节级复制,SHA256 与源相同) |
+| `src\TipCL.App\Resources\wallpapers\preset-*.jpg`(4 张) | **新增**(从 Windows `Resources\wallpapers\` 字节级复制) |
+| `src\TipCL.App\PremiumAssets\*.png`(5 个) | **新增**(从 Windows `PremiumAssets\` 字节级复制) |
+| `src\TipCL.App\TipCL.App.csproj` | 新增两个 `AvaloniaResource` 组(预设背景 4 张、加载器图标 5 个),原有内容一字未改 |
+| `src\TipCL.App\Pages\PageBase.cs` | 新增 `EnableDrop(Func<...>)` / `EnableDrop(bool)` / `DropEnabled` / `DropContextNow()`;类注释里"`EnableDrop` 本包不移植"那句改成已移植 |
+| `src\TipCL.App\MainWindow.cs` | 新增拖放接线与三个处理函数、`WallHost` / `PageWash` 两个图层与 `Wallpaper.Attach`、`Activated`/`Deactivated`、关窗收摊、`ApplyThemeVisuals` 尾部喊 `Wallpaper.OnThemeChanged()`、后端就绪后 `ReloadAsync`;**没有改动任何既有成员的签名或语义** |
+| `tests\TipCL.Tests\C2c2Fixtures.cs` 等 5 个测试文件 | **新增**(106 条用例) |
+
+### 4. 每个 Windows 文件的公开面(逐条对照)
+
+| Windows 文件 | 公开面 | mac 侧 |
+|---|---|---|
+| `Services\FileDrop.cs` | `DropContext`(None/Instance/Version/PreferKind)、`HandleAsync(MainWindow, IReadOnlyList<string>, DropContext?)`、`ImportModpackAsync(MainWindow, string)` | 名字 / 参数 / 语义一致;**类型与成员降为 `internal`**(`MainWindow` 在 mac 是 internal,public 成员不能暴露它 —— CS0051)。页面调用形状不变:`FileDrop.HandleAsync(win, paths, ctx())` |
+| `Services\Wallpaper.cs` | `Error` / `Active` / `ChromeInvalidated` / `Attach(Grid, Border, Border, Border, Rectangle)` / `SetWindowActive(bool)` / `ReloadAsync()` / `SetSource(string)` / `SetEffects(int,int)` / `OnThemeChanged()` / `Shutdown()` | **一模一样**(`Attach` 的第 4 个参数 mac 给侧栏,Windows 给 null;第 5 个参数 mac 是同一个名字的 `Rectangle`) |
+| `Services\AccountGate.cs` | `IsSentinel` / `ListAsync` / `EnsureAsync` / `CreateOfflineAsync` / `ValidName`(类型 `internal`) | 一模一样 |
+| `Services\Thumbs.cs` | `Cached(string,int)` / `LoadAsync(string,int)` | 名字一致,类型由 `BitmapSource` 换成 Avalonia 的 `Bitmap` |
+| `Services\ThumbTile.cs` | `ThumbTile(string, double = 42, double = 10)` / `SetUrl(string?)` / `SetImage(BitmapSource?)`(premium 才有) | 名字 / 默认值一致;`SetImage` **恒在**(mac 等同 premium) |
+| `Services\LoaderIcons.cs` | `Tile(string, string, double = 36)`(premium 支;**compact 支的 `Url` 不搬** —— Windows 里也只有 `Tile` 自己用) | 一致 |
+| `Pages\PageBase.cs` | `protected void EnableDrop(Func<FileDrop.DropContext>)` | 同名同参,可访问性降为 `internal`(参数里有 internal 的 `DropContext`) |
+
+### 5. 从 Windows 复制/搬迁的文件,对它们改了哪几处
+
+除 `MainWindow.cs`(外壳,不是复制品)外,逐文件列出**全部**改动点:
+
+- **FileDrop.cs**:① `MainWindow` 参数与 `DropContext` 降为 internal;② 皮肤那一步(Windows 直接调 `AccountPage.EditSkinExternalAsync`)改成 `SkinApplier` 注入缝,没接时抛 `InvalidOperationException(「账号」页还没移植…)`(与 Windows"没有离线账号"那条同样是 `InvalidOperationException`,由调用方的 `Run` 兜住);③ `SetWallpaperAsync` 尾部多一句:管线 `Error` 非空就把它当结果返回(见第 7 节第 2 条);④ 认种类抽成 `IdentifyPaths`(Windows 是内联的一句,语义不变);⑤ 新增拖放驱动那一半 + 注入缝。
+- **Wallpaper.cs**:① 视频壁纸改成注入缝 `VideoHost`(默认 null = 本版不支持,见 D-109);② `ApplyChrome` 里对 `SideFrost.Refresh()` / `Backdrop.Refresh()` 的两处调用改成 `SideFrostRefresh` / `BackdropRefresh` 两个注入口(C2c3 落地时接上,现在为 null);③ `SetResourceReference` → `UiExt.Dyn`;④ 轮播计时器做成注入缝(默认实现与 C2c1 的 Toast 计时器同口径:没有时钟就不挂);⑤ `Attach` 会把上一次挂上去的两个静态图层从旧宿主里摘掉(一个进程里会有多个外壳);⑥ 新增预设解析(`Presets` / `PresetUri` / `PresetPath` / `ReleasePreset` / `OpenPreset`)与一批只读的 internal 取值口(测试用)。
+- **Thumbs.cs**:① 路径来源改成注入缝 `Store`(`BridgeThumbStore` = Windows 的两条后端调用;测试用 `LocalThumbStore`);② 解码统一走 `ImageDecode`(Core 的 Skia,不需要 `WebpFallback`);③ `Trim` 里对 `_mem.Keys` 先 `ToList()`(照 WPF 那行写会在遍历中改集合);④ 新增 `Clear` / `MemoryCount` / `FailureCount` 给测试。
+- **ThumbTile.cs**:① 显示那一步 `Dispatcher.InvokeAsync` → `CheckAccess` + `Post`;② 暴露 `ImageLayer` / `Letter` / `ImageVisible` / `LetterVisible` / `ImageSource` / `Token` 只读给测试。
+- **LoaderIcons.cs**:只保留 premium 支;`pack://` → `avares://`;`BitmapImage.DecodePixelWidth` → `ImageDecode`(按宽度缩放)。文件名表 / clamp / 缓存键一字未改。
+- **AccountGate.cs**:① `AppServices.Window?.Prefs` → `(AppServices.Window as MainWindow)?.Prefs`;② `AppServices.Window?.Toast` → `AppServices.Toast`(C2a 起的统一口径);③ 后端调用收进两个注入缝。
+- **PageBase.cs**:新增 4 个成员(见上表),原有成员逐字未改。
+- **MainWindow.cs**:只增不改(见第 3 节),`_pageWash` 由内联 `new Border{...}` 改成具名字段 `Rectangle`(像素逐位不变:smoke 与基准一致)。
+
+### 6. 资源与复制品的字节核验
+
+| 文件 | 结果 |
+|---|---|
+| `Resources\wallpapers\preset-morning.jpg` | SHA256 `D88FA221…` 与 Windows 源**相同** |
+| `preset-dusk.jpg` | `99C7FA8C…` 相同 |
+| `preset-night.jpg` | `656C0F88…` 相同 |
+| `preset-sakura.jpg` | `7B60F059…` 相同 |
+| `PremiumAssets\grass.png` | `AEE29A26…` 相同 |
+| `fabric_gh.png` | `1F62ABFC…` 相同 |
+| `forge_gh.png` | `9EA5E797…` 相同(内容其实是 JPEG,解码按内容识别) |
+| `neoforge_gh.png` | `9590353F…` 相同 |
+| `quilt_gh.png` | `B3E5A359…` 相同 |
+| `Models\AccountRow.cs` / `InstanceInfo.cs` | 545 / 583 字节,与 Windows 源逐字节相同 |
+
+### 7. Windows → mac 差异(逐条,不静默丢)
+
+1. **视频壁纸本版不支持**(D-109):Windows 用 WPF `MediaElement` 静音循环播 mp4;Avalonia 11 **没有内建播放器**,要支持得引 LibVLC 之类的新依赖(超出本包授权)。mac 侧:`VideoHost` 为 null 时记 `Error = macOS 版还不支持视频壁纸:<path>` 且 `Active = false` —— **绝不假装放上了**;接上注入缝之后走 Windows 那条路(起播 / 跟窗口激活播停 / 换图先停)。
+2. **拖进来的壁纸失败时会说实话**:`FileDrop.SetWallpaperAsync` 在 `ReloadAsync` 之后检查 `Wallpaper.Error`,非空就把原因当结果返回(于是 Toast 报的是真原因,而不是照样说"已设为背景图")。这是本包对 Windows 的一处**收严**。
+3. **`EnableDrop(bool)` / `DropEnabled` / 拖放总闸 `Enabled` / `ReadyGate` 是 mac 新增**:Windows 的 `EnableDrop` 只开不关,且"后端没连上"是外壳的 `_bridgeReady`;mac 侧把这两件事做成可断言的状态(测试与 C3+ 页面都用得上),语义仍是"没连上后端就不出浮层、不接文件"。
+4. **"拖出去 = 取消"显式记一笔**(`DragCancelled`):Windows 靠事件路由(拖到窗口外松手时窗口收不到 `Drop`),mac 侧在 `DragLeave` 时记标记、`Drop` 看到标记就拒绝;重新拖进来会清掉。真实拖放的语义不变。
+5. **`EnableDrop(null)` 当场抛 `ArgumentNullException`**:Windows 传 null 会在落点那一刻才 NRE;mac 侧提前收严(有用例钉住)。
+6. **`Wallpaper.Attach` 会摘掉旧宿主里的图层**:mac 一个进程里会有多个外壳(测试),不摘会"一个控件两个父";Windows 一辈子只有一个 MainWindow。
+7. **不再直接调 `Backdrop` / `SideFrost`**:它们属 C2c3(**红线不许本包碰**),改成两个注入口;因此"有壁纸时侧栏霜化要刷新"这件事**本包没做**,留给 C2c3 接线(第 10 节)。
+8. **`DropVeil` 的图标行照抄 Windows 的空文本**(`Text=""`,只占位不画字形),没有自己编一个图标。
+9. **`MainWindow.ApplyThemeVisuals` 尾部会喊 `Wallpaper.OnThemeChanged()`**:Windows 是 `App.ThemeVisualsChanged` 事件,mac 的外壳直接调一次(等价,见 D-110)。
+10. **`BuildLocalService` 那条口径**不变:`FileDrop` 在 mac 是 internal(见第 4 节)。
+
+### 8. 测试(新增 106 条用例;总数 2691 → 2797)
+
+| 文件 | 覆盖 |
+|---|---|
+| `C2c2FileDropTests.cs`(27 条) | 浮层进出 / 幂等 / `DragLeave` 后无残留(可见标志 + 图层在位 + 没有没落地的淡出)/ 拖出去落点算取消 / 重新进来清标记 / 载荷逐项一致(路径顺序、滤空)/ 后端没连上或总闸关掉时全压住 / `EnableDrop` 默认 false、开关、上下文每次现调、null 拒绝、切页之后仍有效 / 落点用当前页上下文、没开就用 `None` / 浮层文案与取值(圆角 10、内边距 (20,16,20,18)、描边 2、30/15/12、最宽 360、两条文案)/ `IdentifyPaths` 与 `FileKinds` 规则一致 / 关窗摘掉静态引用 |
+| `C2c2WallpaperTests.cs`(26 条) | `SetSource` 状态机(真图 / 空 / 不存在 / 坏图 / 幂等)/ 没有窗口时不抛 / 模糊遮罩夹 0-40、0-80 与底色 / `ApplyChrome`(PageWash 透明度、根边框兜底、标题栏玻璃 vs 实底)/ 两个外壳之间搬图层 / 四个预设表与内嵌资源真的能打开 / 未知预设走 Windows 回落 / 释放到数据目录且不覆盖 / `ReloadAsync` 六个键与默认值 / 单图设置 / 文件夹轮播(扫描、夹 1-1440、到点换一张、取消文件夹停表)/ `Shutdown` 停表 / 没有时钟就不挂计时器 / 视频壁纸不支持与接上之后的那条路 |
+| `C2c2ThumbsTests.cs`(28 条) | 缓存根可注入且落在 `TestHome.Root` 下 / 未命中 → `thumb_path` → `ensure_thumb` → 解码 → 内存命中 / 磁盘已缓存就不再 ensure / 坏图回落且记失败 / 冷却期内不重试 / 空 url 不碰后端 / 解码宽度 `max(16, px*2)` / `LocalThumbStore` 纯函数 / 瓦片首字母与 `?` / 取图期间显示首字母 / 缓存命中立即显示 / `SetImage` 顶掉未完成的取图 / 失败仍是首字母 / 瓦片宽度即取图宽度 / 加载器文件名表(含大小写)/ 五个图标的真解码 / 未知加载器回落 / clamp(32/72/96)/ `Tile` 能被 `Ui` 层直接用(挂真窗口、有尺寸)/ 图标缓存 / avares 取址 / `ImageDecode` 对空输入给 null |
+| `C2c2AccountGateTests.cs`(25 条) | 哨兵名(空 / 空白 / 离线模式 中英)/ 真名字 / `ValidName` 规则与长度上下界 / `ListAsync` 过滤 + 激活优先 + 去重 / 空清单 / `EnsureAsync` 偏好命中与回落 / 没登录那一支真的弹框建号(名字、皮肤、后端返回名、Toast、取消 → null)/ `Player` 预填被清掉 + 空名字会再问一次 + 警告 Toast / 皮肤索引 0/1/2 → default·steve·alex / 已有账号时**不弹框** |
+
+纪律:碰 Avalonia 的用例体**一律**经 `AvaloniaSession.Run(...)`(D-79);不模拟真实输入设备(拖放走公开入口 + 注入"拖的是什么",对话框用程序化 `RaiseEvent` 点按钮);临时文件全在 `TestHome.Root` 之下;本包新加的注入缝由 `C2c2Scope` 取快照并在 `Dispose` 里还原,用例类归入同一个 `C2c2Globals` collection(D-103)。每条期望都在注释里标了来源【Windows 源】/【任务书】/【本机实测】。
+
+### 9. 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 错误**;警告按类别分组 = `NU1900` ×6 + `SYSLIB0014` ×1(没有别的告警) |
+| 2 | `dotnet test TipCL.Mac.sln -c Release --no-build`(第 1 / 2 次) | 都是**退出码 0,失败 0 / 通过 2797 / 总计 2797** |
+| 3 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll`(第 1 / 2 次) | 都是**退出码 0,通过 2797 / 失败 0 / 跳过 0 / 不支持 0**(`总计 2797 个用例,通过 2797,失败 0,跳过 0,不支持 0` + `in-proc 测试全绿`) |
+| 4 | `--smoke --theme light` / `--theme dark` / `--theme blue` | 退出码 **0 / 0 / 2**;light **21823 字节 `8336CA13…049B`**、dark **18200 字节 `DBD3C171…604E`** —— **与 C2b 基准逐位相同**(新增的浮层是收起的、背景宿主是空的、`PageWash` 由 Border 换成 Rectangle 后像素一致) |
+| 5 | `%LOCALAPPDATA%\TipCL` 收尾复测 | **9328 文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16** —— 与开工时**完全相同** |
+| 6 | 残留进程与 `%TEMP%` | `testhost` / `TipCL` / `java` / `adb` **各 0 个**;`%TEMP%\tipcl*` 最新一项是 12:14:02 的 `tipcl-probe`(早于本包开工的 12:42),**本包开工之后新增 0 个** |
+| 7 | `git diff --name-status 876d57d HEAD -- src/TipCL.Core` | **空**(Core 一字未动);Core 身份 = 238 有对应 / 216 一致 / 22 有改动 / 10 无对应 |
+| 8 | 逐文件字节核验(18 个源码/csproj + 9 个二进制资源) | 全部 **无 BOM、CR=0、U+FFFD=0**;9 个资源与 Windows 源 SHA256 相同 |
+
+### 10. 只有真机(Mac)才能验的
+
+- **真实拖放**:Avalonia 的 `DragDrop` 走平台 DnD 会话,离屏 headless 里**起不来**。本包只把"平台事件 → 提取文件路径 → `FileDrop` 入口"这一段接线写好并用公开入口验了;真机上要验的是:拖文件到窗口上是否出现浮层、松开是否真装、拖到窗口外松手是否什么都不发生、`e.Data.GetFiles()` 拿到的路径是不是本地路径。**未验**。
+- **`e.Data` 的 `[Obsolete]`(CS0618)**:Avalonia 11.3.2 的 `DragEventArgs.Data` 被标了"Use DataTransfer instead",但 11.3.2 的程序集里**没有** `DataTransfer` / `IDataTransfer`(ref 与 lib 两个目录的 `Avalonia.Base.dll`/`Avalonia.Controls.dll` 里都没有这个符号);本包**不动 `NoWarn`**,只把那一行局部 `#pragma warning disable CS0618` 包住,等 D-01 升级 Avalonia 后换新 API。
+- **视频壁纸**:本版按"不支持"处理(见第 7 节第 1 条),真机上也一样不支持 —— 想支持要先引播放器依赖。
+- **macOS 的窗口激活/失活与壁纸联动**:`Activated` / `Deactivated` 在 headless 里没有真实窗口管理器语义,真机上要验"切到别的应用时视频暂停、回来继续"。
+- **Keychain / 后端**:与本包无关(见 B1a / C2d)。
+
+### 11. 遗留与风险
+
+1. **`Backdrop` / `SideFrost` 的接入口留空**(C2c3):有壁纸时侧栏霜化不会刷新、窗口背板不会重取;浮层与壁纸本身不受影响。C2c3 只需把 `Wallpaper.BackdropRefresh` / `SideFrostRefresh` 接上。
+2. **皮肤拖放还没接线**:`FileDrop.SkinApplier` 为空时抛「账号页还没移植」;C3+ 的账号页包把它接到 `AccountPage.EditSkinExternalAsync` 即可(Windows 的调用点就那一处)。
+3. **`FileDrop.HandleAsync` 的"认不准就问一句"这条链没有端到端用例**:它要真后端(`install_mod` 之类)与真对话框,本包只测了认种类与载荷,没测 `AskKindAsync` 的具体交互;**未验**。
+4. **`AccountGate` 的对话框交互用了"先推出来再点"的写法**(见 D-113):离屏的 `SmokeAutoAnswer` 回调是在 `Dlg.Push` **里面**被调的,而 `Dlg.Ask` 的 `button.Click += …` 在 `Push` 返回**之后**才装上 —— 在那个回调里点确定,TrySetResult 还没接上,点了也白点。本包一开始就是这么写的,导致一条用例 30 秒超时并把会话线程占死,后面整批用例跟着超时(排查过程见 D-112)。C3+ 凡是要驱动 `Dlg.Ask` 的用例都按这个写法来。
+5. **`ThumbTile` 的异步取图在测试里是"发射后不管"**:只断言了"此刻显示首字母";取回来之后切图那条路靠 `Thumbs` 与 `SetImage` 的用例钉住(真机上还要看淡入)。
+6. **`Wallpaper` 的静态状态是进程级的**:一个进程里多个外壳会共用一套图层引用,`Attach`/`Detach` 负责搬家;真机只有一个窗口,不受影响。
+7. **`Thumbs` 的内存缓存上限只在 >400 时裁到 300**,没有专门用例去灌 400 张(成本高、价值低);`Trim` 的取舍逻辑本包只做了代码级核对。
+8. **`LoaderIcons` 只有 premium 支**:compact 的 `Url`(运行时下载)没有搬 —— 它在 Windows 里也没有别的调用点;GOAL 定了 mac 只出一个版本(等同 premium)。
+9. **我本轮自己踩了一次 D-36 的坑(如实记录)**:用 PowerShell 的 `Get-Content -Raw | Set-Content` 批量替换 `C2c2ThumbsTests.cs` 里的一种写法时,中文被写坏(读成乱码 + BOM),`Select-String` 也匹配不到中文了;随即**用 `write` 工具把该文件整份重写**,并逐字节核验(无 BOM / CR=0 / U+FFFD=0 / 中文可 grep)。这也是为什么本小节的表格与追加内容都用"先 `write` 成临时文件、再按字节拼接"的做法。**教训与 D-36 一字不差,不要再用那个管线**。
+10. **本包的提交顺序**:`C2c2(a)`(拖放 + 背景 + 账号守卫 + 两个 Models)、`C2c2(c)`(Thumbs / ThumbTile / LoaderIcons + 内嵌资源)、最后一个提交是测试与文档。任务书原本让 (a) 只放 `FileDrop`/`EnableDrop`,但 `FileDrop.SetWallpaperAsync` 要调 `Wallpaper.ReloadAsync`/`Error`,两者无法拆成两个都能独立编译的提交,所以 (a) 一并落了背景与账号守卫(如实记录)。
+
+### 12. 本包没有做的事(红线)
+
+没有移植任何页面(一个页面也没有);没有碰 `Backdrop` / `SideFrost` / `SideFrostEx` / `ImeGuard` / `WebViewHost` / `WebpFallback`、标题栏圆片、下载任务底条(全归 C2c3);没有碰 AI 卡片与 `Pages\Bubble.cs`;没有改 `src\TipCL.Core`(一个字节);没有改色板、`Controls.axaml`、导航模型,也没有改 `Ui` / `UiExt` / `Dlg` / `AppServices` 的任何既有签名;没有删测试、没有改弱断言、没有加 Skip、没有扩 `NoWarn`、没有改 TFM。

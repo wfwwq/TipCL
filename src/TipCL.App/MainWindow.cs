@@ -163,7 +163,7 @@ internal sealed class MainWindow : Window
 		_sidebar = BuildSidebar();
 		_host = new PageHost(ResolvePage) { Name = "PageHostCtl" };
 		_wallHost = new Grid { Name = "WallHost", IsHitTestVisible = false, ClipToBounds = true };
-		_pageWash = new Rectangle();
+		_pageWash = new Rectangle { Name = "PageWash" };
 		_pageWash.Dyn(Shape.FillProperty, "B.PageWash");
 		_bodyGrid = BuildBody();
 		_contentLayer = BuildContentLayer();
