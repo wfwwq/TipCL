@@ -4422,3 +4422,25 @@ SSE 事件流也收到了真事件(`hello` 握手 + `create_instance` 引发的 
 2. **我对本包的一处预测是错的**:我在任务书里说 Core 的「改动文件数」会 22 -> 23;**实际仍是 22**,因为 `BackendApi.cs` 本来就在那 22 个里(B2c3 改过它两行)。已在细则里更正,子代理不必为我的预测负责。
 
 **这一包之后,GOAL 完成标准还差什么**:后端能跑(已证)、**界面还没有任何真实页面**(C3..C8 未开始)、`Motion`/Toast/DropVeil 等视觉件未落(C2c)、全页冒烟矩阵与文档收尾(D1/D2)、以及 macOS 真机一切(永远标未验证)。
+#### 补录:后端真实启动的原始证据(C2d 回报,2026-11-13 12:20)
+
+Lead 验收时已独立复跑确认「真实往返存在且与 Core 状态交叉校验」;以下是子代理给出的**具体数值**,一并存档,供 D2 的真机清单与将来排障对照:
+
+| 项 | 观测值 |
+|---|---|
+| 绑定 | 真 `BackendApi` + 真 `BridgeServer` 绑 `127.0.0.1:0`,探针那轮实测拿到端口 **63547** |
+| 健康检查 | `/health` 答 **200** |
+| `get_language` | `zh_CN`(并断言等于 `I18nCore.CurrentLanguage()`) |
+| `translate("启动")` | `启动`(并断言等于 `I18nCore.Tr("启动")`) |
+| `translate("启动","en")` | `Launch` |
+| `available_languages` | `{"zh_CN":"简体中文","en":"English"}` |
+| `get_instances` | 返回 `<TestHome.Root>\.minecraft` —— **落在隔离目录里,没碰用户数据** |
+| SSE 事件流 | 收到握手 `hello`,以及 `create_instance` 引发的 `ui_changed` |
+| 端口释放 | 10 轮起停用过的 54264...54284 **全部释放**;完整测试前后回环监听表 27 -> 27(无新增/消失);线程 33 -> 34 |
+| 顺带修掉的真缺口 | `StartInProcessAsync` 的健康检查里 `await Task.Delay(100, ct)` 被取消时会把**已建好的监听器与客户端一起漏掉**(端口永久占用 + accept 线程常驻);已先写用例复现、再插 8 行 `catch (OperationCanceledException) { client.Dispose(); srv.Stop(); throw; }` 修掉 |
+| 生产默认那一步 | `McpServer.StartIfEnabled` + `PluginManager.StartGlobal`(5 秒后会去插件市场联网)在测试里被注入缝换掉,**没有实测** |
+
+**两条运营教训(Lead 记)**:
+
+1. C2d 的四个测试类原先互相改进程级注入缝,导致 VSTest 通道时绿时红(它自己见过 1~115 条失败)。已归到同一个 xunit collection 并修掉 3 处「取决于别的用例先跑过什么」的断言(D-103)。**这与 C1b 那个 Dispatcher 线程问题是同一类病:进程级共享状态 + 通道间调度差异**。后续包凡是要动进程级注入缝,必须走同一 collection,并且用例之间不许有顺序依赖。
+2. 它收尾时的抖动里至少有一次是**并发构建**造成的(另一个会话在 12:08:03-06 重建同一产物目录)。**结论:Lead 做验收复跑时,必须确认没有子代理还在构建**(本轮 Lead 的复跑都在子代理提交之后,四次均绿)。
