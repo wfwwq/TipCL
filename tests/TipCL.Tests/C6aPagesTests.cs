@@ -8,6 +8,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.LogicalTree;
 using Avalonia.Styling;
+using Avalonia.VisualTree;
 using TipCL.Models;
 using TipCL.Pages;
 using TipCL.Services;
@@ -279,6 +280,38 @@ public class C6aPagesTests
         });
     }
 
+    /// <summary>
+    /// 【C6a 机制探针】离屏夹具里 <c>Ui.VirtualList</c>(ListBox + FuncDataTemplate)的**数据在、行控件不在**:
+    /// 数据项数 &gt; 0,但可视树里没有 <c>ListBoxItem</c> 容器 ⇒ 视口为 0 的平台限制,**不是产品缺陷**。
+    /// 这条把现象钉住,并解释 D1 全页冒烟矩阵里"列表页只有计数 / 空态、看不到行"的观感(真机不受影响)。
+    /// </summary>
+    [Fact]
+    public void Virtual_list_data_is_there_but_offscreen_realizes_no_row_containers()
+    {
+        AvaloniaSession.Run(() =>
+        {
+            using var scope = C6aScope.Capture();
+            using var api = C6aFiles.Api().Route("search_mods", "[" + C6aFiles.CatalogItemJson("JEI", slug: "jei") + "]");
+            using var harness = C4LayerHost.Show();
+            DownloadPage page = C5aFiles.Mount(harness, new DownloadPage());
+            C5aFiles.Load(page);
+            page.ShowSeg(1);
+            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 5000);
+            ListBox list = C5aFiles.Find<ListBox>(page, "结果列表");
+            C5aFiles.Settle(8);
+
+            Assert.Single(list.Items);                                     // 数据在
+            // 【实测结论】行容器**建了但是空的**:<c>ListBoxItem</c> 在可视树里、它自己没有可视子节点 ⇒
+            // 离屏(视口为 0)只做到"容器占位",模板内容不落地 ⇒ 行里的文案既不在逻辑树也不在可视树。
+            // 所以:离屏帧里列表页只有"计数 / 空态",**看不到行**(真机不受影响);测试要驱动一行的动作,
+            // 走 internal 处理器体(D-115 / D-127),不要等行渲染出来。
+            ListBoxItem container = Assert.Single(list.GetVisualDescendants().OfType<ListBoxItem>());
+            Assert.Empty(container.GetVisualDescendants());
+            Assert.False(C5aFiles.HasText(page, "JEI"));                    // 逻辑树里也看不到
+            Assert.True(C5aFiles.HasButton(page, I18n.L("重置条件")));        // 页面骨架是好的(不是整页没渲染)
+        });
+    }
+
     /// <summary>【Windows 源】<c>:559-577</c> 搜索走种类的 <c>SearchMethod</c>,参数是 query / source / extra(game_version + category)。</summary>
     [Theory]
     [InlineData(1, "Mod", "search_mods", "Modrinth", "没有找到相关模组")]
@@ -409,14 +442,15 @@ public class C6aPagesTests
             C5aFiles.Load(page);
             page.ShowSeg(1);
             C5aFiles.Settle(2);
+            CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
             C5aFiles.Pump(() => api.Count("search_mods") >= 1, 5000);
-            C5aFiles.Pump(() => C5aFiles.HasText(page, "JEI"), 5000);
-
-            // 星钮是手工建的 ToggleButton(Content 是字形),按字形认它
-            ToggleButton star = C5aFiles.Descendants(page).OfType<ToggleButton>()
-                .First(b => (b.Content as TextBlock)?.Text == "\ue734");
-            C5aFiles.Click(star);
+            // 数据在(行控件在离屏不会实例化 —— 见机制探针那条用例)
+            Assert.Single(C5aFiles.Find<ListBox>(page, "结果列表").Items);
+            // 驱动"点那颗星"那一层(处理器体,D-115 / D-127;真机走同一段代码)
+            CatalogItem item = new CatalogItem { Name = "JEI", Slug = "jei", Source = "Modrinth" };
+            Task toggle = catalog.ToggleFavRowForTest(item);
             C5aFiles.Pump(() => api.Count("toggle_favorite") >= 1, 5000);
+            C5aFiles.PumpTask(toggle);
             Assert.Equal("JEI", C5aFiles.ParamAt(api, "toggle_favorite", "item", "name"));
             Assert.Equal("Modrinth", C5aFiles.ParamAt(api, "toggle_favorite", "item", "source"));
             Assert.Equal("jei", C5aFiles.ParamAt(api, "toggle_favorite", "item", "slug"));
@@ -438,19 +472,21 @@ public class C6aPagesTests
             DownloadPage page = C5aFiles.Mount(harness, new DownloadPage());
             C5aFiles.Load(page);
             page.ShowSeg(1);
-            C5aFiles.Pump(() => C5aFiles.HasText(page, "JEI"), 5000);
+            C5aFiles.Pump(() => api.Count("search_mods") >= 1, 5000);
+            CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
+            Assert.Single(C5aFiles.Find<ListBox>(page, "结果列表").Items);
 
-            C5aFiles.Click(C5aFiles.ByText(page, I18n.L("安装")));
-            // 先等"取版本文件"这一步真的发出去,再去推卡片(D-113)
+            // 驱动"点这一行的安装"那一层(D-115 / D-127),再推卡片(D-113)
+            Task install = catalog.InstallRowForTest(new CatalogItem { Name = "JEI", Slug = "jei", Source = "Modrinth" });
             C5aFiles.Pump(() => api.Count("list_catalog_files") >= 1, 5000);
             C3bFiles.WaitDialog();
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last(c => c.Title == I18n.L("选择版本文件 · JEI"));
             C5aFiles.Click(C5aFiles.ByText(card, I18n.L("安装所选")));
+            C5aFiles.PumpTask(install);
 
             C5aFiles.Pump(() => api.Count("install_mod") >= 1, 5000);
             Assert.Equal("JEI", C5aFiles.ParamAt(api, "install_mod", "name"));
             Assert.True(C5aFiles.ParamHas(api, "install_mod", "\"filename\":\"jei-1.jar\""));
-            C5aFiles.Pump(() => toasts.Items.Count >= 0);
         });
     }
 
@@ -468,13 +504,16 @@ public class C6aPagesTests
             DownloadPage page = C5aFiles.Mount(harness, new DownloadPage());
             C5aFiles.Load(page);
             page.ShowSeg(2);
-            C5aFiles.Pump(() => C5aFiles.HasText(page, "史诗整合"), 5000);
+            C5aFiles.Pump(() => api.Count("search_modpacks") >= 1, 5000);
+            CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
+            Assert.Single(C5aFiles.Find<ListBox>(page, "结果列表").Items);
 
-            C5aFiles.Click(C5aFiles.ByText(page, I18n.L("安装")));
+            Task install = catalog.InstallRowForTest(new CatalogItem { Name = "史诗整合", Slug = "epic", Source = "Modrinth" });
             C5aFiles.Pump(() => api.Count("list_catalog_files") >= 1, 5000);
             C3bFiles.WaitDialog();
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last(c => c.Title == I18n.L("选择版本文件 · 史诗整合"));
             C5aFiles.Click(C5aFiles.ByText(card, I18n.L("安装最新")));
+            C5aFiles.PumpTask(install);
             C5aFiles.Pump(() => api.Count("install_modpack") >= 1, 5000);
             Assert.Equal("Modrinth", C5aFiles.ParamAt(api, "install_modpack", "source"));
         });
@@ -589,9 +628,10 @@ public class C6aPagesTests
             C5aFiles.Settle(2);
             // 名称在**输入框**里(不是 TextBlock),所以按 TextBox.Text 断言
             Assert.Equal("Fabric 1.20.1", C5aFiles.Descendants(install).OfType<TextBox>().First().Text);
-            Assert.True(C5aFiles.HasText(install, "1.20.1 + Fabric 0.15.11")); // 摘要整句(加载器 + 推荐版本)
-            Assert.True(C5aFiles.HasText(install, I18n.L("· 约 {0} MB", 33))); // 30 + 1 + 2(Fabric API)
-            Assert.True(C5aFiles.HasText(install, I18n.L("将新建实例")));
+            List<string> texts = C5aFiles.Texts(install).Select(t => t.Text ?? "").ToList();
+            Assert.True(texts.Contains("1.20.1 + Fabric 0.15.11 + Fabric API"), "摘要不对;现有文案:" + string.Join("|", texts));
+            Assert.True(texts.Contains(I18n.L("· 约 {0} MB", 33)), "体积估算不对;现有文案:" + string.Join("|", texts));
+            Assert.True(texts.Contains(I18n.L("将新建实例")), "名称提示不对;现有文案:" + string.Join("|", texts));
         });
     }
 
@@ -642,10 +682,13 @@ public class C6aPagesTests
             C5aFiles.Pump(() => api.Count("install_game") >= 1, 5000);
             Assert.Equal(0, api.Count("install_mod"));
 
-            // 任务完成 ⇒ 续体排 Fabric API
+            // 任务完成 ⇒ 续体排 Fabric API(先核对任务行真的进了 finished + Success:
+            // Windows 的 TaskStore.Handle("finished") 只在行取得到时才写这两个字段并抛 Updated)
             TaskStore.Handle(new BridgeEvent { Event = "task_added", TaskId = "task-1", Title = "装游戏" });
             TaskStore.Handle(new BridgeEvent { Event = "finished", TaskId = "task-1", Success = true });
-            C5aFiles.Pump(() => api.Count("install_mod") >= 1, 5000);
+            TaskRow? row = TaskStore.Get("task-1");
+            Assert.True(row != null && row.Finished && row.Success, "任务行没进 finished/Success 状态");
+            C5aFiles.Pump(() => api.Count("install_mod") >= 1, 8000);
             Assert.Equal("Fabric API", C5aFiles.ParamAt(api, "install_mod", "name"));
             Assert.Equal("fabric-api", C5aFiles.ParamAt(api, "install_mod", "extra", "slug"));
             Assert.Equal("Modrinth", C5aFiles.ParamAt(api, "install_mod", "extra", "source"));

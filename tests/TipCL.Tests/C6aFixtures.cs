@@ -177,6 +177,7 @@ internal static class C6aFiles
             .Route("list_loader_versions", "[" + LoaderVerJson("0.15.11", "0.15.11") + "," + LoaderVerJson("0.14.9", "0.14.9", stable: false) + "]")
             .Route("default_export_dir", "\"\"")
             .Route("create_instance", "{}")
+            // StartTaskAsync 只在 result 是**字符串**时返回它本身,否则返回整段 JSON 文本 ⇒ 这里必须是裸字符串
             .Route("install_game", "\"task-1\"")
             .Route("install_mod", "\"task-2\"")
             .Route("install_modpack", "\"task-3\"")

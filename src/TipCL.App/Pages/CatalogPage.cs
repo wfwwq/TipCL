@@ -790,6 +790,22 @@ public sealed class CatalogPage : PageBase
 		await DoInstallAsync(extra, anchor);
 	}
 
+	/// <summary>
+	/// 【C6a 测试缝】驱动"点一行里的安装"那一步(处理器体抽成 internal —— D-115 / D-127 的口径)。
+	/// 需要它的原因:离屏夹具里 <c>Ui.VirtualList</c> 的**行控件不会实例化**(视口为 0 的平台限制,
+	/// 见 C6a 的 DECISIONS),所以"点那一行"只能驱动这一层;真机走的是同一段代码(事件处理器只是薄壳)。
+	/// </summary>
+	internal Task InstallRowForTest(CatalogItem item)
+	{
+		return InstallAsync(item, new Button());
+	}
+
+	/// <summary>【C6a 测试缝】驱动"点一行里的收藏星"那一步(同 <see cref="InstallRowForTest"/>)。</summary>
+	internal Task ToggleFavRowForTest(CatalogItem item)
+	{
+		return ToggleFavAsync(item, new ToggleButton());
+	}
+
 	/// <summary>【Windows 源】<c>:728-754</c>:数据包问一次「装进哪个存档」(可选,不选就只放 datapacks 目录)。</summary>
 	private async Task<Dictionary<string, object?>> PickSaveAsync(Dictionary<string, object?> extra)
 	{
