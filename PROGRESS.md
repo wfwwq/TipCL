@@ -6458,3 +6458,34 @@ Avalonia 把"宽于格子的子元素"居中摆放 ⇒ 左移 `(205-300)/2 ≈ 4
 不带 `--page` = **37681 / `2603BF6A...342CBD`**;`--page launch --theme dark` = **33579 / `7D7AFDD5...276893`**;
 `--theme blue` = **2**;新帧 `--page settings --theme light` = **45594 / `C19BF1C4...`**、`--theme dark` = **43745 / `CE33BEFE...`**
 (与 Lead 独立复跑一致)。`FlyToTasks` 在离屏 `Motion.Enabled` 恒假,不画 chip ⇒ 帧不受这次改动影响,已复跑确认。
+
+### Lead 验收(2026-11-14 03:50)—— C4 + C5a + C5b + C5c 四包合并
+
+结论:**四包全部通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| HEAD / 工作树 | `d0dd78e`,**干净**(无未提交、无未跟踪);无 remote、无 tag;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线(`src\TipCL.Core`、`Themes\Palette.cs`、`Palette.Light/Dark.axaml`、`NavModel/NavConfig`、`Services\UiExt.cs`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | `git diff b664f4f HEAD` 在这批路径上**为空** |
+| 授权的改动(只有三处) | `Services\Ui.cs` +53/-2(C5c 门面修窄页降级)、`MainWindow.cs` +6/-1(C5a 补 `FlyEnabled` 消费方)、`Themes\PaletteOverride.cs` 新增 +250(C5a 主题层可写覆盖层)。**`Palette.cs` 一字节未动** |
+| `FlyEnabled` 那处(Lead 读 diff 核对) | 就是把第一道守卫 `if (!Motion.Enabled || !IsLoaded)` 换成 `if (!SettingsPage.FlyEnabled || !IsLoaded)`,后续四道守卫顺序未动;`FlyEnabled` 内部即 `Extras.FlyAnimation && Motion.Enabled` ⇒ **语义只增不减**,是"最小改动" |
+| 构建 | **0 错误**;警告 **7 = 基线**(`NU1900` x6 + `SYSLIB0014` x1;C4 代理报过的 `xUnit2012` x2 已由 C5c 修掉) |
+| **原子四跑 x2**(构建 + 两条通道**在同一次锁里**;每轮 `artifacts\lead-verify.cmd`) | 轮 1:`BUILD=0` / `VSTEST=0`(失败 0 / 通过 3438 / 总计 3438)/ `INPROC=0`(3438/3438、不支持 0);轮 2:**逐项相同**。此前那次 `INPROC=1` 是 C5a 的第三条抖动,已按根因修掉 |
+| **冒烟矩阵(14 帧 + blue,Lead 逐帧比对预期值)** | **0 处不符**:首屏/launch light 37681 `2603BF6A...`、launch dark 33579 `7D7AFDD5...` 逐位不变;library 43775 `8FBA4C9F...` / 40686 `A77F3E6A...`;instance 30057 `36FAEDDE...` / 27468 `2C69550D...`;settings 45594 `C19BF1C4...` / 43745 `CE33BEFE...`;tasks 27719 `0E591B87...` / 24171 `C3EE486E...`;account 33173 `D3F59339...` / 29984 `148EB206...`;`download` = 首屏同帧(未注册,符合裁决);`--theme blue` = **2**。另抽 3 帧复跑**逐字节相同** |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,与基线完全相同 |
+| 全部改动文件编码(Lead 按字节核验) | **0 处异常**(无 BOM、CR=0、U+FFFD=0);入库文件里没有 `Zz*` 探针、没有 `artifacts/`、没有多余 PNG(5 个 `.png` 是 premium 加载器图标) |
+| `%LOCALAPPDATA%\TipCL` / 桌面 / 图片 / 残留进程 | 9328 / 889530606 / 2026-11-10 20:42:16(**零写入**);桌面 14 项、最新 2026-11-12 19:02:53 与图片 3 项、最新 2026-11-06 都**未变**;`testhost`/`TipCL`/`java`/`adb` **0 个** |
+| `%TEMP%\tipcl*` | 142(Lead 早先基线 89)。C4 代理已做对照实验:本仓库源码里出现过的名字与这些目录**对不上**(`smokecwd`/`r9-smoke`/`selftest` 等在本仓库零命中),判定为同机其它产品线在跑 `--smoke`;本包验证期间未新增 |
+
+**四包各自的关键结论**
+
+1. **C4(实例管理簇)**:五个文件 + 两个导航 id(`library`/`instance`,而 `InstanceDetailPage` 按 Windows 不注册 id)。它**第四次**推翻 Lead 任务书的"自包含"前提(还差 7 个 Models DTO + `GlobalModsDialog`)。**事故记录**:它的子代理是 `subagent` 起的,Lead **无法中断**,而且它提交的 `b253090` **编译不过**(探针属性名 `Loaded`/`Shown` 撞 Avalonia 的 `Control.Loaded` 事件)—— 是另一个 teammate 发现并修好的,Lead 另修了 `InstancePage.Select` 的花括号格式(1 行),一并提交 `2e9b9fb`。**"测试全绿"不等于"树能编译"这条已写进运营规则。**
+2. **C5a(设置页 + 主题覆盖层)**:共 50 条用例。它把主题能力落在**新文件** `Themes\PaletteOverride.cs`(按 Lead 裁决,没塞进设置页、没动 C1a 的 `Palette.cs`),9 条机制自测钉住"后合并者胜出 / `{DynamicResource}` 当场重解析 / 清空即摘"。**它的抖动修到第三条时才露出真相**:`ApplyDark` 只写**应用级** `RequestedThemeVariant`,而窗口级变体(外壳 `ApplyThemeState` 会设)会**盖住**应用级 ⇒ `ActualThemeVariant` 不变 ⇒ 勾选框被 `SyncAppearanceControls` 翻回去 ⇒ 再调 `ApplyDark(false)`。**这是真桌面上的用户可见缺陷(「深色模式」半失效),不只是测试问题。** 修法照 Windows `SetDark`:两级都设 + `ApplyThemeVisuals()`。它顺带把同文件里 **35 条建页面的用例**统一成"先钉死再还原"。
+3. **C5b(下载宿主之外的三个页面)**:`TasksPage` / `AccountPage` / `FirstRunWizard` + `tasks`/`account` 注册,33 条用例。三件诚实处置:①`SkinPng` 实测**搬不了**(整个建立在 WPF 成像 API 上),改成"保留算法与全部常量"的 Avalonia 实现(D-137);②三条框架事实(`AutomationProperties.Name` 不跟 `Content` 变、`IsVisible` 只是本地标志、`Dlg.Panel` 不是 `DialogCard`)是它第一轮跑出来**自己期望写错**后修正的;③`SyncAccountChipAsync` 按裁决不做。**`download` 按裁决挂起给 C6**(它是 `CatalogPage` 35 KB + `InstallPage` 15 KB 的分段宿主,做个占位版等于把空壳包装成完成)。
+4. **C5c(两处窄页面布局缺陷)**:先量后修,而且**推翻了 Lead 给的机制猜想**。缺陷 2 不是"离屏 `ScrollViewer` 拿到水平偏移"(`Offset=(0,0) Extent=0 Viewport=0`),而是左卡 `MinWidth=300` 溢出它所在的 205 宽星列后被 Avalonia **居中**:`-48=(205-300)/2` 逐位吻合;修法是"让列兑现 300 地板"。缺陷 1 修在门面(`Ui.Section` + 新 `SectionNarrow`,阈值用两边 `DesiredSize` **自校准**+6px 回滞),摆得开走原路 ⇒ 宽页面像素零变化。第三条"库页看起来被加载过"**结论是"不是 bug"**:门闸确实没漏,那些计数是 `LibraryPage` **构造函数**里 `RenderGroups()` 画的,两边说法都成立。它还做对了一件我很看重的事:第一版修法更省事但会打红 C4 既有的几何断言,它**没有去改别人的断言**,而是换成两边同时成立的修法。
+
+**Lead 的裁决**:接受 D-134(`InstanceDetailPage.SettingsPageFactory` 注入缝 + 如实占位,等版本管理包接上即消除);接受 `FlyEnabled` 的最小外壳改动;把"**凡读应用级全局状态的用例,必须先钉死再在还原路径里恢复**"正式列为项目测试纪律(这个病在同一包里出现三次,事后"多跑两轮"治不了根)。
+
+**测试总数**:3179 -> **3438**(两通道相等、不支持 0)。
+
+**仍然只有真机能验**:重启启动器、真剪贴板/文件面板、真壁纸与视频、以及 D2 清单里的全部观感项。
