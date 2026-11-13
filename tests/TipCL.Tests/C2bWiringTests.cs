@@ -53,19 +53,22 @@ public class C2bWiringTests
     }
 
     [Fact]
-    public void Toast_host_panel_exists_but_the_C2b_shell_leaves_the_toast_sink_unwired()
+    public void Toast_host_panel_is_wired_to_the_real_card_layer()
     {
         AvaloniaSession.Run(() =>
         {
             using var shell = ShellFixture.Create();
             Assert.NotNull(shell.Window.ToastHostPanel);
             Assert.Empty(shell.Window.ToastHostPanel.Children);
-            // 【C2b 的决定,见 D-92】Toast 卡片是 C2c 的视觉件,本包故意不接 ToastSink:
-            // 为空时 AppServices.Toast 只写调试输出(不抛异常、不改状态)。
-            // C2c 把外壳的 Toast 方法挂上来之后,这条断言要跟着改成"非空且发出卡片"。
-            Assert.Null(AppServices.ToastSink);
+            // 【C2b 的决定见 D-95;C2c1 把这一格接上了(D-106)】C2b 故意留空,并写明
+            // "C2c 把外壳的 Toast 方法挂上来之后,这条断言要跟着改成非空且发出卡片"。
+            // 现在断言的是**接上之后**的语义:委托指向外壳的 Toast,调一次就在宿主里多一张卡片。
+            Assert.NotNull(AppServices.ToastSink);
             AppServices.Toast("标题", "正文", ToastKind.Warning);
-            Assert.Empty(shell.Window.ToastHostPanel.Children);
+            var card = Assert.IsType<ToastCard>(Assert.Single(shell.Window.ToastHostPanel.Children));
+            Assert.Equal("标题", card.Title);
+            Assert.Equal("正文", card.Body);
+            Assert.Equal(ToastKind.Warning, card.Kind);
         });
     }
 

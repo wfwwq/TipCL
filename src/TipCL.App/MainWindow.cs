@@ -40,8 +40,10 @@ namespace TipCL;
 /// <item>侧栏:Windows 现状是顶栏页签(侧栏已从可视树撤掉),但 mac 侧任务书明确要「侧栏宽度取
 /// <c>UiPrefs.SideWidth</c>」,所以这里按 <see cref="NavModel"/> 的行表重建侧栏 —— 导航数据
 /// 与页面 id 的绑定关系与 Windows 完全一致,C3 的页面照旧靠 <see cref="NavModel.PageForNavKey"/> 挂上去;</item>
-/// <item><c>ToastHost</c> / <c>DialogHost</c> → 保留空宿主(<c>DialogHost</c> 接给 <c>Dlg.Host</c>);
-/// Toast 卡片、DropVeil、FlyHost、Wallpaper、下载任务底条(Dock)之属 C2c,本包不画。</item>
+/// <item><c>ToastHost</c> / <c>DialogHost</c> → 右上角 Toast 宿主(C2c1 起画真的卡片:
+/// <see cref="ToastLayer"/> + <see cref="ToastCard"/>,<c>AppServices.ToastSink</c> 在这里接上)、
+/// <c>DialogHost</c> 接给 <c>Dlg.Host</c>;
+/// DropVeil、FlyHost、Wallpaper、下载任务底条(Dock)之属 C2c 的其余部分,本包不画。</item>
 /// </list>
 /// </summary>
 internal sealed class MainWindow : Window
@@ -109,6 +111,9 @@ internal sealed class MainWindow : Window
 
 	private readonly StackPanel _toastHost;
 
+	/// <summary>Toast 宿主的管理器(最多 4 张、进/退场动画、自动关闭与计时器收摊;Cards 属 C2c1)。</summary>
+	private readonly ToastLayer _toastLayer;
+
 	private readonly Grid _navGrid;
 
 	private readonly TextBlock _brand;
@@ -155,6 +160,7 @@ internal sealed class MainWindow : Window
 			VerticalAlignment = VerticalAlignment.Top,
 			Margin = new Thickness(0.0, 12.0, 16.0, 0.0)
 		};
+		_toastLayer = new ToastLayer(_toastHost);
 		_rootBorder = new Border
 		{
 			Name = "RootBorder",
@@ -194,6 +200,15 @@ internal sealed class MainWindow : Window
 		AppServices.Window = this;
 		Dlg.Host = _dialogHost;
 		Dlg.BlurTarget = _contentLayer;
+		// C2c1:Toast 的宿主接上真实的卡片(Windows 是 window.Toast(...),mac 走 ToastSink 委托,
+		// 见 D-88/D-95)。接上之后 AppServices.Toast / PageBase.Toast / Dlg.Form 的「填写有误」都有声了。
+		AppServices.ToastSink = Toast;
+
+		// 关窗即收摊:Toast 的自动关闭计时器一个都不留(C2c1 的泄漏纪律,见 D-105)。
+		Closed += delegate
+		{
+			_toastLayer.Dispose();
+		};
 
 		// ---- 偏好:注入的用注入的,否则按 Windows 从数据目录读 ----
 		if (prefs is null)
@@ -373,7 +388,7 @@ internal sealed class MainWindow : Window
 	/// <summary>对话层宿主(= <c>Dlg.Host</c>)。</summary>
 	internal Grid DialogHostPanel => _dialogHost;
 
-	/// <summary>Toast 宿主(空面板;Toast 卡片属 C2c)。</summary>
+	/// <summary>Toast 宿主面板(卡片由 <see cref="ToastCard"/> 画;上限 4 张,见 <see cref="Toasts"/>)。</summary>
 	internal StackPanel ToastHostPanel => _toastHost;
 
 	/// <summary>页面正文那块(被 <c>Dlg.BlurTarget</c> 模糊的目标)。</summary>
@@ -623,6 +638,40 @@ internal sealed class MainWindow : Window
 	{
 		return NavModel.PageForNavKey.TryGetValue(navKey, out string? pageId) ? pageId : null;
 	}
+
+	// =====================================================================
+	// Toast(C2c1)
+	// =====================================================================
+
+	/// <summary>
+	/// 弹一张 Toast 卡片。对应 Windows <c>MainWindow.Toast</c>(<c>MainWindow.xaml.cs:1179-1255</c>):
+	/// 非 UI 线程来的调用先投回 UI 线程;上限 4 张;图标/颜色按 <paramref name="kind"/> 取;
+	/// 进/退场走 <see cref="Motion.SlideIn"/>/<see cref="Motion.SlideOut"/>;
+	/// 点一下关掉、悬停暂停自动关闭、错误 7 秒其余 4 秒(定时器归 <see cref="ToastLayer"/> 管)。
+	/// 卡片本身在 <see cref="ToastCard"/>。
+	/// </summary>
+	internal void Toast(string title, string body = "", ToastKind kind = ToastKind.Info)
+	{
+		if (!Dispatcher.UIThread.CheckAccess())
+		{
+			Dispatcher.UIThread.Post(delegate
+			{
+				Toast(title, body, kind);
+			});
+			return;
+		}
+
+		_toastLayer.Show(title, body, kind);
+	}
+
+	/// <summary>收掉所有 Toast 卡片并停掉它们的计时器(窗口关闭时调,保证不留残留计时器)。</summary>
+	internal void ClearToasts()
+	{
+		_toastLayer.CloseAll();
+	}
+
+	/// <summary>Toast 宿主管理器(测试要验堆叠 / 自动关闭 / 计时器不泄漏)。</summary>
+	internal ToastLayer Toasts => _toastLayer;
 
 	// =====================================================================
 	// 导航
