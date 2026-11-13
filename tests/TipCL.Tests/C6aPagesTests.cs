@@ -302,8 +302,10 @@ public class C6aPagesTests
             C5aFiles.Load(page);
             page.ShowSeg(1);
             C5aFiles.Pump(() => api.Count("search_mods") >= 1, 9000);
+	
             ListBox list = C5aFiles.Find<ListBox>(page, "结果列表");
-            C5aFiles.Settle(8);
+            C5aFiles.Pump(() => list.Items.Count >= 1, 9000);
+	// 【Lead D1 修正】原来这里是 Settle(8)(固定 8 轮) —— 并发负载下轮数不够就假红,改成等效果 + 截止时间。
 
             Assert.Single(list.Items);                                     // 数据在
             // 【实测结论 · 平台行为钉子】离屏(视口为 0)时容器**建了、但行模板内容不落地**:
@@ -365,6 +367,7 @@ public class C6aPagesTests
             page.ShowSeg(1);
             C5aFiles.Settle(2);
             C5aFiles.Pump(() => api.Count("search_mods") >= 1, 9000);
+	
 
             // 游戏版本框(可编辑)打上 1.20.1,再选一个类型(第 2 项 = 优化)
             // 先改类型(会触发一次搜索),泵到这一次的 category 到位;再改游戏版本,泵到两样都到位。
@@ -451,6 +454,9 @@ public class C6aPagesTests
             C5aFiles.Settle(2);
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
             C5aFiles.Pump(() => api.Count("search_mods") >= 1, 9000);
+	// 【Lead D1 修正 2026-11-14】等到了请求到达还不算完 —— 续体把结果填进列表才是可观测效果(与 C6a 那三条偶发红同族)。
+	C5aFiles.Pump(() => C5aFiles.Find<ListBox>(page, "结果列表").Items.Count >= 1, 9000);
+	
             // 数据在(行控件在离屏不会实例化 —— 见机制探针那条用例)
             Assert.Single(C5aFiles.Find<ListBox>(page, "结果列表").Items);
             // 驱动"点那颗星"那一层(处理器体,D-115 / D-127;真机走同一段代码)
@@ -480,6 +486,7 @@ public class C6aPagesTests
             C5aFiles.Load(page);
             page.ShowSeg(1);
             C5aFiles.Pump(() => api.Count("search_mods") >= 1, 9000);
+	
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
             // 【时机】"请求到达" ≠ "续体跑完":搜索的续体(TryCallAsync 返回之后才 ShowRows)要等 Dispatcher
             // 再跑一轮。所以**等效果**(列表里真的有了一行)再断言 —— 条件成立 + 有截止时间(见 D-151)。
@@ -516,6 +523,9 @@ public class C6aPagesTests
             C5aFiles.Load(page);
             page.ShowSeg(2);
             C5aFiles.Pump(() => api.Count("search_modpacks") >= 1, 9000);
+	// 【Lead D1 修正 2026-11-14】等到了请求到达还不算完 —— 续体把结果填进列表才是可观测效果(与 C6a 那三条偶发红同族)。
+	C5aFiles.Pump(() => C5aFiles.Find<ListBox>(page, "结果列表").Items.Count >= 1, 9000);
+	
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
             Assert.Single(C5aFiles.Find<ListBox>(page, "结果列表").Items);
 
