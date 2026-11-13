@@ -19,7 +19,6 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using Avalonia.VisualTree;
 using TipCL.Pages;
 using TipCL.Services;
 using TipCL.Themes;
@@ -799,8 +798,10 @@ internal sealed class MainWindow : Window
 	/// (CatalogPage / InstallPage / InstancePage / JavaPage / LaunchPage / MultiplayerPage /
 	/// VersionManagePage)统一走的那一个成员**,页面侧不再各自留注入缝。
 	///
-	/// 与 Windows 逐条对齐的四道守卫:关掉动画(<see cref="Motion.Enabled"/>)、外壳还没挂进可视树
-	/// (Windows 的 <c>!IsLoaded</c>,Avalonia 侧的等价判据见 <see cref="Motion.Loop"/>)、
+	/// 与 Windows 逐条对齐的四道守卫:关掉动画(<see cref="Motion.Enabled"/>)、外壳还没挂上窗口
+	/// (Windows 的 <c>!IsLoaded</c> —— Avalonia 11 的 <c>Control.IsLoaded</c> 与 WPF 同义:
+	/// <c>Show()</c> 之后为真、<c>Close()</c> 之后回到假,本机探针实测;注意 <c>IsAttachedToVisualTree()</c>
+	/// 对窗口**不能**当这个判据用 —— 没 Show 过的窗口它也是真)、
 	/// 任务行不存在 / <paramref name="source"/> 或任务行不可见、取不到坐标(Windows 的 try/catch)。
 	/// 任一满足就**什么都不做**。所以 <c>--smoke</c>(离屏没有动画时钟 ⇒ <c>Motion.Enabled</c> 为假)
 	/// 下它一行都不画,冒烟帧不受影响。
@@ -809,7 +810,7 @@ internal sealed class MainWindow : Window
 	/// </summary>
 	public void FlyToTasks(Control source, string text = "", string? colorKey = null)
 	{
-		if (!Motion.Enabled || !this.IsAttachedToVisualTree())
+		if (!Motion.Enabled || !IsLoaded)
 		{
 			return;
 		}
