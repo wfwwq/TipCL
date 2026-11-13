@@ -5083,3 +5083,30 @@ Lead 在任务书里说「内置预设背景已内嵌在 Core 的 `Resources\wal
   `_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, ...)` 要改成 Avalonia 的
   `Layoutable.MaxHeightProperty`(或直接用 `Ui.WindowPctConverter` 那套 `Bind`),
   `_hero` / 内容边距 `new Thickness(56,0,24,18)` 照抄即可。
+
+### Lead 验收(2026-11-13 15:05)
+
+结论:**C3a 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 四个提交(`4107699` / `ae171ce` / `7a5a451` / `52b589c`) | 工作树干净;无 remote、无 tag;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线(`src\TipCL.Core`、`Themes\`、`NavModel/NavConfig`、`Services\`、`MainWindow.cs`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改 |
+| 新增文件 | `src\TipCL.App\Pages\` 下 6 个:`BlockHost.cs` / `DashHost.cs` / `DashCard.cs` / `DashLayout.cs` / `PageBlock.cs` / `PageLayoutStore.cs` / `PageLayoutIO.cs`(7 个),与子代理的清单一致 |
+| **恢复的移植测试有没有被改弱(Lead 逐项比对)** | `Ported\PageLayoutTests.cs`:**断言 47 -> 47、用例 15 -> 15**,唯一改动是实例临时目录 `Path.GetTempPath()` -> `TestHome.Root`(A6 B 类规则);`Ported\LayoutDefaultTests.cs`:**diff 完全为空**(一字未改) |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告码只有 `NU1900` x6 + `SYSLIB0014` x1 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0 / 通过 2897 / 总计 2897**(2797 -> 2897,+100 = 新写 80 + 恢复 20) |
+| 进程内执行器 第 1 / 2 次 | 都是**退出码 0,通过 2897 / 失败 0 / 不支持 0** |
+| `--smoke` light / dark / bad | 退出码 0 / 0 / **2**;light **21823 `8336CA13...`**、dark **18200 `DBD3C171...`** —— **与基准逐位相同**(空壳无页面,本包不该画任何新东西) |
+| 全部改动文件编码(Lead 按字节核验) | **无 BOM、CR=0、U+FFFD=0、无连续问号** |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` / 桌面 / 图片 / 残留进程 | 9328 / 889530606 / 2026-11-10 20:42:16;桌面 14 项、最新 2026-11-12 19:02:53(**不变**);图片最新 2026-11-06(**零写入**);残留进程 **0 个** |
+| `%TEMP%` | 本包报的 2 个外来目录(`tipcl-smoke-*` / `tipcl-smokecwd-*`)Lead 复核:名字在本仓库 `src`/`tests` 里**零命中**,且收工时总数已回到 **89** —— 判定非本包产物,与 B2a / C2c2 记过的「同机另有产品线在跑 `--smoke`」同一现象 |
+
+**裁决 1:接受依赖扫描的更正。** Lead 的扫描只数了 `Ui.`/`I18n.`/`SPanel`/`Ico.`/`AppServices`/`Motion.` 的引用次数,**漏了模型层**:`PageBlock.cs`(PageLayoutDoc/BlockState)、`PageLayoutStore.cs`、`PageLayoutIO.cs`、`DashCard.cs`、`DashLayout.cs` 这 6 个文件在 mac 侧完全不存在。子代理按「小而自包含就一并搬」处理,搬到 `src\TipCL.App\Pages\`,**Core 一字节未动** —— 正确。
+
+**裁决 2:接受 `File.Replace` -> `File.Move(tmp, path, overwrite: true)`(D-116)。** Windows 用 `File.Replace` 做原子落盘;Avalonia/mac 侧 `File.Move(overwrite: true)` 同样是 `rename(2)` 语义(原子),而 `File.Replace` 在 Unix 上行为不可靠、本机又验不了;更关键的是该文件的 `Save` **把异常全吞掉**,一旦真出问题表现就是「布局静默不落盘」。这是一处有理由的最小偏差,记在案。
+
+**裁决 3:Windows 源自身的笔误不修、只钉住。** `BlockHost.BlockCard` 写 `Ui.G("Auto","*")`(只有 1 行)却在下一行 `grid.Add(_bodyWrap, 1)`;同位置 `DashHost` 写的是 `Ui.G("Auto,*")`。WPF 与本机 Avalonia 都把越界行号夹到最后一行,行为一致 —— 忠实保留是对的。`DashHost` 里未被使用的 `private const double Gap` 同理逐字保留。
+
+**给 C3b 的机械改动点(子代理点名)**:`LaunchPage` 里 `_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, ...)` 要换成 Avalonia 的 `Layoutable.MaxHeightProperty`(或走 `Ui.WindowPctConverter` + `Bind`)。
