@@ -78,3 +78,36 @@ APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy.AppImage --appdir TipCL.AppDir \
 **浮层关闭行为(顺带补测,三条都有证据)**:`×` 关、点外面 light-dismiss 关、**按 `Esc` 不关**(4 次独立按键 + 正向对照证明键送得到:往浮层输入框打字有字形变化;源码侧 `MakePopup` 只设了 `IsLightDismissEnabled`)。取证纪律见 `_cmp/append-r21b-docs` 落进 PROGRESS 的那两条:必须先证「浮层开着」再下结论;`xdotool getwindowfocus --shell` 本机不支持(会打出「指针下的窗口」冒充焦点);**PNG 的 md5 不能当画面比对**(`import` 写时间戳)。
 
 **另一条与本文档相关、也属本轮收尾的新坑(工具侧,详见 DECISIONS D-53)**:`tools/package.ps1` 是**带 BOM 的 UTF-8**,而 BOM 正是它在 Windows PowerShell 5.1 下能按 UTF-8 解码的前提;收尾时用编辑工具改了它,工具**静默丢掉 BOM**,同一份脚本立刻从 0 个语法错误变成 18 个。最后改成**追加式**写入,并回头逐个核对了本轮所有改动文件(3 个源码 + 1 个测试 + 1 个脚本 + 3 个文档)的 BOM 状态,确认一个都没掉。
+
+### 2026-11-13 M4-H R21h:出包与分发 —— 加 CI 流水线 + `.deb`,并把「跨平台打包工具」的取舍写成决策
+
+**背景**:这一轮收尾时暴露的真实摩擦是**出包靠两台机器手工搬** —— 在 Windows 上 `dotnet publish`,再把 43 MB 通过 rsh 推到一台 Ubuntu(它没有 dotnet 不能发布),在那台机器上用 linuxdeploy 组装 AppImage,最后人工核对 sha256。手工、不可复现、还依赖某台机器的状态。所以本轮补的是**编排与发行格式**,不是换掉 `dotnet publish`。
+
+**一、CI 流水线([.github/workflows/ci.yml](.github/workflows/ci.yml))**
+
+三个任务:`test`(ubuntu + windows 矩阵,两边都跑全量测试与 Release 构建)、`package-linux`(发布 → 拉 linuxdeploy → `tools/package.sh --appimage-only --deb` → zip → sha256 → **xvfb 下裸 FUSE 冒烟**(失败退回 `APPIMAGE_EXTRACT_AND_RUN=1`)→ 上传产物)、`package-win`(发布 → 本机 `--smoke` 冒烟 → zip → 上传)。前置条件都写在文件头(与 `tools/package.sh` 同一份口径:`file` 包、FUSE/extract-and-run)。
+
+**如实说明**:本仓**当前没有 remote**(全部提交在本地),所以这条流水线暂时不会自动跑 —— 它的价值是把「可复现的出包流程」写成**可执行的规格**:接上远端后 push 即可出三份产物;而且它把这一轮踩过的坑(缺 `file`、无 `/dev/fuse`、冒烟要显示)都固化成了步骤。**未在真 GH runner 上跑过**(无从验证),这点照实记。
+
+**二、`.deb`(纯 `dpkg-deb`,不引入任何新依赖,[tools/deb.sh](tools/deb.sh))**
+
+AppImage 解决「下载就能跑」,`.deb` 解决「装进系统、菜单里有、能卸载」。布局:`/opt/TipCL/TipCL.App` + `/usr/bin/tipcl`(三行 exec 包装)+ `/usr/share/applications/tipcl.desktop` + `/usr/share/icons/hicolor/256x256/apps/tipcl.png` + `postinst` 里尽力刷桌面库/图标缓存。`tools/package.sh --deb` 会调用它(没有 `dpkg-deb` 时只提示、不报错)。
+
+**真机验证(盒子 `main`,Ubuntu 24.04.5)**:
+
+| 步骤 | 结果 |
+|---|---|
+| `bash tools/deb.sh` | 产物 `dist/tipcl_0.1.0-m3_amd64.deb` = **37,530,054 B**,sha256 `a706e8a2…`;控制信息 `Installed-Size: 43992`、`Depends: libc6, libx11-6, libice6, libsm6, libfontconfig1, libfreetype6` |
+| 内容 | `/opt/TipCL/TipCL.App` = **44,984,361 B**(就是那份已经以 AppImage 形态裸 FUSE 冒烟 exit 0 的单文件)、`/usr/bin/tipcl`(51 B)、desktop、icon |
+| `sudo dpkg -i` | **exit 0**;文件到位;`dpkg -l tipcl` 显示 `ii tipcl 0.1.0-m3 amd64`;桌面库/图标缓存触发器正常跑 |
+| 装完之后跑起来 | `TIPCL_HOME=<临时> tipcl --ai-selftest` → **exit 0,通过 54 / 失败 0** |
+| `sudo dpkg -r tipcl` | **exit 0**;四份文件全部消失;`dpkg-query` 再也找不到该包 |
+
+**顺手修掉一个真 bug(自己写的脚本)**:`dpkg-deb -c "$DEB" | head -10` 会因为 `head` 提前关管道让 `dpkg-deb` 吃到 **SIGPIPE**(tar 子进程被杀,退出码 2),配合 `set -o pipefail` 整条脚本"假失败"(第一次跑 `DEB_EXIT=2`,而包其实是好的 —— **CI 里这会直接红**)。改成先落盘再 `head`,复跑 `DEB_EXIT=0`。这正是「脚本必须真跑一次」的又一个实例(D-55 的同一条教训)。
+
+**三、遗留(如实)**
+
+- CI **没在真 GitHub runner 上跑过**(无 remote),是按已踩过的坑写的规格,不是已验证的事实;
+- `.deb` 的 `Depends` 是**保守最小集合**,只在 Ubuntu 24.04 实测可装可跑;Debian/其他发行版未测;
+- `.deb` 只打 `amd64`(与 `linux-x64` 对齐),没有 arm64;
+- `--deb` 与 AppImage 走的是**同一份单文件**的两种形态,所以「装完之后真的能起 GUI」只间接证明:AppImage 那份跑过 `--smoke` exit 0、`.deb` 装出来的那份跑过 `--ai-selftest` 54/54 ⇒ **没有在安装后的路径上真开过窗口**(这一条可以补:装完直接 `tipcl` 起 GUI 截图)。

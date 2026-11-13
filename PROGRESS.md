@@ -1,4 +1,4 @@
-﻿# PROGRESS — TipCL Linux 版 M1
+﻿﻿﻿# PROGRESS — TipCL Linux 版 M1
 
 > 工作包状态表。各代理收尾后在自己行内更新状态；详细报告见 `progress/M1-<包>.md`。
 > 共享文件编辑纪律见 GOAL.md §6：各包只追加自己的小节，禁止重写他人内容。
@@ -767,7 +767,7 @@ R21b 归档的 AppImage 之后,R21c~R21e 都改了 `src/`,归档件却没重打 
 
 `AppLog` 的 `UnobservedTaskException` 处理器加一条**收得很窄**的分流:「桌面缺少 `com.canonical.AppMenu.Registrar`」那条(必须是 `AggregateException` 且每个内层都是 `Tmds.DBus.Protocol.DBusException` 且消息含 `ServiceUnknown` + 服务名)降级成**一条** WARN,其余任何未观察异常照旧 ERROR。新增 `App/AppLogDesktopNoiseTests`(5 条负例:普通异常 / 形状像但类型不对 / 混合 `AggregateException` / 缺片段 / null)。
 
-**如实记**:这条的**正向分支没能复现** —— 两次真机会话(一次连贯操作、一次连开 16 个窗口 + 等 90 秒)里 `unhandled` / `WARN` / `ERROR` **全是 0**;上一轮那 24 条的现场是 R21b 的会话(同一台盒子),现象真实但无法按需复现。改动保守:匹配不上时行为与改动前完全一致。
+**如实记**:这条的**正向分支没能复现** —— 两次真机会话(一次连贯操作、一次连开 16 个窗口 + 等 90 秒)里 `unhandled` / `WARN` / `ERROR` **全是 0**;上一轮那 24 条的现场是 R21b 的会话(同一台盒子),现象真实但无法按需复现。改动保守:匹配不上时行为与改动前完全一致。 (补记,同日 R21h):这条**正向分支后来抓到了真机证据** —— 子代理在同一台盒子上跑「存档管理 chip」会话时,应用日志里出现且**只出现一条** `[WARN] unhandled(Task) 已知无害(桌面缺少 AppMenu 服务,后续同类不再记):System.AggregateException: … org.freedesktop.DBus.Error.ServiceUnknown: The name com.canonical.AppMenu.Registrar was not provided by any .service files ---> Tmds.DBus.Protocol.DBusException: …`,而该会话**没有**再出现任何 ERROR 级的 unhandled ⇒ 「按类型+消息精确匹配后降级成一条 WARN」这条分流**真的生效**了(此前两次会话没复现,是因为那两次里这条 DBus 失败压根没发生,不是过滤没命中)。
 
 **三、第三次重打产物(按 D-60 的规矩)**
 
@@ -782,3 +782,34 @@ R21b 归档的 AppImage 之后,R21c~R21e 都改了 `src/`,归档件却没重打 
 - 全量 `dotnet test`:**432 = 431 通过 + 1 跳过 + 0 失败**(新增 5 条噪声负例;R21f 修掉偶发红后连跑 4 遍全绿);
 - Release 构建 **0 警告 0 错误**;`--ai-selftest` exit 0(54 项);十场冒烟全 exit 0 且 **0 WARN / 0 ERROR**;
 - 真机会话三次(复测下拉 / 噪声尝试 / 拉产物),应用全程存活、未碰真实 `%LOCALAPPDATA%\TipCL`。
+
+### 2026-11-13 M4-H R21h:出包从「两台机器手工搬」变成「一条流水线 + 两种发行格式」(主 agent)
+
+**一、CI 流水线(解决的是编排,不是编译)**
+
+新建 `.github/workflows/ci.yml`,三个任务:`test`(ubuntu + windows 矩阵跑全量测试 + Release 构建)、`package-linux`(发布单文件 → 拉 linuxdeploy → `tools/package.sh --appimage-only --deb` → zip → sha256 → **xvfb 下裸 FUSE 冒烟**,失败退回 `APPIMAGE_EXTRACT_AND_RUN=1` → 上传产物)、`package-win`(发布 → 本机 `--smoke` → zip → 上传)。出包逻辑**复用仓库里那两个脚本**,不在 CI 里再写一份。
+
+**如实说明**:本仓没有 remote,这条流水线**暂时不会自动跑**,也**没在真 GH runner 上验证过** —— 它现在的身份是「可执行的出包规格」,不是「已验证的事实」。
+
+**二、`.deb`(纯 `dpkg-deb`,零新依赖)**
+
+`tools/deb.sh`:把 `dist/TipCL-linux-x64/TipCL.App` 打成 `tipcl_<版本>_amd64.deb`(版本从 `CoreInfo.cs` 读,可用 `--version` 覆盖),布局 `/opt/TipCL/TipCL.App` + `/usr/bin/tipcl` 包装 + desktop + icon + `postinst` 刷缓存;`tools/package.sh --deb` 会调用它。
+
+**三、真机验证(盒子 Ubuntu 24.04.5)**
+
+| 步骤 | 结果 |
+|---|---|
+| 打包 | `dist/tipcl_0.1.0-m3_amd64.deb` = 37,530,054 B,sha256 `a706e8a2…`;`Installed-Size: 43992` |
+| `sudo dpkg -i` | exit 0;`dpkg -l` 显示 `ii tipcl 0.1.0-m3 amd64`;桌面库/图标缓存触发器正常 |
+| 装完跑 | `TIPCL_HOME=<临时> tipcl --ai-selftest` → **exit 0,54 / 54** |
+| `sudo dpkg -r` | exit 0;四份文件全消失,`dpkg-query` 找不到该包 |
+
+**四、顺手修掉自己脚本里的一个真 bug**
+
+`dpkg-deb -c "$DEB" | head -10` 会因为 `head` 提前关管道让 `dpkg-deb` 吃 SIGPIPE(tar 子进程被杀,`DEB_EXIT=2`),包本身是好的 —— 但配合 `set -o pipefail` 就是**假失败**,**CI 里直接红**。改成先落盘再 `head`,复跑 `DEB_EXIT=0`。
+
+**五、遗留(如实)**
+
+1 CI 未在真 runner 跑过(无 remote);2`.deb` 的 `Depends` 是保守最小集合,只测了 Ubuntu 24.04;3只打 `amd64`;4**没在「装完之后的路径上真开过 GUI 窗口」**(AppImage 那份跑过 `--smoke` exit 0、`.deb` 那份跑过 `--ai-selftest` 54/54,窗口这一侧可以用「装完直接 `tipcl` 截图」补上)。
+
+**又修掉一个(并发碰撞)**:`_cmp/box/run.ps1` / `push.ps1` / `pull.ps1` 原来把中继文件写在**固定文件名**(`stdin.sh` / `push.sh` / `pull.b64`)里 —— 主 agent 与子代理同时调用时会互相覆盖。本轮就真撞上了:我发出去的 YAML 校验脚本,盒子上执行的却是子代理的脚本(输出整个串了,还少了一条 push 回显)。已改成 `名字-<pid>-<随机>.sh`,并确认三个脚本仍是纯 ASCII。**教训:任何「把内容写临时文件再喂给子进程」的辅助工具,都必须用唯一文件名,否则它在并发下就是个静默的串台器。**

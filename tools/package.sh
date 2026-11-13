@@ -8,6 +8,7 @@
 #                                            # dist/TipCL-linux-x64/TipCL.App 组装 AppImage
 #                                            # （发布在 Windows/CI 做、组装在 Linux 上做时用这条，
 #                                            #  R21 的做法就是这个，见 progress/M4-H-R21-AppImage组装与实机验证.md）
+#   ./tools/package.sh --deb                 # 额外打一个 .deb（纯 dpkg-deb，不引入新依赖，见 tools/deb.sh）
 #
 # 前置条件（AppImage 出包与运行，R21 真机踩出来的两条）:
 #   1. `file` 包必须存在（sudo apt-get install -y file）——appimagetool 靠它做 MIME 识别，
@@ -58,11 +59,13 @@ cd "$ROOT"
 
 NO_APPIMAGE=0
 APPIMAGE_ONLY=0
+MAKE_DEB=0
 for arg in "$@"; do
     case "$arg" in
         --no-appimage) NO_APPIMAGE=1 ;;
         --appimage-only) APPIMAGE_ONLY=1 ;;
-        *) echo "未知参数: $arg (支持: --no-appimage / --appimage-only)" >&2; exit 1 ;;
+        --deb) MAKE_DEB=1 ;;
+        *) echo "未知参数: $arg (支持: --no-appimage / --appimage-only / --deb)" >&2; exit 1 ;;
     esac
 done
 
@@ -168,3 +171,13 @@ echo ""
 echo "打包完成。运行: chmod +x dist/TipCL-linux-x64/TipCL.App && ./dist/TipCL-linux-x64/TipCL.App"
 echo "AppImage 运行: chmod +x dist/TipCL-linux-x64.AppImage && ./dist/TipCL-linux-x64.AppImage"
 echo "  （没有 /dev/fuse 的环境: 前缀 APPIMAGE_EXTRACT_AND_RUN=1 即可）"
+
+if [[ $MAKE_DEB -eq 1 ]]; then
+    echo ""
+    echo "===== .deb ====="
+    if command -v dpkg-deb >/dev/null 2>&1; then
+        bash "$ROOT/tools/deb.sh" --bin "$ROOT/dist/TipCL-linux-x64/TipCL.App" --out "$ROOT/dist"
+    else
+        echo "跳过: 本机没有 dpkg-deb(apt-get install -y dpkg-dev),或交给 CI 里的 ubuntu 任务"
+    fi
+fi

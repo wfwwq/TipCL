@@ -1,0 +1,168 @@
+# .github/workflows/ci.yml —— TipCL(Linux 移植仓)的构建/测试/出包流水线(M4-H R21h)
+#
+# 这条流水线解决的是本轮最真实的摩擦:**以前出包是两台机器手工来回搬** ——
+# 在 Windows 上 `dotnet publish`,再把 43 MB 通过 rsh 推到一台 Ubuntu(因为没有 dotnet 不能发布),
+# 在那台机器上用 linuxdeploy 组装 AppImage,最后人工核对 sha256。手工、不可复现、还依赖某台机器的状态。
+#
+# 现在一条流水线做三件事:
+#   1) test        :Linux 与 Windows 各跑一遍全量测试(两个平台都跑,才能抓平台相关问题)
+#   2) package-linux:linux-x64 单文件 → AppImage(linuxdeploy)+ .deb(dpkg-deb)→ 上传产物 + sha256
+#   3) package-win :win-x64 单文件 → zip → 上传产物 + sha256
+#
+# 前置条件(与 tools/package.sh 的注释同一份口径,都是真机踩出来的):
+#   * AppImage 组装需要 `file` 包(appimagetool 用它做 MIME 识别,缺了最后一步会失败);
+#   * linuxdeploy 自己是 AppImage,宿主没有 /dev/fuse 时用 APPIMAGE_EXTRACT_AND_RUN=1 跑它
+#     (tools/package.sh 已经内置「先直接跑、失败再 extract-and-run」);
+#   * 产物是 self-contained 单文件,构建机不需要装任何 .NET 运行时。
+#
+# 注意:**本仓当前没有 remote**(全部提交都在本地),所以这条流水线暂时不会自动跑 ——
+# 它的作用是把「可复现的出包流程」写成可执行的规格:接上远端之后,push 即可出三份产物。
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # 测试会用 TIPCL_HOME 指向进程私有的临时目录(见 tests/TipCL.Tests/TestIsolation.cs),
+      # 不会碰真实用户目录;无头渲染用 Avalonia 的 headless + 真 Skia。
+      - name: dotnet test
+        run: dotnet test tests/TipCL.Tests/TipCL.Tests.csproj --nologo
+
+      - name: Release build (warnings are the signal)
+        run: dotnet build src/TipCL.App/TipCL.App.csproj -c Release --nologo
+
+  package-linux:
+    name: package (linux-x64 → AppImage + .deb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # 发布参数与 tools/package.ps1 / tools/package.sh 同源:self-contained 单文件 + 压缩。
+      # **不开 PublishTrimmed**(Core 的 System.Text.Json 反射路径与 Avalonia XAML 会被剪掉,M3 决策)。
+      - name: publish linux-x64 (single file)
+        run: |
+          dotnet publish src/TipCL.App -c Release -r linux-x64 -o dist/TipCL-linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:UseSharedCompilation=false
+          rm -f dist/TipCL-linux-x64/*.pdb
+          chmod +x dist/TipCL-linux-x64/TipCL.App
+
+      # linuxdeploy 要求 `file`;AppImage 是构建产物,不进仓(见 .gitignore 的 dist/)
+      - name: fetch linuxdeploy
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq file
+          curl -fSL -o linuxdeploy.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy.AppImage
+
+      # 复用仓库里的脚本,而不是在 CI 里再写一份出包逻辑(tools/package.sh 与 Windows 侧同源)
+      - name: assemble AppDir + AppImage + .deb
+        env:
+          LINUXDEPLOY: ${{ github.workspace }}/linuxdeploy.AppImage
+        run: ./tools/package.sh --appimage-only --deb
+
+      # 也给一份绿色 zip(与 Windows 侧对称;国内下载 AppImage 有时会被拦)
+      - name: zip
+        run: |
+          cd dist
+          zip -q -r TipCL-linux-x64.zip TipCL-linux-x64
+
+      - name: hashes
+        run: |
+          sha256sum dist/TipCL-linux-x64/TipCL.App
+          sha256sum dist/TipCL-linux-x64.AppImage
+          ls -l dist dist/*.deb
+
+      # 出包后立刻冒烟:证明这份产物**真的能起来**(Avalonia 要显示,用 xvfb 提供虚拟 X)。
+      # 先按裸 FUSE 跑;宿主没有 /dev/fuse 时退回 APPIMAGE_EXTRACT_AND_RUN=1(两条路都真机验过)。
+      - name: smoke the AppImage (bare FUSE, extract-and-run fallback)
+        run: |
+          sudo apt-get install -y -qq xvfb
+          rm -rf /tmp/tipcl-smoke && mkdir -p /tmp/tipcl-smoke/home
+          printf '%s\n' '{"first_run": false, "feedback_consent": true}' > /tmp/tipcl-smoke/home/config.json
+          cd /tmp/tipcl-smoke
+          APP="$GITHUB_WORKSPACE/dist/TipCL-linux-x64.AppImage"
+          if ! xvfb-run -a env TIPCL_HOME=/tmp/tipcl-smoke/home "$APP" --smoke; then
+            echo "裸 FUSE 失败,改用 APPIMAGE_EXTRACT_AND_RUN=1 重试"
+            xvfb-run -a env APPIMAGE_EXTRACT_AND_RUN=1 TIPCL_HOME=/tmp/tipcl-smoke/home "$APP" --smoke
+          fi
+          ls -l smoke.png
+          echo "--- 应用日志里的 WARN / ERROR 计数 ---"
+          grep -rc WARN /tmp/tipcl-smoke/home/logs | cat || true
+          grep -rc ERROR /tmp/tipcl-smoke/home/logs | cat || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tipcl-linux-x64
+          path: |
+            dist/TipCL-linux-x64.AppImage
+            dist/*.deb
+            dist/TipCL-linux-x64/TipCL.App
+            dist/TipCL-linux-x64.zip
+          if-no-files-found: error
+
+  package-win:
+    name: package (win-x64 → zip)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: publish win-x64 (single file) + zip
+        shell: pwsh
+        run: |
+          dotnet publish src/TipCL.App -c Release -r win-x64 -o dist/TipCL-win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:UseSharedCompilation=false
+          Get-ChildItem dist/TipCL-win-x64 -Exclude *.exe, "TipCL.App" | Remove-Item -Recurse -Force
+          # 出包后立刻冒烟:--smoke 应 exit 0 并产出 smoke.png(与 tools/package.ps1 同口径)
+          Push-Location dist/TipCL-win-x64
+          if (Test-Path smoke.png) { Remove-Item smoke.png -Force }
+          & .\TipCL.App.exe --smoke
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path smoke.png)) { throw "win-x64 冒烟失败" }
+          Pop-Location
+          Compress-Archive -Path dist/TipCL-win-x64/* -DestinationPath dist/TipCL-win-x64.zip -Force
+
+      - name: hashes
+        shell: pwsh
+        run: Get-FileHash dist/TipCL-win-x64/TipCL.App.exe, dist/TipCL-win-x64.zip -Algorithm SHA256 | Format-List
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tipcl-win-x64
+          path: |
+            dist/TipCL-win-x64.zip
+            dist/TipCL-win-x64/TipCL.App.exe
+          if-no-files-found: error
