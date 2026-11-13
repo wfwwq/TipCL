@@ -123,6 +123,13 @@ public class C3cPageStructureTests
             AppServices.Client = null;
             var page = new LaunchPage();
             Assert.NotNull(page.Content);
+            // 【C4 更正】C4(实例管理簇)又注册了 instance / library 两个页面 ⇒「注册表里只有启动页」
+            // 这个时代前提不再成立。按 D-126 的做法**先把前提还原**,原来那条断言一字不改地保留在下面;
+            // 顺带把「C4 确实注册了它们」显式钉下来(断言只增不减)。
+            Assert.Contains("instance", PageRegistry.Ids);
+            Assert.Contains("library", PageRegistry.Ids);
+            Assert.True(PageRegistry.Unregister("instance"));
+            Assert.True(PageRegistry.Unregister("library"));
             Assert.DoesNotContain(PageRegistry.Ids, id => id != C3cExpected.PageId && id != "");
         });
     }

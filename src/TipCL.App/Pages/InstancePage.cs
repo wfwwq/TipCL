@@ -383,8 +383,7 @@ public sealed class InstancePage : PageBase
 
 	/// <summary>选中某个实例卡(同一个就什么都不做):只重画新旧两张卡,并把新的滚进视野。</summary>
 	internal void Select(string? name)
-	{
-		if (!(_selected == name))
+	{		if (!(_selected == name))
 		{
 			string? previous = _selected;
 			_selected = name;
@@ -400,8 +399,13 @@ public sealed class InstancePage : PageBase
 		}
 	}
 
-	private void MoveSelection(int delta)
+	/// <summary>C4 测试缝:现在选中的是哪个实例(只读快照,同 D-115 / D-127 的口径)。</summary>
+	internal string? SelectedNow()
 	{
+		return _selected;
+	}
+
+	private void MoveSelection(int delta)	{
 		if (_order.Count != 0)
 		{
 			int at = ((_selected == null) ? (-1) : _order.FindIndex((Row r) => r.Key == _selected));
