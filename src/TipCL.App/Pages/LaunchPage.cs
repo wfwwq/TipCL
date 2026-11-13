@@ -1624,6 +1624,7 @@ public sealed partial class LaunchPage : PageBase
 	internal void ShowMoreMenu(Control anchor)
 	{
 		ContextMenu menu = new ContextMenu();
+		_moreMenu = menu;
 		Item(I18n.L("版本设置"), VersionSettingsAsync);
 		Item(I18n.L("刷新新闻"), LoadNewsAsync);
 		Item(I18n.L("查看启动命令"), ShowLaunchCommandAsync);
@@ -1638,8 +1639,10 @@ public sealed partial class LaunchPage : PageBase
 			});
 		});
 		menu.PlacementTarget = anchor;
-		// WPF 是 menu.IsOpen = true;Avalonia 的 MenuBase.IsOpen 的 setter 不可见,等价入口是 ContextMenu.Open()。
-		menu.Open();
+		// WPF 是 menu.IsOpen = true;Avalonia 的 MenuBase.IsOpen 的 setter 不可见,等价入口是 ContextMenu.Open。
+		// **必须把锚点传给 Open(anchor)**:无参的 Open() 会去解析 PlacementTarget 的宿主,离屏/测试里解析不到
+		// 就抛 ArgumentNullException("control")(本机实测,页面用例抓到的真 bug,见 PROGRESS 的 C3c 小节)。
+		menu.Open(anchor);
 		void Item(string head, Func<Task> act)
 		{
 			MenuItem menuItem = new MenuItem
@@ -2094,4 +2097,59 @@ public sealed partial class LaunchPage : PageBase
 
 	/// <summary>此刻后端调用有没有在飞(仅用于断言"没有多余请求"的用例)。</summary>
 	internal int JavaOptionCountNow => _javaOpts.Count;
+
+	// ————— 下面这一批是"控件在隐藏块 / 懒建浮层里"时的只读入口(不改任何行为;C3a 的 OrderNow 口径) —————
+
+	/// <summary>启动游戏 / 停止两个主按钮。</summary>
+	internal Button LaunchButtonNow => _launchBtn;
+
+	internal Button StopButtonNow => _stopBtn;
+
+	internal ProgressBar ProgressBarNow => _prog;
+
+	/// <summary>四个下拉框,按下标:实例 / 版本 / 用户(账号)/ Java。</summary>
+	internal ComboBox[] CombosNow => new[] { _inst, _ver, _acc, _java };
+
+	/// <summary>内存滑杆与它右边那个「4096 MB」标签。</summary>
+	internal Slider MemorySliderNow => _mem;
+
+	internal TextBlock MemoryLabelNow => _memLbl;
+
+	/// <summary>分辨率两个输入框(占位分别是 854 / 480)。</summary>
+	internal TextBox WidthBoxNow => _wBox;
+
+	internal TextBox HeightBoxNow => _hBox;
+
+	internal TextBox ServerBoxNow => _server;
+
+	internal TextBox UserBoxNow => _user;
+
+	/// <summary>四个默认收起区块里的控件(不在可视树的可达路径上,所以给只读入口)。</summary>
+	internal SPanel TaskHostNow => _taskHost;
+
+	internal TextBlock PlaytimeNow => _playTotal;
+
+	internal TextBox NotesNow => _notes;
+
+	internal SPanel NewsHostNow => _newsHost;
+
+	/// <summary>声明式驱动的入口(不模拟输入设备):模拟「点了某个非按钮控件」的那一段处理器体。</summary>
+	internal void PickInstanceForTest(string name)
+	{
+		PickInstanceFromSwitch(name);
+	}
+
+	internal void PickVersionForTest(string version)
+	{
+		PickVersionFromSwitch(version);
+	}
+
+	/// <summary>
+	/// 最近一次弹出的「更多操作」上下文菜单(Windows 里它是个局部变量,弹完就没引用了)。
+	/// mac 侧留一个字段只为了能被告知式地验它(菜单项顺序 / 点某一项走哪条路)。
+	/// </summary>
+	private ContextMenu? _moreMenu;
+
+	/// <summary>最近一次弹出的「更多操作」菜单(没弹过时为 null)。</summary>
+	internal ContextMenu? MoreMenuNow => _moreMenu;
 }

@@ -213,11 +213,39 @@ public class C2bShellTests
 
     // ---------------------------------------------------------------- 页面宿主
 
+    /// <summary>
+    /// C3c 更正:C2b 时这一条叫 <c>Page_host_starts_empty_because_no_page_is_registered_yet</c>,
+    /// 断的是"还没有页面注册所以宿主是空的"。启动页注册进来之后那个前提**不再成立**
+    /// (外壳构造函数第一件事就是 <c>Navigate("launch", instant)</c>,与 Windows 首屏一致),
+    /// 所以这里把小节拆成两条:
+    /// <list type="number">
+    /// <item>注册之后:宿主直接落在启动页上(断言**更多**:当前页类型、宿主内容同一个实例);</item>
+    /// <item><see cref="Page_host_starts_empty_when_the_launch_page_is_unregistered"/>:
+    ///   用 <c>RegistryScope</c> + <c>Unregister</c> 把启动页摘掉,原来的三条断言**一字不改**地留着。</item>
+    /// </list>
+    /// 没有删测试、没有放宽断言、没有加 Skip。
+    /// </summary>
     [Fact]
-    public void Page_host_starts_empty_because_no_page_is_registered_yet()
+    public void Page_host_opens_the_registered_launch_page()
     {
         AvaloniaSession.Run(() =>
         {
+            using var shell = ShellFixture.Create();
+            Assert.Equal("launch", shell.Window.CurrentPageId);
+            Assert.IsType<LaunchPage>(shell.Window.CurrentPage);
+            Assert.Same(shell.Window.CurrentPage, shell.Window.Host.Content);
+        });
+    }
+
+    /// <summary>【Windows 源】<c>MainWindow</c> 的 <c>Navigate(未知 id)</c>:静默不切页;
+    /// 启动页没注册时首屏就是"空宿主"(C2b 的原始断言,一条不改)。</summary>
+    [Fact]
+    public void Page_host_starts_empty_when_the_launch_page_is_unregistered()
+    {
+        AvaloniaSession.Run(() =>
+        {
+            using var scope = new RegistryScope();
+            Assert.True(PageRegistry.Unregister("launch"), "前置条件:启动页此刻应当是注册着的");
             using var shell = ShellFixture.Create();
             Assert.Equal("", shell.Window.CurrentPageId);
             Assert.Null(shell.Window.CurrentPage);
@@ -230,6 +258,10 @@ public class C2bShellTests
     {
         AvaloniaSession.Run(() =>
         {
+            using var scope = new RegistryScope();
+            // C3c:启动页已注册,而这一条要断的是"未知 id 不切页 / 大小写不同建不出来",
+            // 所以先把 launch 摘掉,插回 C2b 时的初始状态(其余断言一字未改)。
+            Assert.True(PageRegistry.Unregister("launch"), "前置条件:启动页此刻应当是注册着的");
             using var shell = ShellFixture.Create();
             // Windows 的 Navigate:GetPage 返回 null 就直接返回(不切页、不改状态、不抛)
             shell.Window.Navigate("nonsense");
@@ -238,7 +270,6 @@ public class C2bShellTests
             shell.Window.Navigate("LAUNCH");
             Assert.Equal("", shell.Window.CurrentPageId);
             // 大小写不同也建不出来(序号比较,与 Windows 的字典一致)
-            using var scope = new RegistryScope();
             scope.Register("launch", () => new ProbePage());
             Assert.Null(shell.Window.GetPage("Launch"));
             Assert.NotNull(shell.Window.GetPage("launch"));

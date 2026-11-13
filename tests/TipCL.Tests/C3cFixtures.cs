@@ -551,8 +551,17 @@ internal sealed class C3cFakeApi : IDisposable
                     }
                     else
                     {
-                        using JsonDocument parametersDoc = JsonDocument.Parse(parameters);
-                        reply = route(parametersDoc.RootElement.Clone());
+                        try
+                        {
+                            using JsonDocument parametersDoc = JsonDocument.Parse(parameters);
+                            reply = route(parametersDoc.RootElement.Clone());
+                        }
+                        catch (Exception ex)
+                        {
+                            // 路由自己写坏了(JSON 拼错之类):回一个错误体,**不**让连接悬着 ——
+                            // 悬着会表现成"页面卡住",排查时会指向错误的方向。
+                            reply = "{\"error\":{\"message\":" + JsonSerializer.Serialize("假后端路由出错: " + ex.Message) + "}}";
+                        }
                     }
 
                     byte[] payload = Encoding.UTF8.GetBytes(reply);
@@ -579,7 +588,6 @@ internal static class C3cWire
     internal static string ReadHead(NetworkStream stream)
     {
         List<byte> bytes = new List<byte>();
-        int previous = 0;
         while (bytes.Count < 65536)
         {
             int b = stream.ReadByte();
@@ -589,12 +597,12 @@ internal static class C3cWire
             }
 
             bytes.Add((byte)b);
-            if (previous == '\r' && b == '\n' && bytes.Count >= 4 && bytes[^2] == '\n' && bytes[^3] == '\r')
+            int n = bytes.Count;
+            // 请求头以空行结束(最后 4 个字节是 CR LF CR LF)。
+            if (n >= 4 && bytes[n - 4] == '\r' && bytes[n - 3] == '\n' && bytes[n - 2] == '\r' && bytes[n - 1] == '\n')
             {
                 break;
             }
-
-            previous = b;
         }
 
         return Encoding.ASCII.GetString(bytes.ToArray());
@@ -631,6 +639,67 @@ internal static class C3cWire
         }
 
         return Encoding.UTF8.GetString(buffer, 0, offset);
+    }
+}
+
+/// <summary>
+/// 任务队列(<see cref="TaskStore"/>)的全局作用域:可以把队列**清空**成确定状态,Dispose 时把进作用域之前的那些行
+/// 按 Id/Title/状态**逐个重建回去**(D-69 的纪律:全局静态必须还原)。
+///
+/// 为什么需要它:<c>TaskStore</c> 是进程级的,别的包(C2a/C2b)的用例会在里面留行,
+/// 于是"任务卡显示『暂无下载任务』"这种断言会随着谁先跑而时绿时红 —— 那正是 A6/D-103 记过的病。
+/// </summary>
+internal sealed class C3cTaskStore : IDisposable
+{
+    private readonly List<TaskRow> _saved;
+
+    private bool _disposed;
+
+    internal C3cTaskStore(bool emptyNow = true)
+    {
+        _saved = TaskStore.Rows.ToList();
+        if (emptyNow)
+        {
+            Empty();
+        }
+    }
+
+    /// <summary>把当前所有任务行删掉(先标成已完成,<c>ClearFinished</c> 才肯删)。</summary>
+    internal static void Empty()
+    {
+        foreach (TaskRow row in TaskStore.Rows.ToList())
+        {
+            row.Finished = true;
+        }
+
+        TaskStore.ClearFinished();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        Empty();
+        foreach (TaskRow row in _saved)
+        {
+            TaskStore.Handle(new BridgeEvent { Event = "task_added", TaskId = row.Id, Title = row.Title });
+            TaskRow? now = TaskStore.Get(row.Id);
+            if (now is null)
+            {
+                continue;
+            }
+
+            now.Status = row.Status;
+            now.Speed = row.Speed;
+            now.Progress = row.Progress;
+            now.Indeterminate = row.Indeterminate;
+            now.Finished = row.Finished;
+            now.Success = row.Success;
+        }
     }
 }
 

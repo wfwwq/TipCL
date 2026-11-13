@@ -123,7 +123,7 @@ public class C3cPageStructureTests
             AppServices.Client = null;
             var page = new LaunchPage();
             Assert.NotNull(page.Content);
-            Assert.Empty(PageRegistry.Ids.Where(id => id != C3cExpected.PageId && id != ""));
+            Assert.DoesNotContain(PageRegistry.Ids, id => id != C3cExpected.PageId && id != "");
         });
     }
 
@@ -663,7 +663,7 @@ public class C3cPageStructureTests
             var page = new LaunchPage();
             Assert.NotNull(page.DashNow);
             Assert.Null(page.DashNow.Parent);
-            Assert.False(C3cFiles.Descendants(page).Contains(page.DashNow));
+            Assert.DoesNotContain(page.DashNow, C3cFiles.Descendants(page));
         });
     }
 
