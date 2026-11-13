@@ -461,15 +461,42 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
-            foreach ((string label, string what) in new[]
+            // 【C6b 更正】C6b 的模块初始化器(C6bSegmentRegistration)已经把 Java / 服务器 / 游戏时长 / 反馈四个缝
+            // 接到了真页面,「没接缝」这个时代前提对它们不再成立。按 D-126 的做法:**先把前提还原**(临时置空)、
+            // 原来那两条断言一字不改地保留;顺带把「确实接了」显式钉下来(断言只增不减)。
+            // 替换全局状态的用例**自己**负责还原(这里用 finally;见钉子用例那一条纪律)。
+            Func<PageBase>? java = SettingsPage.JavaPageFactory;
+            Func<PageBase>? servers = SettingsPage.ServersPageFactory;
+            Func<PageBase>? playtime = SettingsPage.PlaytimePageFactory;
+            Func<PageBase>? feedback = SettingsPage.FeedbackPageFactory;
+            Assert.NotNull(java);
+            Assert.NotNull(servers);
+            Assert.NotNull(playtime);
+            Assert.NotNull(feedback);
+            try
             {
-                ("账号", "账号"), ("Java", "Java"), ("服务器", "服务器"), ("游戏时长", "游戏时长"), ("反馈与关于", "反馈与关于"),
-            })
+                SettingsPage.JavaPageFactory = null;
+                SettingsPage.ServersPageFactory = null;
+                SettingsPage.PlaytimePageFactory = null;
+                SettingsPage.FeedbackPageFactory = null;
+
+                foreach ((string label, string what) in new[]
+                {
+                    ("账号", "账号"), ("Java", "Java"), ("服务器", "服务器"), ("游戏时长", "游戏时长"), ("反馈与关于", "反馈与关于"),
+                })
+                {
+                    C5aFiles.Click(C5aFiles.NavButton(page, I18n.L(label)));
+                    C5aFiles.Settle(2);
+                    Assert.True(C5aFiles.HasText(page, I18n.L("「{0}」页还没移植", what)), label + " 段应当显示如实占位");
+                    Assert.True(C5aFiles.HasText(page, I18n.L("这一分段内嵌的是一个独立页面,属后续工作包;接上对应的注入缝后这里会自动显示")));
+                }
+            }
+            finally
             {
-                C5aFiles.Click(C5aFiles.NavButton(page, I18n.L(label)));
-                C5aFiles.Settle(2);
-                Assert.True(C5aFiles.HasText(page, I18n.L("「{0}」页还没移植", what)), label + " 段应当显示如实占位");
-                Assert.True(C5aFiles.HasText(page, I18n.L("这一分段内嵌的是一个独立页面,属后续工作包;接上对应的注入缝后这里会自动显示")));
+                SettingsPage.JavaPageFactory = java;
+                SettingsPage.ServersPageFactory = servers;
+                SettingsPage.PlaytimePageFactory = playtime;
+                SettingsPage.FeedbackPageFactory = feedback;
             }
         });
     }
@@ -548,9 +575,11 @@ public class C5aSettingsTests
                 SettingsPage.FeedbackPageFactory = () => C5aProbePage.Create("反馈");
                 SettingsPage.FirstRunWizardRunner = () => Task.CompletedTask;
                 SettingsPage.PhoneSyncPanelRunner = () => Task.CompletedTask;
-                Assert.NotNull(SettingsPage.AccountPageFactory);
+            Assert.NotNull(SettingsPage.AccountPageFactory);
             }
 
+            // 纪律:凡是故意替换全局状态的用例(**包括"验证还原"的这条钉子**),自己也要在关键处写回 ——
+            // 这里作用域已经写回过一次,下面再逐个对拍;将来谁把作用域的还原改坏了,这条就会红。
             Assert.Same(beforeAccount, SettingsPage.AccountPageFactory);
             Assert.Same(beforeJava, SettingsPage.JavaPageFactory);
             Assert.Same(beforeServers, SettingsPage.ServersPageFactory);

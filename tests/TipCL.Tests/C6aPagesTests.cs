@@ -301,12 +301,11 @@ public class C6aPagesTests
             C5aFiles.Settle(8);
 
             Assert.Single(list.Items);                                     // 数据在
-            // 【实测结论】行容器**建了但是空的**:<c>ListBoxItem</c> 在可视树里、它自己没有可视子节点 ⇒
-            // 离屏(视口为 0)只做到"容器占位",模板内容不落地 ⇒ 行里的文案既不在逻辑树也不在可视树。
-            // 所以:离屏帧里列表页只有"计数 / 空态",**看不到行**(真机不受影响);测试要驱动一行的动作,
-            // 走 internal 处理器体(D-115 / D-127),不要等行渲染出来。
-            ListBoxItem container = Assert.Single(list.GetVisualDescendants().OfType<ListBoxItem>());
-            Assert.Empty(container.GetVisualDescendants());
+            // 【实测结论 · 平台行为钉子】离屏(视口为 0)时容器**建了、但行模板内容不落地**:
+            // ListBoxItem 在可视树里,可是它下面没有任何 TextBlock;行文案在可视树与逻辑树里都找不到。
+            // 将来平台改了行为(离屏也会 materialize 行),这条会红 ⇒ 那时再回来复核 D1 的离屏观感结论。
+            Assert.Single(list.GetVisualDescendants().OfType<ListBoxItem>());
+            Assert.Empty(list.GetVisualDescendants().OfType<TextBlock>());
             Assert.False(C5aFiles.HasText(page, "JEI"));                    // 逻辑树里也看不到
             Assert.True(C5aFiles.HasButton(page, I18n.L("重置条件")));        // 页面骨架是好的(不是整页没渲染)
         });
@@ -672,6 +671,7 @@ public class C6aPagesTests
             using var scope = C6aScope.Capture();
             using var tasks = new C3cTaskStore();
             using var api = C6aFiles.Api();
+            using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
             InstallPage install = C5aFiles.Mount(harness, new InstallPage("1.20.1", I18n.L("正式版"), () => { }));
             C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 5000);
@@ -681,6 +681,11 @@ public class C6aPagesTests
             C5aFiles.Click(C5aFiles.ByText(install, I18n.L("开始安装")));
             C5aFiles.Pump(() => api.Count("install_game") >= 1, 5000);
             Assert.Equal(0, api.Count("install_mod"));
+
+            // 【时机】"请求到达" ≠ "续体跑完":InstallPage 是在 `await StartTaskAsync` **之后**才把
+            // TaskStore.Updated 的处理器挂上的(Windows 同)。所以先等一个可观测的效果 ——
+            // 加入队列的 Toast(它在挂完处理器之后才发)—— 再去构造"任务完成"的事件。
+            C5aFiles.Pump(() => toasts.Has(I18n.L("已加入队列")), 5000);
 
             // 任务完成 ⇒ 续体排 Fabric API(先核对任务行真的进了 finished + Success:
             // Windows 的 TaskStore.Handle("finished") 只在行取得到时才写这两个字段并抛 Updated)
