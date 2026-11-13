@@ -2012,3 +2012,43 @@ Windows 的几何(`*,18,2*` + 左卡 `MinWidth=300 / MaxWidth=380 / Top`),那条
 `PageHost.Navigate` 只在 `runHooks` 为真时跑 `EnsureLoadedAsync + OnShown`(PageHost.cs:108);`MainWindow.Navigate` 传的
 `BridgeReady` 默认 false 且 `--smoke` 不调 `StartBackend()`(MainWindow.cs:427 注释明写"离屏 --smoke 不走这里")⇒ 冒烟里确实不跑加载钩子。
 库页帧里那些计数与空态是**构造函数**里的 `RenderGroups()`(`LibraryPage.cs:244`)画出来的 —— 两边的说法都成立,矛盾出在"看见了什么"而不是"门闸开了"。
+
+## D-144 C5a:深色开关那条抖动其实是**产品缺陷** —— 只设应用级变体会被窗口级盖住;同族审计(35 条用例先钉死再还原)
+
+- **现象(Lead 在原子运行里抓到的第三个同族实例)**:`C5aSettingsTests.The_dark_switch_changes_the_application_variant`
+  在进程内通道偶发红:`Expected: Dark / Actual: Light`。
+- **根因不是"测试顺序",是产品**:`SettingsPage.ApplyDark` 原来只写 `Application.RequestedThemeVariant`。
+  可窗口自己一旦有 `RequestedThemeVariant`(`MainWindow.ApplyThemeState` 会设、测试的 `UiHost.Show` 也会设),
+  **窗口级那个值会盖住应用级** ⇒ `ActualThemeVariant` 不变 ⇒ `ActualThemeVariantChanged` 触发的
+  `SyncAppearanceControls` 把勾选框按 `IsDarkNow` 翻回去 ⇒ `ApplyDark(false)` ⇒ 表现成"点了深色又跳回浅色"。
+  也就是说:在真桌面上,只要外壳设过自己的窗口级变体,「深色模式」这个开关就是**半失效**的。
+- **修法(照 Windows 的 `MainWindow.SetDark` 语义)**:`ApplyDark` 同时设**应用级 + 窗口级**(有外壳时),再让外壳
+  `ApplyThemeVisuals()` 重刷取色。用例三处一起断言:应用级、`shell.Window.RequestedThemeVariant`、`PaletteOverride.IsDarkNow`。
+- **同族审计(Lead 要求:不只修这一条)**:把 `C5aSettingsTests` 里所有读全局/静态状态的用例过了一遍,
+  **35 个"建页面"的用例统一改成"先钉死再还原"**:`C5aFixtures.PinTheme(Window, ThemeVariant)`(应用级 + 窗口级都设,
+  再泵到 `PaletteOverride.IsDarkNow` 等于目标)+ `PinAppearance()`(主题色 / 背景预设 / `ExtrasDirOverride` 指到
+  `TestHome.Root` 之下)。还原仍由 `C5aScope` 负责(D-69)。涉及的面:应用/窗口主题变体、`Palette` 明暗与覆盖层、
+  `SettingsPage._visualColor` / `_visualBackground` / `Extras`、`Motion.Enabled` / `ClockOverride`、`AppServices.*`、
+  `Dlg` 的离屏开关、`PageRegistry`。
+- **纪律**:凡读全局状态,先自己钉死;不依赖"上一条用例留下了什么";断言失败信息里带实际值。
+
+## D-145 C5a:`FlyEnabled` 补消费方 —— C3d 落 `MainWindow.FlyToTasks` 时漏掉的一道守卫(最小改动)
+
+- **缺陷(本包审计发现的)**:Windows 的 `MainWindow.FlyToTasks` 第一句就是 `if (!SettingsPage.FlyEnabled) return;`,
+  mac 在 C3d 落这个成员时只写了 `!Motion.Enabled` ⇒ 设置页「下载飞入动画」开关**只保存不生效**(用户可见的假功能)。
+- **改动(Lead 授权的最小改动,`src\TipCL.App\MainWindow.cs` 一处)**:
+  ```csharp
+  // 改前
+  if (!Motion.Enabled || !IsLoaded)
+  // 改后
+  // FlyEnabled 内部已经是 `Extras.FlyAnimation && Motion.Enabled`
+  if (!SettingsPage.FlyEnabled || !IsLoaded)
+  ```
+  `FlyEnabled` 的定义是 `Extras.FlyAnimation && Motion.Enabled`,所以这一句**覆盖**原来那句:语义只增不减 ——
+  关掉动画**或**关掉飞入,都什么都不做(与 Windows 一致);后面四道守卫(任务行不存在 / 源或任务行不可见 /
+  取不到坐标)顺序一字未动。
+- **代价(如实记)**:第一次调用 `FlyToTasks` 会触发 `SettingsPage` 的静态初始化(读一次数据目录的 `wpf-theme.json`,
+  之后走静态缓存)——这与 Windows 的行为一致(它同样要读 `SettingsPage.FlyEnabled`);`--smoke` 不调 `FlyToTasks`,
+  所以冒烟帧不受影响(已复跑确认逐字节不变)。
+- **用例**:`C5aSettingsTests.Fly_to_tasks_does_nothing_while_the_settings_switch_is_off` —— 开着时 chip 进 `FlyHost`、
+  关掉时一行都不画(用 `C3dClock` 把动画时钟打开,否则 `Motion.Enabled` 恒假就验不了这道守卫)。

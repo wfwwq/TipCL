@@ -6421,3 +6421,40 @@ Avalonia 把"宽于格子的子元素"居中摆放 ⇒ 左移 `(205-300)/2 ≈ 4
 1. 告警基线:`xUnit2012` 的两条来自我的 `C5bTasksAccountTests.cs`,已按 Lead 要求改成 `Assert.Contains/DoesNotContain`;本轮构建只剩 `NU1900`(取漏洞源失败,本机网络环境造成,条数随构建波动:基线 6、我这次 8)+ `SYSLIB0014` 未见(该工程本轮未重建)。
 2. `SectionNarrow` 的降级是"整簇换行",**没有做**"右簇内部再折行"(按钮组在极窄时会整组下移,不会各自换行)—— 668 下够用,更窄的窗口(如 500)没验。
 3. 缺陷 2 的修法在**更窄**窗口(页面区 < 300+18+右列最小)下的行为没有实测:那种宽度下两栏本来就摆不开,应当像 `Section` 一样降级堆叠;本包没做(不在 Lead 点名的范围内)。
+
+## C5a 补记(第二个交付批:抖动根治 + `FlyEnabled` 补消费方)
+
+### 1. 第三个同族抖动的根因是**产品缺陷**,不只是测试问题
+
+`C5aSettingsTests.The_dark_switch_changes_the_application_variant` 偶发 `Expected: Dark / Actual: Light`。
+根因:`SettingsPage.ApplyDark` 原来只写 `Application.RequestedThemeVariant`,而**窗口级**变体(外壳
+`MainWindow.ApplyThemeState` / 测试的 `UiHost.Show` 都会设)会盖住应用级 ⇒ `ActualThemeVariant` 不变 ⇒
+`SyncAppearanceControls` 把勾选框翻回去 ⇒ 开关在真桌面(只要外壳设过窗口级变体)是**半失效**的。
+修法照 Windows 的 `MainWindow.SetDark`:**应用级 + 窗口级都设**,再 `ApplyThemeVisuals()` 重刷。
+
+**同族审计(35 条用例统一"先钉死再还原")**:`C5aFixtures.PinTheme(Window, ThemeVariant)`(两级都设 + 泵到
+`PaletteOverride.IsDarkNow` 等于目标)+ `PinAppearance()`(主题色 / 背景预设 / `ExtrasDirOverride` 指到
+`TestHome.Root` 之下);还原仍由 `C5aScope`(D-69)。覆盖面:应用/窗口主题变体、`Palette` 明暗与覆盖层、
+`_visualColor` / `_visualBackground` / `Extras`、`Motion.Enabled` / `ClockOverride`、`AppServices.*`、`Dlg` 离屏开关、`PageRegistry`。
+
+### 2. `FlyEnabled` 补上了消费方(C3d 漏掉的一道守卫)
+
+见 D-145:`src\TipCL.App\MainWindow.cs` 的 `FlyToTasks` 第一道守卫由 `!Motion.Enabled` 改成 `!SettingsPage.FlyEnabled`
+(`FlyEnabled == Extras.FlyAnimation && Motion.Enabled`,语义只增不减:关动画**或**关飞入都什么都不做,与 Windows 一致)。
+新增用例 1 条(开着放 chip / 关掉一行不画)。
+
+### 3. 三轮原子运行(Lead 要求的验收线:连跑三轮)
+
+| 轮 | BUILD | VSTest | 进程内 |
+| --- | --- | --- | --- |
+| 1 | `BUILD_EXIT=0` | `VSTEST_EXIT=0`:**失败 0 / 通过 3438 / 总计 3438** | `INPROC_EXIT=0`:**总计 3438,通过 3438,失败 0,跳过 0,不支持 0** |
+| 2 | `BUILD_EXIT=0` | `VSTEST_EXIT=0`:**失败 0 / 通过 3438 / 总计 3438** | `INPROC_EXIT=0`:**总计 3438,通过 3438,失败 0,跳过 0,不支持 0** |
+| 3 | `BUILD_EXIT=0` | `VSTEST_EXIT=0`:**失败 0 / 通过 3438 / 总计 3438** | `INPROC_EXIT=0`:**总计 3438,通过 3438,失败 0,跳过 0,不支持 0** |
+
+三处退出码全 0,两条通道总数相等(3438 = 3437 + 新增那 1 条),不支持 0。`--filter ~C5a` 另跑一次:`失败 0 / 通过 50 / 总计 50`。
+
+### 4. 冒烟(改完之后复跑,既有帧仍逐字节不变)
+
+不带 `--page` = **37681 / `2603BF6A...342CBD`**;`--page launch --theme dark` = **33579 / `7D7AFDD5...276893`**;
+`--theme blue` = **2**;新帧 `--page settings --theme light` = **45594 / `C19BF1C4...`**、`--theme dark` = **43745 / `CE33BEFE...`**
+(与 Lead 独立复跑一致)。`FlyToTasks` 在离屏 `Motion.Enabled` 恒假,不画 chip ⇒ 帧不受这次改动影响,已复跑确认。
