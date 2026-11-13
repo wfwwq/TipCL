@@ -4395,3 +4395,30 @@ SSE 事件流也收到了真事件(`hello` 握手 + `create_instance` 引发的 
 3. **`Guard.Install` 每次启动都会再挂一次 `AppDomain.UnhandledException`**(Core 既有行为,本包没改);
    真桌面只启动一次,测试里起停多次会多挂几次(实测无副作用)。
 4. `%LOCALAPPDATA%\TipCL` 仍是 9328 / 889530606 / 2026-11-10 20:42:16(本包一个字节都没往那里写)。
+### Lead 验收(2026-11-13 12:15)——**全项目最大的未验证点已关闭**
+
+结论:**C2d 通过**,而且这一包回答了整个项目里最要紧的那个问题 —— **进程内后端是真的能跑起来的**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 四个提交(`8b3ecc3` a / `3452514` b / `250b717` c / `6da5ad7` d) | 工作树干净;无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+| **`src\TipCL.Core` 的改动范围** | `git diff --name-status f978aa1 HEAD -- src/TipCL.Core` **只有 `BackendApi.cs` 一个文件**,行数 **+20 / -4**;其余 237 个 Core 文件的 SHA256 与基线一致(仍是 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,清单不变) |
+| Core 开关本身(Lead 逐行读过) | 新增 `public static bool DisableAuthWarmup { get; set; }`(默认 false = 与 Windows 版行为一致)+ 独立判断函数 `ShouldWarmupAuth()`;原来的 `ThreadPool.QueueUserWorkItem` + `Thread.Sleep(1500)` + `AuthHttp.Warmup` 块**原样**被 `if (ShouldWarmupAuth())` 包住 —— 正好是 B1a 验收时裁给 C2 的那一句,没有多余改动 |
+| **后端真的起来了(证据)** | 测试**真的**走完 `BridgeClient` → 回环 `TcpListener` → `RpcDispatcher` → `BackendApi`:调 `get_language` 并断言结果**等于 `I18nCore.CurrentLanguage()`**;调 `translate` 断言 `启动` / `Launch` 且**等于 `I18nCore.Tr("启动")`**;调 `available_languages` 断言 `简体中文` / `English`;调 `get_instances` 断言拿到数组;另有 SSE 事件流投递一次 |
+| 分发器真的在解析方法名 | 调不存在的 `no_such_method_c2d` **必须报错**(断言不是静默成功)—— 这条防的是「假往返」 |
+| 选的方法是否安全 | 只用了 `get_language` / `translate` / `available_languages` / `get_instances` 这类只读本地状态的;下载、启动游戏、`java_list`(扫盘/联网)一律没调 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0 / 通过 2631 / 总计 2631**(2593 → 2631) |
+| 进程内执行器 第 1 / 2 次 | 都是**退出码 0,通过 2631 / 失败 0 / 不支持 0** |
+| **子代理改自己 4 个测试文件是否改弱断言(Lead 逐文件比对)** | `C2dAuthWarmupTests.cs` **24->24 断言、8->8 用例、0 Skip**;另三个文件在我取的基线提交之后才创建(0->116/0->18、0->46/0->5 是新增,不是替换)。**没有改弱、没有删用例、没有加 Skip** |
+| `--smoke` light / dark | **21823 `8336CA13...` / 18200 `DBD3C171...`,与 C2b 基准逐位一致** —— 说明后端在离屏模式下**没有**自动启动,窗口像素没被这一包动过 |
+| `%LOCALAPPDATA%\TipCL` / `%TEMP%` 新目录 | 9328 / 889530606 / 2026-11-10 20:42:16;`tipcl*` 89 -> 89 无新增 |
+| 残留进程与监听 | 我的四次运行结束后:testhost/TipCL/java/adb **0 个**;巡检时见到过一个 `testhost.exe`(pid 34012),查证它**已自行退出、未持有任何监听端口**,随后的范围扫描里 49152+ 的监听全属别的会话进程 —— **没有端口泄漏** |
+| 红线 | 无 remote、无 tag、全局 git identity 未设 |
+
+**Lead 顺带处理的两件事**:
+
+1. **散落文件**:本包中途在**仓库根**建过一个 `C2dFixtures.cs`(与 `tests\TipCL.Tests\C2dFixtures.cs` 同名),另有探针 `tests\TipCL.Tests\ZzC2dProbe.cs`。这两个若被收尾的 `git add -A` 带上就会入库。Lead 巡检时发现并准备叫停,但子代理**自己已经删掉**(最终 `git ls-files` 里没有任何 `Zz*`、仓库根仍然只有 7 个应存在的文件)。
+2. **我对本包的一处预测是错的**:我在任务书里说 Core 的「改动文件数」会 22 -> 23;**实际仍是 22**,因为 `BackendApi.cs` 本来就在那 22 个里(B2c3 改过它两行)。已在细则里更正,子代理不必为我的预测负责。
+
+**这一包之后,GOAL 完成标准还差什么**:后端能跑(已证)、**界面还没有任何真实页面**(C3..C8 未开始)、`Motion`/Toast/DropVeil 等视觉件未落(C2c)、全页冒烟矩阵与文档收尾(D1/D2)、以及 macOS 真机一切(永远标未验证)。
