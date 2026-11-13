@@ -542,9 +542,13 @@ internal sealed class C4LayerHost : IDisposable
 /// </summary>
 internal sealed class SettingsProbePage : PageBase
 {
-    internal bool Loaded { get; private set; }
+    /// <summary>
+    /// <c>LoadAsync</c> 跑过没有。<b>不能叫 <c>Loaded</c></b> —— Avalonia 的 <c>Control</c> 本身有个
+    /// <c>Loaded</c> 事件,那样命名会 CS0108(成员隐藏),而本工程的告警红线只允许 SYSLIB0014 ×1。
+    /// </summary>
+    internal bool LoadRan { get; private set; }
 
-    internal bool Shown { get; private set; }
+    internal bool ShownRan { get; private set; }
 
     /// <summary>工厂收到的实例名(证明参数是页面传下来的,不是写死的)。</summary>
     internal string Instance { get; private set; } = "";
@@ -559,12 +563,12 @@ internal sealed class SettingsProbePage : PageBase
 
     protected override Task LoadAsync()
     {
-        Loaded = true;
+        LoadRan = true;
         return Task.CompletedTask;
     }
 
     public override void OnShown()
     {
-        Shown = true;
+        ShownRan = true;
     }
 }

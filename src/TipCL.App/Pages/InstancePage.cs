@@ -383,7 +383,8 @@ public sealed class InstancePage : PageBase
 
 	/// <summary>选中某个实例卡(同一个就什么都不做):只重画新旧两张卡,并把新的滚进视野。</summary>
 	internal void Select(string? name)
-	{		if (!(_selected == name))
+	{
+		if (!(_selected == name))
 		{
 			string? previous = _selected;
 			_selected = name;
