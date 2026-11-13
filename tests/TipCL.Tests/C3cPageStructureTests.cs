@@ -130,6 +130,23 @@ public class C3cPageStructureTests
             Assert.Contains("library", PageRegistry.Ids);
             Assert.True(PageRegistry.Unregister("instance"));
             Assert.True(PageRegistry.Unregister("library"));
+            // 【C5 更正 · 同一套做法】C5a 注册了 settings、C5b 注册了 account / tasks ⇒ 同样先把前提还原。
+            // 期待集合仍**逐个点名**(断言只增不减):多出任何一个没人认领的 id,下面那条 DoesNotContain 照样会红。
+            Assert.Contains("settings", PageRegistry.Ids);
+            Assert.Contains("account", PageRegistry.Ids);
+            Assert.Contains("tasks", PageRegistry.Ids);
+            Assert.True(PageRegistry.Unregister("settings"));
+            Assert.True(PageRegistry.Unregister("account"));
+            Assert.True(PageRegistry.Unregister("tasks"));
+            // 【C4 收尾更正】上面那两段是"谁注册了什么"的逐项记录(断言只增不减);但此刻注册表里
+            // 仍可能有**别的包**注册的页面 ⇒ 把所有非 launch 的 id 一并临时摘掉,才算真的把时代前提
+            // 还原成"只有启动页"。这样后面再有新包注册页面,也不会把这条历史断言弄红
+            // (D-126 的口径:还原前提,原断言一字不改)。C3cScope 会在 Dispose 里整体还原注册表。
+            foreach (string other in PageRegistry.Ids.Where(id => id != C3cExpected.PageId).ToList())
+            {
+                PageRegistry.Unregister(other);
+            }
+
             Assert.DoesNotContain(PageRegistry.Ids, id => id != C3cExpected.PageId && id != "");
         });
     }

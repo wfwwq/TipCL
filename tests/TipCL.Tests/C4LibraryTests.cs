@@ -388,7 +388,14 @@ public class C4LibraryTests
         });
     }
 
-    /// <summary>【Windows 源】<c>LibraryPage.cs:363-392</c>:副行里的「上次游玩」是从 <c>get_playtime.sessions</c> 派生的(取每个版本最近一次)。</summary>
+    /// <summary>
+    /// 【Windows 源】<c>LibraryPage.cs:363-392</c>:副行里的「上次游玩」是从 <c>get_playtime.sessions</c>
+    /// 派生的,并且**取每个版本最近的那一次**(两条会话给同一个版本,显示的必须是新的那条)。
+    ///
+    /// 时间戳的算法刻意做成**与跑测时刻无关**:用"今天 00:05"与"它减一小时(= 昨天 23:05)"。
+    /// 一开始写的是 <c>Now.AddHours(-1)</c>,凌晨 0 点到 1 点之间跑会跨到昨天 ⇒ VSTest 通道红、
+    /// 进程内通道绿(两条通道跑的时刻不同),本包实测踩到并改掉。
+    /// </summary>
     [Fact]
     public void Library_last_played_comes_from_the_playtime_sessions()
     {
@@ -396,14 +403,16 @@ public class C4LibraryTests
         {
             using var scope = C4Scope.Capture();
             using var toasts = new C3cToasts();
-            long recent = DateTimeOffset.Now.AddHours(-1).ToUnixTimeSeconds();
+            long today = new DateTimeOffset(DateTime.Today.AddMinutes(5)).ToUnixTimeSeconds();
+            long yesterday = today - 3600L;
             using var api = new C3cFakeApi()
                 .Route("get_version_rows", "[" + C4Files.VersionRowJson("1.20.1", "") + "]")
-                .Route("get_playtime", "{\"sessions\":[{\"version\":\"1.20.1\",\"start\":" + recent + "}]}");
+                .Route("get_playtime", "{\"sessions\":[{\"version\":\"1.20.1\",\"start\":" + yesterday + "},{\"version\":\"1.20.1\",\"start\":" + today + "}]}");
             using var harness = C4LayerHost.Show();
             PageBase page = C4Files.Mount(harness, new LibraryPage());
             C4Files.Load(page);
             Assert.Contains(C4Files.Texts(page), t => (t.Text ?? "").Contains("上次游玩 今天", StringComparison.Ordinal));
+            Assert.DoesNotContain(C4Files.Texts(page), t => (t.Text ?? "").Contains("昨天", StringComparison.Ordinal));
         });
     }
 
@@ -555,7 +564,7 @@ public class C4LibraryTests
             Assert.True(page.GroupsNow()["vanilla"]);
             Assert.True(prefs.Expanded["lib:vanilla"]);
             // 键名没写错:别的键不该被写进来
-            Assert.Equal(1, prefs.Expanded.Count);
+            Assert.Single(prefs.Expanded);
         });
     }
 
@@ -622,7 +631,7 @@ public class C4LibraryTests
             C4Files.Click(StarButton(page, "\ue734"));
             C4Files.Flush(2);
             Assert.True(page.IsFav("1.20.1"));
-            Assert.True(prefs.VmFavorites["甲"].Contains("1.20.1"));
+            Assert.Contains("1.20.1", prefs.VmFavorites["甲"]);
             // 重画之后星钮换成实心(\ue735)
             Assert.NotNull(StarButton(page, "\ue735"));
             C4Files.Click(StarButton(page, "\ue735"));
@@ -707,7 +716,7 @@ public class C4LibraryTests
             box.IsChecked = false;
             C4Files.Invoke(box);
             C4Files.Flush(2);
-            Assert.Equal(1, body.ColumnDefinitions.Count);
+            Assert.Single(body.ColumnDefinitions);
             Assert.False(LibraryPage.FoldersVisible());
             PageLayoutDoc? saved = PageLayoutStore.Load("library");
             Assert.NotNull(saved);

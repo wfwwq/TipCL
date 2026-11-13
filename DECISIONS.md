@@ -1793,3 +1793,123 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   动画(它们没消失,只是没人推帧;本用例一泵就会跑完并减数,差值甚至变成 **−2**)。两条通道用例顺序不同,
   直接断言总数会 VSTest 绿、进程内执行器红(本包实测踩到)。所以 `ResetObservability()` 之后按**每条动画的编号**
   记账,`RunningAnimationsSinceReset` 只反映本用例起的那些。
+
+## D-133 C4:实例管理簇的依赖审计(任务书"自包含"第四次不成立)+ 照抄未改的一处 Windows 路径写法
+
+- **任务书前提**:「五个文件(~75 KB)只差 `ModsDialog` / `SavesDialog` 两个对话框,其余服务都已移植」。
+  **实测不成立**(与 D-117 / D-118 / D-121 同一类问题,**第四次**):
+  | 缺什么 | 大小 | 处理 |
+  |---|---|---|
+  | `Models\ModsTarget.cs` | 201 B | `Copy-Item` 字节级搬进 `src\TipCL.App\Models\`(SHA256 与 Windows 源逐字节一致、无 BOM、LF) |
+  | `Models\ModUpdateRow.cs` | 887 B | 同上 |
+  | `Models\SaveRow.cs` | 426 B | 同上 |
+  | `Models\BackupRow.cs` | 222 B | 同上 |
+  | `Models\MediaRow.cs` | 207 B | 同上 |
+  | `Models\GlobalModRow.cs` | 183 B | 同上 |
+  | `Models\VersionRowDto.cs` | 736 B | 同上 |
+  | `Pages\GlobalModsDialog.cs` | 1956 B | **不是 DTO,是 WPF 代码** ⇒ 按同一套换名规则移植(它是本包**唯一**超出"五个文件"清单的产品文件;`ModsDialog.cs:77` 的「全局模组」按钮直接调它,不搬就是静默桩) |
+- 门面计数(任务书给的 `Ui` x58 / `Dlg` x9 / `I18n` x98 / `Motion` x1 / `EnableDrop` x3 / `Thumbs`·`LoaderIcons` x3 等)**逐项复核吻合**,
+  缺的只有模型层与那一个小对话框。`src\TipCL.Core` 一字节未动。
+- **按红线停下并报告的一处**:`InstanceDetailPage` 的「设置」分段内嵌 Windows 的 `VersionManagePage`
+  (34490 字节的**整页**,属别的工作包)——见 D-134。
+- **照抄未改的一处 Windows 写法(用户可见,请 Lead 知悉)**:`LibraryPage.FolderPathFor` 在实例没给 `Path` 时
+  用 `_rootPath.TrimEnd('\\','/') + "\\" + name` 拼一条**反斜杠**路径。mac 上这会在"路径缺失"那一支显示成
+  Windows 风格路径。本包按"忠实移植"保留(Windows 源码就是这么写的,同文件里 `AddFolderAsync` 又用
+  `TrimEnd('\\','/')`,说明 Windows 自己也是混的);要改成平台路径请单开小包,**本包不擅自改语义**。
+
+## D-134 C4:`InstanceDetailPage` 的「设置」分段走注入缝 + 如实占位(用户可见降级,请 Lead 裁决)
+
+- **事实**:Windows 的「设置」分段是 `_settings ??= new VersionManagePage { Folder = _inst }`,而
+  `VersionManagePage` 是 **34490 字节的整页**(mac 侧完全不存在,属 C3 的后续包)。任务书红线:大文件 / 整页
+  **不许本包顺手搬**。
+- **选择(保守 + 不静默)**:分段按钮**照 Windows 建**(「设置」是第 5 个 `ToggleButton`,文案、顺序、`Seg.Item` 类名一致);
+  点击走 mac 侧新增的 `internal static Func<string, PageBase>? InstanceDetailPage.SettingsPageFactory`;
+  **挂点没接时**那一栏显示一句如实的占位(「版本管理页还没移植」+ 为什么),
+  **不是空白、也不是假装能用**(与 D-119 的 `CrashUi.AiFixLauncher`、D-122 的 `LaunchPage.FlyToTasksSeam` 同一口径)。
+  接上工厂之后:页面照 Windows 走 `EnsureLoadedAsync()` + `OnShown()`,并且 `_settings ??=` 只建一次。
+- **这是一处用户可见的行为差异**,请 Lead 裁决:接受这个降级,还是把「设置」分段排进版本管理页那一包
+  (那时 `InstanceDetailPage` 一行都不用改,只要把工厂接上)。
+- 另记:`InstanceDetailPage` **不是导航页**(Windows 也没有它的 id),它由实例库「实例详情」换进页内容;
+  本包**没有**给它注册任何页面 id,并用一条用例把这个现状钉住。
+
+## D-135 C4:写这一包的测试时实测到的四条(Avalonia / 本仓库纪律)
+
+1. **`BridgeClient` 序列化会把非 ASCII 转义成 `\uXXXX`** ⇒ 断言"发给后端的参数值"时,直接
+   `Assert.Contains("\"instance\":\"默认\"", 参数原文)` **必然失效**(原文里是 `\u9ED8\u8BA4`)。
+   本包新增 `C4Files.ParamString` / `ParamStringIn` / `AssertParam`:按 JSON 解析后取**解码值**再比。
+   这条与通道无关(两条通道都会红),但踩一次就要重跑一遍四条通道,所以记下来。
+2. **Avalonia 的 `MenuItem` 在"程序化 Click"下不会翻转 `IsChecked`**(本机探针实测:`IsChecked` 保持原值、
+   处理器读到的也是原值;键盘 Enter / Space 激活同样不抛 `Click`;而它自己的 `IMenuItem.RaiseClick` 是
+   **internal**,测试里碰不到)。翻转发生在**指针点击那条路**里。⇒ 可勾选菜单项的用例按"真实点击进处理器那一刻
+   的状态"**先把 `IsChecked` 翻转做掉再抛 Click**(`LibraryPage` 的「显示文件夹栏」用例就是这么写的,
+   并在注释里写清了为什么)。
+3. **离屏的 `DispatcherTimer`(220ms 防抖)在会被 `Sleep` 的泵里不可靠** ⇒ 页面"过滤 → 计数"这类断言
+   改成:①先钉"防抖没过点之前计数不该变";②再 `RefreshAsync()` 走一遍 `Render()` 验过滤结果。
+   另外 **`DateTimeOffset.Now.AddHours(-1)` 这种相对时间戳在凌晨 0~1 点会跨到昨天** —— 本包因此出现过
+   "进程内通道绿、VSTest 通道红"(两条通道跑的时刻不同);改成"今天 00:05"与"它减一小时"之后与跑测时刻无关。
+4. **分析器告警也算进红线**:`Assert.Equal(N, collection.Count)` 触发 xUnit2013、`Assert.True(list.Contains(x))`
+   触发 xUnit2017,而红线是"除 `NU1900` 外只许 `SYSLIB0014` ×1" ⇒ 一律改用 `Assert.Single` / `Assert.Empty` /
+   `Assert.Contains`;`Avalonia.Controls.Control` 上**已经有 `Loaded` 事件** ⇒ 测试探针页的字段不能叫 `Loaded`
+   (CS0108 成员隐藏),本包改叫 `LoadRan`。
+
+## D-136 C4:提交顺序、与 C3c 时代前提的冲突、以及和别人共树的纪律
+
+- **提交顺序 (c)/(d) 对调**(如实记录):任务书要求先 `LibraryPage` 后 `InstancePage`,但
+  `LibraryPage` 依赖 `InstancePage.SetDefaultAsync` 与 `InstanceDetailPage` ⇒ **先提交 InstancePage +
+  InstanceDetailPage + instance 注册,再提交 LibraryPage + library 注册**,否则没有一个中间提交能编译
+  (写桩是红线)。与 C3c / C2c2 的同类处理一致。
+- **C3c 的既有用例按 D-126 还原前提**:`C3cPageStructureTests.Construction_does_not_throw_without_a_backend`
+  里有一条"注册表里只有启动页"的断言,本包注册 `instance` / `library` 之后不再成立。处理:**先把前提还原**
+  (`PageRegistry.Unregister` 两个 id,C3cScope 会在 Dispose 里还原注册表),原来那条断言**一字不改**地保留,
+  并**另加**两条"C4 确实注册了它们"的断言 —— 断言只增不减,没有删测试 / 放宽断言 / 加 Skip。
+- **共树纪律(本包实测)**:`tools\with-build-lock.ps1` 落地前后,本包遇到过两次外部干扰:
+  ①`dotnet test` 通道在别人重编译同一棵输出树时从全绿变成 115 失败(Lead 已为此加了锁);
+  ②收尾阶段 `src\TipCL.App\Pages\TasksPage.cs` / `FirstRunWizard.cs`(别的工作包)在树里**编译不过**,
+  导致本包的构建命令直接失败。⇒ **凡是 dotnet 命令(含 smoke)都必须包在锁里**,并且**只认自己跑出来的
+  绿色结论**:别人改坏的树不是我的失败,但也不能拿它当我的证据。
+
+
+## D-137 C5b:`SkinPng` 报的是"小而自包含、字节级搬",实测搬不了(WPF 成像没有 Avalonia 等价物)+ 三条框架实测
+
+**背景**:`AccountPage` 需要"把皮肤 PNG 拼成正面全身像"。Windows 的 `Pages\SkinPng.cs` 只有 3878 B,
+我在审计时按"小而自包含"报给 Lead(和之前 D-117/D-118/D-121 那几次"自包含"的前提一样乐观),
+Lead 批准"字节级搬进 `Models\`"。
+
+**实测:搬不了。** 那份文件整个建立在 WPF 的成像 API 上,一个同名等价物都没有:
+
+| Windows(WPF) | Avalonia 侧 | 处置 |
+|---|---|---|
+| `DrawingVisual` + `DrawingContext.DrawImage` + `ScaleTransform(8,8)` | 无 `DrawingVisual` | 换成 `Canvas` + `Image`(部件 8 倍放大、`RenderTransformOrigin(0.5,0)` 做镜像) |
+| `CroppedBitmap` | 无 `CroppedBitmap` | 换成"整图放大后塞进一个 `ClipToBounds` 的 `Canvas`、再平移到部件位置"(数学等价,不需要像素级 API) |
+| `BitmapImage` + `CacheOption.OnLoad` + `IgnoreColorProfile` | `Bitmap` 只能从流建 | 走本仓既有的 `ImageDecode`(注入缝 + Core 的 Skia 编解码器) |
+| `BitmapScalingMode.NearestNeighbor` | — | `BitmapInterpolationMode.None`(Wallpaper.cs 的既有口径) |
+| `RenderTargetBitmap(128, 256, 96, 96, Pbgra32)` | 有 `RenderTargetBitmap` | 保留 128x256/96dpi;另外**必须先 `Measure` + `Arrange` 再 `Render`**,否则拍出来是空白 |
+
+**保留下来的是算法与全部常量**(这才是"移植"该保的东西):12 个部件的 `(sx,sy,sw,sh,dx,dy,mirror)` 与顺序、
+逻辑画布 16x32、`slim` 的 3 像素臂宽、64x32 旧皮肤的 `height*2 <= width` 分支、输出一律 128x256、
+`PixelWidth < 64 → null`、任何失败都 `return null` 不抛。落点按 Lead 指定放在 `src\TipCL.App\Models\SkinPng.cs`
+(Windows 是 `Pages\`,命名空间改 `TipCL.Models` 以便 `AccountPage` 直接可见)。
+
+**三条框架实测(都是本包真跑出来才发现的)**:
+1. **`Button.Content` 改了,`AutomationProperties.Name` 不跟着变**:`Ui.Btn` 在创建时把文字写进自动化名,
+   `Sync` 里把「取消」改成「清除」之后,自动化名仍是「取消」。用自动化名断言"现在显示哪个词"会拿到过期答案
+   ⇒ 判断当前文案只能看 `Content`(本包第一版用例因此红了,修的是**测试期望**,产品代码没动)。
+2. **`Control.IsVisible` 只是控件自己的标志**:祖先 `IsVisible = false` 时它自己仍是 `true`。
+   Windows 藏的是 `logWrap`(那层 `Ui.Pane` 的 Border),所以断言必须落在那层壳上 —— 想一次问"到底看不看得见"
+   要用 `IsEffectivelyVisible`(但离屏宿主窗口不一定算 visible,所以本包选了"断言那层壳"这条与 Windows 同构的路)。
+3. **`Dlg.Panel` 推出来的不是 `DialogCard`**:`C3bFiles.WaitDialog()` 等的是 `DialogCard`(给 `Confirm`/`Ask` 用的),
+   对 `Dlg.Panel` 必然等到超时。面板要按"标题文字"泵(`PanelCard`)。向导、三个对话框都踩得上这条。
+
+## D-138 C5b:`SyncAccountChipAsync` 有意不搬;向导的设置刷新走注入缝;`MaybeShowAsync` 没有调用点
+
+1. **`AccountPage.LoadAsync` 的头一行 `_ = AppServices.Window?.SyncAccountChipAsync();` 整条不写。**
+   mac 外壳在 C2b 就**故意删掉了顶栏的 AI/主题/账号圆片**(`MainWindow.cs:40` 有记录,Lead 把 C2c3 那条待办降级为可选)。
+   为它新增一个外壳方法就是给不存在的控件造同步活(GOAL §2.5 禁止的"假装完成")。Lead 已裁决:如实登记即可,
+   这一条算 **C2b/C2c3 的已知缺口**,不算 C5b 的降级。代码里留了注释指向本条。
+2. **`FirstRunWizard` 结尾那次"刷新设置页"走注入缝**:Windows 是
+   `AppServices.Window?.GetPage("settings") is SettingsPage page → page.RefreshAsync()`,而 `SettingsPage`
+   由 C5a 在另一个 teammate 手里。本包不凭空引用别人的页面类型,也不改外壳去接:留
+   `internal static Func<Task>? SettingsRefresh`,**接了才调、没接就什么都不做**(与 D-119 / D-122 / D-131 同口径),
+   接线由 Lead 在两边都落地后处理。有一条用例专门钉"缝为空时也走完、不抛、不假装刷新过"。
+3. **`FirstRunWizard.MaybeShowAsync()` 在 mac 侧没有任何调用点**:Windows 是外壳启动时调它决定弹不弹。
+   本包不碰外壳(红线),**如实记成"外壳级缺口"交 Lead 统一处理**;`MaybeShowAsync` 本身有用例(读 `first_run` 为假时不推浮层)。

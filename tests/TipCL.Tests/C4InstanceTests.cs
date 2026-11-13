@@ -733,9 +733,9 @@ public class C4InstanceTests
             var detail = C4Files.Mount(harness, new InstanceDetailPage(new InstanceInfo { Name = "甲" }, delegate { }));
             C4Files.Flush(2);
             detail.ShowSeg(4);
-            C4Files.Pump(() => probe != null && probe.Loaded);
+            C4Files.Pump(() => probe != null && probe.LoadRan);
             Assert.Equal("甲", probe!.Instance);
-            Assert.True(probe.Shown, "OnShown 也要被调到(Windows 同)");
+            Assert.True(probe.ShownRan, "OnShown 也要被调到(Windows 同)");
             ContentControl host = SegmentHost(detail);
             Assert.Same(probe, host.Content);
             // 再切一次不会重新建页(Windows 的 _settings ??=)

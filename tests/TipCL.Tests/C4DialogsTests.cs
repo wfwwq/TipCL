@@ -87,7 +87,7 @@ public class C4DialogsTests
             C4Files.PumpTask(show);
             Control panel = C4Files.PanelCard(I18n.L("模组管理 · {0}", "默认"));
             ComboBox target = C4Files.Find<ComboBox>(panel, "目标下拉");
-            Assert.Equal(1, target.Items.Count);
+            Assert.Single(target.Items);
             Assert.Equal(I18n.L("实例共享 mods 目录"), target.Items[0]);
             Assert.Equal(0, target.SelectedIndex);
             // 兜底项的 Value 是空串 ⇒ 拉列表时 version 也是空串
@@ -406,7 +406,7 @@ public class C4DialogsTests
             Control panel = C4Files.PanelCard(I18n.L("模组管理 · {0}", "默认"));
             Assert.True(C4Files.HasText(panel, I18n.L("共 {0} 个模组", 2)));
             // 目标表里那一条也是空对象(Label / Value 都回落成空串),下拉必须仍有 1 项
-            Assert.Equal(1, C4Files.Find<ComboBox>(panel, "目标下拉").Items.Count);
+            Assert.Single(C4Files.Find<ComboBox>(panel, "目标下拉").Items);
         });
     }
 
@@ -1179,21 +1179,21 @@ public class C4DialogsTests
             Task mods = ModsDialog.ShowAsync("默认");
             C4Files.PumpTask(mods);
             Control modsPanel = C4Files.PanelCard(I18n.L("模组管理 · {0}", "默认"));
-            Assert.Equal(1, C4Files.Descendants(modsPanel).OfType<ComboBox>().Count());
+            Assert.Single(C4Files.Descendants(modsPanel).OfType<ComboBox>());
             Assert.True(C4Files.HasButton(modsPanel, I18n.L("检查更新")));
             C4Files.ClosePanel(modsPanel);
 
             Task saves = SavesDialog.ShowAsync("默认", "");
             C4Files.PumpTask(saves);
             Control savesPanel = C4Files.PanelCard(I18n.L("存档管理 · {0}", "默认"));
-            Assert.Equal(1, C4Files.Descendants(savesPanel).OfType<ComboBox>().Count());
-            Assert.Equal(0, C4Files.Descendants(savesPanel).OfType<CheckBox>().Count());
+            Assert.Single(C4Files.Descendants(savesPanel).OfType<ComboBox>());
+            Assert.Empty(C4Files.Descendants(savesPanel).OfType<CheckBox>());
             C4Files.ClosePanel(savesPanel);
 
             Task global = GlobalModsDialog.ShowAsync();
             C4Files.PumpTask(global);
             Control globalPanel = C4Files.PanelCard(I18n.L("全局模组"));
-            Assert.Equal(0, C4Files.Descendants(globalPanel).OfType<ComboBox>().Count());
+            Assert.Empty(C4Files.Descendants(globalPanel).OfType<ComboBox>());
             C4Files.ClosePanel(globalPanel);
             Assert.Equal(0, C4Files.LayerCount());
         });
@@ -1298,7 +1298,7 @@ public class C4DialogsTests
             Assert.True(C4Files.HasText(panel, I18n.L("共 {0} 个模组", 0)));
             Assert.True(C4Files.HasText(panel, I18n.L("还没有模组")));
             C4Files.Settle(4);
-            Assert.Equal(0, toasts.Items.Count);
+            Assert.Empty(toasts.Items);
         });
     }
 
@@ -1403,7 +1403,7 @@ public class C4DialogsTests
             C4Files.Pump(() => api.Count("open_global_mods") >= 1);
             Assert.Equal(1, api.Count("open_global_mods"));
             C4Files.Settle(4);
-            Assert.Equal(0, toasts.Items.Count);
+            Assert.Empty(toasts.Items);
         });
     }
 
