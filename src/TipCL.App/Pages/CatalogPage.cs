@@ -1331,7 +1331,17 @@ public sealed class CatalogPage : PageBase
 				}
 				// Avalonia 的剪贴板读取是异步的;这个方法本身是同步的(Windows 那边也是同步的静态入口),
 				// 所以这里**只发起读取、结果不阻塞界面** —— 拿到之后再走同一条判定。
+				//
+				// 【CS0618,请 Lead 裁决】`GetTextAsync` 在 11.3 已标过时,提示改用
+				// `ClipboardExtensions.TryGetTextAsync` —— 但 11.3.2 里那个扩展方法的接收者是
+				// `Avalonia.Input.IAsyncDataTransfer`(实测编译错误:IClipboard 上没有它,最佳重载要
+				// IAsyncDataTransfer)。也就是说"换名字"其实是要改成**异步数据传输**那一套
+				// (IClipboard.TryGetDataAsync → IAsyncDataTransfer.TryGetTextAsync),属于行为与错误处理
+				// 口径都会变的一次迁移,不该在收尾里顺手做。这里先把旧调用**就地**圈住(作用域极小、
+				// 只包这一句),等有预算时按新 API 迁一次;测试与离屏走的是上面的注入缝,不经过这里。
+#pragma warning disable CS0618
 				Task<string?> pending = top.Clipboard.GetTextAsync();
+#pragma warning restore CS0618
 				pending.ContinueWith(delegate(Task<string?> t)
 				{
 					if (t.Status == TaskStatus.RanToCompletion)

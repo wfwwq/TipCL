@@ -337,6 +337,9 @@ public class C6aPagesTests
             C5aFiles.Settle(2);
 
             C5aFiles.Pump(() => api.Count(method) >= 1, 9000);
+            // 用上 title 这一列:顺手把"这一段内嵌的目录页标题 = 该种类的标题"钉住(Theory 的每一行都真的被用到)
+            CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
+            Assert.Equal(title == "Mod" ? "Mod" : I18n.L(title), catalog.Title);
             Assert.Equal("", C5aFiles.ParamAt(api, method, "query"));
             // 【Windows 源】<c>:127</c>:来源下拉的初值是种类的 DefaultSource(有默认来源的种类就不是「全部」)
             Assert.Equal(source, C5aFiles.ParamAt(api, method, "source"));
@@ -478,7 +481,11 @@ public class C6aPagesTests
             page.ShowSeg(1);
             C5aFiles.Pump(() => api.Count("search_mods") >= 1, 9000);
             CatalogPage catalog = C5aFiles.Descendants(page).OfType<CatalogPage>().Single();
-            Assert.Single(C5aFiles.Find<ListBox>(page, "结果列表").Items);
+            // 【时机】"请求到达" ≠ "续体跑完":搜索的续体(TryCallAsync 返回之后才 ShowRows)要等 Dispatcher
+            // 再跑一轮。所以**等效果**(列表里真的有了一行)再断言 —— 条件成立 + 有截止时间(见 D-151)。
+            ListBox resultList = C5aFiles.Find<ListBox>(page, "结果列表");
+            C5aFiles.Pump(() => resultList.Items.Count > 0, 9000);
+            Assert.Single(resultList.Items);
 
             // 驱动"点这一行的安装"那一层(D-115 / D-127),再推卡片(D-113)
             Task install = catalog.InstallRowForTest(new CatalogItem { Name = "JEI", Slug = "jei", Source = "Modrinth" });
