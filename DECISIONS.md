@@ -2077,3 +2077,33 @@ Lead 在 C5a 裁决里点名要求改成"切到第 6 段时才经工厂建"。ma
   这不是缺陷(Windows 的 `Cached` 与 `WarmAsync` 就是这个次序),但用例必须先 `RefreshAsync()` 再断言后端文案。
 - **`Dlg.Busy` 包住 `await Dlg.Alert` 时,两层浮层同时在**:提示卡没关之前 Busy 那层不回收,
   所以系统信息那一步的浮层数是 **2** 而不是 1(`using` 的边界就是 Windows 的那对花括号)。
+
+## D-147 C6b:`JavaPage` 的「打开所在目录」走既有口径 + 一条揭示注入缝(不造第二套平台分支)
+
+Windows 的最后一步是 `Process.Start("explorer.exe", "/select,\"<path>\"")` —— **Windows 专有**,不许照搬。
+按 Lead 在 C6b 裁决里的口径,**先找现成口径**:项目里已经有 `TipCL.Core.Launcher.Crash.ShellOpen(path)`
+(B1b 抽出来的那条:Windows 走 explorer、mac 走 `open`、Linux 走 `xdg-open`),而且它自带
+`Crash.ShellOpenHook` —— **测试靠它拦截,绝不真开窗口**(`B1b` 的注释原话)。所以没有再造第二套平台分支。
+
+三段顺序(逐字保留 Windows 的"先问后端"):
+1. 后端 `open_media { path }`(与 Windows 同序、同名、同参);
+2. 不成则走新加的注入缝 **`JavaPage.FolderRevealer`**(`Action<string>?`,与 `CrashUi.ClipboardWriter` /
+   `CatalogPage.ClipboardReader` / `FileDrop` 同一模式)—— mac 的等价语义是 Finder 里**揭示并选中**(`open -R <path>`);
+3. 缝没接 ⇒ 退回 `Crash.ShellOpen(target)`,**只打开目录、不选中文件**;这是**用户可见的小降级**,
+   代码注释与本节都写明了,不假装选中(与 D-119 / D-134 同一口径)。
+
+目标路径的判据逐字照抄 Windows:`File.Exists(path) ? Path.GetDirectoryName(path) ?? path : path`
+(测试里路径不存在 ⇒ 原样交给后端/缝,所以断言的是原路径)。
+
+**测试里绝不起进程**:两条用例分别钉 ①后端成功时既不揭示也不用壳 ②后端失败且没接缝时走
+`Crash.ShellOpenHook` 拦下来的那条(同时证明"只打开目录"这一支的语义)。两条都在 `finally` 里还原
+`FolderRevealer` 与 `ShellOpenHook`(进程级静态,别的用例也会动它们)。
+
+## C6b 补记:`JavaPage` 已交付(依赖审计的第二件),`MultiplayerPage` 的审计结论
+
+- `JavaPage`(12320 B / 413 行)已移植 + 注册接缝(分段 2),`Models\JavaInfo`(181 B)字节级搬;
+  8 条用例,C6b 合计 **30 条**两条通道全绿。
+- `MultiplayerPage`(18.8 KB)审计结论:**可移植,不含整页/大件缺件**。依赖是 `Models\TerracottaSnap`(约 1 KB)
+  与 `TerracottaProfile`(同族小 DTO)—— 都是纯 DTO,可字节级搬;`Dlg.Prompt` 在 mac 侧**已存在**
+  (`Dlg.cs` 的 `Prompt(title, label, initial, placeholder)`);其余是 `Ui` / `BlockHost("multiplayer")` /
+  `BridgeEvent` / 既有的 `terracotta_*` 后端调用;`Ui.OpenUrl` 也在。按"小件字节级搬"的规矩,**下一步可开工**。
