@@ -46,6 +46,14 @@
     <AvaloniaResource Include="PremiumAssets\quilt_gh.png" />
   </ItemGroup>
 
+  <!-- C3c:启动页的默认背景 hero.jpg(无截图、也没设自定义壁纸时的回退全景图)。
+       Windows 侧它是**无条件**嵌入的 <Resource Include="PremiumAssets\hero.jpg">(紧凑版也有),
+       而 C2c2 那次只搬了 5 个加载器图标 —— 所以这是本次补上的第 6 个 PremiumAssets 资源,
+       字节级复制,URI 用 avares://TipCL/PremiumAssets/hero.jpg(见 LaunchPage.HeroSource)。 -->
+  <ItemGroup>
+    <AvaloniaResource Include="PremiumAssets\hero.jpg" />
+  </ItemGroup>
+
   <!-- C1a:色板与图标系统的用例要看 internal 的 Palette / LucideAssets(与 D-19 同一手法)。 -->
   <ItemGroup>
     <InternalsVisibleTo Include="TipCL.Tests" />
