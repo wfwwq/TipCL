@@ -3949,3 +3949,34 @@ D-83 的 C1c 遗留是「`Skeleton` 的横扫与 `SmoothScroll` 的滚轮平滑�
    观感会有细微差别;`Shine` 的 7 秒节拍、`HoverLift` 的阴影强度是照 WPF 的数值写的,未在真机校验。
 7. `%TEMP%` 下那 89 个 `tipcl*` 目录是历史遗留(此前会话留下),本包运行期间**没有**新增;
    `tipcl-probe` 属别的会话(D-61)。
+
+### Lead 验收(2026-11-13 10:10)
+
+结论:**C2a 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 四个提交(`70b7443` a / `c12c9ff` b / `1c4679f` c / `17615cd` d) | 工作树干净;无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线文件(`src\TipCL.Core`、`Themes\`、`MainWindow.cs`、`Smoke\`、`Ui.cs`、`UiExt.cs`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改 |
+| `Ported\FileKindsTests.cs` 恢复编译的改动 | 只有 A6 B 类范围内的 2 处:两处 `Path.GetTempPath()` → `TestHome.Root`;断言一字未改 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告 = `NU1900` ×4 + `SYSLIB0014` ×1 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0 / 通过 2467 / 总计 2467**(2257 → 2467,+210) |
+| 进程内执行器 第 1 / 2 次 | 都是**退出码 0,通过 2467 / 失败 0 / 不支持 0** |
+| `--smoke` light / dark | 3956 字节 `9F93EF3E…` / 3941 字节 `F687E6CD…`,**与裁决基准逐位一致** |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` / 残留进程 / `%TEMP%` 新目录 | 9328 / 889530606 / 2026-11-10 20:42:16;0 个;0 个 |
+
+**对子代理 4 个待裁决事项的裁决**:
+
+1. **任务书说「Core 里已有 `BridgeClient` / `BridgeEvent` / `BridgeCallException`」是错的** —— 子代理实测 Core 只有 `BackendApi` / `RpcDispatcher` / `BridgeServer` / `EventBus`;那三个类在 Windows 的 `Services\` 里。**接受它的做法**(字节级搬进 App、命名空间仍 `TipCL.Services`)。这是 Lead 写任务书时的事实错误,记此更正。
+2. **`Ui.Skeleton` 与 `SmoothScroll` 改成走 `Motion`**:交 **C2b**(任务书同时禁止改 `Ui` 门面与要求接线,是我给的约束冲突;C2b 无关这条禁令,由它统一改并复核 `Lucide.MotionEnabled` 转发)。
+3. **`AppServices.Window` 静态类型放宽成 Avalonia `Window`**:接受。为这一个字段把 `MainWindow` 改成 public 得不偿失;`ToastSink` 委托的做法也接受。
+4. **子代理修正了 Lead 插错位置的 `## C2a` 占位标题**:接受。Lead 当时用 C1b 小节里的一行作锚点插入,把 C1b 的「遗留与风险」列表切断了;现已把真实 C2a 小节追加到文件末尾。**同时记下两处文档瑕疵(纯排版,不再花提交去改)**:第 2989 与 3041 行有两个同名 `## C1a` 一级标题;C1c 的验收段落落在 C1b 小节末尾而不是 C1c 小节里。
+
+**只记录、不处理**:
+
+- `Payload` 在 mac 侧没有调用点(事实上的死代码,internal),留待 D 阶段清理。
+- `I18nCheck.cs`(469 行)未搬,若 D1 要 `--i18n-check` 需单开小包。
+- `EnsureCore` 的真实启动(真正拉起 `BackendApi` + `BridgeServer`)按 D-23 没有测过;这也是 GOAL 里「后端能否真的跑起来」的最后一个未验证点,归 C2b 的接线验收或 D1。
+
+**给 C2b 的接线清单(必须做,否则外壳不可用)**:`AppServices.Window`、`AppServices.ToastSink`、`Dlg.Host`、`Dlg.BlurTarget`、`Motion.Enabled = <用户开关>`、离屏的 `Dlg.SmokeActive` / `SmokeAutoAnswer` / `SmokeAutoCancelSystemDialog`,以及把 `Ui.Skeleton` 的横扫与 `SmoothScroll` 的滚轮平滑改走 `Motion`。
