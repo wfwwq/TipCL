@@ -546,3 +546,38 @@ System.InvalidOperationException : Collection was modified; enumeration operatio
 所以那句应读作"**(当日、无 portal 后端的盒子上)不是 GTK/portal**",**不是**"这个构建不会用 portal"。
 这类"文件选择器的形态"是**环境相关**的,证据必须连同环境快照(可见窗口清单 + `WM_CLASS` + pid + 有没有 portal)一起记录 ——
 这也是 R21j 那条并发教训的一部分(两个验证会话同机跑时,其中一个把 portal 启动了,另一个的现场记录因此对不上)。
+
+### 9.12 存档管理 chip 的隔离复验(2026-11-14,R21j 补记):6/6 有证据,1 项环境性无法验证
+
+> **本节取代 §9.11 结尾那条"媒体行的「导出」未测出"**:在**隔离显示**上重做之后它拿到了,而且拿到的是最硬的那种证据。
+> 之所以换环境,是因为 `:0` 上有另一个验证会话在并发点击(见 §9.11 与 PROGRESS R21j 的并发教训)。
+
+**环境**:`DISPLAY=:9`(Xvfb 1280x800x24 + xfwm4 + **私有 dbus**)、`TIPCL_HOME=/home/user/tipcl/chips-home9`
+(自己的夹具,与 `:0` 那个会话完全分开)、**同一个 AppImage**。主 agent 对下列可复核项逐条独立复核过。
+
+| # | chip | 结论 | 证据(已复核的用 ★ 标) |
+|---|---|---|---|
+| 1 | 存档行「导出」 | **通过** | ★`/home/user/Desktop/WorldDlg-out.zip` 271 B,`unzip -t` = `No errors detected`,两条目 `WorldDlg/level.dat` 10 B + `marker.txt` 9 B,且**条目 md5 与存档现场逐字一致**(`19030d24aa324805da31daf16f2754ae` / `ab0b884358ef3d28a8d0b7266a3c0345`);界面出现「已导出 …」;取消 / Esc 两路都关窗,Desktop 清单指纹不变、无新文件 |
+| 2 | 存档行「打开」 | **通过** | 可见窗口差分 + `pgrep` 真进程:`thunar file:///…/saves/WorldDlg`,新窗口 640x300「WorldDlg - Thunar」(`WM_CLASS` = thunar) |
+| 3 | 媒体区 | **通过** | 三档下拉实测切换(截图 167 B / 崩溃报告 66 B / 日志 41 B);日志「打开」→ 真起外部窗口 640x480「…latest.log - Mousepad」(+ 进程);**媒体「导出」→ `/home/user/Desktop/media-out.png`,md5 `0d64af0c45e7192c8b6704526ed06edc` 与源 png 逐字节相同** ★(复核方式:该 md5 等于 rig home 里那张 `2026-11-13_12.00.00.png`) |
+| 4 | 备份产物有效性 | **通过** | ★rig home 里 **6 个备份 zip,`unzip -t` 6/6 OK**,每个 271 B、含 `WorldDlg/level.dat` 10 B + `marker.txt` 9 B,条目 md5 与存档现场一致;把 `marker.txt` 改坏(md5 `dcf86fa9…`)后点「还原」→ 回到 `ab0b884358ef3d28a8d0b7266a3c0345`,与 `unzip -p <备份> WorldDlg/marker.txt` 的输出**逐字节相同**,`level.dat` 未变 |
+| 5 | 删除存档正路径 | **通过** | ★一次性存档 `WorldTwo`:先走取消分支(存档目录原样保留)→ 再点「永久删除」→ `WorldTwo` 消失、`WorldDlg` 完好(`saves/` 只剩 `WorldDlg`) |
+| 6 | (交叉)`:0` 那轮的 7 项 | 见 §9.11 | 两轮在各自 HOME/显示上得到一致结论(1/2/4 项互补,3 项的"打开"两轮都有外部窗口证据) |
+
+**无法验证(1 项,属环境缺口,不是 App 问题)**:媒体 = **截图(png)** 的「打开」看不到外部窗口。
+App 侧调用**已证**(xdg-open 收到正确的绝对路径参数),但**对照实验**把同一个 png 直接交给 `DISPLAY=:9 xdg-open`
+也是 `rc=0`、无进程、无窗口 ⇒ **这台机器没有 image/png 的图形处理器**。同一条调用链在"日志"上用 Mousepad
+给出了完整的外部窗口证据,所以这里能定位到"缺消费方"而不是"App 没调用"。
+
+**两条环境坑(值得记进方法)**:
+
+1. **私有 dbus 会继承调用者的 `DISPLAY`**。第一次在 `:9` 点「导出」**毫无反应** —— 真因不是 App,而是**私有 dbus 总线自身的
+   `DISPLAY=:0`**,于是 portal 的 GTK 选文件框全开在了另一个会话的 `:0` 上(现场有 7 个「导出存档」残留框)。
+   重建总线时带上 `DISPLAY=:9` 之后一切正常。**"隔离显示"必须连 dbus 会话一起隔离**,否则只是把对话框送到别人的屏幕上。
+2. **对话框会随内容高度重新居中**。上一轮那句"点导出没反应 / App 变聋"是**坐标误判**:那一刻该按钮在 `y≈249`,
+   而点的是 `(608, 299)` —— 落在两行存档之间的空白。**这类坐标每次都要重量,不能复用上一轮的量测结果**
+   (与 §9.11 里"选择器的视觉坐标 = 输入坐标、`xwininfo`/`wmctrl` 的 Y 都不可用"是同一条教训的两种表现)。
+
+**清理与边界**:该会话只 kill 自己的 pid(**刻意没有用 `pkill -f mount_TipCL`**,那会误杀 `:0` 上另一个会话的实例),
+`:9` 收尾后已不可连接,`:0` 零残留;`src/`、`tests/`、`docs/`、`PROGRESS.md`、`DECISIONS.md`、`tools/`、`progress/`、`_cmp/`
+**未改一字节**;机器侧只多了 rig 目录(`chips9*`)、`/home/user/Desktop/` 下两个证据文件,以及它 `apt` 装的 `xvfb`。
