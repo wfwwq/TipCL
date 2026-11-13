@@ -6109,10 +6109,10 @@ Avalonia 的 `MenuItem` 在程序化 Click 下**不翻转** `IsChecked`(翻转�
 | `dotnet test` 第 1 / 2 次 | `dotnet test TipCL.Mac.sln -c Release --no-build`(锁内跑) | 都是**退出码 0,失败 0 / 通过 3352 / 总计 3352** |
 | 进程内执行器 第 1 / 2 次 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll`(锁内跑) | 都是**退出码 0,总计 3352 / 通过 3352 / 失败 0 / 跳过 0 / 不支持 0** |
 | `--smoke` 八帧 | 见第 5 节的表(全部包在 `tools\with-build-lock.ps1` 里) | 退出码 0×7 + 2×1;四个新帧各复跑一次逐位相同 |
-| `%LOCALAPPDATA%\TipCL` | 开工第一条命令 / 收尾各量一次 | 两次都是 **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16** = Lead 基线逐项相同(**零写入**) |
+| `%LOCALAPPDATA%\TipCL` | 开工第一条命令 / 收尾各量一次 | 两次都是 **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16** = Lead 基线逐项相同(**零写入**;最后一轮四条通道与八帧冒烟跑完之后又复量一次,仍是这三个数) |
 | 真实桌面 / 图片 | 收尾 | 桌面 14 项、最新 **2026-11-12 19:02:53**(不变);图片 3 项、最新 **2026-11-06 23:39:03**(零写入) |
-| 残留进程 | `Get-Process testhost,TipCL,java,adb` | **0 个** |
-| `%TEMP%` 下的 `tipcl*` | 收尾 | 总数 **142**(C3d 记的 113);最新几条(`tipcl-tests-*` / `tipcl-det-*` / `tipcl-launch-*` / `tipcl-probe-*`)都落在本包的验证窗口内(**00:32–00:35**),但这些名字在本仓库源码里**一个都不存在**,而本仓库自己的测试隔离目录是 `tests\TipCL.Tests\bin\Release\net8.0\test-home\<guid>`(收尾时 540 个)⇒ 判给并行会话,但**本包无法自证归属**,如实记录 |
+| 残留进程 | `Get-Process testhost,TipCL,java,adb` | 本包四条通道跑完时是 **0 个**;最后一轮复测时看到 **1 个 `testhost.exe`**(01:57:43 起、父进程 9044 **还活着**、CPU 32.5s、`Responding=True`)⇒ 判定是**并行会话正在跑测试**,本包**没有**去杀它(杀了会破坏别人的运行) |
+| `%TEMP%` 下的 `tipcl*` | 收尾(最后一个数字是最终复测) | 总数 **113 → 142 → 153**;最新几条(`tipcl-tests-*` / `tipcl-det-*` / `tipcl-launch-*` / `tipcl-probe-*`)都落在本包窗口内(00:32–01:58),但这些名字在本仓库源码里**一个都不存在**,而本仓库自己的测试隔离目录是 `tests\TipCL.Tests\bin\Release\net8.0\test-home\<guid>`(收尾时 540 个)⇒ 判给并行会话,但**本包无法自证归属**,如实记录 |
 | `src\TipCL.Core` 有没有被动过 | `git diff --name-status b664f4f HEAD -- src/TipCL.Core` | **0 行输出**(空) |
 | Core 对 Windows 源的同一性 | 逐文件 SHA256(受版本控制的 248 个) | **238 有对应 / 216 一致 / 22 有改动 / 10 无对应**,与基线**完全相同** |
 | 编码 | 对本包新增 / 改动的 21 个文本文件逐个 `ReadAllBytes` | 无一例外:**无 BOM、CR=0、U+FFFD=0** |
