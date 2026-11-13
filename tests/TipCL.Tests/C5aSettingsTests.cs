@@ -597,17 +597,22 @@ public class C5aSettingsTests
             C5aFiles.Load(page);
             C5aFiles.PumpTask(page.SaveNowAsync());
 
-            Assert.Equal("false", C5aFiles.ParamAt(api, "save_settings", "data", "ui_dark"));
-            Assert.Equal("8", C5aFiles.ParamAt(api, "save_settings", "data", "download_threads"));
-            Assert.Equal("4096", C5aFiles.ParamAt(api, "save_settings", "data", "default_memory_mb"));
-            Assert.Equal("[854,480]", C5aFiles.ParamAt(api, "save_settings", "data", "default_resolution"));
-            Assert.Equal("#2E9B6B", C5aFiles.ParamAt(api, "save_settings", "data", "theme_color"));
-            Assert.Equal("default", C5aFiles.ParamAt(api, "save_settings", "data", "ui_bg_preset"));
-            Assert.Equal("builtin", C5aFiles.ParamAt(api, "save_settings", "data", "ai_mode"));
-            Assert.Equal("131072", C5aFiles.ParamAt(api, "save_settings", "data", "ai_context_window"));
-            Assert.Equal("true", C5aFiles.ParamAt(api, "save_settings", "data", "use_system_proxy"));
-            Assert.Equal("true", C5aFiles.ParamAt(api, "save_settings", "data", "auto_check_update"));
-            Assert.Equal("false", C5aFiles.ParamAt(api, "set_multi_instance", "allow"));
+            // 按**最后一次** save_settings 断言(防抖自动保存可能中途也 Tick 过一次,见 C5aFixtures.ParamAt)
+            int last = api.Count("save_settings") - 1;
+            Assert.True(last >= 0, "一条 save_settings 都没收到");
+            string Saved(string key) => C5aFiles.ParamAt(api, "save_settings", last, "data", key);
+
+            Assert.Equal("false", Saved("ui_dark"));
+            Assert.Equal("8", Saved("download_threads"));
+            Assert.Equal("4096", Saved("default_memory_mb"));
+            Assert.Equal("[854,480]", Saved("default_resolution"));
+            Assert.Equal("#2E9B6B", Saved("theme_color"));
+            Assert.Equal("default", Saved("ui_bg_preset"));
+            Assert.Equal("builtin", Saved("ai_mode"));
+            Assert.Equal("131072", Saved("ai_context_window"));
+            Assert.Equal("true", Saved("use_system_proxy"));
+            Assert.Equal("true", Saved("auto_check_update"));
+            Assert.Equal("false", C5aFiles.ParamAt(api, "set_multi_instance", api.Count("set_multi_instance") - 1, "allow"));
             // 密钥留空时**不带**这两个键(Windows 同)
             Assert.False(C5aFiles.ParamHas(api, "save_settings", "curseforge_api_key"));
             Assert.False(C5aFiles.ParamHas(api, "save_settings", "ai_api_key"));
@@ -632,7 +637,7 @@ public class C5aSettingsTests
             CheckBox switchBox = FindSwitchAfterLabel(page, I18n.L("允许多开"));
             switchBox.IsChecked = true;
             C5aFiles.PumpTask(page.SaveNowAsync());
-            Assert.Equal("true", C5aFiles.ParamAt(api, "set_multi_instance", "allow"));
+            Assert.Equal("true", C5aFiles.ParamAt(api, "set_multi_instance", api.Count("set_multi_instance") - 1, "allow"));
         });
     }
 
@@ -742,6 +747,13 @@ public class C5aSettingsTests
             using var harness = C4LayerHost.Show();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
+            // 视觉状态(主题色 / 背景预设)是 SettingsPage 的**进程级静态**,别的用例类可能动过它 ——
+            // 这条用例断言的是"保存时把界面上的值原样发出去",所以界面状态必须由本用例自己钉死。
+            page.PickSwatch("#2E9B6B");
+            ComboBox bg = C5aFiles.Descendants(page).OfType<ComboBox>()
+                .First(c => c.Items.OfType<object>().Any(o => (o.ToString() ?? "") == I18n.L("默认")));
+            bg.SelectedIndex = 0;
+            C5aFiles.Settle(2);
 
             C5aFiles.Click(C5aFiles.ByText(page, I18n.L("保存为主题包")));
             C3bFiles.WaitDialog();
@@ -752,9 +764,13 @@ public class C5aSettingsTests
 
             C5aFiles.Pump(() => api.Count("save_theme") >= 1);
             Assert.Equal("我的主题", C5aFiles.ParamAt(api, "save_theme", "name"));
-            Assert.Equal("#2E9B6B", C5aFiles.ParamAt(api, "save_settings", "data", "theme_color"));
-            Assert.Equal("false", C5aFiles.ParamAt(api, "save_settings", "data", "ui_dark"));
-            Assert.Equal("default", C5aFiles.ParamAt(api, "save_settings", "data", "ui_bg_preset"));
+            // 按**最后一次** save_settings 断言:500ms 防抖那条自动保存可能在本用例中途也 Tick 过一次
+            // (机器忙时才会,进程内通道因为快所以看不到 —— 本包在 VSTest 通道踩到过)
+            int last = api.Count("save_settings") - 1;
+            Assert.True(last >= 0, "一条 save_settings 都没收到");
+            Assert.Equal("#2E9B6B", C5aFiles.ParamAt(api, "save_settings", last, "data", "theme_color"));
+            Assert.Equal("false", C5aFiles.ParamAt(api, "save_settings", last, "data", "ui_dark"));
+            Assert.Equal("default", C5aFiles.ParamAt(api, "save_settings", last, "data", "ui_bg_preset"));
             C5aFiles.Pump(() => toasts.Has(I18n.L("已保存")));
         });
     }
@@ -941,7 +957,7 @@ public class C5aSettingsTests
             TextBox bgPath = C5aFiles.Descendants(page).OfType<TextBox>().First(b => (b.Tag as string) == I18n.L("图片或视频路径,留空则不用壁纸"));
             bgPath.Text = "/wall.png";
             C5aFiles.PumpTask(page.SaveNowAsync());
-            Assert.Equal("/wall.png", C5aFiles.ParamAt(api, "save_settings", "data", "ui_background"));
+            Assert.Equal("/wall.png", C5aFiles.ParamAt(api, "save_settings", api.Count("save_settings") - 1, "data", "ui_background"));
 
             // 预设背景应用失败:注入缝没接线时也如实报(不静默)
             page.PickPreset("preset-不存在");
@@ -1145,9 +1161,13 @@ public class C5aSettingsTests
             ComboBox lang = C5aFiles.Descendants(page).OfType<ComboBox>()
                 .First(c => c.Items.OfType<object>().Any(o => (o.ToString() ?? "") == I18n.L("English")));
             lang.SelectedIndex = 1;
-            C5aFiles.Pump(() => api.Count("translate") >= 3);
+            // 等**效果**(预览文案落地)再断言,而不是"泵到调了 3 次就数次数":文案落下说明 3 次 translate 都回来了,
+            // 这时候计数才确定(先计数会在续体还没跑完时假红 —— 本包在 VSTest 通道踩到过,见 C5a 的 DECISIONS)。
+            string expected = I18n.L("切换后界面会变成:") + "Settings · Settings · Settings" + I18n.L("(重启后全量生效)");
+            C5aFiles.Pump(() => C5aFiles.TextsWith(page, expected).Count > 0, 5000);
+            Assert.True(C5aFiles.HasText(page, expected), "预览文案没落地;现有文案:" + string.Join("|", C5aFiles.Texts(page).Select(t => t.Text)));
             Assert.Equal(3, api.Count("translate"));
-            Assert.True(C5aFiles.HasText(page, I18n.L("切换后界面会变成:") + "Settings · Settings · Settings" + I18n.L("(重启后全量生效)")));
+            Assert.Equal("en-US", C5aFiles.ParamAt(api, "translate", "lang"));
         });
     }
 

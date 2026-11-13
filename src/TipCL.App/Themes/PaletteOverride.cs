@@ -83,13 +83,13 @@ internal static class PaletteOverride
 		Poke(key, value);
 	}
 
-	/// <summary>写一条颜色覆盖(Windows 的 <c>paletteDictionary["C.xxx"] = color</c>)。</summary>
+	/// <summary>写一条颜色覆盖(Windows 是往色板字典上写同名颜色键,比如主题强调色那五个 <c>C.</c> 开头的键)。</summary>
 	internal static void SetColor(string key, Color color)
 	{
 		Set(key, color);
 	}
 
-	/// <summary>写一条刷子覆盖(Windows 的 <c>paletteDictionary["B.xxx"] = brush</c>)。</summary>
+	/// <summary>写一条刷子覆盖(Windows 是往色板字典上写同名刷子键,比如 <c>B.</c> 开头的那一批)。</summary>
 	internal static void SetBrush(string key, IBrush brush)
 	{
 		Set(key, brush);

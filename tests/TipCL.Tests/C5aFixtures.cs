@@ -55,6 +55,16 @@ internal sealed class C5aScope : IDisposable
 
     private readonly Dictionary<string, object> _overrideEntries;
 
+    private readonly string? _extrasDir;
+
+    private readonly string _themeColor;
+
+    private readonly string _background;
+
+    private readonly bool _flyAnimation;
+
+    private readonly int _flyDurationMs;
+
     private bool _disposed;
 
     private C5aScope()
@@ -72,6 +82,14 @@ internal sealed class C5aScope : IDisposable
         _clockOverride = Motion.ClockOverride;
         _variant = Application.Current!.RequestedThemeVariant;
         _registry = PageRegistry.Snapshot();
+        // SettingsPage 的**静态视觉状态**也是全局量:主题色 / 背景预设 / 外观附加项 / 落盘目录。
+        // 不还原它们的话,"点色块/换背景预设"的用例会把状态漏给后面的用例(本包实测踩到:
+        // 保存主题包那条读到了上一条留下的 ui_bg_preset="eye")。
+        _extrasDir = SettingsPage.ExtrasDirOverride;
+        _themeColor = SettingsPage.VisualThemeColor;
+        _background = SettingsPage.Extras.Background;
+        _flyAnimation = SettingsPage.Extras.FlyAnimation;
+        _flyDurationMs = SettingsPage.Extras.FlyDurationMs;
         // 覆盖层逐条抄下来:不是"清空了事" —— 别的用例(或外壳)先设过什么,收尾时要原样还回去。
         _overrideEntries = new Dictionary<string, object>(StringComparer.Ordinal);
         foreach (string key in PaletteOverride.KeysNow)
@@ -109,6 +127,12 @@ internal sealed class C5aScope : IDisposable
         Motion.ClockOverride = _clockOverride;
         Application.Current!.RequestedThemeVariant = _variant;
         PageRegistry.Restore(_registry);
+        // 设置页的静态视觉状态:先还落盘目录,再还把界面状态刷回去(顺序不能反 —— 刷回去那一步可能落盘)
+        SettingsPage.ExtrasDirOverride = _extrasDir;
+        SettingsPage.Extras.FlyAnimation = _flyAnimation;
+        SettingsPage.Extras.FlyDurationMs = _flyDurationMs;
+        SettingsPage.SyncPersistedThemeColor(_themeColor);
+        SettingsPage.SyncPersistedBackground(_background);
         // 覆盖层:先全清(把挂上去的那一层摘下来),再把进作用域之前的那些条目写回去。
         PaletteOverride.Reset();
         foreach (KeyValuePair<string, object> pair in _overrideEntries)
@@ -220,7 +244,18 @@ internal static class C5aFiles
     /// </summary>
     internal static string ParamAt(C3cFakeApi api, string method, params string[] path)
     {
-        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(api.ParamsOf(method));
+        return ParamAt(api, method, 0, path);
+    }
+
+    /// <summary>
+    /// 同上,但指定是第 <paramref name="index"/> 次调用。
+    /// 为什么要这个重载:设置页的自动保存是 500ms 防抖(<see cref="TipCL.Pages.SettingsPage"/> 的 QueueSave),
+    /// 机器忙的时候那条定时器可能在用例中途真的 Tick 一次 ⇒ 会有**额外的** <c>save_settings</c>;
+    /// 断言"我刚点的那条路发出去的载荷"必须按**最后一次**看,而不是第 0 次(本包在 VSTest 通道踩到过)。
+    /// </summary>
+    internal static string ParamAt(C3cFakeApi api, string method, int index, params string[] path)
+    {
+        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(api.ParamsOf(method, index));
         System.Text.Json.JsonElement cur = doc.RootElement;
         foreach (string key in path)
         {
