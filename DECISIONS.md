@@ -1975,3 +1975,40 @@ Lead 批准"字节级搬进 `Models\`"。
   4. `C5aScope` 补还原设置页的静态视觉状态与 `ExtrasDirOverride`(D-69)。
 - **纪律**:等待一律"条件成立 + 有截止时间",**不要**写"数调用次数"或"泵固定轮数";断言失败信息里带上实际观察值。
 - 佐证:修完后 `tools\c5a-verify.cmd`(build + VSTest + 进程内,一次锁里)连跑两轮,`C5a*` 用例两通道全绿。
+
+## D-142 C5c:`Ui.Section` 在窄页面降级为两行 —— 阈值用 `DesiredSize` 自校准 + 回滞,宽页面零像素变化
+
+**问题(实测,不是猜)**:mac 的页面区被 196px 侧栏压到约 **668px**,而 Windows 版没有侧栏 ⇒ 只在移植后暴露。
+`Ui.Section` 原样照抄 Windows 的 `G(null, "*,Auto")`:左列是标题块(`*`、**没有最小宽**),右列是调用方给的动作簇
+(实例页 = 计数 + 搜索框 + 4 个按钮 ≈ **653px**,也**不收缩**)⇒ 窄页面时左列被算成 **0 宽**。
+探针实测:`页面宽=668 标题宽=0 副说明宽=0 右簇宽=653`(副说明早就设了 `CharacterEllipsis`,但 0 宽时截断也救不了它)。
+
+**修法**:门面里加 `SectionNarrow.Watch(grid, head, right)`(与 `Section` 同文件)。
+- **阈值自校准**:`可用宽 < head.DesiredSize.Width + right.DesiredSize.Width` 才降级(把右簇换到第二行、跨两列、靠右)。
+  不写"窄于 560 就怎样"这种魔数 —— 魔数会在别的页面/别的字号上失效,而 `DesiredSize` 永远是当下的真值。
+- **回滞 `Slack = 6px`**:**必须有**。没有它,降级/恢复会互相触发 —— 换了行 → 宽度判定变化 → 又换回来 → 死循环/抖动。
+- **宽页面零变化**:摆得开就永远走原来的两列路径,所以 `launch` / 首屏 / `settings` / `tasks` / `account` 的冒烟帧**逐字节不变**
+  (实测:tasks 右簇窄、account 右簇 ~420,都不触发;settings 那处 Section 根本没有右簇)。
+
+**为什么修在门面**:`Ui.Section` 被 4 个页面用(`AccountPage` / `InstancePage` / `TasksPage` / `SettingsPage` 的关于卡),
+在每页各打一个补丁既会漏(以后新页面照抄就有缺陷)又不一致 —— 与 C3d 的 `FlyToTasks`、C3e 的 `Motion` 同一条道理。
+
+## D-143 C5c:库页左偏的真机制是"卡片宽于自己的星列后被居中溢出";`C4LibraryTests` 与修复的两全,以及第 3 条异常的结论
+
+**1. 真机制(与"ScrollViewer 水平偏移"的猜想不同)。** 探针把整条链读出来了:
+`Offset=(0,0) Extent=0 Viewport=0`、`滚动框 0..668`、`Grid 在 x=18 宽 632`、`列宽=205/18/409`,而
+**左卡 `布局x=-48`、宽 300** ⇒ `-48 = (205-300)/2`:卡片比它的格子宽 95,而 Avalonia 把"宽于格子的子元素"**居中**摆放。
+根因在 `LibraryPage.cs:232` 的 `left.MinWidth = 300`(2026-11-07 为"窄窗别占太多"留的地板)与 `ApplyFolderLayout` 里
+**只给星列、没给最小宽**这对矛盾。用户可见效果:压掉 18px 左页边距(白卡白像素 **196 → 216**)并向右盖住右栏标题的头几个字。
+⚠️ 教训(值得记):**子元素的最小宽大于它所在星列的最小宽时,得到的不是"占位"而是"越界"**。
+
+**2. 修法:把地板同时写到列上**(`ColumnDefinitions[0].MinWidth = 300`)⇒ 卡片正好填满自己的列,既不越界也不越位;
+右列 409 → 314,新增探针断言"右栏内容不得宽于自己的列"(实测不超),冒烟帧逐帧看过。
+第一版是"把卡片地板降到 0"(更小、更简单),但 `C4LibraryTests.Library_folder_layout_defaults_to_two_columns` 钉着
+Windows 的几何(`*,18,2*` + 左卡 `MinWidth=300 / MaxWidth=380 / Top`),那条用例因此红了 ⇒ **不许为了让自己的修复好看就去改别人的断言**
+(Lead 的纪律),改成"列兑现地板"之后**两边同时成立**。这也是"宽页面像素不变"的另一种体现:星列在宽窗口本来就 ≥ 300,MinWidth 从不生效。
+
+**3. 第 3 条异常(库页"看起来被加载过")的结论:`PageHost` 门闸没漏开,不是 bug。**
+`PageHost.Navigate` 只在 `runHooks` 为真时跑 `EnsureLoadedAsync + OnShown`(PageHost.cs:108);`MainWindow.Navigate` 传的
+`BridgeReady` 默认 false 且 `--smoke` 不调 `StartBackend()`(MainWindow.cs:427 注释明写"离屏 --smoke 不走这里")⇒ 冒烟里确实不跑加载钩子。
+库页帧里那些计数与空态是**构造函数**里的 `RenderGroups()`(`LibraryPage.cs:244`)画出来的 —— 两边的说法都成立,矛盾出在"看见了什么"而不是"门闸开了"。
