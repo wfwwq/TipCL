@@ -497,3 +497,19 @@
 - **附带保留的口径**:`ai_confirm_writes` 刻意不读(裁决不看它,读了就会与真实裁决对着说);子代理路径(`AiAgent.cs:404` 强制 plan)读到的是用户配置档位而不是它自己的 plan 档 —— 与参考版同源(读 settings),未改。
 - **验收(主 agent 独立复跑)**:6 句 6/6 SHA256 与参考版相等;全量 `dotnet test` **416 = 415 通过 + 1 跳过 + 0 失败**(基线 409);`--ai-selftest` **54 = 52 + 2** exit 0;Release 构建 0 CS/CA(仅 2 条 NU1900 镜像噪声);`SMOKE_PAGE=ai` 冒烟 exit 0 / 0 WARN 0 ERROR;五个改动文件均 UTF-8 **无 BOM / LF**。
 - **教训**:1**「模型可见文本」的对位必须用脚本抽字面量比哈希** —— 这是唯一能保证「逐字」的办法;2同一份语义只能有一个归一化入口,把它提出来给裁决与提示共用,是「告知」与「执行」不漂的前提;3「只补告知、不动裁决」这种边界要**用一条锁裁决的用例**守着,而不是写在注释里。
+
+### D-58 · 裁决与「告知」必须同源同序:补别名档位、并把「只看不动」挪到规则之前(R21e,2026-11-13,子代理改、主 agent 复核与补刀)
+
+- **背景**:R21d 补上 `PermissionNote` 后暴露出两处「告知」与「裁决」不一致:1参考版 `PermissionMode.Values` 的 10 档里,Linux 裁决只认 `yolo` / `plan` / `acceptEdits` 三档,`auto` / `autoEdit` / `build` / `edit` / `bypassPermissions` / `dontAsk` 全落默认分支(每次问)⇒ 手改 config 或从 Windows 迁来的配置会出现「提示说会直接执行、实际每次弹确认」(用户批准后本轮拉平);2**参考版把 plan 判断放在规则之前**(`Permission.cs:186-190`:`if (mode == "plan" && !readonly) return deny`),Linux 把规则放在前面 ⇒ **一条 allow 规则能把「只看不动」压过去**。
+- **做法**:1`Decide` 的档位 switch 按参考版逐条对位(`yolo`/`bypassPermissions`→allow「免确认模式」;`auto`/`acceptEdits`/`autoEdit`→除 `delete` 外 allow;`build`→除 `delete`/`launch` 外 allow;`edit`→只放行 `write_local`;`dontAsk`→deny),理由文案与参考版**逐字**相同(核对方式:脚本从两仓源码抽 `(裁决, 理由)` 字面量做集合比对,Linux 16 条全部能在参考版里找到);2在 `DecideRaw` 开头加「plan 硬停」(非只读直接拒),switch 里的 plan 分支保留为兜底;3`McpVerdict`(Linux 独有的一支)把 `bypassPermissions` 与 `yolo` 同等放行,并注明这是 Linux 自定。
+- **没动的**:`RuleFor` 与 `readonly` 两步的相对位置(参考版规则在 readonly 之后、Linux 在之前,实测两者对最终裁决无差别)、`ApplyDontAsk` 独立开关、`PermissionNote` 6 句、面板可选档位集合(仍 5 档)。
+- **验收**:别名用例 **红 8/10 → 绿 10/10**;plan 硬停用例(我加的)在主 agent 手上**红 1/1 → 绿**,全量 `dotnet test` 连跑 2 次 **431 = 430 通过 + 1 跳过 + 0 失败**;Release 构建 0 警告 0 错误;`--ai-selftest` 54 项 exit 0。
+- **教训(这一轮真踩了)**:改「模型可见/用户可见的文案」时,**必须从源文件的字节里取那句话**,不能凭 `read` 看到的字符照打 —— `read` 会把全角标点渲染成半角,肉眼一模一样、`Assert.Equal` 却报「Expected 与 Actual 看起来相同」。我插的那句 `plan` 理由就是手打成了半角逗号,被既有用例当场抓住(同理,子代理的测试期望也先红过一次)。已记规矩:**文案常量只有一处真源,别处一律引过去**。
+
+### D-59 · 静默 `catch` 是缺陷放大器:一个字段类型错掉,整块功能无声消失(R21e,2026-11-13,真机验证发现,子代理修、主 agent 复核)
+
+- **事实**:真机上「下载页 → 数据包 → 装进存档」的下拉**永远打不开**,而数据包本身能装(只是不进存档)。链路四步:`list_saves` 的 `mtime` 是 **JSON 数字**(Core `LocalFs.MTimeInt` → `long`)→ `CatalogModels.SaveRow.Mtime` 声明成 **string** → `Api.Coerce`(序列化再反序列化)抛 `JsonException` → **被一条裸 `catch { return null; }` 吞掉** → `TryCallAsync` 回落空列表 → `CatalogPage` 的 `if (saves.Count == 0) return extra;` 提前返回。
+- **为什么要记一条决策**:1它**在任何平台都可能存在**,却因为静默而只在真机上「点一下」才露出来(页面表现得像「这台实例没有存档」);2日志里**一行都没有**:`TryCallAsync` 自己那条 WARN 从来没机会跑,因为 `Coerce` 先把异常吃掉了 —— 这是**可观测性缺口**,不是单个字段的手误;3这是 PARITY §6 第 1/2 行同一类(「POCO 形状与后端返回不一致 → 界面静默空掉」)的第三例,说明这类缺陷值得一条**通用**处置。
+- **处置**:1`SaveRow.Mtime` 改成与真实返回一致的**数字**类型(数字字符串也能接住 —— `JsonOpts` 开了 `AllowReadingFromString`,但那只解决「字符串→数字」,**不解决「数字→字符串」**,这正是原缺陷的成因);2`Coerce` 的裸 `catch` 改成记录 `AppLog.Warn($"API 结果转换失败({target.FullName}): {类型}: {消息}")` —— 以后同类失败一眼能定位到字段(`JsonException` 会直接点名 `$[0].mtime`);3新增 5 条用例:钉 Core 契约(`mtime` 是数字)、`TryCallAsync<List<SaveRow>>("list_saves")` 必须非空、`CallAsync` 抛异常那条路、下拉判定那步的非空分支、以及「转换失败必须留日志」。
+- **红/绿**:加日志但**不改**字段类型时 `--filter ~CatalogSavesCoerceTests` **红 3/5**(失败信息里带 `JsonException ... Path: $[0].mtime`);改类型后 **5/5 绿**。
+- **教训**:1**「转换失败一律静默」是一条比任何单个字段都值钱的缺陷源** —— 页面拿到默认值,用户看到空白,开发者看不到日志,三者都不知道彼此存在;2POCO 与后端返回的**形状**要有契约用例钉着(`mtime` 是数字这件事以前没有测试守),这类「形状漂移」在移植项目里尤其容易发生(照参考版的 POCO 抄,而参考版的后端与本地后端未必同形);3**真机点一下**的价值在这一轮被反复证明:两条 P0(R21b)、这条下拉、以及 GTK/managed chooser 的误判,全都是「无头全绿但真机不对」。

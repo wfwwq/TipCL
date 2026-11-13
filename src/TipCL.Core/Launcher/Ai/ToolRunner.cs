@@ -34,8 +34,10 @@ public sealed class ToolRunner
     private readonly HashSet<string> _alwaysAllowed = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// 权限档位(照 Windows 版 AiPermissionPanel 的五档):
+    /// 权限档位(面板「照 Windows 版 AiPermissionPanel」只提供本地这几档):
     /// default 每次确认 / acceptEdits 写直接执行 / plan 只看不动 / yolo 全自动 / custom 走自定义规则。
+    /// 裁决还认参考版 Permission.PermissionMode.Values 里的别名(auto / autoEdit / build / edit /
+    /// bypassPermissions / dontAsk)——它们只可能来自手改 config.json 或从 Windows 迁来的配置。
     /// 空串表示读配置(config.json 的 ai_permission_mode)。
     /// </summary>
     public string PermissionMode { get; set; } = "";
@@ -63,8 +65,8 @@ public sealed class ToolRunner
 
     /// <summary>
     /// 该工具按当前档位与自定义规则算出的裁决(allow / ask / deny)+ 理由。
-    /// 文案与 Windows 版 Permission.Decide 逐字对位;Linux 档位少几档(yolo / plan / acceptEdits /
-    /// default / custom),语义对得上的用同一句,对不上的按 Linux 现有语义写(见各分支注释)。
+    /// 理由文案与 Windows 版 Permission.Decide 的 switch 逐字对位(见下面 switch 里各分支的判据);
+    /// 档位集合与参考版一致(含别名),面板仍只写本地那几档。
     /// </summary>
     public PermissionVerdict Decide(string tool) => ApplyDontAsk(DecideRaw(tool));
 
@@ -86,6 +88,14 @@ public sealed class ToolRunner
     /// <summary>按档位与自定义规则算出的原始裁决(「不询问」开关由 <see cref="Decide"/> 叠加)。</summary>
     private PermissionVerdict DecideRaw(string tool)
     {
+        // 「只看不动」是**硬停**:参考版把这一步放在规则之前(Permission.cs:186-190:
+        // `if (mode == "plan" && !readonly) return deny`),所以连 allow 规则也突破不了它。
+        // Linux 原来把规则放在前面,于是一条 allow 规则能把 plan 档压过去 —— 用户口径的
+        // 「只看不动」就形同虚设。这里与参考版同序;只读工具不受影响(参考版同样先看 readonly)。
+        if (Mode == "plan" && ToolMeta.Get(tool) is { } planMeta && !planMeta.@readonly)
+        {
+            return new PermissionVerdict("deny", "当前是「只看不动」模式，不能执行这类操作");
+        }
         string rule = RuleFor(tool);
         if (rule.Length > 0)
         {
@@ -110,11 +120,25 @@ public sealed class ToolRunner
         }
         return Mode switch
         {
-            "yolo" => new PermissionVerdict("allow", "免确认模式"),
+            // 下面每一档的**档位名、side_effect 判据、理由文案**都与 Windows 版 Permission.Decide
+            // (Permission.cs:220-253)逐条对位:手改 config.json 或从 Windows 迁来的配置里写了
+            // auto / autoEdit / build / edit / bypassPermissions / dontAsk 时,裁决要与 PermissionNote
+            // 说的是同一件事(面板仍只提供本地那几档,别名只可能来自配置文件)。
+            "yolo" or "bypassPermissions" => new PermissionVerdict("allow", "免确认模式"),
+            // plan 已在上面拦掉（与参考版同序）；这一支是兜底,防「那条前置判断被误删」
             "plan" => new PermissionVerdict("deny", "当前是「只看不动」模式，不能执行这类操作"),
-            "acceptEdits" => meta.side_effect == "delete"
+            "auto" or "acceptEdits" or "autoEdit" => meta.side_effect == "delete"
                 ? new PermissionVerdict("ask", "删除操作仍需确认")
                 : new PermissionVerdict("allow", "写操作直接执行"),
+            "build" => meta.side_effect is "delete" or "launch"
+                ? new PermissionVerdict("ask", "删除/启动操作仍需确认")
+                : new PermissionVerdict("allow", "安装/下载类直接执行"),
+            "edit" => meta.side_effect == "write_local"
+                ? new PermissionVerdict("allow", "文件类修改直接执行")
+                : new PermissionVerdict("ask", "这类操作需要确认"),
+            // dontAsk 档的拒绝理由与 ApplyDontAsk 那句逐字相同:一个是档位本身就是「不询问」,
+            // 一个是独立开关把 ask 翻成 deny,给用户看的话是同一句(Permission.cs:245-246)
+            "dontAsk" => new PermissionVerdict("deny", "用户开启了「不询问」模式"),
             // default / custom / 空档:一律要确认,理由按风险等级分句(判据同 Windows 版 default 分支的 risk == "high")
             _ => meta.risk == "high"
                 ? new PermissionVerdict("ask", "高风险操作需要确认")
@@ -160,9 +184,9 @@ public sealed class ToolRunner
     /// <paramref name="dontAsk"/> 是 config 的 ai_permission_dont_ask:Linux 侧「不询问」是一个**独立开关**
     /// 而不是档位名,它把「需要确认」直接改成「拒绝」(D-48),所以模型看到的档位描述也要跟着换,
     /// 否则模型会以为还有确认卡可等。yolo(全放行)与 plan(本来就拒)两档下这个开关不生效,保持原句更准。
-    /// 别名(bypassPermissions / auto / autoEdit / build / edit)照参考版给同一句:Linux 的裁决只有
-    /// default / acceptEdits / plan / yolo / custom 五档,遇到这些别名走默认分支 —— 这是「告知」这一面的
-    /// 对位,不改裁决(裁决的回归见 Core/AiPermissionReasonTests)。
+    /// 别名(bypassPermissions / auto / autoEdit / build / edit)照参考版给同一句:裁决现在也认这些
+    /// 别名(见 DecideRaw 的 switch),所以「告知」与「裁决」说的是同一件事(两面的回归分别在
+    /// Core/AiPermissionNoteTests 与 Core/AiPermissionReasonTests)。
     /// </summary>
     public static string PermissionNote(object? mode, bool dontAsk = false)
     {
@@ -309,10 +333,11 @@ public sealed class ToolRunner
         }
     }
 
-    /// <summary>MCP 工具的裁决：plan 档不动、yolo 档放行，其余都要用户点一下。</summary>
+    /// <summary>MCP 工具的裁决：plan 档不动、yolo 档放行，其余都要用户点一下(**这是 Linux 独有的一支**:参考版 Permission.Decide 里没有 MCP 分支,这里的档位集合与理由文案都是 Linux 自定的)。</summary>
     private PermissionVerdict McpVerdict() => Mode switch
     {
-        "yolo" => new PermissionVerdict("allow", "免确认模式"),
+        // bypassPermissions 与 yolo 同等看待(它是同一个意思);plan 档仍然拒绝,其余要确认
+        "yolo" or "bypassPermissions" => new PermissionVerdict("allow", "免确认模式"),
         "plan" => new PermissionVerdict("deny", "当前是「只看不动」模式，不能执行这类操作"),
         _ => new PermissionVerdict("ask", "外部 MCP 工具能力未知，需确认"),
     };

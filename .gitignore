@@ -8,3 +8,4 @@ smoke-*.png
 dist/
 # 冒烟夹具与对比产物(假 TIPCL_HOME:假 .minecraft / ai_chats.json、对比截图、构建日志)
 _cmp/
+scratch/

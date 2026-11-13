@@ -351,7 +351,7 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 
 > **仍未做(如实)**:「不询问」在 Linux 侧是**独立开关**(`ai_permission_dont_ask`,见 D-48)而不是档位名,所以那句 dontAsk 提示只在「开关打开 && 档位不是 `yolo` / `plan`」时用,其余档位保持原句 —— 这样提示与真实裁决自洽。
 >
-> **如实登记的两处偏离**:1**别名档位只影响提示文本、不影响裁决** —— 参考版的 `NormalizePermissionMode` 归一化结果**也用于裁决**(`auto` / `acceptEdits` / `autoEdit` / `build` 等 = 写操作直接执行),而 Linux 的裁决只认 `default` / `acceptEdits` / `plan` / `yolo` / `custom` 五档,这些别名走默认分支 = 每次问。只有手改配置或从 Windows 迁过来的配置才会撞上,届时模型读到的描述(「写操作会直接执行」)与真实裁决(ask)不一致。修它必须让 Linux 的裁决也认别名 —— **那是改裁决,没批之前不动**;2`ai_confirm_writes` **刻意不读**:Linux 的 `Decide` 根本不看这个键,读了它这句话就会与真实裁决对着说。
+> **如实登记的两处偏离(第二处仍在)**:1~~别名档位只影响提示文本、不影响裁决~~ —— **R21e 已拉平**:用户批准后,`Decide` 的档位 switch 按参考版 `Permission.cs:220-253` 逐条补齐(`yolo`/`bypassPermissions` 放行;`auto`/`acceptEdits`/`autoEdit` 除 `delete` 外放行;`build` 除 `delete`/`launch` 外放行;`edit` 只放行 `write_local`;`dontAsk` 直接拒),理由文案与参考版逐字相同;同轮还把**「只看不动」挪到规则之前** —— 参考版 `Permission.cs:186-190` 就是先判 plan 再看规则,Linux 原来是规则在前,于是一条 allow 规则能把 plan 档压过去(「只看不动」形同虚设),现在与参考版同序(新增用例钉住:plan 档下 allow 规则也拿不到 allow,红/绿各一次)。2`ai_confirm_writes` **刻意不读**:Linux 的 `Decide` 根本不看这个键,读了它这句话就会与真实裁决对着说。
 >
 > 另一处**有意不搬**:参考版 `PermissionResult` 还带 `rule_id`,Linux 的「一直允许」是按工具名记的进程内集合,没有「按规则记住」的界面入口,搬 `rule_id` 是无消费方的死重(见 D-48)。
 
@@ -387,7 +387,17 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 
 **保持不动(两版一致,不算遗漏)**:同名文件就地覆盖(`overwrite: true`,`LocalFs.Copy2`)不产生副本;目标 `<存档>/datapacks` 目录不存在就创建;目标路径与版本隔离游戏目录的算法(`<实例>/versions/<版本>` vs `<实例>`)两版逐行相同。
 
-**未在真机验证(如实)**:系统文件对话框本身(GTK/portal 的 `AllowMultiple`)与下载页「装进存档」下拉**都没在真机点过** —— 无头环境点不了系统对话框;这两处只用 API 契约测试覆盖(`install_datapack` 带 `extra.save` → 等任务 → 断言文件既在实例 `datapacks` 也在存档里,隔离/非隔离两条)。存档管理页的「装数据包」列表**仍按实例根**列(与参考版一致,未改):隔离版本只能从实例共享数据包里选,要让列表也列版本目录需给 `get_installed_datapacks` 带上 `version`,属独立条目。
+**真机验证(2026-11-13,R21e 补;盒子 main,XFCE + `DISPLAY=:0`,最终 AppImage,隔离 HOME)**:
+
+| 问题 | 结论 | 证据 |
+|---|---|---|
+| 「导入本地」弹的是系统对话框吗? | **不是 GTK/portal** —— 是 **Avalonia 托管的 `ManagedFileChooser`**(新顶层窗口「导入本地数据包」1000×700,WM_CLASS `TipCL`;点击前后没有 portal / GTK 文件对话框进程,portal 的 DBus 名始终 `(activatable)` 从未激活,对话框带 Places 侧栏)。所以「GTK/portal 的 `AllowMultiple` 有没有生效」这个问法在**本构建里不成立** | 窗口清单(`xwininfo` / `xdotool` 原始输出)+ 进程表 + 截图 |
+| 多选真的可用吗? | **可用,且两个文件都真落地**:普通点选第一个 + Ctrl+点选第二个(两行同时高亮)→ Open → 提示「已加入队列 导入 2 个 · 成功 2」,两条任务完成,`<实例>/datapacks/` 下两个文件都在(300 B / 296 B) | 多选高亮截图 + 导入前后 `find` 对照 + 任务与日志 |
+| 「装进存档」下拉 | **存档管理入口那条:端到端跑通** —— 下拉列出 3 个数据包 → 选中 → 安装 → `<实例>/saves/WorldDlg/datapacks/Veinminer-2.1.0.jar`,**md5 与源文件逐字节相同**;重复装一次仍是同名覆盖、不留副本。**下载页那条:修前打不开**(见下),修后未再真机复测 | 下拉展开 / 选中 / 安装 / toast 四张裁图 + `find` + `md5sum` |
+
+**同一轮真机验证揪出一个真缺陷(已修,R21e / D-59)**:下载页「装进存档」下拉**永远打不开** —— `list_saves` 返回的 `mtime` 是 **JSON 数字**,而 `CatalogModels.SaveRow.Mtime` 声明成 **string** ⇒ `Api.Coerce`(序列化再反序列化)抛 `JsonException`,被一条**裸 `catch` 静默吞掉** ⇒ `TryCallAsync` 回落空列表 ⇒ `CatalogPage` 的 `if (saves.Count == 0) return extra;` 提前返回。修法:字段改成与真实返回一致的数字类型,并把那条静默 `catch` 改成记日志(日志原话 `JsonException ... Path: $[0].mtime` 就是决定性证据)。**POCO 形状与参考版逐行相同**(`Models/SaveRow.cs`),但参考版没有 `Api.Coerce` 这个机制 —— 所以这不算参考版缺陷,记在 Linux 侧。
+
+**仍未在真机验证(如实)**:1隔离版本分支的「装进存档」(盒子上只有根实例、0 个版本,造不出隔离实例);2下载页「装进存档」的**任务式**路径(`extra.save` 走任务流)—— 修前被上面那个缺陷挡住,修后还没在真机复点;3存档管理其余 chip(备份 / 导出 / 打开 / 截图 / 删除)没逐点。
 
 ### 9.7 对话框点按钮不关窗:移植时漏掉的一步(2026-11-13,R21b 真机发现;移植代理修,主 agent 复核)
 

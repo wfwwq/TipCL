@@ -230,13 +230,22 @@ public sealed class ModsTarget
     public override string ToString() => Label;
 }
 
-/// <summary>存档行(照 Windows Models/SaveRow,数据包「装进哪个存档」用)。</summary>
+/// <summary>
+/// 存档行(数据包「装进哪个存档」用)。
+/// 形状按 **list_saves 的真实返回** 对齐(Saves.ListSaves):{name, path, icon, bytes, mtime},
+/// 其中 mtime 是 epoch 秒的**数字**(Core 侧 LocalFs.MTimeInt 返回 long)—— 所以这里必须是数字类型:
+/// 声明成 string 会让 Api.Coerce 在反序列化时抛 JsonException,整批行被判成转换失败,
+/// 下拉拿到空列表后直接提前返回(真机现象:下载页「装进存档」永远打不开)。
+/// 其余几个字段是参考版留下来的显示位,list_saves 不发它们,读到的就是默认值。
+/// </summary>
 public sealed class SaveRow
 {
     public string Name { get; set; } = "";
     public string Folder { get; set; } = "";
     public string Size { get; set; } = "";
-    public string Mtime { get; set; } = "";
+
+    /// <summary>目录 mtime,epoch 秒。数字与数字字符串都能接住(JsonOpts 开了 AllowReadingFromString)。</summary>
+    public long Mtime { get; set; }
 
     [JsonPropertyName("last_played")]
     public string LastPlayed { get; set; } = "";

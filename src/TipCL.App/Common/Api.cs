@@ -2033,8 +2033,12 @@ public sealed class InProcessApi : IApi
             string json = JsonSerializer.Serialize(Plain(value), JsonOpts);
             return JsonSerializer.Deserialize(json, target, JsonOpts);
         }
-        catch
+        catch (Exception ex)
         {
+            // 不能静默。这一层的失败在页面上只表现为「空列表 / 默认值」,一行日志都没有时无从下手 ——
+            // 「下载页装进存档」下拉永远弹不出来就是从这里开始无声无息的(SaveRow.Mtime 声明成 string,
+            // 而 list_saves 给的是数字)。日志里带目标类型与异常原文,JsonException 会直接点名是哪个字段。
+            AppLog.Warn($"API 结果转换失败({target.FullName}): {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }
