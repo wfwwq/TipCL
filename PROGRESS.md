@@ -5514,3 +5514,36 @@ internal 处理器体(不构造 `PointerEventArgs`、不用 Headless 输入模�
 5. **C2c3 的视觉件**(Backdrop / SideFrost / ImeGuard / 标题栏圆片 / 下载任务底条)仍未搬,与启动页无关。
 6. **`hero.jpg` 是 275898 字节的嵌入资源**:GOAL 说 mac 无体积红线,所以直接嵌入;
    但它是"启动页默认背景"的唯一来源,真机上如果 Skia 解不出来会静默回退到纯底色(用例只在本机 Windows 验过解码成功)。
+### Lead 验收(2026-11-13 17:55)——**第一个真实页面**
+
+结论:**C3c 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+**先说一次事故**:本包的子代理在收尾前**失败退出、没有留下收尾消息**,漏了一次提交(一条新用例 + PROGRESS/DECISIONS 的书写)。但要紧的是:**代码全部已经在提交里**,留下的未提交改动经 Lead 复核是一条**完整的、通过的**新用例(`Background_falls_back_to_the_embedded_hero_when_there_is_no_screenshot`)加文档。Lead 已替它补交为 `c252335`,并在补交后**重跑两条通道:3086/3086 全绿**。所以这次事故没有丢任何工作,只是文档晚了一次提交。
+
+| 检查 | 结果 |
+|---|---|
+| 提交(`9955768` a / `319ca0e` b+c / `34c3814` d1 / `068396f` d2 / **`c252335`** e,最后一条由 Lead 补) | 工作树干净;无 remote、无 tag;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线(`src\TipCL.Core`、`Themes\`、`NavModel/NavConfig`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改 |
+| **6 个模型 DTO + `hero.jpg` 对 Windows 源 SHA256** | 6 个模型 **全部一致**;`hero.jpg` **一致** |
+| **既有测试有没有被改弱(Lead 逐项比对)** | `C2bShellTests.cs`:**断言 168 -> 173、用例 27 -> 28、Skip 0 -> 0**。旧的「宿主是空的」那条被改名成「宿主打开已注册的启动页」并**断言更多**(当前页 id、类型、与 `Host.Content` 同一实例);原来的三条断言**一字不改**地留在新增的 `Page_host_starts_empty_when_the_launch_page_is_unregistered` 里(靠 `RegistryScope` 把启动页临时摘掉还原 C2b 的初始状态)。**是加强,不是削弱** |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误 |
+| **`dotnet test` 与进程内执行器各连跑 2 次**(补交前后各一次) | 四次全部**退出码 0**,通过 **3086 / 失败 0 / 不支持 0**(2968 -> 3086,+117 条本包用例 + 1 条拆分) |
+| **`--smoke` 新基准(Lead 独立复跑)** | 不带 `--page` = light = **37681 字节 `2603BF6AB2B5D491E2B6AFB34E3EAEDD8A0388B6A6497D33D3F8193492342CBD`**;dark = **33579 字节 `7D7AFDD502D82EE21F7DCEFEF7B12FC2731628D41B4DDF595FD1E1D05F276893`**;`--theme blue` = **2**。旧基准(21823 / 18200)**作废** —— 那是"没有页面的空壳" |
+| 全部 C3c 文件编码(含未提交时) | **无 BOM、CR=0、U+FFFD=0** |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL`、桌面、图片、残留进程 | 9328 / 889530606 / 2026-11-10 20:42:16(**零写入**);桌面与图片最新写入时间**不变**;残留进程 **0** |
+| 仓库有没有杂散文件 | `git ls-files` 里 `.py` / `artifacts/` / `dist/` / `Zz*` **0 个**;未跟踪文件 **0 个**(它把像素探针放在被忽略的 `artifacts\` 下,没有入库) |
+
+**裁决 1:接受新 `--smoke` 基准(37681 / 33579)。** 空壳第一次有了真实内容,基准**该**变。子代理给了像素取证:标题栏(白/深底 + 绿色 logo 片 + 反色标题字)、侧栏(导航分组 + 选中项)、英雄区大字(light 2282 个深色像素 / dark 2347 个浅色像素)、主按钮 `(31,122,82)` 主色 + 362 个白像素、底边新闻卡;**明暗两帧 494469/495000 像素不同(99.9%)**。**新基准从此刻起生效。**
+
+**裁决 2:接受「冒烟里没有 hero 全景图」的诚实说明。** 离屏时 `BridgeReady` 是 false(D-96),`OnShown`/`EnsureLoadedAsync` 不跑,而背景是在 `SyncBanner`/`OnShown` 里刷的 ⇒ 那一帧是**载入前状态**。解码与应用链路本身**已用测试走通**(`OnImageNow == true`、`Image.Source != null`)。这不是 bug,是如实记录的离屏限制,真机观感留给 D2 清单。
+
+**裁决 3(重要):`FlyToTasks` —— 采纳子代理的建议,一次修好外壳,不在每个页面重复注入缝。**
+
+事实:Windows 的启动页在「修复当前版本」后会调 `Win.FlyToTasks(_launchBtn, "修复中")` 播个飞向任务页的小动画;mac 的外壳(C2b 的 D-97)没搬 `FlyHost`/Dock,**没有这个成员**;而全仓库**还有 13 处**同类调用点(InstancePage / VersionManagePage / InstallPage / JavaPage / CatalogPage / MultiplayerPage / PluginsPage / TasksPage ...),**后面每个页面包都会撞上它**。
+
+本包的选择(不动外壳 + 注入缝 + 挂点没接时不播 + 如实写清)在**当时**是对的 —— 因为红线是我给的。但就整个项目而言,**在 13 个页面包里各复制一次同样的注入缝是错的**:同一个洞修 13 遍,还多 13 个"没接就不播"的静默降级。
+
+**因此就地派 C3d**:把 `FlyToTasks`(以及它需要的最小 `FlyHost` 可视件)作为**可选成员补进外壳**,并把 C3c 的注入缝接上、把这条降级从文档里划掉。C3d 之后,后续页面照 Windows 直接调外壳成员即可,不再需要各自的注入缝。
+
+**运营备注**:本包用 **Python + Pillow**(`artifacts\c3c-pixel-probe*.py`)做像素取证 —— 能跑、产物在忽略目录里、没入库,所以接受;但 Lead 自己的取证一直用 `System.Drawing`,**后续若要写进交付物,统一用仓库里已有的工具链**,别引入新的运行时依赖。
