@@ -22,6 +22,7 @@ namespace TipCL.Tests;
 /// `BridgeHost.StartAsync` 成功之后、`catch` 里把状态打回"未连接"且不改 `_bridgeReady`);
 /// "任务书" = C2d 任务书的第 2 条;"实测" = 本机跑出来的观测值。
 /// </summary>
+[Collection(C2dFixtures.Collection)]
 public class C2dShellWiringTests
 {
     /// <summary>

@@ -1312,3 +1312,77 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   只有生产路径才读盘(只读,读不到/读坏一律回默认值,不抛)。
 - `SaveUiPrefs()` 保留但**不在启动 / 切主题时自动调用**:避免在离屏与测试里碰用户数据;
   将来由设置页(或收尾时的显式保存)调用。
+
+## D-100 C2d:`BackendApi.DisableAuthWarmup` —— 唯一一处 Core 改动的形状与理由
+
+- **背景**:B1a 验收时 Lead 的裁决是「C2 做 BridgeHost 时给 `BackendApi` 加一个可关的开关(默认行为与
+  Windows 版一致)」。C2d 落地:**默认 false(预热照发,与 Windows 一致)**,只有测试/离屏显式置 true。
+- **形状**(`src\TipCL.Core\BackendApi.cs` 一个文件、两处 hunk、**+20/-4 行**,其中 15 行是文档与空行):
+
+  ```csharp
+  // 新增在读实例构造的上一行
+  public static bool DisableAuthWarmup { get; set; }            // 默认 false
+  internal static bool ShouldWarmupAuth() { return !DisableAuthWarmup; }
+
+  // 构造函数里那 4 行原样保留,只是被守卫包住(缩进 +1 层)
+  if (ShouldWarmupAuth())
+  {
+      ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(1500); AuthHttp.Warmup("https://login.live.com/"); });
+  }
+  ```
+
+- **为什么用属性而不是环境变量**:环境变量是进程级、跨程序集可被任何人顺手设上,而且"谁设的、有没有
+  还原"在用例里看不见;属性可以在用例的 `finally` 里精确还原,也能被静态判断函数(
+  `ShouldWarmupAuth()`)单独钉住两个分支。测试必须成对使用(置 true → 用完还原),本包四个测试类
+  都遵守,并在 `C2dFixtures.Install/Restore` 里统一保存/还原快照。
+- **开关只关"构造时的自动预热",不关"用户点了微软登录"**:`start_microsoft_login()` 里那次
+  `AuthHttp.Warmup(...)` 一字未动(用例按源码形状钉住了这一点:全文件守卫只有 1 处、预热调用共 2 处)。
+- **没有别的 Core 改动**:`git diff --name-status a84c8c6 HEAD -- src/TipCL.Core` 只列
+  `src/TipCL.Core/BackendApi.cs`。
+
+## D-101 C2d:测试怎么"安全地"起真后端 —— 两个注入缝 + 一处必须换掉的收尾
+
+- `BridgeHost` 上新增两个 **internal 注入缝**(生产代码永远不写它们,默认值就是生产行为):
+  1. `ApiFactory`:**默认 `new BackendApi(bus)`**;测试换成「把 `DisableAuthWarmup` 置 true 再构造」的
+     工厂 —— 于是整条启动路径是真的(真 BackendApi / 真 BridgeServer / 真回环 socket / 真 RpcDispatcher),
+     唯独不发那次登录预热;
+  2. `OnCoreStarted`:默认是生产那一步(`McpServer.StartIfEnabled` + `PluginManager.StartGlobal`);
+     **测试必须注入空实现**。理由是实测读代码:`PluginManager.StartGlobal` 起的后台线程
+     300 ms 后 `StartAll()` → `Market.CheckUpdates(refresh: true)`,**5 秒后会去插件市场拉更新(联网)**,
+     而"测试绝不碰真网络"是红线。所以本包验的是"除了这一步之外的全部启动路径",这一步只能由真桌面运行覆盖。
+- 另加 `BridgeHost.ResetCore()`(**只有测试收摊用**):清掉进程内内核单例缓存,好让每个用例都从干净状态起;
+  生产路径下内核按 Windows 语义活到进程结束(与 `BridgeServer.Stop` 不动内核一致)。
+
+## D-102 C2d:`BridgeReady` 由真启动路径打开;失败保持 false 并留原因
+
+- `MainWindow` 新增 `ConnectAsync(BackendBootstrap?, ct)`(Windows `MainWindow.ConnectAsync` 的前半截):
+  `BridgeHost.StartAsync` 成功才 `AppServices.Host/Client = ...` + **`BridgeReady = true`**;
+  失败时 `BridgeReady` 保持 false、原因写进 `BridgeError` 与调试输出(绝不静默 ready)。
+  生产入口是 `MainWindow.StartBackend()`(`App.OnFrameworkInitializationCompleted` 的桌面分支里调一次,
+  fire-and-forget),关窗时挂 `Closed → StopBackend()` 收摊。
+- **离屏 `--smoke` 不走这条路**:`SetupWithoutStarting()` 不进桌面生命周期,所以冒烟像素与后端无关
+  (实测:light/dark 与 C2b 基准逐位相同)。
+- 连上之后照 Windows 做一次"补载当前页"(`ReloadCurrentAsync` 的等价物)。它**碰页面**,所以必须回到
+  UI 线程:`ConnectAsync` 的续体在线程池上(用 `ConfigureAwait(false)` 换来的 —— 同步等待版
+  `ConnectBlocking` 因此能在 AvaloniaSession 线程上安全使用),于是走
+  `Dispatcher.UIThread.Post`;`CheckAccess()` 为真时直接跑。
+- `ConnectBlocking(...)` 是**测试/离屏同步入口**(用例体跑在会话线程上不能 await),标注清楚只给它用。
+
+## D-103 C2d:用例发现并修掉的真缺口(取消启动会漏监听器)+ 测试隔离的三处纪律
+
+1. **真缺口**:`BridgeHost.StartInProcessAsync` 的健康检查循环里,`await Task.Delay(100, ct)` 在 ct 被取消时
+   会把**已经起来的监听器与客户端**一起漏在进程里(方法直接抛出去,没走到后面的 `client.Dispose();
+   srv.Stop();`)—— 监听 socket 与 `bridge-accept` 线程会永久留下。
+   用例 `Stop_during_start_cancels_and_leaves_no_listener` 先复现(端口还在监听表里),再修:
+   给那次 `Task.Delay` 包一层 `catch (OperationCanceledException) { client.Dispose(); srv.Stop(); throw; }`
+   (纯插入 8 行,**没有改动原有代码的缩进或语义**)。
+2. **四个 C2d 测试类归到同一个 xunit collection**(`C2dFixtures.Collection`):它们都临时改写进程级静态
+   注入缝;xunit 默认按类并行,两个 C2d 类并行时会互相把对方的内核工厂换掉(VSTest 通道实测红,
+   进程内执行器串行看不到)。
+3. **不写"取决于别的用例先跑过什么"的断言**:`create_instance` 的落点在单根模式/多实例模式下形状不同
+   (单根模式补齐根实例标准目录,多实例模式新建同名目录),VSTest 通道里因为并行而两种都出现过;用例因此
+   改成"两种形状都接受,但落点必须在隔离目录之下"。同理,SSE 首条事件是握手 `hello`
+   (BridgeServer.cs:993),用例只认 `ui_changed`。
+4. **用例体一律 `async Task` + `await`**(不用 `.GetAwaiter().GetResult()`):否则 xUnit1031 会给 66 条警告
+   (实测),而"NU1900 之外只允许 SYSLIB0014 一处"是硬要求。Avalonia 用例体仍必须同步(那条走
+   `AvaloniaSession` + `ConnectBlocking`)。

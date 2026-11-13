@@ -30,6 +30,15 @@ namespace TipCL.Tests;
 /// </summary>
 internal static class C2dFixtures
 {
+    /// <summary>
+    /// 本包四个测试类的 xunit collection 名。
+    /// 为什么必须归到一个 collection:它们都是**进程级静态**的注入缝
+    /// (<c>BridgeHost.ApiFactory</c> / <c>OnCoreStarted</c> / <c>BackendApi.DisableAuthWarmup</c> /
+    /// <c>AppServices.Host</c>)的临时改写者;xunit 默认按类并行,两个 C2d 类并行时会互相把对方的
+    /// 工厂换掉(实测:VSTest 通道里就是这么红的 —— 进程内执行器是串行的所以看不到)。
+    /// 归到一个 collection 之后同一个 collection 内的类**串行**执行。
+    /// </summary>
+    internal const string Collection = "C2d backend";
     private static bool _installed;
 
     private static bool _savedWarmupSwitch;

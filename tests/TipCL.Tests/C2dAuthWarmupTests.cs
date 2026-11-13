@@ -19,6 +19,7 @@ namespace TipCL.Tests;
 ///
 /// **纪律**:每个用例必须在 <c>finally</c> 里把开关还原(任务书要求)。
 /// </summary>
+[Collection(C2dFixtures.Collection)]
 public class C2dAuthWarmupTests
 {
     /// <summary>实测(任务书要求):开关默认 false —— 默认行为与 Windows 版一致,预热照发。</summary>

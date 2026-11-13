@@ -29,6 +29,7 @@
 | C2a | 桥层与 WPF-free 基础服务(`AppServices`/`Payload`/`TaskStore`/`TaskRow`/`I18n`/`Fmt`/`FileKinds`/`BridgeEvent`/`BridgeCallException`/`BridgeHost`/`BridgeClient`/`Dlg`/`Motion`) | ✅ 完成(见下;**新增 210 条用例,总数 2257 → 2467,两条通道各连跑 2 次都 2467/2467 全绿**;`src\TipCL.Core` 一行未动;只有进程内一条后端路径,外部 Python 桥已去) |
 | C2b | 外壳:`MainWindow` / 导航 / 页面宿主 / Toast·Dialog·DropVeil 宿主 / 系统菜单与快捷键 | ✅ 完成(见下;**新增 79 个测试方法 / 122 条用例,总数 2467 → 2593,两条通道各连跑 2 次都全绿**;C2a 的接线清单除 `ToastSink`(Toast 视觉件属 C2c)与"启动后端"两处外全部落地;smoke 因新增标题栏 / 侧栏 / 页面宿主而变,**新基准 = light 21823 `8336CA13...` / dark 18200 `DBD3C171...`**) |
 | C2c | Toast / Dialog / DropVeil 视觉件 + `FileDrop` / `PageBase.EnableDrop` + Backdrop / Wallpaper / SideFrost / ImeGuard / AccountGate / 下载任务底条(C2b 明确没做的视觉件) | 未开始 |
+| C2d | 进程内后端接线与验收(可关的登录预热 / `BackendBootstrap` 状态机 / 真启停 / 真 RPC 往返 / `BridgeReady` 开闸) | ✅ 完成(见下;**新增 38 条用例,总数 2593 → 2631,两条通道都 2631/2631 全绿**;`src\TipCL.Core` 只动 `BackendApi.cs` 一个文件(+20/-4);**后端真的起在 `127.0.0.1:0` 上并跑通了真 RPC 与真 SSE**,`BridgeReady` 改由真启动路径打开;顺带修掉"取消启动会漏监听器"的真缺口;smoke 与 C2b 基准逐位相同) |
 | C3-C8 | 页面逐个移植 | 未开始(接入方式:各页面包 `PageRegistry.Register(...)`,页面 id 见表) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
@@ -4222,3 +4223,175 @@ AI 助手[ai]、工具[tasks, more]、设置[settings];`download` 分区默认�
 全仓库扫描结果:436 个受版本控制的文本文件里,只有 `SmokeState.cs` 是异常;`tools\package.ps1` 的 BOM 是 D-12 要求的(PowerShell 5.1 必需),`TipCL.Mac.sln` 的 CRLF 是解决方案文件惯例 —— 两者都不是缺陷。
 
 **只记录、不处理**:`Ported\NavCompatTests.cs` 这次是 A 类原样恢复(只动了 csproj 的 `Compile Remove`),文件本身零改动;`NavDump.cs` 未搬(D1 若做 `--nav-dump` 单开小包);`UiPrefs` 仍叫 `wpf-ui.json` 且 `SaveUiPrefs` 未自动调用(避免碰用户数据)。
+
+---
+
+## C2d 进程内后端接线与验收:后端真的跑起来了(2026-11-13)
+
+本包**只做后端接线与验收**:没有移植任何页面、没有碰 C2c 的视觉件、没有碰导航 / 色板 / `Controls.axaml`,
+`src\TipCL.Core` 只改 `BackendApi.cs` 一个文件(两处 hunk,**+20/-4** 行)。
+
+### 1. 一句话结论(先说最要紧的)
+
+**后端真的起来了,而且是一次真实往返。** 真 `BackendApi` + 真 `BridgeServer` 绑在 `127.0.0.1:0` 上
+(探针那次实测端口 **63547**),`/health` 答 200,`BridgeClient` 打过去拿到真值
+(`get_language` = `zh_CN`、`translate("启动", "en")` = `Launch`、`get_instances` 返回隔离目录下的真路径),
+SSE 事件流也收到了真事件(`hello` 握手 + `create_instance` 引发的 `ui_changed`);
+停掉之后端口从系统监听表里消失、能被重新绑、再连被拒。
+
+### 2. 后端启动路径(现在的样子)
+
+`App.OnFrameworkInitializationCompleted`(桌面生命周期)→ `MainWindow.StartBackend()`(fire-and-forget)
+→ `MainWindow.ConnectAsync()` → `BackendBootstrap.StartAsync()`(状态机)→ `BridgeHost.StartAsync()`
+→ `EnsureCore(root)`(`TIPCL_HOME` / `Utils.SetRoot` / `Config.Reset` / `Guard.Install` / I18n)
+→ `ApiFactory(root, bus)` 造 `BackendApi` → `OnCoreStarted(api)` → `new BridgeServer(api, bus, token)`
+→ `srv.Start(0)` → 健康检查循环(`/health`,最多 60 次 × 100ms)→ 成功则 `AppServices.Host/Client = ...`
++ **`BridgeReady = true`** + 往 UI 线程投一次"补载当前页"(Windows `ReloadCurrentAsync` 的等价物)。
+失败则 `BridgeReady` 保持 false,原因写进 `MainWindow.BridgeError` 与调试输出(**绝不静默 ready**)。
+
+- 阶段:`NotStarted → Starting → Ready → Stopped`;启动失败落 `Failed`(`Error` 里放的是**原异常**)。
+- `Stop()` 幂等,顺序固定:先取消在飞的启动 → `Client.Dispose()`(取消 SSE 循环)→ `server.Stop()`(放端口)。
+- 关窗挂 `Closed → StopBackend()`;离屏 `--smoke` **不进**桌面生命周期,所以不启动后端(实测像素没变)。
+- 两个注入缝(`BridgeHost.ApiFactory` / `OnCoreStarted`)与 `ResetCore()` 都标着"只有测试用"(见 D-101)。
+
+### 3. Core 那处改动的完整形状(D-100)
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `src/TipCL.Core/BackendApi.cs` —— **整个项目唯一一处 Core 改动**,`git diff --name-status a84c8c6 HEAD -- src/TipCL.Core` 只列它 |
+| 行数 | **+20 / -4**(15 行是 XML 文档与空行;真正逻辑 = 1 个属性 + 1 个 3 行判断函数 + 1 个 `if` 与一对花括号) |
+| 默认行为 | `DisableAuthWarmup = false` = 与 Windows 版一致:构造时照旧排预热 |
+
+改前(实例构造函数末尾,原文一字不差):
+
+```csharp
+		// 启动后在后台预热微软登录域名(系统代理探测 + DNS + TLS),点「微软登录」时验证码能更快出来
+		ThreadPool.QueueUserWorkItem(delegate
+		{
+			Thread.Sleep(1500);
+			AuthHttp.Warmup("https://login.live.com/");
+		});
+```
+
+改后(那 4 行原样保留,只被守卫包住、缩进 +1 层):
+
+```csharp
+		if (ShouldWarmupAuth())
+		{
+			ThreadPool.QueueUserWorkItem(delegate
+			{
+				Thread.Sleep(1500);
+				AuthHttp.Warmup("https://login.live.com/");
+			});
+		}
+```
+
+新增(在实例构造的上一行):
+
+```csharp
+	public static bool DisableAuthWarmup { get; set; }                     // 默认 false
+	internal static bool ShouldWarmupAuth() { return !DisableAuthWarmup; }
+```
+
+- 用**属性**而不是环境变量:环境变量是进程级、谁都能顺手设,而且"谁设的、还原没有"在用例里看不见;
+  属性能在 `finally` 里精确还原,判断函数还能被单独钉住两个分支。
+- `start_microsoft_login()` 里那次 `AuthHttp.Warmup(...)` **一字未动**(用户点按钮才走);
+  用例按源码形状钉住了这一点:全文件守卫只 1 处、预热调用共 2 处。
+- Core 身份核对(本包自己用"同名文件配对 + SHA256"的方法复算):mac 侧 Core 264 个 `.cs` /
+  同名有对应 253 / 完全一致 231 / **有改动 22** / 无对应 11。
+  **`BackendApi.cs` 本来就在这 22 个里**(B2c3 改过 `export_launch_script`;实测 a84c8c6 那一版与
+  Windows 源也不相等)→ 本包没有让任何一个新文件进入"有改动"集合,其余 21 个文件本包一字未碰。
+
+### 4. 往返用的 RPC 方法与"为什么安全"
+
+| 方法 | 返回的实测值 | 为什么安全 |
+|---|---|---|
+| `get_language` | `"zh_CN"` | 只读内存里的语言码,无 IO |
+| `translate`(key=`启动`) | `"启动"` | 读 Core **内嵌**的 `Resources/locales/*.json`,不落盘、不联网 |
+| `translate`(key=`启动`, lang=`en`) | `"Launch"` | 同上;两个语言都给值,证明它真去查了词表 |
+| `available_languages` | `{"zh_CN":"简体中文","en":"English"}` | 同一张内嵌词表;顺带证明**对象**返回值也能过桥 |
+| `get_instances` | 1 行,`path` = `<TestHome.Root>\.minecraft` | 只扫隔离目录下的实例目录(空),返回的 path 必须在隔离目录下 |
+| `stash_upload` | `<TestHome.Root>\uploads\c2d-containment-<guid>.bin` | 落点在 `Utils.ROOT/uploads`;用它做"后端只往隔离目录写"的取证 |
+| `create_instance` | 触发 `ui_changed`(SSE 用) | 只在隔离目录里补标准目录 / 建同名目录,不联网 |
+| `no_such_method_c2d` | `BridgeCallException: unknown method: ...` | 证明分发器真的在解析方法名,失败不会静默成功 |
+
+**一个都没碰**:下载、启动游戏、`java_list` 这类会扫盘 / 联网的方法一律不调。
+`PluginManager.StartGlobal`(生产默认那一步,5 秒后会去插件市场联网)在测试里被 `OnCoreStarted` 换掉(D-101)。
+
+### 5. 收摊(Stop)的取证
+
+1. 端口从 `IPGlobalProperties.GetActiveTcpListeners()` 的回环列表里消失(`DoesNotContain`);
+2. 同一个端口能被重新 `TcpListener` 绑上(`CanBind == true`);
+3. 再连它会被拒(`CanConnect == false`);
+4. **10 轮起停**:用过的 10 个端口(实测 54264、54266、54269、54271、54273、54275、54277、54280、54282、54284)
+   逐个断言已放掉 + "没有新监听端口" + 线程数 33 → 34(泄漏的话一轮一个 `bridge-accept` 线程会是 +10);
+5. **取消启动**不留监听:`Stop()` 之后启动任务返回 null、阶段停 `Stopped`,系统监听表里没有新端口;
+6. SSE 连着的时候 `Stop()` 立刻返回(< 10s 上限,实测毫秒级),事件流状态落回未连接。
+
+**真缺口(本包发现并修掉)**:`BridgeHost.StartInProcessAsync` 的健康检查循环里,`await Task.Delay(100, ct)`
+在 ct 被取消时会把**已经起来的监听器与客户端**一起漏在进程里(端口永久被占 + `bridge-accept` 线程常驻)。
+用例 `Stop_during_start_cancels_and_leaves_no_listener` 先复现(监听表里端口还在),再修:给那次 `Task.Delay`
+包一层 `catch (OperationCanceledException) { client.Dispose(); srv.Stop(); throw; }`(纯插入 8 行,
+没有改动原有代码的缩进与语义)。见 D-103。
+
+### 6. 新增 / 改动的文件
+
+| 文件 | 说明 |
+|---|---|
+| `src\TipCL.Core\BackendApi.cs` | **改**:`DisableAuthWarmup` + `ShouldWarmupAuth()` + 守卫(+20/-4,D-100) |
+| `src\TipCL.App\Services\BackendBootstrap.cs` | **新增**:启动器 + 状态机(`BridgePhase`)+ 取消在飞启动 + 幂等 Stop |
+| `src\TipCL.App\Services\BridgeHost.cs` | **改**:两个注入缝、`ResetCore()`、取消启动时的监听器泄漏修复 |
+| `src\TipCL.App\MainWindow.cs` | **改**:`ConnectAsync` / `ConnectBlocking` / `StartBackend` / `StopBackend` / `BridgeError` + 连上后补载当前页(仅后端接线相关) |
+| `src\TipCL.App\App.cs` | **改**:桌面生命周期里调一次 `window.StartBackend()`(3 行 + 注释) |
+| `tests\TipCL.Tests\C2dFixtures.cs` | **新增**:注入缝的装载/还原 + 监听表/端口/线程数/条目快照等观察手段 + collection 名 |
+| `tests\TipCL.Tests\C2dAuthWarmupTests.cs` | **新增**:预热开关 8 个方法 / 9 条用例(含源码形状钉子) |
+| `tests\TipCL.Tests\C2dBackendLifecycleTests.cs` | **新增**:18 条生命周期用例 |
+| `tests\TipCL.Tests\C2dShellWiringTests.cs` | **新增**:5 条接线用例(`BridgeReady` 门 + 补载当前页) |
+| `tests\TipCL.Tests\C2dRoundTripTests.cs` | **新增**:6 条真实往返用例(含 SSE) |
+
+### 7. 测试(新增 37 个方法 / 38 条用例;总数 2593 → 2631)
+
+四处"通道差异"是写用例时踩出来的,都记在 D-103:并行通道里两个 C2d 类会互改注入缝(四个类因此归到
+同一个 xunit collection)、SSE 首条事件是握手 `hello` 而不是 `ui_changed`、`create_instance` 的落点形状
+取决于单根模式(不能用"某个固定形状"断言)、以及 xUnit1031(xUnit1031 实测 66 条警告 → 用例体改成
+`async Task` + `await` 后归零)。
+
+### 8. 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | 开工前 / 收工后 `%LOCALAPPDATA%\TipCL` 测量 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,**前后一致,也与 Lead 基线一致** |
+| 2 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 0,**0 错误**;**7 个警告** = `NU1900`(镜像取不到漏洞数据,纯净度受网络影响)×6 + `SYSLIB0014` 唯一一处(`src\TipCL.Core\Launcher\Sync\PhoneClient.cs:116`) |
+| 3 | `dotnet test TipCL.Mac.sln -c Release --no-build` 第 1 / 2 次 | 都是**退出码 0**:`已通过! - 失败: 0,通过: 2631,已跳过: 0,总计: 2631,持续时间: 12 s` |
+| 4 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` 第 1 / 2 次 | 都是**退出码 0**:`总计 2631 个用例,通过 2631,失败 0,跳过 0,不支持 0`,末尾 `in-proc 测试全绿` |
+| 5 | `--smoke --theme light` / `--theme dark` | 退出码 **0 / 0**;light **21823 字节** `8336CA136B4F309D8275490578B8759E680AB5A1D8B861659D082802FE60449B`、dark **18200 字节** `DBD3C171D7E176F12F9CE05335E7E96A0CE21F1135A4CC1E2CCADD5564AD604E` —— **与 C2b 基准逐位相同**(后端没在离屏路径上启动,像素没变) |
+| 6 | 收工残留进程 `testhost` / `TipCL` / `java` / `adb` | **0 个** |
+| 7 | 一次完整测试前 / 后回环监听表 | 27 → 27,**没有新增、也没有消失**的端口;每个用例用过的端口另在用例内逐个断言已放掉 |
+| 8 | `git diff --name-status a84c8c6 HEAD -- src/TipCL.Core` | 只有 `M src/TipCL.Core/BackendApi.cs`;`git diff --numstat` = **20/4** |
+| 9 | Core 同名配对 SHA256 复核 | 264 / 253 / 231 / **有改动 22** / 无对应 11,`BackendApi.cs` 事前已在其中(见第 3 节) |
+| 10 | `%TEMP%` 下 `tipcl*` | 总数 101,与开工前一致;**本包没有新建任何 `%TEMP%\tipcl*`**(`tipcl-probe` 属另一会话:它的 `logs\tipcl-20261113.log` 记的是 `TipCL 0.1.0-m3 启动`,`home=%TEMP%\tipcl-probe`,是别人在跑 `TipCL.exe`,不是本包用例 —— 本包用例从不启动外部进程,数据全在 `bin\...\test-home\<guid>` 下) |
+
+### 9. 未验证项(本机是 Windows,没有 Mac)
+
+1. **真桌面路径的自动启动**:`App.OnFrameworkInitializationCompleted → StartBackend` 这一段在离屏 / 测试里
+   进不去(`SetupWithoutStarting` 不建桌面生命周期),本包只能在用例里直接走 `ConnectBlocking` /
+   `StartBackend`(注入缝换掉内核工厂)。**开机自启在真 mac 桌面上没跑过。**
+2. **生产默认的"内核起来之后那一步"**:`McpServer.StartIfEnabled` + `PluginManager.StartGlobal` 在测试里被
+   `OnCoreStarted` 换掉(它 5 秒后要去插件市场联网,红线不许碰)。所以"插件系统 + MCP 与真后端一起起来的
+   样子"**只在代码层面对齐,没有实测**。
+3. **登录预热本身**:本包把开关置 true 来避免联网,所以"预热真的发出去了、能加速微软登录"这条
+   **没有验证**(D-23 起就是这样,本包没有改变这个事实)。
+4. macOS 真机上的一切(红绿灯 / 系统菜单 / 动画开着那几条)仍与 C2b 一样**未验证**。
+5. `BridgeHost` 里那个静态内核单例在多实例 / 重连场景下的语义(Windows 也只有一个进程内内核)
+   **没有做压力验证**:本包只验了"起 → 停 → 再起"这条直线。
+
+### 10. 遗留与风险
+
+1. **C3 页面接入后要复查"补载当前页"**:它走 `Dispatcher.UIThread.Post`,在会话线程被用例体占满时不会执行,
+   所以那一条用例分两个阶段(见 `C2dShellWiringTests.Page_loading_follows_the_bridge_ready_gate`)。
+   真桌面上它由 UI 循环执行,行为与 Windows 一致。
+2. **`StopBackend` 不动内核单例**:与 Windows 一致(`BackendApi` 按设计活到进程结束);
+   测试收摊靠 `BridgeHost.ResetCore()`(internal,只有测试用)。
+3. **`Guard.Install` 每次启动都会再挂一次 `AppDomain.UnhandledException`**(Core 既有行为,本包没改);
+   真桌面只启动一次,测试里起停多次会多挂几次(实测无副作用)。
+4. `%LOCALAPPDATA%\TipCL` 仍是 9328 / 889530606 / 2026-11-10 20:42:16(本包一个字节都没往那里写)。

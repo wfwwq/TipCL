@@ -22,10 +22,14 @@ namespace TipCL.Tests;
 /// 真 <c>RpcDispatcher</c>。**唯一被换掉的是"内核起来之后那一步"**(<c>OnCoreStarted</c>):
 /// 生产默认那一步会启动插件系统,而它 5 秒后会去插件市场拉更新(联网),测试不能碰(D-101)。
 ///
-/// 期望值来源逐条标注:"任务书" / "Win 源"(Windows 版对应实现)/ "实测"(本机跑出来的观测值)。
+/// 用例体一律 <c>async Task</c> 并 <c>await</c>(不用 <c>.GetAwaiter().GetResult()</c>:
+/// xUnit1031 会因此报警告,而本项目要求"NU1900 之外的警告只有 SYSLIB0014 一处")。
 /// 每个用例都在 <c>finally</c> 里 <see cref="C2dFixtures.Restore"/> 并 Dispose 启动器
 /// (任务书:每个 start 必须有配对的 stop,端口用 0 让系统挑)。
+///
+/// 期望值来源逐条标注:"任务书" / "Win 源"(Windows 版对应实现)/ "实测"(本机跑出来的观测值)。
 /// </summary>
+[Collection(C2dFixtures.Collection)]
 public class C2dBackendLifecycleTests
 {
     // ───────────────────────── 状态机 ─────────────────────────
@@ -57,7 +61,7 @@ public class C2dBackendLifecycleTests
     /// 做法是让内核工厂先卡在一个门闩上,趁它卡着读阶段(实测)。
     /// </summary>
     [Fact]
-    public void Start_goes_through_starting_and_ends_ready_then_stopped()
+    public async Task Start_goes_through_starting_and_ends_ready_then_stopped()
     {
         C2dFixtures.Install();
         using ManualResetEventSlim gate = new ManualResetEventSlim(false);
@@ -82,7 +86,7 @@ public class C2dBackendLifecycleTests
             Assert.Equal(0, boot.Port);
 
             gate.Set();
-            BridgeHost? host = start.GetAwaiter().GetResult();
+            BridgeHost? host = await start;
 
             Assert.NotNull(host);
             Assert.Equal(BridgePhase.Ready, boot.Phase);
@@ -106,13 +110,13 @@ public class C2dBackendLifecycleTests
 
     /// <summary>启动成功:阶段 Ready、宿主就绪、端口 &gt; 0、数据根 = 隔离目录(实测)。</summary>
     [Fact]
-    public void Start_reports_ready_with_a_real_port_and_the_isolated_root()
+    public async Task Start_reports_ready_with_a_real_port_and_the_isolated_root()
     {
         C2dFixtures.Install();
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
 
             Assert.NotNull(host);
             Assert.Equal(BridgePhase.Ready, boot.Phase);
@@ -133,16 +137,16 @@ public class C2dBackendLifecycleTests
 
     /// <summary>已经在用的时候再启动一次:抛 InvalidOperationException(调用错误,不是静默复用)。</summary>
     [Fact]
-    public void Second_start_while_ready_is_rejected()
+    public async Task Second_start_while_ready_is_rejected()
     {
         C2dFixtures.Install();
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
             Assert.NotNull(host);
 
-            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => boot.StartAsync().GetAwaiter().GetResult());
+            InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(() => boot.StartAsync());
 
             Assert.Contains(I18n.L("后端已经启动了"), ex.Message, StringComparison.Ordinal);
             Assert.Equal(BridgePhase.Ready, boot.Phase);
@@ -161,7 +165,7 @@ public class C2dBackendLifecycleTests
     /// 宿主为 null、端口 0(任务书:失败不许静默变成 ready)。
     /// </summary>
     [Fact]
-    public void Factory_that_throws_leaves_the_bootstrap_failed()
+    public async Task Factory_that_throws_leaves_the_bootstrap_failed()
     {
         C2dFixtures.Install();
         BridgeHost.ApiFactory = delegate(string root, EventBus bus)
@@ -172,7 +176,7 @@ public class C2dBackendLifecycleTests
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
 
             Assert.Null(host);
             Assert.Equal(BridgePhase.Failed, boot.Phase);
@@ -194,7 +198,7 @@ public class C2dBackendLifecycleTests
     /// 而且紧接着的第二次启动照样能起来(实测)。
     /// </summary>
     [Fact]
-    public void Failed_start_leaves_no_listener_and_a_later_start_works()
+    public async Task Failed_start_leaves_no_listener_and_a_later_start_works()
     {
         C2dFixtures.Install();
         BridgeHost.ApiFactory = delegate(string root, EventBus bus)
@@ -207,7 +211,7 @@ public class C2dBackendLifecycleTests
             List<int> before = C2dFixtures.LoopbackListeners();
             using (BackendBootstrap broken = new BackendBootstrap())
             {
-                Assert.Null(broken.StartAsync().GetAwaiter().GetResult());
+                Assert.Null(await broken.StartAsync());
                 Assert.Equal(BridgePhase.Failed, broken.Phase);
             }
 
@@ -218,7 +222,7 @@ public class C2dBackendLifecycleTests
             // 换回正常工厂,证明失败没有把进程级状态弄脏(内核单例还有效)。
             C2dFixtures.InstallCoreFactoryOnly();
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
 
             Assert.NotNull(host);
             Assert.Equal(BridgePhase.Ready, boot.Phase);
@@ -238,7 +242,7 @@ public class C2dBackendLifecycleTests
     /// 而且**没有留下新监听**(任务书:取消在飞的启动 + 不留监听)。
     /// </summary>
     [Fact]
-    public void Stop_during_start_cancels_and_leaves_no_listener()
+    public async Task Stop_during_start_cancels_and_leaves_no_listener()
     {
         C2dFixtures.Install();
         using ManualResetEventSlim gate = new ManualResetEventSlim(false);
@@ -264,7 +268,7 @@ public class C2dBackendLifecycleTests
             Assert.Equal(BridgePhase.Stopped, boot.Phase);
 
             gate.Set();
-            BridgeHost? host = start.GetAwaiter().GetResult();
+            BridgeHost? host = await start;
 
             Assert.Null(host);
             Assert.Null(boot.Host);
@@ -284,13 +288,13 @@ public class C2dBackendLifecycleTests
 
     /// <summary>端口真的绑上了:回环上能连、而且出现在操作系统的监听表里(实测)。</summary>
     [Fact]
-    public void Started_port_is_bound_and_reachable()
+    public async Task Started_port_is_bound_and_reachable()
     {
         C2dFixtures.Install();
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
             Assert.NotNull(host);
 
             Assert.True(C2dFixtures.CanConnect(host!.Port), "回环端口连不上: " + host.Port);
@@ -306,16 +310,16 @@ public class C2dBackendLifecycleTests
 
     /// <summary>/health 真的答 200(这也是 <c>BridgeHost</c> 起来之后的开闸条件)。</summary>
     [Fact]
-    public void Health_endpoint_answers_200()
+    public async Task Health_endpoint_answers_200()
     {
         C2dFixtures.Install();
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
             Assert.NotNull(host);
 
-            Assert.True(host!.Client.IsHealthyAsync().GetAwaiter().GetResult());
+            Assert.True(await host!.Client.IsHealthyAsync());
 
             boot.Stop();
         }
@@ -327,13 +331,13 @@ public class C2dBackendLifecycleTests
 
     /// <summary>Stop 幂等:连调两次不抛,阶段停在 Stopped(实测)。</summary>
     [Fact]
-    public void Stop_is_idempotent()
+    public async Task Stop_is_idempotent()
     {
         C2dFixtures.Install();
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
             Assert.NotNull(host);
             int port = host!.Port;
 
@@ -356,13 +360,13 @@ public class C2dBackendLifecycleTests
     /// 而且再连它会被拒(实测)。这三条一起才算"监听器真的关了"。
     /// </summary>
     [Fact]
-    public void Stop_releases_the_port_and_refuses_new_connections()
+    public async Task Stop_releases_the_port_and_refuses_new_connections()
     {
         C2dFixtures.Install();
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
             Assert.NotNull(host);
             int port = host!.Port;
 
@@ -380,18 +384,18 @@ public class C2dBackendLifecycleTests
 
     /// <summary>停掉之后还能再起来(阶段从 Stopped 回到 Ready;实测)。</summary>
     [Fact]
-    public void Restart_after_stop_works()
+    public async Task Restart_after_stop_works()
     {
         C2dFixtures.Install();
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? first = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? first = await boot.StartAsync();
             Assert.NotNull(first);
             int firstPort = first!.Port;
             boot.Stop();
 
-            BridgeHost? second = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? second = await boot.StartAsync();
 
             Assert.NotNull(second);
             Assert.Equal(BridgePhase.Ready, boot.Phase);
@@ -411,13 +415,13 @@ public class C2dBackendLifecycleTests
 
     /// <summary>Dispose = 收后端 + 之后再用就抛 ObjectDisposedException(实测)。</summary>
     [Fact]
-    public void Dispose_stops_the_backend_and_closes_the_bootstrap()
+    public async Task Dispose_stops_the_backend_and_closes_the_bootstrap()
     {
         C2dFixtures.Install();
         try
         {
             BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
             Assert.NotNull(host);
             int port = host!.Port;
 
@@ -427,7 +431,7 @@ public class C2dBackendLifecycleTests
             Assert.Equal(BridgePhase.Stopped, boot.Phase);
             Assert.Null(boot.Host);
             Assert.True(C2dFixtures.CanBind(port));
-            Assert.Throws<ObjectDisposedException>(() => boot.StartAsync().GetAwaiter().GetResult());
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => boot.StartAsync());
         }
         finally
         {
@@ -440,13 +444,13 @@ public class C2dBackendLifecycleTests
     /// (Win 源:`BridgeHost.Dispose` 先 <c>Client.Dispose()</c>(取消 SSE)再 <c>server.Stop()</c>)。
     /// </summary>
     [Fact]
-    public void Stop_while_the_event_stream_is_open_is_prompt()
+    public async Task Stop_while_the_event_stream_is_open_is_prompt()
     {
         C2dFixtures.Install();
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
             Assert.NotNull(host);
             int port = host!.Port;
 
@@ -458,7 +462,11 @@ public class C2dBackendLifecycleTests
             watch.Stop();
 
             Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), "Stop 花了 " + watch.Elapsed + "(疑似被 SSE 拖住)");
-            Assert.False(host.Client.StreamConnected);
+            // 事件流那条读循环是在别的线程上收摊的(SetStreamState(false) 在它的 finally 里),
+            // 所以这里给一个有上限的等待 —— 并行通道下"Stop 刚返回就读状态"会看到中间态(实测)。
+            Assert.True(
+                WaitForStreamClosed(host, TimeSpan.FromSeconds(10)),
+                "停止之后事件流状态没有落回未连接;LastStreamError=" + host.Client.LastStreamError);
             Assert.True(C2dFixtures.CanBind(port));
         }
         finally
@@ -473,7 +481,7 @@ public class C2dBackendLifecycleTests
     /// 这里给 6 的余量,把线程池的正常波动排除在外)。实测值写在断言消息里。
     /// </summary>
     [Fact]
-    public void Ten_start_stop_cycles_leave_no_listener_or_thread_pileup()
+    public async Task Ten_start_stop_cycles_leave_no_listener_or_thread_pileup()
     {
         C2dFixtures.Install();
         try
@@ -485,7 +493,7 @@ public class C2dBackendLifecycleTests
             for (int i = 0; i < 10; i++)
             {
                 using BackendBootstrap boot = new BackendBootstrap();
-                BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+                BridgeHost? host = await boot.StartAsync();
                 Assert.NotNull(host);
                 Assert.Equal(BridgePhase.Ready, boot.Phase);
                 used.Add(host!.Port);
@@ -519,19 +527,19 @@ public class C2dBackendLifecycleTests
     /// 必然抛(连接被拒)。期望类型不写死(平台差异),只要求它抛。
     /// </summary>
     [Fact]
-    public void Rpc_after_stop_fails_instead_of_pretending()
+    public async Task Rpc_after_stop_fails_instead_of_pretending()
     {
         C2dFixtures.Install();
         try
         {
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
             Assert.NotNull(host);
             int port = host!.Port;
             boot.Stop();
 
             using BridgeClient client = new BridgeClient(new Uri(BridgeHost.ClientBaseUrl(port)), new string('a', 64));
-            Assert.ThrowsAny<Exception>(() => client.CallAsync("get_language").GetAwaiter().GetResult());
+            await Assert.ThrowsAnyAsync<Exception>(() => client.CallAsync("get_language"));
             Assert.False(C2dFixtures.CanConnect(port));
         }
         finally
@@ -543,12 +551,13 @@ public class C2dBackendLifecycleTests
     // ───────────────────────── 数据落点 ─────────────────────────
 
     /// <summary>
-    /// 数据全部落在隔离目录里:启动前后对比 <see cref="TestHome.Root"/> 下的条目,
-    /// 后端新建的东西必须在隔离目录之下(实测:`.minecraft` 目录树 + `tipcl-error.log`),
-    /// 而且用户真实的 <c>%LOCALAPPDATA%\TipCL</c> 与本次启动无关。
+    /// 数据全部落在隔离目录里:让后端**真的写一个文件**(<c>stash_upload</c> 把 base64 解出来写到
+    /// <c>Utils.ROOT/uploads</c> 下,名字带 Guid),然后断言落点在 <see cref="TestHome.Root"/> 之下、
+    /// 内容正确、并且启动前后新增的条目全都在隔离目录里;用户真实的
+    /// <c>%LOCALAPPDATA%\TipCL</c> 与本次启动无关。
     /// </summary>
     [Fact]
-    public void Backend_writes_only_under_the_isolated_test_home()
+    public async Task Backend_writes_only_under_the_isolated_test_home()
     {
         C2dFixtures.Install();
         try
@@ -557,18 +566,15 @@ public class C2dBackendLifecycleTests
             HashSet<string> before = C2dFixtures.EntriesUnder(TestHome.Root);
 
             using BackendBootstrap boot = new BackendBootstrap();
-            BridgeHost? host = boot.StartAsync().GetAwaiter().GetResult();
+            BridgeHost? host = await boot.StartAsync();
             Assert.NotNull(host);
 
-            // 让后端**真的写一个文件**再断言落点:stash_upload 是 BackendApi 的 RPC 方法
-            // (把 base64 解出来写到 Utils.ROOT/uploads 下,见 BackendApi.cs 的 stash_upload),
-            // 名字带 Guid,不会跟别的用例打架。这一条同时也是"后端真的在干活"的取证。
             string data = Convert.ToBase64String(Encoding.UTF8.GetBytes("C2d"));
-            JsonElement result = host!.Client.CallAsync("stash_upload", new Dictionary<string, object>
+            JsonElement result = await host!.Client.CallAsync("stash_upload", new Dictionary<string, object>
             {
                 ["name"] = name,
                 ["data"] = data
-            }).GetAwaiter().GetResult();
+            });
             string written = result.GetString() ?? "";
 
             List<string> created = C2dFixtures.EntriesUnder(TestHome.Root).Except(before).ToList();
@@ -584,7 +590,7 @@ public class C2dBackendLifecycleTests
 
             string realUserDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TipCL");
-            Assert.StartsWith(TestHome.Root, host!.Root, StringComparison.Ordinal);
+            Assert.StartsWith(TestHome.Root, host.Root, StringComparison.Ordinal);
             Assert.StartsWith(TestHome.Root, Utils.ROOT, StringComparison.Ordinal);
             Assert.False(host.Root.StartsWith(realUserDir, StringComparison.Ordinal));
             Assert.False(Utils.ROOT.StartsWith(realUserDir, StringComparison.Ordinal));
@@ -597,7 +603,7 @@ public class C2dBackendLifecycleTests
 
     /// <summary>启动不会动"当前目录"这类进程级设置:隔离根与 <c>BridgeHost.FindRoot()</c> 始终一致(实测)。</summary>
     [Fact]
-    public void Start_keeps_find_root_and_utils_root_in_agreement()
+    public async Task Start_keeps_find_root_and_utils_root_in_agreement()
     {
         C2dFixtures.Install();
         try
@@ -606,7 +612,7 @@ public class C2dBackendLifecycleTests
             Assert.Equal(TestHome.Root, Utils.ROOT);
 
             using BackendBootstrap boot = new BackendBootstrap();
-            Assert.NotNull(boot.StartAsync().GetAwaiter().GetResult());
+            Assert.NotNull(await boot.StartAsync());
 
             Assert.Equal(TestHome.Root, BridgeHost.FindRoot());
             Assert.Equal(TestHome.Root, Utils.ROOT);
@@ -635,5 +641,21 @@ public class C2dBackendLifecycleTests
         }
 
         return host.Client.StreamConnected;
+    }
+
+    private static bool WaitForStreamClosed(BridgeHost host, TimeSpan timeout)
+    {
+        DateTime deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!host.Client.StreamConnected)
+            {
+                return true;
+            }
+
+            Thread.Sleep(50);
+        }
+
+        return !host.Client.StreamConnected;
     }
 }
