@@ -1558,3 +1558,54 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   `Ui.G("Auto", "*")`(**只定义 1 行**)之后又 `grid.Add(_bodyWrap, 1)`;同位置的 `DashHost` 写的是
   `Ui.G("Auto,*")`(2 行)。WPF 与 Avalonia 都会把越界行号夹到最后一行,所以两边行为一致;
   移植逐字照抄,并用用例钉住实际落位(常态操作条收起、只占 0 高度,视觉等价)。
+
+## D-118 C3b:任务书"这两个对话框自包含"的前提只对了一半(如实记录,按"小而自包含就一并搬"处理)
+
+- 任务书给的依赖计数(`CrashUi.cs`:`Ui.` 12 / `Dlg.` 3 / `I18n.` 28 / `Motion.` 0;
+  `VersionSetupDialog.cs`:`Ui.` 30 / `Dlg.` 1 / `I18n.` 45 / `Motion.` 0)**逐项复核全部吻合**。
+- 但"所有服务都已移植,所以本包自包含"**不成立**:两个文件还引用 `TipCL.Models.OpResult`
+  (`CrashUi` 的动作返回值)与 `TipCL.Models.VersionSettingsDto`(版本设置的 DTO),
+  这两个类型在 mac 侧**完全不存在**(Windows 侧各 240 / 1136 字节,纯 `System.Text.Json`
+  数据对象,不碰界面类型)。
+- 处理:按任务书"小而自包含就一并搬并说明"的规定,用 `Copy-Item` **字节级**搬进
+  `src\TipCL.App\Models\`(SHA256 与 Windows 源逐字节一致、无 BOM、LF)。
+  `src\TipCL.Core` 一字节未动。与 C3a 的 D-117 是同一类问题(模型层被依赖扫描漏掉)。
+- 另一处**真的缺口**没有搬,按红线停下并报告:`Pages\AiFixWindow.cs`(Windows 侧 22662 字节的**整窗**,
+  依赖 AI 页整套基础设施)—— 见 D-119。
+- 顺带记一个**照抄来的**行为细节(不是移植引入的,已用两条用例钉住):
+  `VersionSettingsDto.Isolation` 的属性初值是 `"none"`,而 `IsoValues` 的第 2 项正好是 `"none"`,
+  所以后端给空对象(或 `TryCallAsync` 兜底)时版本隔离落在「关闭(共用实例目录)」而**不是**第 0 项
+  「跟随全局」;第 0 项只留给"值不在候选表里"这一支。
+
+## D-119 C3b:`AiFixWindow` 未移植 → 「交给 AI 修复」走注入缝 + 如实提示(请 Lead 裁决)
+
+- 事实:`CrashUi` 在 `gameError: true` 时会建一个主按钮「交给 AI 修复」,Windows 的点击处理是
+  `new AiFixWindow(report).Show()`。`AiFixWindow` 是 **22.6 KB 的整窗**,依赖 `AiRisk` / `ToolMeta` /
+  `AiUiText` / `AiIcons` / `MdView`(AI 页基础设施),属 C7+ 的范围,**本包按红线没有移植它**。
+- 选择(保守 + 不静默):按钮**照 Windows 建**(文案、图标码位 `\ue99a`、提示语、`BtnKind.Primary` 全一致),
+  点击走 mac 侧新增的 `CrashUi.AiFixLauncher`;挂点没接时弹一句 Toast(标题「暂未实现」,
+  正文「AI 修复窗口尚未移植」)。
+- 为什么不静默空操作:静默会让人以为"点了没反应 = bug";为什么不干脆不建这个按钮:那会改变
+  `LaunchPage` / `TasksPage` 看到的 UI 形状,页面移植就不再机械。
+- **这是一处用户可见的行为差异**,请 Lead 裁决:接受这个降级,还是把 `AiFixWindow` 排进 AI 全家那一包并
+  把 `AiFixLauncher` 接上(接的时候 `CrashUi` 本身不用再改)。
+
+## D-120 C3b:测试里"对话框还开着"时不许等对话框任务;泵的计时必须用 Stopwatch(会话 30 秒会先炸)
+
+- 现象:第一版 71 条用例全跑出来后是 **23 失败**,拆开只有**两处真问题**,其余 21 条是
+  `AvaloniaSession` 会话线程被一条死等用例占死之后的**连锁超时**(C1b-fix 记过的同一现象:
+  "看起来像整批卡死,实际只有一个用例的写法错")。
+- 真问题 1:**在对话框还开着的用例里去等对话框任务**(`PumpTask(Choose/Ask 返回的那个 Task)`)。
+  那个任务只有关掉卡片才会结束,于是必然死等到会话超时。修法:新增
+  `C3bFiles.Settle()`(推几轮 Dispatcher 让"点了之后的效果"落地,但**不等**未结束的任务),
+  这类用例只断言效果,最后再点关闭 + `PumpTask`。
+- 真问题 2(**更隐蔽**):`C3bFiles.Pump` 第一版按"轮数 × 2ms"记账,而 `UiHost.Flush()` 一轮要
+  `RunJobs` + `ForceRenderTimerTick`,真实耗时远大于 2ms —— 于是 15 秒的预算被拖成几十秒,
+  **先超时的是 `AvaloniaSession` 的 30 秒**,失败消息还指向"卡在等待 Dispatcher",误导排查方向。
+  修法:改用 `Stopwatch` 计真实时间,上限 **9 秒**(明显小于 30 秒),保证失败时冒出来的是本方法
+  自己的异常。
+- 配套记两条本机实测的期望值(都是别人写的 UI 门面的既有行为,本包只是照抄期望):
+  `Ui.Txt(bold: true)` 用的是 `FontWeight.SemiBold`(=600,枚举别名 `DemiBold`)不是 `Bold`(700);
+  Avalonia 的 `Layoutable.MaxHeight` 默认值是 `PositiveInfinity` 而不是 `NaN`。
+- 结论(给 C3+ 的后续包):**驱动对话框的用例,只想"点了之后的效果"就用 `Settle`;要等任务就在
+  关掉卡片之后再等;泵一律按真实时间设上限,且必须明显小于会话的 30 秒。**

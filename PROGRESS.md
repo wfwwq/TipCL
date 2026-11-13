@@ -34,6 +34,7 @@
 | C2d | 进程内后端接线与验收(可关的登录预热 / `BackendBootstrap` 状态机 / 真启停 / 真 RPC 往返 / `BridgeReady` 开闸) | ✅ 完成(见下;**新增 38 条用例,总数 2593 → 2631,两条通道都 2631/2631 全绿**;`src\TipCL.Core` 只动 `BackendApi.cs` 一个文件(+20/-4);**后端真的起在 `127.0.0.1:0` 上并跑通了真 RPC 与真 SSE**,`BridgeReady` 改由真启动路径打开;顺带修掉"取消启动会漏监听器"的真缺口;smoke 与 C2b 基准逐位相同) |
 | C3-C8 | 页面逐个移植 | 未开始(接入方式:各页面包 `PageRegistry.Register(...)`,页面 id 见表) |
 | C3a | 区块 / 仪表盘布局框架:`Pages\BlockHost.cs` + `Pages\DashHost.cs`(含它们真正依赖的布局模型:`Pages\PageBlock.cs`、`PageLayoutStore.cs`、`PageLayoutIO.cs`、`DashCard.cs`、`DashLayout.cs`) | ✅ 完成(见下;**新增 100 条用例,总数 2797 → 2897,两条通道各连跑 2 次都 2897/2897 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书说"这两个文件应该自包含"**实测不成立** —— 还差 5 个没移植的模型/存储文件,按"小而自包含就一并搬"的规定搬了,见 D-117) |
+| C3b | 启动页需要的两个小对话框:`Pages\CrashUi.cs`(崩溃 / 异常退出报告卡)+ `Pages\VersionSetupDialog.cs`(版本设置) | ✅ 完成(见下;**新增 71 条用例,总数 2897 → 2968,两条通道各连跑 2 次都 2968/2968 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书的门面计数复核吻合,但"自包含"不成立 —— 还差两个没移植的小模型 `Models\OpResult.cs` / `Models\VersionSettingsDto.cs`,按"小而自包含就一并搬"字节级搬来,见 D-118;`AiFixWindow`(22.6 KB 整窗)属 AI 全家未移植,「交给 AI 修复」按钮保留 + 注入缝 + 如实提示,请 Lead 裁决,见 D-119) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
 ## 仓库现状(截至 A1)
@@ -5110,3 +5111,174 @@ Lead 在任务书里说「内置预设背景已内嵌在 Core 的 `Resources\wal
 **裁决 3:Windows 源自身的笔误不修、只钉住。** `BlockHost.BlockCard` 写 `Ui.G("Auto","*")`(只有 1 行)却在下一行 `grid.Add(_bodyWrap, 1)`;同位置 `DashHost` 写的是 `Ui.G("Auto,*")`。WPF 与本机 Avalonia 都把越界行号夹到最后一行,行为一致 —— 忠实保留是对的。`DashHost` 里未被使用的 `private const double Gap` 同理逐字保留。
 
 **给 C3b 的机械改动点(子代理点名)**:`LaunchPage` 里 `_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, ...)` 要换成 Avalonia 的 `Layoutable.MaxHeightProperty`(或走 `Ui.WindowPctConverter` + `Bind`)。
+---
+
+## C3b 启动页需要的两个小对话框:`CrashUi` + `VersionSetupDialog`(2026-11-13)
+
+工作包:把 Windows `Pages\CrashUi.cs`(5035 字节)与 `Pages\VersionSetupDialog.cs`(5078 字节)
+移植到 Avalonia 11 / net8,好让随后的 `LaunchPage`(C3c)移植保持机械。**不碰** `LaunchPage.cs`、
+不碰外壳 / 导航 / 调色板 / 样式表 / 其它已移植页面、`src\TipCL.Core` 一字节未改。
+
+### 1. 先核实任务书的依赖扫描(结论:门面那几个数对,但**漏了两个模型类型**)
+
+任务书给的计数逐项复核,**全部吻合**:
+
+| 文件 | `Ui.` | `Dlg.` | `I18n.` | `Motion.` | 复核命令 |
+|---|---|---|---|---|---|
+| `CrashUi.cs` | 12 | 3 | 28 | 0 | `[regex]::Matches(...)` 逐项计数 |
+| `VersionSetupDialog.cs` | 30 | 1 | 45 | 0 | 同上 |
+
+但"这两个文件自包含"**不成立**(与 C3a 的 D-117 同一类问题):它们还引用了两个在 mac 侧
+**根本不存在**的模型类型 —— `TipCL.Models.OpResult`(240 字节,`CrashUi` 的动作返回值)
+与 `TipCL.Models.VersionSettingsDto`(1136 字节,版本设置的传输对象)。两个都
+**小而自包含**(纯 `System.Text.Json`、不碰界面类型),所以按任务书"小而自包含就一并搬并说明"
+的规定用 `Copy-Item` **字节级**搬进 `src\TipCL.App\Models\`(与 Windows 源 SHA256 一致、无 BOM)。
+**另外发现一个真的缺口,这一块没搬**:`AiFixWindow`(Windows 侧 22662 字节的**整窗**)在 mac 侧不存在,
+属 AI 全家(C7+),按红线"整页 / 大服务缺失就停下并报告"处理 —— 见第 4 条差异与第 7 条遗留。
+
+### 2. 两个对话框各做什么
+
+**`CrashUi`(崩溃 / 异常退出对话框)** —— 输入一份 `CrashReport`,输出**一个布尔**:
+
+- 标题取 `Headline`,空则退 `Title`,都空用「游戏异常退出」;依次排摘要、`退出码 {0}{1}`(退出码为 null 就不排)、帮助、
+  日志框(`Input.Log` 样式、高 190、换行);
+- `Actions` 每项一个 `BtnKind.Soft` 按钮,点击 → `apply_crash_action`(`{action, report}`)→ Toast「已处理」/「没能处理」,
+  处理期间按钮禁用;
+- `gameError: true` 时多一个主按钮「交给 AI 修复」;
+- 5 个固定工具按钮(`BtnKind.Chip`):打开日志文件(`open_crash_file`)/ 导出报告(`Dlg.SaveFile` → `export_crash_report`)/
+  上传给开发者(`submit_crash_report`)/ 附说明反馈(`Dlg.Ask` 收一段说明 → `submit_crash_feedback`)/ 复制全文;
+- 最后 `Dlg.Choose(「启动出问题了」, 面板, [关闭, 重新启动], 760)`,`== 1` 即"要重新启动"。
+
+**`VersionSetupDialog`(版本设置)** —— 先读后写,**没有返回值**(结果只经 Toast):
+
+- `get_version_settings`(失败 / 缺口用 `VersionSettingsDto` 的初值兜)+ `get_accounts`(列表**头部插入**「(不绑定)」);
+- 14 行字段:版本隔离(4 档)/ 独占内存 / JVM 参数 / 垃圾回收器(5 档)/ 直连服务器 / 端口 /
+  启动前命令 + 等待开关 / 退出后命令 / 窗口标题 / 窗口模式(3 档)/ 绑定账号 / 统一通行证 / 在版本列表中隐藏;
+- `Ui.Scroll` + `MinWidth 560` + `BindWindowMaxHeight(0.55, 260)`,用 `Dlg.Ask(「版本设置 · 」+ version, ..., 「保存」)`;
+- 点「保存」才把 14 个键的字典写回 `save_version_settings`(`memory_mb` 只在"能解析成正整数"时写数字,否则写 `null`),
+  成功 Toast「已保存」、失败 Toast「保存失败」+ 消息。
+
+### 3. 这一包交付的成员清单(LaunchPage / TasksPage / LibraryPage / VersionManagePage 会用到的)
+
+| 成员 | 形状 | 说明 |
+|---|---|---|
+| `CrashUi.ShowAsync(CrashReport report, bool gameError = false)` | `public static Task<bool>` | **与 Windows 同名同参同默认值**;Windows 的调用点:`LaunchPage:1871`、`TasksPage:210`(`gameError: true`) |
+| `VersionSetupDialog.ShowAsync(string instance, string version)` | `public static Task` | **与 Windows 同名同参**;Windows 的调用点:`LaunchPage:1635`、`LibraryPage:717`、`VersionManagePage:562` |
+| `CrashUi.ClipboardWriter` | `internal static Func<Control, string, Task<bool>>?` | **mac 侧新增**:剪贴板注入缝(测试按它断言"走的是缝、不是真剪贴板") |
+| `CrashUi.AiFixLauncher` | `internal static Action<CrashReport>?` | **mac 侧新增**:「交给 AI 修复」的挂点(AiFixWindow 落地后接这里) |
+| `CrashUi.ClipboardPlatformAttempts` | `internal static int` | **mac 侧新增**:平台剪贴板路径被走到的次数(只增不减;测试用它钉红线) |
+| `CrashUi.HeadOf(CrashReport)` / `CrashUi.CopyText(string, CrashReport)` | `internal static string` | **mac 侧新增**:从 `ShowAsync` 里抽出来的两个纯函数(逻辑一字未改,便于单测) |
+| `CrashUi.CopyAsync(Control owner, string text)` | `internal static Task<bool>` | **mac 侧新增**:写剪贴板的唯一入口(缝优先 → 离屏跳过 → 平台) |
+
+命名空间与 Windows 一致(`TipCL.Pages` / `TipCL.Models`),所以页面移植时 `using` 都不用改。
+
+### 4. Windows → Avalonia 差异(逐条 + 理由)
+
+`CrashUi.cs`:
+
+1. **剪贴板**:WPF 是静态 `Clipboard.SetText(head + "\n" + Summary + "\n\n" + Detail)`,外面一个空 `catch`。
+   Avalonia 11 **没有**静态剪贴板入口,剪贴板挂在 `TopLevel` 上、且只有 `SetTextAsync`。这里改成
+   `CopyAsync`:`ClipboardWriter` 接了就只走缝 → 离屏(`Dlg.SmokeActive`)直接返回 false 不碰平台 →
+   否则走 `TopLevel.GetTopLevel(owner)?.Clipboard`。取不到实现、或写失败、或抛异常,一律返回 `false`
+   且**不弹**「已复制」—— 与 Windows"先 SetText 成功才 Toast、失败静默"逐条等价。
+   离屏那一条分支是 mac 侧新增的(与 `Dlg` 在离屏下不弹真文件选择器同一口径)。
+2. **「交给 AI 修复」**:Windows 直接 `new AiFixWindow(report).Show()`。那个窗口 22.6 KB、
+   依赖 AI 页整套基础设施(`AiRisk` / `ToolMeta` / `AiUiText` / `AiIcons` / `MdView`),属 AI 全家(C7+),
+   **不在本包范围,也没有搬**。按钮照建(文案 / 图标码位 / 提示语 / `BtnKind.Primary` 全照 Windows),
+   点击走 `AiFixLauncher`;挂点没接时弹一句 Toast「暂未实现 / AI 修复窗口尚未移植」——
+   **不做静默空操作**(静默会让人以为点了没反应是 bug)。这是一处**用户可见的**行为差异,已记入 D-119
+   并请 Lead 裁决(要么接受这个降级,要么把 AiFixWindow 排进 C7)。
+3. `TextBox.Style = Ui.S("Input.Log")` → `StyleKeys.Apply(log, "Input.Log")`:Avalonia 没有"按键取样式",
+   C1b 把每个 WPF 样式键固定翻译成一个类名,C1c 的 `Ui.S` 返回的就是那个类名。
+4. `button.ToolTip = ...` → `UiExt.Tip(button, ...)`(Avalonia 的 ToolTip 是挂载属性 `ToolTip.SetTip`)。
+5. `UIElement` / `FrameworkElement` → `Control`;`Thickness` → `Avalonia.Thickness`;`WrapPanel` / `TextBox` /
+   `Button` 都是 Avalonia 同名类型。`I18n.L` / `Dlg.Choose` / `Dlg.SaveFile` / `Dlg.Ask` / `Ui.*` / `PageBase.Run` /
+   `AppServices.*` 在 C1c / C2a 已经是同名同参,mac 版一字未动。
+6. 忠实保留:动作列表为 null 时照样塞一个空的 `WrapPanel`(`report.Actions ?? new List<CrashAction>()`,
+   逐字照抄,没有"顺手"加判空);动作闭包在 `foreach` 里捕获循环变量(每轮一份,与 Windows 一致)。
+
+`VersionSetupDialog.cs`:
+
+1. 只有框架类型差异(`UIElement`/`FrameworkElement` → `Control`)。其余逐行照抄:
+   `Math.Max(0, Array.IndexOf(...))` 夹越界、`acc.SelectedIndex <= 0 ? "" : acc.Str()`、
+   `winMode.SelectedIndex switch { 1 => "fullscreen", 2 => "maximized", _ => "window" }`、
+   `int.TryParse(mem.Text?.Trim(), out int memory) && memory > 0` 才写数字否则写 `null`。
+2. 忠实保留:`IsoLabels` / `GcLabels` 是 `static readonly`,文案在**类型初始化**那一刻经 `I18n.L` 定死
+   (Windows 也是这样;运行中切语言不会重算这两张表)。
+3. Windows 里的 `dictionary2` / `dictionary3` 只是同一个字典的别名,这里直接写 `payload`
+   (键名、赋值顺序、类型一字不差;声明成 `Dictionary<string, object?>` 好让 `memory_mb = null` 诚实)。
+4. **一处值得记的行为细节(本机实测)**:`VersionSettingsDto.Isolation` 的**属性初值是 `"none"`**
+   (`Models\VersionSettingsDto.cs:7`),而 `IsoValues` 的第 2 项正好是 `"none"` —— 所以后端给空对象
+   (或读取失败走 `TryCallAsync` 兜底)时,版本隔离落在**「关闭(共用实例目录)」**而不是第 0 项
+   「跟随全局」。第 0 项只留给"值不在候选表里"(如 `"bogus"`)这一支。
+   这是 Windows 源码本来就有的行为(代码与 DTO 都是照抄的),不是移植引入的,用两条用例钉住了。
+
+### 5. 测试(新增 71 条用例;总数 2897 → 2968)
+
+`tests\TipCL.Tests\` 新增 3 个文件:`C3bFixtures.cs`(夹具)、`C3bCrashUiTests.cs`(40 条)、
+`C3bVersionSetupTests.cs`(31 条,含 Theory 数据行)。
+
+- 每条碰 Avalonia 的用例体都走 `AvaloniaSession.Run(...)`(D-79 / C1b-fix),没有第二个
+  `SetupWithoutStarting`,`AvaloniaSession.cs` 一字未改;
+- 驱动对话框一律**"先把对话框推出来、再点按钮"**(D-113);点按钮用 `RaiseEvent`,**不模拟真实输入设备**;
+- 后端走 C2a 已有的回环假后端 `FakeBridgeServer`(`TcpListener` 绑 `127.0.0.1:0`,**不是** `HttpListener`,见 D-27)
+  —— 不起真 `BackendApi` / `BridgeServer`、不出网、不弹真文件选择器(导出那条走 `Dlg.SmokeActive`);
+- 剪贴板**只**走 `CrashUi.ClipboardWriter` 注入缝,并断言 `ClipboardPlatformAttempts` 增量恒为 0
+  —— 这就是"测试绝不碰真剪贴板"那条红线的机器化证明;
+- 全局静态由 `C3bScope` 快照还原(`AppServices.Client` / `ToastSink` / `Dlg.Host` / `Dlg.BlurTarget` /
+  `Dlg.SmokeActive` / 两个 Smoke 挂点 / `Motion.Enabled` / `Motion.Scale` / 两个 `CrashUi` 挂点),
+  D-69 的纪律;
+- 收摊两件套:关掉之后宿主空 / 遮罩落到终态 / 再泵 20 轮不冒新东西 / `PendingOperations == 0`,
+  以及"同一个按钮连点两次不出事"(两条通道都有)。
+
+**踩到的坑(如实记,见 D-120)**:第一版测试全跑出来后是 **2968 用例 / 23 失败**,拆开看只有**两处真问题**,
+其余 21 条全是**会话线程被一条死等用例占死**之后的连锁超时(C1b-fix 记过的同一现象):
+
+1. 一条断言写错(把整个卡片的 `TextBlock` 当成了面板的行;卡片标题与按钮里的文字也被数进来了)
+   → 改成直接钉面板的子项个数;
+2. 一条用例在**对话框还开着**的时候去等对话框任务(`PumpTask(task)`) → 必然等不到 → 30 秒会话超时。
+   更糟的是我第一版的泵按"轮数 × 2ms"计时,而 `UiHost.Flush()` 一轮的真实耗时远大于 2ms,
+   于是我的 15 秒预算被拖成几十秒,**先超时的是 `AvaloniaSession` 的 30 秒**。修法(写进 D-120):
+   泵用 `Stopwatch` 计真实时间、上限 9 秒(明显小于 30 秒),并新增 `C3bFiles.Settle()` 专门给
+   "对话框还开着、只断言点了之后的效果"的用例。
+   顺带修好另外两处期望值:`Ui.Txt(bold: true)` 用的是 `SemiBold`(=600,枚举别名 `DemiBold`)不是 `Bold`;
+   Avalonia 的 `Layoutable.MaxHeight` 默认是 `PositiveInfinity` 而不是 `NaN`。
+
+### 6. 验证命令与实际结果(本机 Windows,全部由本包亲自执行)
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 构建 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 个错误**;**7 个警告**(用 `WarningsOnly` 逐个取出来看:**唯一警告码只有 `NU1900` ×6 + `SYSLIB0014` ×1**,与 C3a 基线逐项相同) |
+| `dotnet test` 第 1 / 2 次 | `dotnet test TipCL.Mac.sln -c Release --no-build` | 都是**退出码 0,失败 0 / 通过 2968 / 总计 2968**(20 秒 / 次) |
+| 进程内执行器 第 1 / 2 次 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 都是**退出码 0,总计 2968 / 通过 2968 / 失败 0 / 跳过 0 / 不支持 0** |
+| (追加一次进程内执行器,给 `%TEMP%` 做对照实验) | 同上一行 | 退出码 0,2968 / 2968 |
+| `--smoke` light | `TipCL.exe --smoke --theme light --out artifacts\c3b-smoke-light.png` | 退出码 **0**,**21823 字节**,SHA256 `8336CA136B4F309D8275490578B8759E680AB5A1D8B861659D082802FE60449B` —— **与 C2b 基准逐位相同** |
+| `--smoke` dark | `... --theme dark ...` | 退出码 **0**,**18200 字节**,SHA256 `DBD3C171D7E176F12F9CE05335E7E96A0CE21F1135A4CC1E2CCADD5564AD604E` —— **逐位相同** |
+| `--smoke` blue | `... --theme blue ...` | 退出码 **2**(参数错,符合预期),不产出文件 |
+| `--smoke`(第 4 次,对照实验) | `... --theme light --out artifacts\c3b-smoke-ab.png` | 退出码 0,21823 字节,**`%TEMP%` 下 `tipcl*` 前后 104 → 104(0 新增)** |
+| `src\TipCL.Core` 有没有被动过 | `git diff --name-status bed79b0 HEAD -- src/TipCL.Core` | **0 行输出**(空) |
+| Core 对 Windows 源的同一性 | 逐文件 SHA256(mac `src\TipCL.Core\**\*.cs` ↔ Windows `src\TipCL\Core\**\*.cs`) | **238 有对应 / 216 一致 / 22 有改动 / 10 无对应**(与基线完全相同) |
+| 两个搬来的模型 | 与 Windows 源 `OpResult.cs` / `VersionSettingsDto.cs` SHA256 对比 | **240 / 1136 字节逐字节一致** |
+| `%LOCALAPPDATA%\TipCL` | 开工时 / 收工时各量一次 | 两次都是 **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16**,与 Lead 给的基线逐项相同(**零写入**) |
+| 真实桌面 / 图片 | 收工时 | 桌面 14 项、最新写入 **2026-11-12 19:02:53**(与基线相同);图片 3 项、最新 **2026-11-06 23:39:03**(零写入) |
+| 残留进程 | `Get-Process testhost,TipCL,java,adb` | **0 个** |
+| `%TEMP%` 下的 `tipcl*` | 开工时(Lead 基线 89)→ 收工时 `Get-ChildItem $env:TEMP -Force -Filter 'tipcl*'` | 收工时 **104 个**。**两次对照实验**:单跑一次 `--smoke` 前后 **104 → 104**;单跑一次进程内执行器前后 **104 → 104** —— **本包的两次运行都不产生 `%TEMP%\tipcl*`**。本包窗口内(15:31–15:43)新出现的名字有 3 个:`tipcl-smoke-249b9cd9…`(15:42:31)/ `tipcl-selftest-07e60d77…`(15:42:17)/ `tipcl-permnote`(15:31:37);这 3 个名字(以及同批的 `smokecwd` / `r9-smoke` / `r6-e2e` / `final-cli`)在本仓库 `src` / `tests` 里**零命中**,与 B2a / C2c2 / C3a 记过的"同机还有别的产品线在跑"是同一现象 |
+| 编码 | 对本包新增 / 改动的 7 个源文件逐个 `ReadAllBytes` | 无一例外:**无 BOM(前 3 字节不是 `EF BB BF`)、CR=0、U+FFFD=0**;逐个文件核对了 31 处 `??` **全部是 C# 的空合并运算符**(唯一一处出现在注释里,是在引用 Windows 源码原文),不是乱码 |
+| 提交 | 4 个提交 | `d9670a6`(CrashUi + OpResult)/ `823c3d9`(VersionSetupDialog + VersionSettingsDto)/ `246f53e`(71 条用例 + `CrashUi` 的计数成员)/ 文档提交见下一小节;每个 `git add -A` 前都 `git status --short` 确认过没有 `Zz*.cs` 或仓库根下的散落文件(诊断用的 `ZzC3bProbe.cs` 已删除,未进任何提交) |
+
+### 7. 未验证 / 遗留
+
+- **macOS 真机未验证**:Avalonia 的 `TopLevel.Clipboard` 在 macOS 上的真实行为(写入是否成功、
+  是否需要主线程、沙箱权限)本机验不了 —— 本机没有 Mac,而且红线不许在测试里碰真剪贴板。
+  平台那条分支在本机只走到"取不到实现 → 返回 false"的兜底(离屏与无头环境就是这一支)。
+- **`AiFixWindow` 整块未移植**(红线要求停下并报告):因此「交给 AI 修复」在挂点没接时是
+  "如实提示"而不是"真的开窗"。请 Lead 裁决(见 D-119)。
+- **`BindWindowMaxHeight(0.55, 260)` 的实际绑定**在本机不生效:`Application.Current.ApplicationLifetime`
+  在离屏 / 测试进程里是 null,而 C1c/C2b 定的口径是"没有宿主窗口就不绑、不抛"。用例钉的是
+  "不绑 + `MaxHeight` 保持默认(`PositiveInfinity`)",真桌面上的绑定效果未验证。
+- **`Dlg.SaveFile` 的真实文件选择器路径**未验证(测试里一律走 `Dlg.SmokeActive` 的取消支)。
+- 两个对话框都**没有**接线到任何页面 / 外壳,所以 `--smoke`(空壳、无页面)逐位不变是**应该**的。
+- 下一包(C3c)的机械改动点:照 C3a 的 Lead 验收结论,`LaunchPage` 里
+  `_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, ...)` 要换成 Avalonia 的
+  `Layoutable.MaxHeightProperty`(或走 `Ui.WindowPctConverter` + `Bind`);
+  `CrashUi.ShowAsync` / `VersionSetupDialog.ShowAsync` 的调用形状**不用改**。
