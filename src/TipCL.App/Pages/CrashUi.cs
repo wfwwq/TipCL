@@ -58,6 +58,13 @@ public static class CrashUi
 	internal static Action<CrashReport>? AiFixLauncher { get; set; }
 
 	/// <summary>
+	/// 平台剪贴板路径被**真的走到**的次数(只增不减)。
+	/// 留给测试用:接上 <see cref="ClipboardWriter"/> 时这个计数必须一动不动 ——
+	/// 这就是"测试绝不碰真剪贴板"那条红线的机器化证明(口径同 C3a 的只读快照)。
+	/// </summary>
+	internal static int ClipboardPlatformAttempts { get; private set; }
+
+	/// <summary>
 	/// 弹出崩溃报告卡片,返回"是不是点了重新启动"。
 	/// 【Windows 源】<c>CrashUi.cs:13-148</c>:<c>Dlg.Choose(...) == 1</c>,选项顺序 = 关闭(0)/ 重新启动(1)。
 	/// </summary>
@@ -291,6 +298,7 @@ public static class CrashUi
 	/// </summary>
 	private static async Task<bool> PlatformClipboardWrite(Control owner, string text)
 	{
+		ClipboardPlatformAttempts++;
 		TopLevel? top = TopLevel.GetTopLevel(owner);
 		if (top?.Clipboard == null)
 		{
