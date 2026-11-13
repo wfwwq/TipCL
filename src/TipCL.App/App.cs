@@ -42,7 +42,12 @@ public sealed class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow();
+            MainWindow window = new MainWindow();
+            desktop.MainWindow = window;
+            // C2d:真桌面生命周期里启动进程内后端,起来之后窗口的 BridgeReady 总闸才打开。
+            // 失败只记日志、窗口保持未就绪;离屏 --smoke 走 SetupWithoutStarting,不进这条路径
+            // (见 DECISIONS.md D-102)。
+            window.StartBackend();
         }
 
         base.OnFrameworkInitializationCompleted();

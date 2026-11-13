@@ -38,6 +38,10 @@ internal static class C2dFixtures
 
     private static Action<BackendApi>? _savedOnCoreStarted;
 
+    private static BridgeHost? _savedHost;
+
+    private static BridgeClient? _savedClient;
+
     /// <summary>装上"关预热 + 不跑 MCP/插件收尾"的测试注入缝(幂等;必须配 <see cref="Restore"/>)。</summary>
     internal static void Install()
     {
@@ -49,6 +53,8 @@ internal static class C2dFixtures
         _savedWarmupSwitch = BackendApi.DisableAuthWarmup;
         _savedApiFactory = BridgeHost.ApiFactory;
         _savedOnCoreStarted = BridgeHost.OnCoreStarted;
+        _savedHost = AppServices.Host;
+        _savedClient = AppServices.Client;
         _installed = true;
 
         BackendApi.DisableAuthWarmup = true;
@@ -87,6 +93,22 @@ internal static class C2dFixtures
         BackendApi.DisableAuthWarmup = _savedWarmupSwitch;
         BridgeHost.ApiFactory = _savedApiFactory!;
         BridgeHost.OnCoreStarted = _savedOnCoreStarted;
+
+        // 用例留下的宿主(接线上车过的)必须先停掉再还原服务定位器,免得留下监听。
+        BridgeHost? live = AppServices.Host;
+        if (live != null && !ReferenceEquals(live, _savedHost))
+        {
+            try
+            {
+                live.Dispose();
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        AppServices.Host = _savedHost;
+        AppServices.Client = _savedClient;
         BridgeHost.ResetCore();
         _installed = false;
     }

@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
@@ -12,6 +15,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using TipCL.Pages;
 using TipCL.Services;
 using TipCL.Themes;
@@ -110,6 +114,9 @@ internal sealed class MainWindow : Window
 	private readonly TextBlock _brand;
 
 	private bool _bridgeReady;
+
+	/// <summary>后端启动器(C2d;null = 还没有人调过 <see cref="ConnectAsync"/>)。</summary>
+	private BackendBootstrap? _bootstrap;
 
 	/// <summary>
 	/// 构造外壳。<paramref name="prefs"/> 为 null 时按 Windows 的做法从数据目录读
@@ -230,6 +237,8 @@ internal sealed class MainWindow : Window
 	/// 所以默认 false:页面能切、能显示,但 <c>LoadAsync</c>/<c>OnShown</c> 不跑
 	/// —— 与 Windows「还没连上后端时不加载页面」的状态一致。后端接线包把它置 true 即可。
 	/// </summary>
+	/// <remarks>C2d 起:后端真的起来时由 <see cref="ConnectAsync"/> 把它置 true,失败路径保持 false
+	/// (见 DECISIONS.md D-102)。</remarks>
 	internal bool BridgeReady
 	{
 		get
@@ -240,6 +249,104 @@ internal sealed class MainWindow : Window
 		{
 			_bridgeReady = value;
 		}
+	}
+
+	/// <summary>最近一次后端启动失败的原因(空串 = 没失败过 / 已经就绪)。</summary>
+	internal string BridgeError { get; private set; } = "";
+
+	/// <summary>
+	/// C2d:连后端(Windows 的 <c>MainWindow.ConnectAsync</c> 前半截)。成功才把
+	/// <see cref="BridgeReady"/> 打开;失败保持 false,原因留在 <see cref="BridgeError"/>
+	/// 与调试输出里(绝不静默变成 ready)。本方法自己吞掉所有异常,可以 fire-and-forget 调用。
+	/// 续体走线程池(ConfigureAwait(false)),所以同步等待版 <see cref="ConnectBlocking"/>
+	/// 在 AvaloniaSession 线程上也安全。
+	/// </summary>
+	internal async Task<bool> ConnectAsync(BackendBootstrap? bootstrap = null, CancellationToken ct = default(CancellationToken))
+	{
+		BackendBootstrap boot = bootstrap ?? new BackendBootstrap();
+		_bootstrap = boot;
+		BridgeHost? host = await boot.StartAsync(ct).ConfigureAwait(continueOnCapturedContext: false);
+		if (host == null)
+		{
+			BridgeReady = false;
+			BridgeError = (boot.Error == null) ? "" : boot.Error.Message;
+			Debug.WriteLine("[bridge] 未连接: " + boot.Error);
+			return false;
+		}
+		AppServices.Host = host;
+		AppServices.Client = host.Client;
+		BridgeError = "";
+		BridgeReady = true;
+
+		// Windows 在连上之后接着跑 ReloadCurrentAsync(把当前页补载 + OnShown),本包照做。
+		// 这一句碰页面,所以必须回到 UI 线程;失败只记日志,绝不影响"已经就绪"这个事实。
+		try
+		{
+			ReloadCurrentAfterConnect();
+		}
+		catch (Exception ex)
+		{
+			Debug.WriteLine("[bridge] 补载当前页失败: " + ex);
+		}
+		return true;
+	}
+
+	/// <summary>
+	/// 后端就绪之后把当前页补上(Windows 的 <c>ReloadCurrentAsync</c>:<c>EnsureLoadedAsync</c> + <c>OnShown</c>)。
+	/// <see cref="ConnectAsync"/> 的续体在线程池上(它用 ConfigureAwait(false),这样同步等待版在
+	/// AvaloniaSession 线程上才不会自锁),所以这里往 Dispatcher 投一次,由 UI 线程去碰页面。
+	/// </summary>
+	private void ReloadCurrentAfterConnect()
+	{
+		if (Dispatcher.UIThread.CheckAccess())
+		{
+			ReloadCurrentNow();
+			return;
+		}
+		Dispatcher.UIThread.Post(ReloadCurrentNow);
+	}
+
+	/// <summary>补载当前页(必须在 UI 线程上跑)。</summary>
+	private void ReloadCurrentNow()
+	{
+		PageBase? current = _host.Current;
+		if (current is null)
+		{
+			return;
+		}
+		PageBase.Run(async delegate
+		{
+			await current.EnsureLoadedAsync();
+			current.OnShown();
+		});
+	}
+
+	/// <summary>同步等待版:用例体跑在 AvaloniaSession 线程上,不能 await(见 D-79)。</summary>
+	internal bool ConnectBlocking(BackendBootstrap bootstrap, CancellationToken ct = default(CancellationToken))
+	{
+		return ConnectAsync(bootstrap, ct).GetAwaiter().GetResult();
+	}
+
+	/// <summary>
+	/// C2d:生产启动路径(由 <c>App</c> 的桌面生命周期调一次)。不阻塞启动;失败只记日志,
+	/// 窗口的 <see cref="BridgeReady"/> 保持 false。离屏 <c>--smoke</c> 不走这里
+	/// (SetupWithoutStarting 不进桌面生命周期),所以冒烟像素与后端无关(见 D-96/D-102)。
+	/// </summary>
+	internal void StartBackend()
+	{
+		Closed += delegate
+		{
+			StopBackend();
+		};
+		_ = ConnectAsync();
+	}
+
+	/// <summary>C2d:收后端(关窗 / 测试收摊)。先把总闸关回去,再停止监听。</summary>
+	internal void StopBackend()
+	{
+		BridgeReady = false;
+		_bootstrap?.Stop();
+		_bootstrap = null;
 	}
 
 	/// <summary>页面命令:参数是页面 id(菜单项与 ⌘N 都走它)。</summary>
