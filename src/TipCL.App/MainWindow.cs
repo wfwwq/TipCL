@@ -10,10 +10,13 @@ using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Rectangle = Avalonia.Controls.Shapes.Rectangle;
+using Shape = Avalonia.Controls.Shapes.Shape;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using TipCL.Pages;
@@ -103,6 +106,12 @@ internal sealed class MainWindow : Window
 
 	private readonly Border _sidebar;
 
+	/// <summary>背景宿主(Windows <c>MainWindow.xaml</c> 的 <c>WallHost</c>;C2c2)。</summary>
+	private readonly Grid _wallHost;
+
+	/// <summary>页面底纹(Windows 的 <c>PageWash</c>;有壁纸时它透明,壁纸才透得出来)。</summary>
+	private readonly Rectangle _pageWash;
+
 	private readonly Grid _bodyGrid;
 
 	private readonly Grid _contentLayer;
@@ -117,6 +126,9 @@ internal sealed class MainWindow : Window
 	private readonly Grid _navGrid;
 
 	private readonly TextBlock _brand;
+
+	/// <summary>拖放浮层(Windows <c>MainWindow.xaml</c> 的 <c>DropVeil</c> + <c>ShowDropVeil</c>;C2c2)。</summary>
+	private readonly DropVeil _dropVeil;
 
 	private bool _bridgeReady;
 
@@ -150,6 +162,9 @@ internal sealed class MainWindow : Window
 		_navGrid = new Grid { Name = "NavGrid" };
 		_sidebar = BuildSidebar();
 		_host = new PageHost(ResolvePage) { Name = "PageHostCtl" };
+		_wallHost = new Grid { Name = "WallHost", IsHitTestVisible = false, ClipToBounds = true };
+		_pageWash = new Rectangle();
+		_pageWash.Dyn(Shape.FillProperty, "B.PageWash");
 		_bodyGrid = BuildBody();
 		_contentLayer = BuildContentLayer();
 		_dialogHost = new Grid { Name = "DialogHost", IsVisible = false };
@@ -161,6 +176,7 @@ internal sealed class MainWindow : Window
 			Margin = new Thickness(0.0, 12.0, 16.0, 0.0)
 		};
 		_toastLayer = new ToastLayer(_toastHost);
+		_dropVeil = new DropVeil();
 		_rootBorder = new Border
 		{
 			Name = "RootBorder",
@@ -179,6 +195,28 @@ internal sealed class MainWindow : Window
 
 		// ---- 快捷键(Windows 的 PreviewKeyDown → Avalonia 的隧道阶段 KeyDown)----
 		AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
+
+		// ---- 拖放(Windows 的 PreviewDragEnter/Over/Leave/Drop + 窗口级 Drop;见 DropVeil / FileDrop)----
+		// 窗口自己允许拖放(Windows 的 <Window AllowDrop="True">),真正的判定在 FileDrop 里。
+		DragDrop.SetAllowDrop(this, true);
+		AddHandler(DragDrop.DragEnterEvent, OnDragEnter);
+		AddHandler(DragDrop.DragOverEvent, OnDragOver);
+		AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
+		AddHandler(DragDrop.DropEvent, OnDrop);
+		FileDrop.Attach(this, _dropVeil);
+
+		// ---- 背景管线(Windows 的 Wallpaper.Attach(WallHost, RootBorder, TopBar, null, PageWash))----
+		// mac 侧第四个参数给的是侧栏(Windows 没有侧栏);ChromeInvalidated 不接 —— Windows 接的是
+		// "最大化 / 还原字形"的同步,mac 用系统红绿灯,没有那个字形(见 C2b 的窗口差异表)。
+		Wallpaper.Attach(_wallHost, _rootBorder, _topBar, _sidebar, _pageWash);
+		Activated += delegate
+		{
+			Wallpaper.SetWindowActive(true);
+		};
+		Deactivated += delegate
+		{
+			Wallpaper.SetWindowActive(false);
+		};
 
 		// ---- 命令与系统菜单(GOAL:接 NativeMenu,快捷键 Ctrl→⌘)----
 		NavigateCommand = new ShellCommand(delegate(object? parameter)
@@ -208,6 +246,13 @@ internal sealed class MainWindow : Window
 		Closed += delegate
 		{
 			_toastLayer.Dispose();
+			// 拖放浮层与静态引用一并收摊:关窗后不留可见状态、也不留活窗口(FileDrop 是静态类)。
+			_dropVeil.Reset();
+			FileDrop.Detach(this);
+			// 背景管线收摊(Windows 的 Closed → Wallpaper.Shutdown;mac 多一步摘图层引用,
+			// 免得下一个外壳往新宿主里挂时那两个静态图层还挂在旧宿主上)。
+			Wallpaper.Shutdown();
+			Wallpaper.Detach();
 		};
 
 		// ---- 偏好:注入的用注入的,否则按 Windows 从数据目录读 ----
@@ -334,6 +379,17 @@ internal sealed class MainWindow : Window
 			await current.EnsureLoadedAsync();
 			current.OnShown();
 		});
+
+		// Windows 在后端连上之后也把背景管线跑一遍(MainWindow.xaml.cs:357),否则上次会话设的
+		// 壁纸永远不出现。失败只记日志(它与"后端已就绪"无关)。
+		try
+		{
+			PageBase.Run(() => Wallpaper.ReloadAsync(), I18n.L("壁纸没能加载"));
+		}
+		catch (Exception ex)
+		{
+			Debug.WriteLine("[wallpaper] 加载失败: " + ex);
+		}
 	}
 
 	/// <summary>同步等待版:用例体跑在 AvaloniaSession 线程上,不能 await(见 D-79)。</summary>
@@ -427,6 +483,11 @@ internal sealed class MainWindow : Window
 		Grid.SetRow(_contentLayer, 0);
 		Grid.SetRowSpan(_contentLayer, 2);
 
+		// 拖放浮层:盖在正文之上、Toast / 对话层之下(Windows 的 XAML 顺序也是
+		// ContentLayer → DropVeil → ToastHost → DialogHost)。
+		outer.Children.Add(_dropVeil);
+		Grid.SetRow(_dropVeil, 1);
+
 		outer.Children.Add(_toastHost);
 		Grid.SetRow(_toastHost, 1);
 
@@ -441,6 +502,11 @@ internal sealed class MainWindow : Window
 		Grid layer = new Grid { Name = "ContentLayer" };
 		layer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(TitleBarHeight) });
 		layer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1.0, GridUnitType.Star) });
+		// 壁纸层在标题栏与正文之下、铺满整个内容层(Windows 的 WallHost 也是 Row=0 RowSpan=2)。
+		layer.Children.Add(_wallHost);
+		Grid.SetRow(_wallHost, 0);
+		Grid.SetRowSpan(_wallHost, 2);
+
 		layer.Children.Add(_topBar);
 		Grid.SetRow(_topBar, 0);
 		layer.Children.Add(_bodyGrid);
@@ -451,7 +517,7 @@ internal sealed class MainWindow : Window
 	private Grid BuildBody()
 	{
 		Grid area = new Grid();
-		area.Children.Add(new Border { Background = Palette.Brush("B.PageWash") });
+		area.Children.Add(_pageWash);
 		area.Children.Add(_host);
 		Border divider = new Border { BorderThickness = new Thickness(0.0, 1.0, 0.0, 0.0) };
 
@@ -773,6 +839,68 @@ internal sealed class MainWindow : Window
 	}
 
 	/// <summary>刷新当前页(⌘R;Windows 的 F5:没加载过的页 <c>RefreshAsync</c> 自己会空转)。</summary>
+	// =====================================================================
+	// 拖放(Windows MainWindow.xaml.cs:238-256 的接线 + 1133-1177 的三个处理函数)
+	// =====================================================================
+
+	/// <summary>
+	/// 拖进 / 拖过:带文件就出浮层(Windows 的 <c>PreviewDragEnter</c>/<c>PreviewDragOver</c> →
+	/// <c>ShowDropVeil(e.Data.GetDataPresent(DataFormats.FileDrop))</c>)。
+	/// </summary>
+	private void OnDragEnter(object? sender, DragEventArgs e)
+	{
+		FileDrop.DragEnter(DroppedPaths(e));
+	}
+
+	private void OnDragOver(object? sender, DragEventArgs e)
+	{
+		// Windows 的 <c>OnDragOver</c> 顺带把效果定成 Copy / None(mac 侧只有"出不出浮层"这一层状态)。
+		FileDrop.DragOver(DroppedPaths(e));
+	}
+
+	/// <summary>拖走了:收浮层(Windows 的 <c>PreviewDragLeave</c>)。</summary>
+	private void OnDragLeave(object? sender, RoutedEventArgs e)
+	{
+		FileDrop.DragLeave();
+	}
+
+	/// <summary>落点:收浮层并分发(Windows 的 <c>PreviewDrop</c> + <c>Drop</c>)。</summary>
+	private void OnDrop(object? sender, DragEventArgs e)
+	{
+		FileDrop.Drop(DroppedPaths(e));
+	}
+
+	/// <summary>这次拖拽携带的本地文件路径(Avalonia 的 <c>e.Data.GetFiles()</c> 对应
+	/// Windows 的 <c>e.Data.GetData(DataFormats.FileDrop)</c>;取不到就是空表)。</summary>
+	private static List<string> DroppedPaths(DragEventArgs e)
+	{
+		List<string> paths = new List<string>();
+		try
+		{
+			// Avalonia 11.3.2 把 DragEventArgs.Data 标成 [Obsolete]("Use DataTransfer instead"),
+			// 但 11.3.2 的程序集里**根本没有** DataTransfer / IDataTransfer(已按字节核验:
+			// ref 与 lib 两处的 Avalonia.Base.dll / Avalonia.Controls.dll 都没有这个符号),
+			// 这一版换不过去。NoWarn 没动,只把这一行局部包住;等 D-01 升级 Avalonia 后换新 API。
+#pragma warning disable CS0618
+			IEnumerable<IStorageItem>? files = e.Data.GetFiles();
+#pragma warning restore CS0618
+			foreach (IStorageItem item in files ?? Enumerable.Empty<IStorageItem>())
+			{
+				string path = item.TryGetLocalPath() ?? "";
+				if (path.Length > 0)
+				{
+					paths.Add(path);
+				}
+			}
+		}
+		catch
+		{
+			// 拿不到文件列表就当"没带文件"(Windows 那边 GetDataPresent 为 false 时也是这个结果)。
+		}
+
+		return paths;
+	}
+
 	internal void RefreshCurrent()
 	{
 		PageBase? current = _host.Current;
@@ -934,6 +1062,10 @@ internal sealed class MainWindow : Window
 				header.Foreground = Palette.Brush("B.InkFaint", variant);
 			}
 		}
+
+		// Windows 是 App.ThemeVisualsChanged → Wallpaper.OnThemeChanged(mac 没有那个事件,
+		// 外壳自己刷完取色再喊它一声):有壁纸时把标题栏玻璃 / 页面底纹透明那套重新落一遍。
+		Wallpaper.OnThemeChanged();
 	}
 
 	/// <summary>侧栏宽度落点(把偏好里的 <c>SideWidth</c> 夹到上下限后写进布局)。</summary>
