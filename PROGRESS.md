@@ -5905,3 +5905,39 @@ _(本节数字在最终代码上重跑后填写,见文末"最终验证"小节。
    (页面)如果自己换掉了 RenderTransform,依然只能靠 `LastError` 事后发现。
 4. `Motion.PlayFrames` 关掉动画那一支(写最后一个关键帧)现在只剩 `Shine` 的透明度会用;
    变换那条改成了"什么都不做"(Pulse / Shake 自己在 `!Enabled` 分支里落了终态)—— 行为与旧代码逐值相同。
+### Lead 验收(2026-11-13 22:20)
+
+结论:**C3e 通过**。这一包又是「子代理被中断、代码已提交、只剩文档」,Lead 已补交文档为 `3c9f33f`;而且**它修掉的是本项目最隐蔽的一类坏账**。
+
+**先说事故**:本包子代理与其它子代理一起被意外中断,没有留下收尾回报。工作树上只剩 `DECISIONS.md` / `PROGRESS.md` 两份文档未提交(代码分 6 次提交全部就位)。Lead 补交并逐项复核,**没有丢任何工作**。
+
+| 检查 | 结果 |
+|---|---|
+| 提交(`5094e6a` runner 收口 / `d0c5bdd` 79 条用例 / `7838def` 泄露检查按编号记账 / `f4ab0bc` 中间态改 PropertyChanged / `e9eb048` 终态泵法 / **`3c9f33f`** 文档,最后一条由 Lead 补) | 工作树干净;无 remote、无 tag;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线(`src\TipCL.Core`、`Themes\`、`MainWindow.cs`、`NavModel`、`Services\Ui.cs`、`Services\UiExt.cs`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改(本包按裁决**允许**改 `Services\Motion.cs`) |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0 / 通过 3179 / 总计 3179**(3129 -> 3179,+50) |
+| 进程内执行器 | 我先跑 2 次(全绿),**再连跑 6 次做抖动探针:6/6 全绿 3179/3179,零失败**。本树累计 **10 次绿色运行** |
+| **`--smoke` 与基准逐位比对** | 不带 `--page` = **37681 `2603BF6A...`**;`--page launch --theme light` = **同哈希**;`--theme dark` = **33579 `7D7AFDD5...`**;`--theme blue` = **2** —— **逐字节相同**(离屏动画恒关,这条分支进不来) |
+| 全部改动文件编码 | **无 BOM、CR=0、U+FFFD=0** |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 / 216 / 22 / 10,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` / 残留进程 | 9328 / 889530606 / 2026-11-10 20:42:16(**零写入**);残留进程 **0** |
+
+**这一包到底修了什么(值得记清楚,因为它是"测试全绿、真机坏"的典型)**
+
+Lead 在 C3d 验收里采纳的 D-130 只是一条线索。子代理**逐个 `RunAsync` 调用点**查下去,查出 **19 处以变换为目标的调用点、分布在 11 个方法**(`FadeIn` / `HoverLift` / `Pulse` / `Shake` / `Shine` / `Spin` / `PopIn` / `PopOut` / `SlideIn` / `SlideOut` / `PageSwap`),另有 `Stagger` / `StaggerItems` 通过 `FadeIn` 间接中招 —— 比我点名的六个多得多。
+
+**并且顺带查出同族的第二、三个坑**(都以"真机上少动一下"的形式存在,离屏一律看不见):
+
+| 坑 | 证据 | 修法 |
+|---|---|---|
+| `Animation.Easing` 被**显式写 null** ⇒ 动画一个字节都不写、任务永不结束,**也不抛异常** | 探针:A/D 两条 2 秒后仍 PENDING、值不变;而 `new Animation().Easing` 的默认值其实是 `LinearEasing` | 只在 `easing != null` 时赋值(等价 WPF 不给 `Easing` 时的行为) |
+| `IterationCount.Infinite` + `RunAsync` 必抛 `InvalidOperationException: Looping animations must not use the Run method.` | 探针:有限/无限各一条,无限那条必失败 | `Spin` 改成"一圈接一圈"(有限动画跑完在收尾回调里再起下一条) |
+
+**裁决 1:接受唯一的用户可见差异 —— `Spin` 每圈交界处有一次 0~1 帧的重启。** Avalonia 没有公开的"循环动画 + RunAsync"入口,只能一圈接一圈;0° 与 360° 重合,观感连续。其余动画的时长 / 缓动 / 终值与 Windows 逐值相同。**这条列入 D2 的真机清单**(让有 Mac 的人盯一眼转圈有没有可见的顿挫)。
+
+**裁决 2:接受"坏动画不再静默"这一改动。** 失败会留在 `LastError`(界面行为不变、失败仍不崩),并有一条"故意造失败"的用例证明这个钩子真的能抓到。这正是本项目反复吃过的教训:**沉默的异常等于把缺陷藏起来**。
+
+**裁决 3:接受抖动修复的做法。** 子代理在自查时发现两条通道顺序不同导致进程级计数不可比(`7838def` 改成按动画编号记账),以及中间态断言受逐帧采样抖动影响(`f4ab0bc` 改成 `PropertyChanged` 记账),最后把终态一律改成"条件成立 + 本用例起的动画都收摊"的泵法(`e9eb048`)。它自己留下的 `artifacts\flake-5.txt` 记着修复前那次失败;Lead 的 6 次连跑证明**修复之后是稳定的**。
+
+**只记录、交给 D1 的一条测试卫生问题**:`C3dReachTests` 在关窗时把 4 条飞行 chip 动画留在"挂着"状态(它们只是没人推帧,生产里窗口一关就一起没了)。它会让**进程级的 `RunningAnimations` 总数一直被抬着** —— 以后谁想用那个总数做断言,先看 D-132 最后一条。不影响正确性,归 D1 清理。
