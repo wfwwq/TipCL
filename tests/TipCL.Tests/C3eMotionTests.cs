@@ -209,15 +209,12 @@ public class C3eMotionTests
             Motion.Pulse(el, C3eExpected.PulsePeak);
 
             ScaleTransform scale = C3eFiles.Scale(el);
-            double peak = 1.0;
-            stage.Pump(() =>
-            {
-                peak = Math.Max(peak, scale.ScaleX);
-                return Math.Abs(scale.ScaleX - 1.0) < 1e-9 && Motion.RunningAnimationsSinceReset == 0;
-            });
+            using C3eWatcher watch = C3eWatcher.Watch(scale, ScaleTransform.ScaleXProperty);
+            stage.Pump(() => Math.Abs(scale.ScaleX - 1.0) < 1e-9 && Motion.RunningAnimationsSinceReset == 0);
 
-            Assert.True(peak > 1.0, "Pulse 应当真的鼓起来过,实际峰值 " + peak);
-            Assert.True(peak <= C3eExpected.PulsePeak + 1e-9, "峰值不该超过 1.06,实际 " + peak);
+            Assert.True(watch.Writes > 0, "Pulse 应当真的写过缩放值");
+            Assert.True(watch.Max > 1.0, "Pulse 应当真的鼓起来过,实际最大写值 " + watch.Max);
+            Assert.True(watch.Max <= C3eExpected.PulsePeak + 1e-9, "峰值不该超过 1.06,实际 " + watch.Max);
             C3eFiles.Reached(1.0, scale.ScaleX, "Pulse 结束时的 ScaleX");
             C3eFiles.Reached(1.0, scale.ScaleY, "Pulse 结束时的 ScaleY");
             C3eFiles.TargetMustNotBeATransform("Pulse");
@@ -239,18 +236,12 @@ public class C3eMotionTests
             Motion.Shake(el);
 
             TranslateTransform move = C3eFiles.Translate(el);
-            bool wobbled = false;
-            stage.Pump(() =>
-            {
-                if (Math.Abs(move.X) > 0.5)
-                {
-                    wobbled = true;
-                }
+            using C3eWatcher watch = C3eWatcher.Watch(move, TranslateTransform.XProperty);
+            stage.Pump(() => Math.Abs(move.X) < 1e-9 && Motion.RunningAnimationsSinceReset == 0);
 
-                return Math.Abs(move.X) < 1e-9 && Motion.RunningAnimationsSinceReset == 0;
-            });
-
-            Assert.True(wobbled, "Shake 应当真的抖过(途中 X 离开过 0.5 以上)");
+            Assert.True(watch.Writes > 0, "Shake 应当真的写过位移值");
+            Assert.True(watch.Min < -1.0, "Shake 应当真的抖到左边过(第一个关键帧是 −7),实际最小写值 " + watch.Min);
+            Assert.True(watch.Max > 1.0, "Shake 应当真的抖到右边过(第二个关键帧是 6),实际最大写值 " + watch.Max);
             C3eFiles.Reached(0.0, move.X, "Shake 结束时的 X");
             C3eFiles.TargetMustNotBeATransform("Shake");
             C3eFiles.Ended("Shake");
@@ -317,10 +308,12 @@ public class C3eMotionTests
 
             Motion.Spin(owner, rot, 0.08);
 
+            using C3eWatcher watch = C3eWatcher.Watch(rot, RotateTransform.AngleProperty);
             Assert.True(Motion.RunningAnimationsSinceReset >= 1, "Spin 起来之后应当有一条动画在跑");
-            stage.Pump(() => rot.Angle > 1.0);
+            stage.Pump(() => watch.Max > C3eExpected.SpinDegrees / 4.0);
             // 至少转完两圈:证明"一圈跑完接着下一圈"这条重启路径真的接上了
             stage.Pump(() => Motion.StartedAnimations - before >= 3);
+            Assert.True(watch.Writes > 0, "Spin 应当真的写过角度");
             Assert.True(rot.Angle >= 0.0 && rot.Angle <= 360.0 + 1e-6, "角度应当在 0..360 之间,实际 " + rot.Angle);
 
             // 停掉:Windows 那边是 BeginAnimation(AngleProperty, null);mac 走 Loop 的 stop 分支
@@ -457,18 +450,11 @@ public class C3eMotionTests
             Motion.PageSwap(host, second, true);
 
             TranslateTransform move = C3eFiles.Translate(first);
-            bool movedOut = false;
-            stage.Pump(() =>
-            {
-                if (move.Y < -1.0)
-                {
-                    movedOut = true;
-                }
+            using C3eWatcher watch = C3eWatcher.Watch(move, TranslateTransform.YProperty);
+            stage.Pump(() => ReferenceEquals(host.Content, second));
 
-                return ReferenceEquals(host.Content, second);
-            });
-
-            Assert.True(movedOut, "旧页应当先向上滑出去(Y 到过 −1 以下),实际 " + move.Y);
+            Assert.True(watch.Writes > 0, "旧页应当真的被写过位移");
+            Assert.True(watch.Min < -1.0, "旧页应当先向上滑出去(Y 写值到过 −8),实际最小写值 " + watch.Min);
             C3eFiles.Reached(1.0, first.Opacity, "旧页被 Reset 回了不透明度 1");
             C3eFiles.Reached(0.0, move.Y, "旧页被 Reset 回了位移 0");
 
@@ -498,18 +484,11 @@ public class C3eMotionTests
             Motion.PageSwap(host, second, false);
 
             TranslateTransform move = C3eFiles.Translate(first);
-            bool movedDown = false;
-            stage.Pump(() =>
-            {
-                if (move.Y > 1.0)
-                {
-                    movedDown = true;
-                }
+            using C3eWatcher watch = C3eWatcher.Watch(move, TranslateTransform.YProperty);
+            stage.Pump(() => ReferenceEquals(host.Content, second));
 
-                return ReferenceEquals(host.Content, second);
-            });
-
-            Assert.True(movedDown, "后退时旧页应当向下滑出去(Y 到过 +1 以上),实际 " + move.Y);
+            Assert.True(watch.Writes > 0, "后退时旧页应当真的被写过位移");
+            Assert.True(watch.Max > 1.0, "后退时旧页应当向下滑出去(Y 写值到过 +8),实际最大写值 " + watch.Max);
             // 换页之后新页还要 FadeIn(不透明度 250ms + 位移 310ms):等它整条收摊再断言
             stage.Pump(() => second.Opacity >= 1.0
                 && C3eFiles.Translate(second).Y == 0.0
@@ -1037,7 +1016,12 @@ public class C3eMotionTests
                 RotateTransform rot = new RotateTransform();
                 owner.RenderTransform = rot;
                 Motion.Spin(owner, rot, 0.08);
-                stage.Pump(() => rot.Angle > 1.0);
+                using (C3eWatcher watch = C3eWatcher.Watch(rot, RotateTransform.AngleProperty))
+                {
+                    stage.Pump(() => watch.Writes > 0);
+                    Assert.True(watch.Max > 1.0, "关窗之前 Spin 应当真的转过,实际最大写值 " + watch.Max);
+                }
+
                 Assert.True(Motion.RunningAnimationsSinceReset >= 1);
             }
             finally

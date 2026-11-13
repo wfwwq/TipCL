@@ -144,6 +144,63 @@ internal sealed class C3eStage : IDisposable
     }
 }
 
+/// <summary>
+/// 盯住一个 double 属性在这段时间里写过的值(最小 / 最大 / 写了几次)。
+///
+/// **为什么不用"每帧采样"**:动画写值是有事件的,而一帧可能跨过很长的真实时间
+/// (机器忙的时候一帧能吞掉整段动画),采样式断言会因此偶发漏掉中间态 —— 本包的进程内执行器
+/// 就跑出过一次这样的抖动,所以中间态一律改成事件记账。
+/// </summary>
+internal sealed class C3eWatcher : IDisposable
+{
+    private readonly Animatable _target;
+
+    private readonly AvaloniaProperty<double> _property;
+
+    private double _min = double.PositiveInfinity;
+
+    private double _max = double.NegativeInfinity;
+
+    private C3eWatcher(Animatable target, AvaloniaProperty<double> property)
+    {
+        _target = target;
+        _property = property;
+        target.PropertyChanged += OnChanged;
+    }
+
+    /// <summary>最小写值(一次都没写过是 +∞)。</summary>
+    internal double Min => _min;
+
+    /// <summary>最大写值(一次都没写过是 −∞)。</summary>
+    internal double Max => _max;
+
+    /// <summary>写了几次(0 = 动画一个字节都没写 ⇒ 静默不动)。</summary>
+    internal int Writes { get; private set; }
+
+    internal static C3eWatcher Watch(Animatable target, AvaloniaProperty<double> property)
+    {
+        return new C3eWatcher(target, property);
+    }
+
+    private void OnChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property != _property)
+        {
+            return;
+        }
+
+        double value = (double)_target.GetValue(_property)!;
+        _min = Math.Min(_min, value);
+        _max = Math.Max(_max, value);
+        Writes++;
+    }
+
+    public void Dispose()
+    {
+        _target.PropertyChanged -= OnChanged;
+    }
+}
+
 /// <summary>C3e 的公共小工具:可观测性纪律、取变换实例、终值断言。</summary>
 internal static class C3eFiles
 {
