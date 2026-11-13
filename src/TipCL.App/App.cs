@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Themes.Fluent;
+using TipCL.Services;
 using TipCL.Themes;
 
 namespace TipCL;
@@ -32,6 +33,13 @@ public sealed class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // C2a 接线:词表初始化 —— 等价 Windows 版 App.xaml.cs 的 I18n.Init(e.Args)。
+        // 参数照 Windows 的约定:先 --lang,再 TIPCL_LANG,最后数据目录的 config.json。
+        // 只读,不落盘;离屏(--smoke)走的是 SetupWithoutStarting(),不会进到这里,
+        // 所以冒烟基准不受影响。注意:它在 Initialize() 之后跑,样式安装顺序(FluentTheme ->
+        // Palette -> Controls.axaml)一字未动。
+        I18n.Init((ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Args);
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow();

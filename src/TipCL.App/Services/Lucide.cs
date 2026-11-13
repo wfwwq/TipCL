@@ -71,8 +71,17 @@ public static class Lucide
     /// <summary>描边宽度(设计稿尺度);实际描边 = 2 × size/24。</summary>
     public const double DesignStroke = 2.0;
 
-    /// <summary>WPF 版 Motion.Enabled 的替身:没有 Motion 门面之前默认开启动画。</summary>
-    public static bool MotionEnabled { get; set; } = true;
+    /// <summary>
+    /// 动画开关。C1a 时它是 <c>Motion.Enabled</c> 的临时替身(D-83);C2a 的 <see cref="Motion"/> 落地后
+    /// 改成 **Motion 用户开关的转发别名**:读 = <c>Motion.UserEnabled</c>,写 = <c>Motion.Enabled</c>。
+    /// 名字与类型保持不变(Ui.Skeleton / SmoothScroll 还在用它,它们属 C2b),
+    /// 于是全应用只有**一个**动画开关了(见 PROGRESS.md 的 C2a 小节)。
+    /// </summary>
+    public static bool MotionEnabled
+    {
+        get => Motion.UserEnabled;
+        set => Motion.Enabled = value;
+    }
 
     private static readonly ConditionalWeakTable<TextBlock, TranslateTransform> _shimmerSlide = new ConditionalWeakTable<TextBlock, TranslateTransform>();
 
@@ -265,7 +274,18 @@ public static class Lucide
             },
         };
 
-        Run(animation, slide);
+        // C2a:改成走 Motion(Windows 版这里就是 Motion.Loop)。无限动画只在真生命周期里起、
+        // 卸载或关掉动画时停 —— 这条纪律从此由 Motion 统一负责(D-83 的 C1c 遗留)。
+        Motion.Loop(tb, delegate
+        {
+            if (tb.Foreground == brush)
+            {
+                Run(animation, slide);
+            }
+        }, delegate
+        {
+            slide.X = -2.0;
+        });
     }
 
     /// <summary>把几何按缩放系数烘进去(等价 WPF 的 LayoutTransform = ScaleTransform)。</summary>
