@@ -10,11 +10,9 @@ namespace TipCL.Pages;
 /// 而接线写进 `SettingsPage` 或外壳文件都要改别人的文件(红线)。
 /// 没有接线时设置页显示的是 C5a 那句如实的占位说明(见 `SettingsPage.PlaceholderFor`)—— 接了才换真页。
 ///
-/// <b>只接本包搬来的三个</b>(`servers` / `playtime` / `feedback`);另外三处缝不归本包:
+/// <b>本包接了四个</b>(`java` / `servers` / `playtime` / `feedback`);另外两处缝不归本包:
 /// <list type="bullet">
 /// <item><see cref="SettingsPage.AccountPageFactory"/>(分段 1)—— 页面由 C5b 交付,接缝归 C5b/Lead;</item>
-/// <item><see cref="SettingsPage.JavaPageFactory"/>(分段 2)—— `JavaPage` 还没移植(见 PROGRESS 的 C6b 小节:
-///   它要 <c>JavaInfo</c> 模型 + 一处 <c>Process.Start("explorer.exe")</c> 的平台决定);</item>
 /// <item><see cref="SettingsPage.WizardFactory"/>(「重新运行启动向导」)—— 向导由 C5b 交付,接缝归 C5b/Lead。</item>
 /// </list>
 ///
@@ -24,10 +22,11 @@ namespace TipCL.Pages;
 /// </summary>
 internal static class C6bSegmentRegistration
 {
-	/// <summary>接上分段 4/5/6 的三个工厂(幂等:重复调用只是重新赋值)。</summary>
+	/// <summary>接上分段 2/4/5/6 的四个工厂(幂等:重复调用只是重新赋值)。</summary>
 	[ModuleInitializer]
 	internal static void Register()
 	{
+		SettingsPage.JavaPageFactory = () => new JavaPage();
 		SettingsPage.ServersPageFactory = () => new ServersPage();
 		SettingsPage.PlaytimePageFactory = () => new PlaytimePage();
 		SettingsPage.FeedbackPageFactory = () => new FeedbackPage();
