@@ -3307,6 +3307,33 @@ PNG 自然不同。这不是样式写错,也不是窗口外观被改(窗口仍�
    ProgressBar 的不确定态动效 —— 这些的观感与 Windows 版不完全一致。
 3. **C1c 的接线成本**:`Ui.cs` / `UiExt.cs` 里的 `Style="{StaticResource X}"` 都要换成类名(建议直接用
    `StyleKeys.Apply` / `StyleKeys.Classes`);`Pw` 的调用点要改成 `TextBox` + `PasswordChar`;
+### Lead 验收(2026-11-13 09:20)
+
+结论:**C1c 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 三次提交(`a6190b3` 基座 / `cfec58d` 输入与其余构建器 / `dd1c39c` 测试与文档) | 工作树干净;无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+| **`Ui` 公开成员覆盖(Lead 独立对拍)** | Windows 39 个 vs mac 39 个;**缺失 0、多出 0** |
+| **`UiExt` 公开成员覆盖(Lead 独立对拍)** | Windows 22 个 vs mac 22 个;**缺失 0、多出 0** |
+| `SPanel` / `SmoothScroll` | 成员齐(我脚本报的 `SmoothScroll` 缺 `Register` 是**误报** —— 那是 WPF 的 `DependencyProperty.Register` 调用,不是成员;Windows 全树也没有 `SmoothScroll.Register` 的调用点) |
+| 偏差表 | 已在 C1c 小节按「公开成员里有必要改动的全部」逐条列出(`UIElement`→`Control`、`Visibility`→`IsVisible`、`Pw` 返回 `TextBox`、`RowCard` 事件类型、`VirtualList<T>` 参数类型等),并有「降级与观感差异」单列一节 —— 没有静默丢 |
+| 红线文件(`src\TipCL.Core`、测试隔离三件、`Ported\`、`AvaloniaSession.cs`、`Themes\`、`MainWindow.cs`、`Smoke\`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改 |
+| 新测试是否按 C1b-fix 的纪律走会话 | `C1cUiTests.cs` 与 `C1cUiInputTests.cs` 都调用 `AvaloniaSession`/`C1aFixtures`;没有第二处 `SetupWithoutStarting` |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告 = `NU1900` ×4 + `SYSLIB0014` ×1 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0**;总计 **2257**(2157 → 2257,本包 +100) |
+| 进程内执行器 第 1 / 2 次 | 都是**退出码 0,通过 2257 / 失败 0 / 不支持 0** |
+| `--smoke` light / dark | 3956 字节 `9F93EF3E…` / 3941 字节 `F687E6CD…`,**与裁决基准逐位一致** |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` / 残留进程 / `%TEMP%` 新目录 | 9328 / 889530606 / 2026-11-10 20:42:16;0 个;0 个 |
+
+**遗留(交给 C2)**:`Skeleton` 的横扫与 `SmoothScroll` 的滚轮平滑目前是自带的最小实现,`Motion` 门面落地后要改成走 Motion(D-82 已记);`Pw` 的调用点要按 `TextBox` 处理。
+
+**C1 完成**:C1a(色板/图标字体/Lucide)、C1b(Controls.axaml + 类名映射)、C1b-fix(测试会话)、C1c(Ui/UiExt 门面)。下一步 C2(外壳)。
+
+---
+
+## C2a Bridge 与基础服务
    标题栏那套(`Btn.Caption*` / `Btn.TitleIcon`)属 C2。
 4. **探针结论已经写进实现**:Avalonia 不允许连续两个 `/template/`(运行期抛
    `ControlTemplate styles cannot contain multiple template selectors`),跨两层模板取部件必须重画外层模板;
