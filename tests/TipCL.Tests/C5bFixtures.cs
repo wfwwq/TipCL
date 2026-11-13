@@ -214,6 +214,12 @@ internal static class C5bFiles
         return card;
     }
 
+    /// <summary>只把对话框等出来、**先不点任何按钮**(给"先填表再确认"的用例用)。</summary>
+    internal static DialogCard AnswerDialogOpen()
+    {
+        return C3bFiles.WaitDialog();
+    }
+
     /// <summary>把 <c>PageLayoutStore</c> 指到临时目录(落盘必须落在 <see cref="TestHome.Root"/> 之下)。</summary>
     internal static string LayoutDir()
     {
