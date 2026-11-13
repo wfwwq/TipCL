@@ -357,8 +357,10 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | 项 | 参考版 | Linux(补前) | Linux(补后) | 依据 |
 |---|---|---|---|---|
 | 回复正文里的链接 | WPF `Hyperlink`(`MdView.cs:367`):可点、点开浏览器、悬停有光标 | 主题色 + 下划线的 `Span` —— **不可点、无光标、无 URL 提示**(D-22 记为平台限制) | `InlineUIContainer` 包一个真 `TextBlock`:手型光标 + URL tooltip + 点击开浏览器(`xdg-open` / `open` / `ShellExecute`) | D-49 |
-| 行内码底色 | `Run` + `Background` | Avalonia 的 `Run` 没有 `Background` → 等宽 + 主题色近似 | **仍未做**(与链接无关的另一半,D-22 第 2 条依旧成立) | D-22 |
-| 链接悬停态 | `Hyperlink` 自带 | 无 | **仍未做**:保持静态样式(下划线常亮) | 如实记录 |
+| 行内码底色 | WPF `Run` + `Background`(`MdView.cs:340`:`SetResourceReference(TextElement.BackgroundProperty, "B.Hover")`) | 「Avalonia 的 `Run` 没有 `Background`」→ 退成等宽 + 主题色近似 | **已补(R21c)**:那句平台前提在 Avalonia 11.3.2 上**不成立** —— `TextElement` 有 `BackgroundProperty`(Run 是 Inline → TextElement)**而且真会被画出来**(无头 Skia 抓帧数像素:改动前 0 个 `B.Hover` 像素、改动后 100+)。于是照参考版原样:同一个属性、同一个键 `B.Hover`(浅 `#F2F2F2` / 深 `#2A2A2A`,上压 `B.AccentText` 对比 4.7:1 / 7.3:1)。**没有**走 `InlineUIContainer` 包 Border:外壳按 natural 宽度 arrange,320 宽段落里 80 字符标识符外壳宽 536 会被裁且不参与折行,而 `Run` 照常折行、底色只画不改布局(见 D-56) | D-56 |
+| 链接悬停态 | WPF `Hyperlink` 自带 MouseOver 变色 | 无(下划线常亮) | **已补(R21c)**:`PointerEntered` / `PointerExited` 在 `B.AccentText` ↔ `B.Accent` 之间换前景色(浅色档 5.3:1 → 3.5:1、深色档 8.4:1 → 6.1:1,两套主题都看得出变化又都还看得清);用**重新挂 `Res.Bind`** 而不是直接赋画刷,离开时能干净回到主题色(实测重挂会顶掉旧绑定)。手型光标 / URL tooltip / 点击开浏览器(R17 那三条)一字未动 | D-56 |
+
+> R21c 补记:§9.5 表里最后两条「仍未做」都已收口(D-56)。取证方式是**抓帧数像素**而不是「属性挂上没挂上」:改动前整帧里 `B.Hover` 像素 = 0,改动后 = 100+(并且先断言「没写行内码的对照段落里一个 `B.Hover` 像素都不该有」,免得把表格线 `B.LineSoft` `#F0F0F0` 误数进来)。另外如实记一条覆盖缺口:**AI 页冒烟帧改动前后逐位相同**(`smoke.png` 37,553 B,sha256 一致)—— 那份冒烟内容里没有行内码,所以这条特性只有单测与抓帧用例覆盖,冒烟覆盖不到。
 
 ### 9.6 导入多选 + 数据包装进存档(2026-11-13,R18)
 

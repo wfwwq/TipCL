@@ -479,3 +479,11 @@
 - **教训**:1**文档里、脚本里写下的命令,必须至少照着跑通一次** —— 「代码写了」和「命令可执行」是两件事,而这类缺陷只会以「照抄命令能成、跑脚本不成」的形式藏在缝隙里;2**给一条从没跑过的分支加一个「我能跑它」的入口(这里是 `--appimage-only`),本身就是一种验证手段**;3反过来,凡是「只在某个环境里才走得到」的分支,记得把它变成**在任何环境都能被跑到**的形状(拆参数、分离 publish 与组装),否则它永远是「看起来有」。
 
 
+
+### D-56 · 行内码底色与链接悬停态:「Avalonia 的 `Run` 没有 `Background`」这句前提是**错的**,以抓帧为准(R21c,2026-11-13,子代理改、主 agent 复核 + 红绿复跑)
+
+- **被推翻的前提**:P5 的代码注释与 PARITY §9.5、D-22 第 2 条都写着「Avalonia 的行内不支持背景色(`Run` 无 `Background`)」,据此把行内码退成「等宽 + 主题色」。收口这条欠账时实测:**Avalonia 11.3.2 的 `TextElement` 有 `BackgroundProperty`**(`Run` 是 `Inline` → `TextElement`),**而且真会被画出来** —— 无头 Skia 抓帧数像素,改动前整帧里 `B.Hover` 像素 **0** 个、挂上绑定后 **100+** 个。参考版 WPF 本来就是这么做的(`Pages/Ai/MdView.cs:340`:`SetResourceReference(TextElement.BackgroundProperty, "B.Hover")`),所以最终实现与参考版是**同一个属性、同一个键**。
+- **为什么不用 `InlineUIContainer` 包 Border**(那条路能做出圆角药丸,子代理先做通了才换掉):`InlineUIContainer` 里的控件被 `TextLayout` 按**无限宽** measure、再按 natural 尺寸 arrange,320 宽段落里 80 字符的长标识符外壳宽到 **536 px 并被裁掉**,而且它不参与折行。`Run` 的底色只画、不参与布局 ⇒ 段落行距与折行行为与改动前**逐位相同**(用例:`InlineCode_BackgroundDoesNotAffectLayout`:摘掉底色后 `DesiredSize` 一字不差、行距仍是 22、长行内码不把段落撑宽)。
+- **链接悬停态**:参考版用 WPF `Hyperlink` 自带 MouseOver 变色,这边手挂 `PointerEntered` / `PointerExited`,在 `B.AccentText` ↔ `B.Accent` 之间换前景色(两套主题下都有变化、都还留可读对比)。**关键细节**:用「重新挂 `Res.Bind(...)`」而不是直接赋画刷 —— 实测重挂会顶掉旧绑定,因此离开悬停时能干净回到主题色,而不会把浅色画刷钉在深色主题里。R17 的三条行为(手型光标 / URL tooltip / 点击开浏览器)未动,并有用例锁住。
+- **红/绿证据(主 agent 独立复跑)**:把 `run[!TextElement.BackgroundProperty] = Res.Bind("B.Hover");` 这一行摘掉 → `--filter ~MdView` **3 失败 / 7 通过**(两条 `Assert.NotNull() Failure: Value is null` + 像素用例「只数到 0 个 #F2F2F2 像素」);装回 → **10/10 通过**。全量 `dotnet test` **连跑 2 遍:409 = 408 通过 + 1 跳过 + 0 失败**(上一轮基线 404);Release 构建 0 CS/CA(只 2 条 NU1900 镜像噪声);`SMOKE_PAGE=ai` 冒烟 exit 0 / 0 WARN 0 ERROR。
+- **教训**:1**「平台不支持」这类结论必须落到可复核的取证上** —— 这里的正确取证是「抓帧数像素」,而它当场把一句流传了两轮的前提推翻;写进文档的平台限制尤其要标清「当时是怎么验的」,否则它会变成一个不再被质疑的借口(D-22 第 1 条「链接不可点」当年也是同一个毛病的反面:那条是**被推翻后落实了**,这条是**从一开始就错了**);2**视觉改动的验收要钉住「不动布局」这一侧**,否则「看起来更好了」可能在别处把折行改坏;3同一族功能(行内码 / 链接)用**同一条取证套路**(抓帧 + 主题键断言 + 布局不变断言)比逐个手工点更早发现问题。

@@ -608,3 +608,41 @@
   >
   > 上一轮那条「按 Esc 不关」的结论当时其实**没有证据**(检测脚本报浮层窗口数=0,而截图里浮层根本没打开);这一轮重做时还纠掉了两个取证方法错误:`xdotool getwindowfocus --shell` 在本机 xdotool 上不支持(之前的 `FOCUS_*` 打印的其实是「指针下的窗口」),以及 **PNG 的 md5 不能判画面**(`import` 会写 tEXt 时间戳,静止画面 md5 也不同;像素比较必须逐像素差)。
 - 本地归档 `dist/TipCL-linux-x64.AppImage` 走 rsh 分片拉取:**6 MB 分片会 `h2 protocol error`,2 MB 可用**(与 push 侧的经验一致)。
+
+### 2026-11-13 M4-H R21c:Markdown 两条 UI 欠账收口(行内码底色 + 链接悬停态;子代理改,主 agent 复核)
+
+**背景**:PARITY §9.5 表里还挂着两条「仍未做」—— 行内码底色、链接悬停态。本轮由子代理(`deepseek-v4.1-flash:free`)实现,主 agent 独立复核。
+
+**一、行内码底色:顺带推翻了一条前提**
+
+- P5 的注释与 D-22 第 2 条都写着「Avalonia 的 `Run` 没有 `Background`」,于是行内码一直只有「等宽 + 主题色」。**实测这句不成立**:Avalonia 11.3.2 的 `TextElement` 有 `BackgroundProperty`(Run 是 Inline → TextElement),**而且真会被画出来**(无头 Skia 抓帧数像素:改动前整帧 `B.Hover` 像素 **0**、挂上绑定后 **100+**)。
+- 最终实现照参考版原样:同一个属性、同一个键 `B.Hover`(浅 `#F2F2F2` / 深 `#2A2A2A`;上压 `B.AccentText` 的对比 **4.7:1 / 7.3:1**);字体仍是 `Mono` / 12、文字仍是 `" " + x.Text + " "`(连续空白一字未动)。
+- **没走 `InlineUIContainer` 包 Border**(那条路能做圆角药丸,子代理先做通了又换掉):`InlineUIContainer` 里的控件被按**无限宽** measure、再按 natural 尺寸 arrange —— 320 宽段落里 80 字符标识符的外壳宽 **536 px 且被裁**,还不参与折行;而 `Run` 的底色只画、不参与布局 ⇒ 段落行距与折行与改动前**逐位相同**。
+
+**二、链接悬停态**
+
+`PointerEntered` / `PointerExited` 在 `B.AccentText` ↔ `B.Accent` 之间换前景色(浅色档 5.3:1 → 3.5:1、深色档 8.4:1 → 6.1:1,两套主题都看得出变化又都还看得清)。用**重新挂 `Res.Bind`** 而不是直接赋画刷 —— 实测重挂会顶掉旧绑定,所以离开悬停能干净回到主题色,不会把浅色画刷钉在深色主题里。R17 的三条行为(手型光标 / URL tooltip / 点击开浏览器)未动。
+
+**三、主 agent 的独立复核(不只信子代理的报告)**
+
+| 项 | 结果 |
+|---|---|
+| 红证据(主 agent 自己摘掉那一行 `run[!TextElement.BackgroundProperty] = ...` 再跑) | `--filter ~MdView`:**3 失败 / 7 通过**(两条 `Value is null` + 像素用例「只数到 0 个 #F2F2F2 像素」) |
+| 绿证据(装回) | `--filter ~MdView`:**10/10 通过** |
+| 全量 | `dotnet test` **连跑 2 遍:409 = 408 通过 + 1 跳过 + 0 失败**(上一轮基线 404,本轮 +5 用例) |
+| Release 构建 | 0 CS/CA(只 2 条 NU1900 镜像噪声),与基线一致 |
+| 冒烟 | `SMOKE_PAGE=ai` exit **0**、`smoke.png` 37,553 B、应用日志 **0 WARN / 0 ERROR**;真实 `%LOCALAPPDATA%\TipCL` 未动 |
+| 编码 | 三个文件均 UTF-8 **无 BOM / LF**(`MdView.cs` bare_lf=452、`MdViewLinkTests.cs`=273、`MdViewInlineCodeTests.cs`=207) |
+| 轮次标签 | 子代理自报「R18」(那是「导入多选」那轮) ⇒ 已由主 agent 统一改成 **R21c**(3 个文件共 6 处) |
+
+**四、遗留与覆盖缺口(如实)**
+
+- **AI 页冒烟帧改动前后逐位相同**(`smoke.png` 37,553 B,sha256 一致)⇒ 那份冒烟内容里**没有行内码**,这条特性只有单测 + 抓帧用例覆盖,冒烟覆盖不到。
+- 悬停每次进/出都会重新 `Res.Bind`(即每次向 `Application.GetResourceObservable` 新订阅一次);视觉行为验证过,**旧订阅是否释放没测**(与仓库现成的 `Ui.Dyn` / Hover 用法同一套路)。
+- `Run` 的底色是**整行高矩形**(不圆角、无内边距)—— 这就是参考版 WPF `Run` 的样子。
+- 超长、无折行点的行内码(如 80 字符无空格标识符)在窄段落里仍会排出可视区(普通文本也一样,`TextBlock` 不在词内断行);本轮加了「段落 `DesiredSize.Width` 夹在可用宽内」的断言锁住布局层,但**被裁掉的观感没解决**,属文本排版固有行为。
+- 子代理实验期间有一次真调用了默认 `MdView.UrlOpener`(可能尝试开过浏览器窗口);此后测试一律先替换 `UrlOpener`。
+
+> **复核时的附带发现(方法层面,一并记)**:这十场冒烟的帧**并非逐位稳定** —— 同一份代码连跑两次,`settings-tab6` 取到 38,573 / 38,579 B 两个值、`plugins-dark` 取到 33,574 / 33,576 B 两个值(而 `launch` 564,149 B 与 `ai` 37,553 B 稳定)。本轮改动只碰 AI 页的 Markdown 渲染(`MdView` 全仓只被 `AiBubble` 使用),用 **A/B 单变量对照**验证:把 `MdView.cs` 还原到改动前重建再跑,`settings-tab6` 两侧 sha256 **完全相同**、`plugins-dark` 两侧互有大小 ⇒ 那点抖动**不是本轮引入的**,是这两页的帧自带少量运行间差异(动画相位 / 抗锯齿一类)。规矩:**拿冒烟帧当回归判据前,先确认那一页是逐位稳定的**;不稳定的页要比像素差或结构断言,别拿 PNG 字节数当等号(本轮主 agent 就是靠这条对照才没把抖动误判成回归)。
+>
+> 本轮最终验收(冻结树上):构建 App/Core exit 0、`dotnet test` **两遍**都 exit 0、`--ai-selftest` exit 0、**十场冒烟全 exit 0 且 0 WARN / 0 ERROR**、真实 `%LOCALAPPDATA%\TipCL` 未被触碰(`config.json` mtime 未变)。

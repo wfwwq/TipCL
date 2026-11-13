@@ -27,6 +27,10 @@ internal sealed class MdView : UserControl
 {
     internal static readonly FontFamily Mono = new("Cascadia Mono, Consolas, DejaVu Sans Mono, Noto Sans Mono CJK SC, monospace");
 
+    /// <summary>链接前景色键:常态 / 悬停(两套 Palette 里都有;悬停换色的理由见 BuildInline 的 R21c 说明)。</summary>
+    private const string LinkInk = "B.AccentText";
+    private const string LinkHoverInk = "B.Accent";
+
     private readonly StackPanel _host = new();
     private readonly DispatcherTimer _throttle = new() { Interval = TimeSpan.FromMilliseconds(80) };
 
@@ -279,9 +283,18 @@ internal sealed class MdView : UserControl
                 return new LineBreak();
             case MdInlineKind.Code:
             {
-                // Avalonia 的行内不支持背景色(Run 无 Background),用等宽 + 主题色近似
+                // R21c:P5 记的「Avalonia 的行内不支持背景色(Run 无 Background)」在 11.3.2 上已不成立 ——
+                // `TextElement` 有 `BackgroundProperty`(Run 是 Inline → TextElement),而且真会被画出来
+                // (无头 Skia 渲染取像素验证:纯红底 Run 数出 1781 个红像素)。
+                // 于是照参考版原样来:**同一个属性、同一个键** ——
+                // 参考版 Pages/Ai/MdView.cs:340 就是 `SetResourceReference(TextElement.BackgroundProperty, "B.Hover")`。
+                // 不用像链接那样包 InlineUIContainer:Border 外壳会把行内码变成一个不可折行的方块
+                // (实测 320 宽段落里 80 字长标识符外壳宽 536,会被裁掉),而 Run 照常参与折行、
+                // 底色只画不改布局,段落行距与折行行为与改动前完全一致。
+                // 底色 B.Hover:浅色 #F2F2F2 / 深色 #2A2A2A,上压 B.AccentText 的对比是 4.7:1 / 7.3:1。
                 var run = new Run(" " + x.Text + " ") { FontFamily = Mono, FontSize = 12 };
                 run[!TextElement.ForegroundProperty] = Res.Bind("B.AccentText");
+                run[!TextElement.BackgroundProperty] = Res.Bind("B.Hover");
                 return run;
             }
             case MdInlineKind.Bold:
@@ -313,7 +326,7 @@ internal sealed class MdView : UserControl
                     FontSize = 13.5,
                     VerticalAlignment = VerticalAlignment.Center,
                 };
-                inner[!TextBlock.ForegroundProperty] = Res.Bind("B.AccentText");
+                inner[!TextBlock.ForegroundProperty] = Res.Bind(LinkInk);
                 AddInlines(inner.Inlines!, x.Children);
                 // 只对真的点了链接的按下动作做响应;失败不抛(打不开浏览器时用户还能自己复制)
                 inner.Cursor = new Cursor(StandardCursorType.Hand);
@@ -323,6 +336,14 @@ internal sealed class MdView : UserControl
                     OpenLink(x.Url);
                     e.Handled = true;
                 };
+                // R21c:悬停反馈。参考版用 WPF 的 Hyperlink —— 自带 MouseOver 变色,这边得手挂。
+                // 两个键都是现成的同族主题色:常态 B.AccentText(浅 #1F7A52 / 深 #79C8A3)、
+                // 悬停 B.Accent(浅 #2E9B6B / 深 #3FB07C)——两套主题里都「看得出变化」,
+                // 且两者在各自底色上都还有可读对比(浅色档 5.3:1 → 3.5:1,深色档 8.4:1 → 6.1:1)。
+                // 用 ![...] = Res.Bind(...) 重新挂观察绑定(不是直接赋画刷):已实测「重挂会顶掉旧绑定」,
+                // 所以离开时能干净地回到常态色,而不是把浅色画刷留在深色主题里。
+                inner.PointerEntered += (_, _) => inner[!TextBlock.ForegroundProperty] = Res.Bind(LinkHoverInk);
+                inner.PointerExited += (_, _) => inner[!TextBlock.ForegroundProperty] = Res.Bind(LinkInk);
                 return new InlineUIContainer { Child = inner, BaselineAlignment = BaselineAlignment.Center };
             }
             default:
