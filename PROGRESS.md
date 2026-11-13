@@ -864,3 +864,45 @@ R21b 归档的 AppImage 之后,R21c~R21e 都改了 `src/`,归档件却没重打 
 
 **仍未做**:CI 真 runner;`.deb` 从安装路径拉起 GUI(脚本已备 `_cmp/box/deb-gui.sh`,私有 Xvfb `:8`);
 测试宿主内存增长的根因;浮层里"没账号 → 点启动 → 建号 → 继续"的人工点一遍(留给下次实机验收)。
+
+## M4-H R21j:Linux 上的出包链路 + 存档管理 chip 收尾(2026-11-13/14)
+
+> 详版与逐条证据:`progress/M4-H-R21j-出包链路与chip收尾.md`;决策 D-67。
+
+1. **`tools/package.sh` 的改名通配是个真缺陷(D-67)**:`mv -f dist/TipCL-*.AppImage dist/TipCL-linux-x64.AppImage 2>/dev/null || true`
+   在**第二次**出包时会同时匹配新旧两个文件 → `mv` 多源到非目录目标失败 → 被 `2>/dev/null || true` 吞掉 →
+   **canonical 名字还是上一版**,新包留在 `dist/TipCL-x86_64.AppImage`。实测:旧脚本第二次出包后
+   `dist/TipCL-linux-x64.AppImage` 的 mtime 停在 16:48、sha256 `bfaa2649…` 不变,而单体二进制已经是 16:57 的新版。
+   修好后连跑两次,canonical 分别刷成 `703a0c58…` / `beb216fc…`,且解开取载荷哈希确认带的是新二进制。
+   **这条打的正是 D-60 那条规矩**:"改完 `src/` 就重打产物"被脚本自己悄悄破坏了。附带一条同源的坑:
+   **AppImage 不是逐字节可复现的**(同样输入连出两次得到两个哈希),所以"大小一样 / 看着是新的"都不能当验货,只有 sha256 能。
+2. **`AiPermissionPanel.ReloadRulesAsync` 的 CS1998**:Ubuntu 的 SDK(8.0.134)报、
+   本机 SDK 不报 —— 方法体确实没有 `await`(读的是内存里的配置 + 同步重建界面;参考版是 `async` 因为要走后端取设置)。
+   按"警告就是信号"的口径改成同步方法 `ReloadRules()`,`RefreshAsync` 保持可 `await` 的签名(内部返回 `Task.CompletedTask`),
+   而不是加 `await Task.CompletedTask` 去哄编译器。改完 Linux 上 `dotnet publish` **0 警告 0 错误**。
+3. **在 Linux 上真跑了一遍 CI 的 `package-linux` 链路(第一次)**:`dotnet publish -r linux-x64`(CI 同参数)→
+   `./tools/package.sh --appimage-only --deb` → 冒烟。产物:
+   `TipCL.App` 45,002,391 B `9f5f8462…`;AppImage 38,984,184 B `beb216fc…`;`.deb` 37,540,562 B `601873a7…`;
+   新产物裸 FUSE 冒烟 **exit 0**、`smoke.png` 575,416 B、**0 WARN / 0 ERROR**。
+   (环境事实:盒子上**没有 `zip`** —— CI 第三个产物是 zip,runner 自带。)
+4. **`.deb` 装完从"安装路径"真的拉起了 GUI**(此前只验到 CLI):私有 Xvfb `:8` + xfwm4 上跑 `tipcl`
+   → 进程 `/opt/TipCL/TipCL.App`、窗口 **`TipCL` 900x550 @ (192,173)**、root 截图 587,682 B;
+   `sudo dpkg -r tipcl` 后记录与文件都干净、无残留进程。用私有显示而不是抢 `:0`,本身就是 R21i 并发教训的落实。
+5. **存档管理其余 chip:7 项逐点验证全部有证据**(PARITY §9.4 最后一条,详见 §9.11):
+   备份 / 还原 / 备份行删除 / 删除存档正路径 / 导出 / 打开 / 媒体区(截图·崩溃报告·日志 的列表与"打开"),
+   主 agent 逐条**独立复核**了可复核的磁盘断言(备份目录空、存档 md5 与 zip 条目一致、导出 zip 271 B、
+   三类媒体各 2 个文件、日志只有 1 条已知无害 WARN)。
+   **未测出(如实)**:媒体行的「**导出**」—— 此时盒子上已有 `xdg-desktop-portal-gtk`,点击走 GTK 门户对话框
+   (默认目录 `/`,不在可写范围),屏上还叠着别的会话遗留的门户窗抢点击。
+   **并顺带修正 R21e 的一条口径**:文件选择器的形态**取决于环境** —— 没有 portal 后端时是进程内 Avalonia 对话框
+   (`WM_CLASS="TipCL","TipCL"`、`_NET_WM_PID` = 应用 pid),有 portal 时同一次点击变成 GTK 门户对话框
+   (`WM_CLASS="xdg-desktop-portal-gtk"`、另一个 pid、按钮顺序相反、默认目录 `/`)。所以 R21e 那句应读作
+   "(当日、无 portal 后端的盒子上)不是 GTK/portal",**不是**"这个构建不会用 portal"。
+6. **并发教训(这一轮最贵的一条)**:同一台盒子同时跑两个会点界面的会话(两个 `DISPLAY`、同一个 AppImage)会
+   互相破坏证据 —— 窗口几何漂移(902x575@(192,146) → 900x550)、焦点/层级被抢(点击落到别的窗口)、
+   **环境被对方改变**(对方启动 portal 之后文件选择器形态变了,两边记录因此不一致)、事后无法复盘。
+   规矩:同时只跑一个会点界面的会话;非要并行就用隔离 `DISPLAY`(Xvfb)+ 各自的 `TIPCL_HOME` 与输出目录;
+   凡与外程序交互的证据,必须同时记录环境快照(可见窗口清单 + `WM_CLASS` + pid + 有没有 portal);
+   `pkill` 只按自己的路径匹配,别用宽匹配(会杀掉对方的进程)。
+
+**数字**:测试仍是 **446**(445 通过 + 1 跳过 + 0 失败);Linux 出包三个产物如上;`.deb` 安装 + GUI + 卸载全通。

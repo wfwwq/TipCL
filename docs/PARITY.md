@@ -400,7 +400,7 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 
 **同一轮真机验证揪出一个真缺陷(已修,R21e / D-59)**:下载页「装进存档」下拉**永远打不开** —— `list_saves` 返回的 `mtime` 是 **JSON 数字**,而 `CatalogModels.SaveRow.Mtime` 声明成 **string** ⇒ `Api.Coerce`(序列化再反序列化)抛 `JsonException`,被一条**裸 `catch` 静默吞掉** ⇒ `TryCallAsync` 回落空列表 ⇒ `CatalogPage` 的 `if (saves.Count == 0) return extra;` 提前返回。修法:字段改成与真实返回一致的数字类型,并把那条静默 `catch` 改成记日志(日志原话 `JsonException ... Path: $[0].mtime` 就是决定性证据)。**POCO 形状与参考版逐行相同**(`Models/SaveRow.cs`),但参考版没有 `Api.Coerce` 这个机制 —— 所以这不算参考版缺陷,记在 Linux 侧。
 
-**仍未在真机验证(如实)**:1隔离版本分支的「装进存档」(盒子上只有根实例、0 个版本,造不出隔离实例);2下载页「装进存档」的**任务式**路径(`extra.save` 走任务流)—— 修前被上面那个缺陷挡住,修后还没在真机复点;3存档管理其余 chip(备份 / 导出 / 打开 / 截图 / 删除)没逐点。
+**仍未在真机验证(如实)**:1隔离版本分支的「装进存档」(盒子上只有根实例、0 个版本,造不出隔离实例);2下载页「装进存档」的**任务式**路径(`extra.save` 走任务流)—— 修前被上面那个缺陷挡住,修后还没在真机复点;3存档管理其余 chip(备份 / 导出 / 打开 / 截图 / 删除)没逐点(已在 §9.11 逐点补齐:备份 / 还原 / 备份删除 / 删除存档 / 导出 / 打开 / 媒体区 有证据;媒体行的「导出」仍因环境未测出)。
 
 **R21f 补测(新产物 + 同一台盒子)**:按「代码改完就重打产物」的规矩重发重装(理由见 D-60),用**含 R21c~R21e 修复的新 AppImage**(38,967,800 B,sha256 `42bce41e1068a0f645207019c4634b78ab8f5536f10f873b17a4b73862471691`)复测三件事 —— 其中第一条是上表里「修后未再真机复测」的补上:
 
@@ -514,3 +514,35 @@ System.InvalidOperationException : Collection was modified; enumeration operatio
 **一条判据失效(如实)**:§9.8 记的"8/8 张启动页冒烟帧逐位相同(`070d6ad6…`,564,149 B)"不再可用 —— 连续两次同样条件下的
 `SMOKE_PAGE=launch` 冒烟帧哈希就不同(573,359 / 573,327 B),原因是启动页那条线上新闻行。本轮改的控件只在**默认关闭的浮层**里,
 主帧不受影响;这类改动由结构性探针(`SMOKE_PROBE=popup-theme` 的 B 组 10/10)+ 单测证明,**不再靠像素比对**。
+
+### 9.11 存档管理其余 chip 逐点验证结果(2026-11-13,R21j):§9.4/§9.6 里"其余 chip 没逐点"这条收口
+
+> 这一节收口的是 §9.4 里的「3存档管理其余 chip(备份 / 导出 / 打开 / 截图 / 删除)没逐点」以及 §9.6 表格下面那句
+> 「仍未在真机验证(如实)」。环境:盒子 `main`、`DISPLAY=:0`、`TIPCL_HOME=/home/user/tipcl/chips-home`、
+> 最终 AppImage;夹具存档 `WorldDlg`(`level.dat` 内容 `MARKER-v1` / `marker.txt` 内容 `ORIGINAL`)。
+> 主 agent 对可独立复核的磁盘断言**逐条复核过**(不只看子代理的结论)。
+
+| # | chip | 结论 | 关键证据 |
+|---|---|---|---|
+| 1 | 备份 | 有证据 | 备份 zip 271 B,`unzip -l` = `WorldDlg/level.dat` 10 B + `WorldDlg/marker.txt` 9 B;日志三行(任务开始 task-… / 存档备份完成 / 任务完成);UI 由 `备份(0)/还没有备份` 变 `备份(1)` 并出现「还原 / 删除」行。**如实记**:列表刷新是异步的,点完 +4 s 的截图里仍显示 `备份(0)` |
+| 2 | 还原 | 有证据 | 先篡改两个文件(`level.dat` md5 `19030d24…` → `96e5634…`、`marker.txt` `ab0b8843…` → `77fc9bf5…`),点备份行「还原」(确认框「用「…zip」覆盖现有存档?」)后 **md5 逐字回到原值**(与 zip 内条目一致) |
+| 3 | 备份行删除 | 有证据 | 点「删除」(无二次确认)后 `backups/` 为空、UI 回到 `备份(0)/还没有备份` |
+| 4 | 删除存档(正路径) | 有证据 | 用一次性存档 `WorldTwo` 走完 danger 确认框(「会被永久删除,其中的建筑与进度都无法恢复。」)→ 点「永久删除」后 `saves/` 只剩 `WorldDlg`(md5 前后不变) |
+| 5 | 导出 | 有证据 | 保存对话框 `WM_CLASS="TipCL","TipCL"`、`_NET_WM_PID` = 应用自身 ⇒ **进程内画的 Avalonia 对话框**;Name 预填 `WorldDlg.zip`,点 Save 后磁盘真出 zip(271 B,两条目、内容与 `saves/WorldDlg/` 现场一致) |
+| 6 | 打开 | 有证据 | 点存档行「打开」→ X 里多出 **Thunar 窗口**(标题 `WorldDlg - Thunar`,地址栏指向该存档目录,状态栏 `2 files: 19 bytes`);调用链 `Crash.OpenPath → xdg-open` 由一个**只记录、不替代**的透传 shim 留痕(它 `exec /usr/bin/xdg-open "$@"`,真正的窗口是 Thunar 自己开的) |
+| 7 | 媒体区(截图 / 崩溃报告 / 日志) | 有证据 | 三档列表与磁盘逐一对上(截图 167 B ×2、`file(1)` 认得出是真 PNG;崩溃报告只列 `.txt`;日志 28 B / 41 B);**打开**也真拉起外部程序 —— 截图 → Chrome 标签、日志 → Mousepad |
+
+**仍未测出(如实)**:媒体行右侧的「**导出**」。卡点是环境:此时盒子上已有 `xdg-desktop-portal-gtk`,点它走的是
+**GTK 门户对话框**(默认目录 `/`,不在可写范围),且屏上叠着别的会话遗留的门户窗抢点击,取不到"媒体文件被复制到指定位置"的证据。
+补测建议:在一个**没有 portal 后端**的干净会话里重做(那时选择器回到进程内 Avalonia 版、默认目录 = 进程 cwd)。
+
+**顺带修正 §9.6 里 R21e 的一条口径(重要)**:R21e 当时写的是"「导入本地」弹的**不是** GTK/portal,是 Avalonia 托管的
+`ManagedFileChooser`"。R21j 看到的是**两种形态都会出现,取决于环境**:
+
+* **没有 portal 后端**:进程内 Avalonia 对话框 —— `WM_CLASS="TipCL","TipCL"`、`_NET_WM_PID` = 应用自身、按钮 `Save|Cancel`;
+* **有 `xdg-desktop-portal(-gtk)`**(同一台盒子、同一个 AppImage,只是后来起了 portal):同一次点击变成
+  **GTK 门户对话框** —— `WM_CLASS="xdg-desktop-portal-gtk"`、另一个 pid、按钮顺序 `Cancel|Save`、默认目录 `/`。
+
+所以那句应读作"**(当日、无 portal 后端的盒子上)不是 GTK/portal**",**不是**"这个构建不会用 portal"。
+这类"文件选择器的形态"是**环境相关**的,证据必须连同环境快照(可见窗口清单 + `WM_CLASS` + pid + 有没有 portal)一起记录 ——
+这也是 R21j 那条并发教训的一部分(两个验证会话同机跑时,其中一个把 portal 启动了,另一个的现场记录因此对不上)。

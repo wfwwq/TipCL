@@ -157,7 +157,25 @@ if [[ -n "$LD_BIN" ]]; then
             --output appimage)
     fi
     # linuxdeploy 产物名取自 desktop 文件 Name 字段，统一改名
-    mv -f dist/TipCL-*.AppImage dist/TipCL-linux-x64.AppImage 2>/dev/null || true
+    # **不能写成 `mv -f dist/TipCL-*.AppImage dist/TipCL-linux-x64.AppImage`**:第二次出包时那个通配会
+    # 连「上次已经改好名的 canonical 文件」一起匹配,`mv` 多源 → 非目录目标直接失败,而失败被
+    # `2>/dev/null || true` 吞掉 —— 结果**新包留在原地、canonical 名字还是上一版**(R21i 在盒子上连着出包
+    # 时踩到:AppImage 的 mtime/sha256 一动不动,而单体二进制已经换了)。只认「不是 canonical 自己」的那一个。
+    renamed=""
+    for f in dist/TipCL-*.AppImage; do
+        [ -e "$f" ] || continue
+        case "$f" in
+            dist/TipCL-linux-x64.AppImage) continue ;;
+        esac
+        mv -f "$f" dist/TipCL-linux-x64.AppImage
+        renamed="$f"
+        break
+    done
+    if [ -n "$renamed" ]; then
+        echo "改名: $renamed -> dist/TipCL-linux-x64.AppImage"
+    else
+        echo "警告: 没找到 linuxdeploy 刚产出的 AppImage(期望 dist/TipCL-x86_64.AppImage),canonical 名字可能还是上一版" >&2
+    fi
     echo "AppImage: dist/TipCL-linux-x64.AppImage ($(du -h dist/TipCL-linux-x64.AppImage | cut -f1))"
 else
     echo "未检测到 linuxdeploy —— AppDir 已组装完成，出包命令："

@@ -70,12 +70,13 @@ internal sealed class AiPermissionPanel : Border
     }
 
     /// <summary>刷新当前档位与规则列表(宿主在弹出前后各调一次即可)。</summary>
-    public async Task RefreshAsync()
+    public Task RefreshAsync()
     {
         string mode = Py.S(TipCL.Core.Launcher.Config.CONFIG.Get("ai_permission_mode", "default"));
         int index = Array.IndexOf(Modes, mode);
         _mode.SelectedIndex = index >= 0 ? index : 0;
-        await ReloadRulesAsync();
+        ReloadRules();
+        return Task.CompletedTask;
     }
 
     private async Task SaveModeAsync()
@@ -115,10 +116,17 @@ internal sealed class AiPermissionPanel : Border
         });
         _content.Text = "";
         _status.Text = "已添加规则";
-        await ReloadRulesAsync();
+        ReloadRules();
     }
 
-    private async Task ReloadRulesAsync()
+    /// <summary>
+    /// 按配置重建规则列表。**故意不是 async**:它读的是已在内存里的配置、只做同步的界面重建
+    /// (参考版这里是 `async` 因为要走后端取设置,Linux 侧是本地配置)。写成 `async Task` 而不含
+    /// await 会被编译器按 CS1998 报警 —— 那条警告在 Ubuntu 的 SDK(8.0.134)上会出现,本机 SDK 不报
+    /// (2026-11-13 在盒子上真跑 `dotnet publish` 时暴露)。项目口径是"警告就是信号",所以这里按实际
+    /// 行为改成同步方法,而不是加 `await Task.CompletedTask` 去哄编译器。
+    /// </summary>
+    private void ReloadRules()
     {
         int denied = 0;
         int total = 0;
@@ -160,6 +168,6 @@ internal sealed class AiPermissionPanel : Border
         {
             data = new Dictionary<string, object> { ["ai_permission_rules"] = rules.Cast<object>().ToList() },
         });
-        await ReloadRulesAsync();
+        ReloadRules();
     }
 }
