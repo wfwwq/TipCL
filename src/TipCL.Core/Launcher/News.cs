@@ -25,8 +25,20 @@ public static class News
 	/// <summary>正文截断阈值(对齐 Windows 版:超过 160 字截到 160 再加省略号)。</summary>
 	public const int BODY_LIMIT = 160;
 
+	/// <summary>
+	/// 缓存文件路径的**测试覆盖点**(留空 = 用默认的 &lt;ROOT&gt;/cache/news.json)。
+	///
+	/// 为什么要有这条缝隙:启动页那条「线上新闻」是**后台 fire-and-forget** 地调 `fetch_news`
+	/// (LaunchPage.cs:885 → Api.cs:502 → <see cref="Fetch"/>),成功就会 <c>WriteCache</c> 写这个文件;
+	/// 而 A 类测试(建启动页的)与缓存类用例跑在**同一个进程、同一个 ROOT** 下,于是「坏缓存必须是空」
+	/// 这类断言会被那条后台抓取**偶尔**污染成非空(实测:全量跑多次里红过两次,报 5+ 条真实新闻;
+	/// 单独跑缓存用例 5/5 绿)。让用例把自己的缓存指到私有文件上,这条跨用例耦合就断了。
+	/// 与 <c>MdView.UrlOpener</c> 同一个套路(生产留默认、测试替换)。
+	/// </summary>
+	public static string CachePathOverride { get; set; } = "";
+
 	/// <summary>缓存文件:&lt;ROOT&gt;/cache/news.json(对齐 Windows 的 PPath.Join(Utils.ROOT, "cache", "news.json"))。</summary>
-	public static string CACHE => PPath.Join(Utils.ROOT, "cache", "news.json");
+	public static string CACHE => CachePathOverride.Length > 0 ? CachePathOverride : PPath.Join(Utils.ROOT, "cache", "news.json");
 
 	/// <summary>
 	/// 载荷 → 行列表。行字段与 Windows 版一致:title / body / version / image / date

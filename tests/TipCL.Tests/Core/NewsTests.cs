@@ -1,7 +1,11 @@
 // R16 线上新闻:News 的数据语义(行字段 / 12 条上限 / 160 字截断 / 缓存往返 / 失败降级)。
 // 全程不触网:失败路径用「已取消的 DownloadManager」让 FetchJson 在发请求前就抛,
 // 与断网 / 超时 / 源返回坏 JSON 走的是同一条 catch(都落在 Fetch 的降级分支上)。
-// 缓存文件在 TestIsolation 的隔离 TIPCL_HOME 里,每个用例收尾还原原始字节。
+// 缓存文件默认在 TestIsolation 的隔离 TIPCL_HOME 里 —— 但**那是全进程共享的一份**:
+// 启动页那条后台「线上新闻」会真发 HTTP 并在成功时写它(LaunchPage.cs:885 → fetch_news → News.Fetch),
+// 于是「坏缓存必须是空」这类断言会被那条后台抓取偶尔污染成非空(实测:全量跑里红过两次,
+// 报 5+ 条真实新闻;单独跑本类 5/5 绿)。所以本类把自己的缓存指到**私有临时文件**上,
+// 用 News.CachePathOverride 这条缝隙,R21f 起生效。
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,8 +15,49 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
-public class NewsTests
+public class NewsTests : IDisposable
 {
+    private static readonly string PrivateCache =
+        Path.Combine(Path.GetTempPath(), "tipcl-news-tests-" + Guid.NewGuid().ToString("N") + ".json");
+
+    public NewsTests()
+    {
+        News.CachePathOverride = PrivateCache;
+        if (File.Exists(PrivateCache)) File.Delete(PrivateCache);
+    }
+
+    public void Dispose()
+    {
+        News.CachePathOverride = "";
+        try { if (File.Exists(PrivateCache)) File.Delete(PrivateCache); } catch (Exception) { }
+    }
+
+    /// <summary>
+    /// 隔离性守卫:本类的缓存**不许**是那个全进程共享的默认文件 —— 一旦有人把这条缝隙去掉,
+    /// 这条用例立刻红(而不是等某次全量跑出个偶发失败)。
+    /// </summary>
+    [Fact]
+    public void CachePath_IsPrivateToThisTestClass()
+    {
+        Assert.Equal(PrivateCache, News.CACHE);          // 原样用我们设的那份
+        // 与「默认那份」比:默认值由 DefaultCachePath() 在同一套表示下取,免得被短路径/长路径这类差异误判
+        Assert.NotEqual(DefaultCachePath(), PPath.Abs(News.CACHE));
+    }
+
+    /// <summary>临时摘掉覆盖,取「默认那份」缓存的绝对路径(用完原样还原)。</summary>
+    private static string DefaultCachePath()
+    {
+        string saved = News.CachePathOverride;
+        try
+        {
+            News.CachePathOverride = "";
+            return PPath.Abs(News.CACHE);
+        }
+        finally
+        {
+            News.CachePathOverride = saved;
+        }
+    }
     // ————————————————— 载荷 → 行 —————————————————
 
     [Fact]
@@ -167,7 +212,7 @@ public class NewsTests
     [Fact]
     public void CachePath_IsUnderRootCacheDir()
     {
-        Assert.Equal(PPath.Abs(PPath.Join(Utils.ROOT, "cache", "news.json")), PPath.Abs(News.CACHE));
+        Assert.Equal(PPath.Abs(PPath.Join(Utils.ROOT, "cache", "news.json")), DefaultCachePath());
     }
 
     // ————————————————— 工具 —————————————————
