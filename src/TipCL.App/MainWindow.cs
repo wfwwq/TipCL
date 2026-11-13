@@ -810,7 +810,12 @@ internal sealed class MainWindow : Window
 	/// </summary>
 	public void FlyToTasks(Control source, string text = "", string? colorKey = null)
 	{
-		if (!Motion.Enabled || !IsLoaded)
+		// 【C5a 更正】第一道守卫按 Windows 的原文补上设置页那个开关(Windows 的 MainWindow.FlyToTasks
+		// 一开始就判 SettingsPage.FlyEnabled;C3d 落这个成员时只写了 Motion.Enabled ⇒
+		// 设置页「下载飞入动画」只保存不生效,是个用户可见的假功能)。
+		// FlyEnabled 内部已经是 `Extras.FlyAnimation && Motion.Enabled`,所以这一句覆盖原来那句,
+		// 语义只增不减:关掉动画**或**关掉飞入,都什么都不做(与 Windows 一致)。
+		if (!SettingsPage.FlyEnabled || !IsLoaded)
 		{
 			return;
 		}

@@ -2225,11 +2225,21 @@ public sealed partial class SettingsPage : PageBase
     /// </summary>
     private static void ApplyDark(bool dark)
     {
+        ThemeVariant variant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+        // 【C5a 更正】Windows 走的是 MainWindow.SetDark(dark),**窗口级**主题;只设应用级变体是不够的 ——
+        // 窗口自己一旦有 RequestedThemeVariant(外壳 ApplyThemeState / 测试的 UiHost.Show 都会设),
+        // 它会盖住应用级那个值 ⇒ ActualThemeVariant 不变 ⇒ 勾选框被 SyncAppearanceControls 翻回去,
+        // 表现成"点了深色开关又跳回浅色"(本包在进程内通道实测定到)。
         if (Application.Current is { } app)
         {
-            app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+            app.RequestedThemeVariant = variant;
         }
-        PageBase.Win?.ApplyThemeVisuals();
+        MainWindow? win = PageBase.Win;
+        if (win is not null)
+        {
+            win.RequestedThemeVariant = variant;
+            win.ApplyThemeVisuals();
+        }
     }
 
     private async Task BrowseGameDirAsync()

@@ -116,6 +116,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -147,6 +151,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -172,6 +180,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
             C5aFiles.Click(C5aFiles.NavButton(page, I18n.L("下载与网络")));
@@ -195,6 +207,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -220,6 +236,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -258,6 +278,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -294,6 +318,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -327,6 +355,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -355,6 +387,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -385,6 +421,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
             C5aFiles.Click(C5aFiles.NavButton(page, I18n.L("反馈与关于")));
@@ -414,6 +454,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -446,6 +490,10 @@ public class C5aSettingsTests
             SettingsPage.FeedbackPageFactory = () => C5aProbePage.Create("反馈");
 
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
             // 构造 + 首屏加载(停在通用段)都不许建内嵌页
@@ -483,6 +531,10 @@ public class C5aSettingsTests
             using var toasts = new C3cToasts();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -510,6 +562,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -536,6 +592,10 @@ public class C5aSettingsTests
             using var toasts = new C3cToasts();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -565,6 +625,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -593,6 +657,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
             C5aFiles.PumpTask(page.SaveNowAsync());
@@ -628,6 +696,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -650,6 +722,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -689,6 +765,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi().Route("set_game_dir", "\"/new/games\"");
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -716,6 +796,10 @@ public class C5aSettingsTests
                 .Route("delete_theme", "{}");
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -745,6 +829,10 @@ public class C5aSettingsTests
             using var api = C5aFiles.SettingsApi().Route("save_theme", "{}");
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
             // 视觉状态(主题色 / 背景预设)是 SettingsPage 的**进程级静态**,别的用例类可能动过它 ——
@@ -785,6 +873,10 @@ public class C5aSettingsTests
             using var api = C5aFiles.SettingsApi().Route("import_theme", "\"我的主题\"");
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -811,6 +903,10 @@ public class C5aSettingsTests
                 .Route("start_self_update", "\"task-1\"");
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -839,6 +935,10 @@ public class C5aSettingsTests
                 .Route("cleaner_apply", "{\"removed\":3,\"bytes\":60}");
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -872,6 +972,10 @@ public class C5aSettingsTests
                 .Route("get_smart_recommendation", "{\"memory_mb\":8192,\"java_major\":17,\"window_width\":1600,\"window_height\":900,\"gc_preset\":\"zgc\",\"cpu_count\":8,\"total_ram_gb\":16}");
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -898,6 +1002,10 @@ public class C5aSettingsTests
             using var api = C5aFiles.SettingsApi().Route("test_ai_connection", "\"连接正常\"");
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -918,6 +1026,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi().Route("ai_list_models", "{\"ok\":true,\"models\":[\"gpt-4o\",\"gpt-4o-mini\"],\"error\":\"\"}");
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -951,6 +1063,10 @@ public class C5aSettingsTests
                 .Route("reset_background", "{\"image\":\"\",\"folder\":\"\"}");
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -982,7 +1098,10 @@ public class C5aSettingsTests
 
     // ================================================================ 主题即时生效(B 类:主题层覆盖)
 
-    /// <summary>【Windows 源】<c>:1784-1795</c> 深色开关:立刻把应用变体切过去(mac 没有 <c>SetDark</c>,走等价写法)。</summary>
+    /// <summary>
+    /// 【Windows 源】<c>:1784-1795</c> 深色开关:立刻把主题切过去(mac 没有 <c>SetDark</c>,等价写法 =
+    /// **应用级 + 窗口级都设**;只设应用级会被窗口级盖住,这条用例把它钉住)。
+    /// </summary>
     [Fact]
     public void The_dark_switch_changes_the_application_variant()
     {
@@ -990,19 +1109,63 @@ public class C5aSettingsTests
         {
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
+            // 真外壳要在场:Windows 的深色是**窗口级**(MainWindow.SetDark),没有外壳时 mac 走的是
+            // "只设应用级变体"那条弱分支 —— 那一条也要能验,但不是这条用例的重点。
+            using var shell = ShellFixture.Create();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(shell.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
-            Application.Current!.RequestedThemeVariant = ThemeVariant.Light;
-            C5aFiles.Settle(2);
+            Assert.False(PaletteOverride.IsDarkNow);
             CheckBox dark = FindSwitchAfterLabel(page, I18n.L("深色模式"));
             dark.IsChecked = true;
-            C5aFiles.Settle(2);
-            Assert.Equal(ThemeVariant.Dark, Application.Current.RequestedThemeVariant);
+            C5aFiles.Pump(() => PaletteOverride.IsDarkNow, 2000);
+            // 三处一起看:应用级、窗口级(Windows 的 SetDark 是窗口级的)、以及全局读取口径
+            Assert.Equal(ThemeVariant.Dark, Application.Current!.RequestedThemeVariant);
+            Assert.Equal(ThemeVariant.Dark, shell.Window.RequestedThemeVariant);
+            Assert.True(PaletteOverride.IsDarkNow);
+
             dark.IsChecked = false;
-            C5aFiles.Settle(2);
+            C5aFiles.Pump(() => !PaletteOverride.IsDarkNow, 2000);
             Assert.Equal(ThemeVariant.Light, Application.Current.RequestedThemeVariant);
+            Assert.Equal(ThemeVariant.Light, shell.Window.RequestedThemeVariant);
+            Assert.False(PaletteOverride.IsDarkNow);
+        });
+    }
+
+    /// <summary>
+    /// 【C5a 更正 · 补 C3d 漏掉的消费方】设置页「下载飞入动画」开关必须真的管住 <c>FlyToTasks</c>:
+    /// 开着时 chip 进 <c>FlyHost</c>,关掉时**什么都不做**(Windows 的 <c>MainWindow.FlyToTasks</c> 第一句就是
+    /// <c>SettingsPage.FlyEnabled</c>)。
+    /// </summary>
+    [Fact]
+    public void Fly_to_tasks_does_nothing_while_the_settings_switch_is_off()
+    {
+        AvaloniaSession.Run(() =>
+        {
+            using var scope = C5aScope.Capture();
+            using var api = C5aFiles.SettingsApi();
+            using var shell = ShellFixture.Create();
+            using var clock = new C3dClock();
+            Assert.True(clock.On, "动画时钟得先打开,否则 Motion.Enabled 恒假,这一条就验不了 FlyEnabled");
+
+            // 先证明"开着的时候真的放 chip"
+            SettingsPage.Extras.FlyAnimation = true;
+            shell.Window.FlyToTasks(shell.Window.Sidebar, "飞行");
+            C5aFiles.Pump(() => shell.Window.FlyHostPanel.Children.Count == 1);
+            Assert.Single(shell.Window.FlyHostPanel.Children);
+            C5aFiles.Pump(() => shell.Window.FlyHostPanel.Children.Count == 0);
+
+            // 关掉设置页那个开关:与"关掉动画"同等结果 —— 一行都不画
+            SettingsPage.Extras.FlyAnimation = false;
+            Assert.False(SettingsPage.FlyEnabled);
+            shell.Window.FlyToTasks(shell.Window.Sidebar, "飞行");
+            C5aFiles.Settle(6);
+            Assert.Empty(shell.Window.FlyHostPanel.Children);
         });
     }
 
@@ -1018,6 +1181,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -1043,6 +1210,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -1070,6 +1241,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
@@ -1125,6 +1300,10 @@ public class C5aSettingsTests
             TipCL.Core.Launcher.Ai.FileMemory.Remember("修好了 Java 路径");
             using var toasts = new C3cToasts();
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
             C5aFiles.Click(C5aFiles.NavButton(page, I18n.L("通用")));
@@ -1155,6 +1334,10 @@ public class C5aSettingsTests
             using var scope = C5aScope.Capture();
             using var api = C5aFiles.SettingsApi().Route("translate", "\"Settings\"");
             using var harness = C4LayerHost.Show();
+            // 读全局状态之前先自己钉死(D-141/D-144):主题变体(应用级 + 窗口级)、主题色、背景预设、外观附加项落点。
+            // 收尾由 C5aScope 还原 —— 这样每一条都与"上一条用例留下了什么"无关。
+            C5aFiles.PinTheme(harness.Window, ThemeVariant.Light);
+            C5aFiles.PinAppearance();
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 

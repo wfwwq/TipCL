@@ -274,6 +274,39 @@ internal static class C5aFiles
         return api.ParamsOf(method).Contains(fragment, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 把**全局外观状态**钉死成已知值:主题色 / 背景预设(它们是 `SettingsPage` 的进程级静态)。
+    /// 纪律(见 D-141/D-144):凡是读全局状态的东西,用之前**自己先钉死**,收尾由 <see cref="C5aScope"/> 还原 ——
+    /// 不依赖"上一条用例留下了什么"。落盘点也一并指到 <c>TestHome.Root</c> 之下(红线)。
+    /// </summary>
+    internal static void PinAppearance(string themeColor = "#2E9B6B", string background = "default")
+    {
+        string dir = System.IO.Path.Combine(TestHome.Root, "c5a-pinned");
+        System.IO.Directory.CreateDirectory(dir);
+        SettingsPage.ExtrasDirOverride = dir;
+        SettingsPage.SyncPersistedThemeColor(themeColor);
+        SettingsPage.SyncPersistedBackground(background);
+    }
+
+    /// <summary>
+    /// 钉死当前主题变体:**应用级与窗口级都要设**(只设应用级会被窗口级那个值盖住 ——
+    /// `MainWindow.ApplyThemeState` 与测试的 <c>UiHost.Show</c> 都会设窗口级,本包在进程内通道实测踩到),
+    /// 然后泵到 <see cref="PaletteOverride.IsDarkNow"/> 真的等于目标(条件成立 + 有截止时间,不靠固定轮数)。
+    /// </summary>
+    internal static void PinTheme(Window? window, ThemeVariant variant)
+    {
+        if (Application.Current is { } app)
+        {
+            app.RequestedThemeVariant = variant;
+        }
+        if (window is not null)
+        {
+            window.RequestedThemeVariant = variant;
+        }
+        bool wantDark = variant == ThemeVariant.Dark;
+        Pump(() => PaletteOverride.IsDarkNow == wantDark, 2000);
+    }
+
     /// <summary>按左导航按钮的文案点它(内容 TextBlock 直接拿文案比,与 Windows 的 label 一字不差)。</summary>
     internal static ToggleButton NavButton(Control page, string label)
     {
