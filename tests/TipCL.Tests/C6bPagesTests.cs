@@ -251,7 +251,7 @@ public class C6bPagesTests
             Assert.Equal(0, api.Count("import_servers"));
             C5bFiles.Click(Button(page, I18n.L("导出")));
             C5bFiles.Settle(4);
-            Assert.Equal(0, toasts.Items.Count);
+            Assert.Empty(toasts.Items);
         });
     }
 

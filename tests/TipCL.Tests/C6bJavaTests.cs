@@ -95,7 +95,7 @@ public class C6bJavaTests
             Assert.True(C5bFiles.HasText(page, I18n.L("点上面「下载」装一个,或扫描系统已有安装")));
             // 发行版表为空 ⇒ 兜一个 adoptium,并选中它(Windows 同)
             ComboBox vendor = C5bFiles.Descendants(page).OfType<ComboBox>().First(c => c.Items.Count == 1 && string.Equals(c.Items[0] as string, "Adoptium", StringComparison.Ordinal));
-            Assert.Equal(1, vendor.Items.Count);
+            Assert.Single(vendor.Items.Cast<object>());
             Assert.Equal("Adoptium", vendor.Items[0]);
             Assert.Equal(0, vendor.SelectedIndex);
         });
@@ -212,8 +212,8 @@ public class C6bJavaTests
                 C5bFiles.Pump(() => api.Count("open_media") >= 1);
                 C5bFiles.Settle(4);
                 // 后端吃下了 ⇒ 既不揭示也不开壳(与 Windows 同:open_media 成功就 return)
-                Assert.Equal(0, revealed.Count);
-                Assert.Equal(0, shellOpened.Count);
+                Assert.Empty(revealed);
+                Assert.Empty(shellOpened);
                 // 【Windows 源】:目标 = `File.Exists(path) ? 它的目录 : path` —— 测试里这个路径不存在,
                 // 所以原样交给后端(与 Windows 逐字相同的判据)
                 C5bFiles.AssertParam(api, "open_media", "path", "/jdk21/bin/java");

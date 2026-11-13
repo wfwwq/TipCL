@@ -97,8 +97,8 @@ public class C6bMultiplayerTests
             MultiplayerPage page = LoadPage(harness, "{}");
             // 诊断:`EnsureLoadedAsync` 会把载入期的异常吞掉并 Toast,所以先把 Toast 摊开看
             Assert.True(toasts.Items.Count == 0, "载入期抛了:" + string.Join(" | ", toasts.Items.Select(t => t.Title + " / " + t.Body)));
-            Assert.True(C5bFiles.Texts(page).Any(t => (t.Text ?? "").Contains(I18n.L("内核未安装"), StringComparison.Ordinal)));
-            Assert.True(C5bFiles.Texts(page).Any(t => (t.Text ?? "").Contains(I18n.L("内核未运行"), StringComparison.Ordinal)));
+            Assert.Contains(C5bFiles.Texts(page), t => (t.Text ?? "").Contains(I18n.L("内核未安装"), StringComparison.Ordinal));
+            Assert.Contains(C5bFiles.Texts(page), t => (t.Text ?? "").Contains(I18n.L("内核未运行"), StringComparison.Ordinal));
             Assert.True(C5bFiles.HasText(page, I18n.L("下载陶瓦联机内核")));
             Assert.True(HasButton(page, I18n.L("下载")));
             // 玩家标题与房间卡默认藏着(Windows:Visibility.Collapsed)。
