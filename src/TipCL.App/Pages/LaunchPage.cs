@@ -70,7 +70,10 @@ namespace TipCL.Pages;
 ///   Avalonia 的 <c>TextBox</c> 没有这些,只有它模板里那根 <c>ScrollViewer</c> 有:取不到就**跳过自动滚动**
 ///   (日志内容照样刷新,只是不追底);</item>
 /// <item><c>PageBase.Win?.FlyToTasks(...)</c> → <see cref="FlyToTasksSeam"/>:mac 的外壳(D-97)没有那个
-///   "飞向任务页"的浮层,本包按红线**不动外壳**,所以留一个可注入挂点,详见类注释末尾;</item>
+///   "飞向任务页"的浮层,本包按红线**不动外壳**,所以留一个可注入挂点,详见类注释末尾;
+///   <b>C3d 更正:外壳已经补上 <c>MainWindow.FlyToTasks</c>(现在页面直接写
+///   <c>Win?.FlyToTasks(anchor, text)</c> 即可),这个注入缝由外壳构造函数接上真成员、关窗时解绑
+///   —— 本条差异与下面那段"用户可见的降级"**都已作废**,保留原文只为不改写历史;</b></item>
 /// <item><c>ContextMenu</c> / <c>MenuItem.Header</c> / <c>Popup</c> 都是 Avalonia 同名类型,
 ///   只有 <c>Popup</c> 的 <c>StaysOpen</c> 在 Avalonia 叫 <c>IsLightDismissEnabled</c>、<c>AllowsTransparency</c>
 ///   没有对应(浮层本来就带透明层),这三处差异在 <c>LaunchPage.Popups.cs</c> 里;</item>
@@ -83,6 +86,11 @@ namespace TipCL.Pages;
 /// <c>Win.FlyToTasks(_launchBtn, "修复中")</c> 播一个"飞向任务页"的小动画。mac 的外壳没搬 `FlyHost`(D-97),
 /// 所以这里走注入缝 <see cref="FlyToTasksSeam"/>:挂点没接时**不播动画**(任务本身照跑、照常 Toast)。
 /// 这是本页唯一一处用户可见的降级。
+///
+/// <b>C3d 更正(见 PROGRESS 的 C3c 小节末尾):这条降级已在 C3d 修好。</b>Lead 的裁决是"一次修好外壳,
+/// 不在 13 个页面包里重复同一个注入缝",所以外壳补上了 <c>MainWindow.FlyToTasks</c> + `FlyHost`,
+/// 并由外壳构造函数把这个接缝接到真成员上(关窗解绑)—— 现在「修复当前版本」真的会飞向任务页。
+/// 后续页面**直接写 <c>Win?.FlyToTasks(anchor, text)</c>** 即可,不必再留缝。
 /// </summary>
 public sealed partial class LaunchPage : PageBase
 {
@@ -302,6 +310,11 @@ public sealed partial class LaunchPage : PageBase
 	/// 「飞向任务页」的注入缝(见类注释末尾的降级说明)。
 	/// Windows 是 <c>Win.FlyToTasks(source, text)</c>;mac 的外壳还没有这个成员,所以由外壳补齐时接上,
 	/// 没接就只是不播那个动画(修复任务照跑)。
+	///
+	/// <b>C3d:外壳已经补齐并把这条缝接上了</b>(<c>MainWindow</c> 构造函数里
+	/// <c>FlyToTasksSeam = (source, text) =&gt; FlyToTasks(source, text)</c>,关窗置空)。
+	/// 缝的签名保持不变(下游可继续注入自己的探针 / 替身);**新页面不要再加缝**,
+	/// 直接写 <c>Win?.FlyToTasks(anchor, text)</c>。
 	/// </summary>
 	internal static Action<Control, string>? FlyToTasksSeam { get; set; }
 
@@ -1838,8 +1851,9 @@ public sealed partial class LaunchPage : PageBase
 				instance = _inst.Str(),
 				version = ver,
 			});
-			// 【Windows 源】Win?.FlyToTasks(_launchBtn, I18n.L("修复中")) —— mac 的外壳没有这个成员,
-			// 走注入缝;没接挂点时就不播那个"飞向任务页"的动画(用户可见的降级,见类注释与 D-121)。
+			// 【Windows 源】Win?.FlyToTasks(_launchBtn, I18n.L("修复中")) —— C3c 时 mac 的外壳没有这个成员,
+			// 走注入缝、没接挂点就不播(那条用户可见的降级,见类注释与 D-121);
+			// **C3d 起外壳的构造函数把这个缝接到了真成员上**,所以这一句等于 Windows 的那一句。
 			FlyToTasksSeam?.Invoke(_launchBtn, I18n.L("修复中"));
 		}
 	}

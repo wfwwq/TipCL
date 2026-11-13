@@ -252,6 +252,15 @@ internal sealed class MainWindow : Window
 		// 见 D-88/D-95)。接上之后 AppServices.Toast / PageBase.Toast / Dlg.Form 的「填写有误」都有声了。
 		AppServices.ToastSink = Toast;
 
+		// C3d:C3c 给启动页留的注入缝接上**真外壳成员**(`Win?.FlyToTasks(anchor, text)`)——
+		// 「修复当前版本」之后那个飞向任务页的小动画从此真的会播,C3c 记的那条"用户可见降级"到此结束
+		// (见 D-122 的裁决与 PROGRESS 的 C3c 更正注)。
+		// 用 delegate 而不是方法组:不依赖"可选参数更多的方法能否转成更少参数的委托"这条转换规则。
+		LaunchPage.FlyToTasksSeam = delegate(Control source, string text)
+		{
+			FlyToTasks(source, text);
+		};
+
 		// 关窗即收摊:Toast 的自动关闭计时器一个都不留(C2c1 的泄漏纪律,见 D-105)。
 		Closed += delegate
 		{
@@ -263,6 +272,9 @@ internal sealed class MainWindow : Window
 			// 免得下一个外壳往新宿主里挂时那两个静态图层还挂在旧宿主上)。
 			Wallpaper.Shutdown();
 			Wallpaper.Detach();
+			// C3d:注入缝是**静态**的,关窗必须解绑,免得它一直拎着一个已经关掉的窗口(泄漏纪律)。
+			// 本应用只有一个外壳(Windows 同),所以直接置空。
+			LaunchPage.FlyToTasksSeam = null;
 		};
 
 		// ---- 偏好:注入的用注入的,否则按 Windows 从数据目录读 ----
