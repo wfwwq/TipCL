@@ -1702,3 +1702,49 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
 - 做法:`GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault()` 取到就用它的
   `Offset.Y / Extent.Height / Viewport.Height / ScrollToEnd()` 做同一件事;**取不到(还没套模板 / 离屏)就跳过自动滚动**
   —— 日志内容照旧刷新,只是不追底。这是"降级但如实",不是静默丢功能(行缓冲 2500 的上限与裁剪逻辑一字未改,用例钉住)。
+## D-129 C3d:测试里"动画开着"那一支用 `Motion.ClockOverride` 打开(headless 的实测取舍)
+
+- **事实**:headless 会话里 `Application.ApplicationLifetime` 永远是 null ⇒ `Motion.HasClock` 恒假 ⇒
+  `Motion.Enabled` 恒假 ⇒ **所有"动画开着"的分支在测试里不可达**(D-69 / D-98 记过同一件事,
+  当时只能验"关掉时落终态"那一半)。
+- **本包探针实测(两条,决定了设计)**:
+  1. 离屏的动画时钟**推得动**:620ms 的 `Animation.RunAsync` 在 `UiHost.Flush()` 的泵
+     (`Dispatcher.UIThread.RunJobs()` + `AvaloniaHeadlessPlatform.ForceRenderTimerTick()`)里真的跑完并落了终态;
+     同一控件上并发跑 5 条 Animation(分属 Translate / Scale / Opacity)互不打架。
+  2. **`DispatcherTimer` 在那条泵里一次都不 Tick**(400ms 的 16ms 定时器,计数 0)⇒
+     "用 `DispatcherTimer` 逐帧插值驱动动画"这条方案被**否掉**(那会在离屏/测试里永远走不完)。
+- **决定**:给 `Motion` 加一个 **internal 注入点** `internal static bool? ClockOverride`(默认 null =
+  按真桌面生命周期判断,行为与以前完全一致;`HasClock` 读它)。测试用 `C3dClock` 作用域把它与用户开关
+  一起置真、用完**两个都还原**(先还用户开关、再撤时钟)。这样 `FlyToTasks` 的守卫可以**逐字**保持
+  Windows 的 `if (!Motion.Enabled || !IsLoaded) return;`,而"动画开着"那一支真的可验。
+- **纪律**:只在作用域内设它;**任何**设了它的包都有义务还原,否则同进程里别的用例会看到"动画开着"。
+- 顺带实测:`Avalonia.Controls.Control.IsLoaded` 在 Avalonia 11 里**存在**且语义与 WPF 一致
+  (没 Show=假 / Show 后=真 / Close 后=假),所以 `!IsLoaded` 这条守卫也是逐字照搬;
+  **不能**拿 `IsAttachedToVisualTree()` 当"窗口活着"的判据(窗口是它自己那棵树的根,没 Show 过也是真)——
+  `Motion.Loop` 里那句把它当作 `IsLoaded` 等价物的注释对窗口不成立(本包只记录,不改它)。
+
+## D-130 C3d:620ms 时间线怎么落到 Avalonia(Avalonia 只有一条整段缓动的取舍)
+
+- Windows 的四条曲线:X `0→dx`(620ms,`CubicEase EaseInOut`);Y 两个关键帧(45% 处 `dy*0.28-46` 配
+  `EaseOut`、100% 处 `dy` 配 `EaseIn`);透明度 15%/72%/100% = 1/1/0(线性);缩放 `0.7→0.42`(X、Y 各一条)。
+- Avalonia 的 `Animation` 只有**一条**整段缓动(`Animation.Easing`),没有 WPF 那种"每个关键帧自带缓动"。
+  因此:X / 缩放用**两关键帧 + 真缓动**(只有一段 ⇒ 缓动就是曲线本身,与 Windows 逐点相同);
+  Y 的两段不同缓动按 **2.5%(15.5ms)采样成线性关键帧**(`0.025` 能整除 `0.45` 与 `1.0`,
+  45% 那一帧正好落在采样点上,不会被采样误差吃掉);透明度本来就是线性的,直接照搬。
+- **以 Transform 对象本身当 `RunAsync` 目标是错的**(探针实测抛 `InvalidCastException`:
+  `TransformAnimator` 要求目标是 `Visual`)。正确写法是**目标给 chip**、setter 写
+  `TranslateTransform.XProperty` / `ScaleTransform.ScaleXProperty`,由动画器去解析 chip 的 `RenderTransform`。
+- 时长 **620ms 不乘 `Motion.Scale`**:Windows 这里就是裸的 `TimeSpan.FromMilliseconds(620.0)`(其它
+  `Motion` 成员才乘倍率)。`Completed` 挂在**缩放**那条动画上(Windows 的 `doubleAnimation` 就是 0.7→0.42)。
+
+## D-131 C3d:剩余 13 处调用点的统一写法(12 处逐字、1 处一次 cast)
+
+- 12 处(LaunchPage / InstancePage / VersionManagePage / CatalogPage / JavaPage / MultiplayerPage 等)
+  **一字不改**:`PageBase.Win?.FlyToTasks(anchor, text)` —— `PageBase.Win` 早就是
+  `internal static MainWindow?`(C2b),`FlyToTasks` 就在那个类型上。
+- 只有 `InstallPage.cs:489` 的 `AppServices.Window?.FlyToTasks(_go, _ver)` 要写成
+  `(AppServices.Window as MainWindow)?.FlyToTasks(_go, _ver)`:mac 的 `AppServices.Window` 静态类型是
+  Avalonia 的 `Window?`(D-88),而 `MainWindow` 是 internal。**没有**新增 `AppServices.Shell` 之类的成员
+  (会偏离 Windows 原文,且多一个要维护的门面),null 语义与原来相同。
+- C3c 的 `LaunchPage.FlyToTasksSeam` **签名保留**(下游可注入探针),但由外壳构造函数接到真成员、
+  `Closed` 时置空;**新页面不要再加缝**,直接写 `Win?.FlyToTasks(anchor, text)`。

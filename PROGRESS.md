@@ -35,6 +35,7 @@
 | C3-C8 | 页面逐个移植 | 进行中(C3c 起;**第一个真实页面 = 启动页**,接入方式:各页面包 `PageRegistry.Register(...)` 注册页面 id) |
 | C3c | **启动页**:`Pages\LaunchPage.cs`(58.4 KB)+ `Pages\LaunchPage.Popups.cs`(9.5 KB)移植并注册为 `launch` | ✅ 完成(见下;**新增 117 条用例,C2b 的"空宿主"那条拆成两条(+1),总数 2968 → 3086,两条通道各连跑 2 次都 3086/3086 全绿**;`--smoke` 因为页面第一次真的有内容而合法变更为 **light 37681 `2603BF6A...` / dark 33579 `7D7AFDD5...`**;实测还差 **6 个 Models DTO** 与 **hero.jpg**(C2c2 漏的那张),按"小而自包含就一并搬"字节级搬来 —— **Lead 说"这些文件自包含"第三次不成立**,见 D-121;`MainWindow.FlyToTasks` 在 mac 侧不存在 → 注入缝 + 用户可见降级,见 D-122 请 Lead 裁决;页面用例抓到一个真 bug:`ContextMenu.Open()` 无参调用会抛 `ArgumentNullException`,见 D-124) |
 | C3a | 区块 / 仪表盘布局框架:`Pages\BlockHost.cs` + `Pages\DashHost.cs`(含它们真正依赖的布局模型:`Pages\PageBlock.cs`、`PageLayoutStore.cs`、`PageLayoutIO.cs`、`DashCard.cs`、`DashLayout.cs`) | ✅ 完成(见下;**新增 100 条用例,总数 2797 → 2897,两条通道各连跑 2 次都 2897/2897 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书说"这两个文件应该自包含"**实测不成立** —— 还差 5 个没移植的模型/存储文件,按"小而自包含就一并搬"的规定搬了,见 D-117) |
+| C3d | **外壳补 `FlyToTasks` + `FlyHost`**:13 处页面调用点一次修好(含 C3c 注入缝的接线) | ✅ 完成(见下;**新增 33 个测试方法 / 43 条用例,总数 3086 → 3129,两条通道各连跑 2 次都 3129/3129 全绿**;`--smoke` 与 C3c 基准**逐位相同**(light 37681 `2603BF6A...` / dark 33579 `7D7AFDD5...`),离屏时第一道守卫就把飞行挡掉,冒烟帧里没有 chip;C3c 记的那条"用户可见降级"**已修好**(提交 `a9ad510` 外壳成员 + `b61db8a` 接线);顺带实测两条框架事实:`Avalonia.Controls.Control.IsLoaded` 在 11 里存在、**以 Transform 对象为 `Animation.RunAsync` 目标会抛 `InvalidCastException`**(后者是既有问题,不在本包范围,见小节第 8 节) |
 | C3b | 启动页需要的两个小对话框:`Pages\CrashUi.cs`(崩溃 / 异常退出报告卡)+ `Pages\VersionSetupDialog.cs`(版本设置) | ✅ 完成(见下;**新增 71 条用例,总数 2897 → 2968,两条通道各连跑 2 次都 2968/2968 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书的门面计数复核吻合,但"自包含"不成立 —— 还差两个没移植的小模型 `Models\OpResult.cs` / `Models\VersionSettingsDto.cs`,按"小而自包含就一并搬"字节级搬来,见 D-118;`AiFixWindow`(22.6 KB 整窗)属 AI 全家未移植,「交给 AI 修复」按钮保留 + 注入缝 + 如实提示,请 Lead 裁决,见 D-119) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
@@ -5558,3 +5559,149 @@ internal 处理器体(不构造 `PointerEventArgs`、不用 Headless 输入模�
 > 3. 后续 13 处调用点(CatalogPage / InstallPage / InstancePage / JavaPage / LaunchPage /
 >    MultiplayerPage / VersionManagePage)**直接写 `Win?.FlyToTasks(anchor, text)`** 即可,不必再留缝;
 > 4. Lead 的裁决与全部细节见文末的 **C3d** 小节。
+---
+
+## C3d 外壳补 `FlyToTasks` / `FlyHost`:13 处页面调用点一次修好(2026-11-13)
+
+工作包:把 Windows `MainWindow.FlyToTasks`(`MainWindow.xaml.cs:1336-1425`)与它那个 `FlyHost` 画布
+(`MainWindow.xaml`:77)**补进 mac 外壳**,并把 C3c 给启动页留的注入缝接到真成员上。
+依据是 C3c 的 Lead 验收**裁决 3**(「一次修好外壳,不在 13 个页面包里重复同一个注入缝」)。
+
+**不碰**:色板 / `Controls.axaml` / 导航模型 / `Pages\PageHost.cs` / `Pages\PageRegistry.cs` /
+其它页面与其它页面的移植(唯一动过的页面文件是 `LaunchPage` 里那处**注入缝本身**:接线 + 注释更正);
+`src\TipCL.Core` 一字节未改。所以本包之后,后续 12 个页面包照 Windows 直接调 `<c>Win?.FlyToTasks</c>` 即可。
+
+### 1. 外壳拿到了什么
+
+1. **`FlyHost`**(`MainWindow._flyHost`):一个 `Canvas`(`Name="FlyHost"`,`IsHitTestVisible=false`),
+   与 Windows 的 XAML 子元素顺序**同一位置** —— `ContentLayer → FlyHost → DropVeil → ToastHost → DialogHost`。
+   z 序因此是:**盖在整窗内容之上(跨标题栏与正文两行),但在拖放浮层 / Toast / 对话框之下**。
+2. **`public void FlyToTasks(Control source, string text = "", string? colorKey = null)`** —— 签名与 Windows
+   逐参对应(`FrameworkElement` → `Control`),四道守卫、chip 的构造、几何与 620ms 运动全部照抄。
+3. **`Services\FlyMotion.cs`**:620ms 时间线(四条曲线)单独成一个纯运动学类,外壳只管建 chip / 算坐标 / 摘 chip。
+4. **接线**:外壳构造函数里 `LaunchPage.FlyToTasksSeam = (source, text) => FlyToTasks(source, text)`,
+   `Closed` 里置空(静态接缝不许拎着死窗口)。
+
+### 2. 与 Windows 逐条对齐的四道守卫(任一满足就什么都不做)
+
+| # | Windows 源 | mac 写法 | 说明 |
+|---|---|---|---|
+| 1 | `!Motion.Enabled` | `!Motion.Enabled` | mac 的 `Motion.Enabled` 还要求"有人在推进动画时钟"(D-69)⇒ **离屏 / 测试里恒假**,冒烟帧因此一行都不画 |
+| 2 | `!base.IsLoaded` | `!IsLoaded` | **Avalonia 11 的 `Control.IsLoaded` 与 WPF 同义**(本机探针实测:没 Show=假、Show 后=真、Close 后=假)。注意**不能**用 `IsAttachedToVisualTree()`:窗口是它自己那棵树的根,没 Show 过它也是真(见 D-129) |
+| 3 | `target == null \|\| !source.IsVisible \|\| !target.IsVisible` | 同名成员 + 目标换成侧栏的 tasks 行 | Windows 的 `TabTasks` 是顶栏页签,mac 的外壳是侧栏(D-97),换的是"哪一行",判据不变 |
+| 4 | `try { TransformToAncestor... } catch { return; }` | `TranslatePoint` 返回 null 就返回 | 源控件不在同一棵可视树里时 Avalonia 给 null,等价于 Windows 的 catch |
+
+mac 侧只多一条**防御**:`source is null` 直接返回(Windows 会 NRE)。`target` 的取法:
+`_navGrid` 里 `Tag` 的导航键映射到页面 id `tasks` 的那个 `ToggleButton`(行表被配置改没了就是 null,
+与 Windows 的 `TabTasks == null` 同一分支)。
+
+### 3. chip 与几何(逐值照抄)
+
+| 项 | Windows 源 | 值 |
+|---|---|---|
+| 形状 | :1360-1361 | `CornerRadius 999`、`Padding (10,4,10,5)` |
+| 文字 | :1362 | `Ui.Txt(text 为空 ? I18n.L("已加入队列") : text, 11.5, bold: true, "B.OnAccentStrong")` |
+| 底色 | :1364 | `colorKey ?? "B.AccentStrong"`(走 `UiExt.Dyn` = WPF 的 `SetResourceReference`) |
+| 阴影 | :1365 | `Motion.Shadow(chip, 16.0, 0.3, 3.0)`(Border 上落到 `BoxShadow`,与 C2a 同一套映射) |
+| 量盒 | :1367 | `Measure(new Size(500, 60))` 之后读 `DesiredSize` |
+| 起点 | :1370-1371 | `Canvas.SetLeft/Top(中心 − 尺寸/2)`,中心 = `source.TranslatePoint(Bounds/2, this)` |
+| 变换 | :1372-1378 | `TransformGroup{ Scale(0.7,0.7), Translate(0,0) }`,原点 `(0.5,0.5)` 相对 |
+| 终点 | :1352 | 任务行中心(同一个 `TranslatePoint`) |
+
+### 4. 620ms 时间线(`FlyMotion`)与三处移植差异
+
+Windows 的四条曲线:X `0→dx`(620ms,`CubicEase EaseInOut`);Y 两个关键帧(45% 处 `dy*0.28-46` 用
+`EaseOut`、100% 处 `dy` 用 `EaseIn`);透明度 15%=1 / 72%=1 / 100%=0(线性);缩放 `0.7→0.42`(X/Y 各一条)。
+`Completed` 挂在**缩放**那条上(Windows 的 `doubleAnimation` 就是 0.7→0.42),回调里摘 chip + 给任务行
+`Motion.Pulse`。
+
+| # | 差异 | 为什么 / 影响 |
+|---|---|---|
+| 1 | Avalonia 的 `Animation` 只有**一条整段缓动**,没有 WPF「每个关键帧自带缓动」 | X / 缩放走两关键帧 + 真缓动(单段 ⇒ 缓动就是曲线本身,**与 Windows 逐点相同**);Y 的两段不同缓动按 **2.5%(15.5ms)采样成线性关键帧**,0.025 能整除 0.45 与 1.0 ⇒ 45% 那帧正好落在采样点上。与 Windows 曲线的偏差**远小于 1px** |
+| 2 | 驱动方式:WPF 合成时钟 → Avalonia `Animation.RunAsync`(4~5 条并发动画,目标都是 chip) | 本机探针实测:并发动画互不打架(终态都正确、变换对象没被换掉);**以 Transform 对象本身当目标是错的**(会抛 `InvalidCastException`,见第 8 节)。离屏没有时钟时走不到这里(守卫 1 已挡) |
+| 3 | 时长**不乘** `Motion.Scale` | Windows 这里就是裸的 `TimeSpan.FromMilliseconds(620.0)`,mac 照抄(mac 的 `Motion` 其它成员才乘倍率) |
+
+**还差 1px 的地方(照抄,不是本包引入)**:坐标算在**窗口**坐标系里(Windows 也是 `TransformToAncestor(this)`),
+而 chip 被放进 `FlyHost` —— 但 `FlyHost` 在 `RootBorder`(1px 边框)之内,所以两个坐标系差 1px。
+Windows 的 XAML 同样是 `RootBorder` 包住 `FlyHost`,这个 1px 在两边一模一样。
+
+### 5. 后续 13 处调用点用哪一条(本包标准化的形状)
+
+**12 处一字不改**:`PageBase.Win?.FlyToTasks(anchor, text)` —— `PageBase.Win` 早就是
+`internal static MainWindow?`(C2b),`FlyToTasks` 就在那个类型上。
+**1 处要一次 cast**:`InstallPage.cs:489` 的 `AppServices.Window?.FlyToTasks(_go, _ver)` 在 mac 侧写成
+`(AppServices.Window as MainWindow)?.FlyToTasks(_go, _ver)` —— mac 的 `AppServices.Window` 静态类型是
+Avalonia 的 `Window?`(D-88)。**没有**为此新增 `AppServices.Shell` 之类的新成员(那会偏离 Windows 原文),
+null 语义与原来相同。见 D-131。
+
+C3c 的 `FlyToTasksSeam` **签名保留**(下游页面/测试仍可注入探针),但它的默认行为已经是"接到真成员",
+**新页面不要再加缝**(那正是本包要消掉的重复)。
+
+### 6. 测试(33 个方法 / 43 条用例;总数 3086 → 3129)
+
+| 文件 | 方法 / 用例 | 覆盖 |
+|---|---|---|
+| `C3dFlyTests.cs` | 24 / 34 | 四道守卫(关动画 / 用户关掉动画 / 源不可见 / 任务行不存在 / 任务行不可见 / 没 Show 过 / 已 Close / 源不在可视树 / null 源)、chip 的文字(3 组 Theory 含默认文案)、底色(默认 `B.AccentStrong` + 自定义键)、字号 11.5 半粗 + `B.OnAccentStrong`、999 药丸 + padding、阴影(含 alpha 76 = `round(0.3*255)`)、起点几何(现算一遍)、变换组顺序与原点、常量逐项(含"45% 落在采样点上")、**曲线与 WPF 三次幂闭式逐点对拍(8 组 Theory)**、Y 曲线 46px 领先量、透明度三段、**飞完宿主必须重新为空(泄漏检查)**、连飞两条都落地、终点 + 终态缩放 0.42 + 透明度 0、任务行被 Pulse 的证据 |
+| `C3dReachTests.cs` | 9 / 9 | `PageBase.Win` 指向外壳、页面形状真的到得了外壳成员、没有窗口时 null 安全、窗口不是外壳时 `Win` 为 null、`AppServices.Window` 形状 cast 一次后同样到得了、**外壳把接缝接到真成员**、**关窗解绑接缝**、**修复路径调用接缝(文案「修复中」+ anchor 是启动按钮)**、**端到端:启动页长在真外壳里时修复真的在外壳 `FlyHost` 上飞出 chip 且飞完摘掉** |
+| `C3dFixtures.cs` | — | 期望值权威副本(`C3dExpected`)、`C3dClock`(打开"动画开着"那一支的作用域,见 D-129)、`FlyProbePage`(只按页面统一形状调外壳成员)、`C3dFiles`(唯一 chip / 现算几何 / 拆变换组 / 色键对拍 / 启动页假后端与加载) |
+
+驱动方式沿用既有纪律:按钮与菜单项走 `RaiseEvent`,对话框走 `DlgHarness`/`C2c2Files.Dialog()`(D-113),
+等待一律"一边泵 Dispatcher 一边看条件"(Stopwatch + 9 秒上限,D-120),**不模拟真实输入设备**(D-115)。
+"动画开着"那一支靠新增的 `Motion.ClockOverride` 打开(**本机探针实测:headless 的动画时钟靠
+`AvaloniaHeadlessPlatform.ForceRenderTimerTick()` 真的推得动,620ms 的 `Animation.RunAsync` 会跑完并落终态;
+但 `DispatcherTimer` 在那条泵里一次都不 Tick** —— 后者否掉了"用 DispatcherTimer 逐帧驱动"的方案),见 D-129。
+
+### 7. 验证命令与实际结果(本机 Windows,全部由本包亲自执行)
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 构建 | `dotnet build-server shutdown` + `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | 退出码 **0**,**0 个错误**;警告 = `NU1900` ×6 + `SYSLIB0014` ×1(与基线逐项相同) |
+| `dotnet test` 第 1 / 2 次 | `dotnet test TipCL.Mac.sln -c Release --no-build` | 都是**退出码 0,失败 0 / 通过 3129 / 总计 3129**(57 秒 / 58 秒) |
+| 进程内执行器 第 1 / 2 次 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 都是**退出码 0,总计 3129 / 通过 3129 / 失败 0 / 跳过 0 / 不支持 0** |
+| `--smoke`(不带 `--page`) | `TipCL.exe --smoke --out artifacts\c3d-nopage.png` | 退出码 **0**,**37681 字节**,SHA256 `2603BF6AB2B5D491E2B6AFB34E3EAEDD8A0388B6A6497D33D3F8193492342CBD` = **C3c 基准逐位相同** |
+| `--smoke --page launch --theme light` | 同上加 `--page launch` | 退出码 **0**,**37681 字节**,同一个哈希 |
+| `--smoke --theme dark` | 同上 `--theme dark` | 退出码 **0**,**33579 字节**,`7D7AFDD502D82EE21F7DCEFEF7B12FC2731628D41B4DDF595FD1E1D05F276893` = **C3c 基准逐位相同** |
+| `--smoke --theme blue` | 同上 `--theme blue` | 退出码 **2**(参数错,符合预期),打用法、不产出文件 |
+| 冒烟里到底有没有 chip | 见下 | **没有**:两帧与 C3c 基准**逐字节相同**,而 C3c 基准是在 `FlyToTasks` 还不存在时出的图;机制上离屏 `Motion.Enabled == false`(无动画时钟),第一道守卫就返回;外加外壳只多挂了一个**空** `Canvas`(不画、不影响布局) |
+| `src\TipCL.Core` 有没有被动过 | `git diff --name-status 30196f3 HEAD -- src/TipCL.Core` | **0 行输出**(空) |
+| Core 对 Windows 源的同一性 | 逐文件 SHA256(mac `src\TipCL.Core\**\*.cs` ↔ Windows `src\TipCL\Core\**\*.cs`,受版本控制的 248 个) | **有对应 238 / 完全一致 216 / 有改动 22 / 无对应 10**,与基线**完全一致** |
+| `%LOCALAPPDATA%\TipCL` | 收尾时量一次(见下"诚实说明") | **9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16** —— 与 Lead 基线逐项相同(**零写入**) |
+| 真实桌面 / 图片 | 收尾时 | 桌面 14 项、最新写入 **2026-11-12 19:02:53**(不变);图片 3 项、最新 **2026-11-06 23:39:03**(零写入) |
+| 残留进程 | `Get-Process testhost,TipCL,java,adb` | **0 个** |
+| `%TEMP%` 下的 `tipcl*` | 收尾时 | 总数 **113**(C3c 记的 104 是别的产品线留下的);**本包验证窗口(18:31:08–18:34:19)内新建 0 个**;窗口之前 18:26–18:30 有 9 个(`tipcl-tests-*` / `tipcl-smoke-*` / `tipcl-final-selftest-*` 之类),这些名字在本仓库源码里**一个都不存在**,而且本仓库的测试隔离目录是 `tests\TipCL.Tests\bin\Release\net8.0\test-home\<guid>`(收尾时 424 个,最新 18:34:07)⇒ 判给别的会话/产品线,但**本包无法自证归属**,如实记录 |
+| 编码 | 对本包新增 / 改动的 8 个文本文件逐个 `ReadAllBytes` | 无一例外:**无 BOM、CR=0、U+FFFD=0** |
+| 提交 | 5 个提交 | `a9ad510`(FlyHost + FlyMotion + FlyToTasks)/ `b61db8a`(接缝接线 + 页面注释更正)/ `1c20fbe`(C3c 小节追加更正注)/ `90079bb`(43 条用例)/ 文档提交见下;每次 `git add -A` 前都 `git status --short` 确认没有 `Zz*` 或仓库根散落文件 |
+
+### 8. 顺带实测到的两条框架事实(一条影响全项目)
+
+1. **`Avalonia.Controls.Control.IsLoaded` 在 Avalonia 11 里存在**,语义与 WPF 的 `IsLoaded` 一致
+   (本机探针:没 Show=假 / Show 后=真 / Close 后=假)。因此 `FlyToTasks` 的 `!IsLoaded` 是**逐字照抄**。
+   ⇒ `Motion.Loop` 里那句注释("与 Windows 的 `owner.IsLoaded` 等价:Avalonia 用「在不在可视化树上」判断")
+   **对窗口不成立**(窗口是它自己那棵树的根,`IsAttachedToVisualTree()` 在没 Show 过时也是真)。
+   本包**没有改** `Motion.Loop`(不在红线内但属于别的包的语义,改了要重新验一批既有用例),只记录。
+2. **以 Transform 对象本身当 `Animation.RunAsync` 的目标会抛 `InvalidCastException`**
+   (`TransformAnimator` 要求目标是 `Visual`)。也就是说 `Motion` 里那些 `Play(translate, ...)` / `Play(scale, ...)`
+   形式的调用(FadeIn 的竖直位移、HoverLift、PopIn/PopOut、Shake、Spin…)在**真桌面**(有动画时钟、
+   `Motion.Enabled` 为真)会**静默失效**(异常被 `Motion.Start` 吞掉);离屏/测试里因为 `Enabled` 恒假根本走不到,
+   所以一直没被发现。**这是既有问题,不是本包引入**;本包的时间线因此把**目标指向 chip**(
+   setter 写 `TranslateTransform.XProperty` / `ScaleTransform.ScaleXProperty`),这也是 Avalonia 的正确写法。
+   **请 Lead 决定**是否单开一个小包修 `Motion` 里那些调用点(修法是把目标换成宿主控件,不动公开签名)。
+
+### 9. 未验证项(本机是 Windows,没有 Mac)
+
+1. **macOS 真机**:飞行 chip 的实际观感、系统红绿灯下的坐标、真桌面合成时钟推进 620ms 的表现、
+   `Motion.Enabled` 在真桌面为真那条分支 —— 全部**未验证**。
+2. **动画中途逐帧的形状没有采样**:离屏没有"逐帧读某一时刻"的钩子,所以验的是
+   ①曲线数学与 WPF 闭式逐点一致、②终态(位移 / 缩放 0.42 / 透明度 0)、③结束时摘 chip。
+3. **`Motion.Pulse` 之后任务行的缩放是否回到 1.0** 没断言(只断言"缩放变换出现了"这一条证据)。
+4. **剩余 12 处调用点还没移植**:所以"它们编得过"是形状推导(12 处逐字 + 1 处一次 cast),不是编译验证。
+5. `%TEMP%` 那 9 个 `tipcl*` 目录的归属(见第 7 节末)—— 本包只能证明**不在自己的窗口内**。
+
+### 10. 遗留与风险
+
+1. **`Motion.ClockOverride` 是新增的 internal 测试注入点**(D-129):默认 null(行为与以前完全一致),
+   设了它的包**必须**在作用域里还原,否则同进程里别的用例会看到"动画开着"。
+2. **第 8 节的两条**:`Motion.Loop` 的注释不准确(只记录)、`Motion` 里以 Transform 为目标的动画在真桌面静默失效(**请 Lead 裁决是否单开小包**)。
+3. **C3c 的注入缝保留着**(签名不变),但它已由外壳接上真成员;**新页面不要再加缝** —— 这层间接可以后续某个包统一拆掉。
+4. 本包**只补了外壳的两个成员**;`FlyHost` 里除了飞行 chip 之外没有任何其它用途
+   (Windows 也只被 `FlyToTasks` 用)。
