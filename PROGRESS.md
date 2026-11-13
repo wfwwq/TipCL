@@ -6250,3 +6250,93 @@ Avalonia 一个同名等价物都没有。所以保留的是**算法与全部常
 7. **并发负载会让"按固定轮数泵"的异步测试假红。** 遇到不属于自己范围的失败,先 `--filter` 单独复跑;复跑绿了就是并发干扰。长期修法:把固定轮数换成"条件成立 + 有截止时间"的等待。
 8. **探针属性/局部变量名要避开 Avalonia 与 WPF 基类既有成员**(`Loaded`/`Shown`/`body` 这些名字已经各踩一次),否则是编译错误或成员隐藏告警。
 9. **全局状态类的前提断言会被下一个包打破**(「注册表里只有启动页」这类)。既定解法是**还原前提、断言不删**(D-126):先 `Assert.Contains` 钉住新增的 id,再 `Unregister` 把它们摘掉,原来的 `DoesNotContain` 一字不改地留着。
+
+## C5a:设置页(SettingsPage)移植 + 主题层可写色板覆盖层
+
+### 依赖审计(先做的第一件事,四类)
+
+Windows 侧三个 partial:`SettingsPage.cs` 2012 行 + `SettingsPage.Themes.cs` 390 行 + `SettingsPage.PhoneSync.cs` 76 行 = **2478 行**,
+类 `TipCL.Pages.SettingsPage : PageBase`,7 个分段(通用 / 账号 / Java / 下载与网络 / 服务器 / 游戏时长 / 反馈与关于),
+前 6 张卡挂在同一个 `BlockHost` 里。
+
+| 类 | 内容 | 处置 |
+| --- | --- | --- |
+| A:本身是页面的缺件 | `AccountPage` / `JavaPage` / `ServersPage` / `PlaytimePage` / `FeedbackPage` / `FirstRunWizard`(另有 `PhoneSyncPanel`) | **注入缝 + 如实占位**(D-119 / D-134 先例);`AccountPage` / `FirstRunWizard` 由 C5b 移植,我不碰那两个文件(见 D-140) |
+| B:主题运行时改写的基础设施 | Windows 写 `App.PaletteDictionary`,还有 `App.IsDark` / `App.PaletteUri` / `App.RaiseThemeVisualsChanged` | **新建 `Themes\PaletteOverride.cs`**(Lead 裁决,落在主题层;见 D-139) |
+| C:小而自包含的 DTO | `CleanerEntry` 136B / `CleanerPreview` 481B / `CleanerResult` 131B / `ThemeRow` 326B / `BackgroundState` 149B / `SmartRecommendation` 655B / `UpdateInfo` 370B | **字节级搬**(共 2248 字节),`TipCL.Core` 一字节未动 |
+| D:离屏/测试不能碰的三处 | 重启启动器(`Process.Start` 自身 + `Shutdown`)、复制 MCP 地址(`Clipboard.SetText`)、壁纸预设缩略图(`pack://` + `BitmapImage`) | 注入缝 + mac 既有件(见 D-140) |
+
+**已核对过的好消息**:222 处 `Ui.*` 用到的成员(Btn/Card/Check/Combo/Field/G/Glyph/H/Input/Muted/Pane/S/Section/Sld/Small/Switch/Txt/V)
+mac 侧**一个不缺**;`Wallpaper` / `FileKinds` / `Fmt` / `BridgeHost` / `Clamp` / `Core.Launcher.AppInfo` / `PhoneLink` / `PhoneClient` /
+`McpServer` / `FileMemory` / `BlockHost` / `FileMemory` 都在;29 个后端方法名全是 RPC 字符串,无编译依赖;`B.*` / `C.*` 只是资源键,不是类型。
+
+### 交付物
+
+| 文件 | 说明 |
+| --- | --- |
+| `src\TipCL.App\Themes\PaletteOverride.cs`(新,8995B) | 运行时可写色板覆盖层:`Set` / `SetColor` / `SetBrush` / `Remove` / `Reset` / `TryGetNow` / `CountNow` / `KeysNow` / `AttachedNow` / `VariantNow` / `IsDarkNow` / `Builtin` / `BuiltinColor` |
+| `src\TipCL.App\Pages\SettingsPage.cs`(新,101416B) | 页面本体:7 段导航 / 通用段 9 块 / 下载与网络段 1 块 / 反馈与关于段(Grid 双行)/ 自动保存 / 壁纸 / 主题包 / 清理 / 推荐 / AI / 记忆 / MCP / 手机同步接线 |
+| `src\TipCL.App\Pages\SettingsPage.Themes.cs`(新,17627B) | 主题包五个动作 + `ApplyVisuals` / `ApplyAccent`(对比度补偿那一套逐字照抄)+ 颜色数学,落点改成 `PaletteOverride` |
+| `src\TipCL.App\Pages\SettingsPage.PhoneSync.cs`(新,4975B) | 手机同步卡片(走 `PhoneLink` / `PhoneClient`,`PhoneSyncPanelRunner` 缝) |
+| `src\TipCL.App\Pages\SettingsPageRegistration.cs`(新,1414B) | `[ModuleInitializer]` 注册页面 id `settings`(D-125) |
+| `src\TipCL.App\Models\*.cs`(新 7 个) | C 类七个 DTO,字节级搬 |
+| `tests\TipCL.Tests\C5aFixtures.cs`(新) | `C5aScope`(全局静态快照还原,含色板覆盖层与设置页静态视觉状态)、`C5aFiles`(泵/查找/假后端参数)、`C5aProbePage`(分段探针) |
+| `tests\TipCL.Tests\C5aPaletteOverrideTests.cs`(新) | 覆盖层机制自测 9 条(含优先级探针,见 D-139) |
+| `tests\TipCL.Tests\C5aSettingsTests.cs`(新) | 设置页 40 条 |
+| `tools\c5a-verify.cmd`(新) | 一次锁里跑 build + VSTest + 进程内(避免"build 完被别人重建成另一个二进制") |
+| `tools\c5a-smoke.ps1`(新) | 五个冒烟帧 + 基准逐字节比对 + 像素取证 |
+| `tools\c5a-append-docs.ps1`(新) | 按字节把本节拼到 `PROGRESS.md` / `DECISIONS.md` 末尾(D-36) |
+
+### 用例数
+
+`C5aPaletteOverrideTests` 9 + `C5aSettingsTests` 40 = **49 条**(全量套件 3437 条的一部分)。覆盖:
+注册(模块初始化器 / 导航表 / 外壳按 id 解析)、无后端构造与加载降级、静态结构(7 段导航 / 9 块 BlockHost / 六行外观卡 /
+7 个滑杆范围与默认值 / 9 个下拉的选项 / 13 个输入框占位 / 6 个主题色色块 / 4 个预设背景缩略图 / 关于卡片)、
+A 类占位与"切段才建"(探针页计数)、D 类三个注入缝、加载与保存的后端调用名与参数(整份 `save_settings` 载荷逐键抽检)、
+主题包五动作、检查更新三条路、清理(勾选真的进载荷)、智能推荐、AI 测试连接与拉模型(内置模式不拉)、
+壁纸应用/撤销/恢复出厂、深色切换、色块与背景预设写进覆盖层、默认色撤掉覆盖、`Extras` 落盘、记忆卡片、语言预览。
+
+### 运行(四条 + 原子两轮)
+
+| # | 命令 | 结果 |
+| --- | --- | --- |
+| 1 | **`tools\c5a-verify.cmd` 第 1 轮**(一次锁里 build + VSTest + 进程内) | `BUILD_EXIT=0`;**`已通过! 失败 0 / 通过 3437 / 总计 3437`**;进程内 **总计 3437 个用例,通过 3437,失败 0,跳过 0,不支持 0** ⇒ `VSTEST_EXIT=0` `INPROC_EXIT=0` |
+| 2 | **`tools\c5a-verify.cmd` 第 2 轮** | 与第 1 轮逐字相同:三条退出码全 **0**,两条通道 3437 / 3437 全绿 |
+| 3 | `--filter FullyQualifiedName~C5a`(构建后) | 退出码 **0**:`已通过! - 失败: 0,通过: 49,已跳过: 0,总计: 49`(连跑多次一致) |
+| 4 | `--filter FullyQualifiedName~C5`(C5a + C5b) | 退出码 **0**:`已通过! - 失败: 0,通过: 82,已跳过: 0,总计: 82`(连跑 4 次一致) |
+
+**修抖动之前的一轮(如实记)**:同一把脚本在那时是 `BUILD_EXIT=0` + VSTest `失败 1 / 通过 3436 / 总计 3437`,
+唯一红的是 **`C4LibraryTests.Library_folder_layout_defaults_to_two_columns`**(不是本包,下一轮自己绿了 ——
+同一份二进制两次结果不同 ⇒ 那条用例自己的抖动);本包的两条抖动(见 D-141)修掉之后才有上面那两轮全绿。
+
+### 冒烟(既有帧逐字节不变 + 两个新基准)
+
+| 帧 | 命令 | 结果 |
+| --- | --- | --- |
+| 不带 `--page` | `TipCL.exe --smoke --out artifacts\c5a-nopage.png` | 退出码 **0**,**37681 字节**,SHA256 `2603BF6AB2B5D491E2B6AFB34E3EAEDD8A0388B6A6497D33D3F8193492342CBD` = **C3c 基准逐字节相同** |
+| `--page launch --theme dark` | 同上 | 退出码 **0**,**33579 字节**,`7D7AFDD502D82EE21F7DCEFEF7B12FC2731628D41B4DDF595FD1E1D05F276893` = **基准逐字节相同** |
+| `--theme blue` | 同上 | 退出码 **2**(参数错,符合预期),打用法、**不产出文件** |
+| `--page settings --theme light` | `--smoke --page settings --theme light --out artifacts\c5a-settings-light.png` | 退出码 **0**,**45594 字节**,`C19BF1C465C95116A0BBC7B4F09DF55B00CFB588FB8D258EE2C40F68C8DD4ECF`(Lead 独立复跑一致) |
+| `--page settings --theme dark` | 同上 `--theme dark` | 退出码 **0**,**43745 字节**,`CE33BEFE6841EDB5B38A564EF203F7BF8D61BFCEA5FC0BE3A41208CF70465691`(Lead 独立复跑一致) |
+
+**两帧里看得到什么(像素取证,`tools\c5a-smoke.ps1` 用 `System.Drawing` 采样,每 2 像素取一点)**:
+- 尺寸都是 **900×550**;light 的主色 `#FFFFFF`(占采样点 32%,702 种颜色),dark 的主色 `#232323`(占 30%,652 种颜色);
+- 左带(x<240,侧栏 + 设置页自己的 168 宽导航)x 与右区都有大量非主色像素(light:32797 / 50896;dark:33000 / 53417)⇒ 两侧都画了东西,不是空壳;
+- 六个主题色色块的纯色像素都在:light 下 `#2E9B6B`=426(当前选中那个,另加主色按钮/标签也用它)、其余五个各 **78**;
+  dark 下 `#2E9B6B`=42、其余五个各 **78** ⇒ 主题色那一行六块都真的渲染出来了(选中块带描边,量最大);
+- 明暗两帧 **100%** 采样点不同(30907/31050)⇒ 主题切换真的换了整套配色,不是"同一张图换了个名字"。
+- **看不到什么(如实说)**:离屏外壳 `BridgeReady` 为 false(D-96),所以各卡片里的**数据**全是预加载态(计数 0、列表空、AI 状态"检测中"之类);
+  分段 1/2/4/5/6 的内嵌页是占位文案(那六个页面还没移植);`FlyToTasks` 一类动画在离屏 `Motion.Enabled` 恒假,不会出现在帧里。
+
+### 未验证 / 遗留
+
+1. **只有真机能验证**:重启启动器(`ProcessLauncher` 默认真起进程 + 桌面生命周期 `Shutdown`)、真剪贴板写入、真壁纸/视频播放;
+   离屏与 headless 里这三条都走注入缝或直接不生效。
+2. **A 类六个缺件仍是占位**:`AccountPage`(C5b 已移植,缝待接)/ `JavaPage` / `ServersPage` / `PlaytimePage` / `FeedbackPage` /
+   `FirstRunWizard`(C5b 已移植,缝待接)/ `PhoneSyncPanel`。**接缝由提供方在自己文件的模块初始化器里接**
+   (照 `MainWindow` 接 `LaunchPage.FlyToTasksSeam` 的先例),`SettingsPage` 本身不动。
+3. **`FlyEnabled` 目前没有消费方**:Windows 的 `MainWindow.FlyToTasks` 会看 `SettingsPage.FlyEnabled`(关掉"下载飞入动画"),mac 的
+   `MainWindow.FlyToTasks` 只看 `Motion.Enabled` ⇒ 「下载飞入动画」开关**只保存不生效**。修法在外壳(不是我的文件),请 Lead 裁决。
+4. **设置页的自动保存防抖**(500ms `DispatcherTimer`)在离屏泵里未必 Tick(D-129),所以用例走 `SaveNowAsync()` 内部入口;
+   "真桌面上防抖真的会触发"这条只有真机能验。
+5. 全量套件里 `C4LibraryTests.Library_folder_layout_defaults_to_two_columns` 那一条的抖动不是本包的,留给它的作者。

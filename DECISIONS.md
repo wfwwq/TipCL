@@ -1913,3 +1913,65 @@ Lead 批准"字节级搬进 `Models\`"。
    接线由 Lead 在两边都落地后处理。有一条用例专门钉"缝为空时也走完、不抛、不假装刷新过"。
 3. **`FirstRunWizard.MaybeShowAsync()` 在 mac 侧没有任何调用点**:Windows 是外壳启动时调它决定弹不弹。
    本包不碰外壳(红线),**如实记成"外壳级缺口"交 Lead 统一处理**;`MaybeShowAsync` 本身有用例(读 `first_run` 为假时不推浮层)。
+
+## D-139 C5a:运行时色板覆盖层落在**主题层**(`Themes\PaletteOverride.cs`)—— 不进设置页,也不改 C1a 的 `Palette`
+
+- **要解决什么**:Windows 的 `SettingsPage.Themes.cs` 直接往 WPF 的 `App.PaletteDictionary`(运行时可写
+  `ResourceDictionary`)里写 24 个强调色键 + 3 个背景键(主题色 / 界面背景"立即生效"就是这一步)。
+  mac 的内置色板(`Palette.Light/Dark.axaml`)是**编译进程序集的只读资源**,`Palette.Brush/Color` 又是
+  **全局**读的(C1a 起所有页面与外壳都走它),所以"换个主题色立刻全局生效"只能靠**比内置色板更晚被查到**的一层同名键。
+- **落点(Lead 裁决)**:新建 `src\TipCL.App\Themes\PaletteOverride.cs`(纯新增文件)。`Palette.cs`(C1a 的文件)一字节未动;
+  覆盖层也**不**藏在设置页里 —— 否则就是一个"谁都不知道存在的全局",而且别的页面想用主题能力就得 import 一个页面类。
+  这与 C3d 的裁决同一条道理:`FlyToTasks` 一次修在外壳,主题能力一次修在主题层。
+- **机制**:一个自己的 `ResourceDictionary`,第一次写入时**追加**到 `Application.Resources.MergedDictionaries`
+  末尾;Avalonia 的 `ResourceDictionary.TryGetResource` 先查自己的键、再**逆序**查合并字典(后合并的优先)。
+- **探针实测**(`tests\TipCL.Tests\C5aPaletteOverrideTests.cs`,9 条,全绿):
+  1. 后合并的那一层确实胜出:`{DynamicResource}` 绑上的 Border 背景在 `Set` 之后**当场**变成覆盖色,`Reset` 之后回到内置色;
+  2. `Palette.Brush` / `Palette.Color`(全局读取口)同样看得见覆盖;
+  3. `PaletteOverride.BuiltinColor` 读的是 axaml 直读缓存,**绕开**覆盖层 —— 这正是 Windows 那句
+     `new ResourceDictionary { Source = PaletteUri(isDark) }` 的等价物(不绕开的话"把主题色恢复成默认绿"会读到被覆盖过的值);
+  4. 深/浅两本内置色板的 `C.Paper` / `C.Canvas` 各不相同,`IsDarkNow` 跟当前变体走;
+  5. 覆盖层"有条目才挂、清空即摘":`MergedDictionaries.Count` 回到进作用域前的原样(测试纪律:D-69)。
+- **代价(如实记)**:覆盖层是**不按主题分**的一层普通键值,所以主题变体一变必须重算(设置页在
+  `ApplyDark` 与 `Application.ActualThemeVariantChanged` 两条路里都调了 `ApplyVisuals()`)。Windows 因为每个变体
+  有一份自己的字典,天生不用这一步 —— 这是 mac 侧唯一需要补的地方。
+
+## D-140 C5a:设置页六个缺件走注入缝;`FeedbackPage` 从"字段初始化"改成"切段才建";D 类三处一并走缝
+
+- **依赖审计(四类)**:A 类 = 本身是页面的缺件六个:`AccountPage` / `JavaPage` / `ServersPage` / `PlaytimePage` /
+  `FeedbackPage` / `FirstRunWizard`(另有 `PhoneSyncPanel`);B 类 = 主题运行时改写的基础设施(= D-139);
+  C 类 = 小而自包含的 DTO 七个(`CleanerEntry` / `CleanerPreview` / `CleanerResult` / `ThemeRow` /
+  `BackgroundState` / `SmartRecommendation` / `UpdateInfo`,共 2118 字节,字节级搬);D 类 = 离屏/测试不能碰的三处。
+- **A 类做法**(照 D-119 / D-134 的先例,请 Lead 裁决):`SettingsPage.AccountPageFactory` 等六个
+  `Func<PageBase>` / `Func<Task>` 注入缝;**没接缝时显示一句如实的占位说明**(`Ui.Empty`:说清这一栏内嵌的是哪个页面、
+  属后续工作包、接上缝就会显示),不空白、不假装能用。`AccountPage` 与 `FirstRunWizard` 本轮由 c4-dialogs 的 C5b 移植,
+  我**不碰**那两个页面文件,只留缝。
+- **`FeedbackPage` 必须懒建**:Windows 是字段初始化(`private readonly FeedbackPage _feedback = new FeedbackPage();`),
+  构造设置页就会连带构造它 —— mac 侧那页还不存在,所以改成"切到第 6 段时才经工厂建"。
+- **实测踩到的 bug(值得记)**:一开始我把"段视图"和"内嵌子页"共用一个 `_views[7]` 缓存,于是分段 6 的段视图
+  (上标题卡 + 下内嵌页的 Grid)被 `SubPageFor(6)` 缓存进去的子页**顶掉**,"关于"那段整块不见了(两条用例红)。
+  修法:`_subs[7]`(子页实例)与 `_aboutView`(段视图)分开。
+- **D 类三处**:重启启动器 = `ProcessLauncher` 注入缝(默认真起进程 + 桌面生命周期 `Shutdown`;离屏没有桌面生命周期
+  ⇒ 只起不退,如实记录,**只有真机能完整验证**);复制 MCP 地址 = `ClipboardWriter` 注入缝(默认走
+  `TopLevel.Clipboard`,`Dlg.SmokeActive` 时**不碰**真剪贴板,与 `CrashUi.ClipboardWriter` 同一模式);
+  内置预设背景缩略图 = 走 C2c2 已落地的 `Wallpaper.OpenPreset` + `ImageDecode`(不自己新写解码)。
+- **可测性(同 D-115 / D-127)**:色块与预设缩略图的点击体抽成 internal `PickSwatch` / `PickPreset`。
+  原因实测:`PointerReleasedEventArgs` 的构造函数不公开,硬 `RaiseEvent(new RoutedEventArgs(PointerReleasedEvent))`
+  会 `InvalidCastException`(本包踩到)。
+
+## D-141 C5a:只在 VSTest 通道红的两条用例 —— "数调用次数当同步手段" + "进程级静态状态"
+
+- **现象**:同一份产品代码,进程内通道全绿,VSTest 里 1~2 条浮动(`Saving_a_theme_pack_prompts_then_calls_save_theme`、
+  `The_language_preview_calls_translate_three_times`)。Lead 用"同一次锁里 build + 两通道"的原子脚本复现过。
+- **根因 1(计数当同步)**:`Assert.Equal(0, api.Count("save_settings"))` 与 `Assert.Equal(3, api.Count("translate"))`
+  都是"数调用次数"。设置页的自动保存是 500 ms 防抖(`DispatcherTimer`),机器忙的时候它会在用例中途真的 Tick 一次
+  ⇒ 多一条 `save_settings`;语言预览那条则在 3 次 `translate` 的续体还没回来时就数了次数。
+- **根因 2(进程级静态)**:`SettingsPage` 的 `_visualColor` / `_visualBackground` / `Extras` 是**静态**的,
+  别的用例类动过就会漏进来(实测:保存主题包那条读到了上一条留下的 `ui_bg_preset="eye"` 与 `theme_color`)。
+- **修法(不放宽断言)**:
+  1. 等**效果**落地再断言:语言预览那条泵到"预览文案出现"才计数;
+  2. 载荷断言按**最后一次**同方法调用取 —— 新增 `C5aFiles.ParamAt(api, method, index, path...)` 重载;
+  3. 用例自己把界面状态钉死(显式 `PickSwatch("#2E9B6B")`、把背景选回"默认");
+  4. `C5aScope` 补还原设置页的静态视觉状态与 `ExtrasDirOverride`(D-69)。
+- **纪律**:等待一律"条件成立 + 有截止时间",**不要**写"数调用次数"或"泵固定轮数";断言失败信息里带上实际观察值。
+- 佐证:修完后 `tools\c5a-verify.cmd`(build + VSTest + 进程内,一次锁里)连跑两轮,`C5a*` 用例两通道全绿。
