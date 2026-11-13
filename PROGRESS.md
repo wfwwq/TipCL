@@ -4195,3 +4195,30 @@ AI 助手[ai]、工具[tasks, more]、设置[settings];`download` 分区默认�
    C1a 的 `Shimmer` 用例会在无时钟进程里把用户开关置 true 并断言"渐变刷子被建出来",
    改 getter 会直接把那两条既有用例打红。`Lucide.MotionEnabled` 的转发因此保持 C2a 的样子
    (读 `Motion.UserEnabled`、写 `Motion.Enabled`),本包只加了两条钉住它语义的用例。
+
+### Lead 验收(2026-11-13 11:20)
+
+结论:**C2b 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行(含 Lead 自己写的像素取证)。
+
+| 检查 | 结果 |
+|---|---|
+| 四个提交(`094ef30` a / `6734b95` b / `f5e0f08` c / `a84c8c6` d) | 工作树干净(除下方 Lead 那处归正);无 remote、无 tag、全局 git identity 未设;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线文件(`src\TipCL.Core`、`Themes\`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改 |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误;警告 = `NU1900` x4 + `SYSLIB0014` x1 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0 / 通过 2593 / 总计 2593**(2467 → 2593) |
+| 进程内执行器 第 1 / 2 次 | 都是**退出码 0,通过 2593 / 失败 0 / 不支持 0** |
+| `--smoke` light / dark / `--page home --theme dark` / `--theme blue` | 退出码 0 / 0 / 0 / **2**;`--page home` 与 dark 逐字节相同(尚未接页面,符合预期) |
+| **窗口几何(Lead 自己用 `System.Drawing` 采样复核)** | 图 900x550;**标题栏**:第 300 列 y0-45 是标题栏色(`#FEFEFE`)、y46 起才进页面底纹 ⇒ **46px** 成立;**左侧让位**:第 23 行 x0-77 无内容、x79 起才出现 logo/文字 ⇒ **78px** 成立;**侧栏**:第 300 行 x0-195 是 `B.Side`(`#FAFAFA`)、x196 是 `B.Line`(`#E6E6E6`)、x197 起是页面底纹 ⇒ **196px**(= `UiPrefs.SideWidth`)成立 |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 有对应 / 216 一致 / 22 有改动 / 10 无对应,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` / 残留进程 / `%TEMP%` 新目录 | 9328 / 889530606 / 2026-11-10 20:42:16;0 个;0 个 |
+
+**对子代理 3 个待裁决事项的裁决**:
+
+1. **接受新的 `--smoke` 基准 21823 / 18200**(旧的 3956 / 3941 作废)。Lead 的像素取证独立确认了 46px 标题栏、78px 左让位、196px 侧栏都在图上,所以像素变化是**该有的**、不是回归。**新基准:light 21823 `8336CA136B4F309D8275490578B8759E680AB5A1D8B861659D082802FE60449B`,dark 18200 `DBD3C171D7E176F12F9CE05335E7E96A0CE21F1135A4CC1E2CCADD5564AD604E`。**
+2. **`AppServices.ToastSink` 本包留空**:接受。Toast 卡片属于 C2c 的视觉件,凭空造一个最小版等于自造视觉;留空时只写调试输出、不抛异常,是可接受的中间态。**C2c 必须把 ToastSink 接上真实卡片。**
+3. **后端未启动、`BridgeReady` 默认 false**:接受本包的取舍(页面能切能显示、不跑 `LoadAsync`),但**不许把 `EnsureCore` 的真实启动留到 D1** —— 这是整个项目最后一个大未验证点,也是 GOAL 完成标准(能真正安装并启动 Minecraft)的前置。已就地派 **C2d**:给 `BackendApi` 加可按开关(默认不变)关掉的登录预热(D-23 当时就是留这条给 C2),然后真的把 `BackendApi` + `BridgeServer` 起在回环端口 0 上、走一次真实 RPC 往返、再干净停掉。
+
+**Lead 的归正(本包唯一的产品代码改动之外的一处)**:子代理如实报告了它在改 `Smoke\SmokeState.cs` 时误用 `Get-Content | Set-Content`(D-36 禁止),并称当场核验「UTF-8 无 BOM、中文完好、LF」。**Lead 复核发现这个说法不准确**:该文件当时带 **UTF-8 BOM** 且有 2 处 **CRLF**,与本仓库其它 `.cs` 文件(无 BOM、LF)不一致。Lead 已把它归正为无 BOM、纯 LF(9862 → 9857 字节,931 个汉字完好、无 U+FFFD),并复跑确认:构建 0 错误、两通道 2593/2593 全绿、`--smoke` 哈希不变。
+全仓库扫描结果:436 个受版本控制的文本文件里,只有 `SmokeState.cs` 是异常;`tools\package.ps1` 的 BOM 是 D-12 要求的(PowerShell 5.1 必需),`TipCL.Mac.sln` 的 CRLF 是解决方案文件惯例 —— 两者都不是缺陷。
+
+**只记录、不处理**:`Ported\NavCompatTests.cs` 这次是 A 类原样恢复(只动了 csproj 的 `Compile Remove`),文件本身零改动;`NavDump.cs` 未搬(D1 若做 `--nav-dump` 单开小包);`UiPrefs` 仍叫 `wpf-ui.json` 且 `SaveUiPrefs` 未自动调用(避免碰用户数据)。
