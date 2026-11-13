@@ -49,7 +49,11 @@ public sealed partial class LaunchPage : PageBase
 
     private readonly ComboBox _ver = UiClass.Combo();
 
-    private readonly TextBox _user = UiClass.Input("Player");
+    // 用户 = **真实账号下拉**(对齐参考版 `_acc = Ui.Combo()`)。此前这里是自由文本框:
+    // 手输的名字必须与「账号」页里已有账号逐字相同才能启动,一个账号都没有时更是一条死路
+    // (启动链会抛「启动游戏前请先创建一个离线用户」)。现在与参考版一致:下拉里是真实账号,
+    // 点启动先过 Common/AccountGate 的闸门(见 LaunchAsync)。
+    private readonly ComboBox _user = UiClass.Combo();
 
     private readonly TextBox _server = UiClass.Input("直连服务器 ip:port（可空）");
 
@@ -621,9 +625,11 @@ public sealed partial class LaunchPage : PageBase
                 }
             }
             FillCombo(_inst, names, preferred);
-            var user = Py.S(Config.CONFIG.Get("last_user", ""));
-            if (string.IsNullOrWhiteSpace(_user.Text))
-                _user.Text = user.Length > 0 ? user : "Player";
+            // 用户下拉 = 真实账号(排除哨兵,当前账号排最前)。保持上次选中的那个账号;
+            // 它已经不在了就退回列表第一个(没有账号时下拉为空,启动时才走闸门去建)。
+            var accounts = await AccountGate.ListAsync();
+            string lastUser = Py.S(Config.CONFIG.Get("last_user", ""));
+            FillCombo(_user, accounts, accounts.Contains(lastUser) ? lastUser : accounts.FirstOrDefault() ?? "");
             double mem = 4096;
             try { mem = Convert.ToDouble(Config.CONFIG.Get("default_memory_mb", 4096), CultureInfo.InvariantCulture); }
             catch { }
@@ -944,9 +950,15 @@ public sealed partial class LaunchPage : PageBase
             return;
         }
         string instance = CurInst();
-        string account = _user.Text?.Trim() ?? "";
-        if (account.Length == 0)
-            account = "Player";
+
+        // 启动前先过账号闸门(对齐参考版 `EnsureLaunchAccountAsync` → `AccountGate.EnsureAsync`):
+        // 选中的账号还在就用它;一个都没有(或选中的已经不在)就弹「创建离线用户」就地建一个,
+        // 建好后把下拉补齐再继续。**用户取消 = 这一次不启动**(参考版同样是 `if (account == null) return;`)。
+        string? account = await AccountGate.EnsureAsync(_user.SelectedItem as string);
+        if (account == null)
+            return;
+        if ((_user.SelectedItem as string) != account)
+            FillCombo(_user, await AccountGate.ListAsync(), account);
         _prog.Value = 0;
         _prog.IsVisible = true;
         _progGen++;
@@ -1062,7 +1074,7 @@ public sealed partial class LaunchPage : PageBase
             _memSaveTimer.Stop();
             Config.CONFIG.Set("default_memory_mb", (int)_mem.Value);
         };
-        _user.LostFocus += (_, _) => Config.CONFIG.Set("last_user", _user.Text ?? "");
+        _user.SelectionChanged += (_, _) => Config.CONFIG.Set("last_user", _user.SelectedItem as string ?? "");
         _server.LostFocus += (_, _) => Config.CONFIG.Set("direct_server", _server.Text ?? "");
         // 分辨率:离开输入框(或回车)即落盘(照 Windows _wBox/_hBox.LostFocus → SaveDisplayPrefsAsync)
         _wBox.LostFocus += (_, _) => SaveResolution();

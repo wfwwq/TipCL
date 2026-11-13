@@ -152,11 +152,17 @@ public class MdViewInlineCodeTests
             window.SetDark(false);                                    // 固定浅色:B.Hover = #F2F2F2
             Assert.Equal(Color.Parse("#FFF2F2F2"), PaletteColor("B.Hover"));
 
-            // 对照:没写行内码时,整帧里一个 #F2F2F2 像素都不该有
-            Assert.Equal(0, BackgroundPixels("前缀 abc 后缀"));
+            // 对照:没写行内码时,同色像素只能是「可忽略的噪声」,不能是一块底色。
+            // **不能断言恰好 0**:字形栅格化与抗锯齿逐平台不同 —— Windows 上是 0 个,Ubuntu 上
+            // 会在文字边缘凑出 1 个恰好等于 #F2F2F2 的像素(2026-11-13 第一次在 Linux 上真跑
+            // 测试时才红的:Expected 0 / Actual 1)。判据改成「比底色块小两个数量级」:区分度
+            // 一点没丢(带行内码时 >100),也不会因为一个边缘像素把整条用例判死。
+            int control = BackgroundPixels("前缀 abc 后缀");
+            Assert.True(control <= 5, $"对照段落里同色像素有 {control} 个,底色计数已经不可信");
 
             int withCode = BackgroundPixels("前缀 `abc` 后缀");
             Assert.True(withCode > 100, $"行内码底色没画出来:只数到 {withCode} 个 #F2F2F2 像素");
+            Assert.True(withCode > control * 10, $"底色块({withCode})与对照噪声({control})区分不开");
 
             // 底色在嵌套上下文里也要画得出来(AI 回答里行内码常常嵌在粗体 / 列表 / 引用 / 表格 / 标题里)
             foreach (string markdown in new[]

@@ -46,8 +46,19 @@ jobs:
 
       # 测试会用 TIPCL_HOME 指向进程私有的临时目录(见 tests/TipCL.Tests/TestIsolation.cs),
       # 不会碰真实用户目录;无头渲染用 Avalonia 的 headless + 真 Skia。
-      - name: dotnet test
-        run: dotnet test tests/TipCL.Tests/TipCL.Tests.csproj --nologo
+      # 分两批跑,不是洁癖,是实测边界:在 8 GB 的 Ubuntu 盒子上把整批(440 条)塞进**同一个测试宿主**时,
+      # 宿主内存线性增长(约 200 MB/s),43 秒涨到 5 GB 被内核 OOM 杀掉 —— 报错是
+      # `The active test run was aborted. Reason: Test host process crashed`,dmesg 里是
+      # `oom-kill ... task=dotnet ... anon-rss:4936736kB`。拆成两批后每批都在 10 秒内跑完,
+      # 峰值各自只有约 0.43 GB。GitHub 的 ubuntu-latest 也是 7 GB 级,不为这 5 GB 的边界留隐患。
+      # 两批合起来覆盖全量:239(App)+ 200(其余)+ 1 跳过 = 440。
+      # 注意:增长根因**没有**定位到具体代码(在测试宿主内部,性质上属 Avalonia 无头会话的每派发开销),
+      # 如实记在 PROGRESS.md 里,没有当成已解决。
+      - name: dotnet test (batch 1/2 — App 界面组)
+        run: dotnet test tests/TipCL.Tests/TipCL.Tests.csproj --nologo --filter "FullyQualifiedName~TipCL.Tests.App"
+
+      - name: dotnet test (batch 2/2 — 其余全部)
+        run: dotnet test tests/TipCL.Tests/TipCL.Tests.csproj --nologo --filter "FullyQualifiedName!~TipCL.Tests.App"
 
       - name: Release build (warnings are the signal)
         run: dotnet build src/TipCL.App/TipCL.App.csproj -c Release --nologo

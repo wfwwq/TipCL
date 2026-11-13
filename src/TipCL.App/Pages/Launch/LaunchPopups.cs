@@ -420,7 +420,7 @@ public sealed partial class LaunchPage
     {
         ("实例 ComboBox", _inst),
         ("版本 ComboBox", _ver),
-        ("用户 TextBox", _user),
+        ("用户 ComboBox", _user),
         ("直连 TextBox", _server),
         ("Java ComboBox", _java),
         ("内存 Slider", _mem),

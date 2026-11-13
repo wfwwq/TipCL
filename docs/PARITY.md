@@ -365,6 +365,9 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 
 > R21c 补记:§9.5 表里最后两条「仍未做」都已收口(D-56)。取证方式是**抓帧数像素**而不是「属性挂上没挂上」:改动前整帧里 `B.Hover` 像素 = 0,改动后 = 100+(并且先断言「没写行内码的对照段落里一个 `B.Hover` 像素都不该有」,免得把表格线 `B.LineSoft` `#F0F0F0` 误数进来)。另外如实记一条覆盖缺口:**AI 页冒烟帧改动前后逐位相同**(`smoke.png` 37,553 B,sha256 一致)—— 那份冒烟内容里没有行内码,所以这条特性只有单测与抓帧用例覆盖,冒烟覆盖不到。
 
+> R21i 补记(2026-11-13):上面那句"实测重挂会顶掉旧绑定"当时**没有验证过"旧订阅会不会漏"**;现在有答案了,而且是两层。**框架源码级** —— Avalonia 11.3.2 的 `AvaloniaObject.Bind(AvaloniaProperty, IBinding, anchor)`(`src/Avalonia.Base/AvaloniaObject.cs:659`)走到 `ValueStore.AddBinding(property, expression)`(`src/Avalonia.Base/PropertyStore/ValueStore.cs:48`);该分支在 `priority == BindingPriority.LocalValue` 时**先** `DisposeExistingLocalValueBinding(property)`(同文件 `1238-1245`)**再**装新的,而 `!property = binding` 这条索引器写法与 `Res.Bind` 走的都是 LocalValue ⇒ **重挂必然释放旧订阅**。**可执行断言** —— `tests/TipCL.Tests/App/RebindSubscriptionTests.cs` 三条:计数 observable 直接量"第二次绑定后第一条的活跃订阅必须归零"(用例内部先断言计数为 1,自带反证)、悬停那样来回 100 轮后活跃订阅恒为 1(泄漏会是 199)、真链接控件按悬停写法重挂 200 次后切深浅色字色仍等于**当前**主题对应键的颜色。**如实说明**:第三条**证明不了**订阅释放(真泄漏时最后订阅的那条仍会最后推值、颜色看着也对),它证明的是用户看得见的那件事;释放由第一条证明。
+
+
 ### 9.6 导入多选 + 数据包装进存档(2026-11-13,R18)
 
 **一、多选导入(补上「参考版能多选、Linux 只能单选」的差)**
@@ -474,3 +477,40 @@ System.InvalidOperationException : Collection was modified; enumeration operatio
 | 全量 | `dotnet test` 连跑 **3 遍全绿**:404 = 403 通过 + 1 跳过 + 0 失败(上一轮基线 403 = 402 + 1) |
 
 > 附带记一条工具坑(与源码无关,但会让人误判结论):`Copy-Item` 会把源文件的 LastWriteTime **一起带过去**,于是「把备份拷回来」得到的文件可能比上一次构建还旧 ⇒ MSBuild 判定「最新」直接跳过编译,`dotnet test` 仍在跑旧 DLL —— 症状是「加锁版」还报同一处 `FirstOrDefault`,而那一行源码早已不存在。判断「到底在跑哪份代码」要看异常栈里的行号与符号,不能只看命令成功。
+
+### 9.10 在 Linux 上真跑起来之后:启动前账号闸门、三条测试缺陷、以及"OOM 冒充崩溃"(2026-11-13/14,R21i)
+
+> 详版与逐条原始输出:`progress/M4-H-R21i-收尾验证与账号闸门.md`;决策 D-64 / D-65 / D-66。
+
+**为什么会有这一节**:此前所有验收都在 Windows 上跑,Linux 侧只有"冒烟出图 + 真机点几下"。这一轮把盒子上装了 .NET SDK 8.0.134,
+用与 CI **逐字相同**的命令把整套测试跑了一遍 —— 立刻掉出三个真问题和一个环境问题。
+
+| # | 问题 | 性质 | 处置 |
+|---|---|---|---|
+| 1 | `ShortcutTests.Cli_Launch_RunsGameWithShortcutArgs` 红 | **一条从未执行过的用例**:正文开头 `if (OperatingSystem.IsWindows()) return;`,所以它在 Windows 上"绿"了几个月,一行都没跑过 | 夹具缺账号 / 客户端 jar / `arguments.game`;产品侧逐条与参考版相同(`BackendApi.cs:2881` `_require_launch_account`、`McLauncher.cs:525`、`Preflight.cs:113`、启动器只做占位符替换)⇒ 修夹具(唯一名字账号 + `--account`、占位 jar、真实形状的 game 参数),并把退出码断言换成带 CLI 输出的 `Assert.True(...)`。修完第一次真的跑通:账号 → Java 探测 → `实际启动` → `游戏已退出,退出码 0` |
+| 2 | `MdViewInlineCodeTests` 行内码底色用例红 | 断言过严:"对照段落里**恰好 0 个** `#F2F2F2` 像素"在 Ubuntu 上不成立(字形边缘凑出 1 个) | 判据改成"对照 ≤5 且带码 >100 且 >10 × 对照",区分度不变 |
+| 3 | **测试宿主进程崩溃** | **真缺陷**(见 D-64):`Motion.FadeIn` 的淡入定时器在 Avalonia 平台拆掉之后才跑到,写 `TranslateTransform.Y` 抛 `Unable to locate 'Avalonia.Animation.IGlobalClock'` → 未被观察的任务异常 → 终结器线程重抛 → **进程终止** | `Motion` 三处延后回调统一走新的 `Later()`:try/catch + 一条 WARN(与 D-62 的分流口径一致) |
+| 4 | 修完 3 之后**仍然**崩(位置每次不同:148 / 288 / 381 条) | **环境性 OOM**(见 D-66):宿主 RSS 约 200 MB/s 线性增长,整批 44 秒 5.07 GB;`dmesg` 是 `oom-kill ... task=dotnet ... anon-rss:4936736kB`,而 VSTest 只报 `Test host process crashed` | 分批跑:`~TipCL.Tests.App` 239 通过(峰值 0.43 GB)+ `!~TipCL.Tests.App` 200 通过 + 1 跳过(峰值 0.43 GB)= 440 全绿;CI 与验收都改成两批 |
+
+**启动前账号闸门(产品级缺口,见 D-65)**:参考版有 `Services/AccountGate.cs`(启动页账号下拉 + 启动前 `EnsureAsync`:没账号就弹
+「创建离线用户」建一个再继续),Linux 侧此前是**自由文本框、没有闸门** —— 手输名字必须与已有账号逐字相同才能启动,一个账号都没有时
+点「启动」只会拿到 `启动游戏前请先创建一个离线用户`,而这句话指向另一个页面。本轮按参考版补齐:新增
+`src/TipCL.App/Common/AccountGate.cs`,`_user` 换成**真实账号下拉**(与参考版同一处 `Ui.Field("用户", …)`),点「启动」先过闸门
+(用户取消则不启动);对话框做成可注入的一步,6 条用例覆盖(名字口径 / 名单排除哨兵且当前账号最前 / 已有账号不弹窗 /
+注入对话框建号且真落库 / 取消不建号 / 选中账号失效时回退)。
+
+**§9.4 那条"隔离版本分支未在真机验证"的口径补充(不是新事实,是把覆盖说清)**:该分支的**逻辑**其实由 4 条用例钉着 ——
+`App/SavesDatapackTests`:`Install_IsolatedVersion_UsesVersionDatapacksAndVersionSaves`、
+`Install_IsolatedVersion_SharedSourceFallsBack`、`Install_IsolatedVersion_MissingSave_Throws`、
+`InstallTask_WithSaveOption_OnIsolatedVersion`(任务式路径也一样),断言"列"与"装"指的是同一个目录
+(`<实例>/versions/<版本>/datapacks` → `<版本>/saves/<存档>/datapacks`,且不写实例根)。所以那句应读作
+"**真机上造不出隔离实例、没跑 GUI**;逻辑有 4 条用例覆盖",不是笼统的"未验证"。
+
+**CI 工作流**:本轮还补了第一次**真解析**校验(PyYAML 6.0.3 的 `yaml.safe_load` + 结构断言 + 引用路径/产物名/开关与
+`tools/package.sh` 交叉核对,0 问题),并把"CI 里为什么不用 `DotNetHostPath`"从猜测改成实测(本机不带该参数 3/3 红、异常落在
+`TestIsolation.Init` 建目录 —— 本机仓库目录低完整性标签所致,干净 runner 不需要它)。**仍然没变**:本仓无 remote,
+这条流水线一次都没在真 runner 上跑过。
+
+**一条判据失效(如实)**:§9.8 记的"8/8 张启动页冒烟帧逐位相同(`070d6ad6…`,564,149 B)"不再可用 —— 连续两次同样条件下的
+`SMOKE_PAGE=launch` 冒烟帧哈希就不同(573,359 / 573,327 B),原因是启动页那条线上新闻行。本轮改的控件只在**默认关闭的浮层**里,
+主帧不受影响;这类改动由结构性探针(`SMOKE_PROBE=popup-theme` 的 B 组 10/10)+ 单测证明,**不再靠像素比对**。

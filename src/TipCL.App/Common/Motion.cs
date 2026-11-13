@@ -18,6 +18,31 @@ public static class Motion
 {
     public static bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// 延后执行一段动画收尾代码。**这里必须吞掉异常** —— 动画定时器可能在 Avalonia 平台 / 服务
+    /// 定位器已经拆掉之后才跑到(收尾竞态),这时写 `TranslateTransform.Y` 会抛
+    /// `Unable to locate 'Avalonia.Animation.IGlobalClock'`。它属于**未被观察的任务异常**,
+    /// .NET Core 会由终结器线程重新抛出并**直接干掉整个进程**:2026-11-13 在 Linux 盒子上跑
+    /// `dotnet test` 时就是这么把测试宿主打崩的(跑完 148 条后 `Test host process crashed`,
+    /// 栈顶 `Motion.FadeIn` → `TranslateTransform.set_Y`)。
+    /// 真机运行期不会走到这里(那时平台还活着);走到这里就说明已经在收尾,记一条 WARN 即可,
+    /// 不该让它升级成进程崩溃 —— 与 AppLog 对「未观察异常」的处置口径一致(见 D-62)。
+    /// </summary>
+    private static void Later(TimeSpan delay, Action body)
+    {
+        DispatcherTimer.RunOnce(() =>
+        {
+            try
+            {
+                body();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("动画收尾回调在平台拆掉之后触发,已忽略: " + ex.GetType().Name + ": " + ex.Message);
+            }
+        }, delay);
+    }
+
     /// <summary>淡入 + 自下方 fromY 位移（ms 毫秒）。</summary>
     public static void FadeIn(Control el, double ms = 220, double fromY = 10, double delayMs = 0)
     {
@@ -37,15 +62,15 @@ public static class Motion
                 new DoubleTransition { Property = TranslateTransform.YProperty, Duration = TimeSpan.FromMilliseconds(ms) },
             };
             el.RenderTransform = translate;
-            DispatcherTimer.RunOnce(() =>
+            Later(TimeSpan.FromMilliseconds(delayMs), () =>
             {
                 el.Opacity = 1;
                 translate.Y = 0;
-            }, TimeSpan.FromMilliseconds(delayMs));
+            });
         }
         else
         {
-            DispatcherTimer.RunOnce(() => el.Opacity = 1, TimeSpan.FromMilliseconds(delayMs));
+            Later(TimeSpan.FromMilliseconds(delayMs), () => el.Opacity = 1);
         }
     }
 
@@ -64,7 +89,7 @@ public static class Motion
             Duration = TimeSpan.FromMilliseconds(ms),
         });
         el.Opacity = 0;
-        DispatcherTimer.RunOnce(() => done?.Invoke(), TimeSpan.FromMilliseconds(ms));
+        Later(TimeSpan.FromMilliseconds(ms), () => done?.Invoke());
     }
 
     /// <summary>容器子项依次入场位移淡入（照 Windows 版 Motion.Stagger 语义）。</summary>

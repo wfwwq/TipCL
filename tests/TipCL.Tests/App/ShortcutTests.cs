@@ -317,26 +317,58 @@ public class ShortcutTests : IDisposable
         // 版本 json 声明 java 17(与假 java 的 -version 输出一致)
         string verDir = Path.Combine(Instances.GetInstancePath(_inst), "versions", Ver);
         Directory.CreateDirectory(Path.Combine(verDir, "natives"));
+        // 游戏参数照**真实**版本 json 的形状给(arguments.game 里是标准的 --username/--version/...):
+        // 启动器只做占位符替换(`McLauncher.BuildLaunchCommand` → `Utils.ReplacePlaceholders`),
+        // **自己不会凭空补 `--version`** —— 夹具里给空数组,命令行上就真的没有 `--version`,
+        // 断言 `Assert.Contains("--version", args)` 也就没有依据。参考版同一条规则。
+        const string gameArgs =
+            "[\"--username\",\"${auth_player_name}\",\"--version\",\"${version_name}\",\"--gameDir\",\"${game_directory}\"," +
+            "\"--assetsDir\",\"${assets_root}\",\"--assetIndex\",\"${assets_index_name}\",\"--uuid\",\"${auth_uuid}\"," +
+            "\"--accessToken\",\"${auth_access_token}\",\"--userType\",\"${user_type}\"]";
         File.WriteAllText(Path.Combine(verDir, Ver + ".json"),
             $"{{\"id\":\"{Ver}\",\"type\":\"release\",\"javaVersion\":{{\"majorVersion\":17}}," +
-            "\"mainClass\":\"net.minecraft.client.main.Main\",\"libraries\":[],\"arguments\":{\"game\":[],\"jvm\":[]}}");
+            "\"mainClass\":\"net.minecraft.client.main.Main\",\"libraries\":[],\"arguments\":{\"jvm\":[],\"game\":" +
+            gameArgs + "}}");
+
+        // 客户端 jar 也必须在:启动链先预检(缺了给一条 warn「客户端 jar 未直接找到」),但真正拼
+        // 命令行之前会**硬失败**(`客户端 jar 缺失: ... 请重新安装版本`)。参考版是同一条规则
+        // (`Core/Launcher/McLauncher.cs:525` 抛、`Preflight.cs:113` 警告),所以这里补一个占位 jar
+        // —— 假 java 不看内容,只记录收到的参数(PK\x03\x04 开头,免得哪天有人按 zip 去读它)。
+        File.WriteAllBytes(Path.Combine(verDir, Ver + ".jar"), new byte[] { 0x50, 0x4B, 0x03, 0x04 });
 
         // 版本设置里钉死 Java 路径,跳过「自动选择」的探测
         await _api.CallAsync<PyDict>("save_version_settings", new { instance = _inst, version = Ver, data = new { java, memory_mb = 1024 } });
 
-        var cmd = CommandLine.Parse(new List<string> { "-i", _inst, "launch", Ver });
-        var output = new StringWriter();
-        int code = await Task.Run(() => CommandLine.Run(cmd, _api, output));
+        // 账号:启动链要求账号已存在 —— 参考版 `BackendApi._require_launch_account` 与 Linux 的
+        // `LaunchCore.RequireLaunchAccount` 是同一条规则(没有账号就报「启动游戏前请先创建一个离线用户」)。
+        // 这条用例的正文**只在 Linux 上执行**(Windows 直接 return),所以这个夹具缺口一直到
+        // 2026-11-13 第一次在盒子上真跑时才暴露 —— 当时它以 `退出码 3` 红在这里,不是产品缺陷。
+        // 账号用**唯一名字 + `--account <名字>` 显式指定**:AccountPageTests 会并行建/删账号,
+        // 不显式指定就得依赖「当前账号」这个共享状态,会变成顺序相关的偶发红。
+        string account = "cli-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        await _api.CallAsync<object>("add_offline_account", new PyDict { ["username"] = account, ["skin"] = "default" });
+        try
+        {
+            var cmd = CommandLine.Parse(new List<string> { "-i", _inst, "launch", Ver, "--account", account });
+            var output = new StringWriter();
+            int code = await Task.Run(() => CommandLine.Run(cmd, _api, output));
 
-        Assert.Equal(CliExit.Ok, code);
-        Assert.True(File.Exists(log), "假 java 没被启动;CLI 输出:\n" + output);
-        string args = File.ReadAllText(log);
-        Assert.Contains("GAME-ARGS", args);
-        Assert.Contains("--version", args);
-        // CLI 走的是与 UI 相同的启动链:日志里有实例/版本/账号/Java
-        string text = output.ToString();
-        Assert.Contains(_inst, text);
-        Assert.Contains("Java", text);
+            // 退出码不对时必须把 CLI 的输出一起打出来 —— 这条用例自身只在 Linux 上执行,
+            // 失败信息里不带上现场就没法查。
+            Assert.True(code == CliExit.Ok, $"CLI 退出码 {code}(期望 {CliExit.Ok});CLI 输出:\n{output}");
+            Assert.True(File.Exists(log), "假 java 没被启动;CLI 输出:\n" + output);
+            string args = File.ReadAllText(log);
+            Assert.Contains("GAME-ARGS", args);
+            Assert.Contains("--version", args);
+            // CLI 走的是与 UI 相同的启动链:日志里有实例/版本/账号/Java
+            string text = output.ToString();
+            Assert.Contains(_inst, text);
+            Assert.Contains("Java", text);
+        }
+        finally
+        {
+            await _api.CallAsync<object>("remove_account", new PyDict { ["name"] = account });
+        }
     });
 
     private static List<string> SplitExec(string exec)

@@ -813,3 +813,54 @@ R21b 归档的 AppImage 之后,R21c~R21e 都改了 `src/`,归档件却没重打 
 1 CI 未在真 runner 跑过(无 remote);2`.deb` 的 `Depends` 是保守最小集合,只测了 Ubuntu 24.04;3只打 `amd64`;4**没在「装完之后的路径上真开过 GUI 窗口」**(AppImage 那份跑过 `--smoke` exit 0、`.deb` 那份跑过 `--ai-selftest` 54/54,窗口这一侧可以用「装完直接 `tipcl` 截图」补上)。
 
 **又修掉一个(并发碰撞)**:`_cmp/box/run.ps1` / `push.ps1` / `pull.ps1` 原来把中继文件写在**固定文件名**(`stdin.sh` / `push.sh` / `pull.b64`)里 —— 主 agent 与子代理同时调用时会互相覆盖。本轮就真撞上了:我发出去的 YAML 校验脚本,盒子上执行的却是子代理的脚本(输出整个串了,还少了一条 push 回显)。已改成 `名字-<pid>-<随机>.sh`,并确认三个脚本仍是纯 ASCII。**教训:任何「把内容写临时文件再喂给子进程」的辅助工具,都必须用唯一文件名,否则它在并发下就是个静默的串台器。**
+
+## M4-H R21i:收尾 —— 在 Linux 上真跑起来之后(2026-11-13/14)
+
+> 详版与逐条证据:`progress/M4-H-R21i-收尾验证与账号闸门.md`
+
+**这一轮做的是把「只在 Windows 上验证过」的部分拿到 Linux 上真跑一遍。** 三件事:
+
+1. **CI 工作流第一次被真解析**:装 PyYAML 6.0.3 对 `.github/workflows/ci.yml` 做 `yaml.safe_load` + 结构断言 +
+   引用路径交叉核对,0 问题(3 job / 18 步 / 每个 step `run` 与 `uses` 二选一 / `uses` 都钉版本 / `needs` 无悬空无环 /
+   workflow 里引用的仓库路径都存在 / `--appimage-only`+`--deb` 与 `tools/package.sh` 的开关一一对应 / 产物名一致)。
+   **仍未在真 runner 上跑过(本仓无 remote)** —— 这是"解析 + 静态交叉核对",不是"跑通了"。
+   顺带把"CI 里为什么不用 `DotNetHostPath`"从猜测变成实测:本机不带该参数 **3/3 红**,异常落在
+   `TestIsolation.Init() → Directory.CreateDirectory`(仓库目录带低完整性标签、`testhost.exe` 写不了 `%TEMP%`),
+   干净 runner 没有这层标签 —— CI 现在的写法是对的,给它传那个参数反而错。
+2. **Linux 上第一次真跑测试套件**(盒子 `apt-get install dotnet-sdk-8.0` = 8.0.134,源码 `git archive` 打 zip 推过去,
+   命令与 CI 逐字相同)。跑出来 3 个真问题 + 1 个环境问题:
+   - **一条从未执行过的用例**:`ShortcutTests.Cli_Launch_RunsGameWithShortcutArgs` 正文只在 Linux 执行
+     (Windows 开头直接 `return`),第一次真跑就是红的。夹具缺账号 / 客户端 jar / `arguments.game` 里的
+     `--version`;产品侧**逐条与参考版相同**(`BackendApi.cs:2881` `_require_launch_account`、
+     `McLauncher.cs:525` 抛、`Preflight.cs:113` 警告、启动器只做占位符替换)。修完**第一次真的跑通**:
+     `账号: cli-xxxx (离线)` → `使用 Java 17: .../fake-java/java` → `实际启动` → `游戏已退出,退出码 0`。
+   - **一条过严的断言**:行内码底色用例要求"对照段落里恰好 0 个 `#F2F2F2` 像素",Ubuntu 上字形边缘会凑出 1 个
+     (Windows 上是 0)。判据改成"对照 ≤5 且带码 >100 且 >10 × 对照"。
+   - **`Motion` 的收尾竞态(真缺陷,已修,见 D-64)**:淡入定时器在 Avalonia 平台拆掉之后才跑到,写
+     `TranslateTransform.Y` 抛 `Unable to locate 'Avalonia.Animation.IGlobalClock'` → 未被观察的任务异常 →
+     终结器线程重抛 → **测试宿主进程直接崩**。三处延后回调统一走新的 `Later()`:try/catch + 一条 WARN。
+   - **环境性 OOM(如实:根因未定位)**:测试宿主 RSS 约 200 MB/s 线性增长,整批 44 秒到 5.07 GB 被内核杀
+     (`dmesg`: `oom-kill ... task=dotnet ... anon-rss:4936736kB`,报错文案是 `Test host process crashed`)。
+     **分批跑**(`~TipCL.Tests.App` / `!~TipCL.Tests.App`)各自峰值 **0.43 GB**、合计 440 全绿。增长根因**没有**
+     定位到具体代码(在测试宿主内部,性质上像 Avalonia 无头会话每派发的开销),所以只写成"已量化 + 已规避",
+     CI 与盒子验收都改成两批(见 D-66)。Windows 上整批跑不会 OOM(有页面文件)—— 这正是"只在 Windows 上验证"
+     会漏掉这类问题的原因。
+3. **补齐参考版的「启动前账号闸门」**(产品级缺口,见 D-65):新增 `src/TipCL.App/Common/AccountGate.cs`;
+   启动页「用户」由自由文本框换成**真实账号下拉**(参考版同一处 `Ui.Field("用户", _acc)`);点「启动」先过
+   `EnsureAsync`(选中的账号还在就用它 → 否则列表第一个 → 一个都没有就弹「创建离线用户」,建好再继续;
+   用户取消则这次不启动)。6 条用例 + 浮层探针 B 组 10/10。
+
+**另一条收口**:PARITY §9.5 里"悬停每次重挂 `Res.Bind`,旧订阅会不会漏"从此有答案 —— 框架源码级
+(`ValueStore.AddBinding`:LocalValue 分支先 `DisposeExistingLocalValueBinding` 再装新的,位置见详版)+ 3 条用例
+(`RebindSubscriptionTests`),其中"真实路径"那条如实标注了它**证明不了**订阅释放。
+
+**数字**:测试 **446**(445 通过 + 1 跳过 + 0 失败)。本地分批:App 245 + 其余 201;盒子分批:App 239 +
+其余 201(盒子源码快照早于 `AccountGateTests`)。`dotnet build` Debug / Release 均 **0 警告 0 错误**。
+浮层探针 `POPUP-THEME OK`(B 组 10/10,C 组刻意保留的 0/5 反证)。
+
+**一条判据失效(如实)**:PARITY §9.8 记的"8/8 张启动页冒烟帧逐位相同(`070d6ad6...`,564,149 B)"不再可用 ——
+连续两次同样条件下的 `SMOKE_PAGE=launch` 冒烟帧哈希就不同(573,359 / 573,327 B),原因是启动页那条线上新闻行。
+本轮改动在默认关闭的浮层里,主帧不受影响,由结构性探针 + 单测证明,不再靠像素比对。
+
+**仍未做**:CI 真 runner;`.deb` 从安装路径拉起 GUI(脚本已备 `_cmp/box/deb-gui.sh`,私有 Xvfb `:8`);
+测试宿主内存增长的根因;浮层里"没账号 → 点启动 → 建号 → 继续"的人工点一遍(留给下次实机验收)。
