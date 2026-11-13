@@ -6489,3 +6489,73 @@ Avalonia 把"宽于格子的子元素"居中摆放 ⇒ 左移 `(205-300)/2 ≈ 4
 **测试总数**:3179 -> **3438**(两通道相等、不支持 0)。
 
 **仍然只有真机能验**:重启启动器、真剪贴板/文件面板、真壁纸与视频、以及 D2 清单里的全部观感项。
+## C6b:设置页分段 4/5/6 的三个子页(服务器 / 游戏时长 / 反馈与帮助)+ 注入缝接线
+
+**范围**:`Pages\ServersPage.cs`(7256 B / 237 行)、`Pages\PlaytimePage.cs`(10802 B / 312 行)、
+`Pages\FeedbackPage.cs`(8399 B / 264 行)三个子页 + `Pages\C6bSegmentRegistration.cs`(接线)+
+`Models\{ServerRow,FeedbackRow,HelpArticle}.cs`(**字节级搬**,222 / 270 / 182 字节)。
+
+### 1. 依赖审计(先查后动)
+
+| 文件 | 结论 |
+|---|---|
+| `ServersPage` | **可移植**。齐:`InstanceInfo` / `Ui.Section`·`Card`·`Empty`·`Glyph`/`BlockHost("servers")`/`Dlg.Confirm·Ask·PickFile·SaveFile`/`AccountGate.EnsureAsync`/`PageBase.Win?.Navigate("launch")`。缺件只有 `Models\ServerRow`(222 B)→ 字节级搬。 |
+| `PlaytimePage` | **可移植**。齐:`Ui.Prog`/`Motion.CountUp`·`Progress`·`Stagger`/`Fmt.Duration`/`BlockHost("playtime")`;**零缺件**。 |
+| `FeedbackPage` | **可移植**。齐:`Ui.Multi`·`Check`·`Tag`·`Section`/`Dlg.PickFiles·Busy·Alert`/`OpResult`。缺件:`Models\FeedbackRow`(270 B)+ `Models\HelpArticle`(182 B)→ 字节级搬。 |
+| `JavaPage`(12.3 KB) | **本包没做**,审计结论:可移植,但需要 ①`Models\JavaInfo`(181 B,可字节搬)②一处 `Process.Start("explorer.exe", "/select,…")` 的**平台决定**(mac 没有 explorer;要么走 `open_media` 后端、要么加一个 reveal 注入缝)—— 这两件都要 Lead 点头,所以按"大件/要先裁决"停下。 |
+| `MultiplayerPage`(18.8 KB) | **本包没做**,只做了粗查(它自带联机房间/端口/host 列表等一整块);没有细读,不敢报"可移植"。 |
+
+### 2. 接线(不改别人的文件)
+
+C5a 已经在 `SettingsPage` 留好六个注入缝(未接时显示如实的占位说明)。本包用**自己的** `[ModuleInitializer]`
+(`C6bSegmentRegistration`)把**三个**接上:
+
+```csharp
+SettingsPage.ServersPageFactory  = () => new ServersPage();
+SettingsPage.PlaytimePageFactory = () => new PlaytimePage();
+SettingsPage.FeedbackPageFactory = () => new FeedbackPage();
+```
+
+- **为什么用 ModuleInitializer**:真桌面启动、`--smoke`、测试里的 `new SettingsPage()` 都自动看得到,
+  而且一个字节都不用改 `SettingsPage.cs` / 外壳(红线);
+- **`FeedbackPage` 的懒构造**:Windows 是**字段初始化**(`new FeedbackPage()` 跟设置页构造函数一起建),
+  Lead 在 C5a 裁决里点名要改成"切到第 6 段时才建" —— 交出去的是**工厂**,设置页按需调;
+  有一条用例专门钉这件事(换一个计数工厂 → `new SettingsPage()` 之后计数必须还是 0);
+- 另外三处缝**不归本包**:`AccountPageFactory`(C5b 的页面)、`JavaPageFactory`(本包没搬 `JavaPage`)、
+  向导缝(C5b 的向导)。
+
+### 3. 验收
+
+**构建**:`dotnet build TipCL.Mac.sln -c Release -p:UseSharedCompilation=false -m:1` → **0 个错误**(锁下)。
+
+**我的用例(两条通道)**:`--filter FullyQualifiedName~C6bPages` → `已通过! - 失败: 0,通过: 22,总计: 22`(退出码 0);
+全量**进程内执行器** `总计 3503 个用例,通过 3499,失败 4,跳过 0,不支持 0` —— 其中 **C6b 22/22 全绿、[FAIL] 0**,
+那 4 条全在 c4-pages 名下(`C6aPagesTests` ×3 + `C5aSettingsTests.Missing_segments_show_the_honest_placeholder` ×1),
+它的 C6a 测试当时还在调(它自己也就此发过消息)。
+
+**冒烟矩阵(8 个 id × 明暗,全部走锁;对照 = 我开工前自跑的 C5c 终稿基线)**
+
+| 帧 | 结果 |
+|---|---|
+| 首屏/`launch` light/dark | **逐字节不变** 37681 `2603BF6A…` / 33579 `7D7AFDD5…` |
+| `library` light/dark | **不变** 43775 `8FBA4C9F…` / 40686 `A77F3E6A…` |
+| `instance` light/dark | **不变** 30057 `36FAEDDE…` / 27468 `2C69550D…` |
+| `settings` light/dark | **不变** 45594 `C19BF1C4…` / 43745 `CE33BEFE…` |
+| `tasks` light/dark | **不变** 27719 `0E591B87…` / 24171 `C3EE486E…` |
+| `account` light/dark | **不变** 33173 `D3F59339…` / 29984 `148EB206…` |
+| `multiplayer` light/dark | **新帧 = 与首屏逐字节相同**(37681 `2603BF6A…` / 33579 `7D7AFDD5…`) |
+
+两条要说明的:
+1. **`settings` 那一帧没有变化**,不是"接线没生效":`--smoke` 里 `BridgeReady` 为假 ⇒ 页面的加载钩子不跑
+   (C5c 已查清的口径),而设置页的分段内容是**切段时才建**的,所以帧里只有构造函数那部分。
+   接线本身由用例钉住(工厂造出真页面 + 懒构造),冒烟帧因此合理地**不变**。
+2. **`multiplayer` 帧与首屏逐字节相同**:`MultiplayerPage` 本包没搬,`multiplayer` 这个 id 没有注册工厂
+   ⇒ `Navigate` 静默不动(与 C3c 记的"其它 id 什么都不切"、以及 C5b 的 `--page download` 同一现象)。
+
+### 4. 落地时实测到的三条(都修的是**测试期望**,页面代码没动)
+
+1. **`UiExt.Fill` 会自动选中第一项**(与 Windows 的 `Fill` 同)⇒ `ServersPage` 首屏就会拉一次 `list_servers`,
+   "没选实例就不拉列表"那个状态**在 mac 上不可达**;用例改成钉"填了实例 ⇒ 拉过列表"。
+2. **`PlaytimePage` 行里的时长是同步读缓存的**(`Cached`),而缓存由 `WarmAsync` 异步预热 ⇒ 首屏画的是本地
+   `Fmt.Duration`,后端 `format_playtime` 的文案在**下一次重画**时才上屏(Windows 同序)—— 用例改成先 `RefreshAsync` 再断言。
+3. **`Dlg.Busy` 包着 `await Dlg.Alert`**:提示卡没关之前 Busy 那层不收,所以系统信息那一步的浮层数是 **2** 而不是 1。

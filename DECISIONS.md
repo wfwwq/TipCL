@@ -2052,3 +2052,28 @@ Windows 的几何(`*,18,2*` + 左卡 `MinWidth=300 / MaxWidth=380 / Top`),那条
   所以冒烟帧不受影响(已复跑确认逐字节不变)。
 - **用例**:`C5aSettingsTests.Fly_to_tasks_does_nothing_while_the_settings_switch_is_off` —— 开着时 chip 进 `FlyHost`、
   关掉时一行都不画(用 `C3dClock` 把动画时钟打开,否则 `Motion.Enabled` 恒假就验不了这道守卫)。
+
+## D-146 C6b:设置页分段 4/5/6 的接线走自己的 `[ModuleInitializer]`,`FeedbackPage` 交工厂以保证懒构造
+
+**1. 接线不改别人的文件。** C5a 已在 `SettingsPage` 留好六个注入缝(`ServersPageFactory` / `PlaytimePageFactory` /
+`FeedbackPageFactory` 等,未接时显示如实的占位说明)。本包没有去编辑 `SettingsPage.cs`,而是在自己的
+`Pages\C6bSegmentRegistration.cs` 里用 `[ModuleInitializer]` 赋值 —— 与 D-125 的页面注册同一套理由:
+模块加载时、任何代码之前接好,真桌面启动 / `--smoke` / 测试里的 `new SettingsPage()` 都自动生效,
+而"把赋值写进设置页或外壳"都要改别人的文件(红线)。只接本包搬来的三个;`AccountPageFactory`(C5b 的页面)、
+`JavaPageFactory`(`JavaPage` 本包没搬)、向导缝(C5b 的向导)都没碰,如实留在"未接 = 显示占位"的状态。
+
+**2. `FeedbackPage` 必须交工厂而不是实例。** Windows 那一版是**字段初始化**:
+`private readonly FeedbackPage _feedback = new FeedbackPage();` —— 构造设置页就会连带构造反馈页。
+Lead 在 C5a 裁决里点名要求改成"切到第 6 段时才经工厂建"。mac 的缝本身就是 `Func<PageBase>`,天然满足;
+本包用一条用例把它钉住:把缝换成一个**计数工厂**,`new SettingsPage()` 之后计数必须仍然是 **0**
+(构造设置页不许连带建反馈页)。这条约束对将来接 `AccountPageFactory` / `JavaPageFactory` 同样适用。
+
+**3. 三条"框架/夹具实测"(修的都是**测试期望**,页面代码没动)。**
+- **`UiExt.Fill` 会自动选中第一项**(与 Windows 的 `Fill` 同)⇒ `ServersPage` 首屏就会拉一次 `list_servers`,
+  "实例没选中 ⇒ 不拉列表"这个分支在 mac 上**不可达**(它是靠 `_inst.Str()` 为空兜底的)。用例改成钉
+  "填了实例 ⇒ 拉过列表",不再钉调用次数 —— 次数由 `Fill` 的选中策略决定,不是这一页的契约。
+- **`PlaytimePage` 行里的时长是同步读缓存的**(`Cached(secs)`),而缓存由 `WarmAsync` **异步**预热 ⇒
+  首屏画的是本地 `Fmt.Duration`,后端 `format_playtime` 的文案要**下一次重画**才上屏。
+  这不是缺陷(Windows 的 `Cached` 与 `WarmAsync` 就是这个次序),但用例必须先 `RefreshAsync()` 再断言后端文案。
+- **`Dlg.Busy` 包住 `await Dlg.Alert` 时,两层浮层同时在**:提示卡没关之前 Busy 那层不回收,
+  所以系统信息那一步的浮层数是 **2** 而不是 1(`using` 的边界就是 Windows 的那对花括号)。
