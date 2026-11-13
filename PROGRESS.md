@@ -5707,3 +5707,32 @@ C3c 的 `FlyToTasksSeam` **签名保留**(下游页面/测试仍可注入探针)
 3. **C3c 的注入缝保留着**(签名不变),但它已由外壳接上真成员;**新页面不要再加缝** —— 这层间接可以后续某个包统一拆掉。
 4. 本包**只补了外壳的两个成员**;`FlyHost` 里除了飞行 chip 之外没有任何其它用途
    (Windows 也只被 `FlyToTasks` 用)。
+
+### Lead 验收(2026-11-13 18:45)
+
+结论:**C3d 通过**。以下由 Lead 在 `D:\项目\tipcl\mac\` 亲自执行。
+
+| 检查 | 结果 |
+|---|---|
+| 六个提交(`a9ad510` / `b61db8a` / `1c20fbe` / `90079bb` / `f7293a8` / `6c6534b`) | 工作树干净;无 remote、无 tag;Windows 仓库 HEAD 仍 `803dd38` |
+| 红线(`src\TipCL.Core`、`Themes\`、`NavModel/NavConfig`、`Services\Ui.cs`、`Services\UiExt.cs`、测试隔离三件、`AvaloniaSession.cs`、`.gitattributes`、`.gitignore`、`Directory.Build.props`、`TipCL.Mac.sln`) | 未改(本包按裁决**允许**改 `MainWindow.cs` / `Motion.cs` / 新增 `FlyMotion.cs`) |
+| `dotnet build ... --no-incremental` | 退出码 0,0 错误 |
+| `dotnet test` 第 1 / 2 次 | 都是**退出码 0,失败 0 / 通过 3129 / 总计 3129**(3086 -> 3129,+43) |
+| 进程内执行器 第 1 / 2 次 | 都是**退出码 0,通过 3129 / 失败 0 / 不支持 0** |
+| **`--smoke` 与 C3c 基准逐位比对** | 不带 `--page` = **37681 `2603BF6A...`**;`--page launch --theme light` = **同哈希**;`--theme dark` = **33579 `7D7AFDD5...`**;`--theme blue` = **2** —— **逐字节相同**。离屏 `Motion.Enabled` 为假 ⇒ 第一道守卫直接返回,帧里没有 chip(新增的只是一个空 Canvas) |
+| `FlyToTasks`(Lead 抽查源码) | 成员存在;`FlyHost` 是 Canvas、Row0/RowSpan2;z 序写明为 `ContentLayer -> FlyHost -> DropVeil -> ToastHost -> DialogHost`(与 Windows XAML 子元素顺序一致);`TabTasks` 的 mac 等价物与 `TabTasks == null` 同分支 |
+| 全部改动文件编码 | **无 BOM、CR=0、U+FFFD=0** |
+| `src\TipCL.Core` 对 Windows 源 SHA256 | 238 / 216 / 22 / 10,与基线完全相同 |
+| `%LOCALAPPDATA%\TipCL` / 桌面 / 图片 / 残留进程 | 9328 / 889530606 / 2026-11-10 20:42:16(**零写入**);桌面与图片最新写入时间不变;残留进程 **0** |
+
+**裁决 1:采纳 D-130,单开小包修 —— 但先记下我认可的严重性。**
+
+子代理在写本包时**实测**发现:`Motion` 里凡是把 **Transform 对象本身**当作 `Animation.RunAsync` 目标的那批动画,在 Avalonia 上会抛 `InvalidCastException`(TransformAnimator 要求目标是 `Visual`),而 `Motion.Start` 把异常**吞掉**了。后果是:**真桌面(动画开着)上这些动画静默不动** —— 包括 `FadeIn` 的竖直位移、`HoverLift`、`PopIn`/`PopOut`、`Shake`、`Spin`;离屏因 `Motion.Enabled` 恒假走不到,所以一直没人发现。
+
+这是 **C2a 移植 `Motion` 时留下的既存缺陷**,不是 C3d 引入的;但它意味着**后面每个用到这些动画的页面在真机上都会"少动一下"而不报错** —— 正是那种"测试全绿、真机坏了"的坏账。所以:**采纳,单开 C3e 修**(把目标换成宿主控件,公开签名不动),并要求它一并处理"吞异常"这一点(至少不许再把这类缺陷藏起来)。
+
+**裁决 2:接受 `InstallPage.cs:489` 的写法差异(D-131)。** 12 处调用点可以一字不改地用 `PageBase.Win?.FlyToTasks(anchor, text)`;唯独那一处因为 mac 的 `AppServices.Window` 是 `Window?` 而写成 `(AppServices.Window as MainWindow)?.FlyToTasks(...)`。可以接受,后续页面按 D-131 的两条形状照抄即可。
+
+**裁决 3:接受 `Motion.ClockOverride`(D-129)。** headless 里 `Motion.Enabled` 恒假,所以"动画开着"这一支结构上不可达;加一个 internal 注入点让那一支真的可验 —— 这是正解(**但使用者必须还原**,已写进遗留)。
+
+**运营备注**:子代理如实说明它量 `%LOCALAPPDATA%\TipCL` 基线是在**收尾阶段**而不是开工第一条命令 —— 这种自我披露是对的(让我知道那条证据的强度)。以后仍要求开工先量。
