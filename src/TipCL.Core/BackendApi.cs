@@ -1735,17 +1735,33 @@ public partial class BackendApi
 		return Modpack.InstallMrpackBySlug(dm, obj3, inst, on_progress, dm.cancel, force: false, null, extra["version_id"]);
 	}
 
+	/// <summary>
+	/// 关掉构造时的登录域名预热。默认 false = 与 Windows 版行为一致:构造时排一个后台任务,
+	/// 1.5 秒后预热 login.live.com。只有测试与离屏验证把它置 true(用完必须在 finally 里还原),
+	/// 为的是在不联网的前提下真正实例化 BackendApi(见 DECISIONS.md D-100)。
+	/// </summary>
+	public static bool DisableAuthWarmup { get; set; }
+
+	/// <summary>构造函数要不要排登录预热任务(独立判断函数,便于用例钉住两个开关值的分支,不真的发请求)。</summary>
+	internal static bool ShouldWarmupAuth()
+	{
+		return !DisableAuthWarmup;
+	}
+
 	public BackendApi(EventBus bus)
 	{
 		_bus = bus ?? new EventBus();
 		InitAccounts();
 		EnsureDefaultInstance();
 		// 启动后在后台预热微软登录域名（系统代理探测 + DNS + TLS），点「微软登录」时验证码能更快出来
-		ThreadPool.QueueUserWorkItem(delegate
+		if (ShouldWarmupAuth())
 		{
-			Thread.Sleep(1500);
-			AuthHttp.Warmup("https://login.live.com/");
-		});
+			ThreadPool.QueueUserWorkItem(delegate
+			{
+				Thread.Sleep(1500);
+				AuthHttp.Warmup("https://login.live.com/");
+			});
+		}
 	}
 
 	private void InitAccounts()
