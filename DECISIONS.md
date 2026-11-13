@@ -955,3 +955,100 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
    类型上 `Asset` 由 WPF 的 `FrameworkElement` 变成 Avalonia 的 `Control`,
    `Icon` / `Spinner` / `Rotate` 的 path 由 `System.Windows.Shapes.Path` 变成
    `Avalonia.Controls.Shapes.Path` —— 这是框架类型本身,不是签名设计。
+
+## D-71 WPF 样式键 -> Avalonia 类名,映射表只放在 `StyleKeys.cs`
+
+- Avalonia 没有 WPF 的「按 x:Key 取 Style 挂到控件上」这套机制,样式只能靠**选择器**命中。
+  所以 C1b 为每个具名 WPF 样式键固定一个**类名**,规则:点换连字符 + 驼峰处插连字符 + 全小写
+  (`Btn.Primary -> btn-primary`、`T.PageTitle -> t-page-title`、`ListItemRow -> list-item-row`)。
+- 表只有一份:[src/TipCL.App/Themes/StyleKeys.cs](src/TipCL.App/Themes/StyleKeys.cs) 里的
+  `Table`(40 个具名样式键)/ `Templates`(BtnTpl -> ControlTheme `BtnBase`)/ `ImplicitTypes`(13 个隐式类型样式)/
+  `ResourceKeys`(9 个资源令牌)/ `Unsupported`(GroupBox)。四张表 + Unsupported 正好铺满 Windows 版的 64 个 `x:Key`。
+- 隐式类型样式(`x:Key="{x:Type X}"`)不产生类名,在 axaml 里就是类型选择器;`Map` 对它们返回空串。
+- `Controls.axaml` 里每条类选择器上方都写着 `<!-- WPF键 -> .类名 -->`,把映射留在原地可追溯;
+  两条测试(静态层)逐条核对表、注释与选择器三者一致,键名写错会立刻红。
+- 每个变体类**自带**基模板(类样式里 `Theme={StaticResource BtnBase}`),等价 WPF 的 `BasedOn`,
+  所以调用点只加一个变体类就够。C1c 建议直接用 `StyleKeys.Apply(control, "Btn.Primary")`。
+
+## D-72 控制模板的移植深度按「Avalonia 内部契约」分级
+
+- **整份重画**(WPF 模板就是视觉本体、且 Avalonia 的部件契约已知):按钮族 12 个、三个 ToggleButton 变体、
+  Input 家族 / Pw、Chk / Switch、Combo / ComboItem、ListItemRow、ToolTip、Sld。
+- **只改属性 + 按 `/template/` 取命名部件**(Avalonia 的内部结构比 WPF 复杂、重画风险大于收益):ScrollBar、
+  ProgressBar、Expander、TabItem、MenuItem、ContextMenu(只改前景色,外壳留给 Fluent)。
+- 每一条差异都写进 PROGRESS.md 的 C1b「视觉差异」表(16 条),没有静默丢功能。
+- 判据是「本机实测」而不是猜:开工时先用一次性探针(headless 下把 Fluent 默认主题的视觉树打出来)
+  把各控件的模板部件名摸清(PART_ScrollViewer / PART_TextPresenter / PART_Popup / PART_Indicator /
+  PART_LineUpButton / Track 的 PART_DecreaseButton 等),探针文件用完即删。
+
+## D-73 Avalonia 不允许连续两个 `/template/`,Track 不是 TemplatedControl
+
+- 实测 1:`<Style Selector="Slider /template/ Track /template/ Thumb">` 在运行期抛
+  `InvalidOperationException: ControlTemplate styles cannot contain multiple template selectors.`
+  也就是说**跨两层模板取部件是做不到的**,唯一的路是把外层模板整份重画,让部件落在同一层模板里。
+- 实测 2:`Avalonia.Controls.Primitives.Track` **没有 `Template` 属性**(编译期报
+  「Unable to resolve property Template on type Track」),它不是 TemplatedControl;
+  WPF 的 `Track.Thumb` / `Track.DecreaseRepeatButton` 写法在 Avalonia 里对应
+  `<Track.Thumb>` / `<Track.DecreaseButton>` / `<Track.IncreaseButton>` 三个属性元素,
+  直接写在 Slider 的模板里。
+- 实测 3:重画的 Slider 若不把 `Orientation` / `Minimum` / `Maximum` / `Value` 用 TemplateBinding 接到 Track 上,
+  Track 会一直是 `:vertical`、`Value` 停在 0、滑块不动(探针实测 bounds 不变)。接上之后与 Fluent 的原生行为
+  逐项对上(值 0→100 时滑块 x 从 0 到 182,原生是 0 到 180,差别只是 18px 与 20px 的滑块半径)。
+- 结论写进 PROGRESS 的「遗留与风险」,后续包再遇到「想改模板深处某个部件」时先按这条判断要不要重画。
+
+## D-74 TextBox 的模板部件名以 Avalonia 为准,编译期会强制
+
+- WPF 的 `PART_ContentHost` 在 Avalonia 里叫 **`PART_ScrollViewer`**,并且模板里还必须有
+  **`PART_TextPresenter`**(缺了直接编译失败:`Required template part with x:Name 'PART_TextPresenter'
+  must be defined on 'TextBox' ControlTemplate.`)。
+- `Text` 用双向绑定(`{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}`),
+  其余(CaretIndex / Selection* / CaretBrush / PasswordChar / TextWrapping / TextAlignment / LineHeight /
+  LetterSpacing)用 TemplateBinding;`TextPresenter` 没有 `MaxLines`(编译期报错后删掉)。
+- 占位文字仍走 WPF 的做法:`Tag` 里放提示语,用 `StringConverters.IsNullOrEmpty` 绑 `IsVisible`。
+- 滚动条可见性在 Avalonia 是 `ScrollViewer.VerticalScrollBarVisibility` 这类**附加属性**
+  (不加前缀会编译失败),WPF 的 `TextBoxBase.*` 前缀不存在。
+
+## D-75 `PasswordBox` / `GroupBox` 在 Avalonia 11 不存在
+
+- 反射确认(`Avalonia.Controls` 里名字带 Box 的公开类型只有 AutoCompleteBox / CheckBox / ComboBox /
+  ComboBoxItem / ListBox / ListBoxItem / MaskedTextBox / TextBox)。
+- `Pw`(WPF 的 PasswordBox 样式)因此改成一份 `TextBox.pw` 类:复用输入框模板,密码掩码由调用点设
+  `PasswordChar`。C1c 的 `Ui.Pw` 要相应改成返回 `TextBox`。
+- `GroupBox` 隐式样式不移植:Windows 版全仓库 grep 没有任何 GroupBox 使用点,只在
+  `StyleKeys.Unsupported` 里留档(带原因),测试专门钉住这一条且要求 axaml 里不许出现 GroupBox。
+
+## D-76 时长/缓动令牌:WPF `Duration` -> `sys:TimeSpan`,`CubicEase` -> `CubicEaseOut`
+
+- Avalonia 的时间线只吃 `TimeSpan`,`D.Fast` / `D.Med` 写成 `<sys:TimeSpan x:Key="D.Fast">0:0:0.13</sys:TimeSpan>`
+  (`xmlns:sys="clr-namespace:System;assembly=System.Runtime"`),取值仍是 130ms / 220ms,用例对拍。
+- Avalonia 没有带 `EasingMode` 的 `CubicEase`(缓动类型清单实测只有 CubicEaseIn/Out/InOut 这类),
+  所以 `E.Out` 用 `<CubicEaseOut/>`:曲线与 WPF 的 `CubicEase + EaseOut` 完全一致,
+  用例断言 `Ease(0.5) > 0.5` 且 `Ease(1) == 1`。
+- `E.Out` 目前没有使用点(WPF 里它只给按钮/开关的退场动画用,而 Avalonia 这边用无过渡的伪类直切),
+  留给 C2 的动画门面。
+
+## D-77 字体令牌按 GOAL 的 mac 列表,Avalonia 的逗号字体列表能整串解析
+
+- `F.Ui` = `PingFang SC, Hiragino Sans GB, Microsoft YaHei UI, sans-serif`、`F.Mono` = `Menlo, Consolas, monospace`
+  (GOAL §3,覆盖 Windows 的写法);`F.Icon` = C1a 的 avares 图标字体 + Windows 的两个兜底字体族。
+- 本机实测 Avalonia 11.3.23 的 `FontFamily` 构造函数会把逗号列表拆成 `FamilyNames`
+  (4 个 / 3 个 / 3 个),`Name` 取第一个,所以兜底列表是**真的**被接受的,不需要退化成单个字体。
+- 这带来一个**必须由 Lead 裁决的副作用**:隐式 TextBlock 样式一挂上 `F.Ui`,本机(Windows)第一个可用字体
+  就成了 Microsoft YaHei UI,`--smoke` 窗口里那句 `TipCL` 的字形因此变化,PNG 从 3713/3669 变成 3956/3941。
+  取证方式:临时注掉那一行 `FontFamily` -> smoke 逐字节回到 C1a 基准;还原后又是新值。
+  本包**没有**改基准记录、也没有为了让 smoke 不变而删掉这一行(那是把移植做残)。
+
+## D-78 C1b 的测试分两层:XML 文本层 + headless 运行时层
+
+- **XML 文本层**(不需要平台,`C1bControlsTests` / `C1bStyleKeysTests`):64 个 Windows 键的落点、
+  40 个类名映射与注释/选择器三者一致、色板引用穷尽扫描(每个 `B.*`/`C.*` 都要在两份色板里存在)、
+  令牌取值、WPF 残留语法(只看标记、不看注释,注释里本来就为了说明差异提到了那些词)。
+  Windows 源路径可用时另有一条交叉复核,不可用只打印原因、不判失败。
+- **headless 运行时层**(`C1bRuntimeStylesTests`,复用 `C1aFixtures.EnsureAvalonia()` 的
+  `SynchronizationContext` 还原):样式表真加载、类选择器真命中、ControlTheme 真被换上、
+  `PART_TextPresenter` / `PART_Popup` 等部件真被框架找到、Track 的值真的从 Slider 流过去。
+- **纪律**:样式里有 `Transitions`(淡化)的地方**不断言动画中的值**,只断言没有过渡的属性
+  (变换、可见性、尺寸),否则头两帧的中间值会把用例抖红;全局静态
+  (`Application.RequestedThemeVariant`)在 `Hosted.Dispose` 里还原。
+- 写用例时踩到 `xUnit2013`(`Assert.Equal(0, X.Count())`),已按分析器建议改成 `Assert.Empty`,
+  现在全仓警告只有 NU1900 与 SYSLIB0014。

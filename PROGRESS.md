@@ -24,7 +24,7 @@
 | B2e | Apple 芯片旧版本:Java 按目标架构(Mojang 平台键 / 厂商安装 / 已装 Java 挑选 / Rosetta 提示) | ✅ 完成(见下;**新增 235 条用例,总数 1170 → 1405,两条通道都 1405/1405 全绿**;新建 `Launcher\JavaArch.cs`,`Java.cs` / `McLauncher.cs` / `Installer.cs` 各改一处;写测试时抓到并修掉一个「读取委托 / 探测委托」接错的真 bug,见 D-50;两处同类缺口只记录未改,见 D-52) |
 | B3 | 打包 | ✅ 完成(见下;**新增 116 条用例,总数 1680 → 1796,两条通道都 1796/1796 全绿**;`tools\package.ps1` + 打包器实跑通过:443 条目、85,812,352 字节 tar.gz、两次运行 SHA256 完全一致;审草稿时改了两处 —— tar 从 Pax 换 Ustar(确定性)、暂存目录只删 `TipCL.app`) |
 | C1a | 主题色板 + 图标字体 + Lucide 图标(Avalonia 移植) | ✅ 完成(见下) |
-| C1b | `Themes/Controls.axaml` 移植 | 未开始 |
+| C1b | `Themes/Controls.axaml` 移植 | ✅ 完成(见下;**新增 257 条用例,总数 1900 → 2157,两条通道都 2157/2157 全绿**;64 个 WPF 键全部有落点,40 个具名样式映射成类名;smoke 因隐式 TextBlock 字体变化为 3956/3941,**待 Lead 裁决基准**,见小节第 7/8 条) |
 | C1c | `Services/Ui.cs` / `UiExt.cs` 门面 | 未开始 |
 | C2-C8 | 外壳 + 页面 | 未开始 |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
@@ -3147,3 +3147,170 @@ Lead 说明:
    以后再加 Avalonia 初始化一定要照做。
 6. **没有做**的事:`Themes\Controls.xaml`(C1b)、`Services\Ui.cs` / `UiExt.cs`(C1c)、任何页面(C2+)、
    壁纸与 `PremiumAssets` 的内嵌(它们属于页面/C2);没有改 TFM、没有扩 `NoWarn`、没有新增警告、没有联网请求。
+
+---
+
+## C1b `Themes/Controls.axaml` 移植(控件样式表)
+
+### 做了什么
+
+1. **`src/TipCL.App/Themes/Controls.axaml`**(新建,约 640 行):Windows 版 `Themes\Controls.xaml`(1055 行、64 个 `x:Key`)
+   逐键移植。根节点是 `<Styles>`,令牌与 ControlTheme 落在 `Styles.Resources`,选择器写在根下;
+   每条类选择器上方都有一条固定的对应注释 `<!-- WPF键 -> .类名 -->`(测试逐条核对)。
+2. **`src/TipCL.App/Themes/StyleKeys.cs`**(新建):WPF 样式键 -> Avalonia 类名的**唯一**映射表,
+   四张表铺满 64 个键:`Table`(40 个具名样式键)、`Templates`(1 个 ControlTemplate 键 BtnTpl)、
+   `ImplicitTypes`(13 个隐式类型样式)、`ResourceKeys`(9 个资源令牌)+ `Unsupported`(GroupBox,1 个)。
+   另给 C1c 备了 `Map` / `Classes` / `Apply` / `Split`。
+3. **`src/TipCL.App/App.cs`**:在 FluentTheme 与色板之后 `Styles.Add(new StyleInclude(...))` 挂上样式表
+   (晚加入的 Styles 优先级更高,同名属性上我们的样式胜出)。
+4. **类名规则**(任务书定的):点换连字符 + 驼峰处插连字符 + 全小写,例如
+   `Btn.Primary -> btn-primary`、`T.PageTitle -> t-page-title`、`ListItemRow -> list-item-row`。
+   隐式类型样式(`x:Key="{x:Type X}"`)不产生类名,直接变成类型选择器。
+5. 每个变体类**自带** `Btn.Base` 的模板(类样式里设 `Theme`),等价 WPF 的 `BasedOn`;
+   所以 C1c 只加变体类即可,不用再加 `btn-base`。
+
+### WPF 键 -> Avalonia 类名(完整表)
+
+| WPF 键 | 类名 | 备注(Avalonia 侧) |
+|---|---|---|
+| `T.H1` | `t-h1` | 20px SemiBold |
+| `T.PageTitle` | `t-page-title` | 21px ExtraBold |
+| `T.GroupTitle` | `t-group-title` | 12.5px + Margin 4,0,0,6 |
+| `T.H2` | `t-h2` | 17px SemiBold |
+| `T.H3` | `t-h3` | 15px SemiBold |
+| `T.Muted` | `t-muted` | 12px InkMuted + Wrap |
+| `T.Small` | `t-small` | 11px InkFaint |
+| `T.Mono` | `t-mono` | F.Mono 12px InkSoft |
+| `Card` | `card` | Border:Card 底 + CR.Card + Padding 12 |
+| `Seg.Rail` | `seg-rail` | Border:SegRail 底 + 圆角 10 + Padding 3 |
+| `ScrollThumb` | `scroll-thumb` | Thumb:Scroll 底 + 圆角 4 + Margin 3,2;悬停/拖动换 ScrollHover |
+| `Btn.Base` | `btn-base` | 只用基模板(无变体色) |
+| `Btn.Primary` | `btn-primary` | AccentStrong / OnAccentStrong / Bold |
+| `Btn.Soft` | `btn-soft` | AccentSoft / AccentSoft2 / AccentText |
+| `Btn.Normal` | `btn-normal` | Paper / Line / Ink |
+| `Btn.Ghost` | `btn-ghost` | 全透明底 + InkSoft |
+| `Btn.Danger` | `btn-danger` | DangerSoft / DangerSoft / Danger |
+| `Btn.Icon` | `btn-icon` | Ghost 配色 + Padding 7 + MinWidth 30 |
+| `Btn.Chip` | `btn-chip` | Paper2 / Line / InkSoft + Padding 11,5 + 12px |
+| `Btn.Caption` | `btn-caption` | 46 宽窗口按钮 + 图标字体 |
+| `Btn.CaptionClose` | `btn-caption-close` | 自带矢量 X + 悬停 CaptionHot |
+| `Btn.TitleIcon` | `btn-title-icon` | 32x32 标题栏图标钮 |
+| `Btn.TitleChip` | `btn-title-chip` | 复用 TitleIcon 模板,宽度自适应 |
+| `Ico.Line` | `ico-line` | Path 16x16 / 线宽 1.7,Stroke 跟随祖先 Foreground |
+| `Ico.Caption` | `ico-caption` | Path 10x10 / 线宽 1.1 |
+| `TabItemBtn` | `tab-item-btn` | ToggleButton,选中下划线(Border#Un) |
+| `Tab.Top` | `tab-top` | ToggleButton,13.5px Medium,选中 Bold + 底部条 |
+| `Seg.Item` | `seg-item` | ToggleButton,选中 SegOn 白底 + Bold |
+| `Input` | `input` | TextBox 全家共用模板(占位文字走 Tag) |
+| `Input.Multi` | `input-multi` | + AcceptsReturn / Wrap / Top |
+| `Input.Log` | `input-log` | + F.Mono 11.5 / 只读 / NoWrap / 双向滚动条 |
+| `Pw` | `pw` | TextBox + PasswordChar(见差异 9) |
+| `ComboItem` | `combo-item` | ComboBoxItem,悬停 Hover、选中 AccentSoft |
+| `Combo` | `combo` | ComboBox 整份模板(含 Popup#PART_Popup) |
+| `Chk` | `chk` | CheckBox:18x18 圆角 6 方框 + 勾 |
+| `Switch` | `switch` | CheckBox:40x22 开关 |
+| `Sld` | `sld` | Slider 整份模板(Track 部件写在模板里) |
+| `Prog` | `prog` | ProgressBar 高度 6 / Accent / LineSoft |
+| `ListItemRow` | `list-item-row` | ListBoxItem 行模板 |
+| `PlainList` | `plain-list` | ListBox 去边框 + ItemContainerTheme=ListItemRow |
+
+**没有类名的键**:`BtnTpl` -> ControlTheme `BtnBase`(唯一的模板键)、
+`F.Icon` / `F.Ui` / `F.Mono` / `CR.Card` / `CR.Ctl` / `CR.Pill` / `D.Fast` / `D.Med` / `E.Out`(资源令牌,`x:Key` 同名)、
+`GroupBox` -> `StyleKeys.Unsupported`(Avalonia 11 没有 GroupBox 控件,Windows 版也没有使用点)。
+
+**隐式类型样式(13 个)** -> 类型选择器:`TextBlock`、`ScrollBar`、`CheckBox`、`RadioButton`、`ToggleButton`、
+`ListBox`、`ListBoxItem`、`Label`、`Expander`、`TabItem`、`ToolTip`、`ContextMenu`、`MenuItem`。
+另有一条 `Thumb` 的隐式样式(挂 ScrollThumb 模板),来源是 WPF 的 `ScrollThumb` 具名样式。
+
+### 视觉差异(WPF 有、Avalonia 没有等价物的部分)
+
+1. **隐式 TextBlock**:`TextOptions.TextFormattingMode` / `TextRenderingMode` / `SnapsToDevicePixels` 三个开关
+   Avalonia 没有对应属性(它的渲染器不吃这些开关),没移植。
+2. **按钮动画**:WPF 的 Storyboard 淡化改成 Avalonia `Transitions`(`DoubleTransition`,时长仍取 `D.Fast`);
+   按下的 0.972 缩放是瞬时 `RenderTransform`(没有过渡);`E.Out` 目前没有使用点,等 C2 接动画。
+3. **焦点环**:WPF `FocusVisualStyle=null` + 模板内 `Kf`(看 `IsKeyboardFocused`)-> Avalonia `FocusAdorner=null`
+   + `:focus-visible`(语义与 WPF 一致:鼠标点击不显示)。
+4. **线帽**:WPF `StrokeStartLineCap` + `StrokeEndLineCap` 在 Avalonia 合成一个 `StrokeLineCap`。
+5. **ScrollBar**:WPF 的模板结构(Track + Decrease/IncreaseRepeatButton + Thumb)在 Avalonia 里没有等价物
+   (Avalonia 的 ScrollBar 自己按名字找 4 个 RepeatButton 与那个 Track),所以保留 Fluent 的结构,
+   只改宽度(10px)、压掉灰色轨道与两端箭头按钮(与 WPF 的 0 透明度空壳等效)、滑块改用色板灰。
+   **悬停时 Fluent 可能露出箭头按钮,本机未验**。
+6. **ScrollThumb 的拖动配色**:WPF 看 `Thumb.IsDragging`,Avalonia 用 `:pressed`。
+7. **Combo**:Avalonia 的 ComboBox 自己处理点击,模板里不需要 WPF 那个 ToggleButton;Popup 的 `PopupAnimation=Fade`
+   与 `AllowsTransparency` 没有对应属性(被丢掉);`DropShadowEffect` -> `Border.BoxShadow`;
+   弹出层最小宽度改用 `$parent[ComboBox].Bounds.Width` 绑定。
+8. **Prog**:保留 Fluent 的进度条模板(`PART_Indicator` 由框架找),只改高度/前景/底色/圆角;
+   WPF 的 indeterminate「Glow」扫光条(70px 渐变 + 1.5s 循环)没有移植 —— Fluent 自带不确定态动画,观感不同。
+9. **Pw**:Avalonia 11 **没有 PasswordBox**(反射确认),改用 `TextBox` + `PasswordChar`,与输入框共用模板。
+10. **Chk / Switch**:动画改成伪类直接切值(无过渡);开关滑块的 `DropShadowEffect` -> `BoxShadow`;
+    WPF 的 `ToggleButton.IsChecked` 触发 -> `:checked`。
+11. **Sld**:Avalonia 的 `Track` **不是** TemplatedControl(没有 `Template` 属性),而且 Fluent 的 Slider 把 Thumb 的
+    `20x20` 与系统强调蓝写成**局部值**(样式压不过),所以把 Slider 整份模板照 WPF 重画,三个部件用
+    `<Track.Thumb>` / `<Track.DecreaseButton>` / `<Track.IncreaseButton>` 直接写在模板里;
+    重画后必须显式把 `Orientation/Minimum/Maximum/Value` 接到 Track 上,否则 Track 一直是 `:vertical`、值不动(本机实测);
+    悬停放大从 ScaleTransform 动画改成换尺寸。
+12. **PlainList**:WPF 的 `VirtualizingPanel.IsVirtualizing` / `VirtualizationMode` / `ScrollUnit` 在 Avalonia 里
+    没有对应设置(Avalonia 的列表本来就虚拟化 + 像素滚动);`ItemContainerStyle` -> `ItemContainerTheme`。
+13. **ToolTip**:照 WPF 重画(Paper 底 + Line 边 + 圆角 8 + Padding 9,6),`DropShadowEffect` -> `BoxShadow`。
+14. **ContextMenu**:没有重画外壳(Fluent 的结构复杂),只改前景色 —— 圆角/内边距/阴影按 Fluent 的,与 Windows 版不同。
+15. **MenuItem**:只改字体/前景 + 布局根圆角与悬停底色(`MenuItem.IsHighlighted` -> `:pointerover` / `:selected`),
+    图标/子菜单那一套按 Fluent 的。
+16. **GroupBox**:Avalonia 11 没有该控件,未移植(Windows 版全仓库也没有使用点,grep 确认)。
+
+### 新增/修改文件
+
+- 新增 `src/TipCL.App/Themes/Controls.axaml`、`src/TipCL.App/Themes/StyleKeys.cs`
+- 修改 `src/TipCL.App/App.cs`(只加挂载样式表那几行)
+- 新增 `tests/TipCL.Tests/C1bControlsTests.cs`(XML 文本层 + 完整性 + 令牌 + WPF 残留检查)
+- 新增 `tests/TipCL.Tests/C1bStyleKeysTests.cs`(类名映射表本身)
+- 新增 `tests/TipCL.Tests/C1bRuntimeStylesTests.cs`(headless 运行期:选择器命中、模板部件、伪类)
+- 没有改 `src/TipCL.Core/` 一个字节,没有改 `MainWindow.cs`,没有改任何既有测试。
+
+### 验证命令与实际结果(全部在本机真实执行过)
+
+| # | 命令 | 结果 |
+|---|---|---|
+| 1 | `%LOCALAPPDATA%\TipCL` 开工前测量 | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与 Lead 基线一致 |
+| 2 | `dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:"ErrorsOnly;Summary"` | **0 错误**;警告只有 `NU1900`(本机镜像超时,次数随重试浮动)与 `SYSLIB0014` **唯一一处**(`src/TipCL.Core/Launcher/Sync/PhoneClient.cs:116`,Windows 版原样的 `WebRequest.Create`) |
+| 3 | `dotnet test TipCL.Mac.sln -c Release --no-build` | 退出码 0,通过 **2157** / 失败 0 / 跳过 0(1900 + 本包 257) |
+| 4 | `dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll` | 退出码 0,总计 **2157**,通过 2157,失败 0,跳过 0,**不支持 0**;两条通道总数一致 |
+| 5 | `--smoke --theme light --out artifacts/c1b-light.png` | 退出码 0,**3956 字节**,SHA256 `9F93EF3E0775A7D3FC07787F36BCEAE2B855CD24E06420A4BDBEB90DFD628F8C` |
+| 6 | `--smoke --theme dark --out artifacts/c1b-dark.png` | 退出码 0,**3941 字节**,SHA256 `F687E6CD1CE48B078040040775167484890C58A18DFEBF4BD3B6125F151E117E` |
+| 7 | 与 C1a 基准(3713 / `D4F53678...`、3669 / `CFD798FF...`)对比 | **不相等**。原因已定位到唯一一处:隐式 TextBlock 样式的 `FontFamily`(见第 8 条) |
+| 8 | 因果取证:临时注掉隐式 TextBlock 的 `FontFamily` 那一行后重跑 smoke | light **3713 字节 / `D4F53678CF9314B9F3A69B42F778F6A8FF54ADE8E8F0FEB086C4EE00355A3037`**、dark **3669 / `CFD798FF7B4512D99251F916D0FA72C6F15E5D427ACA1EBB25F77D9C0837FBA3`** —— 与 C1a 基准**逐字节一致**,随后已还原那一行 |
+| 9 | 收工后 `%LOCALAPPDATA%\TipCL` | 9328 个文件 / 889530606 字节 / 最新写入 2026-11-10 20:42:16,与开工前完全一致 |
+| 10 | 残留进程 `testhost` / `TipCL` / `java` / `adb` | 0 个 |
+| 11 | `%TEMP%` 下 `tipcl*` 目录 | 共 89 个,按创建时间算**本次会话新建 0 个**(`tipcl-probe` 等属于别的会话) |
+| 12 | `src\TipCL.Core` 对 Windows 源做 SHA256 比对(排除 `obj\`) | mac 侧 248 个 `.cs`:有对应物 **238** / 完全一致 **216** / 有改动 **22** / 无对应物 **10**,与基线完全一致 |
+
+**第 7/8 条的说明**:隐式 TextBlock 样式按 Windows 版移植了 `FontFamily=F.Ui`(`PingFang SC, Hiragino Sans GB,
+Microsoft YaHei UI, sans-serif`,GOAL 的 mac 字体列表)。本机是 Windows,这个列表里第一个在本机存在的字体是
+**Microsoft YaHei UI**,而 C1a 的 smoke 窗口里那句 `TipCL` 之前用的是 Avalonia 的 `$Default` 字体 —— 字形不同,
+PNG 自然不同。这不是样式写错,也不是窗口外观被改(窗口仍然没有标题栏/导航/页面宿主),只是那一个 TextBlock 的
+字体变了。**新基准(3956 / 3941)未经 Lead 裁决,本包没有改任何基准记录,请 Lead 定夺。**
+
+### 未验证项
+
+1. **macOS 真机**(Avalonia.Native / CoreText):`PingFang SC` / `Menlo` / 图标字体在 mac 上能不能命中、
+   控件观感、动画观感 —— 本机是 Windows,一律未验证。
+2. **真实鼠标/键盘交互**(悬停、按下、拖滑块、拖滚动条、点开下拉、Tab 焦点环):本包只验了伪类与值的计算,
+   没有驱动真实指针事件(headless 不模拟)。
+3. **主题热切换的视觉结果**:样式里对色板一律用 `{DynamicResource}`,天然支持热切换,但没有验运行时切换后的画面。
+4. **`E.Out` 令牌**:当前没有任何使用点(等 C2 的动画门面)。
+5. **`ScrollBar /template/ RepeatButton { Opacity=0 }` 在 Fluent 悬停态下是否被覆盖**:未验。
+
+### 遗留与风险
+
+1. **smoke 基准待 Lead 裁决**:新值 3956 / `9F93EF3E...`(light)、3941 / `F687E6CD...`(dark),
+   原因是隐式 TextBlock 的字体(第 8 条已做因果取证)。要不要改基准请 Lead 定。
+2. **Fluent 的模板仍有几处在用**:ContextMenu 外壳、Expander、TabItem、MenuItem 的图标/子菜单、
+   ProgressBar 的不确定态动效 —— 这些的观感与 Windows 版不完全一致。
+3. **C1c 的接线成本**:`Ui.cs` / `UiExt.cs` 里的 `Style="{StaticResource X}"` 都要换成类名(建议直接用
+   `StyleKeys.Apply` / `StyleKeys.Classes`);`Pw` 的调用点要改成 `TextBox` + `PasswordChar`;
+   标题栏那套(`Btn.Caption*` / `Btn.TitleIcon`)属 C2。
+4. **探针结论已经写进实现**:Avalonia 不允许连续两个 `/template/`(运行期抛
+   `ControlTemplate styles cannot contain multiple template selectors`),跨两层模板取部件必须重画外层模板;
+   `Track` 不是 TemplatedControl;`TextBox` 模板必须有 `PART_ScrollViewer` + `PART_TextPresenter`(编译期强制)。
+   探针文件(一次性的 `Zz*ProbeTests.cs`)已删除,不入库。
+5. 测试里给 `Thumb` 挂了一条隐式样式(ScrollThumb 模板)—— 这会影响全应用的 Thumb(滚动条与滑块),
+   这是有意的;C2 若引入别的 Thumb 用法需注意。
