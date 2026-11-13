@@ -148,24 +148,24 @@ internal sealed class C3eStage : IDisposable
 internal static class C3eFiles
 {
     /// <summary>
-    /// 用例开头统一来一次:先把"上一批都收摊了"当断言(泄露检查的前置),
-    /// 再清掉 <see cref="Motion.LastError"/> 与计数 —— 这样 <see cref="Ended"/> 的断言只反映本用例。
+    /// 用例开头统一来一次:清掉 <see cref="Motion.LastError"/> 与计数,并把"还挂着几条"的基线钉住。
+    ///
+    /// **为什么不能直接断言总数是 0**:<c>Motion.RunningAnimationsSinceReset</c> 是进程级的,别的用例
+    /// (C3d 的飞行 chip 在窗口关掉之后还有 4 条收不了尾)会把它一直抬着 —— 本机两条通道的跑法顺序不同,
+    /// 直接断言总数会让 VSTest 绿、进程内执行器红(本包实测踩到)。所以只算**本用例窗口里起的**那些。
     /// </summary>
     internal static int Begin()
     {
-        Assert.True(
-            Motion.RunningAnimations == 0,
-            "上一条用例留下了没结束的动画(RunningAnimations=" + Motion.RunningAnimations + ")," +
-            "先修它(停掉动画的收尾路径),再跑这一条");
         Motion.ResetObservability();
         Assert.Null(Motion.LastError);
+        Assert.Equal(0, Motion.RunningAnimationsSinceReset);
         // Shine 的 Sweep 守卫会看 Dlg.BlurTarget?.Effect;本类不开对话框,
         // 把它清成 null 让那条路确定性地可验(没有对话框时它本来就该是 null)。
         Dlg.BlurTarget = null;
         return Motion.StartedAnimations;
     }
 
-    /// <summary>用例收尾:真的起过动画 + 一条都没报错 + 全收摊了(三条都说完再报错)。</summary>
+    /// <summary>用例收尾:真的起过动画 + 一条都没报错 + 本用例起的都收摊了(三条都说完再报错)。</summary>
     internal static void Ended(string what)
     {
         List<string> problems = new List<string>();
@@ -179,9 +179,9 @@ internal static class C3eFiles
             problems.Add("动画报错:" + Motion.LastError);
         }
 
-        if (Motion.RunningAnimations != 0)
+        if (Motion.RunningAnimationsSinceReset != 0)
         {
-            problems.Add("还有 " + Motion.RunningAnimations + " 条动画没结束");
+            problems.Add("本用例起的动画还有 " + Motion.RunningAnimationsSinceReset + " 条没结束");
         }
 
         Assert.True(problems.Count == 0, what + " → " + string.Join(";", problems));
@@ -296,7 +296,7 @@ internal static class C3eFiles
                     RotateTransform rot = new RotateTransform();
                     owner.RenderTransform = rot;
                     Motion.Spin(owner, rot, 0.08);
-                    stage.Pump(() => Motion.RunningAnimations >= 1);
+                    stage.Pump(() => Motion.RunningAnimationsSinceReset >= 1);
                     // Spin 是无限的,不起停就永远"收不了摊";停法与生产一致(Loop 的 stop 分支)。
                     Motion.Enabled = false;
                     break;

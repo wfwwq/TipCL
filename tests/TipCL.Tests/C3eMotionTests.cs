@@ -105,7 +105,7 @@ public class C3eMotionTests
 
             Assert.Equal(0.4, el.Opacity);
             Assert.Null(el.RenderTransform);
-            Assert.Equal(0, Motion.RunningAnimations);
+            Assert.Equal(0, Motion.RunningAnimationsSinceReset);
             Assert.Equal(0, Motion.StartedAnimations);
 
             stage.Pump(() => el.Opacity >= 1.0 && el.RenderTransform is not null && C3eFiles.Translate(el).Y == 0.0);
@@ -213,7 +213,7 @@ public class C3eMotionTests
             stage.Pump(() =>
             {
                 peak = Math.Max(peak, scale.ScaleX);
-                return Math.Abs(scale.ScaleX - 1.0) < 1e-9 && Motion.RunningAnimations == 0;
+                return Math.Abs(scale.ScaleX - 1.0) < 1e-9 && Motion.RunningAnimationsSinceReset == 0;
             });
 
             Assert.True(peak > 1.0, "Pulse 应当真的鼓起来过,实际峰值 " + peak);
@@ -247,7 +247,7 @@ public class C3eMotionTests
                     wobbled = true;
                 }
 
-                return Math.Abs(move.X) < 1e-9 && Motion.RunningAnimations == 0;
+                return Math.Abs(move.X) < 1e-9 && Motion.RunningAnimationsSinceReset == 0;
             });
 
             Assert.True(wobbled, "Shake 应当真的抖过(途中 X 离开过 0.5 以上)");
@@ -282,7 +282,7 @@ public class C3eMotionTests
                 Motion.Shine(layer, tx, 800.0);
                 Assert.Same(tx, layer.RenderTransform);
 
-                stage.Pump(() => Math.Abs(tx.X - expectedEnd) < 1e-6 && Motion.RunningAnimations == 0);
+                stage.Pump(() => Math.Abs(tx.X - expectedEnd) < 1e-6 && Motion.RunningAnimationsSinceReset == 0);
 
                 C3eFiles.Reached(expectedEnd, tx.X, "Shine 横扫的终点");
                 C3eFiles.Reached(0.0, tx.Y, "Shine 不该动竖直位移");
@@ -317,7 +317,7 @@ public class C3eMotionTests
 
             Motion.Spin(owner, rot, 0.08);
 
-            Assert.True(Motion.RunningAnimations >= 1, "Spin 起来之后应当有一条动画在跑");
+            Assert.True(Motion.RunningAnimationsSinceReset >= 1, "Spin 起来之后应当有一条动画在跑");
             stage.Pump(() => rot.Angle > 1.0);
             // 至少转完两圈:证明"一圈跑完接着下一圈"这条重启路径真的接上了
             stage.Pump(() => Motion.StartedAnimations - before >= 3);
@@ -325,7 +325,7 @@ public class C3eMotionTests
 
             // 停掉:Windows 那边是 BeginAnimation(AngleProperty, null);mac 走 Loop 的 stop 分支
             Motion.Enabled = false;
-            stage.Pump(() => Motion.RunningAnimations == 0);
+            stage.Pump(() => Motion.RunningAnimationsSinceReset == 0);
 
             C3eFiles.Reached(0.0, rot.Angle, "Spin 停掉后的角度");
             C3eFiles.TargetMustNotBeATransform("Spin");
@@ -513,7 +513,7 @@ public class C3eMotionTests
             // 换页之后新页还要 FadeIn(不透明度 250ms + 位移 310ms):等它整条收摊再断言
             stage.Pump(() => second.Opacity >= 1.0
                 && C3eFiles.Translate(second).Y == 0.0
-                && Motion.RunningAnimations == 0);
+                && Motion.RunningAnimationsSinceReset == 0);
             C3eFiles.Reached(1.0, second.Opacity, "后退时新页的不透明度");
             C3eFiles.Reached(0.0, C3eFiles.Translate(second).Y, "后退时新页的位移");
             C3eFiles.Ended("PageSwap 后退");
@@ -640,7 +640,7 @@ public class C3eMotionTests
             stage.Pump(() => done && text.Text == "42");
 
             Assert.Equal("42", text.Text);
-            C3eFiles.Reached(0.0, Motion.RunningAnimations, "CountUp 不该留动画(它走定时器)");
+            C3eFiles.Reached(0.0, Motion.RunningAnimationsSinceReset, "CountUp 不该留动画(它走定时器)");
         });
     }
 
@@ -663,7 +663,7 @@ public class C3eMotionTests
             C3eFiles.Reached(1.0, el.Opacity, "关掉动画时的不透明度");
             Assert.Null(el.RenderTransform);
             Assert.Equal(0, Motion.StartedAnimations);
-            Assert.Equal(0, Motion.RunningAnimations);
+            Assert.Equal(0, Motion.RunningAnimationsSinceReset);
             Assert.Null(Motion.LastError);
         });
     }
@@ -836,7 +836,7 @@ public class C3eMotionTests
             Assert.NotNull(Motion.LastError);
             Assert.Contains("animator", Motion.LastError!.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal("原样", text.Text);
-            Assert.Equal(0, Motion.RunningAnimations);
+            Assert.Equal(0, Motion.RunningAnimationsSinceReset);
         });
     }
 
@@ -874,7 +874,7 @@ public class C3eMotionTests
             stage.Pump(() => done);
 
             Assert.Equal(1, Motion.StartedAnimations);
-            Assert.Equal(0, Motion.RunningAnimations);
+            Assert.Equal(0, Motion.RunningAnimationsSinceReset);
             Assert.Null(Motion.LastError);
             C3eFiles.Reached(1.0, el.Opacity, "那条不透明度动画的终值");
         });
@@ -926,7 +926,7 @@ public class C3eMotionTests
 
             C3eFiles.Reached(1.0, el.Opacity, "失败之后 FadeIn 仍然到位");
             Assert.True(Motion.StartedAnimations - before >= 2, "失败之后仍然起过动画");
-            Assert.Equal(0, Motion.RunningAnimations);
+            Assert.Equal(0, Motion.RunningAnimationsSinceReset);
         });
     }
 
@@ -984,7 +984,7 @@ public class C3eMotionTests
 
             C3eFiles.RunAffected(which, stage);
 
-            stage.Pump(() => Motion.StartedAnimations > before && Motion.RunningAnimations == 0);
+            stage.Pump(() => Motion.StartedAnimations > before && Motion.RunningAnimationsSinceReset == 0);
             C3eFiles.TargetMustNotBeATransform(which);
             Assert.True(Motion.LastError is null, which + " 报错:" + Motion.LastError);
             C3eFiles.Ended(which);
@@ -995,7 +995,7 @@ public class C3eMotionTests
     // 组 E:泄露 —— 动画结束后不许留任何一条在跑
     // ------------------------------------------------------------------
 
-    /// <summary>【任务书】一批动画都跑完之后,<see cref="Motion.RunningAnimations"/> 必须回到 0。</summary>
+    /// <summary>【任务书】一批动画都跑完之后,<see cref="Motion.RunningAnimationsSinceReset"/> 必须回到 0。</summary>
     [Fact]
     public void A_batch_of_animations_leaves_no_animation_running()
     {
@@ -1016,7 +1016,7 @@ public class C3eMotionTests
             stage.Pump(() => cards.All(c => c.Opacity >= 1.0));
             stage.Frames(6);
 
-            Assert.Equal(0, Motion.RunningAnimations);
+            Assert.Equal(0, Motion.RunningAnimationsSinceReset);
             Assert.Null(Motion.LastError);
             Assert.All(cards, c => C3eFiles.Reached(0.0, C3eFiles.Translate(c).Y, "批量 FadeIn 的位移"));
         });
@@ -1038,7 +1038,7 @@ public class C3eMotionTests
                 owner.RenderTransform = rot;
                 Motion.Spin(owner, rot, 0.08);
                 stage.Pump(() => rot.Angle > 1.0);
-                Assert.True(Motion.RunningAnimations >= 1);
+                Assert.True(Motion.RunningAnimationsSinceReset >= 1);
             }
             finally
             {
@@ -1046,13 +1046,13 @@ public class C3eMotionTests
             }
 
             // 关窗 ⇒ Loaded/Unloaded 把 Loop 的 stop 分支推到 Dispatcher 上;这里只推泵、不再有窗口
-            for (int i = 0; i < 40 && Motion.RunningAnimations > 0; i++)
+            for (int i = 0; i < 40 && Motion.RunningAnimationsSinceReset > 0; i++)
             {
                 UiHost.Flush();
                 Thread.Sleep(3);
             }
 
-            Assert.Equal(0, Motion.RunningAnimations);
+            Assert.Equal(0, Motion.RunningAnimationsSinceReset);
             Assert.Null(Motion.LastError);
         });
     }

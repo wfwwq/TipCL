@@ -67,6 +67,15 @@ public static class Motion
 
 	private static int _runningAnimations;
 
+	/// <summary>测试观察用的活动动画编号集合(只有 <see cref="ResetObservability"/> 之后起的才进来)。</summary>
+	private static readonly HashSet<long> Active = new HashSet<long>();
+
+	private static readonly object ActiveGate = new object();
+
+	private static long _nextAnimationId;
+
+	private static bool _trackActive;
+
 	/// <summary>最近一次失败(没有失败就是 null)。</summary>
 	internal static Exception? LastError => _lastError;
 
@@ -81,13 +90,33 @@ public static class Motion
 
 	/// <summary>
 	/// 现在挂着几条还没结束的动画(跑完 / 取消 / 失败都会减回去)。
-	/// 泄露检查用它:一条动画跑完就该回到 0。
+	/// 注意这**是进程全局**的:别的用例(比如 C3d 的飞行 chip)在窗口关掉之后可能还留着几条永远收不了尾的动画,
+	/// 所以"本用例有没有留残留"要用 <see cref="RunningAnimationsSinceReset"/> 看,而不是看这个总数。
 	/// </summary>
 	internal static int RunningAnimations => Volatile.Read(ref _runningAnimations);
 
 	/// <summary>
-	/// 测试专用:清掉 <see cref="LastError"/> 与记录到的目标 / 属性 / 起过几条。
-	/// **不清 <see cref="RunningAnimations"/>** —— 它记的是"现在到底还挂着几条",清掉等于把泄露藏起来。
+	/// 自上次 <see cref="ResetObservability"/> 以来还挂着的动画条数 —— 按**每一条动画的编号**记账,
+	/// 只算这段窗口里起的那些。泄露检查用它:本用例起的都收摊了就该是 0。
+	///
+	/// 为什么不能拿 <see cref="RunningAnimations"/> 的差值代替:<c>C3dReachTests</c> 关掉窗口之后
+	/// 还留着 4 条飞行 chip 的动画,它们**没有消失**,只是没人推帧;本用例一开始泵帧,它们就会跑完并减数,
+	/// 于是"差值"会变成负数(本机进程内执行器实测:-2)。按编号记账没有这个问题。
+	/// </summary>
+	internal static int RunningAnimationsSinceReset
+	{
+		get
+		{
+			lock (ActiveGate)
+			{
+				return Active.Count;
+			}
+		}
+	}
+
+	/// <summary>
+	/// 测试专用:清掉 <see cref="LastError"/> 与记录到的目标 / 属性 / 起过几条,并从这一刻开始
+	/// 按编号记"还挂着几条"(<see cref="RunningAnimationsSinceReset"/>)。
 	/// </summary>
 	internal static void ResetObservability()
 	{
@@ -95,6 +124,11 @@ public static class Motion
 		_lastTargetType = null;
 		_lastPropertyName = null;
 		Volatile.Write(ref _startedAnimations, 0);
+		lock (ActiveGate)
+		{
+			_trackActive = true;
+			Active.Clear();
+		}
 	}
 
 	private static readonly CubicEaseOut EaseOut = new CubicEaseOut();
@@ -522,10 +556,29 @@ public static class Motion
 		_lastPropertyName = DescribeProperty(animation);
 		Interlocked.Increment(ref _startedAnimations);
 		Interlocked.Increment(ref _runningAnimations);
+		long id = 0L;
+		bool tracked = _trackActive;
+		if (tracked)
+		{
+			lock (ActiveGate)
+			{
+				id = ++_nextAnimationId;
+				Active.Add(id);
+			}
+		}
+
 		task.ContinueWith(
 			delegate(Task completed)
 			{
 				Interlocked.Decrement(ref _runningAnimations);
+				if (tracked)
+				{
+					lock (ActiveGate)
+					{
+						Active.Remove(id);
+					}
+				}
+
 				if (token.IsCancellationRequested)
 				{
 					// 被取消:没有收尾回调(旧实现里这一支是"任务照走",与 Windows 的语义不符)。
