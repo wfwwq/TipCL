@@ -176,6 +176,13 @@ public class C5cLayoutProbeTests
                 Assert.True(Math.Abs(offset.X) < 0.5, "窄页面下正文被水平滚走了!(" + measured + ")");
                 // 页边距 18:左卡左缘 = 页面左缘 + 18
                 Assert.True(Math.Abs(cardOrigin.X - (frameOrigin.X + 18.0)) <= 1.0, "库页白卡没有落在 18px 页边距上!(" + measured + ")");
+                // 左卡必须**正好填满**它自己那一列(300 的地板由列兑现,不再溢出格子)
+                Assert.True(Math.Abs(leftCard.Bounds.Width - 300.0) <= 1.0, "左卡没有兑现 300 的最小宽!(" + measured + ")");
+                // 右栏不许因为左列要 300 而被挤到"内容宽于自己的列"(那就是把缺陷换了个方向)
+                Control rightCol = body.Children.OfType<Control>().First(c => Grid.GetColumn(c) == 2);
+                double column2 = body.ColumnDefinitions[2].ActualWidth;
+                Assert.True(rightCol.Bounds.Width <= column2 + 1.0, "右栏内容宽于自己的列,会被裁掉!(" + measured +
+                    " 右栏宽=" + rightCol.Bounds.Width.ToString("0.#") + " 列2宽=" + column2.ToString("0.#") + ")");
             }
             finally
             {

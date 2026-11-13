@@ -229,16 +229,16 @@ public sealed class LibraryPage : PageBase
 		h.FontWeight = FontWeight.ExtraBold;
 		Border left = Ui.Card(Ui.V(10.0, h, _folderPath, _folders, Ui.Sep(), Ui.Txt(I18n.L("添加或导入"), 13.0, bold: true), add, pack, create, migrate), 14.0);
 		// 左栏随窗口比例伸缩,窄窗不挤右栏(2026-11-07 用户反馈:420 固定宽在窄窗占比过大)
+		// 300 是 Windows 那一版给左卡的最小宽(卡片自己的构图需要),这条地板留着 —— 但地板必须由**列**来兑现。
 		//
-		// C5c(缺陷 2)实测更正:原来这里写的是 MinWidth = 300,而左列是一条 **星列**——
-		// 页面被侧栏压到 668 时那条星列只有 205 宽,于是 300 宽的卡片**溢出自己的格子**,
-		// 而 Avalonia 把"宽于格子的子元素"居中摆放 ⇒ 卡片左移 (205-300)/2 ≈ **48px**,
-		// 压掉左页边距(截图里白卡从 x=197 起、应当是 214),还盖住右栏标题的头几个字。
-		// 也就是说:卡片的最小宽度**不能大于它所在星列的最小宽度**,否则就是"越界"而不是"占位"。
-		// 修法是让卡片永远**服从**自己的格子(Stretch,不设高于星列的最小宽度):
-		// 宽窗口时的观感没变(星列本来就 ≥ 300,MinWidth 从不生效),窄窗口时卡片随列变窄、不再越界。
-		// 左栏真实的最小需求是"目录行能显示",由 _folders 自己的换行/截断负责,不需要一个 300 的硬地板。
-		left.MinWidth = 0.0;
+		// C5c(缺陷 2)实测更正:原来只给卡片设了 MinWidth = 300,而左列是一条**星列** ——
+		// 页面被侧栏压到 668 时那条星列只有 205 宽,于是 300 宽的卡片**溢出自己的格子**;
+		// Avalonia 把"宽于格子的子元素"居中摆放 ⇒ 卡片左移 (205-300)/2 ≈ 48px,
+		// 压掉左页边距(截图里白卡白像素从 x=196 起、应当从 216 起 = 196+18 页边距),
+		// 同时向右多占 95px,盖住右栏标题的头几个字。
+		// 修法:把地板同时写到**列**上(列 300 + 分隔 18 + 右列 314),卡片就正好填满自己的列,
+		// 既不越界也不越位;宽窗口时星列本来就 ≥ 300,MinWidth 从不生效 ⇒ 宽页面像素不变。
+		left.MinWidth = 300.0;
 		left.HorizontalAlignment = HorizontalAlignment.Stretch;
 		left.MaxWidth = 380.0;
 		left.VerticalAlignment = VerticalAlignment.Top;
@@ -334,7 +334,8 @@ public sealed class LibraryPage : PageBase
 		}
 		if (folders)
 		{
-			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
+			// C5c:左列要**兑现**左卡的最小宽(300),否则窄页面上卡片会溢出自己的星列(见构造函数里的注释)
+			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star), MinWidth = 300.0 });
 			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18.0) });
 			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2.0, GridUnitType.Star) });
 			if (!_body.Children.Contains(_leftCard))
