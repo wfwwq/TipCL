@@ -126,6 +126,15 @@ function Measure-Frame {
 Measure-Frame -Label 'settings-light' -File 'artifacts\c5a-settings-light.png'
 Measure-Frame -Label 'settings-dark' -File 'artifacts\c5a-settings-dark.png'
 
+# ---------------------------------------------------------------- C6a:the whole page matrix
+# 每个页面明暗两张都跑一遍(既有帧的期望字节数请对照 README.md 的矩阵表;download 是本包新注册的页)。
+$pages = 'library', 'instance', 'tasks', 'account', 'download'
+foreach ($p in $pages) {
+    $l = Invoke-Smoke -Name ($p + '-light') -SmokeArgs @('--page', $p, '--theme', 'light') -Out ('artifacts\c6a-' + $p + '-light.png')
+    $d = Invoke-Smoke -Name ($p + '-dark') -SmokeArgs @('--page', $p, '--theme', 'dark') -Out ('artifacts\c6a-' + $p + '-dark.png')
+    Write-Host ("PAGE {0}: light={1} {2} dark={3} {4}" -f $p, $l.Size, $l.Sha, $d.Size, $d.Sha)
+}
+
 $l = [System.Drawing.Bitmap]::FromFile((Resolve-Path 'artifacts\c5a-settings-light.png').Path)
 $d = [System.Drawing.Bitmap]::FromFile((Resolve-Path 'artifacts\c5a-settings-dark.png').Path)
 try {

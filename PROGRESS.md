@@ -6566,3 +6566,42 @@ SettingsPage.FeedbackPageFactory = () => new FeedbackPage();
 12. **故意替换全局状态的用例,自己也要在 `finally` 里还原 —— 钉子用例不是豁免区。** 今晚有一次是"为了防泄漏而写的钉子用例自己泄漏"。凡碰这些的都要快照+写回(写回**进入前的值**,不是置空):应用/窗口主题变体、`Palette` 与 `PaletteOverride`、各页面自己的静态注入缝、`UiPrefs`/`_visualColor`/`Extras`、`Motion.Enabled`/`ClockOverride`、`AppServices.*`、`Dlg` 离屏开关、`PageRegistry`、`Crash.ShellOpenHook`、`_durCache` 这类静态缓存。
 13. **"先验证验证器"。** 任何"守卫型"测试(扫描仓库、断言不变量)都必须有一条**自检用例**:在临时目录里造出它应该抓到的坏样本,证明它真的会红。反面教材就在今晚:Lead 写的编码守卫第一版**连 BOM 都测不出来** —— 因为 `new UTF8Encoding(true).GetBytes(...)` **不输出 BOM**(那个开关只影响 `GetPreamble()`),而**只有"仓库扫描"那一条时它会永远绿**,看起来像有守卫。另外别写会**自伤**的启发式规则(那条"不许出现连续问号"被它自己的描述文本误报,已删)。
 14. **离屏帧里列表页只有"计数/空态",看不到行 —— 这是平台限制,不是页面坏了。** 探针实测:列表容器(`ListBoxItem`)会建出来,但**容器是空的**,行模板不实例化,行文案在可视树与逻辑树里都找不到。所以 `--smoke` 的帧**只能证明外壳 + 页面骨架 + 主题色**;内容正确性靠两条测试通道,观感与行内容靠真机(见 `docs/MAC-VERIFY.md` 里"列表里真的能看到行"那条必查项)。
+
+## C6a 收尾记录(下载 + 目录 + 安装三页;本轮只到"第一轮原子绿",二轮与页面帧由 Lead 统一跑)
+
+### 交付物
+
+| 文件 | 说明 |
+| --- | --- |
+| `src\TipCL.App\Models\` 六个 DTO(新) | `CatalogKind`(六个种类的搜索/安装/已装/删除方法名与分类表,135 行)、`CatalogItem`、`CatalogFile`、`LoaderVer`、`VersionRow`、`ExportResult` —— 字节级搬 |
+| `src\TipCL.App\Pages\DownloadPage.cs`(新) | 下载页(导航 id `download`):七段轨道 + 右上「任务 N」徽标 + 原版分段的版本列表(BlockHost 两块)+ 三个筛选钮 + 本地搜索 |
+| `src\TipCL.App\Pages\CatalogPage.cs`(新) | 目录页(六个种类共用):三模式(搜索下载/已安装/收藏)、320ms 防抖搜索 + 超时令牌、收藏、安装选文件、已装管理、导出、剪贴板嗅探 |
+| `src\TipCL.App\Pages\InstallPage.cs`(新) | 安装页(裸 `UserControl`,下载页的子视图):五张加载器卡 + 加载器版本行 + Fabric API / OptiFine / LiteLoader 行 + 「将安装 … · 约 N MB」+ 安装状态机 |
+| `src\TipCL.App\Pages\DownloadPageRegistration.cs`(新) | `[ModuleInitializer]` 注册 `download`(D-125);三页到位才注册 |
+| `tests\TipCL.Tests\C6aFixtures.cs` + `C6aPagesTests.cs`(新) | 43 条用例:注册/占位/七段结构/筛选与搜索本地过滤/任务徽标/六个目录段的种类与搜索方法(Theory×6)/已装模式(Theory×5)/收藏/安装选文件/整合包 source/拖放上下文/离屏 VirtualList 机制探针/安装页五卡与六个 `list_loader_versions`/选卡摘要/开始安装(create_instance→install_game)/Fabric API 任务链/空名字拒绝/进入与返回安装子视图 |
+
+### 依赖审计结论
+
+Windows 三页(265 + 1309 + 498 行)**没有牵出别的整页**;缺的只有六个 Models DTO。`Ui.VirtualList`(C1b 的门面)、`Fmt.Downloads`、`SavesDialog.PickSaveTargetAsync`、`Ui.OpenUrl`、`SmoothScroll.BindWindowMaxHeight`、`TaskStore.Added/Updated/RunningCount` 在 mac 侧都已有。
+mac 差异(逐条写在文件注释里):剪贴板读走注入缝 `CatalogPage.ClipboardReader`(离屏/没接缝一律不碰真剪贴板);`InstallPage` 的 `AppServices.Window?.Toast/FlyToTasks/Navigate` 按 D-131 多一次 cast 到 `MainWindow`,`Toast` 改走 `AppServices.Toast`(mac 的 `Window` 没有这个成员);`#if PREMIUM` 两支不搬(Windows 默认构建里那些成员不存在);`CatalogPage.Mode` 由 private 提为 internal(测试缝)。
+
+### 运行(本轮拿到的)
+
+| # | 命令 | 结果 |
+| --- | --- | --- |
+| 1 | `--filter FullyQualifiedName~C6a` | 退出码 **0**:`已通过! 失败 0 / 通过 43 / 总计 43` |
+| 2 | `--filter FullyQualifiedName~C5a` | 退出码 **0**:`已通过! 失败 0 / 通过 51 / 总计 51` |
+| 3 | **原子第一轮**(`tools\c5a-verify.cmd`:build + VSTest + 进程内,同一次锁) | `BUILD_EXIT=0`;**`已通过! 失败 0 / 通过 3523 / 总计 3523`**(`VSTEST_EXIT=0`);**`总计 3523 个用例,通过 3523,失败 0,跳过 0,不支持 0`**(`INPROC_EXIT=0`) |
+
+**第二轮与全页冒烟矩阵(含 `--page download` 明暗新帧)由 Lead 统一跑**(本轮上下文到极限,Lead 已接手)。
+
+### 冒烟(既有帧确认部分)
+
+no-page **37681 `2603BF6A...342CBD`**、`--page launch --theme dark` **33579 `7D7AFDD5...276893`** ⇒ 与基准**逐字节相同**;`--page settings` light **45594 `C19BF1C4...`** / dark **43745 `CE33BEFE...`** = 本包基准一致;`--theme blue` = **退出码 2**、不产出文件。`--page download` 的新基准由 Lead 测。
+
+### 未验证 / 遗留
+
+1. **两轮原子四跑的第二轮**、**全页 14 帧矩阵**(含 `download` 新帧)—— 由 Lead 在 c4-dialogs 的 MultiplayerPage 落地后一次性做。
+2. `tools\c5a-smoke.ps1` 里我加的"页面矩阵"那段第一次跑没输出(脚本在那一块之前退出)—— **不值得再花一轮**,Lead 用他现成的矩阵表即可;脚本其余部分(5 个帧+basis 比对+像素取证)是好的。
+3. **只有真机能验**:安装流程真的起后端任务、剪贴板真读、目录页在真实视口下渲染出行(离屏时容器空、模板不落地,见 D-148)。
+4. **`Ui.VirtualList` 的离屏结论**已按 D-148 记录并在 `README.md` / `docs/MAC-VERIFY.md` 里指向;`EncodingGuardTests` 落地后编码这一项由它覆盖(仓库扫描 + 两条自检),本包不再手工核。

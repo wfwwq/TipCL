@@ -2107,3 +2107,43 @@ Windows 的最后一步是 `Process.Start("explorer.exe", "/select,\"<path>\"")`
   与 `TerracottaProfile`(同族小 DTO)—— 都是纯 DTO,可字节级搬;`Dlg.Prompt` 在 mac 侧**已存在**
   (`Dlg.cs` 的 `Prompt(title, label, initial, placeholder)`);其余是 `Ui` / `BlockHost("multiplayer")` /
   `BridgeEvent` / 既有的 `terracotta_*` 后端调用;`Ui.OpenUrl` 也在。按"小件字节级搬"的规矩,**下一步可开工**。
+
+## D-148 C6a:`Ui.VirtualList` 在离屏里"容器建了、模板不落地"—— 离屏平台限制(不是产品缺陷),后果是离屏矩阵里列表页只有计数/空态
+
+- **问题**:C6a 的三条用例(收藏星 / 安装选文件 / 整合包 source)一开始写的是"等那一行渲染出来再点它",结果在离屏夹具里**永远等不到**(`HasText(page,"JEI")` 超时),而**数据**断言一直是绿的(`list.Items.Count`)。
+- **机制(实测,探针用例 `C6aPagesTests.Virtual_list_data_is_there_but_offscreen_realizes_no_row_containers` 钉住)**:
+  1. `Items` 里有数据 ✓;
+  2. `ListBoxItem` 容器**建了**(在可视树里)✓;
+  3. 但容器下面**没有任何 `TextBlock`** —— 行模板(`FuncDataTemplate`)的内容**不落地**;
+  4. 所以行里的文案在**可视树与逻辑树里都找不到**;页面骨架(筛选行、按钮)是好的,不是整页没渲染。
+- **定性**:**这是离屏的平台限制(视口为 0 / 没有真实布局推进),真机不受影响**。不是产品缺陷,也不在 `Ui.VirtualList`(C1b 的门面)上修。
+- **后果(已同步到 `README.md` 的"离屏帧解读须知"与 `docs/MAC-VERIFY.md`)**:**D1 的全页离屏冒烟矩阵里,任何一个列表页都只有"计数 / 空态"而看不到行** —— 离屏帧的观感**不代表真机**;别拿冒烟图判"列表是坏的"。
+- **测试口径(照 D-115 / D-127)**:需要"驱动某一行的动作"时,**驱动那一行会调用的 internal 处理器体**
+  (`CatalogPage.InstallRowForTest` / `ToggleFavRowForTest`),并且**必须同时保留对后端方法名与参数的断言**(那才是用户真正会触发的东西)—— 不许退化成"只断数据"。
+- 探针按**观测到的平台行为**断言(容器在、容器下没有 TextBlock、文案两棵树里都没有)⇒ 将来平台改了行为(离屏也 materialize 行),这条会红,提醒回来复核上面那条后果结论。
+
+## D-149 C6a/C5a 纪律:凡是故意替换全局状态的用例(包括"验证还原"的钉子用例)都必须自己写回**进入前的值**
+
+- **现象**:c4-dialogs 报 C6b 的分段用例一开始就被污染 —— 根因是 C5a 的用例把 `SettingsPage` 的六个分段注入缝换成探针页之后**没有还原**。
+- **修法(根因)**:`C5aScope` 构造时快照、`Dispose` 时**写回进入前的值** —— **不是"设成 null 就算完"**(将来别的包会往这些缝里装东西,置空会把它们抹掉)。覆盖:`AccountPageFactory` / `JavaPageFactory` / `ServersPageFactory` / `PlaytimePageFactory` / `FeedbackPageFactory` / `FirstRunWizardRunner` / `PhoneSyncPanelRunner` 七个。
+- **钉子用例**:`C5aSettingsTests.The_segment_injection_seams_are_restored_when_the_scope_exits` —— 进作用域把七个缝全换成探针、出来逐个 `Assert.Same` 对拍。**下次谁再漏还原,是这条红,而不是别人莫名其妙地红。**
+- **纪律(Lead 明确要求)**:凡是**故意替换全局状态**的用例(含"验证还原"的钉子用例本身)**必须在 `finally` 里写回**,钉子用例不是豁免区。
+- **审计清单补一类**:除主题变体 / `Palette` 与覆盖层 / `SettingsPage` 的 `_visualColor`·`_visualBackground`·`Extras` / `Motion` / `AppServices.*` / `Dlg` 离屏开关 / `PageRegistry` 之外,还要盯 **"各页面自己的静态注入缝"**(本次漏的就是这一类)。
+
+## D-150 C6a:"全局前提会随包推进而失效"—— 本项目第五次,唯一解法是 D-126 的"还原前提 + 断言只增不减"
+
+- **本次实例**:`C5aSettingsTests.Missing_segments_show_the_honest_placeholder` 的前提是"这五个分段**没有**注入缝 ⇒ 显示如实占位"。C6b 的 `C6bSegmentRegistration`(`[ModuleInitializer]`)落地后,把 **Java / 服务器 / 游戏时长 / 反馈**四个缝接到了真页面 ⇒ 前提失效(失败原文:"**服务器** 段应当显示如实占位")。
+- **前四次**:C2b 的"宿主里还没有页面注册"(→ C3c,D-126)、C3c 的"注册表里只有启动页"(→ C4)、C4 注册 `library`(→ 同一族)、以及"library 没有侧栏 nav key"这类现状断言。
+- **解法(唯一,不许另发明)**:按 **D-126** ——
+  1. **先把前提还原**(测试内临时把那几个缝置空 / `Unregister` 掉),**原来那几条断言一字不改**地保留;
+  2. **把"前提确实变了"这件事用 `Assert.NotNull` / `Assert.Contains` 显式钉下来**(断言只增不减);
+  3. 替换全局状态的那个测试自己负责在 `finally` 里写回(D-149)。
+- **推论**:任何"某处还没有 X"的断言都是**有时效的**;写的时候就要想好"X 来了之后这条怎么还原前提",而不是等着别人来收拾。
+
+## D-151 C6a:"固定预算的泵"在并发负载下天生假红(本项目第四次),长期修法是"条件成立 + 有截止时间 + 把现场值带进断言"
+
+- **本次实例**:C6a 的 26 处 `Pump(..., 5000)`(项目既有默认是 **9000**)在 `--filter` 与进程内通道全绿,但 3523 条**全量一起跑**时超时 ⇒ VSTest 假红两条(C6a),同时 C3b 的一条历史用例也是同类假红(其作者隔离连跑 6/6 全绿)。
+- **已经发生过的四次**:两条通道调度不同(C1b)、别人重建共享 `bin/`、并发跑测试、全量负载(本次)。
+- **本包处置**:把 26 处预算**对齐项目默认 9000**(这不是放宽断言,是把预算对齐既有纪律,Lead 已核:C3b/C3c/C3e/C4/C5a 的 `Pump`/`WaitDialog`/`PumpTask` 默认都是 9000)。
+- **长期修法(Lead 记的 D1 待办,本包先记在这)**:把"固定预算的泵"换成**"条件成立 + 有截止时间的等待"**,并把**等待失败时的现场值**(实际观察到的计数 / 文案 / 参数)带进断言消息 —— 这样下次红了一眼能定位。别用"延长等待"把红压下去,那只是把抖动推给下一次。
+- 关联:D-120(泵的计时必须用 `Stopwatch`、上限要明显小于会话 30 秒)、D-141(数调用次数当同步手段)、D-114(不要在会话线程上同步等)。
