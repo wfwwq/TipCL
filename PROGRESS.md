@@ -37,6 +37,7 @@
 | C3a | 区块 / 仪表盘布局框架:`Pages\BlockHost.cs` + `Pages\DashHost.cs`(含它们真正依赖的布局模型:`Pages\PageBlock.cs`、`PageLayoutStore.cs`、`PageLayoutIO.cs`、`DashCard.cs`、`DashLayout.cs`) | ✅ 完成(见下;**新增 100 条用例,总数 2797 → 2897,两条通道各连跑 2 次都 2897/2897 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书说"这两个文件应该自包含"**实测不成立** —— 还差 5 个没移植的模型/存储文件,按"小而自包含就一并搬"的规定搬了,见 D-117) |
 | C3d | **外壳补 `FlyToTasks` + `FlyHost`**:13 处页面调用点一次修好(含 C3c 注入缝的接线) | ✅ 完成(见下;**新增 33 个测试方法 / 43 条用例,总数 3086 → 3129,两条通道各连跑 2 次都 3129/3129 全绿**;`--smoke` 与 C3c 基准**逐位相同**(light 37681 `2603BF6A...` / dark 33579 `7D7AFDD5...`),离屏时第一道守卫就把飞行挡掉,冒烟帧里没有 chip;C3c 记的那条"用户可见降级"**已修好**(提交 `a9ad510` 外壳成员 + `b61db8a` 接线);顺带实测两条框架事实:`Avalonia.Controls.Control.IsLoaded` 在 11 里存在、**以 Transform 对象为 `Animation.RunAsync` 目标会抛 `InvalidCastException`**(后者是既有问题,不在本包范围,见小节第 8 节) |
 | C3b | 启动页需要的两个小对话框:`Pages\CrashUi.cs`(崩溃 / 异常退出报告卡)+ `Pages\VersionSetupDialog.cs`(版本设置) | ✅ 完成(见下;**新增 71 条用例,总数 2897 → 2968,两条通道各连跑 2 次都 2968/2968 全绿**;`--smoke` 与 C2b 基准**逐位相同**;任务书的门面计数复核吻合,但"自包含"不成立 —— 还差两个没移植的小模型 `Models\OpResult.cs` / `Models\VersionSettingsDto.cs`,按"小而自包含就一并搬"字节级搬来,见 D-118;`AiFixWindow`(22.6 KB 整窗)属 AI 全家未移植,「交给 AI 修复」按钮保留 + 注入缝 + 如实提示,请 Lead 裁决,见 D-119) |
+| C3e | **修 `Motion` 的变换动画**:19 处"把 Transform 当 `RunAsync` 目标"的调用点改成"目标给宿主控件" + 失败可观测 | ✅ 完成(见下;**新增 50 条用例,总数 3129 → 3179,两条通道各连跑 2 次都 3179/3179 全绿**;`--smoke` 与 C3c 基准**逐位相同**(light 37681 `2603BF6A...` / dark 33579 `7D7AFDD5...`);受影响的是 13 个方法(`FadeIn` / `HoverLift` / `Pulse` / `Shake` / `Shine` / `Spin` / `PopIn` / `PopOut` / `SlideIn` / `SlideOut` / `PageSwap` + 间接的 `Stagger` / `StaggerItems`),公开签名一个字节没动;顺带修掉同族的第二、三个坑(`Easing` 显式写 null 会静默失效、`IterationCount.Infinite` 配 `RunAsync` 必抛),见 D-132;**用户可见差异只有一条**:`Spin` 每圈交界有一帧级重启) |
 | D1-D2 | 冒烟矩阵 / 文档收尾 | 未开始 |
 
 ## 仓库现状(截至 A1)
@@ -5736,3 +5737,171 @@ C3c 的 `FlyToTasksSeam` **签名保留**(下游页面/测试仍可注入探针)
 **裁决 3:接受 `Motion.ClockOverride`(D-129)。** headless 里 `Motion.Enabled` 恒假,所以"动画开着"这一支结构上不可达;加一个 internal 注入点让那一支真的可验 —— 这是正解(**但使用者必须还原**,已写进遗留)。
 
 **运营备注**:子代理如实说明它量 `%LOCALAPPDATA%\TipCL` 基线是在**收尾阶段**而不是开工第一条命令 —— 这种自我披露是对的(让我知道那条证据的强度)。以后仍要求开工先量。
+
+---
+
+## C3e `Motion` 的变换动画:`Transform` 当目标是错的,改成"目标给宿主控件"(2026-11-13)
+
+工作包:把 C3d 实测发现、Lead 在 D-130/裁决 1 里认可的那一类缺陷修掉 ——
+**凡是把 Transform 对象本身当 `Animation.RunAsync` 目标的动画,在真桌面上静默不动**
+(异常被 `Motion.Start` 吞掉;离屏 `Motion.Enabled` 恒假,根本走不到那一步,所以测试全绿)。
+同时按裁决要求处理"吞异常"这一点:失败必须**可观测**。**不碰**任何页面、外壳、色板、`Controls.axaml`、
+导航、`src\TipCL.Core`(一字节未改)。
+
+### 1. 受影响的方法(逐个 `RunAsync` 调用点查出来的,不止任务书点名的六个)
+
+**19 处"以变换为目标的调用点",分布在 11 个方法**;另有 2 个方法是通过 FadeIn 间接受影响:
+
+| # | 方法 | 以变换为目标的调用点 | 变换 / 属性 |
+|---|---|---|---|
+| 1 | `FadeIn` | 1 | `TranslateTransform.Y`(竖直滑入) |
+| 2 | `HoverLift` | 6 | 进:Scale X/Y + Translate.Y;出:同样三条 |
+| 3 | `Pulse` | 2 | `ScaleTransform.ScaleX/ScaleY`(三关键帧 1→peak→1) |
+| 4 | `Shake` | 1 | `TranslateTransform.X`(六关键帧 −7/6/−4/3/−1.5/0) |
+| 5 | `Shine` | 1 | `TranslateTransform.X`(横扫) |
+| 6 | `Spin` | 1 | `RotateTransform.Angle`(无限循环) |
+| 7 | `PopIn` | 2 | `ScaleTransform.ScaleX/ScaleY`(0.96→1) |
+| 8 | `PopOut` | 2 | `ScaleTransform.ScaleX/ScaleY`(→0.97) |
+| 9 | `SlideIn` | 1 | `TranslateTransform.X`(40→0) |
+| 10 | `SlideOut` | 1 | `TranslateTransform.X`(0→40) |
+| 11 | `PageSwap` | 1 | 旧页 `TranslateTransform.Y`(∓8) |
+| 12 | `Stagger` | 0(间接) | 每个子项走 `FadeIn` ⇒ 同样静默不动 |
+| 13 | `StaggerItems` | 0(间接) | 同上 |
+
+**没受影响**(目标本来就是控件,`Visual`/`RangeBase.Value`/`Layoutable` 属性):`FadeOut`、`Fade`、`Progress`、
+`AnimateWidth`、`AnimateHeight`、`CountUp`(走 `DispatcherTimer`)、`Shine` 的**不透明度**那条、
+`Pulse`/`Shake` 之外的 `Shadow`、`PageSwap` 新页那条(FadeIn 已被上面第 1 项覆盖)。
+`Loop` 本身只做"起停",不含动画调用点。
+
+**顺带发现并修掉的第二、三个坑(同一族:真桌面上"少动一下")**:
+
+| 坑 | 实测证据 | 修法 |
+|---|---|---|
+| `Animation.Easing` **显式写 null** ⇒ 动画一个字节都不写、任务永不结束(也不抛) | 探针:A/D 两条 2 秒仍 PENDING、值不变;`new Animation().Easing` 的默认值是 **`LinearEasing`** | `TwoFrame`/`KeyFrames` 只在 `easing != null` 时赋值(= WPF 不给 `EasingFunction` 的线性语义)。`Shine` 的**不透明度关键帧**一直踩在这里(旧代码 `PlayFrames(..., null)`) |
+| `IterationCount.Infinite` + `RunAsync` 必抛 `InvalidOperationException: Looping animations must not use the Run method.` | 探针(有限/无限各一条,无限必失败) | `Spin` 改成"**一圈接一圈**"(有限动画跑完在收尾回调里再起下一条);`Animation.Apply` 在 11.3.2 **不是公开 API**,编译不过,所以只能这么办 |
+
+### 2. 机制(为什么是"目标给控件")
+
+本机读 Avalonia 11.3.2 的 IL(`TransformAnimator.Apply`)得到的事实,决定了修法:
+
+1. 它第一句就是 `(Visual)control` ⇒ **目标是 Transform 时同步抛 `InvalidCastException`**(探针:Translate / Scale / Rotate 三种都抛);
+2. `property.OwnerType` 是 `Transform` 子类时,它去 `Visual.RenderTransform` 里找 —— `RenderTransform` **恰好是那一类型**,
+   或(`TransformGroup` 时)里面**运行时类型完全相等**的第一个子项;找不到就**只发一条 Warning 日志、什么都不做**;
+3. 所以正确写法是:**目标给宿主控件、属性仍旧写变换自己的属性**(与 D-130 记的 chip 写法一致,也是任务书给的第一条建议)。
+
+具体改动(全部在 `Motion.cs` 私有实现里,公开签名一个字节没动):
+
+- 新增 `PlayTransform(owner, transform, property, from, to, ms, easing, done)` /
+  `PlayTransformFrames(...)`:目标给 `owner`,并先做一次 `CheckTransformTarget` 自检;
+- `Start` 的目标参数类型由 `Animatable` 收成 **`Visual`** —— "拿 Transform 当目标"从此**编译不过**
+  (比一条断言更硬的回归钉子);仍保留"任何失败都不许把界面带崩";
+- 动画构造抽成 `TwoFrame` / `KeyFrames`(缓动为 null 时不碰 `Animation.Easing`);
+- `Spin` 改成一圈接一圈 + 取消式停止(`Loop` 的 stop 分支:取消 → 归零,等价 Windows 的 `BeginAnimation(AngleProperty, null)`);
+- `Start` 起完动画顺手 `target.InvalidateVisual()`(理由见下一条)。
+
+**headless 的时钟事实(决定了测试怎么验、也顺带更正 D-129)**:离屏的动画时钟**只在真的产出帧时前进** ——
+同一条变换动画,每轮先 `InvalidateVisual()` 再泵,**251ms 跑完**;一次都不标脏就永远停在起点、任务永不结束。
+所以测试的泵每轮先标脏(`C3eStage.Frame`,先 `InvalidateVisual` 再 `UiHost.Flush`),生产侧也多推一次重绘。
+更正 D-129 的一句:那次"`DispatcherTimer` 一次都不 Tick"是**泵里不 sleep**、真实时间没走够导致的;
+本包的泵每轮 sleep 3~5ms,实测 80ms 的定时器 60 轮 **tick 了 9 次** ⇒ FadeIn 的延时分支、Stagger 的错帧、
+CountUp 的逐帧文本**在离屏都能验**(见第 3 节的强制时钟证据)。
+
+### 3. 可观测性(任务书第 3 条)
+
+旧 `Start` 只有 `catch (Exception)` 一吞到底 —— 那正是这个缺陷藏了这么久的原因。现在:
+
+| 成员 | 用途 |
+|---|---|
+| `internal Exception? LastError` | 最近一次失败(**同步异常与"任务随后失败"两条路都记**,旧代码只看得到前者) |
+| `Debug.WriteLine("[Motion] 动画失败…")` | 留在调试输出里 |
+| `internal int StartedAnimations` | 真的交给 Avalonia 起过几条(0 = 一条都没到过) |
+| `internal int RunningAnimations` / `RunningAnimationsSinceReset` | 现在挂着几条 / **本用例窗口里**起的还挂着几条 |
+| `internal string? LastTargetType` / `LastPropertyName` | 最近一条动画的目标类型与属性(回归钉子用它) |
+| `internal void ResetObservability()` | 测试用:清错误与计数,并把"按编号记账"的活动集合清空 |
+| `internal void RunForTest(Animation, Visual, done)` | 测试用:把一条动画直接交给 runner(证明"失败会被记下") |
+| `CheckTransformTarget` 自检 | 变换没挂到宿主上 / 拿错实例 ⇒ 记进 `LastError`(不再"悄悄不动") |
+
+`RunningAnimationsSinceReset` 为什么按**编号**记账:`RunningAnimations` 是进程级的,而 `C3dReachTests` 关窗后
+留了 4 条飞行 chip 动画(它们没消失,只是没人推帧;本用例一泵就补齐并减数 —— 差值一度变成 **−2**),
+两条通道用例顺序不同,直接断言总数会 VSTest 绿、进程内执行器红(本包实测踩到)。
+
+### 4. 公开签名(逐条确认未变)
+
+`Motion` 的公开面一个字节没动:`Scale`、`Enabled`、`UserEnabled`、`EnabledChanged`、`Loop`、`FadeIn`、
+`FadeOut`、`Stagger`、`StaggerItems`、`HoverLift`、`Shadow<T>`、`Pulse`、`Shake`、`Shine`、`Spin`、`Progress`、
+`CountUp`、`AnimateWidth`、`AnimateHeight`、`Fade`、`PopIn`、`PopOut`、`SlideIn`、`SlideOut`、`PageSwap` ——
+名字、参数名、顺序、默认值全同(改动只涉及 `Play`/`PlayFrames`/`Start` 这些私有成员 + 新增 internal 测试缝)。
+`git diff` 里 19 处调用点全是"把第一个实参从变换换成宿主控件、其余逐字不动"。
+
+### 5. 用户可见差异(需要 Lead 知道的两条)
+
+1. **`Spin` 每圈交界处有一次一帧级重启**:Avalonia 没有公开的"循环动画"入口,只能一圈接一圈接。
+   0° 与 360° 在同一处,观感连续,但每圈边界有一次"收尾回调往返"的间隙(实测约 0~1 帧)。
+   **这是本包唯一的用户可见差异**;其余动画的时长 / 缓动 / 终值与 Windows 逐值相同。
+2. **坏动画不再静默**:以前"动画没跑"与"动画跑完"在外部看起来一样,现在失败会留在 `LastError`
+   (界面行为不变,失败仍然不崩)。这条是给未来的人看的,不是观感差异。
+
+### 6. 测试(50 条用例:36 个 `[Fact]` + 1 个 14 行 `Theory`;总数 3129 → 3179)
+
+> 计数更正:测试提交 `d0c5bdd` 的说明里写了"79 条用例",那是我用
+> `--filter FullyQualifiedName~C3e` 跑出来的数 —— 这个过滤器**顺带匹配到了 `B2c3ExportLaunchScriptTests` 的 29 条**。
+> 本包真正新增的是 **50 条**(`--list-tests` 复核:50 × `C3eMotionTests`),总数 3129 → 3179 与之一致。
+
+| 组 | 条数 | 覆盖 |
+|---|---|---|
+| A 逐动画终态 | 20 | FadeIn(含"只补一个 Translate 不换组"、"延时分支")/ HoverLift(进 / 出 / 阴影)/ Pulse(峰值+终值)/ Shake(左右都抖到过+终值 0)/ Shine(横扫终点+透明度回 0)/ Spin(跨圈重启+停掉归零)/ PopIn / PopOut / SlideIn / SlideOut / PageSwap(前进 / 后退)/ Stagger / StaggerItems / Progress / AnimateWidth·Height / CountUp |
+| B 关掉动画 | 7 | 什么都不建、什么都不起(`StartedAnimations=0`)、终态与 Windows 关掉动画时逐值一致;含"`ClockOverride=true` 但用户开关关着"这一支 |
+| C 可观测性 | 6 | 故意失败的动画进 `LastError` 且不抛;`ResetObservability` 清得掉;成功动画不留错误并记 1 条;`Spin` 拿到没挂上去的变换会记原因;失败之后后续动画照跑;变换动画记到的目标是控件、属性是 `TranslateTransform.Y` |
+| D 回归钉子 | 14 | 逐方法(14 行 Theory)验:目标类型里**不出现** "Transform"、`LastError` 为 null、本用例起的动画全收摊 |
+| E 泄露 | 2 | 一批 FadeIn 之后无残留;关窗后 `Spin` 不再是"无限动画还挂着" |
+
+**每个动画的"真的跑起来了"证据(强制时钟 + 逐帧推重绘,全部实测)**:
+
+| 动画 | 断言到的终值 / 证据 |
+|---|---|
+| FadeIn | `Opacity 0→1`;`Translate.Y 10→0`;`LastTargetType` 含 `Border`、`LastPropertyName = TranslateTransform.Y` |
+| FadeIn(延时 300ms) | 延时期间 `StartedAnimations=0`、`RenderTransform=null`;之后 `Opacity=1`、`Y=0` |
+| HoverLift 进 | `ScaleX/ScaleY → 1.012`、`Y → −2`、`BoxShadow` 出现(blur 22 / offsetY 3 / alpha 41) |
+| HoverLift 出 | `ScaleX/ScaleY → 1.0`、`Y → 0` |
+| Pulse | 属性写入记账:**最大写值 1.06 以内且 > 1.0**,终值 `ScaleX=ScaleY=1.0` |
+| Shake | 记账:**最小写值 < −1、最大写值 > 1**(左右都抖到过),终值 `X=0` |
+| Shine | `Translate.X → 父宽+40 = 460`(层宽 60 ⇒ 从 −100 起),`Opacity → 0` |
+| Spin | 角度真的在写(记账非空)、跨了 ≥ 2 圈(`StartedAnimations ≥ 3`)、停掉后 `Angle=0` 且无残留 |
+| PopIn | `ScaleX=ScaleY=1.0`、`Opacity=1` |
+| PopOut | `ScaleX=ScaleY=0.97`、`Opacity=0`、`done` 被调 |
+| SlideIn | `X → 0`、`Opacity=1` |
+| SlideOut | `X → 40`、`Opacity=0`、`done` 被调 |
+| PageSwap 前进 | 旧页 `Y` 写值到过 ≤ −1(记账)、被 `Reset` 回 `Opacity=1 / Y=0`、内容换成新页、新页 `Opacity=1 / Y=0` |
+| PageSwap 后退 | 同上但方向为 +8 |
+| Stagger / StaggerItems | **每个子项**(含错帧延时的)都 `Opacity=1`、`Y=0` |
+
+**中间态断言改用 `PropertyChanged` 记账**:一帧可能跨过整段动画(机器忙的时候),采样式断言会偶发漏掉中间态
+(Pulse 峰值 / Shake 左右 / PageSwap 滑出 / Spin 转过),现在都监听属性写入(`C3eWatcher`),顺带断言"真的写过值"。
+
+### 7. 验证命令与实际结果(本机 Windows,全部由本包亲自执行)
+
+_(本节数字在最终代码上重跑后填写,见文末"最终验证"小节。)_
+
+### 8. 未验证项
+
+1. **macOS 真机**:动画的实际观感 / 每圈交界那一帧级重启能不能看出来 / 真桌面 vsync 驱动下这些动画的节奏 ——
+   **全部未验证**(本机是 Windows)。可验的只有"动画真的跑起来并落终态",这一点已用 `ClockOverride` + 逐帧推重绘验到。
+2. **`Motion.Scale`(时长倍率)≠ 1 时**没有专门验(所有用例都在 `Scale = 1.0` 下跑的);倍数只影响时长,不影响机制。
+3. **`Shine` 的 7 秒串场间隔**:只验了"启动时那一次横扫"(`Loop` 的 start 里 post 的那一次);
+   7 秒的 `DispatcherTimer` 重复触发没有等足时间验(等 7 秒会吃掉会话预算 —— D-120)。
+4. **`HoverLift` 出场的阴影清除**(190ms 的 `DispatcherTimer` 到点把 `BoxShadow` 清回 `default`)只验了"进场挂上阴影",
+   没有验"出场之后阴影被清掉"。
+5. **两类失败只验了其中一类**:「无动画器的属性」的失败(同步抛)已验;「任务本身 fault」那条分支靠代码路径保证,
+   没有真的造出来过(能造出来的形态都要依赖 Avalonia 内部行为)。
+
+### 9. 遗留与风险
+
+1. **`C3dReachTests` 关窗时把 4 条飞行 chip 动画留在"挂着"状态**(它们只是没人推帧,生产里窗口关掉也就一起没了)。
+   它不影响本包(改用按编号记账的 seam),但**进程级 `RunningAnimations` 会一直被它们抬着** ——
+   以后谁想用那个总数做断言,先看 D-132 最后一条。
+2. `Motion.Loop` 里那句"IsLoaded 等价于在可视化树上"的注释**仍然不准确**(C3d 记过),本包**没有改**
+   (不在本包红线内,改了要重验一批既有用例);要改请单开一个小包。
+3. `CheckTransformTarget` 只覆盖"变换没挂到宿主上"这种**会静默不动**的调用;`PlayTransform` 的调用方
+   (页面)如果自己换掉了 RenderTransform,依然只能靠 `LastError` 事后发现。
+4. `Motion.PlayFrames` 关掉动画那一支(写最后一个关键帧)现在只剩 `Shine` 的透明度会用;
+   变换那条改成了"什么都不做"(Pulse / Shake 自己在 `!Enabled` 分支里落了终态)—— 行为与旧代码逐值相同。

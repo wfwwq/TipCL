@@ -1748,3 +1748,48 @@ Utils.cs:347-358),所以 `Sysinfo._winreg_value` 与 `SecretStore` DPAPI 分支�
   (会偏离 Windows 原文,且多一个要维护的门面),null 语义与原来相同。
 - C3c 的 `LaunchPage.FlyToTasksSeam` **签名保留**(下游可注入探针),但由外壳构造函数接到真成员、
   `Closed` 时置空;**新页面不要再加缝**,直接写 `Win?.FlyToTasks(anchor, text)`。
+
+## D-132 C3e:Motion 的变换动画改成"目标给宿主控件" + 失败必须可观测(附三条框架实测)
+
+- **缺陷(任务书 + C3d 实测)**:`Motion` 里凡把 **Transform 对象本身**当 `Animation.RunAsync` 目标的地方,
+  Avalonia 会**同步抛 `InvalidCastException`**。本机读 11.3.2 的 IL 坐实了原因:`TransformAnimator.Apply`
+  第一句就是 `(Visual)control`。旧 `Motion.Start` 把它 `catch` 掉 ⇒ 离屏(`Enabled` 恒假)走不到,
+  **真桌面上这些动画静默不动**(FadeIn 的位移 / HoverLift / PopIn / PopOut / Shake / Spin / Pulse /
+  Shine / SlideIn / SlideOut / PageSwap,以及间接走 FadeIn 的 Stagger / StaggerItems)。
+- **动画器怎么找变换(读 IL 的结论,用来定修法)**:`property.OwnerType` 是 `Transform` 子类时,
+  它在 `Visual.RenderTransform` 里找 —— ① `RenderTransform` 恰好就是那一类型,或 ② `RenderTransform` 是
+  `TransformGroup` 时,取里面**运行时类型完全相等**的第一个子项;两者都不是就**只发一条 Warning 日志、
+  什么都不做**(任务永不结束)。所以调用方必须已经把那个变换实例挂进宿主的 RenderTransform ——
+  `EnsureTranslate` / `EnsureScale` / `Shine` 的 `layer.RenderTransform = tx` 都保证了这一点。
+- **修法**:目标给**宿主控件**、属性仍旧写变换自己的属性(`TranslateTransform.YProperty` 之类),
+  统一走 `PlayTransform` / `PlayTransformFrames`;`Motion.Start` 的目标参数类型收成 `Visual` ——
+  "拿 Transform 当目标"从此**编译不过**(比一条断言更硬的回归钉子)。
+  **公开签名一个字节没动**(19 处调用点都在私有实现里改)。
+- **第二条坑(同族,顺带修)**:**`Animation.Easing` 显式写 null 会让动画静默失效** ——
+  属性一个字节不写、`RunAsync` 的任务永不结束,也不抛异常(本机探针:A/D 两条都 PENDING 2 秒)。
+  `Animation.Easing` 的**默认值是 `LinearEasing`**,所以"不缓动"的正确写法是**不碰这个属性**:
+  `TwoFrame` / `KeyFrames` 现在只在 `easing != null` 时才赋值。`Shine` 的不透明度关键帧
+  (`PlayFrames(..., null)`)一直踩在这个坑上(也是真桌面上的"少动一下")。
+- **第三条坑(Spin 专属)**:**`IterationCount = Infinite` 配 `RunAsync` 必抛**
+  `InvalidOperationException: Looping animations must not use the Run method.`(本机探针;同样被旧代码吞掉)。
+  Avalonia 11.3.2 里唯一能循环的公开入口 `Animation.Apply` **不是公开 API**(编译不过),所以 `Spin`
+  改成"**一圈接一圈**":一条有限动画跑完,在收尾回调里再起下一条。停止沿用 Windows 的语义
+  (`BeginAnimation(AngleProperty, null)`)= **取消 + 归零**:本机探针实测"取消之后动画立刻不再写值",
+  所以归零不会被最后一帧盖回去。代价是每圈交界处有一次收尾往返的一帧级重启(0° 与 360° 同处,观感连续)——
+  这是本包**唯一**的用户可见差异。
+- **headless 的时钟事实(测试能不能验动画,全看它)**:离屏的动画时钟**只在真的产出帧时前进** ——
+  同一条变换动画,每轮先 `InvalidateVisual()` 再泵,251ms 跑完;一次都不标脏就永远停在起点、任务永不结束。
+  所以:测试的泵每轮先标脏(`C3eStage.Frame`);生产侧 `Motion.Start` 起完动画也顺手 `InvalidateVisual()`
+  推一次(真桌面由 vsync 驱动,多推一次无害,但能把"没帧 ⇒ 不动"这条路也堵上)。
+  顺带更正 D-129 的一句:那次的"`DispatcherTimer` 一次都不 Tick"是**泵里不 sleep**、真实时间没走够导致的;
+  本包用"每轮 sleep 3~5ms"的泵实测 80ms 的定时器 60 轮 tick 了 9 次 —— 所以 FadeIn 的延时分支、
+  Stagger 的错帧、CountUp 的逐帧文本**都能在离屏验**。
+- **失败可观测(任务书第 3 条)**:`Motion.Start` 仍然"任何失败都不许把界面带崩",但同步异常**与任务失败**
+  两条路都记进 `LastError` + `Debug.WriteLine`(旧代码只看得到同步异常);另加三个测试缝:
+  `StartedAnimations`(真起过几条)、`RunningAnimationsSinceReset`(本窗口还挂着几条)、
+  `LastTargetType`/`LastPropertyName`(最近一条动画的目标与属性)。`ResetObservability()` 清空前三者。
+  `CheckTransformTarget` 把"动画器会静默不动"的那种调用(变换没挂上去 / 拿错了实例)也变成一条记录。
+- **泄露检查为什么按编号记账**:`RunningAnimations` 是进程级的,而 `C3dReachTests` 关窗后留了 4 条飞行 chip
+  动画(它们没消失,只是没人推帧;本用例一泵就会跑完并减数,差值甚至变成 **−2**)。两条通道用例顺序不同,
+  直接断言总数会 VSTest 绿、进程内执行器红(本包实测踩到)。所以 `ResetObservability()` 之后按**每条动画的编号**
+  记账,`RunningAnimationsSinceReset` 只反映本用例起的那些。
