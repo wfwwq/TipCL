@@ -2275,3 +2275,29 @@ Lead 让我回查 `GOAL.md` 第 34 行的技术选型表,那里**早就写好了
   不假装能用。**等 C7b 的 `PluginUi` / `PluginActionBar` 落地后一行接上**(那两个文件由 C7b 搬,同一文件不能两个归属)。
 - **"8 个警告"查清是增量噪声**:两次 `--no-incremental` 的原子构建都是 **7 个警告 / 0 个错误**(= 基线),
   那个 8 只出现在增量构建里 ⇒ 记为**增量构建的瞬时现象**,`--no-incremental` 下复现不了。
+
+## D-157 C7b 自检清单(两条,都由我自己的错换来)
+
+**规则 1:判定"某个成员缺"之前,必须**在整个解决方案里 grep 这个名字(App + Core + tests 都扫)**,再下结论。**
+这轮我在 `PluginSettingsCard` 的依赖审计里报"`Dlg.Form<T>` 是 mac 侧缺的门面成员",还说服 Lead 批准我"纯新增"一个。
+实际上 **mac 早就有**,而且与 Windows **逐字同构**:
+```
+Windows  Services\Dlg.cs              : public static async Task<T?> Form<T>(string title, UIElement body, Func<T> collect, string? ok = null, double width = 560.0) where T : class
+mac      Services\Dlg.cs:329          : public static async Task<T?> Form<T>(string title, Control   body, Func<T> collect, string? ok = null, double width = 560.0) where T : class
+```
+连"校验失败就抛、对话框留着、错误可见"都已实现(`Toast(I18n.L("填写有误"), ex.Message, ToastKind.Warning)` + `Motion.Shake(card)` + `return`)。
+**我为什么没看见**:我在 `Dlg.cs` 里 grep 的是 `public static (Task|Layer|string)`,而它是 **`public static async Task`** ⇒
+匹配不上;我当时也**没有**先在全仓搜"`Form`"这个名字。
+**代价**:重复实现 ⇒ `error CS0111: 类型"Dlg"已定义了一个名为"Form"的相同参数成员` ⇒ **整棵树编不过**,
+并**挡住了 c4-pages 的完整原子四跑**(按运营规则第 10 条那轮结论作废)。
+**处置**:①撤掉我加的那份;②`Dlg.cs` 用 `git checkout --` 恢复到**与 HEAD 逐字节一致**(我那几次误编辑还把
+`public static Task Alert(...)` 与 `{` 并成了一行 —— 这种"看起来还能编过"的格式损坏也必须恢复,而不是留着);
+③`PluginSettingsCard` 的两处调用点从此**确认可以一字不改地搬**(不需要新成员)。
+
+**规则 2:遇到"某层在 mac 上不存在"时,先回 `GOAL.md` 第 28/34 行那两张技术选型表查表**(那里写了 mac 侧
+"去掉什么、换成什么"),再决定它是"缺件"还是"设计差异" —— 这条见 D-154(插件网页界面用系统浏览器打开)。
+
+**顺带留下的一点点正收益**:我新建的 `C7bDlgFormTests.cs`(3 条)钉的是**既有** `Dlg.Form<T>` 的契约,
+它比 `C2c1WiringTests.The_form_validation_toast_is_audible_now` **多**钉了三件:
+①失败后**对话框仍在**(`LayerCount()` 未减)+ 任务**未完成**;②错误 Toast 的**正文里带原异常消息**;
+③成功路径**返回收集到的值**、无 Toast;另外钉了默认确认文案「保存」与宽度 `560`、取消 ⇒ `null`。所以它不冗余,留下。
