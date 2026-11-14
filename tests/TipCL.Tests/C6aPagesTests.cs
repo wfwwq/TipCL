@@ -377,7 +377,11 @@ public class C6aPagesTests
             C5aFiles.Pump(() => C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "category") == "优化", 9000);
             ComboBox version = C5aFiles.Descendants(page).OfType<ComboBox>()
                 .First(c => c.Items.OfType<object>().Any(o => (o.ToString() ?? "") == "1.20.1"));
-            version.Text = "1.20.1";
+            // 【D1 修法 · "条件根本不会成立"那一类】可编辑 ComboBox 上改 `.Text` **不会**触发 SelectionChanged
+            // (Avalonia 与 WPF 同),而页面是按 SelectionChanged 去重搜的 ⇒ 原来那条"等最后一次搜索的
+            // game_version == 1.20.1"的条件**永远不会成立**,VSTest 通道下就是 9 秒超时。
+            // 改成**选中列表里那一项**(游戏版本下拉的候选里本来就有 1.20.1)⇒ 真的触发一次带该参数的搜索。
+            version.SelectedIndex = version.Items.OfType<object>().Select(o => o.ToString() ?? "").ToList().IndexOf("1.20.1");
             C5aFiles.Pump(() => api.Count("search_mods") >= 2 && C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "game_version") == "1.20.1", 9000);
             int last = api.Count("search_mods") - 1;
             Assert.Equal("1.20.1", C5aFiles.ParamAt(api, "search_mods", last, "extra", "game_version"));

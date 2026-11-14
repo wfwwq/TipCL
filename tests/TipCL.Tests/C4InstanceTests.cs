@@ -834,8 +834,10 @@ public class C4InstanceTests
             var detail = C4Files.Mount(harness, new InstanceDetailPage(new InstanceInfo { Name = "甲" }, delegate { }));
             C4Files.Flush(2);
             detail.ShowSeg(1);
-            C4Files.Pump(() => api.Count("list_saves") >= 1);
-            C4Files.Flush(2);
+            // 【D1 修法 · 形状 A / D-152】原来等的是"请求到达"(`Count("list_saves") >= 1`)再 `Flush(2)` 就断言界面文案;
+            // 但那一行的**控件**是在续体里(拿到回包之后)才加进 `_rows` 的 ⇒ VSTest 通道下偶发 46ms 假红
+            // (`HasText("World")` 拿到 false)。改成**等那个界面效果本身**(条件 + 9000 截止),断言一字不改。
+            C4Files.Pump(() => C4Files.HasText(detail, "World"), 9000);
             Assert.True(C4Files.HasText(detail, "World"));
             Assert.True(C4Files.HasText(detail, "2 MB · 今天"));
             C4Files.Click(C4Files.ByText(detail, I18n.L("打开")));
