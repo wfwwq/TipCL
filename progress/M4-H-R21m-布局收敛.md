@@ -160,3 +160,28 @@ git -c http.curloptResolve=github.com:443:$GOOD push origin --delete linux-port
 **记法**:这类"TCP 时通时不通、服务空回复"的抖动,优先怀疑**解析/路由层面**(而且 A 记录可能有多个、只有部分可达);
 `http.curloptResolve` 是比"反复重试"更有效的一招,但要**逐 IP 探到能通的那个**。
 另:推送失败**不影响本地** —— 提交一直在本地等你,所以先确认本地完整,再慢慢找路。
+
+## 7. 附:网络那条的最终解法(2026-11-14,SSH 公钥登记之后)
+
+§6 记的"钉 IP"只是**临时救急**。真正的解法更简单:**改用 SSH 通道**。
+
+用户把本机公钥(指纹 `SHA256:1q5cANTnlY5ULnb9UUFFx8LLB8HsoajPAcfNaHYmr8g`)加到 GitHub 账号 `wfwwq` 之后:
+
+```bash
+ssh -T git@github.com        # -> "Hi wfwwq! You've successfully authenticated, but GitHub does not provide shell access."
+git remote set-url origin git@github.com:wfwwq/TipCL.git
+git ls-remote origin         # 走 SSH,不再受 HTTPS 层那点抖动影响
+git push origin main
+```
+
+凭据管理器里那条 HTTPS 凭据(`Windows 凭据管理器 → git:https://github.com`,User `wfwwq`)保留作后备 —— 只是因为**原来那套凭据一直是好的**,所以当时没意识到"缺的只是 SSH 公钥登记"。
+
+**两条踩过的小坑(记下来省下次的时间)**:
+
+1 **`ssh -T git@github.com` 成功时退出码也是 1**(GitHub 不提供 shell access,就以 1 退出)。
+   判断必须看输出里的 `Hi <user>! You've successfully authenticated`,**不要看退出码** ——
+   我第一次就是被退出码骗了,误判成"仍未通过",白绕了一圈。
+2 `ssh -T -p 443 git@ssh.github.com`(受限网络准备的 443 端口)在 `BatchMode` 下会先报
+   `Host key verification failed` —— 因为 `ssh.github.com` 的 host key 不在 `known_hosts` 里。
+   要用这条得先 `ssh-keyscan -p 443 ssh.github.com >> $env:USERPROFILE\.ssh\known_hosts`。
+   本机 22 端口本来就通(实测 TCP 可达且 GitHub 服务有响应),所以**没有**启用 443 这条。
