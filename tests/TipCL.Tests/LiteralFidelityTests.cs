@@ -49,6 +49,30 @@ public class LiteralFidelityTests
 	/// <summary>`I18n.L("…")` 的第一个字符串字面量(不支持逐字串/插值串 —— 扫到也不会误判,因为它们不是 `I18n.L(` 的实参)。</summary>
 	private static readonly Regex LiteralPattern = new Regex("I18n\\.L\\(\"((?:[^\"\\\\]|\\\\.)*)\"", RegexOptions.CultureInvariant);
 
+	/// <summary>任意普通字符串字面量(用于"未包裹"通道:直接传给 `Ui.*` 的中文串)。</summary>
+	private static readonly Regex AnyLiteralPattern = new Regex("(?<![A-Za-z0-9_])@?\"((?:[^\"\\\\]|\\\\.)*)\"", RegexOptions.CultureInvariant);
+
+	/// <summary>字面量前面是不是 `I18n.L(`(可带空白)⇒ 属"已包裹"通道,由 <see cref="LiteralPattern"/> 那条扫。</summary>
+	private static readonly Regex WrappedPrefix = new Regex("I18n\\.L\\s*\\(\\s*$", RegexOptions.CultureInvariant);
+
+	/// <summary>
+	/// **白名单:每条都带理由**(键 = 字面量本身,理由写在这张表里;台账只放"欠账",白名单只放"刻意保留")。
+	///
+	/// `AiUiText.StatePrefixes` 的五个状态前缀**刻意半角与全角并存**:Windows 源里前五条全角、后五条半角,
+	/// mac 侧顺序相反,两组串互为"同词不同冒号宽度" ⇒ 集合等价、`foreach` 做前缀剥离的**行为等价**。
+	/// 这不是漂移(mac-aipage 与 mac-tests 各自误 fold 过一次),Lead 2026-11-14 裁定:**保留 + 留档**。
+	///
+	/// 用 `\uXXXX` 写死字符,免得"半角/全角冒号"在编辑器里看不出差别(本 harness 也会把全角渲染成 ASCII)。
+	/// </summary>
+	private static readonly Dictionary<string, string> Whitelist = new Dictionary<string, string>(StringComparer.Ordinal)
+	{
+		["\u51C6\u5907:"] = "AiUiText.StatePrefixes half-width member; its fullwidth twin is in the same list (set-equal, order differs from Windows) and StripState strips prefixes identically - deliberately kept",
+		["\u5931\u8D25:"] = "same as above (AiUiText.StatePrefixes)",
+		["\u5B8C\u6210:"] = "same as above (AiUiText.StatePrefixes)",
+		["\u5DF2\u8DF3\u8FC7:"] = "same as above (AiUiText.StatePrefixes)",
+		["\u6267\u884C\u4E2D:"] = "same as above (AiUiText.StatePrefixes)",
+	};
+
 	/// <summary>一条漂移(file + literal 是身份,place 只用于报告)。</summary>
 	internal sealed class Drift
 	{
@@ -229,6 +253,54 @@ public class LiteralFidelityTests
 	}
 
 	/// <summary>
+	/// 扫**未包裹通道**:含中文的普通字符串字面量(直接交给 `Ui.Input(...)` / combo 标签 / `Tip(...)` 等),
+	/// 且前面不是 `I18n.L(`。存在的理由:mac 侧有 12 处这样的串,产品与 Windows 只差标点宽度还不走词表
+	/// (M11 只扫 `I18n.L("…")`,把它们全漏了)⇒ 这一通道必须单独扫。
+	/// </summary>
+	private static Dictionary<string, List<string>> CollectUnwrappedCjkLiterals(string root, string repoPrefix)
+	{
+		var found = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+		foreach (string file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+		{
+			if (file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+			{
+				continue;
+			}
+
+			string[] lines = C1aPaletteTests.StripComments(File.ReadAllText(file)).Split('\n');
+			for (int i = 0; i < lines.Length; i++)
+			{
+				foreach (Match match in AnyLiteralPattern.Matches(lines[i]))
+				{
+					string body = match.Groups[1].Value;
+					if (!ContainsCjk(body))
+					{
+						continue;
+					}
+
+					string before = lines[i].Substring(0, match.Index);
+					if (WrappedPrefix.IsMatch(before))
+					{
+						continue;   // already covered by the I18n.L scan
+					}
+
+					string tail = file.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, '/');
+					string relative = repoPrefix + tail.Replace(Path.DirectorySeparatorChar, '/');
+					if (!found.TryGetValue(body, out List<string>? places))
+					{
+						places = new List<string>();
+						found[body] = places;
+					}
+
+					places.Add(relative + ":" + (i + 1));
+				}
+			}
+		}
+
+		return found;
+	}
+
+	/// <summary>
 	/// 守卫本体:把 mac 侧的 `I18n.L` 字面量与 Windows 源 + mac 词表比对,
 	/// **新出现**的漂移(不在台账里)一律报红;修好的条目只提示。
 	/// </summary>
@@ -260,22 +332,37 @@ public class LiteralFidelityTests
 		}
 
 		List<Drift> drift = new List<Drift>();
-		foreach (KeyValuePair<string, List<string>> entry in literals)
-		{
-			if (!LooksLikeDrift(entry.Key, keys, nearKeyByFold, windowsFolded))
-			{
-				continue;
-			}
+		List<string> whitelisted = new List<string>();
+		Dictionary<string, List<string>> unwrapped = CollectUnwrappedCjkLiterals(portRoot, PortDir + "/");
 
-			string place = entry.Value[0];
-			drift.Add(new Drift
+		void Collect(Dictionary<string, List<string>> source)
+		{
+			foreach (KeyValuePair<string, List<string>> entry in source)
 			{
-				File = place.Substring(0, place.LastIndexOf(':')),
-				Literal = entry.Key,
-				NearKey = nearKeyByFold[Fold(entry.Key)],
-				Place = place,
-			});
+				if (Whitelist.ContainsKey(entry.Key))
+				{
+					whitelisted.Add(entry.Key + "  (" + entry.Value[0] + ")");
+					continue;
+				}
+
+				if (!LooksLikeDrift(entry.Key, keys, nearKeyByFold, windowsFolded))
+				{
+					continue;
+				}
+
+				string place = entry.Value[0];
+				drift.Add(new Drift
+				{
+					File = place.Substring(0, place.LastIndexOf(':')),
+					Literal = entry.Key,
+					NearKey = nearKeyByFold[Fold(entry.Key)],
+					Place = place,
+				});
+			}
 		}
+
+		Collect(literals);    // wrapped channel: I18n.L("...")
+		Collect(unwrapped);   // unwrapped channel: a CJK literal handed straight to Ui.*
 
 		drift.Sort(static (a, b) => string.CompareOrdinal(a.Identity, b.Identity));
 		string ledgerPath = Path.Combine(macRoot, LedgerRelative.Replace('/', Path.DirectorySeparatorChar));
@@ -290,8 +377,13 @@ public class LiteralFidelityTests
 		List<string> fixedUp = ledger.Keys.Where(identity => !drift.Any(d => d.Identity == identity)).ToList();
 
 		Console.WriteLine(
-			"literal-fidelity: literals=" + literals.Count + " keys=" + keys.Count + " windowsLiterals=" + windowsLiterals.Count +
-			" drift=" + drift.Count + " ledger=" + ledger.Count + " new=" + fresh.Count + " alreadyFixed=" + fixedUp.Count);
+			"literal-fidelity: literals=" + literals.Count + " unwrappedCjk=" + unwrapped.Count + " keys=" + keys.Count +
+			" windowsLiterals=" + windowsLiterals.Count + " drift=" + drift.Count + " whitelisted=" + whitelisted.Count +
+			" ledger=" + ledger.Count + " new=" + fresh.Count + " alreadyFixed=" + fixedUp.Count);
+		foreach (string w in whitelisted)
+		{
+			Console.WriteLine("literal-fidelity whitelist: " + w + "  reason=" + Whitelist[w.Split(' ')[0]]);
+		}
 		// 影响面拆开报(修复优先级):含中文的条目会让**英文界面回退显示中文**;纯标点条目只是写法不一致。
 		Console.WriteLine(
 			"literal-fidelity impact: visuallyHarmful(contains CJK)=" + drift.Count(d => ContainsCjk(d.Literal)) +
