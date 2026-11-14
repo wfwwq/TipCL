@@ -125,9 +125,11 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 | L5 | 设置页「布局」视图(7 小节)+ 整机方案增删改 / 导入导出 | `Pages/SettingsLayoutPage.cs`;`tests/LayoutProfileTests.cs` | `artifacts/shot-settings-layout-{dark,tall-dark,clean-dark,full-dark}.png`;方案与导入导出 14 例 | 完成 |
 | L6 | 自建区块(note / shortcut / clock / divider / playtime)+ 危险类型默认关闭 + 插件 kind `block` + AI 布局工具 | `Pages/Layout/WidgetRegistry.cs`、`Pages/Layout/Widgets/*.cs`(7 个);`Core/Plugins/{PluginManifest,PluginHostApi,PluginManager}.cs`;`Core/Launcher/Ai/LayoutTools.cs`;`tests/LayoutWidgetTests.cs` | `artifacts/l6/widget-fixture.ui_layout_v2.json`、`artifacts/l6/tasks-widgets*.png`、`artifacts/l6/README.md`;44 例 | 完成 |
 | L7a | 顶栏页签数据驱动(`shell.tabs`)+ 标题栏元素开关(`shell.titlebar.*`) | `Pages/Layout/ShellTabs.cs`;`MainWindow.xaml`、`MainWindow.xaml.cs`;`tests/LayoutShellTests.cs` | 默认等价 = 改动前后 PNG **SHA256 相同**;27 例;证据 `artifacts/shot-tabs-dark.png`、`artifacts/shot-tabs-dark-topdiff.png`、`artifacts/l7a_topstrip_diff.py` | 完成(**冒烟未跑通**,见遗留) |
-| D1 | 接线包:MainWindow / LayoutEditor / LayoutEngine / BlockHost 收口 | 同上若干文件 | `artifacts/l2/after/d1-*.png` | **未落定 —— 待追加** |
-| D4 | 插件端到端:插件区块在真实插件里的落地验证 | 待定(`samples/hello-plugin` 侧) | — | **未落定 —— 待追加** |
+| D1 | 接线包:跨阈值 `variants` + 布局变更热重排 + `CanEdit` 门槛收口 | `Pages/Layout/LayoutEditor.cs`;`Pages/BlockHost.cs`;`MainWindow.xaml.cs` | 默认等价逐字节相同(D-26);变体对照 `artifacts/l2/variants/`;见下文 D1 节 | 完成 |
+| D4 | 插件端到端:插件区块 `plugin:<plugin>:<blockId>` 的落地与「不可用」降级 | `samples/hello-plugin`;`Pages/Layout/Widgets/PluginBlocks.cs` | `artifacts/l6/widget-fixture.ui_layout_v2.json`、`artifacts/l6/tasks-widgets-dark.png`、`tasks-widgets-dangerous-dark.png`、`artifacts/l6/README.md` | 完成(取证限制见下文 D4 节) |
 | D2 | 词表成对补齐(审计驱动)+ 工程记录(本包) | `Resources/locales/en.json`、`zh_CN.json`;`PROGRESS.md`;`DECISIONS.md` | 见「D2 实测」 | 完成 |
+| L5b | 单块页入口收口:区块入口表纳入 `settings:network` / `settings:about` | `Pages/SettingsLayoutPage.cs`(`LayoutBlockEntryCatalog`);`tests/LayoutProfileTests.cs` | `artifacts/shot-settings-layout-blocks-dark.png`(12 行含两个单块页)、`shot-settings-layout-full-dark.png` | 完成 |
+| D3 | 最终验收:构建 / 全量测试 / 冒烟 / 双 flavor 字节 / 默认等价 / 提交清单 | — | 见下文「D3 · 最终验收」 | 完成 |
 
 ### L0 · 契约骨架 + v1 双向兼容
 
@@ -178,13 +180,44 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - **验证**:命令 `dotnet build`(D-14 全参数)→ `TipCL.exe --shot launch --out artifacts\shot-tabs-dark.png --theme dark`,与**改动前 exe**(`artifacts/l1/exe/TipCL-before.exe`,字节搜索确认不含 `_shellTabMap` / `RebuildShellTabs`)产出的 `artifacts/l1/before/launch-dark.png` 对比:两张 **SHA256 同为 `D212F4287AA08FDB5F146CA6FFC05358F8F2B0B9304E12AB1F4E1256CE8B97FD`**、900×550、**整图 0 像素差异**(`artifacts/l7a_topstrip_diff.py` + Pillow;顶栏 46px 带 41,400 像素 0 差异,`artifacts/shot-tabs-dark-topdiff.png` 全黑)。`LayoutShellTests` 27 例全绿(默认五项、顺序显隐、13 条高亮映射、文案成对、v1 冻结、XAML 无中文字面量)。
 - **遗留/风险**:1 **冒烟未跑通**(见「本会话环境事实」);2 插件动态页签末尾追加只有代码推理(当前数据目录无 top 组插件页,截不到);3 隐藏 `BridgePill` 时「TipCL」字标自带 8px 左边距保留;4 页签全隐藏时 `Sanitize` 回落默认五项(「界面永远有入口」);5 设置页里的页签/标题栏复选框 UI 属 L5。
 
-### D1 · 接线包(待追加)
+### D1 · 接线包(变体 + 热重排 + 编辑门槛收口)
 
-设计里的 D1 = 把 L1/L2/L7a 的外壳与编辑链路口径统一收口(MainWindow / LayoutEditor / LayoutEngine / BlockHost)。**截至本轮记录时尚未落定**,只留下中间取证 `artifacts/l2/after/d1-*.png`。落定后在本节补:改动清单、逐页 `--shot` 对照、最终构建与测试数字。
+- **做了什么**:1 **布局变更热重排**:`BlockHost` 订阅 `LayoutStoreV2.LayoutChanged`(静态事件,委托对称 `-=`/`+=`,`BlockHost.cs:37,75-76`),回调统一回 UI 线程后调 `Editor.ReloadFromStore()`(`BlockHost.cs:79,106,110`;`LayoutEditor.cs:249`)—— 于是 L5 的「应用方案 / 应用 JSON」与 L4 的分栏写入之后,页面区块**当场重排**,不必等切页;编辑器自带「自己提交触发的那一次不要自重排」守卫(`LayoutEditor.cs:81,682`)。2 **响应式变体**:`LayoutVariantHost.Apply(width)` 只在真的跨过阈值(变体名变化)时回调 `VariantChanged`(`MainWindow.xaml.cs:207-209,1674-1681`)→ `OnLayoutVariantChanged` → `host.Editor.ApplyVariant(width)`(`:1703`);编辑器按 `LayoutVariants.PageOf(doc.Layout, pageId, width, LayoutVariantHost.Threshold)` 取 `variants.narrow`(`LayoutEditor.cs:320-324`),窗口来回拖动不会每帧重建。3 **编辑门槛**:`LayoutEditor.CanEdit` 由 `_specs.Count >= 2` 放宽到 `>= 1`(`LayoutEditor.cs:232`),单块页也能进编辑态调外观 / 标题 / 隐藏 —— L5b 据此把单块页纳进入口表。
+- **关键文件**:`src/TipCL/Pages/Layout/LayoutEditor.cs`;`src/TipCL/Pages/BlockHost.cs`;`src/TipCL/MainWindow.xaml.cs`。
+- **验证**:默认等价截图逐字节相同(与 L7a 同一口径,见 D-26);变体三档宽度对照 `artifacts/l2/variants/`(900 / 800 / 700 px,`imgdiff.py` 判等);热重排由 L5 的方案用例 + L1/L2 的区块用例(共 236 例)兜底;收口后全量 413/413(见「D3 · 最终验收」)。
+- **遗留/风险**:`LayoutChanged` 是静态事件,宿主与编辑器都必须成对 `-=`,否则页面重建会泄漏订阅(已按既有范式处理);变体只有 `narrow` 一档阈值,多档断点未做(设计 §0.1 Q6 的范围)。
 
-### D4 · 插件端到端(待追加)
+### D4 · 插件端到端(插件区块的落地与降级)
 
-D4 = 插件区块在真实插件里的端到端验证(用 `samples/hello-plugin` 之类走一遍:装载 → 渲染 → 卸载后显示「不可用」)。**截至本轮记录时尚未落定**,本节待追加。
+- **做了什么**:插件 UI 贡献新增 kind **`block`**(三处白名单同值,见 D-31),块 id = `plugin:<plugin>:<blockId>`(与老画布 `plugin:<plugin>:<cardId>`、自建 `custom:<widgetId>` 分命名空间);插件块的装配与渲染语义与 `dashCard` 一致(WebView 或原生 WPF),编辑态临时隐藏 WebView(照 `PluginDashCards.cs:122-158` 的既有做法);插件被卸载 / 禁用后,块**保留在布局里并显示「不可用」**并提供说明文案(照 `PluginDashCards.cs:160-172` 的既有语义),不静默删用户数据。
+- **关键文件**:`src/TipCL/Pages/Layout/Widgets/PluginBlocks.cs`;`src/TipCL/Core/Plugins/{PluginManifest,PluginHostApi,PluginManager}.cs`(三处白名单);`samples/hello-plugin`(真实插件夹具)。
+- **验证**:夹具与截图 —— `artifacts/l6/widget-fixture.ui_layout_v2.json`(截图用的布局文档原文,可复现)、`artifacts/l6/tasks-widgets-dark.png`(900×1500:五类自建块 + 默认关闭的 web + 合法按钮 + 非法动作按钮 + 插件块不可用)、`artifacts/l6/tasks-widgets-dangerous-dark.png`(900×1700:显式开启后的 `folder:data` 按钮)、`artifacts/l6/README.md`(逐块对应表 + 取证限制);`LayoutWidgetTests` 44 例(含危险类型默认关闭、插件 id 解析、动作白名单)。命令:`$env:TIPCL_HOME='D:\项目\tipcl\_smoke_home'` + `--shot tasks --size 900x1500`,**不写用户真实数据目录**(取证后确认 `%LOCALAPPDATA%\TipCL` 下没有 `ui_layout_v2.json`)。
+- **遗留/风险(照 README 的诚实记录)**:1 本环境**没有声明 kind=block 的真实插件** → 只拍到「插件不可用」分支,「插件已安装」分支由单测 + 代码路径覆盖;2 已开启的 `web` 区块是 HwndHost(WebView2),`RenderTargetBitmap` 拍不到内容,只能证明「确实创建了 WebView2」(stderr 有生命周期);3 DevShot 走 `Environment.Exit` 结束进程:退出时若仍有活的 WebView2,终结器里会抛 `E_NOINTERFACE`(进程退出码 -532462766)—— 已改为「离开可视树时主动 Dispose + `Application.Exit` 兜底」,正常关窗路径干净退出,只有 dev 截图这条路径仍会看到该栈(截图本身在此之前已落盘)。
+
+### L5b · 单块页入口收口
+
+- **做了什么**:D1 把 `LayoutEditor.CanEdit` 放宽到 `specs ≥ 1` 之后,设置页「布局」→「页面区块」的入口列表原本仍按「只列 specs ≥ 2」过滤,**单块页(`settings:network` / `settings:about`)始终没有入口**。本包把入口表从 `SettingsPage` 的私有数组搬成**公开纯数据类 `LayoutBlockEntryCatalog`**(12 条:`PageId / NavId / SettingsView / Label / SingleBlock`,附 `Find` / `SingleBlockPageIds`),把两个单块页纳入(设置页视图 3 / 6,`SingleBlock = true`);运行期仍以 `host.Editor.CanEdit` 作最终门槛,那两句过时注释改成事实。底部说明也改成事实(单块页能调外观 / 标题 / 先隐藏)。
+- **关键文件**:`src/TipCL/Pages/SettingsLayoutPage.cs`;`tests/TipCL.Tests/LayoutProfileTests.cs`(新增 1 例 `BlockEntryCatalogCoversSingleBlockPages`)。
+- **验证**:`artifacts/shot-settings-layout-blocks-dark.png`(1100×1500:页面区块 12 行,第 2 行「下载与网络」、第 3 行「反馈与关于」)、`artifacts/shot-settings-layout-full-dark.png`(7 小节全貌);全量 413/413(基线 412 + 本包 1 例)。命令:`$env:TIPCL_DEV_SETTINGS_VIEW='7'` + `--shot settings --size 1100x1500`。
+- **遗留/风险**:词表增量 = 新增 1 条、作废 1 条(原「单块页(下载与网络 / 反馈与关于)的编辑入口由后续包补上」);入口不做前置可编辑性预判(点进去由 `CanEdit` 判定并 Toast 提示),若将来有宿主改成懒加载,这条「视觉树 → 逻辑树」查找路径要重评。
+
+### D3 · 最终验收(2026-11-14,布局 v2 全链路)
+
+- **对象**:第八轮布局 v2(L0 / L1 / L2 / L4 / L5 / **L5b** / L6 / L7a / D1 / D4)收口后的兼容分支。
+- **构建**:`dotnet build TipCL.sln -c Release -p:UseSharedCompilation=false -p:DebugType=none -p:DebugSymbols=false -m:1` → **0 错误 0 警告**。
+- **测试**:`dotnet test TipCL.sln -c Release --no-build --filter "FullyQualifiedName!~PhoneLinkTests"`(先把 `TEMP/TMP` 指到 `D:\项目\tipcl\_tmp`)→ **413/413 通过、0 失败**。口径沿革:349(本轮开工基线)→ 407(L0–L7a)→ 412(+D1)→ **413**(+L5b),每一次增长都是**新增用例**,既有用例零回归。
+- **布局相关用例 237 例**:LayoutV2ModelTests 24 / LayoutV2CompatTests 11 / LayoutEngineTests 18 / LayoutBlockHostTests 18 / LayoutEditorTests 23 / LayoutCanvasTests 41 / LayoutSplitTests 16 / LayoutProfileTests **15** / LayoutWidgetTests 44 / LayoutShellTests 27。
+- **冒烟**:干净 `TIPCL_HOME` 下 `TipCL.exe --smoke --smoke-timeout 600` → **exit_code=0**;**报告 `issues: []`**;**25 项 ok / 0 项 false**;**17 张图**(监工实测)。本会话早些时候冒烟跑不动的原因与解法见「本会话环境事实」一节(把 `TIPCL_HOME` 指到工作区内目录即可,已复现)。
+- **默认等价**:改动前后截图**逐字节相同**(D-26 口径);唯一例外是**联机页**:差异只在局域网地址的枚举顺序 / 内容,与布局无关,已记为 **D-35** 的判等归一化规则。
+- **体积**:compact **6,443,520 B** / premium **6,462,464 B**(红线 5,757,264 B,compact 超 686,256 B;D-28 已按 D-11 先例豁免布局功能;P2 逐候选复核后**维持不改**,数字与前置条件见 **D-36**)。
+- **提交(5 个)**:
+  1. `e44e1d6` feat(layout): L0 布局契约 v2 骨架 + v1 双向兼容(LayoutDocV2/LayoutSchema/LayoutStoreV2 + 兼容测试)
+  2. `55f63f6` feat(layout): L1+L2 布局引擎(三模式 stack/grid/canvas)+ 编辑体验 + BlockHost 接入 v2
+  3. `2a79027` feat(layout): L4+L5+L7a 分栏比例、设置页布局管理视图、顶栏页签自定义 + D1 variants/热重排接线
+  4. `a351cef` feat(layout): L6+D4 自建区块与插件 kind block、AI 布局工具、词表补齐、PROGRESS/DECISIONS 记录
+  5. `e55046e` i18n(layout): 补 L5b 新增串(单块页也能进编辑态:可调外观/标题/先隐藏)到 en 与 zh_CN
+- **结论**:范围 A–G 全部落地并通过验收;向后兼容由 L0 的 35 例 + 413 全量兜底;未做项与遗留债务见下一节。
+- **归位之后的复核(2026-11-14,P1 包,不在本轮范围)**:模型层搬进 `Core/Launcher/Layout/` + v1 注入缝(`ILayoutV1Bridge` / `LayoutV1Json` / `LayoutV1Projection`,`FromV1` 改收 `IReadOnlyList<LayoutV1Block>`)之后,归位包与本包各自复跑:**构建 0 错 0 警、全量 418/418 全绿**(418 = 413 + 归位新增 5 例;exe 6,448,128 B,比 D-36 记的 6,443,520 B 多 4,608 B,是归位新增 IL 的体量)。归位途中曾有 2 条既有用例变红(`LayoutBlockHostTests.ReloadRefreshesV1CacheAfterWriteThrough`、`LayoutV2CompatTests.CorruptV2FallsBackToV1SubsetWithoutThrowing`),根因是注入缝 `SaveV1()` 顺手清了 `PageLayoutStore` 的进程内缓存(重构前 `LayoutStoreV2.Save` 从不碰它);已把「清缓存」拆成独立能力 `RefreshV1Cache()` 并只在明确时点调用,两条用例一个字没改就复绿 —— 与布局交付无关,记在此处免得后人把它当回归。
 
 ### D2 · 词表成对补齐 + 工程记录(本包)
 
@@ -201,14 +234,16 @@ D4 = 插件区块在真实插件里的端到端验证(用 `samples/hello-plugin`
 
 ### 收口实测数字(2026-11-14,D2 包)
 
-- 构建:`dotnet build TipCL.sln -c Release -p:UseSharedCompilation=false -p:DebugType=none -p:DebugSymbols=false -m:1` → **0 错误 0 警告**;`src\TipCL\bin\Release\net48\TipCL.exe` = **6,439,936 B**(含本包词表增补;超 D-19 红线按 D-28 豁免并如实记录)。
-- 测试:`dotnet test TipCL.sln -c Release --no-build --filter "FullyQualifiedName!~PhoneLinkTests"` → **412/412 通过、0 失败**(监工复核口径为 349 → **407** 全绿;此后 D1 又补了用例,故收口为 412 —— 口径一致,无回归)。
-- 布局相关用例(按 `--list-tests` 枚举,共 **236** 例):LayoutV2ModelTests 24 / LayoutV2CompatTests 11 / LayoutEngineTests 18 / LayoutBlockHostTests 18 / LayoutEditorTests 23 / LayoutCanvasTests 41 / LayoutSplitTests 16 / LayoutProfileTests 14 / LayoutWidgetTests 44 / LayoutShellTests 27。
+- 构建:`dotnet build TipCL.sln -c Release -p:UseSharedCompilation=false -p:DebugType=none -p:DebugSymbols=false -m:1` → **0 错误 0 警告**;`src\TipCL\bin\Release\net48\TipCL.exe` = **6,439,936 B**(含本包词表增补;超 D-19 红线按 D-28 豁免并如实记录)。 **P2 复核(D-36):compact 6,443,520 B**(见 D3/D-36)。
+- 测试:`dotnet test TipCL.sln -c Release --no-build --filter "FullyQualifiedName!~PhoneLinkTests"` → **412/412 通过、0 失败**(监工复核口径为 349 → **407** 全绿;此后 D1 又补了用例,故收口为 412 —— 口径一致,无回归)。 **P2 收口为 413/413**(+L5b 1 例,见 D3)。
+- 布局相关用例(按 `--list-tests` 枚举,共 **236** 例):LayoutV2ModelTests 24 / LayoutV2CompatTests 11 / LayoutEngineTests 18 / LayoutBlockHostTests 18 / LayoutEditorTests 23 / LayoutCanvasTests 41 / LayoutSplitTests 16 / LayoutProfileTests 14 / LayoutWidgetTests 44 / LayoutShellTests 27。 **P2 补 L5b 后为 237 例(LayoutProfileTests 15)。**
 
 ### 待办(下一轮)
 
-1. **D1 接线包**与 **D4 插件端到端**落定后各补一节(改动清单 + 逐页 `--shot` + 最终数字)。
-2. 冒烟:按「环境事实」条把 `TIPCL_HOME` 指到工作区内目录后补跑 `--smoke --smoke-timeout 600`,把报告路径补进本轮。
-3. 体积:6,439,936 B 已超红线(豁免见 D-28);若要回收,候选见 `docs/size-report.md` 与 D-24 的体积提示。
+1. ~~D1 接线包与 D4 插件端到端落定后各补一节~~ **已办**(见上文 D1 / D4 / L5b / D3 四节)。
+2. ~~冒烟~~ **已办**:监工在干净 `TIPCL_HOME` 下跑通(`exit_code=0`、`issues: []`、25 ok / 0 false、17 张图,见 D3);本会话里跑不动只是数据目录落在工作区外的进程级限制。
+3. 体积:compact 6,443,520 B 超红线(豁免见 D-28)。P2 逐候选复核结论见 **D-36**:写范围内没有「可证明安全」的回收项,要回收必须先解决「资源释放路径纳入范围」「图片降质需用户拍板」「ImageSharp/CodePages 与 D-19·D-20 冲突需重新裁决」「架构 loader 裁剪需报备」四件事。
+
 4. 两处既有近似重复键(标点宽度)由维护者决定归并方式(改 .cs 字面量或改词表 key,二者影响面不同)。
 5. 移植 mac/linux 前先还 D-32 记的依赖方向债务(4 个纯模型文件移入 `Core/Launcher/Layout/`)。
+6. **P1 依赖归位**(模型层 `Pages/Layout/` → `Core/Launcher/Layout/` + `ILayoutV1Bridge`):收口时需修 `LayoutBlockHostTests.ReloadRefreshesV1CacheAfterWriteThrough`、`LayoutV2CompatTests.CorruptV2FallsBackToV1SubsetWithoutThrowing` 两条配套用例(见 D3 节的「归位进行中的实测」),并把 §待办 5(D-32 的依赖方向债务)标记为已还。
