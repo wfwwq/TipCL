@@ -12,6 +12,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using TipCL.Models;
+using TipCL.Pages.Layout;
 using TipCL.Services;
 
 namespace TipCL.Pages;
@@ -742,19 +743,31 @@ public sealed partial class SettingsPage : PageBase
 		}, new Thickness(0.0)).Root, 0);
 		about.Add(_feedback, 1);
 		_views[6] = about;
-		SPanel nav = Ui.V(2.0, NavBtn(0, I18n.L("通用")), NavBtn(1, I18n.L("账号")), NavBtn(2, "Java"), NavBtn(3, I18n.L("下载与网络")), NavBtn(4, I18n.L("服务器")), NavBtn(5, I18n.L("游戏时长")), NavBtn(6, I18n.L("反馈与关于")), _saveState.M(12.0, 10.0, 0.0, 0.0));
+		// L5:「布局」是第 8 个视图(自带 18px 左留白,见 SettingsLayoutPage.cs 的 BuildLayoutView)
+		_views[LayoutView] = BuildLayoutView();
+		SPanel nav = Ui.V(2.0, NavBtn(0, I18n.L("通用")), NavBtn(1, I18n.L("账号")), NavBtn(2, "Java"), NavBtn(3, I18n.L("下载与网络")), NavBtn(4, I18n.L("服务器")), NavBtn(5, I18n.L("游戏时长")), NavBtn(6, I18n.L("反馈与关于")), NavBtn(LayoutView, I18n.L("布局")), _saveState.M(12.0, 10.0, 0.0, 0.0));
 		nav.Margin = new Thickness(12.0, 16.0, 0.0, 12.0);
-		Grid root = Ui.G(null, "168,*");
-		root.Add(nav, 0);
-		root.Add(_view, 0, 1);
+		// L4 分栏(设计 §4.E 第 2 处):左导航 168px(现状值)+ 18px 分隔条 + 视图;
+		// 分隔条占住视图本来就有的 18px 左留白(_view 左移 18px 回到原位),所以首屏逐像素不变。
+		// 比例存 v2 splits["settings"]["nav"];双击分隔条复位。L5 新增的「布局」视图同样需要自带 18px 左留白。
+		PageLayoutHost root = new PageLayoutHost("settings", "nav", new GridLength(168.0), new GridLength(1.0, GridUnitType.Star));
+		_view.Margin = new Thickness(-18.0, 0.0, 0.0, 0.0);
+		root.SetLeft(nav);
+		root.SetRight(_view);
 		base.Content = root;
 		Select(0);
+		// dev-only:设置页导航只认 "settings",--shot 拍不到第 8 个视图「布局」;
+		// 环境变量恰好等于视图号时才生效,正常启动零影响(与 L1 的 TIPCL_DEV_LAYOUT_EDIT 同一套路)
+		if (int.TryParse(Environment.GetEnvironmentVariable("TIPCL_DEV_SETTINGS_VIEW"), out int devView) && devView >= 0 && devView < _views.Length)
+		{
+			Select(devView);
+		}
 	}
 
-	// 左导航：0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于。子页面是本页自持的实例（不与 MainWindow 共享，避免同一控件两个父级）
-	private readonly System.Windows.Controls.Primitives.ToggleButton[] _nav = new System.Windows.Controls.Primitives.ToggleButton[7];
+	// 左导航:0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于 / 7 布局(L5)。子页面是本页自持的实例(不与 MainWindow 共享,避免同一控件两个父级)
+	private readonly System.Windows.Controls.Primitives.ToggleButton[] _nav = new System.Windows.Controls.Primitives.ToggleButton[8];
 
-	private readonly UIElement?[] _views = new UIElement?[7];
+	private readonly UIElement?[] _views = new UIElement?[8];
 
 	private readonly ContentControl _view = new ContentControl
 	{
@@ -788,7 +801,7 @@ public sealed partial class SettingsPage : PageBase
 
 	private void Select(int i)
 	{
-		for (int k = 0; k < 7; k++)
+		for (int k = 0; k < 8; k++)
 		{
 			_nav[k].IsChecked = k == i;
 		}
@@ -806,6 +819,11 @@ public sealed partial class SettingsPage : PageBase
 			_sub?.OnHidden();
 			_sub = sub;
 			ShowSub();
+		}
+		// L5:每次切到「布局」都重建一次,保证读到的方案 / 分栏比例是最新的
+		if (i == LayoutView)
+		{
+			_views[LayoutView] = BuildLayoutView();
 		}
 		_view.Content = _views[i];
 	}

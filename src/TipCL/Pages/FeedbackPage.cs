@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using TipCL.Models;
+using TipCL.Pages.Layout;
 using TipCL.Services;
 
 namespace TipCL.Pages;
@@ -63,9 +64,12 @@ public sealed class FeedbackPage : PageBase
 			PageBase.Run(() => LoadArticlesAsync(_search.Text));
 		};
 		Border el = Ui.Card(Ui.V(10.0, Ui.Section(I18n.L("常见问题"), I18n.L("启动、Java、模组、账号、联机的快速说明（点击标题展开）")), _search, _articles));
-		Grid grid = Ui.G(null, "*,360");
-		grid.Add(Ui.V(14.0, border, border2), 0);
-		grid.Add(el.M(14.0, 0.0, 0.0, 0.0).VTop(), 0, 1);
+		// L4 分栏(设计 §4.E 第 8 处):左栏 = 表单 + 历史,右栏 = 帮助(现状固定 360)。
+		// 现状右卡那 14px 左外边距改成 14px 分隔条(卡片外边距去掉),两栏几何与改动前完全等价;
+		// 比例存 v2 splits["feedback"]["side"],双击分隔条复位
+		PageLayoutHost grid = new PageLayoutHost("feedback", "side", new GridLength(1.0, GridUnitType.Star), new GridLength(346.0));
+		grid.SetLeft(Ui.V(14.0, border, border2));
+		grid.SetRight(el.VTop());
 		// 页面布局自定义（WP-U3）：左右双栏 Grid 保持一整块（纵向流会拆散两侧布局），默认与旧 ScrollBody 等价
 		base.Content = new BlockHost("feedback", new List<BlockSpec>
 		{

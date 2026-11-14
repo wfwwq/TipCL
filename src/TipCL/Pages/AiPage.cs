@@ -13,6 +13,7 @@ using FileMemory = TipCL.Core.Launcher.Ai.FileMemory;
 using McpServer = TipCL.Core.Launcher.Ai.McpServer;
 using TipCL.Models;
 using TipCL.Pages.Ai;
+using TipCL.Pages.Layout;
 using TipCL.Services;
 
 namespace TipCL.Pages;
@@ -113,6 +114,9 @@ public sealed partial class AiPage : PageBase
 	private PlanCard? _planCard;
 
 	private readonly Border _hist;
+
+	// L4:历史栏分栏外壳(收起历史栏时左栏与分隔条一起收起;比例存 v2 splits["ai"]["history"])
+	private readonly PageLayoutHost _histSplit;
 
 	private readonly TextBox _histSearch;
 
@@ -339,7 +343,8 @@ public sealed partial class AiPage : PageBase
 		Button el = AiIcons.Flat("M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M9 3v18", null, I18n.L("显示 / 隐藏对话列表"), delegate
 		{
 			_histOpen = !_histOpen;
-			_hist.Visibility = ((!_histOpen) ? Visibility.Collapsed : Visibility.Visible);
+			// L4:收起历史栏 = 左栏与分隔条一起占 0 宽(该形态不写比例),由分栏外壳统一接管
+			_histSplit.SetLeftVisible(_histOpen);
 		}, "B.InkMuted", 16.0);
 		_titleText.TextTrimming = TextTrimming.CharacterEllipsis;
 		_instPill = new Border
@@ -500,9 +505,14 @@ public sealed partial class AiPage : PageBase
 			sPanel.Visibility = ((!on) ? Visibility.Visible : Visibility.Collapsed);
 		};
 		_pluginViews.PresetsChanged += RenderChats;
-		Grid grid7 = Ui.G(null, "Auto,*");
-		grid7.Add(_hist, 0);
-		grid7.Add(grid6, 0, 1);
+		// L4 分栏(设计 §4.E 第 7 处):历史栏(现状固定 220)+ 10px 分隔条 + 对话区。
+		// 分隔条占住对话区顶部操作条本来就有的 10px 左内边距(grid6 左移 10px 回到原位),首屏逐像素不变;
+		// 比例存 v2 splits["ai"]["history"];历史栏收起时左栏与分隔条一起收起(见下面的开关)
+		PageLayoutHost grid7 = new PageLayoutHost("ai", "history", GridLength.Auto, new GridLength(1.0, GridUnitType.Star));
+		grid6.Margin = new Thickness(-10.0, 0.0, 0.0, 0.0);
+		grid7.SetLeft(_hist);
+		grid7.SetRight(grid6);
+		_histSplit = grid7;
 		Border border2 = new Border
 		{
 			CornerRadius = new CornerRadius(10.0),
