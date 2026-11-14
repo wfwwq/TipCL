@@ -159,7 +159,8 @@ public class C7bPluginsShellTests
                 // 只留下 where == "launch" 的那一个(托盘那个不进这一条)
                 List<Button> buttons = bar.Children.OfType<Button>().ToList();
                 Assert.Single(buttons);
-                Assert.Equal("来一发", buttons[0].Content as string);
+                // 带字形的按钮 Content 是图文面板,文字在**自动化名**里(与 C5b/C6b 同一口径)
+                Assert.Equal("来一发", Avalonia.Automation.AutomationProperties.GetName(buttons[0]));
                 // 点击:plugins_action(plugin, id, context) 且 context 里带 where
                 C5bFiles.Click(buttons[0]);
                 C5bFiles.Pump(() => api.Count("plugins_action") >= 1);
