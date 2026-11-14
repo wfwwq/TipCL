@@ -187,7 +187,7 @@ public sealed partial class PluginsPage
 
 		if (_indexes.Count == 0 && _market.Count == 0)
 		{
-			SPanel empty = Ui.Empty("\uea86", I18n.L("还没有配置插件市场"), I18n.L("填一个或多个插件市场的索引地址(index.json),就能在这里浏览和安装插件。"));
+			SPanel empty = Ui.Empty("\uea86", I18n.L("还没有配置插件市场"), I18n.L("填一个或多个插件市场的索引地址（index.json），就能在这里浏览和安装插件。"));
 			empty.Children.Add(Ui.Btn(I18n.L("添加市场地址"), BtnKind.Primary, delegate
 			{
 				PageBase.Run(EditIndexesAsync);

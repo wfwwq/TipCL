@@ -346,7 +346,7 @@ public static class NativePluginUi
 		if (c.Url.Length == 0)
 		{
 			// 网页界面但还没有地址:Node 宿主还没起来(或正在重启)。宿主就绪后 plugins.ui_changed 会带来地址
-			return Ui.Empty("\uea86", I18n.L("插件页面还没准备好"), I18n.L("插件运行环境正在启动,稍等一下会自动出现。"));
+			return Ui.Empty("\uea86", I18n.L("插件页面还没准备好"), I18n.L("插件运行环境正在启动，稍等一下会自动出现。"));
 		}
 
 		return PluginWebContent(c.Url, c.Plugin, props);
@@ -511,15 +511,15 @@ public static class PluginPerms
 	{
 		return perm switch
 		{
-			"launcher" => I18n.L("调用启动器的全部功能(下载、改实例、启动游戏等),订阅启动器事件,在启动前修改参数"),
+			"launcher" => I18n.L("调用启动器的全部功能（下载、改实例、启动游戏等），订阅启动器事件，在启动前修改参数"),
 			"ai.tools" => I18n.L("给 AI 助手注册工具"),
-			"ai.presets" => I18n.L("注册 AI 预设(人设、可用工具、步数)"),
+			"ai.presets" => I18n.L("注册 AI 预设（人设、可用工具、步数）"),
 			"ai.sessions" => I18n.L("新建、读取、驱动 AI 对话"),
-			"ai.llm" => I18n.L("直接调用模型,会消耗你的 AI 额度"),
-			"credentials" => I18n.L("读写它自己的凭据(加密保存)"),
+			"ai.llm" => I18n.L("直接调用模型，会消耗你的 AI 额度"),
+			"credentials" => I18n.L("读写它自己的凭据（加密保存）"),
 			"ui" => I18n.L("侧栏页面、AI 标签、首页卡片、设置页、提示框"),
 			"ui.overlay" => I18n.L("在主窗口上显示浮层"),
-			"system" => I18n.L("可以读写你的文件、访问网络、运行程序。Node 插件做不到沙箱,只安装你信任的插件"),
+			"system" => I18n.L("可以读写你的文件、访问网络、运行程序。Node 插件做不到沙箱，只安装你信任的插件"),
 			_ => I18n.L("未知权限"),
 		};
 	}

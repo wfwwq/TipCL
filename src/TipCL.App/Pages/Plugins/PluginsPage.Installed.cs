@@ -74,7 +74,7 @@ public sealed partial class PluginsPage
 		_installedHost.Columns = (_installed.Count == 0) ? 1 : TipCL.Controls.PageLayoutHost.PageColumns(PageBase.Win?.Prefs, "plugins", 3, 1, 6);
 		if (_installed.Count == 0)
 		{
-			SPanel empty = Ui.Empty("\uea86", I18n.L("还没有安装插件"), I18n.L("去插件市场看看,或者把插件 zip 拖进这个页面。"));
+			SPanel empty = Ui.Empty("\uea86", I18n.L("还没有安装插件"), I18n.L("去插件市场看看，或者把插件 zip 拖进这个页面。"));
 			_installedHost.Children.Add(empty);
 			return;
 		}
@@ -331,10 +331,10 @@ public sealed partial class PluginsPage
 
 	private async Task UninstallAsync(PluginInfo p)
 	{
-		CheckBox del = Ui.Check(I18n.L("同时删除数据(插件数据目录和保存的凭据)"));
-		SPanel body = Ui.V(10.0, Ui.Muted((p.Source == "dev") ? I18n.L("取消链接后开发文件夹本身不会被删除。") : I18n.L("会删除插件文件;之后可以从市场重新安装。")).Wrap(), del);
+		CheckBox del = Ui.Check(I18n.L("同时删除数据（插件数据目录和保存的凭据）"));
+		SPanel body = Ui.V(10.0, Ui.Muted((p.Source == "dev") ? I18n.L("取消链接后开发文件夹本身不会被删除。") : I18n.L("会删除插件文件；之后可以从市场重新安装。")).Wrap(), del);
 		body.MinWidth = 360.0;
-		if (await Dlg.Ask(I18n.L("卸载「{0}」?", p.DisplayName), body, (p.Source == "dev") ? I18n.L("取消链接") : I18n.L("卸载"), null, danger: true))
+		if (await Dlg.Ask(I18n.L("卸载「{0}」？", p.DisplayName), body, (p.Source == "dev") ? I18n.L("取消链接") : I18n.L("卸载"), null, danger: true))
 		{
 			bool deleteData = del.IsChecked == true;
 			await PageBase.Api.CallAsync("plugins_uninstall", new
@@ -402,7 +402,7 @@ public sealed partial class PluginsPage
 			return text;
 		}
 
-		return I18n.L("(日志是空的)");
+		return I18n.L("（日志是空的）");
 	}
 
 	private async Task InstallLocalAsync(string path, bool dev, Control? source)

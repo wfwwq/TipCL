@@ -354,16 +354,16 @@ public static class PluginConfirm
 		SPanel body = Ui.V(12.0, head);
 		if (!verified)
 		{
-			body.Children.Add(Ui.Small(I18n.L("这个插件没有经过市场审核,来源和代码都没人检查过。")).Wrap());
+			body.Children.Add(Ui.Small(I18n.L("这个插件没有经过市场审核，来源和代码都没人检查过。")).Wrap());
 		}
 
 		if (perms.Contains("system"))
 		{
-			Border warn = Ui.Pane(Ui.H(8.0, Ui.Glyph("\ue7ba", 15.0, "B.Danger").VTop(), Ui.Txt((runtime == "dotnet") ? I18n.L("这是一个 .NET 插件,运行在启动器进程里,拥有完整的电脑权限(文件、网络、运行程序)。只安装你信任的来源。") : I18n.L("这是一个 Node 插件,拥有完整的电脑权限(文件、网络、运行程序),做不到沙箱。只安装你信任的来源。"), 12.5, bold: false, "B.Danger").Wrap()), "B.DangerSoft", 10.0, 10.0);
+			Border warn = Ui.Pane(Ui.H(8.0, Ui.Glyph("\ue7ba", 15.0, "B.Danger").VTop(), Ui.Txt((runtime == "dotnet") ? I18n.L("这是一个 .NET 插件，运行在启动器进程里，拥有完整的电脑权限（文件、网络、运行程序）。只安装你信任的来源。") : I18n.L("这是一个 Node 插件，拥有完整的电脑权限（文件、网络、运行程序），做不到沙箱。只安装你信任的来源。"), 12.5, bold: false, "B.Danger").Wrap()), "B.DangerSoft", 10.0, 10.0);
 			body.Children.Add(warn);
 		}
 
-		body.Children.Add(Ui.Muted((action == "update" && added.Count > 0) ? I18n.L("新版本需要新的权限:") : I18n.L("它需要这些权限:")));
+		body.Children.Add(Ui.Muted((action == "update" && added.Count > 0) ? I18n.L("新版本需要新的权限：") : I18n.L("它需要这些权限：")));
 		ScrollViewer sv = new ScrollViewer
 		{
 			Content = PluginPerms.List(perms, added),

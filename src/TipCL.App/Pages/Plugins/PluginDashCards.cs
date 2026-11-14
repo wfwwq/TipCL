@@ -135,7 +135,7 @@ public static class PluginDashCards
 				if (_c != null || Content == null)
 				{
 					_c = null;
-					Content = Ui.V(4.0, Ui.Muted(I18n.L("插件卡片不可用")), Ui.Small(I18n.L("提供它的插件被禁用或卸载了;可以在编辑布局里移除这张卡片。")).Wrap());
+					Content = Ui.V(4.0, Ui.Muted(I18n.L("插件卡片不可用")), Ui.Small(I18n.L("提供它的插件被禁用或卸载了；可以在编辑布局里移除这张卡片。")).Wrap());
 				}
 
 				return;

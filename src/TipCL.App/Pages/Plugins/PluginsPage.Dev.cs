@@ -55,7 +55,7 @@ public sealed partial class PluginsPage
 		Button folder = Ui.Btn(I18n.L("从文件夹安装"), BtnKind.Soft, null, "\ue8b7");
 		folder.Click += delegate
 		{
-			string? path2 = Dlg.PickFolder(I18n.L("选择插件文件夹(里面有 tipcl-plugin.json)"));
+			string? path2 = Dlg.PickFolder(I18n.L("选择插件文件夹（里面有 tipcl-plugin.json）"));
 			if (path2 != null)
 			{
 				PageBase.Run(() => InstallLocalAsync(path2, dev: false, folder), I18n.L("安装失败"));
@@ -64,13 +64,13 @@ public sealed partial class PluginsPage
 		Button link = Ui.Btn(I18n.L("链接开发文件夹"), BtnKind.Primary, null, "\ue71b");
 		link.Click += delegate
 		{
-			string? path3 = Dlg.PickFolder(I18n.L("选择插件开发文件夹(不复制,改了自动重载)"));
+			string? path3 = Dlg.PickFolder(I18n.L("选择插件开发文件夹（不复制，改了自动重载）"));
 			if (path3 != null)
 			{
 				PageBase.Run(() => InstallLocalAsync(path3, dev: true, link), I18n.L("链接失败"));
 			}
 		};
-		Border local = Ui.Card(Ui.V(8.0, Ui.Section(I18n.L("本地安装"), I18n.L("zip / 文件夹会复制进 TipCL;开发文件夹只链接,文件一改就自动重载")), Ui.H(8.0, zip, folder, link), Ui.Small(I18n.L("也可以直接把插件 zip 或文件夹拖进这个页面。"))));
+		Border local = Ui.Card(Ui.V(8.0, Ui.Section(I18n.L("本地安装"), I18n.L("zip / 文件夹会复制进 TipCL；开发文件夹只链接，文件一改就自动重载")), Ui.H(8.0, zip, folder, link), Ui.Small(I18n.L("也可以直接把插件 zip 或文件夹拖进这个页面。"))));
 		Button runtimeRefresh = Ui.Btn(I18n.L("刷新"), BtnKind.Chip, delegate
 		{
 			PageBase.Run(LoadRuntimeAsync, I18n.L("读取失败"));
@@ -80,7 +80,7 @@ public sealed partial class PluginsPage
 		{
 			PageBase.Run(() => EditProviderAsync(null), I18n.L("保存失败"));
 		}, "\ue710");
-		Border providers = Ui.Card(Ui.V(8.0, Ui.Section(I18n.L("模型供应商"), I18n.L("插件直接调用模型时可选的 OpenAI 兼容端点;默认的 tipcl 就是你在 AI 设置里配的模型"), addProvider), _providerHost));
+		Border providers = Ui.Card(Ui.V(8.0, Ui.Section(I18n.L("模型供应商"), I18n.L("插件直接调用模型时可选的 OpenAI 兼容端点；默认的 tipcl 就是你在 AI 设置里配的模型"), addProvider), _providerHost));
 		_logBox.Height = 300.0;
 		_logPick.SelectionChanged += delegate
 		{
@@ -224,7 +224,7 @@ public sealed partial class PluginsPage
 		}
 		else
 		{
-			_runtimeHost.Children.Add(Ui.Field(I18n.L("Node 宿主"), Ui.Muted(I18n.L("读不到状态(后端还不支持插件,或者没连上)")), null, 140.0));
+			_runtimeHost.Children.Add(Ui.Field(I18n.L("Node 宿主"), Ui.Muted(I18n.L("读不到状态（后端还不支持插件，或者没连上）")), null, 140.0));
 		}
 
 		// 【Windows 源】:这里读 WebViewHost.Available/RuntimeVersion/UnavailableReason/IsWin10OrLater,
@@ -242,7 +242,7 @@ public sealed partial class PluginsPage
 		List<JsonElement> items = J.Items(r).ToList();
 		if (items.Count == 0)
 		{
-			_providerHost.Children.Add(Ui.Muted(I18n.L("只有默认的 tipcl(跟随 AI 设置)。")));
+			_providerHost.Children.Add(Ui.Muted(I18n.L("只有默认的 tipcl（跟随 AI 设置）。")));
 			return;
 		}
 
@@ -265,7 +265,7 @@ public sealed partial class PluginsPage
 				{
 					PageBase.Run(async delegate
 					{
-						if (await Dlg.Confirm(I18n.L("删除供应商「{0}」?", name), I18n.L("用到它的插件会改用默认的 tipcl。"), I18n.L("删除"), null, danger: true))
+						if (await Dlg.Confirm(I18n.L("删除供应商「{0}」？", name), I18n.L("用到它的插件会改用默认的 tipcl。"), I18n.L("删除"), null, danger: true))
 						{
 							await PageBase.Api.CallAsync("plugins_remove_provider", new { id });
 							await LoadProvidersAsync();
@@ -308,7 +308,7 @@ public sealed partial class PluginsPage
 			string i = id.Text.Trim().ToLowerInvariant();
 			if (i.Length == 0 || i == "tipcl" || !i.All((char c) => char.IsLetterOrDigit(c) || c == '-' || c == '_'))
 			{
-				throw new ArgumentException(I18n.L("ID 只能用小写字母、数字、- 和 _,且不能是 tipcl"));
+				throw new ArgumentException(I18n.L("ID 只能用小写字母、数字、- 和 _，且不能是 tipcl"));
 			}
 
 			string u = baseUrl.Text.Trim();

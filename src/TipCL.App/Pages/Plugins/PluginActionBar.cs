@@ -68,7 +68,7 @@ public sealed class PluginActionBar : WrapPanel
 			string icon = cc.Icon;
 			Button button = Ui.Btn(cc.Label, BtnKind.Chip, null, (icon.Length > 0 && icon.Length <= 2) ? icon : "\uea86");
 			button.Margin = new Avalonia.Thickness(0.0, 0.0, 6.0, 0.0);
-			button.Tip(I18n.L("插件:{0}", PluginUi.PluginName(cc.Plugin)));
+			button.Tip(I18n.L("插件：{0}", PluginUi.PluginName(cc.Plugin)));
 			button.Click += delegate
 			{
 				Dictionary<string, object?> ctx = _context();

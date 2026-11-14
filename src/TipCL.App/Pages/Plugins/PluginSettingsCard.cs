@@ -90,7 +90,7 @@ public static class PluginSettingsCard
 	{
 		TextBox box = Ui.Multi("https://example.com/tipcl-plugins/index.json", string.Join("\n", current), 140.0);
 		box.MinWidth = 480.0;
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("一行一个插件市场索引地址(index.json)。多个市场按插件 id 合并,排在前面的优先。")).Wrap(), box);
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("一行一个插件市场索引地址（index.json）。多个市场按插件 id 合并，排在前面的优先。")).Wrap(), box);
 		// 【Windows 源】:校验失败抛异常 ⇒ Form 里 Toast「填写有误」+ 抖卡片,对话框留着(契约见 D-157 的用例)
 		List<string>? result = await Dlg.Form<List<string>?>(I18n.L("插件市场地址"), body, delegate
 		{
@@ -150,7 +150,7 @@ public static class PluginSettingsCard
 			TextBox nameBox = Ui.Input("我的镜像");
 			TextBox rawBox = Ui.Input("https://example.com/https://raw.githubusercontent.com");
 			TextBox dlBox = Ui.Input("https://example.com/https://github.com");
-			SPanel body = Ui.V(8.0, Ui.Field(I18n.L("名称"), nameBox), Ui.Field(I18n.L("Raw 前缀"), rawBox, I18n.L("完整前缀,含 https://raw.githubusercontent.com")), Ui.Field(I18n.L("下载前缀"), dlBox, I18n.L("完整前缀,含 https://github.com")));
+			SPanel body = Ui.V(8.0, Ui.Field(I18n.L("名称"), nameBox), Ui.Field(I18n.L("Raw 前缀"), rawBox, I18n.L("完整前缀，含 https://raw.githubusercontent.com")), Ui.Field(I18n.L("下载前缀"), dlBox, I18n.L("完整前缀，含 https://github.com")));
 			Dictionary<string, object>? r = await Dlg.Form<Dictionary<string, object>?>(I18n.L("添加自定义镜像"), body, delegate
 			{
 				string name = nameBox.Text.Trim();
@@ -158,7 +158,7 @@ public static class PluginSettingsCard
 				string dlPrefix = dlBox.Text.Trim().TrimEnd('/');
 				if (name.Length == 0 || !rawPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || !dlPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
 				{
-					throw new ArgumentException(I18n.L("名称必填;两个前缀都要以 https:// 开头"));
+					throw new ArgumentException(I18n.L("名称必填；两个前缀都要以 https:// 开头"));
 				}
 
 				return new Dictionary<string, object>
@@ -276,7 +276,7 @@ public static class PluginSettingsCard
 			bool on = unverified.IsChecked == true;
 			PageBase.Run(async delegate
 			{
-				if (on && !await Dlg.Confirm(I18n.L("允许安装未审核插件?"), I18n.L("未审核的插件没人检查过来源和代码。Node 插件拥有完整的电脑权限,只安装你信任的作者发布的插件。"), I18n.L("仍然允许"), null, danger: true))
+				if (on && !await Dlg.Confirm(I18n.L("允许安装未审核插件？"), I18n.L("未审核的插件没人检查过来源和代码。Node 插件拥有完整的电脑权限，只安装你信任的作者发布的插件。"), I18n.L("仍然允许"), null, danger: true))
 				{
 					unverified.IsChecked = false;
 					return;
@@ -312,7 +312,7 @@ public static class PluginSettingsCard
 				(win.GetPage("plugins") as IPluginHostPage)?.ShowTab("dev");
 			}
 		}, "\ue99a");
-		Border card = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("插件"), I18n.L("插件市场、加速镜像、未审核插件、插件可用的模型供应商")), Ui.Field(I18n.L("插件市场地址"), Ui.H(10.0, edit, summary.VCenter()), I18n.L("填写插件市场的索引地址,可以填多个")), Ui.Field("", Ui.V(6.0, Ui.Txt(I18n.L("加速镜像"), 13.0, bold: true), Ui.Small(I18n.L("开关与顺序即优先级:排在前面的先尝试,全部失败才报错。Raw 前缀用于市场索引,下载前缀用于插件包")).Wrap(), mirrorHost, Ui.H(6.0, mirrorAdd, mirrorReset))), Ui.Field(I18n.L("允许安装未审核插件"), unverified, I18n.L("关着时,市场里未审核的插件要先打开这里才能安装")), Ui.Field("", Ui.H(8.0, manage, providers))));
+		Border card = Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("插件"), I18n.L("插件市场、加速镜像、未审核插件、插件可用的模型供应商")), Ui.Field(I18n.L("插件市场地址"), Ui.H(10.0, edit, summary.VCenter()), I18n.L("填写插件市场的索引地址，可以填多个")), Ui.Field("", Ui.V(6.0, Ui.Txt(I18n.L("加速镜像"), 13.0, bold: true), Ui.Small(I18n.L("开关与顺序即优先级：排在前面的先尝试，全部失败才报错。Raw 前缀用于市场索引，下载前缀用于插件包")).Wrap(), mirrorHost, Ui.H(6.0, mirrorAdd, mirrorReset))), Ui.Field(I18n.L("允许安装未审核插件"), unverified, I18n.L("关着时，市场里未审核的插件要先打开这里才能安装")), Ui.Field("", Ui.H(8.0, manage, providers))));
 		card.Loaded += delegate
 		{
 			if (!AppServices.Ready)

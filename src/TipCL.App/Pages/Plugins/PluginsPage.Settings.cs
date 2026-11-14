@@ -66,7 +66,7 @@ public sealed partial class PluginsPage
 				Child = content,
 			};
 			frame.Dyn(Border.BorderBrushProperty, "B.LineSoft");
-			Button auto = Ui.Btn(I18n.L("高级(自动表单)"), BtnKind.Chip, delegate
+			Button auto = Ui.Btn(I18n.L("高级（自动表单）"), BtnKind.Chip, delegate
 			{
 				ShowSettings(p, forceAuto: true);
 			}, "\ue713");
@@ -100,7 +100,7 @@ public sealed partial class PluginsPage
 			values = cfg;
 		}
 
-		SPanel cfgCard = Ui.V(2.0, Ui.Section(I18n.L("配置"), I18n.L("改完点「保存」,插件里立即生效,不用重启")));
+		SPanel cfgCard = Ui.V(2.0, Ui.Section(I18n.L("配置"), I18n.L("改完点「保存」，插件里立即生效，不用重启")));
 		int count = 0;
 		IEnumerable<string> keys = (schema.ValueKind == JsonValueKind.Object)
 			? (from x in schema.EnumerateObject() select x.Name)
@@ -150,7 +150,7 @@ public sealed partial class PluginsPage
 				};
 				// 【mac 差异】Ui.Pw 返回 TextBox(不是 WPF 的 PasswordBox);取值/清空走 .Text
 				TextBox pw = Ui.Pw(280.0);
-				pw.Tag = configured ? I18n.L("已配置,留空不修改") : I18n.L("未配置");
+				pw.Tag = configured ? I18n.L("已配置，留空不修改") : I18n.L("未配置");
 				row2.Read = () => pw.Text;
 				Border state = configured ? Ui.Tag(I18n.L("已配置"), "B.Ok", "B.AccentSoft") : Ui.Tag(I18n.L("未配置"), "B.Warn", "B.WarnSoft");
 				Button clear = Ui.Btn(I18n.L("清除"), BtnKind.Ghost);
@@ -289,7 +289,7 @@ public sealed partial class PluginsPage
 		{
 			// 内核不回传密钥明文:有值时显示「已设置」,留空不改
 			TextBox pw = Ui.Pw(280.0);
-			pw.Tag = (str.Length > 0) ? I18n.L("已设置,留空不修改") : I18n.L("未设置");
+			pw.Tag = (str.Length > 0) ? I18n.L("已设置，留空不修改") : I18n.L("未设置");
 			row.Initial = "";
 			row.Read = () => pw.Text;
 			control = pw;
