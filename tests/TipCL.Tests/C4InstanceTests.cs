@@ -408,6 +408,20 @@ public class C4InstanceTests
         });
     }
 
+    /// <summary>
+    /// 【C7a 更正 · 钉新契约】`instance` 这个 id 现在的目标是 Windows 原版那一页(版本管理);
+    /// <see cref="InstancePage"/> 不再注册(Windows 原版里它是死代码)。与上面那条"还原前提"并存。
+    /// </summary>
+    [Fact]
+    public void Instance_id_now_resolves_to_VersionManagePage()
+    {
+        AvaloniaSession.Run(() =>
+        {
+            using var scope = C4Scope.Capture();
+            Assert.IsType<VersionManagePage>(PageRegistry.Create(C4Expected.InstancePageId));
+        });
+    }
+
     /// <summary>【Windows 源】<c>InstancePage.cs:345-355</c>:卡片上的「启动」把该实例设为默认、让启动页优先用它、再跳启动页。</summary>
     [Fact]
     public void Instance_card_launch_button_navigates_after_setting_the_default()
@@ -418,6 +432,10 @@ public class C4InstanceTests
             using var toasts = new C3cToasts();
             using var shell = ShellFixture.Create();
             using var api = new C3cFakeApi().Route("get_instances", "[" + C4Files.InstanceJson("甲") + "]");
+            // 【C7a 更正 · D-126】本用例全程把 `instance` 当 InstancePage 用;而 `instance` 已按 Windows 原版
+            // 改注册成 VersionManagePage(InstancePage 在原版是死代码)。先把前提还原(测试专用的还原入口),
+            // 原断言一字不改;作用域收尾还原注册表快照。
+            InstancePageRegistration.Register();
             shell.Window.Navigate("instance");
             InstancePage page = (InstancePage)shell.Window.CurrentPage!;
             C4Files.Load(page);

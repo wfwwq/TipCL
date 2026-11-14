@@ -38,12 +38,32 @@ public class C4LibraryTests
         AvaloniaSession.Run(() =>
         {
             using var scope = C4Scope.Capture();
+            // 【C7a 更正 · D-126】`instance` 这个 id 已按 Windows 原版改注册成 VersionManagePage
+            // (Windows 的 InstancePage 没有任何构造点 = 死代码),而本用例的前提是"instance 就是 InstancePage"。
+            // 按 D-126 的做法**先把前提还原**(用 InstancePageRegistration 保留的测试还原入口),
+            // 下面原有断言**一字不改**;作用域收尾会把注册表快照还原回去。
+            InstancePageRegistration.Register();
             Assert.True(PageRegistry.Contains(C4Expected.LibraryPageId));
             Assert.True(PageRegistry.Contains(C4Expected.InstancePageId));
             Assert.IsType<LibraryPage>(PageRegistry.Create(C4Expected.LibraryPageId));
             Assert.IsType<InstancePage>(PageRegistry.Create(C4Expected.InstancePageId));
             // 大小写敏感(D-94)
             Assert.Null(PageRegistry.Create("Library"));
+        });
+    }
+
+    /// <summary>
+    /// 【C7a 更正 · 钉新契约】`instance` 这个 id 现在的目标是 Windows 原版那一页(版本管理);
+    /// <see cref="InstancePage"/> 不再注册(它在 Windows 原版是死代码)。这条与上面那条"还原前提"并存:
+    /// 上面那条验的是 InstancePage 自己的行为,这条把**当前默认注册**钉住。
+    /// </summary>
+    [Fact]
+    public void Instance_id_now_resolves_to_VersionManagePage()
+    {
+        AvaloniaSession.Run(() =>
+        {
+            using var scope = C4Scope.Capture();
+            Assert.IsType<VersionManagePage>(PageRegistry.Create(C4Expected.InstancePageId));
         });
     }
 
