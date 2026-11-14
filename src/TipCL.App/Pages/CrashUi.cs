@@ -30,9 +30,11 @@ namespace TipCL.Pages;
 /// <item><c>Clipboard.SetText</c> → <see cref="CopyAsync"/>:WPF 有静态剪贴板入口,Avalonia 11 **没有**,
 ///   剪贴板挂在 TopLevel 上、而且要走 async。所以这里留了一个可注入挂点
 ///   <see cref="ClipboardWriter"/>,测试与离屏模式换掉它,**绝不碰真剪贴板**;</item>
-/// <item><c>new AiFixWindow(report).Show()</c> → <see cref="AiFixLauncher"/>:那个窗口是 22.6 KB 的整窗
-///   (AI 全家,C7+),不在本包范围。按钮照建、点击走挂点;挂点没接时**如实提示**而不是静默空操作
-///   (见 D-118 / D-119);</item>
+/// <item><c>new AiFixWindow(report).Show()</c> → <see cref="AiFixLauncher"/>:那个窗口(C8b 的整窗,
+///   <c>Pages\AiFixWindow.cs</c>)**已经移植**,正常启动路径由 <see cref="TipCL.Pages.AiFixLauncher"/>
+///   的 <c>[ModuleInitializer]</c> 把这个缝接上(接线形状与 Windows 那句一字不差)。保留缝是为了测试与离屏能换掉它;
+///   缝没接时**如实提示**而不是静默空操作 —— 这是**防御性兜底**,不再是"窗口还没移植"的降级
+///   (D-118 / D-119 记的那条降级已因此关闭);</item>
 /// <item><c>UIElement</c> / <c>FrameworkElement</c> → <c>Control</c>;<c>Visibility</c> 在 Avalonia 11 是
 ///   <c>IsVisible</c>(本文件没用到);<c>Thickness</c> 换成 <c>Avalonia.Thickness</c>。</item>
 /// </list>
@@ -52,8 +54,9 @@ public static class CrashUi
 
 	/// <summary>
 	/// 「交给 AI 修复」的注入缝。Windows 是 <c>new AiFixWindow(report).Show()</c>;
-	/// mac 的 <c>AiFixWindow</c> 还没移植(属 AI 全家),所以在它落地之前由外壳 / 页面决定怎么接。
-	/// 为 <c>null</c> 时点击会如实提示"尚未移植",不静默吞掉。
+	/// mac 的 <c>AiFixWindow</c> 已经移植(<c>Pages\AiFixWindow.cs</c>,C8b),并由
+	/// <see cref="TipCL.Pages.AiFixLauncher"/> 的 <c>[ModuleInitializer]</c> 在模块加载时接上。
+	/// 保留这个缝是为了测试与离屏能换掉它;<b>为 <c>null</c> 时点击仍如实提示</b>(防御性兜底,不静默吞掉)。
 	/// </summary>
 	internal static Action<CrashReport>? AiFixLauncher { get; set; }
 
@@ -154,7 +157,9 @@ public static class CrashUi
 					return;
 				}
 
-				// AiFixWindow 未移植(见类注释第 4 条):如实提示,不做静默空操作。
+				// 兜底分支(防御性,不再是"未移植"的降级):正常启动路径上 AiFixLauncher 的
+				// [ModuleInitializer] 已经把缝接好,走到这里只可能是缝被显式置空(测试 / 离屏)。
+				// 口径照旧:如实提示,不做静默空操作。下面那句 Toast 保留作兜底。
 				AppServices.Toast(I18n.L("暂未实现"), I18n.L("AI 修复窗口尚未移植"), ToastKind.Info);
 			};
 			actionRow.Children.Add(aiFix);

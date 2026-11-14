@@ -24,7 +24,8 @@ namespace TipCL.Pages.Plugins;
 ///   <list type="bullet">
 ///   <item><see cref="ChatOpener"/> —— Windows 这里是 <c>win.GetPage("ai") is AiPage ai → await ai.OpenChatAsync(...)</c>,
 ///     而 <c>AiPage</c> 属 AI 批(mac 侧还不存在)。接了缝就调它;**没接就 Navigate("ai") + 一条用户可见的如实 Toast**
-///     (照 <c>CrashUi.AiFixLauncher</c> 的口径:**绝不静默、也不假装开过聊天窗**),AI 批落地后接线即消除;</item>
+///     (照 <c>CrashUi.AiFixLauncher</c> 那条注入缝的兜底口径:**绝不静默、也不假装开过聊天窗**;
+///     那条缝在正常启动路径上已经由 <c>Pages\AiFixLauncher.cs</c> 接好,这里只是照它的兜底写法),AI 批落地后接线即消除;</item>
 ///   <item><b>插件浮层(kind "overlay")是"由 GOAL.md 第 34 行导致的设计差异",不是缺件</b>:
 ///     Windows 这里是 <c>PluginOverlays.Update(plugin, p)</c> —— 造一个 **Win32 分层窗口**
 ///     (点击穿透 = <c>WS_EX_TRANSPARENT|WS_EX_LAYERED</c>,透明 = DWM 玻璃扩到客户区),内容由 **WebView2** 渲染;

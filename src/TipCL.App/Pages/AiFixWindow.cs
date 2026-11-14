@@ -974,5 +974,8 @@ internal sealed class AiFixWindow : Window
 		_status.Text = I18n.L("等你回答");
 	}
 
-	// ==== 仅剩块 4:[ModuleInitializer] 接线 CrashUi.AiFixLauncher + 关闭降级(`:157` 改防御性兜底、保留 `:158`)。
+	// ==== 块 4(已落地):接线**不在这里**,在 `Pages\AiFixLauncher.cs` —— 它的 [ModuleInitializer]
+	// 把 CrashUi.AiFixLauncher 接成 `report => new AiFixWindow(report).Show()`(与 Windows 那句一字不差);
+	// CrashUi 里那条「暂未实现 / AI 修复窗口尚未移植」的用户可见降级因此关闭(该文件的注释按事实改成
+	// "防御性兜底",那句 Toast 作为兜底保留)。本文件到块 4 为止,块 1–4 已全部落地。
 }
