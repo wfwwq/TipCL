@@ -2582,3 +2582,88 @@ Assert.NotNull(shell.GetPage("plugins") as IPluginHostPage);
   原来断言的是**机制**(`Assert.Single(body.ColumnDefinitions)` —— "收起时把列清成 1 列"),列管理搬进控件后改成断言
   **同一件事的效果**(3 列仍在但**前两列宽为 0**、右栏 `*`),并**多出两条**(间隙也收 0、右栏吃满);
   **断言只增不减、其余一字未改**。⇒ 以后凡"实现方式变了但能力没变"的用例,都用这个范式。
+
+## D-168 `Pages\Layout\` 家族(Windows 布局 v2)**不进 mac** —— 事实澄清 + 保持「按需补能力」+ 复活入口
+
+**拍板来源**:用户经 Lead 转达(2026-11-14 14:5x CST):该家族**保持忽略、写清理由**,不要移动、不要删除、不要提交它。本记录落地该决定,并**改正口径里的两处事实错误**(见第 2 节)——记录如果照着错的写法写,以后每个接手人都会被它误导。
+
+### 1 它到底是什么(实测,非转述)
+
+| 组成 | 位置(windos 克隆) | 现状 |
+|---|---|---|
+| A 页面侧家族 | `src\TipCL\Pages\Layout\` | **15 文件 / 217,351 B**(含 `Widgets\` 子目录 8 个文件) |
+| B 纯模型(2fc5e3c 移出 A) | `src\TipCL\Core\Launcher\Layout\` | 5 文件 / 88,876 B(`LayoutDocV2` `LayoutJson` `LayoutSchema` `LayoutStoreV2` + `LayoutV1Bridge`) |
+| C AI 布局工具 | `src\TipCL\Core\Launcher\Ai\LayoutTools.cs` | 15,510 B(mac 侧已按「不适用且有据」裁剪) |
+| D 设计书 | `docs\layout-v2-design.md` | 55,521 B(L0–L7 设计,**不计入**「18 文件」) |
+
+- 建立它的 7 个提交(全在 windos,`main`,**未推送、也不在已发布 main**):
+  `e44e1d6` L0(13:00:10)→ `55f63f6` L1+L2 → `2a79027` L4+L5+L7a → `a351cef` L6+D4 → `e55046e` i18n(13:08:00)→ `2fc5e3c` P1(13:49:08,4 个模型文件移入 Core)→ `9bfb179` P2(13:49:13,**= 冻结哈希**)。
+- 规模口径:「**18 文件**」(Lead 05:03:10Z 对用户的原话)对 —— 那是 `a351cef` 状态;体积实测 **291,493 B**(≈285 KiB),「283 KB」是 B/KB 混用 ±3%,不影响结论。
+
+### 2 事实澄清(两处,必须先纠正)
+
+1. ★ **它不在 mac 克隆里,也不曾被 mac 的 `.gitignore` 忽略。**
+   - mac 侧 `src\TipCL.App\Pages\Layout\` **目录不存在**;
+   - `git status --short` 全文只有一条测试文件改动(` M tests\TipCL.Tests\C1aPaletteTests.cs`,基线时刻);`git status --short --ignored` 只有 `artifacts/`、`dist/`、`*/bin`、`*/obj` —— **没有一条与 Layout 家族有关**;mac 全仓**没有任何未跟踪文件**;
+   - mac 里带 "Layout" 的**已跟踪**文件是 **v1 那套**(`Core\Launcher\{LayoutDoc,LayoutItem,UiLayout}.cs`、`Pages\{DashLayout,PageLayoutIO,PageLayoutStore}.cs`、`Controls\PageLayoutHost.cs` + 6 个测试文件),与本族无关。
+   ⇒ 所以「保持被忽略」的准确含义**不是**「有一批 mac 文件正被忽略着」,而是「**不把任何一件复制进 mac 树**」。
+2. ★ **它不在移植基准里,因此这不是「移植漏了一块」。**
+   - `git -C windos\tipcl ls-tree -r --long 803dd38 -- src/TipCL/Pages/Layout` = **0 文件**;
+   - `803dd38` 正是 `GOAL.md:12` 钉的唯一基准(`merge-base --is-ancestor 803dd38 HEAD` = True);
+   - 该家族是 **基准冻结之后(11-14 当天)** 才在 Windows 侧落成的。
+   ⇒ 正确定性:**「Windows 侧基准外的新功能,mac 侧没跟」**,而不是「移植缺口」。这条决定了下面第 3 节第 1 条理由的分量。
+
+### 3 为什么不进 `src`(五条,按权重)
+
+1. **基准外**:它比 `GOAL.md` 的基准晚一天;移植它会把 mac 从「对齐 `803dd38` 的移植版」变成「对齐一个未推送分支的混合体」,此后的差异审计没有基准可依。
+2. **mac 零活引用**:`TipCL.Pages.Layout` 在 mac 全仓的命中**全在注释/文档注释里**(`Controls\PageLayoutHost.cs`、`PluginsPage.Installed.cs`、`VersionManagePage.cs` 等);整树 0 错误也反证了没有活引用。
+3. **三条用户可见后果已关闭或已登记**:①`D-165`(插件市场「已安装」固定 3 列)已由 C9a(`3652c59`/`6a4079a`)**关闭**;②AI 缺 `layout_get`/`layout_apply` 已按「不适用且有据」裁剪;③六页「可拖分隔条 + 栏宽记忆」已由 C9a 在 `src\TipCL.App\Controls\PageLayoutHost.cs` 自建补回(逐页帧比对通过)。
+4. **成本远大于文件体积**:11 文件 30 处 `System.Windows*`、7 文件 48 处 `Ui.` 静态 UI 助手、3 文件 41 处 `Canvas`、5 文件 `System.Windows.Media`;**10 文件 73 处 `I18n.L(...)` ⇒ 约 73 条新词条 × en + zh_CN**(要过词表差集守卫)。另有未计入家族体积的 `Pages\SettingsLayoutPage.cs`(48,928 B);`LayoutEditor.cs`(48,430 B)是拖放式编辑器 UI。
+5. **本机没有 Mac**:编辑器「能拖能编」只能靠离屏截图 + 单测,按红线必须标「未验证」;而且它 11-14 当天还在热重构(13:49 刚把 4 个文件移进 Core),是移动目标。
+
+### 4 「保持忽略」的准确执行口径(本节就是可验证的断言)
+
+- **不复制、不移动、不删除、不提交**该家族的**任何文件**进 mac;mac 的 `src/`、`tests/` 里**永远不出现** `Pages\Layout\` 目录。
+- mac 的 `.gitignore` **保持原样**:被忽略的是 `artifacts/`、`dist/`、`*/bin`、`*/obj`(**构建产物与在途工作区**),**与 Layout 家族无关**。本记录存在的意义之一,就是防止以后有人把「Layout 家族」记成「一批被忽略的资产」——它不是资产,是**从未进入本仓库的范围外功能**。
+  - 对照:真正「被 `.gitignore` 忽略的关键资产」是 `artifacts\wip\AiFixWindow.cs`(31350 B / 978 行,sha256 `7d7204356a1f2c822aab673c10c32801d0188e995b9bb04169d78fdde225d007`),属 U1/`D-119`,与本条无关。
+- 谁若将来把该家族文件复制进 mac:**必须**同时给出「不进提交」的处理口径与独立移植工作包编号,否则视为违反本决策。
+- **如实登记义务**:三条差异写进 `docs\MAC-VERIFY.md`,并在最终验收清单里出现一行「范围外声明」。
+
+### 5 将来要复活时的入口(文件位置 + 命令)
+
+- 位置(唯一一份在 **windos** 克隆 `main`):`src\TipCL\Pages\Layout\`、`src\TipCL\Core\Launcher\Layout\`、`src\TipCL\Core\Launcher\Ai\LayoutTools.cs`、`docs\layout-v2-design.md`。
+- **冻结哈希:`9bfb179`**(11-14 13:49:13 +0800)。
+- 取用命令(**只读,任选**):
+
+  ```powershell
+  # 1) 看/导出单件,不碰任何工作树
+  git -C D:\项目\tipcl\windos\tipcl show 9bfb179:src/TipCL/Pages/Layout/LayoutEngine.cs
+  # 2) 导出整个家族
+  git -C D:\项目\tipcl\windos\tipcl archive 9bfb179 src/TipCL/Pages/Layout src/TipCL/Core/Launcher/Layout | tar -x -C <目的目录>
+  # 3) 从那 7 个提交还没推送时的离线保险里恢复(自包含,不需要那个克隆)
+  git clone D:\项目\tipcl\_tmp\tasks\mac-ship\windos-layoutv2-20261114.bundle windos-restore
+  ```
+
+- 复活时的**硬约束**(写在这里免得重犯):①从**已提交的哈希**取件,不从工作树取;②先补 i18n 词条(en + zh_CN)并过差集守卫;③按 K 块/页拆包,`src/**` 与 `tests/**` 的改动必须进独立工作包(**文档包无权动 src/tests**);④真机项(拖动手感、命中宽)一律登记「未验证」;⑤`LayoutTools` 要么补 `layout_get`/`layout_apply`,要么继续保留裁剪结论,**不许半搬**。
+
+### 6 离线备份(与 U10 的 push 授权配套)
+
+Lead 要求「交出推送命令前先打本地备份」。已落盘 `_tmp\tasks\mac-ship\`(自包含完整历史,`git bundle verify` 均通过):
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `mac-master-ahead67-20261114.bundle` | 3,470,618 B | `e9b0683b16acef3abccd5a1d92cbb92db9508abae16e8d01d760283401cffcc7` |
+| `windos-layoutv2-20261114.bundle` | 8,076,892 B | `13e93196c1e97c8b4025c92678ac795eb7827bdedc209059517e2e5b6fd7373f` |
+
+第二个是 **layout v2 家族唯一一份代码的离线保险**(那 7 个提交至今未推送)。
+
+### 7 与 `D-165` / `D-167` 的关系
+
+`D-165`(插件市场固定 3 列)已由 `D-167` 的 C9a 列数存储**关闭**,不再是差异;本决策不重开它,只把「整族不进 mac」这条范围结论固定下来,并给出复活入口。
+
+### 8 本次记录的证据出处
+
+- windos:`ls-tree`/`ls-tree -r --long` 实测(18 文件/291,493 B @ `a351cef`;15 文件/217,351 B @ HEAD `9bfb179`)、`merge-base --is-ancestor`、`ls-tree 803dd38` = 0 文件;
+- mac:`git status --short --ignored`、`git ls-files`、全仓 Layout 文件名扫描、`Controls\PageLayoutHost.cs` 等注释命中的独立复核;
+- 规模与后果的原始出处:会话记录 `_tmp\session-recon\cb015309.digest.md:13137/13146-13162`(05:03:10Z 的答复);
+- 完整三选一成本分析与三处不确定点见 `_tmp\tasks\mac-ship\U11-layout-family-advice.md`。
