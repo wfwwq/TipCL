@@ -651,9 +651,16 @@ public class C5aSettingsTests
         });
     }
 
-    /// <summary>【D 类差异】手机同步面板的接缝:没接 → 如实 Toast;接了 → 真的弹。</summary>
+    /// <summary>
+    /// 【U6 前提更正 · D-126】手机同步面板的接缝:U6 落地前它**没人接**,所以这条用例钉的是"点了必须出那条
+    /// 如实降级 Toast(「手机同步面板还没移植」)";U6 把真面板 (<see cref="PhoneSyncPanel"/>) 与它的注册文件
+    /// (<c>PhoneSyncPanelRegistration</c>) 一起落地后,缝默认就是接上的 ⇒ 前提换成 **"点了必须真弹出真面板"**。
+    /// 旧的钉死断言(必须出降级 Toast)随前提一起删掉,替换为下面三条只增不改的补充:
+    /// 1 缝上挂的就是真面板本身(注册文件的 <c>[ModuleInitializer]</c> 接上来的);2 点一下真的弹出面板那张卡;
+    /// 3 降级 Toast 从此不该再出现。测试环境没连手机,所以面板开口第一句就是「请先在设置里连接手机」。
+    /// </summary>
     [Fact]
-    public void Phone_sync_panel_seam_toasts_when_unwired_and_runs_when_wired()
+    public void Phone_sync_panel_seam_opens_the_real_panel()
     {
         AvaloniaSession.Run(() =>
         {
@@ -668,18 +675,28 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
-            C5aFiles.Click(C5aFiles.ByText(page, I18n.L("打开同步面板")));
-            C5aFiles.Pump(() => toasts.Has(I18n.L("手机同步面板还没移植")));
+            // 1 缝上挂的是真面板(不是 null、也不是探针)。
+            Assert.NotNull(SettingsPage.PhoneSyncPanelRunner);
+            Assert.Equal((Func<Task>)PhoneSyncPanel.ShowAsync, SettingsPage.PhoneSyncPanelRunner);
 
-            int ran = 0;
-            SettingsPage.PhoneSyncPanelRunner = () =>
-            {
-                ran++;
-                return Task.CompletedTask;
-            };
+            // 2 点「打开同步面板」:面板真的跑起来(测试环境没连手机 ⇒ 它的第一件事就是那句提示卡)。
+            // 【本包实测的判据】不能用 Dlg.AnyOpen:C4LayerHost 的宿主 Grid 就是 Dlg.Host,而 C5aFiles.Mount
+            // 把页面也挂在那上面 ⇒ AnyOpen 恒为 true。要判"有没有浮层"得数 DialogCard(C5aSettingsTests
+            // 别处的浮层断言也是这个口径)。
+            Assert.Empty(Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>());
             C5aFiles.Click(C5aFiles.ByText(page, I18n.L("打开同步面板")));
-            C5aFiles.Pump(() => ran == 1);
-            Assert.Equal(1, ran);
+            DialogCard panel = C3bFiles.WaitDialog();
+            Assert.Equal(I18n.L("手机同步"), panel.Title);
+            Assert.True(
+                C3bFiles.Descendants(panel).OfType<TextBox>().Any(box => string.Equals(box.Text, I18n.L("请先在设置里连接手机"), StringComparison.Ordinal)),
+                "真面板的第一句提示(请先在设置里连接手机)没出现");
+
+            // 关掉这张卡(它确实是可交互的真对话框),别把浮层留给后面的用例。
+            C5aFiles.Click(C5aFiles.ByText(panel, I18n.L("知道了")));
+            C5aFiles.Pump(() => !Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Any());
+
+            // 3 降级 Toast 从此不该再出现。
+            Assert.False(toasts.Has(I18n.L("手机同步面板还没移植")));
         });
     }
 
