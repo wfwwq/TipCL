@@ -16,8 +16,8 @@ Windows 桌面版(WPF / .NET Framework 4.8)是**只读参照**，整棵树在同
 | `progress/` | 各工作包的收尾报告 |
 | `windos/` | Windows 桌面版整棵树（**只读参照**） |
 
-仓库根的 `TipCL.Linux.sln` 登记了上面三个工程。版本号 `0.1.0-m3` 必须三处一致：`src/TipCL.App/TipCL.App.csproj`
-与 `src/TipCL.Core/TipCL.Core.csproj` 的 `<Version>`、`src/TipCL.Core/CoreInfo.cs` 的常量 —— `tests/TipCL.Tests/SmokeTests.cs` 会断言它。
+仓库根的 `TipCL.Linux.sln` 登记了上面三个工程。版本号 `1.1.0` 必须三处一致:`src/TipCL.App/TipCL.App.csproj`
+与 `src/TipCL.Core/TipCL.Core.csproj` 的 `<Version>`、`src/TipCL.Core/CoreInfo.cs` 的常量 —— `tests/TipCL.Tests/SmokeTests.cs` 会断言它,并顺带断言它与 `AppInfo.APP_VERSION` 相同。**(2026-11-14 由 `0.1.0-m3` 统一为 `1.1.0`;`tools/deb.sh` 就是从 `CoreInfo.cs` 取版本号的,所以 deb 包名与内嵌版本也随之变成 `1.1.0`。)**
 
 ## 环境要求
 

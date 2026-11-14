@@ -71,17 +71,18 @@ R21k 首次真跑 CI 与修复(`cc4c39d`/`44e9917`)、`ac62394` 把 Linux/Avalon
 另外这条**业已证明过一半**:占位值是"格式非法"这件事本身已经被真机验证 —— 客户端会当场拒绝并说明原因(本轮 T2,`t2-10-toast-02.png`)。
 ⇒ 需要拍板的只有一句:"要不要现在切一个 **版本号 > 1.1.0** 的 tag 发版"。
 
-### 3.1 一条必须写下来的事实:这个版本里有两个版本号常量
+### 3.1 版本号:2026-11-14 已统一为 `1.1.0`(在此之前确实是两个常量打架)
 
-| 常量 | 值 | 谁在用 | 位置 |
+| 常量 | 现值 | 谁在用 | 位置 |
 |---|---|---|---|
 | `AppInfo.APP_VERSION` | **`1.1.0`** | **更新判据**(`Updater.Newer(remote, local = AppInfo.APP_VERSION)`)、设置页「关于」里显示的版本、插件引擎兼容性检查 | `src/TipCL.Core/Launcher/AppInfo.cs:10` |
-| `CoreInfo.Version` | `0.1.0-m3` | **启动横幅**「=== TipCL 0.1.0-m3 启动 pid=…」、HTTP UA、插件宿主默认版本 | `src/TipCL.Core/CoreInfo.cs:8`;横幅打印点 `src/TipCL.App/Common/AppLog.cs:67` |
+| `CoreInfo.Version` | **`1.1.0`** | **启动横幅**「=== TipCL 1.1.0 启动 pid=...」、HTTP UA、插件宿主默认版本 | `src/TipCL.Core/CoreInfo.cs:8`;横幅打印点 `src/TipCL.App/Common/AppLog.cs:67` |
 
-两个 csproj 的 `<Version>` 也是 `0.1.0-m3`(`src/TipCL.Core/TipCL.Core.csproj:10`、`src/TipCL.App/TipCL.App.csproj:8`)。
+两个 csproj 的 `<Version>` 也已是 `1.1.0`(`src/TipCL.Core/TipCL.Core.csproj:10`、`src/TipCL.App/TipCL.App.csproj:8`)。
 
-⇒ **看到日志里打 `0.1.0-m3`,不等于"构建过期"** —— 那是 `CoreInfo.Version`,与更新判据无关。(真机复验时我也一度照这个怀疑过,后来登盒子核对:那份构建树里的 `src/TipCL.Core/Launcher/AppInfo.cs:10` 就是 `1.1.0`,与仓库一致。)**发版说明与清单里写版本号,请以 `APP_VERSION` 为准。**
-⇒ 这两个常量不一致属于**产品决定**(统一它们会改变更新语义或横幅/UA),本轮**没有改**,只登记事实。
+**历史(别被旧日志误导)**:在这之前 `CoreInfo.Version` 与两个 csproj 都是 `0.1.0-m3`,而 `AppInfo.APP_VERSION` 是 `1.1.0` —— 也就是"横幅说 `0.1.0-m3`、更新判据说 `1.1.0`"。**2026-11-14 已统一为 `1.1.0`**(顺带把 `SmokeRunner` 的 HTTP UA 与 `PluginHost` 的插件宿主默认版本一起对齐)。所以:**旧记录里打 `0.1.0-m3` 不等于"构建过期";新构建一律打 `1.1.0`。** 发版说明里写版本号,以 `APP_VERSION`(现 `1.1.0`)为准。
+
+⇒ ⚠️ **`update-linux.json` 里的清单 `version` 仍是占位 `0.1.0-m3`,不要动它**:它是"发布清单的版本",而 `Updater.Check` 比的对象是 `APP_VERSION`(现 `1.1.0`)⇒ 清单 `version` 必须**严格大于 `1.1.0`** 才有意义,否则永远是「已是最新版本」(详见 §2 第 3 条)。
 
 ---
 
