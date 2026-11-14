@@ -6665,3 +6665,46 @@ C6a/C6b 交付后,套件在两条通道上偶发红,而且**每次都换一条**
 **推送前的发布前审计(Lead 执行)**:敏感信息扫描**干净**(唯一命中是测试夹具常量 `"super-secret-token"`;`SecretStore`/`TokenState` 是处理密钥的代码而非密钥;无 `.env`/`.pem`/`.pfx`、无个人邮箱);无来自被禁止引用产品线的内容(只在 `GOAL.md` / `README.md` 里以文字形式写了那条禁令本身);仓库约 25 MB。**遗留未决(已告知用户,等其决定)**:①仓库**没有 LICENSE**(这是用户自己的项目,但仍建议加一个);②有 46 行文档/脚本写着开发机绝对路径 `D:\项目\tipcl` 与 `C:\Users\Administrator`;③提交作者是占位身份,推上去不会被关联到任何账号。
 
 **运营规则补充(第 15 条)**:推送类操作**必须先 `git ls-remote` 探明目标仓库的已有 refs**,尤其要判断"目标仓库是不是上游原版自己的仓库" —— 两边历史无关时,只能推新分支,永远不强推默认分支。这条和"`BUILD_EXIT != 0` 时结果作废"属于同一类:**先确证事实,再动手**。
+
+## C7a:VersionManagePage 移植 + 导航语义修正 + D-134 降级消除
+
+### 交付物
+
+| 文件 | 说明 |
+| --- | --- |
+| `src\TipCL.App\Pages\VersionManagePage.cs`(新,1241 行) | 版本管理页(导航 id `instance`):十组版本卡(收藏/Fabric/Forge/Quilt/NeoForge/OptiFine/LiteLoader/原版/不常用/隐藏)、左栏文件夹卡与实例行、版本行(瓦片/标签/副行/隔离标签/独立开关/收藏·卸载·设置)、版本与实例两个右键菜单、安装·迁移·导入整合包·新建·卸载·挑 Java 全照抄;**插件动作条走注入缝** `ActionBarFactory`(没接缝时如实说明) |
+| `src\TipCL.App\Pages\VersionManagePageRegistration.cs`(新) | `[ModuleInitializer]` 把 `instance` 注册成 `VersionManagePage`(D-125) |
+| `src\TipCL.App\Pages\VersionManagePageSettingsRegistration.cs`(新) | 接上 `InstanceDetailPage.SettingsPageFactory = folder => new VersionManagePage { Folder = folder }` ⇒ **D-134 降级消除** |
+| `src\TipCL.App\Pages\InstancePageRegistration.cs`(改,+19/-13) | **去掉 `[ModuleInitializer]`**(不再自注册),保留 `PageId` 与 `Register()` 作测试还原入口(D-126);注明"Windows 原版死代码、文件与 43 条测试保留" |
+| `tests\TipCL.Tests\C7aNavTableTests.cs`(新,135 行) | 导航表一致性 30 条(Windows 十行逐条钉:类型名相符-or-未注册为 null、导航层都有落点、`InstancePage` 不是任何导航 id 的目标) |
+| `C4LibraryTests.cs` / `C4InstanceTests.cs`(改,+20 / +18) | 各 **1 处还原前提**(D-126,原断言一字不改)+ **1 条新断言** `Assert.IsType<VersionManagePage>(PageRegistry.Create("instance"))` |
+
+### 依赖审计(先做的第一件事)
+
+Windows `VersionManagePage.cs` 1110 行,依赖面**没有牵出别的整页**:`VersionRowDto` / `InstanceInfo` / `JavaOption` /
+`FileDrop.DropContext` / `ThumbTile` / 全套 `Ui.*` 与 `UiExt` / `Dlg` / `ModsDialog` / `SavesDialog` /
+`VersionSetupDialog` / `InstancePage.SetDefaultAsync` / `Win.Prefs.VmFavorites` / `LaunchPage.PreferInstance(name, version?)`
+**在 mac 侧都在**。唯一缺件是 `TipCL.Pages.Plugins.PluginActionBar`(63 行)⇒ 它又依赖 **`Pages\Plugins\PluginUi.cs`(494 行 / 13.9 KB)**,
+那不是"小而自包含",而且由 **C7b** 在搬 ⇒ 按 D-119/D-134 的老办法**留缝**(Lead 裁决)。
+
+### 运行
+
+| # | 命令 | 结果 |
+| --- | --- | --- |
+| 1 | `--filter FullyQualifiedName~C4` | 退出码 **0**:`已通过! 失败 0 / 通过 175 / 总计 175` |
+| 2 | `--filter FullyQualifiedName~C7a` | 退出码 **0**:`已通过! 失败 0 / 通过 30 / 总计 30` |
+| 3 | **原子四跑 轮 2**(`artifacts\lead-verify.cmd artifacts\c7a-r2`) | `BUILD_EXIT=0`(**7 个警告 / 0 个错误**)、`VSTEST_EXIT=0`(`失败 0 / 通过 3555`)、`INPROC_EXIT=0`(`总计 3555,通过 3555,失败 0,跳过 0,不支持 0`) |
+| 4 | **原子四跑 轮 1**(`artifacts\c7a-r1`) | `BUILD_EXIT=0`(7/0)、`VSTEST_EXIT=0`(3555/3555)、`INPROC_EXIT=1` —— 唯一那条红是 **`C2dBackendLifecycleTests.Ten_start_stop_cycles_leave_no_listener_or_thread_pileup`**(负载敏感的端口/线程泄漏老抖动,**不是本包**;Lead 随后把它的修法作为小包交回本包处理,见 D-155) |
+
+### 冒烟
+
+`--page instance` 明暗两帧**合法变化** ⇒ 新基准 **light 44163 / `EBB237FB4E20BDDB…`**、**dark 40739 / `74ADDEC9EB438181…`**
+(旧 30057 / 27468 作废);原因:那一格的目标页从 `InstancePage`(Windows 死代码)换成 `VersionManagePage`,版式不同。
+其余 14 帧不受影响(本包未碰外壳 / `Controls.axaml` / `Palette` / 其它页面)。
+
+### 未验证 / 遗留
+
+1. `--page instance` 两帧的**画面内容判读**是按版式与离屏常态推的,没有逐像素取证(离屏 `BridgeReady=false` ⇒
+   实例与版本列表都空、列表行本就不落地见 D-148)。
+2. 插件动作条仍是一句如实说明 —— **等 C7b 的 `PluginUi` / `PluginActionBar` 落地后接一行**即可。
+3. `InstancePage` 的 43 条测试继续以"显式 `Register()` 还原前提"的方式跑(D-126);它作为**产品功能**没有任何入口。

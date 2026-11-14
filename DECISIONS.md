@@ -2219,3 +2219,59 @@ Lead 让我回查 `GOAL.md` 第 34 行的技术选型表,那里**早就写好了
   ⇒ 现在**两个程序集都找**(先 App、再 Core)。
 - 图标:`data:` 走 `ImageDecode`、`http(s):` 走既有 `Thumbs.Cached` / `LoadAsync`,
   字形分支逐字保留(`DefaultGlyph = "\uea86"`、`icon.Length <= 2` 当字形、SVG 直接放弃)。
+
+## D-155 C2d/C2c1 两条负载敏感红:一条是"断言测的不是它自己的性质",一条是"固定一次 Flush 当同步"
+
+- **对象(两条都不是本包作者写的,由 Lead 诊断后交 C7a 落地)**:
+  1. `C2c1WiringTests.The_form_validation_toast_is_audible_now`;
+  2. `C2dBackendLifecycleTests.Ten_start_stop_cycles_leave_no_listener_or_thread_pileup`。
+- **红 1 的根因与修法**:按下「保存」之后只 `UiHost.Flush()` **一次**就想让 Toast 出现在
+  `ToastHostPanel.Children` 里;并发负载下那一次不够 ⇒ `Assert.Single` 拿到空集合(实测**只在 VSTest 通道红过、
+  进程内通道同轮绿**)。修法就是我们清过三次的那族:**"固定一次/固定轮数"换成"等效果 + 9000 截止"**
+  (`C3bFiles.Pump(() => ToastHostPanel.Children.Count >= 1, 9000)`,它内部就是"条件不成立就 Flush + 2ms"),
+  **断言一字未改**。
+- **红 2 的根因与修法(重点)**:`C2dFixtures.WaitUntilNoNewLoopbackListener` 读的是**整台机器的监听表**,
+  而机器上**同时有别的代理/会话在跑**(那天有一条 linux-port 的线在构建)⇒ 那条断言在负载下报
+  `10 轮之后还有新监听端口: 61310,61312`,**它测的不是本用例的性质,是环境**。
+  而**该用例自己的端口**本来就被两行逐条精确检查过:`Assert.DoesNotContain(port, LoopbackListeners())` +
+  `Assert.True(CanBind(port), …)` —— 那才是"启停 10 轮之后端口有没有放掉"这个被测性质,而且更强更准。
+  ⇒ **删掉那条全机器断言**(不是放宽,是删掉一条测错对象的断言),把"新增端口"这个观察量**保留为诊断信息**
+  拼进下面**线程数断言**的失败消息里,并注明"**仅供参考,可能来自别的进程**"。其余断言(每轮端口逐条检查、
+  线程数上限、`BridgePhase` 流转)一条没动、强度不变。
+- **纪律沉淀**:①**断言的观察量必须是被测对象的性质**,不是"这台机器的状态"(并发环境里后者必然噪声);
+  ②凡"等一个异步效果"的地方,"固定一次 Flush / 固定轮数睡眠"都是负载敏感假红的来源(D-151 同族)。
+
+## D-156 C7a:`VersionManagePage` 落地 + 导航语义修正(`instance` 指向的那一页错了)+ D-134 降级消除
+
+- **导航判定(证据)**:Windows `MainWindow.xaml.cs:108-117` 的导航表里 `instance` 那一行是
+  `new NavDef("instance", I18n.L("版本管理"), …, () => new VersionManagePage())`;而 `InstancePage` 在整个
+  Windows 工程里**只出现在它自己的构造函数那一行、没有任何构造点** ⇒ **它在原版是死代码**。
+  C4 当时把 `instance` 注册成 `InstancePage` 只对上了键名(`NavModel.PageForNavKey["instance"]` 确实是
+  `"instance"`)、没对上页面 —— **这是 C4 验收里漏掉的一处真实偏差**。
+- **修法**:`instance` 改由 `VersionManagePageRegistration`(`[ModuleInitializer]`)注册成
+  `VersionManagePage`;`InstancePageRegistration` **去掉 `[ModuleInitializer]`**(不再自注册),但**保留
+  `PageId` 与 `Register()` 作为测试用的还原入口(D-126)**,文件与它已有的 43 条测试全部保留,类注释写明死代码背景。
+  侧栏标题 `NavModel.SubTitles["instance"] = 版本管理` 与 `VersionManagePage.Title` 同名 ⇒ 换页后**自洽**。
+- **D-134 降级消除**:`VersionManagePageSettingsRegistration`(`[ModuleInitializer]`)把
+  `InstanceDetailPage.SettingsPageFactory` 接成 `folder => new VersionManagePage { Folder = folder }`
+  (与 Windows `InstanceDetailPage.cs:189` 的 `new VersionManagePage { Folder = _inst }` 同形),**没动外壳**;
+  正常启动路径上「版本管理页还没移植」那句占位不再出现(依赖那句占位的用例按 D-126 还原前提)。
+- **`57 → 2` 的核减结论(重要)**:翻注册影响面最初按粗口径数出 57 处;逐条核过"**是否真的经由注册表/导航
+  拿到 InstancePage**"之后,**真正需要 D-126 还原前提的只有 2 处**(`C4LibraryTests.cs:44` 与
+  `C4InstanceTests.cs:421-422`),其余 55 处是 `new InstancePage()` / `typeof(InstancePage)` / 常量引用 /
+  `LibraryPage` 的 `CurrentPage` —— **直接类型引用不经注册表,翻注册与它们无关,一字未改**。
+  两个涉事文件各补一条 `Assert.IsType<VersionManagePage>(PageRegistry.Create("instance"))` 钉新契约。
+  教训:**粗口径 grep 只能给上界,必须逐条判"这条路径真的经过被改的那个入口吗"。**
+- **导航表一致性测试**:新增 `C7aNavTableTests`(30 条):①Windows 那十行 id → **类型名**必须相符,
+  **未注册则必须为 null**(二选一,**不用 Skip、不写死桩**;用类型名而不是 `typeof` 是因为 `AiPage`/`PluginsPage`
+  尚未移植 ⇒ 写 `typeof` 编译不过,而类型名写法在它们落地后**自动升级为强断言**);②十个 id 在导航层
+  (`NavDefs`/`SectionIds`/`TopKeys`/`PageForNavKey`)里都有落点;③`Assert.IsNotType<InstancePage>` ——
+  把"死代码页面不该有入口"钉死。
+- **`--page instance` 帧合法变化**:那一格的目标页换了人 ⇒ 新基准 **light 44163 / dark 40739**(旧 30057/27468 作废),
+  原因是版式不同(左栏 272px 文件夹卡 + 右栏十组版本卡 vs 实例卡列表);其余 14 帧不受影响(本包只改了
+  "`instance` 指向哪一页"+ 注册文件,未碰外壳 / `Controls.axaml` / `Palette` / 其它页面)。
+- **插件动作条留缝**:`VersionManagePage.ActionBarFactory`(`internal static Func<Control?>?`,形状同
+  `CrashUi.AiFixLauncher` / `InstanceDetailPage.SettingsPageFactory`);**没接缝时显示一句如实说明**,不静默、
+  不假装能用。**等 C7b 的 `PluginUi` / `PluginActionBar` 落地后一行接上**(那两个文件由 C7b 搬,同一文件不能两个归属)。
+- **"8 个警告"查清是增量噪声**:两次 `--no-incremental` 的原子构建都是 **7 个警告 / 0 个错误**(= 基线),
+  那个 8 只出现在增量构建里 ⇒ 记为**增量构建的瞬时现象**,`--no-incremental` 下复现不了。

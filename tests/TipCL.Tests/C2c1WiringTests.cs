@@ -247,7 +247,11 @@ public class C2c1WiringTests
             UiHost.Flush();
 
             C2c1Input.Press(DlgHarness.ButtonByText(dlg.Host, I18n.L("保存")));
-            UiHost.Flush();
+            // 【C7a 追加修法 · D-152/D-151 同一族】原来是 `UiHost.Flush();` 固定刷一次;
+            // 并发负载下那一次不够 ⇒ 下面 `Assert.Single(ToastHostPanel.Children)` 会拿到空集合
+            // (实测只在 VSTest 通道红过、进程内通道同轮绿)。改成"**等效果 + 9000 截止**":
+            // C3bFiles.Pump 内部就是"条件不成立就 UiHost.Flush() + 2ms、带截止"。**断言本身一字不改。**
+            C3bFiles.Pump(() => shell.Window.ToastHostPanel.Children.Count >= 1, 9000);
 
             // 卡片没关(表单还在),浮层里多了一张「填写有误」的 Toast
             Assert.False(task.IsCompleted);
