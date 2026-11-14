@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -106,6 +107,32 @@ internal static class AiIcons
 	public const string Scan = "M3 7V5a2 2 0 0 1 2-2h2 M17 3h2a2 2 0 0 1 2 2v2 M21 17v2a2 2 0 0 1-2 2h-2 M7 21H5a2 2 0 0 1-2-2v-2 M7 12h10";
 
 	public const string Settings = "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M4.9 19.1L7 17 M17 7l2.1-2.1";
+
+	/// <summary>
+	/// 把一段文本写进剪贴板并吐一个 Toast(= Windows 里那几处静态 <c>Clipboard.SetText(...)</c> + <c>AppServices.Toast</c>;
+	/// 失败只吞掉这一次复制,与 Windows 的 try/catch 同义)。Avalonia 侧剪贴板要从 <c>TopLevel</c> 取,写是异步的。
+	/// </summary>
+	internal static void CopyText(Control owner, string text)
+	{
+		TopLevel? top = TopLevel.GetTopLevel(owner);
+		if (top?.Clipboard == null)
+		{
+			return;
+		}
+		_ = WriteClipboardAsync(top, text);
+	}
+
+	private static async Task WriteClipboardAsync(TopLevel top, string text)
+	{
+		try
+		{
+			await top.Clipboard!.SetTextAsync(text);
+			AppServices.Toast(I18n.L("已复制"), "", ToastKind.Success);
+		}
+		catch
+		{
+		}
+	}
 
 	/// <summary>【Windows 源】<c>:84-87</c>:图标(走 <see cref="Lucide.Icon"/> 这条现成口径)。</summary>
 	public static Path Icon(string data, double size = 16.0, string brushKey = "B.InkMuted")
