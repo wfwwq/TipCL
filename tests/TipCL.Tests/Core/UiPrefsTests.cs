@@ -105,8 +105,8 @@ public class UiPrefsTests
             // 没记过的键 → 默认值,不串味
             Assert.True(fresh.GetExpanded(UiPrefs.LIB_PREFIX + "never-opened", true));
             Assert.False(fresh.GetExpanded(UiPrefs.VM_PREFIX + "never-opened", false));
-            Assert.Equal(false, fresh.ExpandedMap()[libKey]);
-            Assert.Equal(true, fresh.ExpandedMap()[vmKey]);
+            Assert.False(fresh.ExpandedMap()[libKey]);   // 原先写 Assert.Equal(false, ...) —— xUnit2004 警告
+            Assert.True(fresh.ExpandedMap()[vmKey]);
 
             // 翻转后同样往返
             var flip = UiPrefs.Load();
@@ -153,8 +153,8 @@ public class UiPrefsTests
         object? before = Config.CONFIG.Get(UiPrefs.KEY);
         try
         {
-            // 1) ui_prefs 整个缺失
-            Config.CONFIG.Set(UiPrefs.KEY, null);
+            // 1) ui_prefs 整个缺失(显式写 null:这条用例就是测「节点缺失/写坏了」的兜底,CS8625 用 ! 表明是有意为之)
+            Config.CONFIG.Set(UiPrefs.KEY, null!);
             UiPrefs missing = UiPrefs.Load();
             Assert.True(missing.GetExpanded(UiPrefs.LIB_PREFIX + "fabric", true));
             Assert.False(missing.IsFavorite("any", "1.20.1"));
