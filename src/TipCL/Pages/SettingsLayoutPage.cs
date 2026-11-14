@@ -520,7 +520,7 @@ public sealed partial class SettingsPage
 			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
 			return;
 		}
-		PageBase.Toast(I18n.L("布局已应用,可直接「另存为方案」保留"), name, ToastKind.Success);
+		PageBase.Toast(I18n.L("布局已应用，可直接「另存为方案」保留"), name, ToastKind.Success);
 		RefreshLayoutView();
 	}
 
@@ -637,7 +637,7 @@ public sealed partial class SettingsPage
 					PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
 					return;
 				}
-				PageBase.Toast(I18n.L("布局已应用,可直接「另存为方案」保留"), System.IO.Path.GetFileName(path), ToastKind.Success);
+				PageBase.Toast(I18n.L("布局已应用，可直接「另存为方案」保留"), System.IO.Path.GetFileName(path), ToastKind.Success);
 				RefreshLayoutView();
 			}
 			else if (choice == 2)
@@ -665,7 +665,7 @@ public sealed partial class SettingsPage
 			LayoutV2 doc = LayoutStoreV2.Load();
 			int num = LayoutProfiles.MergeV1Pages(doc, pages);
 			LayoutStoreV2.Save(doc);
-			PageBase.Toast(I18n.L("已导入 {0} 个页面的布局(下次打开对应页面生效)", num), System.IO.Path.GetFileName(path), ToastKind.Success);
+			PageBase.Toast(I18n.L("已导入 {0} 个页面的布局（下次打开对应页面生效）", num), System.IO.Path.GetFileName(path), ToastKind.Success);
 			RefreshLayoutView();
 		}
 		catch (Exception ex2)
