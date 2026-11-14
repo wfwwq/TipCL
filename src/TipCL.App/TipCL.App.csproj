@@ -5,6 +5,12 @@
     <AssemblyName>TipCL</AssemblyName>
     <RootNamespace>TipCL</RootNamespace>
     <IsPackable>false</IsPackable>
+    <!-- 用户要求补上产物版本号:此前三个产物都没有自己的 <Version>。
+         值必须与 src\TipCL.Core\Launcher\AppInfo.cs 的 APP_VERSION 保持一致(Windows 侧同版也是 1.1.0):
+         后者是运行时展示/上报用的字符串,这里是程序集元数据(AssemblyVersion/FileVersion/InformationalVersion),
+         两者是**手工同步**的两处 —— 改版本时一起改(备选做法:只在 Directory.Build.props 写一处,但那会连带
+         给测试/工具工程也加上版本,当前不需要)。 -->
+    <Version>1.1.0</Version>
     <!-- Avalonia 11 的 native interop(Windows/Win32 后端)需要 -->
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
   </PropertyGroup>
