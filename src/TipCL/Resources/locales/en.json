@@ -1,4 +1,5 @@
-{"自定义布局": "Custom layout", 
+{"单块页(下载与网络 / 反馈与关于)也能进编辑态:可以调外观、标题或先隐藏": "Single-block pages (Downloads & network / Feedback & about) can also enter edit mode: adjust appearance, title, or hide it first",
+ "自定义布局": "Custom layout", 
  "Node 宿主 30 秒内崩溃超过 3 次，已停止。请查看插件日志。": "The Node host crashed more than 3 times in 30 seconds and was stopped. Check the plugin logs.",
  "kind 必须是 {0}(当前 {1})": "kind must be {0} (currently {1})",
  "version 必须是 {0}(当前 {1})": "version must be {0} (currently {1})",
