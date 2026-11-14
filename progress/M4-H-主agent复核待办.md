@@ -51,6 +51,11 @@ dotnet src\TipCL.App\bin\Release\net8.0\TipCL.App.dll -i bogus_inst launch 26.3
   - `Shortcut.Chmod755` 是空方法 → `.desktop` 没有可执行位;Path/Icon/Exec 直接沿用 Windows 反斜杠路径,Linux 上不可用(M4-H P3.5)。
 
 ## C. 尚未完成的功能(按优先级)
+> **状态(2026-11-14 补,linux-finalize):本节四项已在 2026-11-12 全部关闭,下面是当时写下的原始清单,留档不改。**
+> 1 P5 剩余(AI 子系统)→ PROGRESS「M4-H P5(主体完成)」小节(工具链/权限/三张卡/自检/图片输入/AiFixView 全落地);
+> 2 P6 插件宿主全链 → PROGRESS「M4-H P6 + P7 + P5 尾巴」小节(文件级链路真做,进程内跑插件代码那半按不移植并写明理由,见 PARITY §7);
+> 3 P7 统一拖放入口 → 同小节(`Common/FileDrop.cs` + `Common/FileKinds.cs` 已落地;Linux/X11 收不到系统拖放是 Avalonia 11.3.2 无 XDND 的平台限制,见 PARITY §8 与 DECISIONS D-38);
+> 4 P8 插件动态顶部页签(`group:"top"`)→ PARITY §2「`Shell/TitleBar.SetPluginTabs` + `MainWindow.SyncPluginTabs`(2026-11-12 P8)」。
 
 1. **P5 剩余(AI 子系统)**:工具调用链 `ToolLine / ToolState / StepGroup` + Core `Launcher/Ai` 的 `Agent / Tools / ToolCall`;权限确认与选择卡 `ConfirmCard / AskBlock / AskCard / AiPermissionPanel`;`PlanCard / TaskCard`;`AiSelfTest / AiUiText`;会话记忆面板;图片输入(`AiPage.Images.cs`);`AiIcons`。
    - **`AiFixWindow.cs`(810 行)必须做**:`CrashUi` 的「交给 AI 修复」按钮因它而暂缺,做完后接上。

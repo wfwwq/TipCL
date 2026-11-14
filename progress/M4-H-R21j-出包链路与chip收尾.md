@@ -171,6 +171,7 @@ LINUXDEPLOY=/home/user/tipcl/linuxdeploy.AppImage ./tools/package.sh --appimage-
 **遗留(如实)**:1媒体行「导出」的真机补测(需一个没有 portal 后端的干净会话);
 2CI 仍未在真 runner 上跑过;3测试宿主内存增长的根因未定位(R21i 只做了量化 + 分批规避);
 4盒子 `chips/` 下留了约 46 个脚本、约 55 张截图和那个透传 shim(需要清理时按目录整体删即可)。
+> **R21j 遗留第 2 条已关闭(2026-11-14 补,linux-finalize)**:上面『2CI 仍未在真 runner 上跑过』已不成立 —— `M4-H R21k:推送到 GitHub + 第一次在真 runner 上跑 CI` 真推了一版并在 `.github/workflows/ci.yml` 上跑过真 runner(两个 test job 全绿),见 PROGRESS 的 R21k 小节与 PARITY §9.10。
 
 > **R21j 补记(2026-11-14,隔离会话复核)**:上面第 5 条里"媒体行的「导出」未测出"**已被补齐**,而且是硬证据 ——
 > 在**隔离显示** `:9`(Xvfb + xfwm4 + **私有 dbus**,自己的 `TIPCL_HOME=chips-home9`,同一个 AppImage)上重做:

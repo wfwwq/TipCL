@@ -1,6 +1,6 @@
 # M4-H R21:AppImage 组装与实机验证
 
-状态:流程已在真机打通(2026-11-13,干跑用的是当时的产物);最终产物出来后再跑一遍并归档
+状态:✅ **已闭环**(2026-11-14 补记,linux-finalize)—— 最终产物已重打并归档进 `dist/`:`dist/TipCL-linux-x64.AppImage` = 38,984,184 B sha256 `48c3dceae...`(实测)、`dist/tipcl_0.1.0-m3_amd64.deb` = 37,544,610 B sha256 `109cfd550...`;下面「还差什么」四条见本文件「R21b 收尾」表与 PROGRESS 的 R21f/R21g/R21j 小节。
 
 ## 为什么现在才做
 
@@ -108,6 +108,8 @@ AppImage 解决「下载就能跑」,`.deb` 解决「装进系统、菜单里有
 **三、遗留(如实)**
 
 - CI **没在真 GitHub runner 上跑过**(无 remote),是按已踩过的坑写的规格,不是已验证的事实;
+- **销账(2026-11-14 补)**:上一条已关闭 —— 远端接上后 `M4-H R21k:推送到 GitHub + 第一次在真 runner 上跑 CI`真推了一版并在 `.github/workflows/ci.yml` 上跑过真 runner(两个 test job 全绿),见 PROGRESS 的 R21k 小节与 PARITY §9.10。
 - `.deb` 的 `Depends` 是**保守最小集合**,只在 Ubuntu 24.04 实测可装可跑;Debian/其他发行版未测;
 - `.deb` 只打 `amd64`(与 `linux-x64` 对齐),没有 arm64;
 - `--deb` 与 AppImage 走的是**同一份单文件**的两种形态,所以「装完之后真的能起 GUI」只间接证明:AppImage 那份跑过 `--smoke` exit 0、`.deb` 装出来的那份跑过 `--ai-selftest` 54/54 ⇒ **没有在安装后的路径上真开过窗口**(这一条可以补:装完直接 `tipcl` 起 GUI 截图)。
+- **销账(2026-11-14 补)**:上一条「没有在安装后的路径上真开过窗口」已关闭 —— `M4-H R21j` 在真机上「`.deb` 装 → 从 `/opt/TipCL/TipCL.App` 拉起 GUI(窗口 `TipCL` 900x550)→ 卸载干净」跑通,见 PROGRESS 的 R21j 小节验收表「安装」行。

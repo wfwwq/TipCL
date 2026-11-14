@@ -661,3 +661,12 @@ AppImage 形态取 **`$APPIMAGE`**(磁盘上那个 `.AppImage`,不是 `/tmp/.mou
 >
 > **本轮产物**(改了就重打):AppImage 38,984,184 B `48c3dcea…`、`.deb` 37,544,610 B `109cfd55…`(裸 FUSE 冒烟 exit 0、0 WARN 0 ERROR)。
 > **仍如实留白**:「立即重启」分支未验;失败在任务页是否可见未验;公网真实清单未验;**真发一次版**(release 事件 → `release.yml` 的 linux job → 手工改清单)未验 —— 需要真的切一个 tag。
+
+> **§9.14 留白收口(2026-11-14,linux-finalize)**:上面「仍如实留白」四条逐条见 `PROGRESS.md` 的「M4-H R22 留白收口」小节。摘要:
+> 1「立即重启」分支 —— **已验(真机)**:点「立即重启」后旧 pid `221529` 正常退出、新 pid `221929` 拉起,磁盘 AppImage 的 sha256 由 `48c3dcea…` 变为更新包真值 `4dc93174…`(与更新包、缓存 `.bin` 三处一致),无 `.new` 残留,重启后窗口仍在;
+> 2「失败在任务页是否可见」—— **已验(真机)**:失败后切「下载」→ 点「任务」,下载任务页上有一行「更新启动器 / 下载失败 … sha256 校验失败 …」,页头「进行中 0 · 共 1」(截图由 linux-finalize 亲自复核);
+>    第 1、2 条的真机工件由同仓库并发 agent `linux-updater` 的本轮 T4/T5 产出(`_tmp/tasks/linux-updater/`,脚本 `t4-fail-toast-and-tasks-page.sh` / `t5-restart-branch.sh`,原始输出与截图在 `box-pull/`)。
+> 3**公网真实清单**:`https://raw.githubusercontent.com/wfwwq/TipCL/main/update-linux.json` 实测仍是 `"sha256": "REPLACE-WITH-THE-REAL-SHA256"`(故意格式非法的占位,与 D-72 一致);而且它指向的 `v0.1.0-m3` 发行版**不存在**(tag 与资产实测 404,仓库现有 release 只有 Windows 的 `TipCL.exe`,最新 v1.1.0)。另有一条实测:a) `Updater.Check` 比的是 `AppInfo.APP_VERSION`(现 `1.1.0`),所以清单 `version` 必须 **> 1.1.0** 才有意义,否则永远是「已是最新版本」;
+> 4**真发一次版**:未做 —— 卡点是**要真的切 tag / 建 release**(GitHub 写权限),且本轮授权不含 linux 推送;`release.yml` 的 linux job 已就绪但从未跑过。
+> ⇒ 四条里 1、2 已关闭;3、4 属外部卡点,清单文件**保持现状不改**(现在填任何 sha 都对应不到真实资产)。
+> 另:第 1、2 条与第 3、4 条的事实口径见 `scratch/update-e2e2/REPORT.md` 与 `docs/HANDOFF-d95a9472.md`(由 `linux-updater` 写);第 3 条有一处需留意 —— 那边写的是"发 `v0.1.0-m3`(或更高)的 release 即可闭环",而按 `AppInfo.APP_VERSION = 1.1.0` 实测,只有 **> 1.1.0** 的版本号才会让客户端看见更新。

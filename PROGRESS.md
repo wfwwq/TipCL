@@ -1,4 +1,4 @@
-﻿﻿﻿# PROGRESS — TipCL Linux 版 M1
+﻿﻿# PROGRESS — TipCL Linux 版 M1
 
 > 工作包状态表。各代理收尾后在自己行内更新状态；详细报告见 `progress/M1-<包>.md`。
 > 共享文件编辑纪律见 GOAL.md §6：各包只追加自己的小节，禁止重写他人内容。
@@ -6,10 +6,10 @@
 | 工作包 | 内容 | 独占地盘 | 状态 | 报告 |
 |---|---|---|---|---|
 | M1-A1 ✅ | 工程脚手架（git init、sln、App 空壳、根文档、tools 骨架） | 仓库根、src/TipCL.App、tools/ | 已完成（本包范围；整体 build 待 A4 落地后复验） | progress/M1-A1.md |
-| M1-A2 ✅ | 设计令牌与主题库（Palette 明暗、Controls、UiHelpers、ThemeGalleryPage） | src/TipCL.App/Themes/、src/TipCL.App/Ui/ | 进行中 | progress/M1-A2.md |
-| M1-A3 ✅ | 窗口外壳与导航框架（Shell/：MainWindow、TitleBar、SideNav、NavRegistry） | src/TipCL.App/Shell/、Pages/ | 进行中 | progress/M1-A3.md |
-| M1-A4 ✅ | Core 业务复用层（Windows 版 Core/Services 跨平台搬运 + 复用清单） | src/TipCL.Core/ | 进行中 | progress/M1-A4.md |
-| M1-A5 ✅ | 测试与构建基建 + 冒烟（xunit、build 脚本、docs/、smoke 文档化） | tests/TipCL.Tests/、tools/（充实）、docs/ | 进行中 | progress/M1-A5.md |
+| M1-A2 ✅ | 设计令牌与主题库（Palette 明暗、Controls、UiHelpers、ThemeGalleryPage） | src/TipCL.App/Themes/、src/TipCL.App/Ui/ | 已完成 | progress/M1-A2.md |
+| M1-A3 ✅ | 窗口外壳与导航框架（Shell/：MainWindow、TitleBar、SideNav、NavRegistry） | src/TipCL.App/Shell/、Pages/ | 已完成 | progress/M1-A3.md |
+| M1-A4 ✅ | Core 业务复用层（Windows 版 Core/Services 跨平台搬运 + 复用清单） | src/TipCL.Core/ | 已完成 | progress/M1-A4.md |
+| M1-A5 ✅ | 测试与构建基建 + 冒烟（xunit、build 脚本、docs/、smoke 文档化） | tests/TipCL.Tests/、tools/（充实）、docs/ | 已完成 | progress/M1-A5.md |
 
 ## 状态约定
 
@@ -221,6 +221,7 @@
 - **清理**:删掉已无引用的 `Pages/PlaceholderAi.cs`(AI 页真实化后它成了死代码;对照 Windows 也没有这个文件)。
 - **验收**:Debug / Release 全量重编 0 警告 0 错误;`dotnet test` 连续 3 次 **169 通过 / 1 跳过 / 0 失败**。
 - **仍未完成(留给下一轮,顺序即优先级)**:P5 剩余(AI 工具调用链 / 权限确认与 ask_user 卡 / 计划卡与任务卡 / 自检 / 图片输入 / AiIcons / AiViewStrip)、P6 插件宿主全链(市场·已安装·设置·开发者四分段拆分、PluginActionBar/Overlays/DashCards/Events/PluginUi、MainWindow.Plugins)、P7 的拖放入口、P8 的插件动态顶部页签。
+- **销账(2026-11-14 补,linux-finalize)**:上面这四项在**后续两棒内全部关闭** —— P5 剩余见本文件「M4-H P5(主体完成)AI 工具链 + 权限 + 三张卡 + 自检 + 图片输入 + AiFixWindow」小节;P6 插件宿主全链与 P7 统一拖放入口见「M4-H P6 + P7 + P5 尾巴」小节;P8 插件动态顶部页签见 `docs/PARITY.md` §2 的「`Shell/TitleBar.SetPluginTabs` + `MainWindow.SyncPluginTabs`(2026-11-12 P8)」一行。本节保留原样留档,**不要再把它当未完成项引用**。
 
 ### 2026-11-12 M4-H P3.5 桌面快捷方式 + CLI 入口(移植代理;用户复核否决了上一棒「不移植」的裁决)
 
@@ -1109,3 +1110,49 @@ Windows 版(`windos/src/TipCL/Core/Launcher/Config.cs:12`、`Updater.cs:12`)与�
 
 **一次失误(如实记)**:上一轮代理收尾时用 `pgrep -f xfwm4` **宽匹配**误杀了 `:0` 上会话的窗口管理器(xfce4-session 已自动重启,
 `:0` 恢复正常;此后它改为按 pid/路径精确 kill)。规矩重申:**收尾只按自己的 pid 或自己的路径匹配,宽匹配会误杀别人的东西**。
+
+## M4-H R22 留白收口(2026-11-14,linux-finalize;四条逐条)
+
+> 本节收掉本小节上方「如实留白」那四条。原则:能落地的用**本轮真机/实测证据**关掉;落不了地的写清**具体外部卡点**,不放宽口径。原来的留白段落保留在下方不动。
+
+**1「立即重启」分支(替换后顺手拉起新版)—— 已验(真机,本轮)**
+
+真机(盒子 `main`,隔离 rig `/home/user/tipcl/ud2`:私有 Xvfb `:9` + 本机 8123 HTTP 清单 + 一支真 AppImage 当被测件 + `TIPCL_UPDATE_URL` 指过去),与被中止的那次补验同一套夹具,但这一次点了**「立即重启」**:
+
+- 清单 sha256 = 更新包真值(`4dc93174…`);检查更新 → 「发现新版本」→「下载更新」→ 任务完成(`任务开始 / 发现 99.0.0 / 更新包已下载 / 任务完成`);
+- 点「立即重启」(「更新已下载」对话框主按钮,坐标 (496,409))后:旧进程 `pid=221529` 打出 `=== 正常退出 ===`(07:09:05.590Z)→ **新进程 `pid=221929` 拉起**(07:09:05.777Z,新的一行启动日志),两个 pid 都在进程表里被枚举到;
+- 磁盘上那支 `present/TipCL-under-test.AppImage` 的 sha256 由 `48c3dcea…` 变成 `4dc93174…`,与更新包、缓存 `home/cache/TipCL-99.0.0.bin` **三处一致**;`find . -name '*.new*'` **无残留**;
+- 重启后窗口仍在:`TipCL` 900×550。
+
+证据(原始输出逐行在盘上,非转述):`t5.log.txt`(116 行,`T5 START 07:08:29Z` → `T5 END 07:09:09Z`)、脚本 `t5-restart-branch.sh`、截图 `t5-01-settings.png` / `t5-02-newversion.png` / `t5-03-update-downloaded.png` / `t5-04-right-after-restart-click.png` / `t5-05-new-instance-window.png`。
+**产出者**:同仓库并发 agent `linux-updater` 的本轮真机 T5(工件在 `_tmp/tasks/linux-updater/box-pull/`,其完整复验报告与交接件为 `scratch/update-e2e2/REPORT.md` 与 `docs/HANDOFF-d95a9472.md`);本条的收口判定由 linux-finalize 复核其原始日志后给出。
+⇒ **结论:分支可用**(当场替换 + 拉起新版 + 旧进程退出),不再是留白。
+
+**2「失败在任务页是否也可见」—— 已验(真机,本轮)**
+
+同一套夹具,清单 sha256 写成「长度合法但值错」(64 个 0):检查更新 →「发现新版本」→「下载更新」→ 任务失败 → 切「下载」页 → 点页头的「任务」按钮 → 停在**下载任务页**截图。(**判据提醒**:下载页那个「任务 N」角标统计的是**进行中**数,失败后会回到 0,别拿它当"失败可见"的判据;要看的是任务页上那行卡片。)
+
+**linux-finalize 亲自看图复核**(不是转述):`t4-30-tasks-page.png`(1280×800)上确实有一行失败任务 —— 标题「更新启动器」、副标题「下载失败 TipCL-99.0.0.bin: sha256 校验失败: http://127.0.0.1:8123/pkg.AppImage」、页头「进行中 0 · 共 1」,右侧按钮「日志」可用、「清除」置灰。同轮的 `t4-10-toast-immediately-after-fail.png` 是界面那条失败 toast,`t4-20-download-badge.png` 是下载页角标。
+
+代码侧对照(`src/TipCL.App/Common/Api.cs` 的 `start_self_update`):该任务走 `StartDetached("更新启动器", …)` → `TaskStore.Add(id, title)` + `task_added` 事件,失败把原因写进同一张 `TaskRow` —— 与图上那一行逐字对得上。所以「失败只在任务页、界面上无声」这条 R22 修的就是**界面那一路**,任务页这一路本来就是通的。
+**范围如实说明**:本用例覆盖的是**下载 / 校验失败**这一类;`apply_update` 自身抛错(如包丢失)走的是 `MainWindow.OfferRestartForUpdateAsync` 的 `Dlg.Alert` / Toast,不在本用例覆盖内。
+证据同第 1 条:脚本 `t4-fail-toast-and-tasks-page.sh`、原始日志与上述截图在 `_tmp/tasks/linux-updater/`。
+
+**3 公网真实清单:sha256 现状(实测)与正确做法**
+
+- **客户端真正读的那份清单地址**(三处源码一致:`Updater.DEFAULT_URL` / `Config.DEFAULT_UPDATE_URL` / `Config` 里 `update_url` 的默认值)= `https://raw.githubusercontent.com/wfwwq/TipCL/main/update-linux.json`。
+- **实测(2026-11-14 15:1x +08:00,HTTP 200)**,线上市值就是仓库里的现值:
+  `"version": "0.1.0-m3"`、`"url": "https://github.com/wfwwq/TipCL/releases/download/v0.1.0-m3/TipCL-linux-x64.AppImage"`、
+  **`"sha256": "REPLACE-WITH-THE-REAL-SHA256"`** —— 旧记录说的 `REPLACE-WITH-THE-REAL-SHA256` 与 R22 说的「已改成格式非法」**是同一件事**:它不是漏填,而是**故意**写成格式非法(见 D-72 的来由)。
+- 两条只有实测才会暴露的硬事实:
+  1. **那个 url 指向一个不存在的发行版**:`releases/tag/v0.1.0-m3` 与 `releases/download/v0.1.0-m3/TipCL-linux-x64.AppImage` 实测都是 **HTTP 404**;仓库现有 release 最新为 **v1.1.0(2026-11-07)**,资产只有 `TipCL.exe` 与 `TipCL.exe.sha256`,**一个 Linux 资产都没有**(GitHub releases API 实测)。
+  2. **清单的 `version` 比错了对象**:`Updater.Check` 里 `Newer()` 比的是 **`AppInfo.APP_VERSION`(现值 `1.1.0`)**,不是包版本 `0.1.0-m3`。所以**即使真发了 v0.1.0-m3、真把 sha256 填对**,客户端也会因为 `flag=false` 直接返回 `ok=true / has_update=false / message="已是最新版本"` —— **连「更新被拒绝」都不会提示**(`ValidSha256` 只在 `flag=true` 时才被检查)。要让更新真的可见,清单 `version` 必须 **> 1.1.0**(如 `1.1.1`)。
+- **正确做法**(发版后照做,与 `release.yml` 末尾自己打印的片段同口径):1 切一个**新版本号**的 tag(如 `v1.1.1`)并建 release(published)→ 2 `release.yml` 的 `linux` job 出 `dist/TipCL-linux-x64.AppImage` + `dist/*.deb` 并 `gh release upload`,日志里已打印可直接粘贴的三行(`version` = 标签去掉 `v`、`url` = `releases/download/<tag>/TipCL-linux-x64.AppImage`、`sha256` = `sha256sum dist/TipCL-linux-x64.AppImage`)→ 3 把这三项填进仓库根 `update-linux.json` → 4 复核:`curl -s <清单地址>` 读到新值,且 `sha256` 与刚上传资产的 `sha256sum` 逐字相同。
+- **本轮不落地 + 为什么(具体外部卡点)**:1 需要**真的切 tag / 建 release**,属对外发布动作,要 GitHub 写权限与凭据;lead 台账本轮明确「**只授权 windos → 独立分支;mac / linux 不授权推送**」;2 本 agent 的授权范围**禁止 git commit / add / stash / reset**,tag 也无从创建;3 新版本号是产品决定(必须选一个 > 1.1.0 的号)。
+  ⇒ **`update-linux.json` 保持现状不改**,理由写清:它现在的形态既不会误触发更新(version 低于 `APP_VERSION`),也不会误导(sha 故意非法);在没有真实资产的前提下填任何 sha 都是错的。要动它必须先解锁上面 1/2/3。
+
+**4 真发一次版(release 事件 → `release.yml` 的 linux job → 手工改清单)—— 未落地**
+
+卡点与第 3 条完全相同(切 tag + 建 release + 授权推送),需 lead / 用户授权。
+`release.yml` 本体已就绪、无需再改:`on: release: [published]` + `workflow_dispatch`(带 `tag` 输入),两个 job —— `windows`(net48 exe + sha256)与 `linux`(publish → linuxdeploy → AppImage + `.deb` → xvfb 裸跑冒烟 → 上传 + 打印清单三行)。目前**从没有 Linux 发行版可发**(仓库 0 个 Linux 资产),所以这条链路一次也没跑过。
+本条与第 3 条的事实口径另见 `scratch/update-e2e2/REPORT.md` 与 `docs/HANDOFF-d95a9472.md` 的第二、三节(那两份由 `linux-updater` 写;两处结论一致,**唯一一处口径差别**已在此写明:那里写的是"发 `v0.1.0-m3`(或更高)的 release 即可闭环",而按第 3 条第 2 点实测,`v0.1.0-m4` 这类仍 **低于 `AppInfo.APP_VERSION`(1.1.0)** 的版本号即使真发出来也只会显示"已是最新版本" —— 正确的门槛是 **> 1.1.0**)。
