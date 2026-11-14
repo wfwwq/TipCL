@@ -21,24 +21,25 @@
 <img src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat-square" alt="MIT" />
 <a href="https://github.com/wfwwq/TipCL/actions/workflows/ci-windows.yml"><img src="https://github.com/wfwwq/TipCL/actions/workflows/ci-windows.yml/badge.svg" alt="CI" /></a>
 
-[界面预览](#-界面预览) · [AI 助手](#-ai-助手) · [功能](#-功能) · [下载与构建](#-下载与构建) · [目录结构](#-目录结构) · [MCP Server](#-mcp-server) · [手机同步](#-手机同步) · [插件系统](#-插件系统) · [开发者选项](#-开发者选项) · [更新机制](#-更新机制) · [安全说明](#-安全说明) · [社区建议](#-社区建议) · [致谢](#-致谢) · [仓库结构](#仓库结构) · [许可证](#-许可证)
+[界面预览]（#-界面预览） · [AI 助手]（#-ai-助手） · [功能]（#-功能） · [下载与构建]（#-下载与构建） · [目录结构]（#-目录结构） · [MCP Server](#-mcp-server) · [手机同步]（#-手机同步） · [插件系统]（#-插件系统） · [开发者选项]（#-开发者选项） · [更新机制]（#-更新机制） · [安全说明]（#-安全说明） · [社区建议]（#-社区建议） · [致谢]（#-致谢） · [仓库结构]（#仓库结构） · [许可证]（#-许可证）
 
 </div>
 
 ---
-> 本仓库有两个实现:**Windows 桌面版**(在 `windos/`,就是这份 README 介绍的这个)与 **Linux / Avalonia 移植**(在仓库根 `src/`,当前主线);两者的分工与目录约定见[仓库结构](#仓库结构)。
+
+> 本仓库有两个实现：**Windows 桌面版**（在 `windos/`，就是这份 README 介绍的这个）与 **Linux / Avalonia 移植**（在仓库根 `src/`，当前主线）；两者的分工与目录约定见[仓库结构]（#仓库结构）。
 
 ## 📸 界面预览
 
 <div align="center">
-<img src="windos/docs/ui-audit/hero/launch-light.png" width="640" alt="启动页(浅色主题)" />
+<img src="windos/docs/ui-audit/hero/launch-light.png" width="640" alt="启动页（浅色主题）" />
 </div>
 
-| 启动(深色主题 + 实例切换) | 实例库 | 设置 |
+| 启动（深色主题 + 实例切换） | 实例库 | 设置 |
 |:--:|:--:|:--:|
 | <img src="windos/docs/ui-audit/hero/pop-dark.png" width="250" /> | <img src="windos/docs/ui-audit/hero/library-light.png" width="250" /> | <img src="windos/docs/ui-audit/hero/settings-light.png" width="250" /> |
 
-> 以上是浅色 / 深色主题下的实际界面,原图在 `windos/docs/ui-audit/hero/`。
+> 以上是浅色 / 深色主题下的实际界面，原图在 `windos/docs/ui-audit/hero/`。
 
 ## 🤖 AI 助手
 
@@ -69,8 +70,8 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 | 👤 **账号** | 微软正版、外置登录（authlib-injector）、离线皮肤 |
 | 🌐 **联机** | 内置 Terracotta 局域网联机 |
 | 📱 **手机同步** | 同一 Wi-Fi 或 USB 数据线和手机启动器互传存档，配对码连接，谁改了传谁，覆盖前自动备份 |
-| 🤖 **AI 助手** | 崩溃诊断、卡顿优化、看图、长期记忆、MCP Server，见[上文](#-ai-助手) |
-| 🔌 **插件系统** | 插件市场一键安装，插件可加页面、AI 工具、启动钩子和首页卡片，见[下文](#-插件系统) |
+| 🤖 **AI 助手** | 崩溃诊断、卡顿优化、看图、长期记忆、MCP Server，见[上文]（#-ai-助手） |
+| 🔌 **插件系统** | 插件市场一键安装，插件可加页面、AI 工具、启动钩子和首页卡片，见[下文]（#-插件系统） |
 | 🏠 **仪表盘首页** | 默认呈现启动横幅、启动配置、快捷入口和新闻；日志、时长、便签等卡片按需添加，布局随心拖拽，支持方案与导入导出 |
 | 🎨 **外观** | 浅色 / 深色主题，中英双语界面 |
 
@@ -88,7 +89,7 @@ cd TipCL
 dotnet build windos/src/TipCL/TipCL.csproj -c Release
 ```
 
-构建完跑单元测试(Windows / Linux 上都能跑):
+构建完跑单元测试（Windows / Linux 上都能跑）：
 
 ```bat
 dotnet test windos/tests/TipCL.Tests
@@ -173,25 +174,25 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 
 ## 🔄 更新机制
 
-启动器默认读取本仓库的 [`update.json`](update.json) 检查更新。发布新版本时修改其中的 `version`、`url`（下载地址）和 `sha256` 即可。
+启动器默认读取本仓库的 [`update.json`](update.json) 检查更新(移植侧读 [`update-linux.json`](update-linux.json)，见[仓库结构]（#仓库结构）)；发布新版本时修改其中的 `version`、`url`（下载地址）和 `sha256` 即可。
 
 ## 🛡️ 安全说明
 
 exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，点「更多信息 → 仍要运行」即可。个别杀软会对未签名的单文件程序报启发式误报，源码完全公开，也可以自己编译。
 
-- v1.0.15 SHA-256：`807a54eac31298fff6550affb574d740419dbb21b7540df4ca69ee71e91bb212`（每个 Release 附件都带 `.sha256` 文件，可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描）
+- v1.1.0 SHA-256:`8d5f266bbf9d9c3f4231479d4c4e06a692ea5423863f63a7242126c6aa9b759f`(每个 Release 附件都带 `.sha256` 文件，可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
 
 ## 💬 社区建议
 
-来自 [LINUX DO](https://linux.do) 等社区的每一条建议都会在这里登记,并标出处理状态;也欢迎直接 [提 Issue](https://github.com/wfwwq/TipCL/issues/new/choose)。
+来自 [LINUX DO](https://linux.do) 等社区的每一条建议都会在这里登记，并标出处理状态；也欢迎直接 [提 Issue](https://github.com/wfwwq/TipCL/issues/new/choose)。
 
-状态说明:✅ 已完成 · 🚧 开发中 · 📋 已采纳待排期 · ⏸️ 暂不考虑(附原因)。目前还没有登记条目 —— 你的建议就是第一条。
+状态说明：✅ 已完成 · 🚧 开发中 · 📋 已采纳待排期 · ⏸️ 暂不考虑（附原因）。目前还没有登记条目 —— 你的建议就是第一条。
 
 ## 🙏 致谢
 
-- QQ `368****168`:帮忙测试了正版(微软)验证
+- QQ `368****168`:帮忙测试了正版（微软）验证
 - xbly666:发现并且反馈了图标的 bug
-- 界面图标字形来自 [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)(MIT),打包为内置字体 TipCL Icons
+- 界面图标字形来自 [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)(MIT)，打包为内置字体 TipCL Icons
 
 ## 仓库结构
 
@@ -199,14 +200,16 @@ exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，
 
 | 目录 | 版本 | 说明 |
 |---|---|---|
-| [`windos/`](windos/) | **Windows 桌面版**（WPF / .NET Framework 4.8） | 就是本文档介绍的这个；源码在 `windos/src/TipCL/`；流水线见 [`.github/workflows/ci-windows.yml`](.github/workflows/ci-windows.yml)，发版见 [`release-windows.yml`](.github/workflows/release-windows.yml) |
+| [`windos/`](windos/) | **Windows 桌面版**(WPF / .NET Framework 4.8) | 就是本文档介绍的这个；源码在 `windos/src/TipCL/`；流水线见 [`.github/workflows/ci-windows.yml`](.github/workflows/ci-windows.yml) |
 | `src/` `tests/` `tools/`（**仓库根**） | **Linux / Avalonia 移植**（当前主线） | 自包含单文件产物 + AppImage + `.deb`；流水线见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)；文档见 [`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md) / [`docs/PARITY.md`](docs/PARITY.md) |
+
+* 发版：[`.github/workflows/release.yml`](.github/workflows/release.yml) 由 release 事件（或手动指定 tag）触发，两个 job 把 Windows 的 `TipCL.exe` 与 Linux 的 AppImage / `.deb` 上传到同一个 Release。
 
 * 仓库根 = Linux/Avalonia 移植；Windows 桌面版整棵树在 `windos/` 子目录（2026-11-14 调整，原 Windows 版在根）。
 * 这份 README 放在仓库根：GitHub 首页只渲染根 README，而它是 Windows 桌面版的说明 —— 所以里面所有指向 Windows 树的路径都带 `windos/` 前缀。
 * [`update.json`](update.json) **留在仓库根**:Windows 版启动器按固定 URL
-  (`https://raw.githubusercontent.com/wfwwq/TipCL/main/update.json`)读取它检查更新 ——
-  把它挪进子目录会让**已安装的客户端**更新失效,所以它不属于任何一个子项目,而属于“这个仓库的发布通道”;移植侧用哪份清单,以它自己的更新实现为准。
+  (`https://raw.githubusercontent.com/wfwwq/TipCL/main/update.json`)读取它检查更新；移植侧对应 [`update-linux.json`](update-linux.json) ——
+  两个清单都按固定 URL 读，挪进子目录会让**已安装的客户端**更新失效，所以它们不属于任何一个子项目，而属于“这个仓库的发布通道”。
 * `LICENSE` 同理留在根（仓库级）。
 * 移植的开发过程记录在 [`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md) / [`progress/`](progress/) / [`docs/PARITY.md`](docs/PARITY.md)（与参考版的逐项对照）。
 
@@ -216,4 +219,4 @@ exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，
 
 ---
 
-- v1.1.0 SHA-256:`8d5f266bbf9d9c3f4231479d4c4e06a692ea5423863f63a7242126c6aa9b759f`(每个 Release 附件都带 `.sha256` 文件,可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
+<div align="center"><sub>Made with ❤️ for Minecraft players · 感谢 <a href="https://linux.do">LINUX DO</a> 社区的支持</sub></div>
