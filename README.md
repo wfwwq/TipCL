@@ -204,7 +204,6 @@ exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，
 | `src/` `tests/` `tools/`（**仓库根**） | **Linux / Avalonia 移植**（当前主线） | 自包含单文件产物 + AppImage + `.deb`；流水线见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)；文档见 [`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md) / [`docs/PARITY.md`](docs/PARITY.md) |
 
 * 发版：[`.github/workflows/release.yml`](.github/workflows/release.yml) 由 release 事件（或手动指定 tag）触发，两个 job 把 Windows 的 `TipCL.exe` 与 Linux 的 AppImage / `.deb` 上传到同一个 Release。
-
 * 仓库根 = Linux/Avalonia 移植；Windows 桌面版整棵树在 `windos/` 子目录（2026-11-14 调整，原 Windows 版在根）。
 * 这份 README 放在仓库根：GitHub 首页只渲染根 README，而它是 Windows 桌面版的说明 —— 所以里面所有指向 Windows 树的路径都带 `windos/` 前缀。
 * [`update.json`](update.json) **留在仓库根**:Windows 版启动器按固定 URL
