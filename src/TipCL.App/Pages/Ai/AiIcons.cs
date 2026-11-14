@@ -1,6 +1,8 @@
 using System;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Shapes;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
@@ -106,16 +108,16 @@ internal static class AiIcons
 	public const string Settings = "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M4.9 19.1L7 17 M17 7l2.1-2.1";
 
 	/// <summary>【Windows 源】<c>:84-87</c>:图标(走 <see cref="Lucide.Icon"/> 这条现成口径)。</summary>
-	public static Shape Icon(string data, double size = 16.0, string brushKey = "B.InkMuted")
+	public static Path Icon(string data, double size = 16.0, string brushKey = "B.InkMuted")
 	{
 		return Lucide.Icon(data, size, brushKey);
 	}
 
 	/// <summary>【Windows 源】<c>:89-106</c>:24×24 视图盒的描边路径(缩放见类注释第 1 条)。</summary>
-	public static Shape Path(string data, double size, IBrush brush)
+	public static Path Path(string data, double size, IBrush brush)
 	{
 		double scale = size / 24.0;
-		return new Shape
+		return new Path
 		{
 			Data = Geometry.Parse(data),
 			Width = 24.0,
@@ -133,16 +135,19 @@ internal static class AiIcons
 	/// <summary>【Windows 源】<c>:108-135</c>:扁按钮的模板(视觉树照抄,Border 绑模板父的四个属性 + 居中 ContentPresenter)。</summary>
 	public static FuncControlTemplate<Button> FlatButtonTemplate()
 	{
-		return new FuncControlTemplate<Button>((_, _) =>
+		return new FuncControlTemplate<Button>((button, _) =>
 		{
 			Border border = new Border
 			{
 				CornerRadius = new CornerRadius(8.0),
 			};
-			border.Bind(Border.BackgroundProperty, border.GetObservable(TemplatedControl.BackgroundProperty));
-			border.Bind(Border.BorderBrushProperty, border.GetObservable(TemplatedControl.BorderBrushProperty));
-			border.Bind(Border.BorderThicknessProperty, border.GetObservable(TemplatedControl.BorderThicknessProperty));
-			border.Bind(Border.PaddingProperty, border.GetObservable(TemplatedControl.PaddingProperty));
+			// 内层模板控件的四个属性跟着"模板父"(即这个 Button)走 —— 与 WPF 模板里的
+			// RelativeSource TemplatedParent 同一个意图;Avalonia 里 FuncControlTemplate 的
+			// 第一个参数就是被模板化的那个控件实例。
+			border.Bind(Border.BackgroundProperty, button.GetObservable(TemplatedControl.BackgroundProperty));
+			border.Bind(Border.BorderBrushProperty, button.GetObservable(TemplatedControl.BorderBrushProperty));
+			border.Bind(Border.BorderThicknessProperty, button.GetObservable(TemplatedControl.BorderThicknessProperty));
+			border.Bind(Border.PaddingProperty, button.GetObservable(TemplatedControl.PaddingProperty));
 			border.Child = new ContentPresenter
 			{
 				HorizontalAlignment = HorizontalAlignment.Center,
@@ -237,7 +242,7 @@ internal static class AiIcons
 				HorizontalAlignment = HorizontalAlignment.Right,
 				VerticalAlignment = VerticalAlignment.Bottom,
 			};
-			Shape check = Path(data, 7.0, Brushes.White);
+			Path check = Path(data, 7.0, Brushes.White);
 			check.StrokeThickness = 4.0;
 			badge.Child = check.Mid();
 			badge.Dyn(Border.BorderBrushProperty, "B.Paper");
@@ -292,14 +297,18 @@ internal static class AiIcons
 				StartPoint = new Point(center, center - radius),
 				IsClosed = false,
 			};
-			figure.Segments!.Add(new ArcSegment(
-				new Point(center + radius * Math.Sin(sweep), center - radius * Math.Cos(sweep)),
-				new Size(radius, radius),
-				0.0,
-				sweep > Math.PI,
-				SweepDirection.Clockwise,
-				isStroked: true));
-			Shape arc = new Shape
+			// Avalonia 的 ArcSegment 无参构造 + 属性赋值(WPF 那个带参数的构造函数在这边没有),
+			// 参数值一字不改:半径半径、rotationAngle=0、isLargeArc=sweep>π、顺时针、描边。
+			figure.Segments!.Add(new ArcSegment
+			{
+				Point = new Point(center + radius * Math.Sin(sweep), center - radius * Math.Cos(sweep)),
+				Size = new Size(radius, radius),
+				RotationAngle = 0.0,
+				IsLargeArc = sweep > Math.PI,
+				SweepDirection = SweepDirection.Clockwise,
+				IsStroked = true,
+			});
+			Path arc = new Path
 			{
 				Data = new PathGeometry
 				{
