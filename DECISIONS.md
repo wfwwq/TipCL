@@ -2186,3 +2186,36 @@ Windows 的最后一步是 `Process.Start("explorer.exe", "/select,\"<path>\"")`
   以及 `CrashUi` 的剪贴板缝用例)—— 注入缝优先的那条路不许被这次迁移改坏。
 - **明确不许**:这个 `#pragma` 是**这一处 API 过时的定点豁免**,不是"告警可以关"的先例;不许用它或任何别的方式
   掩盖别的告警(告警预算除 `NU1900` 外只允许 `SYSLIB0014 ×1`)。
+
+## D-148 C7b:插件网页界面在 mac 用**系统浏览器**打开(任务书规定的设计差异,不是"未实现的降级")
+
+**先记一条方法论(这轮踩的坑)**:我在批1b 撞见 `PluginUi.cs` 里的 `WebViewHost` / `PluginWebView` / `WebpFallback`,
+第一反应是按"mac 侧整层不存在 ⇒ 那是缺件"停下报 Lead。**结论对(停下报是对的),判断错(不是缺件)** ——
+Lead 让我回查 `GOAL.md` 第 34 行的技术选型表,那里**早就写好了**:
+
+> | Windows 专属功能 | 管理员提权:去掉。自动更新:只提示新版本 + 打开下载页,不做自替换。
+>    **插件网页界面:用系统浏览器打开(不嵌 WebView)**。compact/premium 双版本与体积红线:不要 |
+
+⇒ **以后遇到"某层在 mac 上不存在",先回 `GOAL.md` 第 28/34 行那两张技术选型表查表**:
+那里写了 mac 侧"去掉什么、换成什么"。查表比重新设计快,而且不会把**设计差异**误记成**缺件**。
+
+**本次落地(与 Windows 的差别):**
+- **内容宿主**:Windows 最后一步是 `new PluginWebView(url, …)`(WebView2 内嵌);mac 换成
+  `NativePluginUi.PluginWebContent(url, plugin, props)` —— 一张如实的内容卡(一句说明 + 地址)
+  + **「在浏览器中打开」按钮**,点击走 B1b 已落的系统浏览器口径 `Crash.ShellOpen`
+  (它自己认平台分支:Windows explorer / mac `open` / Linux `xdg-open`,并且认 `Crash.ShellOpenHook`,
+  **测试靠它拦截、绝不真开窗口**)。
+  `UiContribution.Url` 是**已带 pageToken 的视图地址** ⇒ 系统浏览器打开它是**完整可用的功能**,
+  与 Windows 的差别只是"看在哪里"。**这是设计差异,不是降级**;那批用户可见降级登记在别处(如 D-147)。
+  注:`Content(…, props, …)` 的 `props` 在 Windows 是喂 WebView 的初始化参数;系统浏览器带不了它们 ——
+  地址本身已带 pageToken,所以打开即用,代码里**如实忽略并写明**,不假装传过去了。
+- **`WebViewHost.DevPlugins` 如实不建**:那道注册表(Windows 第 113-116 行)是给 WebView2 宿主读的,
+  mac 没有 WebView 消费方,建一个空集合只会让人以为"有东西在等它"。代码原位留了注释说明。
+- **`WebpFallback` 不是 WebView 问题**:它只是 WebP 解码兜底 ⇒ 换成本仓既有的 `ImageDecode`
+  (Core 的 Skia 编解码器),与 `PluginIcon` 同一处理;**没有新写任何解码器**。
+- **`NativePluginUi` 的反射工厂照搬**(返回类型 `FrameworkElement` → `Control`)——**.NET 插件的原生界面在
+  mac 上照样能用**,这半不受"不嵌 WebView"影响。一处 mac 修正:Windows 只在 **App 程序集**里找
+  `TipCL.Plugins.PluginUiRegistry`,而 mac 的那个注册表由 **Core** 提供(命名空间同样是 `TipCL.Plugins`)
+  ⇒ 现在**两个程序集都找**(先 App、再 Core)。
+- 图标:`data:` 走 `ImageDecode`、`http(s):` 走既有 `Thumbs.Cached` / `LoadAsync`,
+  字形分支逐字保留(`DefaultGlyph = "\uea86"`、`icon.Length <= 2` 当字形、SVG 直接放弃)。
