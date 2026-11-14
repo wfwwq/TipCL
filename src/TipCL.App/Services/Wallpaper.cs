@@ -436,7 +436,7 @@ public static class Wallpaper
 
 		if (!File.Exists(path))
 		{
-			Error = I18n.L("文件不存在:") + path;
+			Error = I18n.L("文件不存在：") + path;
 			_source = "";
 			ApplyChrome(on: false);
 			return;
@@ -457,7 +457,7 @@ public static class Wallpaper
 			Bitmap? bitmap = ImageDecode.DecodeFile(path, 1920);
 			if (bitmap is null)
 			{
-				Error = I18n.L("图片读不出来:") + path;
+				Error = I18n.L("图片读不出来：") + path;
 				_source = "";
 				ApplyChrome(on: false);
 				return;

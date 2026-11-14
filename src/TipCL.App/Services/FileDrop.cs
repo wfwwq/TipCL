@@ -255,7 +255,7 @@ internal static class FileDrop
 			List<FileKinds.Verdict> rest = unsure.Except(same).ToList();
 			if (rest.Count > 0)
 			{
-				AppServices.Toast(I18n.L("有文件没处理"), I18n.L("这些认不出来,可以单独拖进来再选:")
+				AppServices.Toast(I18n.L("有文件没处理"), I18n.L("这些认不出来，可以单独拖进来再选：")
 					+ string.Join(I18n.L("、"), rest.Take(3).Select((FileKinds.Verdict i) => i.Name)));
 			}
 		}
@@ -299,7 +299,7 @@ internal static class FileDrop
 				FileKinds.ModpackProbe.LoaderLabel(info.Loader, info.LoaderVersion),
 				(info.Files > 0) ? I18n.L("{0} 个文件", info.Files) : ""
 			}.Where((string x) => !string.IsNullOrEmpty(x)))).Wrap(),
-			Ui.Field(I18n.L("装成版本"), name, I18n.L("会建成一个新版本,原有版本不受影响"), 78.0));
+			Ui.Field(I18n.L("装成版本"), name, I18n.L("会建成一个新版本，原有版本不受影响"), 78.0));
 		if (await Dlg.Ask(I18n.L("安装整合包"), body, I18n.L("开始安装")))
 		{
 			string target = name.Text?.Trim() ?? "";
@@ -371,10 +371,10 @@ internal static class FileDrop
 		panel.Children.Add(rows);
 		if (others > 0)
 		{
-			panel.Children.Add(Ui.Small(I18n.L("这一批里还有 {0} 个同样认不准的文件,会照同一个选择处理。", others)).Wrap());
+			panel.Children.Add(Ui.Small(I18n.L("这一批里还有 {0} 个同样认不准的文件，会照同一个选择处理。", others)).Wrap());
 		}
 
-		if (!await Dlg.Ask(I18n.L("这个文件放哪儿?"), panel, I18n.L("就这么放"), I18n.L("算了"), danger: false, 460.0))
+		if (!await Dlg.Ask(I18n.L("这个文件放哪儿？"), panel, I18n.L("就这么放"), I18n.L("算了"), danger: false, 460.0))
 		{
 			return "";
 		}
@@ -400,7 +400,7 @@ internal static class FileDrop
 				await AppServices.Client.CallAsync<object>("plugins_install_local", new { path = pluginPath, dev = false });
 			}
 
-			return I18n.L("正在安装插件,进度见插件页");
+			return I18n.L("正在安装插件，进度见插件页");
 		default:
 		{
 			if (!Installers.TryGetValue(kind, out string? method))
@@ -427,7 +427,7 @@ internal static class FileDrop
 
 			window.Navigate("tasks");
 			string where = ((ctx.Instance.Length > 0) ? I18n.L("实例「{0}」", instance) : I18n.L("默认实例"));
-			return I18n.L("已加入下载任务,装进{0}的{1}", where, FileKinds.Label(kind));
+			return I18n.L("已加入下载任务，装进{0}的{1}", where, FileKinds.Label(kind));
 		}
 		}
 	}
@@ -475,7 +475,7 @@ internal static class FileDrop
 		}
 
 		string what = (FileKinds.IsVideo(path) ? I18n.L("动态壁纸") : I18n.L("背景图"));
-		return hadFolder ? I18n.L("已设为{0},文件夹轮播一并停掉了", what) : I18n.L("已设为{0}", what);
+		return hadFolder ? I18n.L("已设为{0}，文件夹轮播一并停掉了", what) : I18n.L("已设为{0}", what);
 	}
 
 	private static async Task<string> SetSkinAsync(string path)
@@ -484,7 +484,7 @@ internal static class FileDrop
 			.Where((AccountRow r) => r.Type == "offline").ToList();
 		if (rows.Count == 0)
 		{
-			throw new InvalidOperationException(I18n.L("还没有离线账号;先到「账号」页建一个,再把皮肤拖进来"));
+			throw new InvalidOperationException(I18n.L("还没有离线账号；先到「账号」页建一个，再把皮肤拖进来"));
 		}
 
 		Func<AccountRow, string, Task<string>>? applier = SkinApplier;

@@ -104,7 +104,7 @@ internal static class AccountGate
 			skin.SelectedIndex = skinIndex;
 			SPanel body = Ui.V(
 				8.0,
-				Ui.Muted(I18n.L("启动游戏前需要先创建一个离线用户(无正版验证)。")),
+				Ui.Muted(I18n.L("启动游戏前需要先创建一个离线用户（无正版验证）。")),
 				name,
 				Ui.Field(I18n.L("默认皮肤"), skin, null, 78.0));
 			if (!await Dlg.Ask(I18n.L("创建离线用户"), body, I18n.L("创建并继续")))
@@ -119,7 +119,7 @@ internal static class AccountGate
 				break;
 			}
 
-			AppServices.Toast(I18n.L("用户名不可用"), I18n.L("1–16 个字符,不能含空格"), ToastKind.Warning);
+			AppServices.Toast(I18n.L("用户名不可用"), I18n.L("1–16 个字符，不能含空格"), ToastKind.Warning);
 		}
 
 		string created = await AccountCreator(typed, skinIndex switch

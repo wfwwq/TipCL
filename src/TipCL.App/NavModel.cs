@@ -26,8 +26,8 @@ public static class NavModel
 
 	public static readonly IReadOnlyDictionary<string, string> StyleLabels = new Dictionary<string, string>
 	{
-		["compact"] = I18n.L("精简(启动 / 游戏 / 版本管理)"),
-		["grouped"] = I18n.L("分组(账户 / 游戏 / 通用)")
+		["compact"] = I18n.L("精简（启动 / 游戏 / 版本管理）"),
+		["grouped"] = I18n.L("分组（账户 / 游戏 / 通用）")
 	};
 
 	public static readonly string[] SectionIds = new string[2] { "download", "more" };
@@ -533,7 +533,7 @@ public static class NavModel
 		string? source = SectionIds.FirstOrDefault((string sec) => members[sec].Contains(key));
 		if (source != null && members[source].Count <= 1)
 		{
-			return new PinResult(null, I18n.L("该分区只剩这一个子页,移走会变空栏;先在「自定义分区」里补充其它子页"));
+			return new PinResult(null, I18n.L("该分区只剩这一个子页，移走会变空栏；先在「自定义分区」里补充其它子页"));
 		}
 		Dictionary<string, object> patch = new Dictionary<string, object>();
 		if (NavStyle(cfg) == "grouped")
