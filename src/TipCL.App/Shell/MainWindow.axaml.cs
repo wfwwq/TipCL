@@ -49,6 +49,8 @@ public partial class MainWindow : Window
                 Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = SyncAccountChipAsync());
             else if (ev.Event == "crash")
                 Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = ShowCrashAsync(ev.TaskId));
+            else if (ev.Event == "update_staged")
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = OfferRestartForUpdateAsync(ev.Text, ev.Message));
         };
         _ = SyncAccountChipAsync();
         HookPlugins();
@@ -195,6 +197,72 @@ public partial class MainWindow : Window
     {
         await TipCL.App.Pages.Feedback.FirstRunWizard.MaybeShowAsync();
         await TipCL.App.Common.FeedbackConsent.MaybeAskAsync(this);
+        await AutoCheckUpdateAsync();
+    }
+
+    // ───────── 启动器自更新(R22,照 Windows MainWindow.AutoCheckUpdateAsync / OfferRestartForUpdateAsync) ─────────
+
+    private static bool _autoUpdateChecked;
+
+    /// <summary>启动后按「自动检查更新」设置**静默**检查一次,有新版才问一句(照参考版:等待 3 秒再查)。</summary>
+    private async Task AutoCheckUpdateAsync()
+    {
+        if (_autoUpdateChecked) return;
+        _autoUpdateChecked = true;
+        try
+        {
+            if (!TipCL.Core.Py.Truthy(TipCL.Core.Launcher.Config.CONFIG.Get("auto_check_update", true))) return;
+            await Task.Delay(3000);
+            TipCL.Core.PyDict? info = await TipCL.App.Common.InProcessApi.Instance.TryCallAsync<TipCL.Core.PyDict>("check_update");
+            if (info == null || !TipCL.Core.Py.Truthy(info["has_update"])) return;
+            string body = ("TipCL " + TipCL.Core.Py.S(info["latest"]) + " 已发布。\n" + TipCL.Core.Py.S(info["notes"])).Trim();
+            if (await TipCL.App.Common.Dlg.Confirm("发现新版本", body + "\n\n现在下载更新?下载完会提示你重启。", "下载更新", "以后再说"))
+                await TipCL.App.Common.InProcessApi.Instance.TryCallAsync<string>("start_self_update");
+        }
+        catch (Exception ex)
+        {
+            // 启动时的静默检查失败不打扰用户,只记一条 WARN(离线是常态)
+            TipCL.App.Common.AppLog.Warn("自动检查更新失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 更新包下载好了(外壳订阅的 update_staged 事件)→ 问一句什么时候重启。
+    ///
+    /// **与参考版的一处有意差别**:Windows 是"先暂存、退出时再用 PowerShell 换 exe"(因为运行中的 exe 换不掉);
+    /// Linux 换运行中的二进制是安全的(进程继续用旧 inode / AppImage 用的是解包挂载),所以这里**无论选哪个都当场替换**,
+    /// 只是"立即重启"会顺手把新版拉起来。
+    /// </summary>
+    private async Task OfferRestartForUpdateAsync(string package, string version)
+    {
+        if (string.IsNullOrWhiteSpace(package)) return;
+        bool now = await TipCL.App.Common.Dlg.Confirm("更新已下载", "重启 TipCL 即可更新到 " + (version.Length > 0 ? version : "新版本") + "。", "立即重启", "稍后重启");
+        try
+        {
+            TipCL.Core.PyDict? res = await TipCL.App.Common.InProcessApi.Instance.TryCallAsync<TipCL.Core.PyDict>("apply_update",
+                null, new TipCL.Core.PyDict { ["package"] = package, ["restart"] = now });
+            if (res == null) return;
+            string mode = TipCL.Core.Py.S(res["mode"]);
+            if (!TipCL.Core.Py.Truthy(res["ok"]))
+            {
+                // 目标不可写(.deb 装到 /opt 那种):把"包在哪、怎么装"如实告诉用户,不假装已更新
+                await TipCL.App.Common.Dlg.Alert("需要手动安装", TipCL.Core.Py.S(res["message"]));
+                return;
+            }
+            if (now)
+            {
+                // 新版已经拉起来了,这个进程功成身退
+                Close(); // 主窗口关闭即退出(Avalonia 11 的 Application 没有 Shutdown)
+            }
+            else
+            {
+                TipCL.App.Common.ToastHost.Show("更新已就绪", mode == "appimage" ? "下次打开就是新版" : "重启启动器即可生效", TipCL.App.Common.ToastKind.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            TipCL.App.Common.ToastHost.Show("更新失败", ex.Message, TipCL.App.Common.ToastKind.Error);
+        }
     }
 
     /// <summary>

@@ -292,7 +292,7 @@ public sealed partial class SettingsPage : PageBase
             UiClass.Field("启动器可见性", _vis, "游戏启动后启动器窗口怎么处理"),
             UiClass.Field("启动页主页", _home, "新闻、自定义 HTML 或留空"),
             UiClass.Field("自定义主页", _homePath, "本地 .html 文件路径"),
-            UiClass.Field("自动检查更新", _autoUpdate, "启动时检查启动器更新"),
+            UiClass.Field("自动检查更新", UiClass.H(8, _autoUpdate, UiClass.Btn("检查更新", BtnKind.Chip, (_, _) => Run(CheckUpdateAsync, "检查更新失败"))), "启动时检查启动器更新"),
             UiClass.Field("语言", _lang, "切换界面语言，重启后完全生效"),
             UiClass.Field("", _langPreview)));
 

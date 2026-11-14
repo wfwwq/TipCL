@@ -10,7 +10,7 @@ public static class Config
 
 	public const string DEFAULT_MS_CLIENT_ID = "00000000402b5328";
 
-	public const string DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/wfwwq/TipCL/main/update.json";
+	public const string DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/wfwwq/TipCL/main/update-linux.json";
 
 	/// <summary>微软登录 Client ID：不再开放给用户设置，固定用内置值；开发调试可用环境变量 TIPCL_MS_CLIENT_ID 覆盖。</summary>
 	public static string MsClientId()
@@ -19,7 +19,7 @@ public static class Config
 		return (env.Length > 0) ? env : DEFAULT_MS_CLIENT_ID;
 	}
 
-	/// <summary>更新源：不再开放给用户设置，固定用官方 update.json；开发调试可用环境变量 TIPCL_UPDATE_URL 覆盖。</summary>
+	/// <summary>更新源：不再开放给用户设置，固定用官方 update-linux.json；开发调试可用环境变量 TIPCL_UPDATE_URL 覆盖。</summary>
 	public static string UpdateUrl()
 	{
 		string env = (System.Environment.GetEnvironmentVariable("TIPCL_UPDATE_URL") ?? "").Trim();
@@ -133,7 +133,7 @@ public static class Config
 		pyDict["ai_gateway_defaults"] = "";
 		pyDict["default_jvm_args"] = "";
 		pyDict["default_priority"] = "normal";
-		pyDict["update_url"] = "https://raw.githubusercontent.com/wfwwq/TipCL/main/update.json";
+		pyDict["update_url"] = "https://raw.githubusercontent.com/wfwwq/TipCL/main/update-linux.json";
 		pyDict["theme_color"] = "#2E9B6B";
 		pyDict["ui_dark"] = false;
 		pyDict["ui_background"] = "";

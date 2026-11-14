@@ -9,7 +9,7 @@ namespace TipCL.Core.Launcher;
 
 public static class Updater
 {
-	public const string DEFAULT_URL = "https://raw.githubusercontent.com/wfwwq/TipCL/main/update.json";
+	public const string DEFAULT_URL = "https://raw.githubusercontent.com/wfwwq/TipCL/main/update-linux.json";
 
 	private static readonly Regex _SHA256_RE = new Regex("\\A[0-9a-fA-F]{64}\\z", RegexOptions.CultureInvariant);
 
@@ -88,7 +88,7 @@ public static class Updater
 		object data;
 		try
 		{
-			data = dm.FetchJson(url, 12L);
+			data = (JsonFetcher != null) ? JsonFetcher(url) : dm.FetchJson(url, 12L);
 		}
 		catch (Exception e)
 		{
@@ -102,48 +102,134 @@ public static class Updater
 		return PyDict.Of("ok", !flag3, "current", AppInfo.APP_VERSION, "latest", (text.Length > 0) ? text : AppInfo.APP_VERSION, "has_update", flag2, "message", flag3 ? "更新清单缺少有效 SHA-256，已拒绝自动更新" : (flag ? ("发现 " + text) : "已是最新版本"), "notes", Py.Str(Py.Or(G(data, "notes"), G(data, "changelog"), "")), "url", Py.Str(Py.Or(G(data, "url"), G(data, "download"), "")), "sha256", text2);
 	}
 
+	/// <summary>取清单的注入点(测试替身;为空时走真实 HTTP)。与仓库既有的 News.CachePathOverride / MdView.UrlOpener 同一种做法。</summary>
+	internal static Func<string, object?>? JsonFetcher { get; set; }
+
+	/// <summary>自身目标的注入点(测试用;为空时按运行形态判定)。</summary>
+	internal static string TargetOverride { get; set; } = "";
+
 	/// <summary>
-	/// 生成替换脚本：等当前进程退出 → 用下载好的新版覆盖当前 exe → （可选）重新打开。
-	/// 用 PowerShell -EncodedCommand，避免中文路径和引号转义问题。
+	/// 要接管的文件:**AppImage 走 `$APPIMAGE`** —— 那是磁盘上那个 `.AppImage` 本身,
+	/// 不是运行时解包出来的 `/tmp/.mount_*` 挂载路径(用后者替换等于往临时目录写,毫无意义)。
+	/// 其它形态(自包含单文件、直接跑的二进制)取进程自己的可执行路径。
 	/// </summary>
-	public static string BuildApplyScript(string package, string exe, int pid, bool restart)
+	public static string UpdateTarget()
 	{
-		string Q(string s) => "'" + (s ?? "").Replace("'", "''") + "'";
-		StringBuilder sb = new StringBuilder();
-		sb.Append("$ErrorActionPreference='SilentlyContinue';");
-		sb.Append("Wait-Process -Id ").Append(pid).Append(" -Timeout 60;");
-		sb.Append("$ok=$false;for($i=0;$i -lt 40 -and -not $ok;$i++){try{Copy-Item -LiteralPath ").Append(Q(package)).Append(" -Destination ").Append(Q(exe)).Append(" -Force -ErrorAction Stop;$ok=$true}catch{Start-Sleep -Milliseconds 500}};");
-		sb.Append("if($ok){Remove-Item -LiteralPath ").Append(Q(package)).Append("};");
-		if (restart)
+		if (TargetOverride.Length > 0)
 		{
-			sb.Append("Start-Process -FilePath ").Append(Q(exe)).Append(';');
+			return TargetOverride;
 		}
-		return sb.ToString();
+		string appImage = (System.Environment.GetEnvironmentVariable("APPIMAGE") ?? "").Trim();
+		if (appImage.Length > 0 && File.Exists(appImage))
+		{
+			return appImage;
+		}
+		string exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
+		// 运行中的二进制被删过(常见于"先删后换"的自更新),此时路径已不可用
+		return (exe.EndsWith("(deleted)", StringComparison.Ordinal) || !File.Exists(exe)) ? "" : exe;
 	}
 
-	/// <summary>启动后台替换进程。调用方随后应退出启动器。</summary>
-	public static void ApplyStaged(string package, bool restart)
+	/// <summary>当前是不是 AppImage 形态运行(用于给用户一句准确的提示)。</summary>
+	public static bool IsAppImage()
+	{
+		string appImage = (System.Environment.GetEnvironmentVariable("APPIMAGE") ?? "").Trim();
+		return appImage.Length > 0 && File.Exists(appImage);
+	}
+
+	/// <summary>
+	/// 能不能安全替换:替换是**同目录改名**(rename),所以要的是**目标目录可写**,不是目标文件可写。
+	/// 用"在目标目录建一个探针文件再删掉"来实测 —— 比猜权限位可靠(`/opt/TipCL` 就是典型的 root 属主目录)。
+	/// </summary>
+	public static bool CanReplace(string target)
+	{
+		try
+		{
+			if (target.Length == 0 || !File.Exists(target))
+			{
+				return false;
+			}
+			string dir = System.IO.Path.GetDirectoryName(target) ?? "";
+			if (dir.Length == 0)
+			{
+				return false;
+			}
+			string probe = System.IO.Path.Combine(dir, ".tipcl-write-probe-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+			File.WriteAllText(probe, "probe");
+			File.Delete(probe);
+			return true;
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// 装更新(Linux 版:**当场替换**,不像 Windows 那样等进程退出再用 PowerShell 换 exe)。
+	///
+	/// 为什么 Linux 可以当场换:运行中的可执行文件在 Linux 上被换掉是安全的 ——
+	/// 进程继续用旧 inode,新文件占的是目录项;AppImage 更宽松(运行时用的是解包挂载,磁盘上那个文件没人占)。
+	/// 所以这里下载包 → 同目录写 `*.new` → **原子 rename 覆盖** → 提示重启(或直接重启)。
+	///
+	/// 目标目录不可写(典型:`.deb` 装到 `/opt/TipCL`)时**不硬来**:返回 `mode=download-only`,
+	/// 把包留在下载目录并告诉用户该怎么装完 —— 系统包管理器管的东西不该被应用偷偷替换。
+	/// </summary>
+	public static PyDict ApplyStaged(string package, bool restart)
 	{
 		string pkg = Utils.AbsPath(package);
 		if (!File.Exists(pkg))
 		{
 			throw new RuntimeError("更新包不存在: " + pkg);
 		}
-		System.Diagnostics.Process current = System.Diagnostics.Process.GetCurrentProcess();
-		string exe = current.MainModule?.FileName ?? "";
-		if (exe.Length == 0)
+		string target = UpdateTarget();
+		if (target.Length == 0)
 		{
 			throw new RuntimeError("找不到启动器自身路径");
 		}
-		string script = BuildApplyScript(pkg, exe, current.Id, restart);
-		string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-		System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+		if (!CanReplace(target))
 		{
-			FileName = "powershell.exe",
-			Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand " + encoded,
-			UseShellExecute = false,
-			CreateNoWindow = true
-		});
+			return PyDict.Of(
+				"ok", false,
+				"mode", "download-only",
+				"target", target,
+				"package", pkg,
+				"message", "更新包已下载: " + pkg + "\n当前文件不可写(" + target + "),通常是用 .deb 装的。请用包管理器安装,或手动替换。");
+		}
+		string staged = target + ".new";
+		File.Copy(pkg, staged, overwrite: true);
+		// 权限跟着旧文件走:下载下来的包是 0644,不补可执行位替换完就跑不起来了
+		if (!OperatingSystem.IsWindows())
+		{
+			// CA1416:这两个 API 只在 Unix 上有实现(本移植只跑 Linux,但分析器要求显式守卫)
+			try
+			{
+				File.SetUnixFileMode(staged, File.GetUnixFileMode(target));
+			}
+			catch (Exception)
+			{
+			}
+		}
+		File.Move(staged, target, overwrite: true);
+		if (restart)
+		{
+			try
+			{
+				System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+				{
+					FileName = target,
+					UseShellExecute = false,
+				});
+			}
+			catch (Exception)
+			{
+			}
+		}
+		return PyDict.Of(
+			"ok", true,
+			"mode", IsAppImage() ? "appimage" : "inplace",
+			"target", target,
+			"package", pkg,
+			"message", restart ? "已更新,正在重新启动。" : "已更新,重启启动器即可生效。");
 	}
 
 	public static string Download(PyDict info, DownloadManager dm = null)

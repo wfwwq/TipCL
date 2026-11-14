@@ -502,6 +502,45 @@ public sealed class InProcessApi : IApi
             case "fetch_news":
                 return News.Fetch();
 
+            // —— 启动器自更新(照 Windows BackendApi.check_update / start_self_update;R22)——
+            // check_update 会真发一次 HTTP(最多 12s)—— CallAsync 本身跑在 Task.Run 里,所以别在 UI 线程直接调它。
+            case "check_update":
+                return Updater.Check();
+            case "start_self_update":
+                return StartDetached("更新启动器", async (prog, ct) =>
+                {
+                    PyDict info = await Task.Run(() => Updater.Check(), ct);
+                    if (!Py.Truthy(info["has_update"]))
+                    {
+                        prog.Log(Py.S(Py.Or(info["message"], "已是最新版本")));
+                        return;
+                    }
+                    prog.Log(Py.S(Py.Or(info["message"], "下载更新")));
+                    string pkg = await Task.Run(() => Updater.Download(info), ct);
+                    prog.Log("更新包已下载: " + pkg);
+                    // 交给外壳(MainWindow)去问"现在重启还是稍后":它订阅 update_staged 事件
+                    RaiseEvent(new ApiEvent
+                    {
+                        Event = "update_staged",
+                        Text = pkg,
+                        Message = Py.S(Py.Or(info["latest"], "")),
+                    });
+                }).Id;
+            case "apply_update":
+            {
+                // Linux 版是**当场替换**(见 Updater.ApplyStaged 的注释),所以这里同步做完就返回结论;
+                // 目标目录不可写(.deb 装到 /opt)时返回 mode=download-only,由调用方把"怎么装完"告诉用户。
+                PyDict res = Updater.ApplyStaged(Py.S(args.Get("package")), Py.Truthy(args.Get("restart")));
+                RaiseEvent(new ApiEvent
+                {
+                    Event = "update_applied",
+                    Message = Py.S(res["message"]),
+                    Text = Py.S(res["mode"]),
+                    Success = Py.Truthy(res["ok"]),
+                });
+                return res;
+            }
+
             // —— 账号(设置页「账号」内层导航)——
             case "get_account_rows":
             {

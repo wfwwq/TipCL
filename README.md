@@ -17,13 +17,28 @@
 <img src="https://img.shields.io/badge/UI-WPF-6CB33E?style=flat-square" alt="WPF" />
 <img src="https://img.shields.io/badge/MCP-Server-000000?style=flat-square" alt="MCP Server" />
 <img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E4%B8%AD%E6%96%87%20%7C%20English-F4A93B?style=flat-square" alt="中文 | English" />
+<img src="https://img.shields.io/github/v/release/wfwwq/TipCL?style=flat-square&label=Release" alt="Release" />
+<img src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat-square" alt="MIT" />
 <a href="https://github.com/wfwwq/TipCL/actions/workflows/ci-windows.yml"><img src="https://github.com/wfwwq/TipCL/actions/workflows/ci-windows.yml/badge.svg" alt="CI" /></a>
 
-[AI 助手](#-ai-助手) · [功能](#-功能) · [下载与构建](#-下载与构建) · [MCP Server](#-mcp-server) · [插件系统](#-插件系统) · [目录结构](#-目录结构) · [开发者选项](#-开发者选项) · [致谢](#-致谢) · [仓库结构](#仓库结构)
+[界面预览](#-界面预览) · [AI 助手](#-ai-助手) · [功能](#-功能) · [下载与构建](#-下载与构建) · [目录结构](#-目录结构) · [MCP Server](#-mcp-server) · [手机同步](#-手机同步) · [插件系统](#-插件系统) · [开发者选项](#-开发者选项) · [更新机制](#-更新机制) · [安全说明](#-安全说明) · [社区建议](#-社区建议) · [致谢](#-致谢) · [仓库结构](#仓库结构) · [许可证](#-许可证)
 
 </div>
 
 ---
+> 本仓库有两个实现:**Windows 桌面版**(在 `windos/`,就是这份 README 介绍的这个)与 **Linux / Avalonia 移植**(在仓库根 `src/`,当前主线);两者的分工与目录约定见[仓库结构](#仓库结构)。
+
+## 📸 界面预览
+
+<div align="center">
+<img src="windos/docs/ui-audit/hero/launch-light.png" width="640" alt="启动页(浅色主题)" />
+</div>
+
+| 启动(深色主题 + 实例切换) | 实例库 | 设置 |
+|:--:|:--:|:--:|
+| <img src="windos/docs/ui-audit/hero/pop-dark.png" width="250" /> | <img src="windos/docs/ui-audit/hero/library-light.png" width="250" /> | <img src="windos/docs/ui-audit/hero/settings-light.png" width="250" /> |
+
+> 以上是浅色 / 深色主题下的实际界面,原图在 `windos/docs/ui-audit/hero/`。
 
 ## 🤖 AI 助手
 
@@ -61,12 +76,6 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 
 > Win7 / 8.1 同样可用：图标用内置字体渲染、图片走纯托管解码，不依赖系统里不存在的新组件（插件的 Web 界面在 Win7 / 8.1 上会自动改用浏览器打开）。
 
-## 🙏 致谢
-
-- QQ `368****168`：帮忙测试了正版（微软）验证
-- xbly666        ：发现并且反馈了图标的bug
-- 界面图标字形来自 [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)（MIT），打包为内置字体 TipCL Icons
-
 ## 📦 下载与构建
 
 **直接使用**：在 [Releases](https://github.com/wfwwq/TipCL/releases) 下载 `TipCL.exe`，双击运行。只需要系统自带的 .NET Framework 4.8，不用装任何运行时。AI 助手开箱即用，也可以在设置里换成自己的模型和 Key。
@@ -77,14 +86,20 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 git clone https://github.com/wfwwq/TipCL.git
 cd TipCL
 dotnet build windos/src/TipCL/TipCL.csproj -c Release
+```
 
-# 运行单元测试（Windows / Linux 都可以）
+构建完跑单元测试(Windows / Linux 上都能跑):
+
+```bat
 dotnet test windos/tests/TipCL.Tests
 ```
 
 产物在 `windos/src/TipCL/bin/Release/net48/TipCL.exe`，依赖已通过 Costura 打进单个 exe。每次 push 和 PR 都会由 CI 自动构建并跑测试。
 
 ## 📁 目录结构
+
+<details>
+<summary>展开完整目录树</summary>
 
 ```
 windos/src/TipCL/
@@ -103,7 +118,9 @@ windos/docs/plugins/DESIGN.md   插件系统接口契约文档
 windos/tools/iconfont/          内置图标字体的映射表与生成脚本
 ```
 
-## 🔌 MCP Server
+</details>
+
+## 🔗 MCP Server
 
 TipCL 可以作为本机 MCP Server，让 Claude、Cursor 等外部 AI 直接调用启动器的工具：查实例、装版本 / 模组 / 整合包 / 光影、启动游戏、诊断崩溃和卡顿、备份存档。
 
@@ -166,14 +183,15 @@ exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，
 
 ## 💬 社区建议
 
-来自 [LINUX DO](https://linux.do) 等社区的每一条建议都会在这里登记，并标出处理状态。也可以直接 [提 Issue](https://github.com/wfwwq/TipCL/issues/new/choose)。
+来自 [LINUX DO](https://linux.do) 等社区的每一条建议都会在这里登记,并标出处理状态;也欢迎直接 [提 Issue](https://github.com/wfwwq/TipCL/issues/new/choose)。
 
-| 建议 | 来源 | 状态 | 说明 |
-|---|---|---|---|
-| （等待第一条建议） | | | |
+状态说明:✅ 已完成 · 🚧 开发中 · 📋 已采纳待排期 · ⏸️ 暂不考虑(附原因)。目前还没有登记条目 —— 你的建议就是第一条。
 
-状态说明：✅ 已完成 · 🚧 开发中 · 📋 已采纳待排期 · ⏸️ 暂不考虑（附原因）
+## 🙏 致谢
 
+- QQ `368****168`:帮忙测试了正版(微软)验证
+- xbly666:发现并且反馈了图标的 bug
+- 界面图标字形来自 [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)(MIT),打包为内置字体 TipCL Icons
 
 ## 仓库结构
 
@@ -186,9 +204,9 @@ exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，
 
 * 仓库根 = Linux/Avalonia 移植；Windows 桌面版整棵树在 `windos/` 子目录（2026-11-14 调整，原 Windows 版在根）。
 * 这份 README 放在仓库根：GitHub 首页只渲染根 README，而它是 Windows 桌面版的说明 —— 所以里面所有指向 Windows 树的路径都带 `windos/` 前缀。
-* [`update.json`](update.json) **留在仓库根**:两个实现的启动器都按固定 URL
+* [`update.json`](update.json) **留在仓库根**:Windows 版启动器按固定 URL
   (`https://raw.githubusercontent.com/wfwwq/TipCL/main/update.json`)读取它检查更新 ——
-  把它挪进子目录会让**已安装的客户端**更新失效，所以它不属于任何一个子项目，而属于“这个仓库的发布通道”。
+  把它挪进子目录会让**已安装的客户端**更新失效,所以它不属于任何一个子项目,而属于“这个仓库的发布通道”;移植侧用哪份清单,以它自己的更新实现为准。
 * `LICENSE` 同理留在根（仓库级）。
 * 移植的开发过程记录在 [`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md) / [`progress/`](progress/) / [`docs/PARITY.md`](docs/PARITY.md)（与参考版的逐项对照）。
 
@@ -198,4 +216,4 @@ exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，
 
 ---
 
-<div align="center"><sub>Made with ❤️ for Minecraft players · 感谢 <a href="https://linux.do">LINUX DO</a> 社区的支持</sub></div>
+- v1.1.0 SHA-256:`8d5f266bbf9d9c3f4231479d4c4e06a692ea5423863f63a7242126c6aa9b759f`(每个 Release 附件都带 `.sha256` 文件,可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描)

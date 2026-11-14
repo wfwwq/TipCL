@@ -1,0 +1,6 @@
+{
+  "version": "0.1.0-m3",
+  "notes": "Linux / Avalonia 移植的可自更新版本。发布新版本时改这三项:version(清单版本号,要比客户端 AppInfo.APP_VERSION 新)、url(那支 AppImage 的下载地址)、sha256(它的 SHA-256)。sha256 不合法时客户端会拒绝更新(这是有意的安全兜底),所以别留下占位值就发版。",
+  "url": "https://github.com/wfwwq/TipCL/releases/download/v0.1.0-m3/TipCL-linux-x64.AppImage",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+}

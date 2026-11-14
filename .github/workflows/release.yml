@@ -1,0 +1,106 @@
+# .github/workflows/release.yml —— 发版:Windows 版与 Linux/Avalonia 移植各自的产物(M4-H R22)
+#
+# 由 release 事件(published)或手动指定 tag 触发。两个 job 各自构建、各自上传到同一个 release:
+#   * windows:Windows 桌面版(net48 单文件 `TipCL.exe` + 它的 sha256),源码在 `windos/`
+#   * linux  :Linux/Avalonia 移植(AppImage + .deb),源码在仓库根;另外打印一份
+#              `update-linux.json` 需要的 sha256 片段,省得发版的人自己算
+#
+# **发版后要人工做的一件事**:把 `update-linux.json` 的 version / url / sha256 改成刚发布的这一版
+# (Windows 侧同规矩:`update.json` 的 version / url / sha256)。两份清单都留在仓库根 —— 它们是外部接口
+# (客户端按固定 URL 读取),不属于任何一个子项目。
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要上传到的发行版标签"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  windows:
+    name: windows (TipCL.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build
+        run: dotnet build windos/src/TipCL/TipCL.csproj -c Release
+      - name: Upload TipCL.exe
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          cp windos/src/TipCL/bin/Release/net48/TipCL.exe TipCL.exe
+          sha256sum TipCL.exe | cut -d' ' -f1 > TipCL.exe.sha256
+          gh release upload "$TAG" TipCL.exe TipCL.exe.sha256 --clobber
+
+  linux:
+    name: linux (AppImage + .deb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: publish linux-x64 (single file)
+        run: |
+          dotnet publish src/TipCL.App -c Release -r linux-x64 -o dist/TipCL-linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:UseSharedCompilation=false
+          rm -f dist/TipCL-linux-x64/*.pdb
+          chmod +x dist/TipCL-linux-x64/TipCL.App
+
+      - name: fetch linuxdeploy（需要 `file` 包）
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq file
+          curl -fSL -o linuxdeploy.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy.AppImage
+
+      - name: assemble AppDir + AppImage + .deb
+        env:
+          LINUXDEPLOY: ${{ github.workspace }}/linuxdeploy.AppImage
+        run: bash ./tools/package.sh --appimage-only --deb
+
+      # 发出去的包也要自己先起得来:与 CI 同一条 xvfb 冒烟(裸 FUSE 失败就 extract-and-run)
+      - name: smoke the AppImage
+        run: |
+          sudo apt-get install -y -qq xvfb
+          rm -rf /tmp/tipcl-rel && mkdir -p /tmp/tipcl-rel/home
+          printf '%s\n' '{"first_run": false, "feedback_consent": true}' > /tmp/tipcl-rel/home/config.json
+          cd /tmp/tipcl-rel
+          APP="$GITHUB_WORKSPACE/dist/TipCL-linux-x64.AppImage"
+          if ! xvfb-run -a env TIPCL_HOME=/tmp/tipcl-rel/home "$APP" --smoke; then
+            xvfb-run -a env APPIMAGE_EXTRACT_AND_RUN=1 TIPCL_HOME=/tmp/tipcl-rel/home "$APP" --smoke
+          fi
+          ls -l smoke.png
+
+      - name: upload + print the manifest lines
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          gh release upload "$TAG" dist/TipCL-linux-x64.AppImage dist/*.deb --clobber
+          APP_SHA=$(sha256sum dist/TipCL-linux-x64.AppImage | cut -d' ' -f1)
+          echo "==== 把下面这段填进 update-linux.json(version 用这次的标签去掉 v 前缀)===="
+          echo "  \"version\": \"${TAG#v}\","
+          echo "  \"url\": \"https://github.com/${{ github.repository }}/releases/download/$TAG/TipCL-linux-x64.AppImage\","
+          echo "  \"sha256\": \"$APP_SHA\""
+          echo "====================================================================="

@@ -28,12 +28,12 @@ on:
     paths-ignore:
       - "windos/**"
       - ".github/workflows/ci-windows.yml"
-      - ".github/workflows/release-windows.yml"
+      - ".github/workflows/release.yml"
   pull_request:
     paths-ignore:
       - "windos/**"
       - ".github/workflows/ci-windows.yml"
-      - ".github/workflows/release-windows.yml"
+      - ".github/workflows/release.yml"
   workflow_dispatch:
 
 env:
