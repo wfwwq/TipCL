@@ -128,7 +128,54 @@ public class C7bPluginsShellTests
         });
     }
 
-    // ================================================================ 外壳行为(假后端驱动 plugins_ui)
+    // ================================================================ 插件动作条(批4)
+
+    /// <summary>
+    /// 【Windows 源】<c>PluginActionBar.cs:34-61</c>:只收 <c>where</c> 匹配的动作;没有匹配项时**整条隐藏**;
+    /// 点击调 <c>plugins_action(plugin, id, context)</c>,并把 <c>where</c> 塞进 context(全部走假后端)。
+    /// </summary>
+    [Fact]
+    public void Plugin_action_bar_filters_by_where_and_calls_plugins_action()
+    {
+        AvaloniaSession.Run(() =>
+        {
+            using var scope = C5bScope.Capture();
+            using var toasts = new C3cToasts();
+            using var api = new C3cFakeApi()
+                .Route("plugins_ui", "[{\"plugin\":\"demo\",\"kind\":\"action\",\"id\":\"go\",\"label\":\"来一发\",\"spec\":{\"where\":\"launch\"}}," +
+                                     "{\"plugin\":\"demo\",\"kind\":\"action\",\"id\":\"tray\",\"label\":\"托盘\",\"spec\":{\"where\":\"tray\"}}]")
+                .Route("plugins_list", "[]")
+                .Route("plugins_action", "null");
+            Dictionary<string, object?> ctx = new Dictionary<string, object?> { ["version"] = "1.20.1" };
+            PluginActionBar bar = new PluginActionBar("launch", () => ctx);
+            try
+            {
+                // 首屏还没拉到贡献 ⇒ 整条隐藏(Windows 的 Collapsed)
+                C5bFiles.Flush(2);
+                Assert.False(bar.IsVisible);
+                PageBase.Run(PluginUi.RefreshAsync);
+                C5bFiles.Pump(() => PluginUi.OfKind("action").Any());
+                C5bFiles.Pump(() => bar.IsVisible);
+                // 只留下 where == "launch" 的那一个(托盘那个不进这一条)
+                List<Button> buttons = bar.Children.OfType<Button>().ToList();
+                Assert.Single(buttons);
+                Assert.Equal("来一发", buttons[0].Content as string);
+                // 点击:plugins_action(plugin, id, context) 且 context 里带 where
+                C5bFiles.Click(buttons[0]);
+                C5bFiles.Pump(() => api.Count("plugins_action") >= 1);
+                C5bFiles.AssertParam(api, "plugins_action", "plugin", "demo");
+                C5bFiles.AssertParam(api, "plugins_action", "id", "go");
+                string args = api.ParamsOf("plugins_action");
+                Assert.Contains("\"where\":\"launch\"", args, StringComparison.Ordinal);
+                Assert.Contains("\"version\":\"1.20.1\"", args, StringComparison.Ordinal);
+            }
+            finally
+            {
+                // 订阅是进程级静态 ⇒ 收尾真退订(否则这会一直抓着这条动作条)
+                bar.Detach();
+            }
+        });
+    }
 
     /// <summary>
     /// `plugin:` 命中回退口 ⇒ **页面真的换上**;未注册且非 `plugin:` 的 id ⇒ <c>Navigate</c> 给 false、
