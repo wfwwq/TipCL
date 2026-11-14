@@ -811,7 +811,7 @@ public class C5aSettingsTests
             };
 
             Task save = page.SaveNowAsync();
-            C5aFiles.Pump(() => api.Count("set_language") >= 1);
+            C5aFiles.Pump(() => api.Count("set_language") >= 1, 9000);
             Assert.Equal("en-US", C5aFiles.ParamAt(api, "set_language", "lang"));
 
             // 确认框推出来再点(D-113)
@@ -819,6 +819,9 @@ public class C5aSettingsTests
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last();
             Assert.Equal(I18n.L("语言已切换"), card.Title);
             C5aFiles.Click(C5aFiles.ByText(card, I18n.L("立即重启")));
+            // 【D1 修法 · D-152】点完「立即重启」之后,注入缝(`ProcessLauncher`)是在**续体**里才被调到的,
+            // 而那条断言在列表为空时是假红(实测只在 VSTest 通道红过一次)⇒ 先**等这个可观测效果**成立再断言。
+            C5aFiles.Pump(() => launchedExe.Count >= 1, 9000);
             C5aFiles.PumpTask(save);
             // 注入缝被调到 = "要重启"那条路真的走了;测试里没有起任何真进程
             Assert.Contains(launchedExe, exe => exe.Length > 0 || exe.Length == 0);

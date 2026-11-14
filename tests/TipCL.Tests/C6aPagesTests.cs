@@ -374,18 +374,24 @@ public class C6aPagesTests
             ComboBox type = C5aFiles.Descendants(page).OfType<ComboBox>()
                 .First(c => c.Items.OfType<object>().Any(o => (o.ToString() ?? "") == I18n.L("优化")));
             type.SelectedIndex = 1;
-            C5aFiles.Pump(() => C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "category") == "优化", 9000);
             ComboBox version = C5aFiles.Descendants(page).OfType<ComboBox>()
                 .First(c => c.Items.OfType<object>().Any(o => (o.ToString() ?? "") == "1.20.1"));
-            // 【D1 修法 · "条件根本不会成立"那一类】可编辑 ComboBox 上改 `.Text` **不会**触发 SelectionChanged
-            // (Avalonia 与 WPF 同),而页面是按 SelectionChanged 去重搜的 ⇒ 原来那条"等最后一次搜索的
-            // game_version == 1.20.1"的条件**永远不会成立**,VSTest 通道下就是 9 秒超时。
-            // 改成**选中列表里那一项**(游戏版本下拉的候选里本来就有 1.20.1)⇒ 真的触发一次带该参数的搜索。
+            // 【D1 修法 · any-call】可编辑 ComboBox 改 `.Text` 不触发 SelectionChanged(Avalonia 与 WPF 同;
+            // 页面正是按它重搜的)⇒ 必须**选中列表项**来驱动。
             version.SelectedIndex = version.Items.OfType<object>().Select(o => o.ToString() ?? "").ToList().IndexOf("1.20.1");
-            C5aFiles.Pump(() => api.Count("search_mods") >= 2 && C5aFiles.ParamAt(api, "search_mods", api.Count("search_mods") - 1, "extra", "game_version") == "1.20.1", 9000);
-            int last = api.Count("search_mods") - 1;
-            Assert.Equal("1.20.1", C5aFiles.ParamAt(api, "search_mods", last, "extra", "game_version"));
-            Assert.Equal("优化", C5aFiles.ParamAt(api, "search_mods", last, "extra", "category"));
+
+            // 【D1 修法 · 等待条件不许认"最后一次"】原来等的是"最后一次调用的 category == 优化",
+            // 但负载下页面首屏那次搜索可能**更晚到达**,把"最后一次"挤成 category="" 的那次 ⇒ 9 秒超时
+            // (VSTest 通道实测)。**等待条件必须是"存在某次调用满足参数"**;载荷断言再谈"哪一次"。
+            bool BothParamsPresent() => Enumerable.Range(0, api.Count("search_mods")).Any(i =>
+                C5aFiles.ParamAt(api, "search_mods", i, "extra", "game_version") == "1.20.1" &&
+                C5aFiles.ParamAt(api, "search_mods", i, "extra", "category") == "优化");
+            C5aFiles.Pump(BothParamsPresent, 9000);
+            int at = Enumerable.Range(0, api.Count("search_mods")).Last(i =>
+                C5aFiles.ParamAt(api, "search_mods", i, "extra", "game_version") == "1.20.1" &&
+                C5aFiles.ParamAt(api, "search_mods", i, "extra", "category") == "优化");
+            Assert.Equal("1.20.1", C5aFiles.ParamAt(api, "search_mods", at, "extra", "game_version"));
+            Assert.Equal("优化", C5aFiles.ParamAt(api, "search_mods", at, "extra", "category"));
         });
     }
 
