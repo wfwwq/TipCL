@@ -594,8 +594,8 @@ public sealed partial class LaunchPage : PageBase
 #endif
 	}
 
-#if PREMIUM
-	// —— premium 标题栏沉浸（交接必读 §2.5：「启动页背景铺到标题栏下，标题栏半透明」；compact 无此代码） ——
+#if IMMERSIVE
+	// —— 标题栏沉浸（IMMERSIVE/PREMIUM 构建启用；compact 无此代码） ——
 	// 有全幅背景（截图或 hero，且用户没设壁纸）时：把 _bgImage/_bgShade 从页面根搬到 MainWindow.WallHost
 	//（RowSpan=2，位于 TopBar 之后的非命中层；排在 Wallpaper 自带元素之后，天然压在其上），PageWash 置透明，
 	// TopBar 换玻璃底 + 白字（元素级资源覆盖，模拟效果图 .tb.glass）。
@@ -1911,7 +1911,7 @@ public sealed partial class LaunchPage : PageBase
 		}
 	}
 
-#if PREMIUM
+#if IMMERSIVE
 	// 离开启动页必须退出沉浸：背景搬回页面根（随页面一起离屏）、TopBar 回主题底色、PageWash 恢复。
 	// 再次回到启动页时 OnShown → ApplyHeroTone → SyncImmersive 会自动重新进入。
 	public override void OnHidden()
