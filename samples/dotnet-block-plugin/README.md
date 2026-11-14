@@ -46,20 +46,21 @@ DotNetBlockSample.dll      <- samples\dotnet-block-plugin\bin\Release\DotNetBloc
 然后在插件页启用它(首次启用会问一次 `ui` 权限),到「设置 → 布局 → 编辑」里加一个插件区块,
 块 id 写 `plugin:dotnet-block-sample:hello`。
 
-## 为什么 manifest 里**不**声明 `contributes.blocks`
+## 为什么 manifest 里**也**声明 `contributes.blocks`(一段历史)
 
-`.NET` 插件的界面是**运行时**用 `ctx.Ui.RegisterBlock(...)` 注册的(`DESIGN.md` §3.2),
-manifest 只需声明 `runtime/assembly/entryType` + 需要的权限。**额外**在 manifest 里声明同一个块会踩一个
-当前树上的坑(RPC 层缺陷,已在本轮 E2E 里拍到,详见 `tests/TipCL.NativeBlockE2E` 的报告与
-`_tmp\tasks\win-weak\e2e-run3.txt`):
+`.NET` 插件的界面是**运行时**用 `ctx.Ui.RegisterBlock(...)` 注册的(`DESIGN.md` §3.2),manifest 只需
+`runtime/assembly/entryType` + 权限。但**同时**在 manifest 里声明同一个块是完全合法的写法,而它一度是个坑:
 
 - `PluginManager.UiRows()` 把「manifest 声明」与「原生注册表」**两批都塞进同一次 `plugins_ui`**
-  (`PluginManager.cs:1346` 的 `"native": false` 行 + `:1366` 的 `"native": true` 行),同一个
-  `(plugin, kind, id)` 于是有两行;
-- 前端 `PluginUi.Find` 是 `FirstOrDefault`,拿到的是 `native:false` 且 `url:""` 的那一行,
-  于是走「插件页面还没准备好」分支 → **.NET 插件的块渲染不出自己的控件**;
-- 契约(`docs/plugins/DESIGN.md:443`)说的是「.NET 插件的原生界面行上 `native:true`、`url:""`」,
-  所以这属于 RPC 合并层该去重(native 行优先)的地方,不是插件写法问题。
+  (`"native": false` 行 + `"native": true` 行),同一个 `(plugin, kind, id)` 于是有两行;
+- 前端 `PluginUi.Find` 是 `FirstOrDefault`,拿到 `native:false` 且 `url:""` 的那一行 ⇒ 走
+  「插件页面还没准备好」⇒ **.NET 插件的块渲染不出自己的控件**;
+- 契约(`docs/plugins/DESIGN.md:443`)只说「.NET 插件的原生界面行上 `native:true`、`url:""`」,
+  重复行不在契约里。
 
-因此本样例只做运行时注册 —— 这条路径在 E2E 里是**全绿**的;如果你确实要在 manifest 里声明,
-先把上面那处去重修掉(修完把本样例的 `contributes.blocks` 加回来即可复现两行场景)。
+**已修复**:`PluginManager.DedupNativeFirst` 现在按 `(plugin, kind, id)` 去重、native 行优先
+(键里带 plugin 是必须的:两个插件各有一个同 id 的块是合法的,不能互相吞);
+`tests\TipCL.Tests\PluginUiRowsDedupTests.cs` 钉住这条规则,`tests\TipCL.NativeBlockE2E` 则端到端复现
+「manifest 声明 + 运行时注册」两行场景 —— 现在 `plugins_ui` 只给一行 `native:true`、块渲染出插件控件。
+
+所以本样例**保留** manifest 声明:它既是"一个真实插件会怎么写"的样子,也是那条修复的回归现场。

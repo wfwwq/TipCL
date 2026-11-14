@@ -8,5 +8,10 @@
   "assembly": "DotNetBlockSample.dll",
   "entryType": "DotNetBlockSample.BlockPlugin",
   "permissions": ["ui"],
-  "engines": { "tipcl": ">=1.0.13" }
+  "engines": { "tipcl": ">=1.0.13" },
+  "contributes": {
+    "blocks": [
+      { "id": "hello", "label": "示例 .NET 区块", "view": "dotnet-block-sample" }
+    ]
+  }
 }
