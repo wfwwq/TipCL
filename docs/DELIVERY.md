@@ -123,3 +123,23 @@ chmod +x tools/verify-linux.sh && tools/verify-linux.sh        # 默认 dist/lin
 | 字体 | 30 个 CJK 字体可用，中文渲染正常（fontconfig 存在） |
 
 产物更新：修复后重发 linux-x64（44,641,606 B）与 win-x64（45,487,941 B，`--smoke` 复跑通过）。
+
+---
+
+## 本文件之外的交付现状(2026-11-14 起)
+
+本节只是索引,细节都在被指向的文件里。以上一~五节是 **M3** 期的交付说明,现状已经往前走了一大截:
+
+| 主题 | 看这里 |
+|---|---|
+| 启动器自更新(R22)的真机 E2E(round 1) | `scratch/update-e2e/REPORT.md` |
+| 更新器双修复复验 + 「立即重启」/「失败在任务页可见」两条留白的收口(round 3) | `scratch/update-e2e2/REPORT.md` |
+| R21 最终交付清单(R21 产物哈希 / 盒子端到端 / PermissionNote 已补做)与 R22 四条留白的逐条现状 | `docs/HANDOFF-d95a9472.md` |
+
+当前归档产物(2026-11-14 重打,`dist/`):
+
+- `dist/TipCL-linux-x64.AppImage` **38,984,184 B**,sha256 `48C3DCEADA0E35D7C25B181F639FA9B66DC1F2E2F7A0635E856F5C36BE97A6E0`
+- `dist/tipcl_0.1.0-m3_amd64.deb` **37,544,610 B**,sha256 `109CFD55062048B1FD6296D237F747014AF3D1998A4C939CB12FCCCE88DD7130`
+
+注意:`dist/TipCL-linux-x64.zip` 与 `dist/TipCL-linux-x64/` 仍是 **11-13** 的产物(早于 R22),未随 R22 重打;
+`update-linux.json` 的 `sha256` 现在是**故意格式非法**的占位值 `REPLACE-WITH-THE-REAL-SHA256`(见 HANDOFF 第三节)。
