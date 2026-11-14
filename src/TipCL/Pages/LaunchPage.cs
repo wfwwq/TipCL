@@ -219,7 +219,7 @@ public sealed partial class LaunchPage : PageBase
 	// 嵌入 hero.jpg（启动页默认背景）只解码一次（两版通用）
 	private static System.Windows.Media.Imaging.BitmapSource? _heroCache;
 
-#if IMMERSIVE
+#if IMMERSIVE || PREMIUM
 	// _immersive = 当前处于标题栏沉浸态（背景已搬进 WallHost）；compact 无沉浸代码
 	private bool _immersive;
 #endif
@@ -589,13 +589,13 @@ public sealed partial class LaunchPage : PageBase
 			_launchGlow.Color = accent.Color;
 		}
 		_launchGlow.Opacity = (onImage ? 0.45 : 0.3);
-#if IMMERSIVE
+#if IMMERSIVE || PREMIUM
 		SyncImmersive(onImage);
 #endif
 	}
 
-#if IMMERSIVE
-	// —— 标题栏沉浸（IMMERSIVE/PREMIUM 构建启用；compact 无此代码） ——
+#if IMMERSIVE || PREMIUM
+	// —— 标题栏沉浸（IMMERSIVE 与 PREMIUM 构建都启用；compact 无此代码） ——
 	// 有全幅背景（截图或 hero，且用户没设壁纸）时：把 _bgImage/_bgShade 从页面根搬到 MainWindow.WallHost
 	//（RowSpan=2，位于 TopBar 之后的非命中层；排在 Wallpaper 自带元素之后，天然压在其上），PageWash 置透明，
 	// TopBar 换玻璃底 + 白字（元素级资源覆盖，模拟效果图 .tb.glass）。
@@ -1911,7 +1911,7 @@ public sealed partial class LaunchPage : PageBase
 		}
 	}
 
-#if IMMERSIVE
+#if IMMERSIVE || PREMIUM
 	// 离开启动页必须退出沉浸：背景搬回页面根（随页面一起离屏）、TopBar 回主题底色、PageWash 恢复。
 	// 再次回到启动页时 OnShown → ApplyHeroTone → SyncImmersive 会自动重新进入。
 	public override void OnHidden()
