@@ -208,8 +208,8 @@ internal sealed partial class AiPage : PageBase
 	private static (string Title, string Sub, string Icon, string Prompt)[] QuickStarts => new(string, string, string, string)[4]
 	{
 		(I18n.L("下个最新版"), I18n.L("装好最新正式版并建一个实例"), "M12 3v12 M6 11l6 6 6-6 M4 21h16", I18n.L("帮我下载最新正式版 Minecraft")),
-		(I18n.L("装 Fabric + 钠"), I18n.L("一步配好 1.20.1 性能优化"), "M12 2l10 6-10 6L2 8z M2 14l10 6 10-6", I18n.L("给我装 1.20.1 Fabric,再装钠和 Iris 光影")),
-		(I18n.L("崩溃分析"), I18n.L("读最近一次崩溃报告找原因"), "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z M14 2v6h6 M8 13h8 M8 17h5", I18n.L("刚才启动失败了,读一下日志告诉我原因")),
+		(I18n.L("装 Fabric + 钠"), I18n.L("一步配好 1.20.1 性能优化"), "M12 2l10 6-10 6L2 8z M2 14l10 6 10-6", I18n.L("给我装 1.20.1 Fabric，再装钠和 Iris 光影")),
+		(I18n.L("崩溃分析"), I18n.L("读最近一次崩溃报告找原因"), "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z M14 2v6h6 M8 13h8 M8 17h5", I18n.L("刚才启动失败了，读一下日志告诉我原因")),
 		(I18n.L("扫模组冲突"), I18n.L("检查版本不兼容和重复模组"), "M3 7V5a2 2 0 0 1 2-2h2 M17 3h2a2 2 0 0 1 2 2v2 M21 17v2a2 2 0 0 1-2 2h-2 M7 21H5a2 2 0 0 1-2-2v-2 M7 12h10", I18n.L("扫一下当前实例的模组冲突"))
 	};
 
@@ -246,7 +246,7 @@ internal sealed partial class AiPage : PageBase
 			Cursor = new Cursor(StandardCursorType.Hand),
 			Content = AiIcons.Icon("M12 19V5 M5 12l7-7 7 7", 16.0, "B.OnAccentStrong")
 		};
-		ToolTip.SetTip(_send, I18n.L("发送(Enter)"));
+		ToolTip.SetTip(_send, I18n.L("发送（Enter）"));
 		_send.Dyn(TemplatedControl.BackgroundProperty, "B.AccentStrong");
 		_send.Click += delegate
 		{
@@ -299,7 +299,7 @@ internal sealed partial class AiPage : PageBase
 		}, "\ue72c");
 		ToolTip.SetTip(_modelFetch, I18n.L("刷新模型列表"));
 		_model.Width = 190.0;
-		ToolTip.SetTip(_model, I18n.L("当前对话使用的模型;换完对下一轮生效"));
+		ToolTip.SetTip(_model, I18n.L("当前对话使用的模型；换完对下一轮生效"));
 		_model.SelectionChanged += delegate
 		{
 			if (!_syncModel)
@@ -398,7 +398,7 @@ internal sealed partial class AiPage : PageBase
 			Cursor = new Cursor(StandardCursorType.Hand),
 			HorizontalAlignment = HorizontalAlignment.Left
 		};
-		ToolTip.SetTip(_instPill, I18n.L("助手默认操作的实例,点击切换"));
+		ToolTip.SetTip(_instPill, I18n.L("助手默认操作的实例，点击切换"));
 		_instPill.Dyn(Border.BackgroundProperty, "B.AccentSoft");
 		_instPill.PointerReleased += delegate(object? _, PointerReleasedEventArgs e)
 		{
@@ -483,7 +483,7 @@ internal sealed partial class AiPage : PageBase
 		{
 			PageBase.Run(OpenPermissionPanelAsync);
 		}, "B.InkMuted", 15.0);
-		Button elImg = AiIcons.Flat("M3 5h18v14H3z M8.5 8.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3z M21 15l-5-5L5 19", null, I18n.L("附图片(也可以直接粘贴或拖进来)"), PickImage, "B.InkMuted", 15.0);
+		Button elImg = AiIcons.Flat("M3 5h18v14H3z M8.5 8.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3z M21 15l-5-5L5 19", null, I18n.L("附图片（也可以直接粘贴或拖进来）"), PickImage, "B.InkMuted", 15.0);
 		SetupImageInput();
 		_sendStop.Content = _send;
 		Grid grid4 = Ui.G(null, "Auto,Auto,Auto,Auto,Auto,*,Auto");
@@ -572,7 +572,7 @@ internal sealed partial class AiPage : PageBase
 	private void SyncInstChip()
 	{
 		string text = PageBase.Win?.Prefs.CatalogInstance ?? "";
-		_instText.Text = I18n.L("实例:{0}", (text.Length > 0) ? text : I18n.L("默认"));
+		_instText.Text = I18n.L("实例：{0}", (text.Length > 0) ? text : I18n.L("默认"));
 	}
 
 	private async Task OpenInstanceMenuAsync()
@@ -635,7 +635,7 @@ internal sealed partial class AiPage : PageBase
 
 		string last = McpServer.LastTool;
 		_mcpText.Text = (last.Length > 0) ? I18n.L("MCP 已开启 · {0} {1}", last, McpServer.LastToolAt.ToString("HH:mm")) : I18n.L("MCP 已开启");
-		string tip = I18n.L("MCP Server 地址:{0}", McpServer.Url);
+		string tip = I18n.L("MCP Server 地址：{0}", McpServer.Url);
 		if (last.Length > 0)
 		{
 			tip = tip + "\n" + I18n.L("最近一次外部调用:{0}({1})", last, McpServer.LastToolAt.ToString("yyyy-MM-dd HH:mm:ss"));

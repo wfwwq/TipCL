@@ -124,7 +124,7 @@ internal sealed partial class AiPage
 				_dock.Children.Remove(card);
 			}
 
-			TextBlock textBlock = Ui.Txt((ok ? I18n.L("已允许:") : I18n.L("已拒绝:")) + label, 12.0, bold: false, ok ? "B.InkMuted" : "B.Danger");
+			TextBlock textBlock = Ui.Txt((ok ? I18n.L("已允许：") : I18n.L("已拒绝：")) + label, 12.0, bold: false, ok ? "B.InkMuted" : "B.Danger");
 			textBlock.TextTrimming = TextTrimming.CharacterEllipsis;
 			SPanel sPanel = Ui.H(6.0, AiIcons.Icon(ok ? "M20 6L9 17l-5-5" : "M18 6L6 18 M6 6l12 12", 12.0, ok ? "B.Accent" : "B.Danger").VCenter(), textBlock.VCenter());
 			sPanel.Margin = new Thickness(6.0, 0.0, 0.0, 0.0);
@@ -137,7 +137,7 @@ internal sealed partial class AiPage
 				_messages.Children.Add(sPanel);
 			}
 
-			_status.Text = (ok ? I18n.L("正在执行操作...") : I18n.L("已拒绝"));
+			_status.Text = (ok ? I18n.L("正在执行操作…") : I18n.L("已拒绝"));
 			SyncPlaceholder();
 			ScrollDown();
 		};

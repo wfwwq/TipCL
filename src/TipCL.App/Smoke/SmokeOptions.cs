@@ -3,18 +3,27 @@ using System;
 namespace TipCL.Smoke;
 
 /// <summary>
-/// <c>--smoke [--page &lt;id&gt;] [--theme light|dark] [--out x.png]</c> 的解析结果。
+/// <c>--smoke [--page &lt;id&gt;] [--theme light|dark] [--out x.png] [--ai-seed]</c> 的解析结果。
 /// </summary>
 internal sealed class SmokeOptions
 {
     public const string Usage =
-        "用法: TipCL --smoke [--page <id>] [--theme light|dark] [--out <file.png>]";
+        "用法: TipCL --smoke [--page <id>] [--theme light|dark] [--out <file.png>] [--ai-seed]";
 
     public string Page { get; private set; } = string.Empty;
 
     public string Theme { get; private set; } = "light";
 
     public string Out { get; private set; } = "smoke.png";
+
+    /// <summary>
+    /// M7:<c>--page ai</c> 时用 AI 页自己的自测缝灌一份**确定性的对话**再截屏(见 <see cref="SmokeRunner"/>)。
+    /// 默认关:**不带这个开关时,AI 页的帧与其他页一样只反映"外壳切过去 + 页面构造函数",不多喂任何数据**。
+    /// 为什么要它:离屏不连后端(<c>BridgeReady=false</c>),而外壳只在后端就绪后才跑页面的
+    /// <c>EnsureLoadedAsync</c>/<c>OnShown</c>(D-92 的口径,`MainWindow.Navigate` 传的就是 <c>BridgeReady</c>),
+    /// 所以不进这个开关,AI 页永远只有空壳 —— 消息区、卡片、状态行都拿不到帧证据。
+    /// </summary>
+    public bool AiSeed { get; private set; }
 
     public bool Dark => string.Equals(Theme, "dark", StringComparison.OrdinalIgnoreCase);
 
@@ -72,6 +81,12 @@ internal sealed class SmokeOptions
                 }
 
                 options.Out = path;
+                continue;
+            }
+
+            if (string.Equals(arg, "--ai-seed", StringComparison.OrdinalIgnoreCase))
+            {
+                options.AiSeed = true;
                 continue;
             }
 

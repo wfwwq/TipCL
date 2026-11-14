@@ -313,10 +313,10 @@ internal sealed partial class AiPage
 	{
 		string text = StopReasonOf(ev) switch
 		{
-			"no_tool_call" => I18n.L("它没有真的开始执行:模型只回了文字,没有调用任何工具。"),
-			"max_rounds" => I18n.L("步骤太多,先停在这里。你可以让我继续。"),
-			"pending_task" => I18n.L("下载/安装还在后台跑,可以在「下载任务」里看进度。"),
-			"stream_failed" => I18n.L("接口这轮没有返回内容,已停止。"),
+			"no_tool_call" => I18n.L("它没有真的开始执行：模型只回了文字，没有调用任何工具。"),
+			"max_rounds" => I18n.L("步骤太多，先停在这里。你可以让我继续。"),
+			"pending_task" => I18n.L("下载/安装还在后台跑，可以在「下载任务」里看进度。"),
+			"stream_failed" => I18n.L("接口这轮没有返回内容，已停止。"),
 			"empty_response" => I18n.L("接口返回了空回复。"),
 			_ => "",
 		};
@@ -328,10 +328,10 @@ internal sealed partial class AiPage
 		string detail = DetailOf(ev);
 		if (detail.Length > 0 && !text.Contains(detail))
 		{
-			text = text + I18n.L("(") + detail + I18n.L(")");
+			text = text + I18n.L("（") + detail + I18n.L("）");
 		}
 
-		return I18n.L("(提示:") + text + I18n.L(")");
+		return I18n.L("（提示：") + text + I18n.L("）");
 	}
 
 	private void NotifyStop(BridgeEvent ev)
@@ -346,7 +346,7 @@ internal sealed partial class AiPage
 		}
 		else
 		{
-			PageBase.Toast(I18n.L("它没有真的开始执行"), I18n.L("模型只回了文字,没有调用任何工具。"), ToastKind.Warning);
+			PageBase.Toast(I18n.L("它没有真的开始执行"), I18n.L("模型只回了文字，没有调用任何工具。"), ToastKind.Warning);
 		}
 	}
 
@@ -366,25 +366,25 @@ internal sealed partial class AiPage
 		case "checkpoint_warn":
 		{
 			string message = ((ev.Payload.ValueKind == JsonValueKind.Object && ev.Payload.TryGetProperty("message", out JsonElement m) && m.ValueKind == JsonValueKind.String) ? (m.GetString() ?? "") : "");
-			PageBase.Toast(I18n.L("无法一键撤回"), (message.Length > 0) ? message : I18n.L("检查点不可用,本轮改动无法自动撤回"), ToastKind.Warning);
+			PageBase.Toast(I18n.L("无法一键撤回"), (message.Length > 0) ? message : I18n.L("检查点不可用，本轮改动无法自动撤回"), ToastKind.Warning);
 			break;
 		}
 		case "model_fallback":
 		{
 			string model = ((ev.Payload.ValueKind == JsonValueKind.Object && ev.Payload.TryGetProperty("model", out JsonElement mv) && mv.ValueKind == JsonValueKind.String) ? (mv.GetString() ?? "") : "");
 			PageBase.Toast(I18n.L("已切换备用模型"), model, ToastKind.Warning);
-			Add(Note((model.Length > 0) ? I18n.L("主模型暂时不可用,本轮已切换到 {0}", model) : I18n.L("主模型暂时不可用,本轮已切换到备用模型")));
+			Add(Note((model.Length > 0) ? I18n.L("主模型暂时不可用，本轮已切换到 {0}", model) : I18n.L("主模型暂时不可用，本轮已切换到备用模型")));
 			break;
 		}
 		case "thinking":
-			_status.Text = I18n.L("思考中...");
+			_status.Text = I18n.L("思考中…");
 			OpenRound();
 			break;
 		case "think":
 		{
 			bool afterTools = ev.Payload.ValueKind == JsonValueKind.Object && ev.Payload.TryGetProperty("after_tools", out JsonElement v) && v.ValueKind == JsonValueKind.True;
-			string thinking = (afterTools ? I18n.L("搜完了,正在整理...") : I18n.L("正在想..."));
-			_status.Text = (afterTools ? I18n.L("搜完了,正在整理...") : I18n.L("思考中..."));
+			string thinking = (afterTools ? I18n.L("搜完了，正在整理…") : I18n.L("正在想…"));
+			_status.Text = (afterTools ? I18n.L("搜完了，正在整理…") : I18n.L("思考中…"));
 			OpenRound(thinking);
 			break;
 		}
@@ -403,8 +403,8 @@ internal sealed partial class AiPage
 			else
 			{
 				CloseRound();
-				Line(name, I18n.L("准备:") + label, ToolState.Prepare);
-				_status.Text = I18n.L("正在执行操作...");
+				Line(name, I18n.L("准备：") + label, ToolState.Prepare);
+				_status.Text = I18n.L("正在执行操作…");
 			}
 
 			break;
@@ -416,8 +416,8 @@ internal sealed partial class AiPage
 				break;
 			}
 
-			Line(name, I18n.L("执行中:") + label, ToolState.Running);
-			_status.Text = I18n.L("正在执行操作...");
+			Line(name, I18n.L("执行中：") + label, ToolState.Running);
+			_status.Text = I18n.L("正在执行操作…");
 			break;
 		case "tool_done":
 		{
@@ -427,7 +427,7 @@ internal sealed partial class AiPage
 				break;
 			}
 
-			Line(name, I18n.L("完成:") + label, ToolState.Done);
+			Line(name, I18n.L("完成：") + label, ToolState.Done);
 			string taskId = TaskIdOf(ev);
 			if (taskId.Length > 0 && !_taskCards.ContainsKey(taskId))
 			{
@@ -439,7 +439,7 @@ internal sealed partial class AiPage
 		}
 		case "tool_skip":
 			CloseRound();
-			Line(name, I18n.L("已跳过:") + label, ToolState.Skipped);
+			Line(name, I18n.L("已跳过：") + label, ToolState.Skipped);
 			break;
 		default:
 			if (!string.IsNullOrWhiteSpace(ev.Label))
@@ -479,13 +479,13 @@ internal sealed partial class AiPage
 			remembered = FileMemory.RememberedOf(result);
 			if (remembered != null)
 			{
-				text = I18n.L("已记住:") + remembered;
+				text = I18n.L("已记住：") + remembered;
 				undoable = true;
 			}
 			else if (result.StartsWith("已经记过了", StringComparison.Ordinal))
 			{
 				int at = result.IndexOfAny(new char[2] { ':', ':' });
-				text = I18n.L("已记住:") + ((at >= 0) ? result.Substring(at + 1).Trim() : result) + I18n.L("(之前就记过)");
+				text = I18n.L("已记住：") + ((at >= 0) ? result.Substring(at + 1).Trim() : result) + I18n.L("（之前就记过）");
 			}
 			else
 			{
@@ -500,7 +500,7 @@ internal sealed partial class AiPage
 				return false;
 			}
 
-			text = I18n.L("已忘记:") + forgotten;
+			text = I18n.L("已忘记：") + forgotten;
 		}
 
 		TextBlock label = Ui.Txt(text, 12.0, bold: false, "B.AccentText");
@@ -523,7 +523,7 @@ internal sealed partial class AiPage
 			{
 				bool ok = FileMemory.Undo(remembered ?? "");
 				row.Children.Remove(undo);
-				label.Text = (ok ? I18n.L("已撤销:") : I18n.L("没找到这条记忆:")) + remembered;
+				label.Text = (ok ? I18n.L("已撤销：") : I18n.L("没找到这条记忆：")) + remembered;
 				label.Dyn(TextBlock.ForegroundProperty, "B.InkMuted");
 			}, "B.InkMuted", 11.0, pill: true);
 			row.Children.Add(undo.VCenter());
@@ -580,7 +580,7 @@ internal sealed partial class AiPage
 
 		card.Retry = delegate(string reason)
 		{
-			PageBase.Run(() => SendTextAsync(I18n.L("刚才的后台任务「{0}」失败了({1}),请重试", card.TitleText, reason)));
+			PageBase.Run(() => SendTextAsync(I18n.L("刚才的后台任务「{0}」失败了（{1}），请重试", card.TitleText, reason)));
 		};
 		_taskCards[taskId] = card;
 		Add(card);

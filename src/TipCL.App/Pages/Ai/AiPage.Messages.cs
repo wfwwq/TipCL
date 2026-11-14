@@ -202,10 +202,10 @@ internal sealed partial class AiPage
 			HorizontalAlignment = HorizontalAlignment.Center
 		};
 		border.Dyn(Border.BackgroundProperty, "B.AccentStrong");
-		TextBlock textBlock = Ui.Txt(I18n.L("今天想折腾点什么?"), 20.0, bold: true, "B.Ink");
+		TextBlock textBlock = Ui.Txt(I18n.L("今天想折腾点什么？"), 20.0, bold: true, "B.Ink");
 		textBlock.HorizontalAlignment = HorizontalAlignment.Center;
 		textBlock.Margin = new Thickness(0.0, 14.0, 0.0, 0.0);
-		TextBlock textBlock2 = Ui.Txt(I18n.L("下游戏、装模组、读崩溃日志,改动前都会先问你"), 13.0, bold: false, "B.InkMuted");
+		TextBlock textBlock2 = Ui.Txt(I18n.L("下游戏、装模组、读崩溃日志，改动前都会先问你"), 13.0, bold: false, "B.InkMuted");
 		textBlock2.HorizontalAlignment = HorizontalAlignment.Center;
 		textBlock2.Margin = new Thickness(0.0, 6.0, 0.0, 18.0);
 		UniformGrid uniformGrid = new UniformGrid

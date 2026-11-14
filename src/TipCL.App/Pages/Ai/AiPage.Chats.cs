@@ -158,7 +158,7 @@ internal sealed partial class AiPage
 				string presetName = AiPresets.Name(chat.Preset);
 				Border presetTag = Ui.Tag(presetName, "B.AccentText", "B.AccentSoft");
 				presetTag.MaxWidth = 76.0;
-				ToolTip.SetTip(presetTag, I18n.L("预设:{0}", presetName));
+				ToolTip.SetTip(presetTag, I18n.L("预设：{0}", presetName));
 				grid.Add(presetTag.M(6.0, 0.0, 0.0, 0.0).VCenter(), 0, 2);
 			}
 

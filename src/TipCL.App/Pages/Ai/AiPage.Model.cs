@@ -36,11 +36,11 @@ internal sealed partial class AiPage
 		int selectedIndex = _perm.SelectedIndex;
 		_permTip.Text = selectedIndex switch
 		{
-			1 => I18n.L("当前「写直接执行」:写入不再询问,删除仍会先问你"),
-			2 => I18n.L("当前「只看不动」:只读取和分析,不会改任何文件"),
-			3 => I18n.L("当前「全自动」:所有操作都不再询问,请谨慎使用"),
-			4 => I18n.L("当前「自定义」:按权限管理里的规则执行"),
-			_ => I18n.L("当前「每次确认」:读取直接做,写入和删除都会先问你"),
+			1 => I18n.L("当前「写直接执行」：写入不再询问，删除仍会先问你"),
+			2 => I18n.L("当前「只看不动」：只读取和分析，不会改任何文件"),
+			3 => I18n.L("当前「全自动」：所有操作都不再询问，请谨慎使用"),
+			4 => I18n.L("当前「自定义」：按权限管理里的规则执行"),
+			_ => I18n.L("当前「每次确认」：读取直接做，写入和删除都会先问你"),
 		};
 		_permTip.Dyn(TextBlock.ForegroundProperty, (selectedIndex == 3) ? "B.Danger" : "B.InkMuted");
 		_perm.Dyn(TemplatedControl.ForegroundProperty, (selectedIndex == 3) ? "B.Danger" : "B.Ink");
@@ -196,7 +196,7 @@ internal sealed partial class AiPage
 			});
 			if (list == null)
 			{
-				PageBase.Toast(I18n.L("拉取失败"), I18n.L("没能从网关取到模型列表,可直接手填模型名"), ToastKind.Warning);
+				PageBase.Toast(I18n.L("拉取失败"), I18n.L("没能从网关取到模型列表，可直接手填模型名"), ToastKind.Warning);
 				return;
 			}
 
@@ -232,7 +232,7 @@ internal sealed partial class AiPage
 			}
 			else
 			{
-				PageBase.Toast(I18n.L("没取到模型"), string.IsNullOrEmpty(list.Error) ? I18n.L("网关没返回模型列表,可直接手填模型名") : list.Error, ToastKind.Warning);
+				PageBase.Toast(I18n.L("没取到模型"), string.IsNullOrEmpty(list.Error) ? I18n.L("网关没返回模型列表，可直接手填模型名") : list.Error, ToastKind.Warning);
 			}
 		}
 		finally
@@ -252,12 +252,12 @@ internal sealed partial class AiPage
 			long output = GetNum("output");
 			if (input != 0L || output != 0L)
 			{
-				string estimatedMark = ((u.TryGetProperty("real_requests", out JsonElement real) && real.TryGetInt64(out long realCount) && realCount > 0 && estimated == 0L) ? "" : I18n.L("(估算)"));
+				string estimatedMark = ((u.TryGetProperty("real_requests", out JsonElement real) && real.TryGetInt64(out long realCount) && realCount > 0 && estimated == 0L) ? "" : I18n.L("（估算）"));
 				long requests = GetNum("requests");
 				double ratio = AiUiText.ContextRatio(input, requests, _contextWindow);
 				_ringHost.Content = AiIcons.Ring(ratio);
 				_usageLabel.Text = $"{ratio * 100.0:0}% · {AiUiText.Tokens(input)}";
-				string tip = string.Format(I18n.L("本会话:输入 {0} / 输出 {1} tokens{2}"), Fmt(input), Fmt(output), estimatedMark) + "\n" + string.Format(I18n.L("上下文窗口 {0},圆环为每轮平均占用的估算"), AiUiText.Tokens(_contextWindow));
+				string tip = string.Format(I18n.L("本会话：输入 {0} / 输出 {1} tokens{2}"), Fmt(input), Fmt(output), estimatedMark) + "\n" + string.Format(I18n.L("上下文窗口 {0},圆环为每轮平均占用的估算"), AiUiText.Tokens(_contextWindow));
 				ToolTip.SetTip(_usageLabel, tip);
 				ToolTip.SetTip(_ringHost, tip);
 			}

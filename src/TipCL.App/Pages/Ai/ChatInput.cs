@@ -49,7 +49,7 @@ internal sealed class ChatInput : TextBox
 	public ChatInput()
 	{
 		StyleKeys.Apply(this, "Input.Multi");
-		Tag = I18n.L("问我要下什么、哪报错、模组怎么配...  Enter 发送,Shift+Enter 换行");
+		Tag = I18n.L("问我要下什么、哪报错、模组怎么配…  Enter 发送，Shift+Enter 换行");
 		AcceptsReturn = true;
 		TextWrapping = TextWrapping.Wrap;
 		ScrollViewer.SetVerticalScrollBarVisibility(this, ScrollBarVisibility.Auto);

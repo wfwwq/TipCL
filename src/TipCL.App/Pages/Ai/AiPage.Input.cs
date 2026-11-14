@@ -191,7 +191,7 @@ internal sealed partial class AiPage
 			return;
 		}
 
-		if (await Dlg.Confirm(I18n.L("清空当前对话?"), I18n.L("这个对话的全部消息会被删除,无法恢复(不会还原磁盘改动)。"), I18n.L("清空"), null, danger: true))
+		if (await Dlg.Confirm(I18n.L("清空当前对话？"), I18n.L("这个对话的全部消息会被删除，无法恢复（不会还原磁盘改动）。"), I18n.L("清空"), null, danger: true))
 		{
 			string id = chat.Id;
 			await SwitchChatAsync(async delegate
@@ -219,15 +219,15 @@ internal sealed partial class AiPage
 	{
 		if (_pendingConfirm != null && !_pendingConfirm.Answered)
 		{
-			_placeholder.Text = I18n.L("先处理上面的确认,或直接输入新要求来拒绝");
+			_placeholder.Text = I18n.L("先处理上面的确认，或直接输入新要求来拒绝");
 		}
 		else if (_busy)
 		{
-			_placeholder.Text = I18n.L("回复中也可以继续输入,会立刻交给助手");
+			_placeholder.Text = I18n.L("回复中也可以继续输入，会立刻交给助手");
 		}
 		else
 		{
-			_placeholder.Text = I18n.L("问点什么,@ 引用实例或崩溃日志...  Enter 发送,Shift+Enter 换行");
+			_placeholder.Text = I18n.L("问点什么，@ 引用实例或崩溃日志…  Enter 发送，Shift+Enter 换行");
 		}
 
 		_placeholder.IsVisible = string.IsNullOrEmpty(_input.Text);

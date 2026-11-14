@@ -84,8 +84,8 @@ internal sealed partial class AiPage
 		_round.Clear();
 		_group?.Refresh();
 		_group = null;
-		Bubble bubble = new Bubble("assistant", "...", RetryFrom);
-		bubble.SetThinking(thinking ?? I18n.L("正在想..."));
+		Bubble bubble = new Bubble("assistant", "…", RetryFrom);
+		bubble.SetThinking(thinking ?? I18n.L("正在想…"));
 		Add(bubble);
 		return _roundBubble = bubble;
 	}
@@ -186,7 +186,7 @@ internal sealed partial class AiPage
 		if (rounds <= 0)
 		{
 			RenderMessages();
-			PageBase.Toast(I18n.L("没法从这句重发"), I18n.L("这句话可能已被压缩进摘要,或是插队消息"), ToastKind.Warning);
+			PageBase.Toast(I18n.L("没法从这句重发"), I18n.L("这句话可能已被压缩进摘要，或是插队消息"), ToastKind.Warning);
 			return;
 		}
 
@@ -208,7 +208,7 @@ internal sealed partial class AiPage
 				_store = (await PageBase.Api.TryCallAsync("ai_list_chats", null, _store)) ?? _store;
 				RenderMessages();
 				string msg = ((r.ValueKind == JsonValueKind.Object && r.TryGetProperty("message", out JsonElement me) && me.ValueKind == JsonValueKind.String) ? (me.GetString() ?? "") : "");
-				_status.Text = ((msg.Length > 0) ? msg : I18n.L("回退没有全部成功,已停下,请检查后再发"));
+				_status.Text = ((msg.Length > 0) ? msg : I18n.L("回退没有全部成功，已停下，请检查后再发"));
 				return;
 			}
 		}
@@ -263,7 +263,7 @@ internal sealed partial class AiPage
 			await Task.WhenAny(ended.Task, Task.Delay(3000));
 			if (_busy)
 			{
-				PageBase.Toast(I18n.L("上一条还在处理"), I18n.L("等它说完,或点「停止」再发"), ToastKind.Warning);
+				PageBase.Toast(I18n.L("上一条还在处理"), I18n.L("等它说完，或点「停止」再发"), ToastKind.Warning);
 				return;
 			}
 		}
@@ -275,7 +275,7 @@ internal sealed partial class AiPage
 
 		_runChatId = _store.ActiveId;
 		SetBusy(on: true);
-		_status.Text = I18n.L("思考中...");
+		_status.Text = I18n.L("思考中…");
 		if (echo)
 		{
 			Add(new Bubble("user", (_pendingImages.Count > 0) ? (text + "\n" + I18n.L("[附图 {0} 张]", _pendingImages.Count)) : text, RetryFrom)
@@ -304,7 +304,7 @@ internal sealed partial class AiPage
 		if (result == null || !result.Ok)
 		{
 			string? message = result?.Message;
-			string shown = ((message != null && message.Length > 0) ? message : I18n.L("后端没有响应,请稍后再试"));
+			string shown = ((message != null && message.Length > 0) ? message : I18n.L("后端没有响应，请稍后再试"));
 			if (_roundBubble != null)
 			{
 				_messages.Children.Remove(_roundBubble);
@@ -340,7 +340,7 @@ internal sealed partial class AiPage
 		bool diskChanged = r.ValueKind == JsonValueKind.Object && r.TryGetProperty("disk_changed", out JsonElement value2) && value2.GetBoolean();
 		if (!ok && diskChanged)
 		{
-			_status.Text = I18n.L("对话已回退,但磁盘改动没能全部还原,请手动检查相关文件");
+			_status.Text = I18n.L("对话已回退，但磁盘改动没能全部还原，请手动检查相关文件");
 			return;
 		}
 
@@ -359,15 +359,15 @@ internal sealed partial class AiPage
 
 		if (diskChanged)
 		{
-			_status.Text = string.Format(I18n.L("已撤回:{0} 个文件的改动已还原"), restored);
+			_status.Text = string.Format(I18n.L("已撤回：{0} 个文件的改动已还原"), restored);
 		}
 		else if (r.ValueKind == JsonValueKind.Object && r.TryGetProperty("rollbackable", out JsonElement value6) && value6.ValueKind == JsonValueKind.False)
 		{
-			_status.Text = I18n.L("已撤回:只回退了对话,这一轮的磁盘改动无法自动还原");
+			_status.Text = I18n.L("已撤回：只回退了对话，这一轮的磁盘改动无法自动还原");
 		}
 		else
 		{
-			_status.Text = I18n.L("已撤回:只回退了对话,这一轮没有可还原的磁盘改动");
+			_status.Text = I18n.L("已撤回：只回退了对话，这一轮没有可还原的磁盘改动");
 		}
 	}
 
