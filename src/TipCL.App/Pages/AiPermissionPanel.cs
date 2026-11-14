@@ -70,7 +70,7 @@ internal sealed class AiPermissionPanel : Border
 		I18n.L("仅当前实例"),
 	}, null, 125.0);
 
-	private readonly TextBox _content = Ui.Input(I18n.L("限定参数(留空 = 整个工具)"));
+	private readonly TextBox _content = Ui.Input(I18n.L("限定参数（留空 = 整个工具）"));
 
 	private readonly SPanel _rules = Ui.V(6.0);
 
@@ -103,9 +103,9 @@ internal sealed class AiPermissionPanel : Border
 		// 【Windows 差异】WPF 是 Ui.Scroll(_rules).Hh(290.0);mac 的 UiExt 没有 Hh ⇒ 直接给固定高度
 		rulesScroll.Height = 290.0;
 		SPanel body = Ui.V(8.0,
-			Ui.Section(I18n.L("权限档位"), I18n.L("与 Qt 版共用五档权限;自定义规则会覆盖默认判定")),
+			Ui.Section(I18n.L("权限档位"), I18n.L("与 Qt 版共用五档权限；自定义规则会覆盖默认判定")),
 			Ui.Field(I18n.L("当前档位"), modeRow, I18n.L("点保存后立即对下一轮生效")),
-			Ui.Section(I18n.L("规则"), I18n.L("规则可记到全局或当前实例;删除工具不提供始终允许")),
+			Ui.Section(I18n.L("规则"), I18n.L("规则可记到全局或当前实例；删除工具不提供始终允许")),
 			ruleRow,
 			_status,
 			rulesScroll);

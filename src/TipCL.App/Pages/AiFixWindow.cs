@@ -197,7 +197,7 @@ internal sealed class AiFixWindow : Window
 		}
 
 		string model = (s.TryGetValue("ai_model", out JsonElement mm) && mm.ValueKind == JsonValueKind.String) ? (mm.GetString() ?? "") : "";
-		return string.Format(I18n.L("自定义接口({0})"), (model.Length > 0) ? model : I18n.L("未命名模型"));
+		return string.Format(I18n.L("自定义接口（{0}）"), (model.Length > 0) ? model : I18n.L("未命名模型"));
 	}
 
 	// ==== 块 2:崩溃上下文的后半 + 主按钮/发送/停止/忙态(照 Windows 150-309 行)====
@@ -220,23 +220,23 @@ internal sealed class AiFixWindow : Window
 	/// <summary>【Windows 源】<c>:144-202</c> 的同名方法(静态、可测):把崩溃现场拼成给 AI 的上下文。</summary>
 	internal static string BuildCrashContext(CrashReport r, string iface)
 	{
-		List<string> parts = new List<string> { I18n.L("【启动器注入 · 对用户不可见】本次对话的崩溃上下文:") };
+		List<string> parts = new List<string> { I18n.L("【启动器注入 · 对用户不可见】本次对话的崩溃上下文：") };
 		List<string> facts = new List<string>();
 		if (!string.IsNullOrWhiteSpace(r.Instance))
 		{
-			facts.Add(string.Format(I18n.L("实例:{0}"), r.Instance));
+			facts.Add(string.Format(I18n.L("实例：{0}"), r.Instance));
 		}
 
 		if (!string.IsNullOrWhiteSpace(r.Version))
 		{
-			facts.Add(string.Format(I18n.L("版本:{0}"), r.Version));
+			facts.Add(string.Format(I18n.L("版本：{0}"), r.Version));
 		}
 
 		if (r.ExitCode.HasValue)
 		{
 			int code = r.ExitCode.GetValueOrDefault();
-			string hint = string.IsNullOrWhiteSpace(r.ExitHint) ? "" : string.Format(I18n.L("({0})"), r.ExitHint);
-			facts.Add(string.Format(I18n.L("退出码:{0}{1}"), code, hint));
+			string hint = string.IsNullOrWhiteSpace(r.ExitHint) ? "" : string.Format(I18n.L("（{0}）"), r.ExitHint);
+			facts.Add(string.Format(I18n.L("退出码：{0}{1}"), code, hint));
 		}
 
 		if (facts.Count > 0)
@@ -255,18 +255,18 @@ internal sealed class AiFixWindow : Window
 			string clipped = Clip(text, limit);
 			if (clipped.Length > 0)
 			{
-				parts.Add(label + I18n.L(":") + "\n" + clipped);
+				parts.Add(label + I18n.L("：") + "\n" + clipped);
 			}
 		}
 
 		if (!string.IsNullOrWhiteSpace(r.DirectFile))
 		{
-			parts.Add(string.Format(I18n.L("完整日志文件:{0}"), r.DirectFile));
+			parts.Add(string.Format(I18n.L("完整日志文件：{0}"), r.DirectFile));
 		}
 
-		parts.Add(I18n.L("日志自查提醒:上面的日志只是截断摘录。你带有读取日志和检查实例的工具(get_latest_log、get_crash_report、read_artifact、inspect_mod、list_mods 等),请主动调用工具读取完整日志核实原因,不要以「没有日志」「无法访问日志」为由拒绝分析。"));
-		parts.Add(string.Format(I18n.L("接口状态:当前对话通过启动器内置的{0}接入,接口正常可用。不要声称「没有配置接口 / 接口不可用」。"), iface));
-		parts.Add(I18n.L("如果问题能通过改配置、禁用模组等方式修复,请直接动手(写操作会先征求我同意);需要更多上下文就自己读日志文件。边查边说:有阶段性发现或换步骤时,先用一两句话告诉我,再继续调用工具。最后用一句话给我结论和下一步建议。"));
+		parts.Add(I18n.L("日志自查提醒：上面的日志只是截断摘录。你带有读取日志和检查实例的工具（get_latest_log、get_crash_report、read_artifact、inspect_mod、list_mods 等），请主动调用工具读取完整日志核实原因，不要以「没有日志」「无法访问日志」为由拒绝分析。"));
+		parts.Add(string.Format(I18n.L("接口状态：当前对话通过启动器内置的{0}接入，接口正常可用。不要声称「没有配置接口 / 接口不可用」。"), iface));
+		parts.Add(I18n.L("如果问题能通过改配置、禁用模组等方式修复，请直接动手（写操作会先征求我同意）；需要更多上下文就自己读日志文件。边查边说：有阶段性发现或换步骤时，先用一两句话告诉我，再继续调用工具。最后用一句话给我结论和下一步建议。"));
 		return string.Join("\n\n", parts);
 	}
 
@@ -354,7 +354,7 @@ internal sealed class AiFixWindow : Window
 		if (sent == null || !sent.Ok)
 		{
 			string message = sent?.Message ?? "";
-			string shown = (message.Length > 0) ? message : I18n.L("后端没有响应,请稍后再试");
+			string shown = (message.Length > 0) ? message : I18n.L("后端没有响应，请稍后再试");
 			if (_roundBubble != null)
 			{
 				_messages.Children.Remove(_roundBubble);
@@ -683,7 +683,7 @@ internal sealed class AiFixWindow : Window
 		case "checkpoint_warn":
 		{
 			string message = (ev.Payload.ValueKind == JsonValueKind.Object && ev.Payload.TryGetProperty("message", out JsonElement m) && m.ValueKind == JsonValueKind.String) ? (m.GetString() ?? "") : "";
-			_status.Text = (message.Length > 0) ? message : I18n.L("检查点不可用,本轮改动无法自动撤回");
+			_status.Text = (message.Length > 0) ? message : I18n.L("检查点不可用，本轮改动无法自动撤回");
 			break;
 		}
 		case "model_fallback":
@@ -722,7 +722,7 @@ internal sealed class AiFixWindow : Window
 			else
 			{
 				CloseRound();
-				Line(name, I18n.L("准备:") + label, ToolState.Prepare);
+				Line(name, I18n.L("准备：") + label, ToolState.Prepare);
 				_status.Text = I18n.L("正在执行操作...");
 			}
 
@@ -730,13 +730,13 @@ internal sealed class AiFixWindow : Window
 		case "tool_run":
 		case "tool_start":
 			CloseRound();
-			Line(name, I18n.L("执行中:") + label, ToolState.Running);
+			Line(name, I18n.L("执行中：") + label, ToolState.Running);
 			_status.Text = I18n.L("正在执行操作...");
 			break;
 		case "tool_done":
 		{
 			CloseRound();
-			ToolLine line = Line(name, I18n.L("完成:") + label, ToolState.Done);
+			ToolLine line = Line(name, I18n.L("完成：") + label, ToolState.Done);
 			string taskId = TaskIdOf(ev);
 			if (taskId.Length > 0)
 			{
@@ -749,7 +749,7 @@ internal sealed class AiFixWindow : Window
 		}
 		case "tool_skip":
 			CloseRound();
-			Line(name, I18n.L("已跳过:") + label, ToolState.Skipped);
+			Line(name, I18n.L("已跳过：") + label, ToolState.Skipped);
 			break;
 		default:
 			if (!string.IsNullOrWhiteSpace(ev.Label))
@@ -830,10 +830,10 @@ internal sealed class AiFixWindow : Window
 	{
 		string note = StopReasonOf(ev) switch
 		{
-			"no_tool_call" => I18n.L("它没有真的开始执行:模型只回了文字,没有调用任何工具。"),
-			"max_rounds" => I18n.L("步骤太多,先停在这里。你可以让我继续。"),
-			"pending_task" => I18n.L("下载/安装还在后台跑,完成后助手会回来汇报。"),
-			"stream_failed" => I18n.L("接口这轮没有返回内容,已停止。"),
+			"no_tool_call" => I18n.L("它没有真的开始执行：模型只回了文字，没有调用任何工具。"),
+			"max_rounds" => I18n.L("步骤太多，先停在这里。你可以让我继续。"),
+			"pending_task" => I18n.L("下载/安装还在后台跑，完成后助手会回来汇报。"),
+			"stream_failed" => I18n.L("接口这轮没有返回内容，已停止。"),
 			"empty_response" => I18n.L("接口返回了空回复。"),
 			_ => "",
 		};
@@ -845,10 +845,10 @@ internal sealed class AiFixWindow : Window
 		string detail = DetailOf(ev);
 		if (detail.Length > 0 && !note.Contains(detail))
 		{
-			note = note + I18n.L("(") + detail + I18n.L(")");
+			note = note + I18n.L("（") + detail + I18n.L("）");
 		}
 
-		return I18n.L("(提示:") + note + I18n.L(")");
+		return I18n.L("（提示：") + note + I18n.L("）");
 	}
 
 	/// <summary>【Windows 源】<c>:735-770</c>:确认卡。照 Lead 的口径**复用 C8a 的 <c>ConfirmCard</c>**
