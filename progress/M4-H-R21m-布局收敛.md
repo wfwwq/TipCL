@@ -94,3 +94,34 @@ git rm .github/workflows/ci-linux.yml # 消掉上一轮为子目录布局多加�
 | 重复的 workflow | **已消掉**(根上只有三份:移植 `ci.yml` + Windows `ci-windows.yml`/`release-windows.yml`) |
 | `linux-port` 分支 | 保留(内容 = 现在 main 的根,历史仍是独立一条;要不要删由你定) |
 | 仍未做 | 1 win job 首次失败(`700cd21`)的原因未定位;2 两条平台级提示(`actions/*@v4` 的 Node 20 弃用、`ubuntu-latest` 2026-10 迁移)未处理;3 `linux-port` 分支的取舍 |
+
+## 5. 附:推送抖动的那一段(以及绕法)
+
+`2f7683e` 那次推送还算顺(重试 1 次),但紧随其后的文档提交连续失败 **十几次**:
+`Empty reply from server` / `Recv failure: Connection was reset` / `Failed to connect to github.com:443 after 21s`。
+当时的诊断有意思:
+
+```
+github.com:443        reachable = 时通时不通(5 次探测:True/False/False/False/True)
+api.github.com:443    reachable = True
+raw.githubusercontent.com:443 reachable = True
+git ls-remote        也失败(说明不是"推送体积大"的问题)
+```
+
+排除掉的:HTTP/2(改成 `-c http.version=HTTP/1.1` 无效)、代理配置(`http.proxy`/`HTTPS_PROXY` 都是空)、凭据(同一套凭据十几分钟前刚推成功过)。
+
+**绕法(有效)**:解析到 `github.com` 的 A 记录后,**把域名钉到那个 IP** 再推:
+
+```bash
+# 探一下钉 IP 时 git 服务是否真的响应(公开仓可匿名读)
+curl -sS -o /dev/null -w '%{http_code}' --resolve github.com:443:20.205.243.166 \
+  'https://github.com/wfwwq/TipCL.git/info/refs?service=git-upload-pack'      # -> 200
+
+# 钉住 IP 推送
+git -c http.curloptResolve=github.com:443:20.205.243.166 push origin main
+#  2f7683e..469caac  main -> main      ← 一次成功
+```
+
+**结论与记法**:这类"TCP 时通时不通、服务空回复"的抖动,优先怀疑**域名解析/路由层面的干扰**;
+`http.curloptResolve`(Git 2.30+ 的 `http.curloptResolve`)能把域名钉到已验证可用的 IP,是比"反复重试"更有效的一招。
+另外:推送失败**不影响本地**——提交一直在本地,只是等一个网络窗口;所以遇到这种情况先确认"本地提交完整",再慢慢找路。
