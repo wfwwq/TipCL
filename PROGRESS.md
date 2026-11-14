@@ -924,3 +924,52 @@ R21b 归档的 AppImage 之后,R21c~R21e 都改了 `src/`,归档件却没重打 
 > "隔离显示"必须连 **dbus 会话**一起隔离。2**对话框随内容高度重新居中** —— 上一轮那句"点导出没反应/App 变聋"
 > 是**坐标误判**(该按钮当时在 `y≈249`,点的是 299,落在两行之间的空白);这类坐标**每次都要重量,不能复用**。
 > 3 并发会话的收尾只能用**自己的 pid**(`pkill -f mount_TipCL` 会误杀对方的实例);该会话做到了,`:0` 零残留。
+
+## M4-H R21k:推送到 GitHub + 第一次在真 runner 上跑 CI(2026-11-14)
+
+> 详版:`progress/M4-H-R21k-第一次真跑CI与推送.md`;决策 D-68。
+
+**推送**:远端 `https://github.com/wfwwq/TipCL`(用户指定)。推之前先只读探测,三个发现决定了做法:
+1 本机 SSH key **没登记**(`Permission denied (publickey)`,递的就是那把 `id_ed25519`)→ 不能走 SSH;
+2 目标仓**不是空的**,它就是 **Windows 版 TipCL 本体**(`main` = `803dd385…`,带 tag `v1.0.1…v1.0.13`),
+而且远端已有 **`macos-port`** 分支 ⇒ "一个平台一个分支"是既有惯例;
+3 HTTPS dry-run 通过 ⇒ 系统凭据管理器里已有可用凭据,不必向用户要 token。
+本地 `linux/` 是**另一条独立历史**(根提交 `7979b2b`,49 个提交,与远端无共同祖先)⇒ 直接推 `main` 会被拒,
+唯一能"覆盖"的办法是 force-push(会抹掉上游历史)—— **不做**。于是推成新分支:
+`git push -u origin main:linux-port`,并核对:远端 `linux-port` = 本地 `700cd21`(match=True)、
+远端 `main` 与 `v1.0.13` **原封不动**。
+
+**第一次真跑 CI**(run #231,SHA `700cd21`)—— 那条一直写着"从没在真 runner 上跑过"的流水线,当场跑了起来:
+
+| job | 结果 | 注解给出的退出码 |
+|---|---|---|
+| `test (ubuntu-latest)` | **success** | — |
+| `test (windows-latest)` | **success** | — |
+| `package (linux-x64 → AppImage + .deb)` | failure(`assemble AppDir + AppImage + .deb`) | **126** |
+| `package (win-x64 → zip)` | failure(`publish win-x64 (single file) + zip`) | 1 |
+
+两个 test job 全绿顺带验证了 R21i 的两件事:**测试拆两批**在真 runner 上跑得过(同一套在我们 8 GB 盒子上整批会 OOM);
+**`dotnet test` 不带 `DotNetHostPath`** 在干净机器上是对的(本机不带它 3/3 红是本机低完整性标签所致)。
+
+**两条失败的根因与修法**:
+1 **退出码 126 = 找到命令但不可执行**。`git ls-files -s` 直接给出答案:`tools/package.sh` / `tools/deb.sh`
+   在索引里是 **100644**(Windows 建的文件默认没有可执行位),而 CI 写的是 `./tools/package.sh`。
+   修:`git update-index --chmod=+x` 补成 100755(人照文档 `./` 也能跑)+ CI 改成 `bash ./tools/package.sh …`(双保险)。
+2 **win job 把"GUI 冒烟"和"打包"塞在同一步**:失败就连累整包;而且冒烟在**包目录**里跑,成功时 `smoke.png`
+   会被一起压进 zip。修:拆成 `publish` / `smoke(best effort)` / `zip`,冒烟在 `RUNNER_TEMP` 里跑,
+   失败**只发 `::warning` 注解**(带退出码 / 有没有 png / 末几行输出)**不阻断**;GUI 的真实覆盖仍由
+   ubuntu job 的 `xvfb + AppImage --smoke` 与真机/本地冒烟承担。
+   **诚实更正**:2 的原因我起初写成"托管 runner 没有交互桌面"——那是**假设**。第二次运行这一步是 **success**
+   (且没发出 warning 注解),说明那次冒烟**在托管 runner 上真的成功了**,假设至少不是全部原因;
+   **第一次为什么 1 仍未定位**(日志下载要管理员权限,匿名 403)。
+3 runner 顺手报出我们自己的 3 条测试警告(`xUnit2004` ×2、`CS8625`,都在 `Core/UiPrefsTests.cs`)→ 已清掉。
+
+**第二次真跑 CI**(run #232,`cc4c39d`):**四个 job 全绿** ——
+ubuntu/windows 两个 test job(各两批 + Release build)、`package (linux-x64 → AppImage + .deb)`
+(含 `assemble`、`smoke the AppImage`、`upload-artifact`)、`package (win-x64 → zip)`(含 `smoke (best effort)`);
+产物已上传:`tipcl-linux-x64` **152,804,131 B**、`tipcl-win-x64` **81,170,109 B**。
+注解里只剩 GitHub 自己的两条平台级提示(Node 20 弃用 / `ubuntu-latest` 2026-10 迁移)——
+**我们自己的警告在 CI 上也清零了**。
+
+**仍未做**:win job 首次失败的确切原因(未定位,已被"不阻断 + 留注解"覆盖);两条平台级提示没动(升 action 大版本另开一轮);
+跨无关历史的 PR 需要本地 `--allow-unrelated-histories` 才能合并,要不要把 Linux 移植并进 `main` 是产品决策,留给你。

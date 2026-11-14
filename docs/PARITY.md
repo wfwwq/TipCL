@@ -581,3 +581,31 @@ App 侧调用**已证**(xdg-open 收到正确的绝对路径参数),但**对照�
 **清理与边界**:该会话只 kill 自己的 pid(**刻意没有用 `pkill -f mount_TipCL`**,那会误杀 `:0` 上另一个会话的实例),
 `:9` 收尾后已不可连接,`:0` 零残留;`src/`、`tests/`、`docs/`、`PROGRESS.md`、`DECISIONS.md`、`tools/`、`progress/`、`_cmp/`
 **未改一字节**;机器侧只多了 rig 目录(`chips9*`)、`/home/user/Desktop/` 下两个证据文件,以及它 `apt` 装的 `xvfb`。
+
+### 9.13 CI 已经在真 runner 上跑过,而且全绿(2026-11-14,R21k)
+
+> **本节作废 §9.10 结尾那句"仍然没变:本仓无 remote,这条流水线一次都没在真 runner 上跑过"** —— 仓库已接上远端,
+> 那条流水线当场跑了两轮。§9.10 里其它结论(测试拆两批、`dotnet test` 不带 `DotNetHostPath` 的口径)反而被这两轮**证实**了。
+
+* **远端与分支**:`https://github.com/wfwwq/TipCL`。这个仓就是 **Windows 版 TipCL 本体**(`main` = `803dd385…`,带 tag `v1.0.1…v1.0.13`),
+  并且远端已有 **`macos-port`** 分支 ⇒ "一个平台一个分支"是既有惯例,Linux 移植因此推成 **`linux-port`**:
+  `git push -u origin main:linux-port`。推完核对:远端 `linux-port` = 本地 HEAD(match=True),远端 `main` 与 `v1.0.13` **原封不动**。
+  (本地 `linux/` 与远端是两条**无共同祖先**的历史;要并进 `main` 需要另有决策,不在本轮。)
+* **第一次真跑(run #231,`700cd21`)**:`test (ubuntu-latest)` / `test (windows-latest)` **success**;
+  `package (linux-x64 → AppImage + .deb)` 红在 `assemble AppDir + AppImage + .deb`(注解给 `exit code 126`);
+  `package (win-x64 → zip)` 红在 `publish win-x64 (single file) + zip`(注解给 `exit code 1`)。
+* **两条红的根因**:1**126 = 找到命令但不可执行** —— `tools/package.sh` / `tools/deb.sh` 在 git 索引里是 `100644`
+  (Windows 建的文件默认没有可执行位),而 CI 写的是 `./tools/package.sh`;修法:`git update-index --chmod=+x` 补成 `100755`
+  + CI 改为 `bash ./tools/package.sh …`。2 win 那个 job 把 GUI 冒烟与打包放同一步(失败连累整包),而且冒烟在**包目录**里跑
+  (成功时 `smoke.png` 会被压进 zip);修法:拆成 `publish` / `smoke(best effort)` / `zip`,冒烟在 `RUNNER_TEMP` 里跑,
+  失败只发 `::warning` 注解(带退出码 / 有没有 png / 末几行输出)不阻断。**诚实更正**:第二条我曾写成"托管 runner 没有交互桌面",
+  但复跑时这一步是 **success**(且没发出 warning 注解)⇒ 那是**假设**,第一次为什么 1 **未定位**(日志下载要管理员权限,匿名 403)。
+* **复跑(run #232,`cc4c39d`)**:★**四个 job 全绿**★,逐步骤 success —— ubuntu/windows 两个 test job(各两批 + Release build)、
+  `package (linux-x64)`(publish → linuxdeploy → `assemble AppDir + AppImage + .deb` → zip → hashes → **`smoke the AppImage`(xvfb)** → upload)、
+  `package (win-x64)`(publish → `smoke (best effort)` → zip → hashes → upload)。
+  产物:`tipcl-linux-x64` **152,804,131 B**、`tipcl-win-x64` **81,170,109 B**。
+  注解只剩 GitHub 自己的两条平台级提示(Node 20 弃用 / `ubuntu-latest` 2026-10 迁移),**我们自己的警告已清零**。
+* **仍未做**:win job 首次失败的确切原因(未定位,已被"不阻断 + 留注解"覆盖);两条平台级提示未处理;
+  跨无关历史的 PR 需本地 `--allow-unrelated-histories`,要不要把 Linux 移植并进 `main` 留作产品决策。
+* **对验收口径的影响**:§9.10 与 PROGRESS 里"CI 未在真 runner 验证过"这一条**从遗留清单里划掉**;
+  相应地,"能证明 Linux 交付链在干净机器上成立"这一层,现在由 CI 的两轮真跑 + 盒子真机 + 本地三处共同支撑。
