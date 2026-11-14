@@ -973,3 +973,36 @@ ubuntu/windows 两个 test job(各两批 + Release build)、`package (linux-x64 
 
 **仍未做**:win job 首次失败的确切原因(未定位,已被"不阻断 + 留注解"覆盖);两条平台级提示没动(升 action 大版本另开一轮);
 跨无关历史的 PR 需要本地 `--allow-unrelated-histories` 才能合并,要不要把 Linux 移植并进 `main` 是产品决策,留给你。
+
+## M4-H R21l:把移植合并进 `main`(作为 `linux/` 子目录)+ 根 workflow(2026-11-14)
+
+> 详版:`progress/M4-H-R21l-合并进main.md`;决策 D-69。
+
+**指令**:用户"加进main"。
+
+**为什么不是直接合并两条历史**:`main` 是 Windows 版本体,根下与移植**重名**的路径一大把
+(`PROGRESS.md` / `DECISIONS.md` / `GOAL.md` / `README.md` / `docs/` / `progress/` / `src/` / `tests/` / `tools/` / `.gitignore` / `交接必读.md`),
+`merge --allow-unrelated-histories` 会在每个重名路径上冲突且"取哪边"都是破坏。
+
+**做法**:`merge -s ours --no-commit`(取上游的树)+ `read-tree --prefix=linux/ -u linux-port`(把移植整棵树放到 `linux/` 下)
+→ 合并提交 `ac62394`,**两个父** = 上游 `803dd385` + 移植历史 `44e9917`;推送是 **fast-forward,没有 force**。
+**核对**:根下只新增 `linux/`(425 文件 / 96,522 行);上游 `README.md`/`LICENSE`/`PROGRESS.md`/`DECISIONS.md`/`src`/`tools`/`.github/workflows/ci.yml`
+的 **blob 与 `origin/main` 逐一相同**;`git diff origin/main HEAD -- . ':(exclude)linux'` 为**空**;
+上游 `CI` 在 merge 提交(#234)与随后那次(#235)**都 success** ⇒ 没打扰它的 Windows CI。
+
+**补根 workflow(否则移植在 main 上没有 CI)**:GitHub 只读仓库根的 `.github/workflows/`,嵌套的
+`linux/.github/workflows/ci.yml` 在 main 上**不会被注册**;上游根 `CI` 只看 Windows 侧。于是新增
+`.github/workflows/ci-linux.yml`(纯新增):`defaults.run.working-directory: linux`、产物路径加 `linux/` 前缀、
+冒烟用 `$GITHUB_WORKSPACE/linux/dist/TipCL-linux-x64.AppImage`、`paths` 过滤 `linux/**`;
+其余与嵌套那份一致(测试分两批、Release 构建、publish→linuxdeploy→AppImage+.deb→zip→hashes→xvfb 冒烟→上传、win 冒烟作提示)。
+**真跑验证**(`c00a475`):上游 `CI` #235 **success**;新的 `linux-port CI` **run #1 四个 job 全绿**,
+产物 `tipcl-linux-x64` **152,804,615 B**、`tipcl-win-x64` **81,170,109 B**。
+两份 workflow 的重复是**刻意的**(同一套流水线在两种布局下的版本),必须同步;要消掉只能把移植挪到仓库根(布局决策,没做)。
+
+**本地布局随之改变(必须知道)**:`D:\项目\tipcl\linux` 现在是**合并后的仓根**(上游工程在根、移植在 `linux\`);
+从干净 clone 看是 `TipCL/{...Windows..., linux/{...移植...}}`。我留在旧根的开发产物(`_cmp/`、`dist/`、`scratch/`、84 张 `smoke*.png`)
+在新根下**不再被忽略**(上游 `.gitignore` 不管这些)⇒ 已全部挪进 `linux/`(那里有规则),搬完仓根 `git status` **干净**。
+回退:`git revert -m 1 ac62394`(或删掉根 `ci-linux.yml`),`linux-port` 分支与 tag 不受影响。
+
+**仍未做**:win job 首次失败原因未定位(日志要权限;已用"不阻断+留注解"覆盖);两条平台级提示未处理;
+两份 workflow 靠人肉同步;要不要把移植并进**根目录**而非 `linux/` 子目录属布局决策(留给你)。

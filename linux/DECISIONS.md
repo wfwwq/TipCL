@@ -670,3 +670,29 @@
   2**能用索引/退出码定性,就别等日志**:126 与 100644 的组合当场就能钉死;
   3**诊断通道要主动设计**(注解),别把"看不到日志"当成"没法查";
   4**拿环境相关的东西当门槛,等于把不稳定性写进流水线**。
+
+### D-69 · 把移植"加进 main"的正确形状是**子目录 + 合并提交**,不是合并两条历史;随之要在仓库根补一份 CI(R21l,2026-11-14,主 agent)
+
+- **背景**:移植此前以独立历史开发(根提交 `7979b2b`,49 个提交),与上游 Windows 工程(`main` = `803dd385`)无共同祖先;
+  两边根目录下**重名路径极多**(`PROGRESS.md` / `DECISIONS.md` / `GOAL.md` / `README.md` / `docs/` / `progress/` /
+  `src/` / `tests/` / `tools/` / `.gitignore` / `交接必读.md`)。
+- **决策一:内容按"子目录加进去",历史用"合并提交"记下来。**
+  `merge --allow-unrelated-histories` 会在每个重名路径上冲突,而"取哪一边"对任一方都是破坏;force-push 覆盖 `main`
+  更是直接抹掉上游。采用:`merge -s ours --no-commit`(树取上游)+ `read-tree --prefix=linux/ -u linux-port`
+  (把移植整棵树放进 `linux/`)+ 提交成一个**两个父**的合并提交 ⇒ 1上游文件**零改动**(用 blob 逐一比对,
+  且 `git diff origin/main HEAD -- . ':(exclude)linux'` 为空);2两边的历史都还能从 `main` 追溯(`git log --graph` 看得见);
+  3推送是 fast-forward,**不需要 force**;4回退只需 `git revert -m 1 <merge>`。
+- **决策二:仓库根补一份 `ci-linux.yml`。** GitHub **只读仓库根的 `.github/workflows/`** —— 嵌套在 `linux/.github/` 下的
+  workflow 在 `linux-port` 分支上有效(那个分支里移植就在根),但合并进 `main` 后**不会被注册**;上游根上的 `CI` 只覆盖
+  Windows 侧。于是新增根上的 `ci-linux.yml`:`defaults.run.working-directory: linux`、产物路径加 `linux/` 前缀、
+  `paths` 过滤 `linux/**`。**代价是要同步两份**(两种布局各一份),这是刻意接受的重复 —— 要消掉它只能把移植挪到仓库根。
+- **证据**:合并提交 `ac62394`(父 `803dd385` + `44e9917`);上游 `CI` #234/#235 均 success;
+  `linux-port CI` **run #1 四个 job 全绿**,产物 `tipcl-linux-x64` 152,804,615 B、`tipcl-win-x64` 81,170,109 B。
+- **附带决策三:开发产物要跟着布局走。** 我留在旧仓根的 `_cmp/`、`dist/`、`scratch/`、84 张 `smoke*.png` 在新根下
+  **不再被忽略**(上游 `.gitignore` 只管 `bin/ obj/ .vs/ *.user *.suo *.pdb publish/ _wph_run/ shot-*.png`),
+  等于给仓库埋了一颗"哪天 `git add -A` 就污染上游"的雷 ⇒ 全部挪进 `linux/`(那里有忽略规则),搬完仓根干净。
+- **教训**:1**"加进 main" 这种要求要先把两边的目录结构看清楚再动手** —— 结果是"重名"而不是"空位",
+  于是"合并"必须降级成"加子目录",否则两边都会被破坏;2**同一条流水线在不同布局下是两份文件**:
+  workflow 的位置(GitHub 只读根)与工作目录(移植在子目录)一起决定了这一点,别指望"照抄一份就行";
+  3**合并/挪动之后要立刻检查"忽略规则还成不成立"** —— 布局一变,原来被忽略的产物可能变成未跟踪垃圾;
+  4凡是能 fast-forward 就别用 force:这次全程没用 force,回退只需一条 `revert -m 1`。
