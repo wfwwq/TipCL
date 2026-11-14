@@ -1043,3 +1043,35 @@ Windows 版(`windos/src/TipCL/Core/Launcher/Config.cs:12`、`Updater.cs:12`)与�
 **仍未做(如实)**:1 Windows job 首次失败(`700cd21`)的确切原因 —— 日志下载要管理员权限(匿名 403),读不到;
 但该步骤已改成"不阻断 + 把退出码/有没有 png/末几行输出写进 `::warning` 注解",下次同类问题不必登 runner 也能看。
 2 `ubuntu-latest` 迁移的通知(2026-10)按上面理由不处理。
+
+## M4-H R22:接上「启动器自更新」整条链路(2026-11-14)
+
+**缺口(上一轮查出来的)**:Windows 参考版有完整自更新链路(启动静默检查 / 有新版弹一次 / 下载后暂存并在退出时换 exe /
+设置页「检查更新」),而移植侧 `Updater.cs` 虽在 Core 里却**没有任何调用方** —— 设置页那个「自动检查更新」开关只写配置没人读,
+按本项目"不做假按钮"的标准就是缺口;清单还指向 Windows 产物,release 也只发 Windows 资产。
+
+**做法**(详见提交 `70ccbd1` 的说明):
+- **Core**:`Updater.DEFAULT_URL` 与 `Config.DEFAULT_UPDATE_URL` **一起**改指新的 `update-linux.json`;
+  删掉 Windows 专用的 `BuildApplyScript`(生成 PowerShell 换 exe),换成 Linux 实现
+  —— `UpdateTarget()`(AppImage 走 `$APPIMAGE`,不是运行时解包挂载路径)、`CanReplace()`(实测**目标目录**可写)、
+  `ApplyStaged()`(同目录写 `*.new` → 权限跟着旧文件走 → **原子 rename 覆盖**;`restart` 时顺手拉起新版)。
+  Linux 换运行中的二进制是安全的,所以**当场替换**,不需要参考版那套"等进程退出"。
+  目标不可写(`.deb` 装在 `/opt`)时**不硬来**:返回 `mode=download-only` + 包路径 + 怎么装完。
+- **API**:`check_update` / `start_self_update`(任务:下载 + sha256 校验 + emit `update_staged`)/ `apply_update`(照参考版同名)。
+- **界面**:MainWindow 启动静默检查(尊重 `auto_check_update`,照参考版等 3 秒)+「发现新版本 / 下载更新 / 以后再说」
+  + 订阅 `update_staged` →「立即重启 / 稍后重启」;设置页加「检查更新」按钮(逻辑在新的 partial `SettingsPage.Update.cs`)。
+  —— 那个开关**从此真的有消费者**了。
+- **发版与清单**:新增 `update-linux.json`(与 `update.json` **并排**,不改那份外部接口);`release-windows.yml` → `release.yml`,
+  两个 job:原有 Windows exe + **新增 Linux**(AppImage + `.deb` + xvfb 冒烟 + 上传),并把要填进清单的 version/url/sha256 打印在日志里。
+
+**过程中被自己的测试和复核抓到的两处**(都值得记):
+1 我第一遍只改了 `Updater.DEFAULT_URL`,新写的用例立刻红了 —— 运行期走的是 **`Config.UpdateUrl()`**,而 `Config.cs` 里
+  **另有一份** `DEFAULT_UPDATE_URL`(还有一处 `update_url` 默认值)。**同一份默认值散成两处,改一处等于没改**。
+2 清单说"有新版"但 sha256 非法时,`Check` 返回 `ok=false / has_update=false` + 一句"已拒绝自动更新" —— 我原来的
+  「检查更新」按钮会把它显示成「已是最新版本」✗(误导),启动静默检查则完全无声 ✗。已改成:按钮提示「更新被拒绝」+ 原因,
+  启动检查记一条 WARN。**安全兜底不能被显示成"一切正常"**。
+
+**验证**:新增 `tests/TipCL.Tests/Core/UpdaterTests.cs` **20 条**(清单默认地址、版本比较含 `0.1.0-m3` 后缀、
+有新版/同号/缺 sha256 被拒/取清单失败、`$APPIMAGE` 优先、原子替换 + 可执行位保留 + 不残留 `.new`、
+不可写目标 download-only 且不动包、缺包抛错、`Download` 对无 url / 非法 sha256 的拒绝);
+本地全套 **466 = 245 + 220(+1 跳过)全绿**,Release 构建 **0 警告 0 错误**;盒子端到端真机验证(独立子代理)结果另附。

@@ -609,3 +609,39 @@ App 侧调用**已证**(xdg-open 收到正确的绝对路径参数),但**对照�
   跨无关历史的 PR 需本地 `--allow-unrelated-histories`,要不要把 Linux 移植并进 `main` 留作产品决策。
 * **对验收口径的影响**:§9.10 与 PROGRESS 里"CI 未在真 runner 验证过"这一条**从遗留清单里划掉**;
   相应地,"能证明 Linux 交付链在干净机器上成立"这一层,现在由 CI 的两轮真跑 + 盒子真机 + 本地三处共同支撑。
+
+### 9.14 启动器自更新在 Linux 侧接上了(2026-11-14,R22)
+
+**补前(这是本轮唯一一条"未记录的功能缺口")**:参考版有完整的自更新链路 —— 启动时按 `auto_check_update` 静默检查一次
+(`MainWindow.xaml.cs:589-650`)、有新版问一句、下载后暂存并在退出时换 exe(`Updater.BuildApplyScript` / `ApplyStaged`)、
+设置页有「检查更新」按钮(`SettingsPage.cs:552`)。而移植侧:**`Updater` 类搬过来了、却没有任何调用方**;
+设置页那个「自动检查更新」开关**只把 `auto_check_update` 写进配置、没人读**(按本项目"不做假按钮"的标准就是缺口);
+清单默认指向 Windows 那份(`update.json` 的 `url` 是 `TipCL.exe`);release 也只上传 Windows 资产。
+
+**补后**:
+
+| 入口 | 行为 | 位置 |
+|---|---|---|
+| 启动静默检查 | 尊重 `auto_check_update`,等 3 秒查一次;有新版弹「发现新版本 / 下载更新 / 以后再说」 | `Shell/MainWindow.axaml.cs`(`AutoCheckUpdateAsync`,照参考版同序) |
+| 手动检查 | 设置页「自动检查更新」旁的**「检查更新」**按钮:已是最新就报一句、有新版问要不要下载、清单有问题提示「更新被拒绝」+ 原因 | `Pages/Settings/SettingsPage.cs` + 新 partial `SettingsPage.Update.cs` |
+| 下载 | 后台任务:下载 → **sha256 校验**(不通过就删包并报错)→ emit `update_staged` | `Common/Api.cs` 的 `start_self_update`(照参考版同名 op) |
+| 落地 | 弹「更新已下载 / 立即重启 / 稍后重启」→ 调 `apply_update` → **当场替换**;不可写时弹「需要手动安装」 | `MainWindow.OfferRestartForUpdateAsync` + `Updater.ApplyStaged` |
+
+**Linux 的替换策略(与参考版有意的差别,见 D-71)**:参考版是"暂存 → 退出时用 PowerShell 换 exe"(因为 Windows 上运行中的 exe 换不掉);
+Linux 换运行中的二进制是安全的(进程继续用旧 inode;AppImage 用的是解包挂载),所以**当场替换**:
+下载包 → 同目录写 `*.new` → 权限跟着旧文件走 → **原子 rename 覆盖** → 提示重启(`restart` 时顺手拉起新版)。
+AppImage 形态取 **`$APPIMAGE`**(磁盘上那个 `.AppImage`,不是 `/tmp/.mount_*` 解包路径);能不能替换用**实测目标目录可写**判定;
+`.deb` 装在 `/opt/TipCL` 这种**不硬来**,只下载并把"用包管理器装"写清楚。
+
+**清单与发版**:新增根目录的 **`update-linux.json`**(version / notes / url / sha256),与 `update.json` **并排**——
+后者是外部接口(两个实现都写死读它),不往里塞平台字段;`TIPCL_UPDATE_URL` 环境变量可覆盖清单地址(测试/镜像用)。
+`release-windows.yml` → **`release.yml`**,两个 job:原有 Windows exe + **新增 Linux**(publish → linuxdeploy → AppImage + `.deb`
+→ xvfb 冒烟 → 上传资产),并把要填进 `update-linux.json` 的 version/url/sha256 打印在日志里。清单仍是**手工**更新(与 Windows 侧同规矩)。
+
+**验证**:`tests/TipCL.Tests/Core/UpdaterTests.cs` **20 条**(清单默认地址 / 版本比较含 `0.1.0-m3` 后缀 /
+有新版 / 同号 / **缺 sha256 被拒** / 取清单失败 / `$APPIMAGE` 优先 / 原子替换 + 可执行位保留 + 不残留 `.new` /
+不可写目标 download-only 且不动包 / 缺包抛错 / `Download` 对无 url 与非法 sha256 的拒绝);本地全套 **466 全绿**、Release 构建 0 警告 0 错误;
+盒子端到端(本地 HTTP 清单 + 假包 + `TIPCL_UPDATE_URL`,真点一遍并核对替换前后 sha256)见 R22 的实机记录。
+
+**如实留白**:1盒子上验的是"本地清单 + 假包"的真机链路,**真的发一次版**(release 事件触发 `release.yml` 的 linux job)还没跑过 ——
+那需要真的切一个 tag/发行版;2「立即重启」那个分支(替换后顺手拉起新版)在盒子上只做到"能替换",重启那步的连续验证按 R22 记录为准。

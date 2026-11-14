@@ -214,7 +214,14 @@ public partial class MainWindow : Window
             if (!TipCL.Core.Py.Truthy(TipCL.Core.Launcher.Config.CONFIG.Get("auto_check_update", true))) return;
             await Task.Delay(3000);
             TipCL.Core.PyDict? info = await TipCL.App.Common.InProcessApi.Instance.TryCallAsync<TipCL.Core.PyDict>("check_update");
-            if (info == null || !TipCL.Core.Py.Truthy(info["has_update"])) return;
+            if (info == null || !TipCL.Core.Py.Truthy(info["has_update"]))
+            {
+                // 静默检查不打扰用户,但"被拒绝"要留痕:ok=false 说明清单有问题(比如 sha256 不合法),
+                // 这条最容易在发版流程出错时被忽略,所以记一条 WARN 而不是彻底无声。
+                if (info != null && !TipCL.Core.Py.Truthy(info["ok"]))
+                    TipCL.App.Common.AppLog.Warn("自动检查更新: " + TipCL.Core.Py.S(info["message"]));
+                return;
+            }
             string body = ("TipCL " + TipCL.Core.Py.S(info["latest"]) + " 已发布。\n" + TipCL.Core.Py.S(info["notes"])).Trim();
             if (await TipCL.App.Common.Dlg.Confirm("发现新版本", body + "\n\n现在下载更新?下载完会提示你重启。", "下载更新", "以后再说"))
                 await TipCL.App.Common.InProcessApi.Instance.TryCallAsync<string>("start_self_update");

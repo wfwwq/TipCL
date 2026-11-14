@@ -27,6 +27,13 @@ public sealed partial class SettingsPage
         string latest = Py.S(info["latest"]);
         if (!Py.Truthy(info["has_update"]))
         {
+            // 注意这条分支里有两种情况:"确实是最新" 与 "清单说新版但 sha256 不合法被拒"(ok=false)。
+            // 后者是有意的安全兜底,**不能**显示成"已是最新版本"——要把原因如实说出来。
+            if (!Py.Truthy(info["ok"]))
+            {
+                Toast("更新被拒绝", Py.S(info["message"]), ToastKind.Warning);
+                return;
+            }
             Toast("已是最新版本", current + (latest.Length > 0 && latest != current ? " (清单:" + latest + ")" : ""), ToastKind.Success);
             return;
         }
