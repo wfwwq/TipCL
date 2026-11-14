@@ -895,8 +895,8 @@ public class C4InstanceTests
             var detail = C4Files.Mount(harness, new InstanceDetailPage(new InstanceInfo { Name = "甲" }, delegate { }));
             C4Files.Flush(2);
             detail.ShowSeg(1);
-            C4Files.Pump(() => api.Count("list_saves") >= 1);
-            C4Files.Flush(2);
+            // 【D1 修法 · A 组】空态文案也是续体画的 ⇒ 等它出现;删掉固定刷一次的残留 Flush。断言一字不改
+            C4Files.Pump(() => C4Files.HasText(detail, I18n.L("这里还是空的")), 9000);
             Assert.True(C4Files.HasText(detail, I18n.L("这里还是空的")));
             Assert.True(C4Files.HasText(detail, I18n.L("到「下载」页搜索安装")));
         });

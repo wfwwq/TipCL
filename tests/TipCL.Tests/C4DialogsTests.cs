@@ -950,6 +950,9 @@ public class C4DialogsTests
             C4Files.Click(C4Files.ByText(panel, I18n.L("打开")));
             C4Files.Pump(() => api.Count("open_media") >= 1);
             Assert.Contains("\"path\":\"/tmp/shot.png\"", api.ParamsOf("open_media"));
+            // 【D1 修法 · A 组】载荷断言留在原处(请求到达即已记录参数);**界面那一行文案是续体画的** ⇒ 等它出现再断言。
+            // 这一处没有残留 Flush。断言一字不改。
+            C4Files.Pump(() => C4Files.HasText(panel, Fmt.Size(100)), 9000);
             Assert.True(C4Files.HasText(panel, Fmt.Size(100)));
         });
     }
@@ -1429,7 +1432,10 @@ public class C4DialogsTests
             Control panel = C4Files.PanelCard(I18n.L("全局模组"));
             Assert.True(C4Files.HasText(panel, I18n.L("全局模组目录是空的")));
             C4Files.Click(C4Files.ByText(panel, I18n.L("刷新")));
-            C4Files.Pump(() => api.Count("list_global_mods") >= 2);
+            // 【D1 修法 · A 组】等**三样界面效果**都成立(两行文案 + 两个开关),不是"请求到达";这一处没有残留 Flush。
+            // 断言一字不改。
+            C4Files.Pump(() => C4Files.HasText(panel, "g1.jar") && C4Files.HasText(panel, "2 KB") &&
+                                C4Files.Descendants(panel).OfType<CheckBox>().Count() == 2, 9000);
             Assert.True(C4Files.HasText(panel, "g1.jar"));
             Assert.True(C4Files.HasText(panel, "2 KB"));
             Assert.Equal(2, C4Files.Descendants(panel).OfType<CheckBox>().Count());
