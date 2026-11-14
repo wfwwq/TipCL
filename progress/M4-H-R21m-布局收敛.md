@@ -125,3 +125,38 @@ git -c http.curloptResolve=github.com:443:20.205.243.166 push origin main
 **结论与记法**:这类"TCP 时通时不通、服务空回复"的抖动,优先怀疑**域名解析/路由层面的干扰**;
 `http.curloptResolve`(Git 2.30+ 的 `http.curloptResolve`)能把域名钉到已验证可用的 IP,是比"反复重试"更有效的一招。
 另外:推送失败**不影响本地**——提交一直在本地,只是等一个网络窗口;所以遇到这种情况先确认"本地提交完整",再慢慢找路。
+
+## 6. 附:推送抖动的诊断与绕法(含后续一次经验修正)
+
+`2f7683e` 那次推送还算顺(重试 1 次),但紧随其后的提交连续失败 **十几次**:`Empty reply from server` /
+`Recv failure: Connection was reset` / `Failed to connect to github.com:443 after 21s`。诊断:
+
+```
+github.com:443                 reachable = 时通时不通(5 次探测 True/False/False/False/True)
+api.github.com:443             reachable = True
+raw.githubusercontent.com:443  reachable = True
+git ls-remote                 也失败(排除"推送体积大")
+```
+
+排除掉的:HTTP/2(`-c http.version=HTTP/1.1` 无效)、代理配置(`http.proxy`/`HTTPS_PROXY` 都空)、凭据(同一套凭据十几分钟前刚成功过)。
+
+**绕法**:把域名钉到 IP 再推。**但"钉哪个 IP"有讲究** —— 后来删分支时又抖了一次,连试 5 次失败、
+第 6 次才通,期间解析出的 A 记录在变(`57.155.223.240` → `20.6.7.17`)。所以可靠写法是:
+
+```bash
+# 1) 把 github.com 的所有 A 记录逐个探一遍,挑出真正响应 git 服务的那个
+for ip in $(dig +short A github.com); do
+  code=$(curl -sS -m 12 -o /dev/null -w '%{http_code}' --resolve github.com:443:$ip \
+         'https://github.com/wfwwq/TipCL.git/info/refs?service=git-upload-pack')
+  echo "$ip -> $code"
+  [ "$code" = "200" ] && GOOD=$ip && break
+done
+
+# 2) 用那个 IP 推(或删分支)
+git -c http.curloptResolve=github.com:443:$GOOD push origin main
+git -c http.curloptResolve=github.com:443:$GOOD push origin --delete linux-port
+```
+
+**记法**:这类"TCP 时通时不通、服务空回复"的抖动,优先怀疑**解析/路由层面**(而且 A 记录可能有多个、只有部分可达);
+`http.curloptResolve` 是比"反复重试"更有效的一招,但要**逐 IP 探到能通的那个**。
+另:推送失败**不影响本地** —— 提交一直在本地等你,所以先确认本地完整,再慢慢找路。

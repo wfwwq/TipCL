@@ -1008,3 +1008,38 @@ Windows 版(`windos/src/TipCL/Core/Launcher/Config.cs:12`、`Updater.cs:12`)与�
 
 **回退**:`git revert 2f7683e`。**仍未做**:win job 首次失败原因未定位;两条平台级提示未处理;
 `linux-port` 分支(内容 = 现在 main 的根,历史仍独立)要不要删由你定。
+
+## M4-H R21n:收尾三件(action 升版消告警、删冗余分支、网络绕法修正)(2026-11-14)
+
+用户"做"回应的是我列的遗留清单。逐条:
+
+**1. Node 20 弃用告警:已消掉(不是猜版本号,是读 `action.yml`)**。GitHub 每次运行都报
+`actions/checkout@v4` / `actions/setup-dotnet@v4` / `actions/upload-artifact@v4` 指向 Node 20(已被弃用、被强制跑在 Node 24)。
+做法:直接读每个 major 的 `action.yml` 里 `runs.using`:
+
+| action | v4 | v5 | v6 | v7 | 首个声明 node24 |
+|---|---|---|---|---|---|
+| `actions/checkout` | node20 | **node24** | node24 | node24 | **v5** |
+| `actions/setup-dotnet` | node20 | **node24** | node24 | — | **v5** |
+| `actions/upload-artifact` | node20 | node20 | **node24** | node24 | **v6** |
+
+按"**最小能消掉告警**"选(`upload-artifact` 注意:**v5 仍是 node20**,必须到 v6):
+`checkout@v5`、`setup-dotnet@v5`、`upload-artifact@v6`。改了三份 workflow
+(`ci.yml` 三处 checkout / 三处 setup-dotnet / 两处 upload-artifact;`ci-windows.yml` 与 `release-windows.yml` 各一处 checkout + setup-dotnet),
+三份都过真解析。**验证**:推送后移植 `ci` 与新 Windows `CI` 都真跑 —— 全绿;**注解里 Node 20 那条消失了**,
+只剩两条 `ubuntu-latest 将在 2026-10 迁到 Ubuntu 26` 的平台级 **notice**(不需要动作:流水线不依赖 Ubuntu 版本,
+依赖用 apt 现装,AppImage 冒烟本来就有 extract-and-run 兜底)。
+**如实记**:`release-windows.yml` 只在 release 事件触发,本次与下次推送都不会跑它 —— 它用的两个动作与另两份相同,属**间接验证**。
+
+**2. 删掉冗余分支 `linux-port`**:它的内容就是现在 `main` 的根,历史也是 `main` 的祖先(经 R21l 的合并提交),
+删掉不丢任何东西 ⇒ `git push origin --delete linux-port` 已执行(`[deleted] linux-port`)。
+远端现在只剩 `main`(`0d15e41`)与未动的 `macos-port`。
+
+**3. 网络绕法修正(顺手得到的一条经验)**:删分支那步又抖了一次 —— 连试 5 次失败、第 6 次才通,
+而 `github.com` 的 A 记录在两次之间**变了**(`57.155.223.240` → `20.6.7.17`)。
+所以"钉 IP"的正确写法是 **把解析出的多个 A 记录逐个探到真正响应 git 服务(HTTP 200)的那个再用**,
+而不是"取第一个"(详见 `progress/M4-H-R21m-布局收敛.md` 第 6 节)。
+
+**仍未做(如实)**:1 Windows job 首次失败(`700cd21`)的确切原因 —— 日志下载要管理员权限(匿名 403),读不到;
+但该步骤已改成"不阻断 + 把退出码/有没有 png/末几行输出写进 `::warning` 注解",下次同类问题不必登 runner 也能看。
+2 `ubuntu-latest` 迁移的通知(2026-10)按上面理由不处理。
