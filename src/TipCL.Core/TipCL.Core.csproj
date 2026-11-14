@@ -18,4 +18,26 @@
     <InternalsVisibleTo Include="TipCL.Tests" />
   </ItemGroup>
 
+  <!--
+    task-30:内置词表。I18nCore.LoadStrings() 从**内嵌资源** `TipCL.Core.locales.<name>.json` 读
+    (CoreResources.ListDir("locales")),所以这里的 LogicalName **必须**是这个形状,写错了会静默变成空表
+    ⇒ `Tr()` 一律回落返回 key 本身(表现就是:语言切成 English 后整站仍显示中文)。
+    写法与 Windows 侧 `windos/src/TipCL/TipCL.csproj:92-93` 保持一致。
+
+    来源(生成方式,照抄勿猜):
+      底表 = `windos\tipcl\src\TipCL\Resources\locales\{en,zh_CN}.json`(2951 键,最新)
+      + 用户源码压缩包 `TipCL-552f3ac` 里 locales 独有的 16 个键(如「安装时飞入底部任务条」)= 2967 键
+    ⚠️ 三份词表**互不包含**(2951 与 2809 各有 158 / 16 个独有键),别以为最新那份是超集而把 16 个键丢掉;
+    重复键一律以底表(最新)那份的值为准。
+    ⚠️ 这是**复制**进移植侧(不是 link):linux 构建只跑 `src/...`(.github/workflows/ci.yml),
+    而且 `ci.yml` 的 paths-ignore 明确跳过"只动 windos/** 的提交",所以移植侧不能依赖 windos 子树;
+    最新那份词表也根本不在本仓(在另一个 windos\tipcl 检出)。
+    ⚠️ 分叉风险由用例兜:`tests/TipCL.Tests/Core/I18nCoreLocalesTests.cs` 断言键数 ≥ 2951、
+    且那 16 个"压缩包独有"键必须在 —— 谁把旧表(2775/2809)抄回来会立刻红。
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\locales\en.json" LogicalName="TipCL.Core.locales.en.json" />
+    <EmbeddedResource Include="Resources\locales\zh_CN.json" LogicalName="TipCL.Core.locales.zh_CN.json" />
+  </ItemGroup>
+
 </Project>
