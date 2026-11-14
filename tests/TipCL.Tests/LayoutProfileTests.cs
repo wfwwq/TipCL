@@ -7,6 +7,8 @@ using TipCL.Pages;
 using TipCL.Pages.Layout;
 using Xunit;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Tests;
 
 /// <summary>
@@ -29,6 +31,7 @@ public class LayoutProfileTests
 	{
 		Directory.CreateDirectory(_tmp);
 		LayoutStoreV2.DirOverride = _tmp;
+		LayoutStoreV2.V1Bridge = new PagesLayoutV1Bridge();   // 与 App.OnStartup 同装配:v1 走 PageLayoutStore 语义
 		PageLayoutStore.DirOverride = _tmp;
 		LayoutStoreV2.ResetCache();
 	}
@@ -36,6 +39,7 @@ public class LayoutProfileTests
 	private void Release()
 	{
 		LayoutStoreV2.DirOverride = null;
+		LayoutStoreV2.V1Bridge = null;
 		PageLayoutStore.DirOverride = null;
 		LayoutStoreV2.ResetCache();
 		try
@@ -314,7 +318,7 @@ public class LayoutProfileTests
 		{
 			SeedCurrentLayout(0.4);
 			// 「导出兼容 v1 的页面布局」= ProjectV1 + PageLayoutStore.ExportJson
-			string text = PageLayoutStore.ExportJson(LayoutStoreV2.ProjectV1(LayoutStoreV2.Load()));
+			string text = PageLayoutStore.ExportJson(LayoutV1Projection.ProjectV1(LayoutStoreV2.Load()));
 			using JsonDocument parsed = JsonDocument.Parse(text);
 			Assert.Equal(1, parsed.RootElement.GetProperty("version").GetInt32());
 			Assert.Equal(PageLayoutStore.Kind, parsed.RootElement.GetProperty("kind").GetString());

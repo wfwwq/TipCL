@@ -12,6 +12,8 @@ using TipCL.Models;
 using TipCL.Pages.Layout;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages;
 
 // 实例库（2026-11 效果图）：左栏文件夹列表（420 宽）+ 右栏版本选择（按加载器分组折叠）。

@@ -6,6 +6,8 @@ using TipCL.Pages;
 using TipCL.Pages.Layout;
 using Xunit;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Tests;
 
 /// <summary>
@@ -27,6 +29,7 @@ public class LayoutBlockHostTests
 	private void UseDir()
 	{
 		LayoutStoreV2.DirOverride = _tmp;
+		LayoutStoreV2.V1Bridge = new PagesLayoutV1Bridge();   // 与 App.OnStartup 同装配:v1 走 PageLayoutStore 语义
 		PageLayoutStore.DirOverride = _tmp;
 		LayoutStoreV2.ResetCache();
 		PageLayoutStore.Reload();
@@ -35,6 +38,7 @@ public class LayoutBlockHostTests
 	private void Release()
 	{
 		LayoutStoreV2.DirOverride = null;
+		LayoutStoreV2.V1Bridge = null;
 		PageLayoutStore.DirOverride = null;
 		LayoutStoreV2.ResetCache();
 		PageLayoutStore.Reload();

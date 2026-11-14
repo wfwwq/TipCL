@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 
-namespace TipCL.Pages.Layout;
+namespace TipCL.Core.Launcher.Layout;
 
 // 布局文档 v2 的 JSON 值搬运工具(纯模型层,禁 WPF、禁界面):
 //   1) 宽容读取:字段类型不符合契约时一律退回默认值,绝不抛(对齐 PageLayoutStore.ParseLoose 的思路);

@@ -16,6 +16,8 @@ using TipCL.Pages.Ai;
 using TipCL.Pages.Layout;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages;
 
 public sealed partial class AiPage : PageBase

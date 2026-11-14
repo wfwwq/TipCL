@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
-namespace TipCL.Pages.Layout;
+namespace TipCL.Core.Launcher.Layout;
 
 // 布局文档 v2 的模型(设计文档 §3.2 数据契约)。纯模型层:禁 WPF、禁界面依赖,
 // 这样 net8 的测试宿主也能直接加载(与 PageLayoutDoc / PageLayoutStore 同理)。

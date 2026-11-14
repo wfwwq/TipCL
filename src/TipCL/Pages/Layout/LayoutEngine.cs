@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 布局引擎(纯模型层:禁 WPF、禁界面依赖,net8 测试宿主可直接加载):
@@ -757,51 +759,12 @@ public static class LayoutEngine
 	/// 把 v1 单页的 <c>{id,hidden}</c> 与顺序并进 v2 页(导入 v1 语义文件的兼容路径):
 	/// 顺序与显隐以 v1 为准;同一个块在 v2 里的其它字段(span / style / settings...)按 id 保留;
 	/// v2 里有而 v1 里没有的块按原顺序接到末尾(不丢数据)。
+	/// 实现只有一份 —— Core 的 <see cref="LayoutStoreV2.MergeV1Order"/>(那边不认识冻结的 v1 类型,
+	/// 所以这里先把 v1 文档转成 Core 的朴素块列表)。
 	/// </summary>
 	public static PageLayoutV2 MergeV1(PageLayoutV2? existing, PageLayoutDoc? v1)
 	{
-		PageLayoutV2 page = ((existing != null) ? existing.Clone() : new PageLayoutV2());
-		Dictionary<string, BlockLayout> keep = new Dictionary<string, BlockLayout>(StringComparer.Ordinal);
-		List<BlockLayout> source = ((page.Blocks != null) ? page.Blocks : new List<BlockLayout>());
-		foreach (BlockLayout block in source)
-		{
-			if (block != null && !string.IsNullOrEmpty(block.Id) && !keep.ContainsKey(block.Id))
-			{
-				keep[block.Id] = block;
-			}
-		}
-		List<BlockLayout> merged = new List<BlockLayout>();
-		HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-		if (v1 != null && v1.Blocks != null)
-		{
-			foreach (BlockState state in v1.Blocks)
-			{
-				if (state == null || string.IsNullOrEmpty(state.Id) || !seen.Add(state.Id))
-				{
-					continue;
-				}
-				BlockLayout block = (keep.TryGetValue(state.Id, out BlockLayout? found) ? found.Clone() : new BlockLayout
-				{
-					Id = state.Id
-				});
-				block.Id = state.Id;
-				block.Hidden = state.Hidden;
-				merged.Add(block);
-			}
-		}
-		foreach (BlockLayout block2 in source)
-		{
-			if (block2 != null && !string.IsNullOrEmpty(block2.Id) && seen.Add(block2.Id))
-			{
-				merged.Add(block2.Clone());
-			}
-		}
-		for (int i = 0; i < merged.Count; i++)
-		{
-			merged[i].Z = i;
-		}
-		page.Blocks = merged;
-		return page;
+		return LayoutStoreV2.MergeV1Order(existing, LayoutV1Projection.ToCoreBlocks(v1));
 	}
 }
 

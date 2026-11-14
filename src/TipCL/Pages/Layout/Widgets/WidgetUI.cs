@@ -5,6 +5,8 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 自建区块的界面层:按类型分派到具体渲染器,并给"查不到 / 已禁用 / 动作不合法"三种情况统一占位。

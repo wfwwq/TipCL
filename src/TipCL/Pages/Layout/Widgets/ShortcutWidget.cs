@@ -5,6 +5,8 @@ using System.Windows;
 using System.Windows.Controls;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 快捷启动区块(§4.F 的 shortcut):一键启动指定实例 / 版本。

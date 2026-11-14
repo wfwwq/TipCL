@@ -5,6 +5,8 @@ using TipCL.Core;
 using TipCL.Core.Launcher;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 游戏时长区块(§4.F 的 playtime):读启动器自己的 playtime.json(只读,不写),

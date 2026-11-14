@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace TipCL.Pages.Layout;
+namespace TipCL.Core.Launcher.Layout;
 
 // 布局文档 v2 的**唯一契约真相**:字段白名单、类型门禁、逐字段钳位、结构上限。
 // 设计依据 = docs/layout-v2-design.md §3.2 的数据契约表(每一行都对应下面一个常量或一处 Clamp)。

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 自建区块的**纯模型门禁层**(禁 WPF,net8 测试宿主可直接加载):

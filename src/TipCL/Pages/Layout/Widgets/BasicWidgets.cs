@@ -4,6 +4,8 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 三类简单自建区块:便签 / 时钟 / 分隔线(§4.F 的首期白名单 note / clock / divider)。

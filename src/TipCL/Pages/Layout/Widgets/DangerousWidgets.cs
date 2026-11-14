@@ -7,6 +7,8 @@ using System.Windows.Controls;
 using TipCL.Core.Launcher;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 危险类型区块(§0.1 Q5):web(网页)与 button(按钮),**默认关闭**。

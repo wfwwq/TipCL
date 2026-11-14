@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using TipCL.Pages;
-using TipCL.Pages.Layout;
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Core.Launcher.Ai;
 
@@ -191,8 +190,9 @@ public static class LayoutTools
 		PruneBackups(next);
 		LayoutSchema.Sanitize(next);
 		LayoutStoreV2.Save(next);
-		// 写通 v1 后清掉老路径的缓存,让还走 v1 的读取立刻看到新值(L0 报告的坑 3)
-		PageLayoutStore.Reload();
+		// 写通 v1 后清掉老路径的缓存,让还走 v1 的读取立刻看到新值(L0 报告的坑 3);
+		// 具体动作在注入缝里(Pages 侧 = PageLayoutStore.Reload),Core 不需要认识它
+		LayoutStoreV2.RefreshV1Cache();
 		return "已更新布局:" + string.Join(";", changes) + "。改动前的布局已备份为方案「" + backup + "」(可在设置 → 布局里切回)。";
 	}
 
@@ -246,7 +246,7 @@ public static class LayoutTools
 				{
 					return "单个页面的区块不能超过 " + MaxBlocksPerPage + " 个。";
 				}
-				PageLayoutDoc v1 = new PageLayoutDoc();
+				List<LayoutV1Block> ordered = new List<LayoutV1Block>();
 				foreach (object item in blocks)
 				{
 					if (!(item is PyDict entry))
@@ -258,18 +258,19 @@ public static class LayoutTools
 					{
 						continue;
 					}
-					v1.Blocks.Add(new BlockState
+					ordered.Add(new LayoutV1Block
 					{
 						Id = id,
 						Hidden = Py.Truthy(entry.Get("hidden"))
 					});
 				}
-				if (v1.Blocks.Count == 0)
+				if (ordered.Count == 0)
 				{
 					return "blocks 里没有有效的区块 id。";
 				}
 				// 顺序 / 显隐以 AI 给的最新顺序为准;同一块的其它 v2 字段(span / style / settings)按 id 保留
-				target = LayoutEngine.MergeV1(target, v1);
+				// (实现只有一份:Core 的 LayoutStoreV2.MergeV1Order)
+				target = LayoutStoreV2.MergeV1Order(target, ordered);
 			}
 			if (args.Get("mode") != null)
 			{

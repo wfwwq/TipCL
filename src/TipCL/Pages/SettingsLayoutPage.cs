@@ -8,6 +8,8 @@ using System.Windows.Controls;
 using TipCL.Pages.Layout;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages;
 
 // L5(设计 §4.C 的「布局」视图 + §4.G 的 JSON 编辑器):设置页第 8 个视图,7 个小节 ——
@@ -592,7 +594,7 @@ public sealed partial class SettingsPage
 		}
 		if (choice == 2)
 		{
-			string text = PageLayoutStore.ExportJson(LayoutStoreV2.ProjectV1(LayoutStoreV2.Load()));
+			string text = PageLayoutStore.ExportJson(LayoutV1Projection.ProjectV1(LayoutStoreV2.Load()));
 			string? path2 = Dlg.SaveFile(I18n.L("布局 (*.json)|*.json|全部文件|*.*"), "tipcl-page-layout.json", I18n.L("导出兼容 v1 的页面布局"));
 			if (path2 != null && WriteTextFile(path2, text))
 			{
@@ -1187,9 +1189,10 @@ public static class LayoutProfiles
 			{
 				continue;
 			}
-			LayoutV2 migrated = LayoutStoreV2.FromV1(new KeyValuePair<string, PageLayoutDoc>[1]
+			// 单页 v1 文档 → Core 的朴素块列表 → FromV1(顺序与显隐逐项保留)
+			LayoutV2 migrated = LayoutStoreV2.FromV1(new Dictionary<string, IReadOnlyList<LayoutV1Block>>(StringComparer.Ordinal)
 			{
-				kv
+				[kv.Key] = LayoutV1Projection.ToCoreBlocks(kv.Value)
 			});
 			if (migrated.Layout.Pages.TryGetValue(kv.Key, out PageLayoutV2? page) && page != null)
 			{

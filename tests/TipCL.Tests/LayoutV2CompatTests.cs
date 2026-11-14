@@ -7,6 +7,8 @@ using TipCL.Pages;
 using TipCL.Pages.Layout;
 using Xunit;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Tests;
 
 /// <summary>
@@ -38,6 +40,7 @@ public class LayoutV2CompatTests
 	private void UseDir(string dir)
 	{
 		LayoutStoreV2.DirOverride = dir;
+		LayoutStoreV2.V1Bridge = new PagesLayoutV1Bridge();   // 与 App.OnStartup 同装配:v1 走 PageLayoutStore 语义
 		PageLayoutStore.DirOverride = dir;
 		LayoutStoreV2.ResetCache();
 	}
@@ -45,6 +48,7 @@ public class LayoutV2CompatTests
 	private void Release()
 	{
 		LayoutStoreV2.DirOverride = null;
+		LayoutStoreV2.V1Bridge = null;
 		PageLayoutStore.DirOverride = null;
 		LayoutStoreV2.ResetCache();
 		try
@@ -177,7 +181,7 @@ public class LayoutV2CompatTests
 			Assert.Equal(new[] { "version" }, about!.Blocks.Select((BlockState b) => b.Id).ToArray());
 
 			// 与 v2 投影逐页全等
-			Dictionary<string, PageLayoutDoc> projection = LayoutStoreV2.ProjectV1(LayoutStoreV2.Load());
+			Dictionary<string, PageLayoutDoc> projection = LayoutV1Projection.ProjectV1(LayoutStoreV2.Load());
 			IReadOnlyDictionary<string, PageLayoutDoc> loaded = PageLayoutStore.LoadAll();
 			Assert.Equal(projection.Count, loaded.Count);
 			foreach (KeyValuePair<string, PageLayoutDoc> kv in projection)

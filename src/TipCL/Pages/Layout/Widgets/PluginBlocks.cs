@@ -5,6 +5,8 @@ using System.Windows.Controls;
 using TipCL.Pages.Plugins;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 插件区块(§4.F 的 kind = "block",块 id = plugin:<plugin>:<blockId>)。

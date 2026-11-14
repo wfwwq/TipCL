@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 顶栏页签的**纯逻辑层**,照 LayoutSchema 的约定:禁 WPF,便于 net8 测试宿主直接加载。

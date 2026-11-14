@@ -5,6 +5,8 @@ using System.Windows.Controls;
 using TipCL.Pages.Layout;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages;
 
 // 页面区块描述:页面把可重排的内容切成若干 BlockSpec 交给 BlockHost。

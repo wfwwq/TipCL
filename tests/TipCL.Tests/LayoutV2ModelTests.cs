@@ -5,6 +5,8 @@ using TipCL.Pages;
 using TipCL.Pages.Layout;
 using Xunit;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Tests;
 
 /// <summary>

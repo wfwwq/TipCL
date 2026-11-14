@@ -6,6 +6,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 页面区块的渲染 + 编辑宿主(L1 把原来 BlockHost 里的那一套搬进来):

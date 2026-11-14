@@ -9,6 +9,8 @@ using TipCL.Models;
 using TipCL.Pages.Layout;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages;
 
 public sealed class FeedbackPage : PageBase

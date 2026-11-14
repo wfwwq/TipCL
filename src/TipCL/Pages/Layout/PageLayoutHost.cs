@@ -8,6 +8,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using TipCL.Services;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 分栏比例持久化(L4;设计文档 §2.3 的 13 处清单 + §4.E 的实现约定)。四条规矩:

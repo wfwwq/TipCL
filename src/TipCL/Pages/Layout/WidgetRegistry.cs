@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using TipCL.Core.Launcher.Layout;
+
 namespace TipCL.Pages.Layout;
 
 // 自建区块 / 插件区块的内容工厂(§4.F 的口子)。
