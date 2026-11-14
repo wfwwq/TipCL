@@ -224,7 +224,8 @@ public partial class MainWindow : Window
             }
             string body = ("TipCL " + TipCL.Core.Py.S(info["latest"]) + " 已发布。\n" + TipCL.Core.Py.S(info["notes"])).Trim();
             if (await TipCL.App.Common.Dlg.Confirm("发现新版本", body + "\n\n现在下载更新?下载完会提示你重启。", "下载更新", "以后再说"))
-                await TipCL.App.Common.InProcessApi.Instance.TryCallAsync<string>("start_self_update");
+                await TipCL.App.Common.SelfUpdate.StartAsync(TipCL.App.Common.InProcessApi.Instance,
+                    (t, b, k) => TipCL.App.Common.ToastHost.Show(t, b, k));
         }
         catch (Exception ex)
         {

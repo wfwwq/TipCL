@@ -1075,3 +1075,37 @@ Windows 版(`windos/src/TipCL/Core/Launcher/Config.cs:12`、`Updater.cs:12`)与�
 有新版/同号/缺 sha256 被拒/取清单失败、`$APPIMAGE` 优先、原子替换 + 可执行位保留 + 不残留 `.new`、
 不可写目标 download-only 且不动包、缺包抛错、`Download` 对无 url / 非法 sha256 的拒绝);
 本地全套 **466 = 245 + 220(+1 跳过)全绿**,Release 构建 **0 警告 0 错误**;盒子端到端真机验证(独立子代理)结果另附。
+
+> **R22 补记(2026-11-14,盒子真机端到端 + 两处修复)**:链路在真机上**跑通了**,同时被验出两个真问题(已修)。
+> 详细证据(截图、脚本、逐条命令输出)在 `scratch/update-e2e/REPORT.md`(与截图同目录;`scratch/` 不进仓)。
+
+**跑通的四条(私有 Xvfb + 本机 8123 HTTP 清单 + 拷贝一支 AppImage 当被测件 + `TIPCL_UPDATE_URL` 指过去)**:
+1 `TIPCL_UPDATE_URL` 覆盖生效;`grep '^APPIMAGE=' /proc/<pid>/environ` 实测
+  `APPIMAGE=/home/user/tipcl/ud/present/TipCL-under-test.AppImage` —— 证实走的是**磁盘上那支 AppImage**,不是 `/tmp/.mount_*` 解包路径;
+2 启动 3 秒静默检查 → 「发现新版本」对话框(独立 X 窗口,用窗口列表差分定位);
+3 「下载更新」→ 任务日志 `任务开始 / 发现 99.0.0 / 更新包已下载: …/cache/TipCL-99.0.0.bin / 任务完成` → 「更新已下载」;
+4 「稍后重启」→ **磁盘 AppImage 当场替换**:38,984,184 B `4dc93174…` → 38,984,201 B `b30f866c…`(+17 B 正是那个标记),
+  与更新包、缓存 `.bin` **三处 sha256 完全一致**;`find … -name '*.new*'` 无残留;toast 文案「下次打开就是新版」(反证走了 AppImage 分支)。
+**负例与分流**:格式非法的 sha → 「更新被拒绝 / 更新清单缺少有效 SHA-256」且文件不变;长度合法但值错的 sha → 下载任务失败
+`DownloadError: … sha256 校验失败`,文件与缓存都不动;`.deb` 装到 `/opt` → `mode=download-only` + 弹「需要手动安装」+
+`/opt/TipCL/TipCL.App` 的 sha256 **前后一致**(随后已 `dpkg -r` 卸载干净)。
+
+**被验出的两个真问题(已修)**:
+1 **占位 sha 让"拒绝"这条兜底在最常见的占位值上失效**:`Updater.ValidSha256` 只校验 `\A[0-9a-fA-F]{64}\z`,
+   所以"64 个 0"是**合法**的 —— 实测会正常弹「发现新版本」、点下载才失败;而我给 `update-linux.json` 写的占位值恰恰是全零,
+   notes 里还写着"不合法会拒绝" ✗(说错了)。修法:占位值改成**格式非法**的 `REPLACE-WITH-THE-REAL-SHA256`(客户端当场拒绝并说明原因),
+   notes 里把这条道理写清楚。
+2 **下载/校验失败**在界面上**完全无声**(实测失败前后三张截图逐字节相同 —— 失败只体现在任务页)。修法:新增
+   `Common/SelfUpdate.cs`(`StartAsync`),设置页与启动检查两条路发起更新后都盯着该任务的 `finished` 事件,
+   失败就 `Toast("更新失败", 原因)`,成功仍交给 `update_staged` 那条路(不重复打扰)。**"失败"不能静默**。
+
+**本轮的产物(改了 src 就重打,照 D-60)**(盒子上 `publish → package --appimage-only --deb`,裸 FUSE 冒烟 exit 0、0 WARN 0 ERROR):
+`TipCL.App` 45,004,851 B;publish 0 警告 0 错误;**AppImage 38,984,184 B `48c3dceada0e35d7c25b181f639fa9b66dc1f2e2f7a0635e856f5c36be97a6e0`**;
+**`.deb` 37,544,610 B `109cfd55062048b1fd6296d237f747014af3d1998a4c939cb12fccce88dd7130`**;同一份同步到惯例路径 `r22b/TipCL-new.AppImage`。
+
+**如实留白**:1「立即重启」分支(替换后顺手拉起新版)本轮未验;2"失败在任务页是否也可见"未验;
+3公网真实清单(而不是本机 8123)未验;4**真发一次版**(release 事件触发 `release.yml` 的 linux job、然后手工改清单)未验 —— 那需要真的切一个 tag;
+5上一轮盒子上那支旧 `dist/` 产物**不含本轮接线**(设置页没按钮、18 秒内零请求、写回的 `update_url` 还是旧地址),已由本次重打解决。
+
+**一次失误(如实记)**:上一轮代理收尾时用 `pgrep -f xfwm4` **宽匹配**误杀了 `:0` 上会话的窗口管理器(xfce4-session 已自动重启,
+`:0` 恢复正常;此后它改为按 pid/路径精确 kill)。规矩重申:**收尾只按自己的 pid 或自己的路径匹配,宽匹配会误杀别人的东西**。

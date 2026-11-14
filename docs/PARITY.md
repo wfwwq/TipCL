@@ -645,3 +645,19 @@ AppImage 形态取 **`$APPIMAGE`**(磁盘上那个 `.AppImage`,不是 `/tmp/.mou
 
 **如实留白**:1盒子上验的是"本地清单 + 假包"的真机链路,**真的发一次版**(release 事件触发 `release.yml` 的 linux job)还没跑过 ——
 那需要真的切一个 tag/发行版;2「立即重启」那个分支(替换后顺手拉起新版)在盒子上只做到"能替换",重启那步的连续验证按 R22 记录为准。
+
+> **§9.14 的真机验证(R22 补记,2026-11-14)**:链路在盒子上**跑通了**(私有 Xvfb + 本机 8123 HTTP 清单 + 拷贝一支 AppImage 当被测件 + `TIPCL_UPDATE_URL`),
+> 逐条证据见 `scratch/update-e2e/REPORT.md`。要点:
+> 1 `grep '^APPIMAGE=' /proc/<pid>/environ` 实测 `APPIMAGE=…/ud/present/TipCL-under-test.AppImage` ⇒ 走的是**磁盘那支 AppImage**(不是解包挂载路径);
+> 2 启动 3 秒静默检查 →「发现新版本」;3「下载更新」→ 任务日志 +「更新已下载」;
+> 4「稍后重启」→ **当场替换**:38,984,184 B `4dc93174…` → 38,984,201 B `b30f866c…`,与更新包和缓存 `.bin` **三处 sha256 一致**、无 `.new` 残留、
+> toast「下次打开就是新版」(反证 AppImage 分支);
+> 负例:格式非法 sha →「更新被拒绝 + 原因」且文件不变;长度合法但值错 sha → 下载失败 `sha256 校验失败`,文件与缓存不动;
+> `.deb` 装到 `/opt` → `download-only` +「需要手动安装」+ `/opt` 的那份 sha256 不变。
+>
+> **同一轮被验出并修掉两个真问题(见 D-72)**:1 `ValidSha256` 只校验格式,所以"64 个 0"是**合法**的 —— 占位值必须写成**格式非法**的形状,
+> 否则"拒绝"这层兜底在最常见的占位值上失效(本仓 `update-linux.json` 已改成 `REPLACE-WITH-THE-REAL-SHA256`);
+> 2 下载/校验失败**在界面上完全无声**(只体现在任务页),已新增 `Common/SelfUpdate.cs`:发起后盯该任务的 `finished`,失败弹「更新失败 + 原因」。
+>
+> **本轮产物**(改了就重打):AppImage 38,984,184 B `48c3dcea…`、`.deb` 37,544,610 B `109cfd55…`(裸 FUSE 冒烟 exit 0、0 WARN 0 ERROR)。
+> **仍如实留白**:「立即重启」分支未验;失败在任务页是否可见未验;公网真实清单未验;**真发一次版**(release 事件 → `release.yml` 的 linux job → 手工改清单)未验 —— 需要真的切一个 tag。
