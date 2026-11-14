@@ -273,13 +273,14 @@
 - 可回滚:是(词表为纯新增,删掉新增行即回原状)。
 - 偏离提示:补的是「源码字面量的原样形式」,因此那两处近似重复会**同时存在两个 key** —— 这是刻意的(改 .cs 字面量或改既有 key 都会动到别人的文件/既有译文,留给维护者定)。
 
-### D-34 · 仓库文本一律 LF:`Set-Content` / `WriteAllLines` 会整文件翻 CRLF,写完必须核对 numstat 与 CRLF 计数
+### D-34 · 换行纪律:改文本文件前先看该文件在 HEAD 的 EOL,照它写回(仓库 EOL 并不统一)
 
-- 时间:2026-11-14
-- 处境:本轮两次改仓库文本(词表增补、工程记录)时用了 PowerShell 的 `Set-Content` 与 `[IO.File]::WriteAllLines`。这两个调用**按平台默认换行写整个文件**——只想插几行,却会把文件从 LF 整体翻成 CRLF,`git diff` 立刻从"插入 N 行"变成"整文件重写",真实 diff、blame 与后续合并全部被冲掉(本轮实际踩到两次,都在写完后才发现)。
-- 决定:仓库里所有文本文件(源码、词表、`*.md`)**必须是 LF**。改文件只用两条路:1) 逐行文本插入(读全文 → 拼新内容 → `WriteAllText(path, text, UTF8Encoding(false))`,换行沿用 `ReadAllText` 探测到的 `\r\n` / `\n`);2) 编辑器工具。**每次写完必须核对两件事**:`git diff --numstat -- <file>` 的增删行数是否等于预期(出现"整文件级数字"就是被翻过),以及 CRLF 计数 `([regex]::Matches($text, "`+"`r`n"+`")).Count` 必须为 0。
-- 理由:仓库是 mac/linux 端口共用的基线(LF 是唯一不会互相污染的选择);而被翻过的 diff 无法人工复核,等价于把改动藏起来。
-- 数据:本轮 `PROGRESS.md`(已提交版本 214 行)/`DECISIONS.md`(274 行)都实测 CRLF=0;`Set-Content` 对它们会产出 214/274 行全量重写。
+- 时间:2026-11-14(标题与「更正」于同日按 P1 包的实测反证修订)
+- 处境:本轮两次改仓库文本(词表增补、工程记录)时用了 PowerShell 的 `Set-Content` 与 `[IO.File]::WriteAllLines`。这两个调用**按平台默认换行写整个文件**——只想插几行,却会把文件整体翻成 CRLF,`git diff` 立刻从"插入 N 行"变成"整文件重写",真实 diff、blame 与后续合并全部被冲掉(本轮实际踩到两次,都在写完后才发现)。
+- **更正(2026-11-14,P1 实测反证)**:本条原写「仓库文本**一律** LF」,这个说法**与事实不符**。`src/TipCL/Pages/AiPage.cs` 与 `src/TipCL/Pages/SettingsPage.cs` 在 HEAD 里**本身就是 CRLF**;P1 的脚本按 LF 写回,一度把这两个文件整文件翻转成 `+2752/-2750` 与 `+2032/-2030`,后来按 HEAD 复原成 `+2/-0`。所以纪律不是"统一成 LF",而是**沿用每个文件自己的 EOL**;本仓库**没有** `.gitattributes`,EOL 只能按文件实测。
+- 决定:a) **改任何文本文件前,先看该文件在 HEAD 的 EOL**(`git show HEAD:<path>`,或先比 numstat / 数 CRLF),写回时**沿用该文件自己的 EOL**;禁用 `Set-Content` / `[IO.File]::WriteAllLines` 这类"整文件重写"入口,只用两条路:1) 读全文 → 拼新内容 → `WriteAllText(path, text, UTF8Encoding(false))`,换行沿用探测到的 `\r\n` / `\n`;2) 编辑器工具。b) **判据不是"CRLF=0"**,而是两条:`git diff --numstat -- <file>` 的增删行数**只等于你真正改的那几行**(出现"整文件级数字"就是被翻过),以及该文件的 CRLF 计数**与改动前一致**(基线可 0 可非 0:先测,再比)。
+- 理由:被翻过的 diff 无法人工复核,等价于把改动藏起来;而"一律 LF"会把 HEAD 本是 CRLF 的文件整篇改写,制造出比 CRLF 本身更大的噪声,还顺带冲掉那两个文件的 blame。
+- 数据:2026-11-14 实测(HEAD `9bfb179`)——`DECISIONS.md` 309 行 / CRLF=0、`PROGRESS.md` 249 行 / CRLF=0、`docs/layout-v2-design.md` 514 行 / CRLF=0(三者都是 LF、UTF-8 无 BOM);反例就是 `Pages/AiPage.cs` 与 `Pages/SettingsPage.cs`(HEAD 即 CRLF)。
 - 可回滚:是(重新以 LF 写回即可),但已提交的"整文件重写"只能靠 revert 修。
 - 偏离提示:如果将来引入 `core.autocrlf` / `.gitattributes`,先在这里补一条决策;当前仓库**没有**换行属性文件,全靠人工纪律。
 
@@ -307,3 +308,49 @@
   3. **ImageSharp + CodePages(1.16 MB)与硬约束冲突**:D-20 要求保留 WebP 能力、E1-E5 要求不削弱代码页解码;若要动,必须先由用户重新裁决 D-19/D-20(例如允许 compact 侧只留 WebP 解码器)。
   4. **架构 loader 裁剪 = 功能裁剪**:arm64(147,520)+ x86(120,944)是 32 位与 ARM64 Windows 上 WebView2 的运行时依赖,砍掉等于放弃这两类机器(Win7/8.1 有大量 32 位),按本仓既有纪律属"须报备的裁剪",默认不做。
   5. **WebView2 WinForms(20,199)**:D-8 已试过 `ExcludeAssemblies` 与从 ReferencePath 移除,均未生效;要收益只能换 `ResolvePackageAssets` 思路,20 KB 收益 < 破坏 Costura 单包的风险。
+
+### D-37 · 跨包截图基线不能当等价性判据:等价性只能靠同包内隔离 A/B
+
+- 时间:2026-11-14
+- 处境:验收期间我(Lead)拿 `artifacts/l1/before/`(10:20 拍的基线)去比后面各包的 `--shot`,把比出来的差异当成回归/等价性结论。但 L4 / L5 / L6 / L7a / D1 都落在那条基线**之后**,两边根本不是同一棵树,截图"不同"是**正常**的 —— 差异里混着"确实改过"和"基线年代不同"两个原因,无法归因。这个方法论错误由 P1 包当场纠正。
+- 决定:要证明"某包不改变渲染",必须做**同包内隔离 A/B** —— 用该包改动前的**同一棵树**构建 exe,改动后在**同一条件**(同一页、同一尺寸、同一主题、同一 `TIPCL_HOME`、同一机器状态)重拍,两次**逐字节**比(P1 就是这么做的,结论"渲染影响 = 0 像素")。**跨包基线不能当等价性判据**,它只能当"页面大体没塌"的粗筛。
+- 截图回归的两条前置:1) **同包隔离 A/B**(本条);2) **先归一化动态内容** —— 联机页的局域网地址枚举顺序必须先排序/抹平再比,否则必然假报警(D-35)。两条一起看才构成完整的判等前提。
+- 理由:逐字节判等是最强的默认等价证据,但它的前提是"同一输入 **+ 同一基线来源**";基线与被测对象不同源时,判等结果不可解释 —— 既可能漏掉真回归(把变化归给噪声),也可能凭空造出回归(把基线年代差报成 bug)。证据目录按包分(`artifacts/<包>/{before,after}`),每包各自留一份"改动前"的 A 组。
+- 数据:反例 = `artifacts/l1/before/`(10:20 拍摄)对比后续各包的 `--shot`;正例 = P1 的同包隔离 A/B,`artifacts/p1/{before,after}` 三对截图 **SHA256 逐字节相等** —— launch `84835403...`、tasks `E0C0972E...`、account `37AE547AFC48509B...`。
+- 可回滚:是(纯取证与判等方式,不动产品代码)。
+- 偏离提示:不要为了省事跨包复用同一组 baseline,也不要为了"让截图一致"去固定或伪造动态内容(后者见 D-35 的偏离提示)。
+
+### D-38 · 体积回收(D-28)落地:A = Core 资源构建期 gzip(-386,560 B)、B1 = 移除 ImageSharp 传递依赖 CodePages(-527,872 B);compact 回到 D-19 红线内
+
+- 时间:2026-11-14(task-11;基线 HEAD `9a3cc52`)
+- 处境:上一条 **D-36** 的结论是"写范围内没有可证明安全的回收项,维持不改"。用户随后拍板:**把其中两条口子实施掉** —— (A)"把资源释放路径纳入范围"(D-36 偏离提示 1)、(B)"重新裁决 D-19/D-20"(D-36 偏离提示 3)。另两条(图片降质 353 KB、架构 loader 268 KB)维持不做(D-36 偏离提示 2、4)。
+- 决定:
+  a) **A = 构建期 gzip**:`Resources/{locales,ai,plugin-host}` 的 **15 个**源文件由 `tools/pack-core-resources.ps1` **确定性** gzip(幂等:同一输入逐字节相同)成同目录 `.gz`;`TipCL.csproj` 改为内嵌 `.gz` 且 **LogicalName 逐字不变**;`CoreResources.ReadByResourceName` 按 gzip 魔数(`1F 8B 08`)透明解压 —— 因此 `ReadBytes` / `ReadText` / `ListDir` 语义不变,**`Payload.cs` / Python 侧 / Node 侧零改动**,运行时释放到数据目录的字节与改造前**逐字节相同**。
+  b) **B1 = 移除 `System.Text.Encoding.CodePages`**:它只是 ImageSharp 2.1.13 的**传递依赖**(`src/TipCL/obj/project.assets.json` 把它列在 ImageSharp 的 `dependencies` 里,全仓无直接 `PackageReference`),`src/TipCL/FodyWeavers.xml` 用 `<Costura ExcludeAssemblies="WebView2Loader|System.Text.Encoding.CodePages" ...>` 把它排除出单 exe。
+  c) **漂移守卫** = `tests/TipCL.Tests/CoreResourcesPackTests.cs`:逐文件断言"内嵌资源解压后 == 源码树里的源文件字节",并顺带验证 csproj 的 LogicalName 映射(读不到就是 null → 红)。
+- 数据(2026-11-14 实测,均为本仓标准全量构建 + 全量测试,构建目录固定为 `D:\项目\tipcl\windos\tipcl`):
+  | 阶段 | compact `TipCL.exe` | premium `TipCL.exe` | 用例 | 内嵌资源 |
+  |---|---|---|---|---|
+  | 基线 `9a3cc52` | 6,447,616 B | 6,467,584 B | 422/422 | 35 条 / 3,156,837 B |
+  | + A(`0c0f975`) | 6,061,056 B(−386,560) | 6,081,024 B(−386,560) | **437/437**(+15 漂移守卫) | 35 条 / 2,770,040 B |
+  | **+ B1(`b19012c`)** | **5,533,184 B(−527,872)** | **5,553,152 B(−527,872)** | **437/437** | **34 条 / 2,242,767 B** |
+  - **累计释放 914,432 B**;**compact 合规,余量 224,080 B**(D-19 红线 5,757,264;改造前超线 690,352 B,`tools/build-both.ps1` 的体积门禁由 `exit 1` 变为通过)。
+  - 每档都是 **0 错 0 警**;`TipCL.WebView2Loader.{x64,arm64,x86}.dll` 三条在 B1 后**仍在**(证明 `|` 分隔符没把原有排除搞坏);ImageSharp 本体 628,416 B **保留**。
+  - **B1 的硬验证(不能用"418/437 全绿"代替)**:把 compact exe **单独**放进一个目录(同目录**零个 .dll**),用纯反射夹具加载它并调 `WebpFallback.ToPng` 解真实**有损 VP8** WebP:`sibling .dll count = 0` / `input=4880 B output=25428 B pngSignature=True` / **`codePagesLoaded = False`** / `RESULT=PASS` —— 即单 exe 在没有 CodePages 的情况下仍能解 WebP,且该程序集**从未被加载**。
+- 为什么**不换 ImageSharp 本体**(628,416 B)——用户已拍板"到此为止",三条证据留档(即 D-36 偏离提示 3 所要求的"重新裁决"结论):
+  1. **全仓库没有任何 WebP 解码器**:`VP8|libwebp|WebpDecode|WebpDecoder|RiffWebp` 在 `src/**` **0 命中**;`docs/size-report.md` §3 写的"仓库内解码器替代 ≈ +40~70 KB"是**当时从未落地的计划**,不是既有资产。
+  2. **仓库唯一的 WebP 样本是有损的**:`tests/TipCL.Tests/fixtures/webp-sample.webp`(4,880 B)的 RIFF 块是 **`VP8 `(有损)**,不是 `VP8L`(无损)—— 只写无损解码器既过不了 `WebpFallbackTests.RealWebpDecodesToPng`,也修不好真实场景(Modrinth / CurseForge 封面多为有损 WebP)。
+  3. **等价替换要自己写一整套编解码**:VP8 有损(bool 算术解码 + 帧内预测 + IDCT/WHT + 环内去块滤波)+ VP8L 无损(LZ77 / 颜色缓存 / Huffman / 四种变换)+ VP8X/ALPH 容器 + PNG 编码器(net48 **没有** `ZLibStream`,得手写 zlib 头 + adler32)。这是几千行新代码;交半成品会在 `WebpFallback` 存在的意义上(Win7/8.1)造成功能性回归,**直接违反 D-20「不删 WebP 能力」**。→ **做不了,不做。**
+- 另两条为何不做(维持 D-36 原判):
+  4 **353 KB 图片降质**(`PremiumAssets/hero.jpg` 275,898 + 4 张预设壁纸 77,129)= 用户可见的**画质变化**,须先拿到"允许降质到什么程度"的结论并给逐图对照。
+  5 **268 KB 架构 loader**(arm64 147,520 + x86 120,944)= 砍掉即**放弃 32 位与 ARM64**(含 Win7/8.1 大量 32 位机器),按本仓既有纪律属"须报备的裁剪",默认不做。
+- 可回滚:A 与 B1 是**各自独立一笔**提交(`0c0f975`、`b19012c`),`git revert` 任一即可;`.gz` 为幂等生成物,回滚后可重建。
+- 偏离提示(**后来者最容易踩的坑**):
+  1. ⚠️ **生成 `.gz` 与改 csproj 必须在同一段持锁时间内背靠背完成**。改造前 plugin-host 是**通配** `<EmbeddedResource Include="Resources\plugin-host\**\*" />`,它**会匹配任何新增文件**:只生成 `.gz` 而没改 csproj 的话,plugin-host 会**同时嵌入"原文 + .gz"两份,exe 反而涨约 158 KB**,而且会**静默污染别人的体积基线**(只看字节数看不出来)。
+  2. ⚠️ **`.gz` 文件名不能用"最后一段恰好是区域代码"的名字,否则会被塞进附属程序集**。本轮实测:`tipcl-plugin.d.**ts**.gz` 被 .NET SDK 的 culture 推断认成区域 **`ts`(Tsonga)**,于是它**没进主 exe**,而是进了附属程序集 `obj\Release\net48\ts\TipCL.resources.dll`(diag 构建日志原话:`为文件"Resources\plugin-host\tipcl-plugin.d.ts.gz"指定了区域性"ts"`、`获得了清单资源名称"TipCL.Resources.plugin_host.tipcl-plugin.d.gz"`),内嵌资源因此从 35 条掉到 34 条。**修法**:这 6 条 `EmbeddedResource` 全部加 `WithCulture="false"`(它们本来就不是本地化资源)。同类的还有 `foo.de.gz` / `foo.fr.gz` / `foo.it.gz` / `foo.es.gz` / `foo.ja.gz` 等。
+  3. **改了 locales / ai / plugin-host 的源就必须重跑 `tools/pack-core-resources.ps1`**,否则内嵌的是旧内容 —— `CoreResourcesPackTests` 会当场红(它就是为此设的);`pack-core-resources.ps1 -Check` 可在构建前提前发现(干净树 exit 0)。
+  4. **LogicalName 一个字符都不能改**(尤其别把 `.gz` 后缀写进 LogicalName):`CoreResources.ListDir` 靠 `TipCL.Core.locales.` 前缀 + "前缀后**恰好一个点**"枚举;资源名一旦变成 `...en.json.gz`,`ListDir` 会**直接把它过滤掉**。
+  5. **`tipcl-plugin.d.ts.gz` 这类多点文件名不能套 `%(Filename)%(Extension)`**:`%(Extension)` 只取最后一段(`.gz`),会丢掉 `.ts`;csproj 里对它**单独显式**写全名。
+  6. **`.ps1` 若含中文必须存成 UTF-8 带 BOM**:本机没有 PowerShell 7,Windows PowerShell 5.1 按 ANSI(cp936)读**无 BOM** 的 UTF-8 脚本,中文字符串字面量会解析失败(`The string is missing the terminator`)—— 本轮实测踩到。仓库现状:`tools/build-both.ps1` = UTF-8 带 BOM,`tools/dump-embedded-resources.ps1` = 纯 ASCII。
+  7. **B1 的安全性不能用"全量用例全绿"证明**:`TipCL.Tests` 是 **net8.0** 且以 `SetTargetFramework=TargetFramework=net48` 引用 TipCL,测试宿主加载的是**它自己那份** CodePages。本轮以"**单 exe 隔离目录(同目录零 .dll)+ 真实 WebP 解码**"实测证明(见数据)。静态支撑证据:`TipCL.exe` 里 `System.Text.Encoding.CodePages` 的 **2 次出现都在 Costura 自己的 `costura.metadata` 资源内,不是 TipCL.exe 的 AssemblyRef** —— 即 TipCL 自身代码不引用它,真正引用它的是 `SixLabors.ImageSharp.dll`(其 #Strings 堆含 `CodePagesEncodingProvider`)。
+  8. **Costura `ExcludeAssemblies` 的分隔符是 `|` 不是逗号**(XML **属性**形式,依据 Costura.Fody 6.0.0 自带 `Costura.Fody.xcf` schema:"delimited with **|**";XML **元素**形式才是"delimited with line breaks"):写成逗号会把整串当成**一个**程序集名 —— **既拿不到这 527 KB,还会把原有的 WebView2Loader 排除一并搞失效**。

@@ -87,7 +87,7 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 ## 2026-11-07 第六轮收口（反馈修复全落定）
 - WP-S8b 27045cf：T1 头部两行+左栏 300~380 自适应（修正参数序 bug）；T2 详情页版本下拉+isolated=false 隐藏资源分段（含 DevShot --detail/--forceshared）。
 - 全部已推送 GitHub main（9f56aaf→27045cf，远端核对一致；分支由 master 改名 main）。
-- 终版交付物（dist）：TipCL-compact-20261107-1308-头部共享修复.exe 5,741,568 B SHA 580a71fb…；TipCL-premium-20261107-1308-头部共享修复.exe 6,038,528 B SHA e23ad3f4…。compact 余量 15,696 B。
+- 终版交付物(dist):**该轮只保留了 premium 那件** —— `TipCL-premium-20261107-1308-头部共享修复.exe` **6,038,528 B** SHA256 `e23ad3f4...`,至今仍在 `windos/dist/`(完整哈希见 `_tmp/dist-archive/MANIFEST.md`)。**原文同时记的 compact 件「`TipCL-compact-20261107-1308-头部共享修复.exe` 5,741,568 B SHA 580a71fb...」在 `dist/` 里从来不存在、全盘也找不到实物** → 已按"原文误记"更正(2026-11-14 由 win-verify 归档旧件时 grep 发现、win-docs 逐项核对;同名的 premium 件确实在盘上,所以是产物名写错、不是文件缺失)。
 - 终验：128/129（PhoneLink 环境性）；dist compact --smoke 27/27 页全 ok、0 异常（coverage 17/9 低于旧阈值 20/10 为 S4 删页后页数变化所致，非回归）。
 - 待拍板：InstanceDetailPage 无真实 UI 入口（「管理」走对话框 vs 详情页）；PhoneLink 环境复跑；真窗验收。
 
@@ -242,8 +242,18 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 
 1. ~~D1 接线包与 D4 插件端到端落定后各补一节~~ **已办**(见上文 D1 / D4 / L5b / D3 四节)。
 2. ~~冒烟~~ **已办**:监工在干净 `TIPCL_HOME` 下跑通(`exit_code=0`、`issues: []`、25 ok / 0 false、17 张图,见 D3);本会话里跑不动只是数据目录落在工作区外的进程级限制。
-3. 体积:compact 6,443,520 B 超红线(豁免见 D-28)。P2 逐候选复核结论见 **D-36**:写范围内没有「可证明安全」的回收项,要回收必须先解决「资源释放路径纳入范围」「图片降质需用户拍板」「ImageSharp/CodePages 与 D-19·D-20 冲突需重新裁决」「架构 loader 裁剪需报备」四件事。
+3. ~~体积:compact 6,443,520 B 超红线(豁免见 D-28)~~ **已销账(2026-11-14,task-11)**:用户拍板实施两条口子,A + B1 均已落地并实测 —— **compact 6,447,616 → 5,533,184 B(累计 -914,432 B),回到 D-19 红线 5,757,264 B 内,余量 224,080 B**;premium 6,467,584 → 5,553,152 B;每档 0 错 0 警。A = Core 资源(locales/ai/plugin-host 15 个源文件 543,877 B → gzip 157,080 B)构建期 gzip 后内嵌,读取侧 `CoreResources` 按魔数透明解压(**Payload/Python/Node 零改动**),含 15 例漂移守卫; B1 = 移除 ImageSharp 的传递依赖 `System.Text.Encoding.CodePages`(527,029 B,单 exe 隔离目录实测 WebP 仍可解且 CodePages 从未加载)。用例口径 422 → **437/437**。**未做的三条**:ImageSharp 本体 628,416 B(**全仓无 WebP 解码器、唯一样本是有损 VP8、等价替换要自写一整套编解码 → 做不了**)、353 KB 图片降质(用户可见画质变化)、268 KB 架构 loader(等于放弃 32 位/ARM64)。完整数据、证据与 8 条偏离提示见 **D-38**。
 
 4. 两处既有近似重复键(标点宽度)由维护者决定归并方式(改 .cs 字面量或改词表 key,二者影响面不同)。
-5. 移植 mac/linux 前先还 D-32 记的依赖方向债务(4 个纯模型文件移入 `Core/Launcher/Layout/`)。
-6. **P1 依赖归位**(模型层 `Pages/Layout/` → `Core/Launcher/Layout/` + `ILayoutV1Bridge`):收口时需修 `LayoutBlockHostTests.ReloadRefreshesV1CacheAfterWriteThrough`、`LayoutV2CompatTests.CorruptV2FallsBackToV1SubsetWithoutThrowing` 两条配套用例(见 D3 节的「归位进行中的实测」),并把 §待办 5(D-32 的依赖方向债务)标记为已还。
+5. ~~移植 mac/linux 前先还 D-32 记的依赖方向债务(4 个纯模型文件移入 `Core/Launcher/Layout/`)~~ **已还**:由 `2fc5e3c`(P1 包)办完 —— 4 个纯模型文件(`LayoutDocV2` / `LayoutJson` / `LayoutSchema` / `LayoutStoreV2`)已落在 `src/TipCL/Core/Launcher/Layout/`,并新增 `ILayoutV1Bridge` 注入缝切断 Core→Pages;实测 `Core/**` 里对 `TipCL.Pages` 的引用数 = 0,Pages 侧装配在 `Pages/Layout/LayoutV1BridgePages.cs`。见 D3 节的「归位之后的复核」。
+6. ~~**P1 依赖归位**(模型层 `Pages/Layout/` → `Core/Launcher/Layout/` + `ILayoutV1Bridge`):收口时需修 `LayoutBlockHostTests.ReloadRefreshesV1CacheAfterWriteThrough`、`LayoutV2CompatTests.CorruptV2FallsBackToV1SubsetWithoutThrowing` 两条配套用例(见 D3 节的「归位进行中的实测」),并把 §待办 5(D-32 的依赖方向债务)标记为已还。~~ **已办(`2fc5e3c`)**:两条守门用例均已复绿,而且**用例一个字没改** —— 根因是注入缝 `SaveV1()` 顺手清了 `PageLayoutStore` 的进程内缓存(重构前 `LayoutStoreV2.Save` 从不碰它),已把「清缓存」拆成独立能力 `RefreshV1Cache()` 并只在明确时点调用;构建 **0 错 0 警**、全量 **418/418 全绿**。§待办 5 已标记为已还(见上条)。
+7. **P3(插件 block 机器证据)+ 最终 418 口径**:`2fc5e3c` 同批带入 `tests/TipCL.Tests/LayoutNativeBlockTests.cs`(5 例:按 `(plugin, "block", id)` 注册 / 查找 / 释放后消失、同三元组重复注册替换旧句柄、整插件注销只清自己、白名单含 `block` 且副本同步、原生插件上下文经注册表注册 `block`),把 L6 的「插件不可用」分支从代码审查级提升到注册表用例级。**测试口径沿革**:349(本轮开工基线)→ 407(L0–L7a)→ 412(+D1)→ 413(+L5b)→ **418**(+P1 归位 5 例),每次增长都是**新增用例**、既有用例零回归;exe = **6,448,128 B**(比 D-36 记的 compact 6,443,520 B 多 4,608 B,是归位新增 IL 的体量)。**仍未证(勿当已完成)**:1 真插件端到端(仓库里没有声明 `kind=block` 的真实 .NET 插件样例,只拍到「插件不可用」分支);2 `PluginManager.RequirePermission` 授权闸口与 `ui.register` 的真实 RPC 往返;3 `tipcl-plugin.d.ts` 的 `tsc --strict` 结论(探针目录 `_tmp/tsc-probe`、`_tmp/p3-probe` 确实存在,但正向 exit 0 / 反向 TS2741 的输出摘要只在会话记录里,**本轮未复跑核实**)。
+
+### dist/ 现状(2026-11-14 核对,win-docs;含 A+B1 之后的最终重切)
+
+- **交付目录 `D:\项目\tipcl\windos\dist\` 现有 5 件**(A+B1 之后的最终重切由 win-verify 执行、哈希以 `_tmp/dist-archive/MANIFEST.md` 为准):
+  - `TipCL-compact-20261114-1546.exe` **5,533,184 B** 与 `TipCL-premium-20261114-1546.exe` **5,553,152 B** —— **A+B1 之后的最终档**,与 `DECISIONS.md` D-38 记录的实测字节**逐字节一致**(两条独立构建互为交叉验证);
+  - `TipCL-compact-20261114-1349.exe` 6,448,128 B 与 `TipCL-premium-20261114-1349.exe` 6,467,072 B —— **体积回收之前的"改动前参照件",勿当最终件**;
+  - `TipCL-premium-20261107-1308-头部共享修复.exe` 6,038,528 B —— 历史留存件(见本轮第六节的口径更正)。
+- **已归档到 `D:\项目\tipcl\_tmp\dist-archive\` 的 7 件**:`TipCL-{compact,premium}-20261114-1308.exe`、`TipCL-{compact,premium}-20261107-1333-左栏与详情入口.exe`、`TipCL-{compact,premium}-20261107-1408-遗留清理.exe`、`TipCL-premium-20261114-1522.exe`(task-15 的中间交付件)。
+- **完整 SHA256 清单见 `_tmp/dist-archive/MANIFEST.md`**(`-1308` 两件移出交付目录的归档清单与逐件哈希)。
