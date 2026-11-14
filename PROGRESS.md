@@ -6643,3 +6643,25 @@ C6a/C6b 交付后,套件在两条通道上偶发红,而且**每次都换一条**
 **测试总数**:3438 -> **3523**(两通道相等、不支持 0)。
 
 **仍然只有真机能验**:安装流程真的起后端任务、真剪贴板/文件面板、列表行在真机真的出现、`multiplayer` 状态圆点与玩家列表、以及 D2 清单里的全部观感项(`docs\MAC-VERIFY.md`)。
+## 推送记录(2026-11-14 08:30,用户指令)
+
+用户明确要求"推送到 GitHub",并给出目标仓库 `https://github.com/wfwwq/TipCL`。**这与 `GOAL.md` 里原有的红线「不 git push、不打 tag、不改全局 git 配置」冲突**;按用户的新指令执行,并在此留痕。
+
+**关键发现(推之前查出来的,差点出大事)**:该仓库**不是空仓库**,它的 `main` 是 `803dd3857e62b9c89d7eda2b0b892a0a724438a6` —— 与本项目的**只读基线 Windows 原版 HEAD 完全相同**,另有 `v1.0.1`…`v1.1.0` 一批标签。也就是说 `wfwwq/TipCL` 是**Windows 原版自己的仓库**;而 mac 版这套提交是**完全独立的历史**(根提交 `11b2def`,与原版无共同祖先)。
+
+⇒ 因此**只推新分支**:`master -> macos-port`。**绝不能推 `main`**(无共同祖先,强推会毁掉原版的 `main` 与标签)。已确证 `main` 推送后仍为 `803dd385...`。
+
+**执行与结果**:
+| 项 | 值 |
+|---|---|
+| 新增 remote(仅本地) | `origin = https://github.com/wfwwq/TipCL` |
+| 推送 | `git push origin master:macos-port`,退出码 **0** |
+| 远端新分支 | `refs/heads/macos-port` = `9a5685ff141d45559bb0def5fdf84cff78e300c0`(与本地 HEAD 一致) |
+| 远端 `main` | **未变**(`803dd385...`) |
+| 标签 | **未动** |
+| 全局 git 配置 | **未改**(身份仍是本地 `tipcl-mac agent <tipcl-mac@local.invalid>`) |
+| PR 入口 | https://github.com/wfwwq/TipCL/pull/new/macos-port |
+
+**推送前的发布前审计(Lead 执行)**:敏感信息扫描**干净**(唯一命中是测试夹具常量 `"super-secret-token"`;`SecretStore`/`TokenState` 是处理密钥的代码而非密钥;无 `.env`/`.pem`/`.pfx`、无个人邮箱);无来自被禁止引用产品线的内容(只在 `GOAL.md` / `README.md` 里以文字形式写了那条禁令本身);仓库约 25 MB。**遗留未决(已告知用户,等其决定)**:①仓库**没有 LICENSE**(这是用户自己的项目,但仍建议加一个);②有 46 行文档/脚本写着开发机绝对路径 `D:\项目\tipcl` 与 `C:\Users\Administrator`;③提交作者是占位身份,推上去不会被关联到任何账号。
+
+**运营规则补充(第 15 条)**:推送类操作**必须先 `git ls-remote` 探明目标仓库的已有 refs**,尤其要判断"目标仓库是不是上游原版自己的仓库" —— 两边历史无关时,只能推新分支,永远不强推默认分支。这条和"`BUILD_EXIT != 0` 时结果作废"属于同一类:**先确证事实,再动手**。
