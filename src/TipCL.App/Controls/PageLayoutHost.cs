@@ -120,15 +120,20 @@ internal sealed class PageLayoutHost : Grid
 	/// <summary>该处是否允许写比例(Windows <c>SplitSite.Writable</c>;默认允许)。</summary>
 	public bool Writable { get; set; } = true;
 
-	/// <summary>【Windows 源】<c>:628</c> 的构造:pageId / splitId / 左右栏的**声明**列宽。</summary>
-	public PageLayoutHost(string pageId, string splitId, GridLength left, GridLength right)
+	private double _gap = DefaultGap;
+
+	/// <summary>【Windows 源】<c>:628</c> 的构造:pageId / splitId / 左右栏的**声明**列宽。
+	/// <paramref name="gap"/> 默认 <see cref="DefaultGap"/>(18);某页的间距若原本由孩子自己的外边距提供,
+	/// 就传 0 保持像素不变(Windows 的 per-site 间距来自未移植的 <c>SplitCatalog</c>,见类注释差异第 4 条)。</summary>
+	public PageLayoutHost(string pageId, string splitId, GridLength left, GridLength right, double gap = DefaultGap)
 	{
 		_pageId = pageId ?? "";
 		_splitId = splitId ?? "";
 		_declaredLeft = left;
 		_declaredRight = right;
+		_gap = gap;
 		_colLeft.Width = left;
-		_colGap.Width = new GridLength(DefaultGap);
+		_colGap.Width = new GridLength(gap);
 		_colRight.Width = right;
 		base.ColumnDefinitions.Add(_colLeft);
 		base.ColumnDefinitions.Add(_colGap);
@@ -224,7 +229,7 @@ internal sealed class PageLayoutHost : Grid
 	public bool HasStoredRatio => !double.IsNaN(_storedRatio);
 
 	/// <summary>分隔条宽度(现状留白;Windows <c>GapWidth</c>)。</summary>
-	public double GapWidth => DefaultGap;
+	public double GapWidth => _gap;
 
 	/// <summary>左栏是否可见(Windows <c>LeftVisible</c>:孩子自己的可见性说了算)。</summary>
 	public bool LeftVisible => (_left != null) ? _left.IsVisible : true;
@@ -367,7 +372,7 @@ internal sealed class PageLayoutHost : Grid
 			if (!double.IsNaN(pixels))
 			{
 				_colLeft.Width = new GridLength(pixels);
-				_colRight.Width = new GridLength(Math.Max(0.0, available - pixels - DefaultGap));
+				_colRight.Width = new GridLength(Math.Max(0.0, available - pixels - _gap));
 				_appliedWidth = available;
 				return;
 			}

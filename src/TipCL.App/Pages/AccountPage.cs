@@ -1,4 +1,5 @@
 using System;
+using TipCL.Controls;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -111,9 +112,12 @@ public sealed class AccountPage : PageBase
 		// 【Windows 源】:正身像默认藏着,拿到图才 Show(true)(见 RenderHeroAsync)
 		_heroBody.IsVisible = false;
 		RenderOptions.SetBitmapInterpolationMode(_heroBody, BitmapInterpolationMode.None);
-		Grid cards = Ui.G(null, "Auto,*");
-		cards.Add(heroCard.M(0.0, 0.0, 14.0).VTop(), 0);
-		cards.Add(_list, 0, 1);
+		// 【C9a】两栏交给共用的 PageLayoutHost(与 Windows `AccountPage.cs:82` 同一处声明:
+		// `"account"` / `"hero"` / `Auto` + 右栏 `*`)。间距沿用现状 —— 左卡自带 14px 右外边距,
+		// 所以 gap 传 0,像素与切前的写死版一致(帧逐字节不变);Windows 的 per-site 间距在未移植的 SplitCatalog 里。
+		PageLayoutHost cards = new PageLayoutHost("account", "hero", GridLength.Auto, new GridLength(1.0, GridUnitType.Star), gap: 0.0);
+		cards.SetLeft(heroCard.M(0.0, 0.0, 14.0).VTop());
+		cards.SetRight(_list);
 		// 布局自定义:账号操作与账号卡各成一个区块,默认顺序与可见性和旧版完全一致
 		Content = new BlockHost("account", new List<BlockSpec>
 		{
