@@ -37,19 +37,26 @@ public sealed class SlashCommand
 ///
 /// 本文件**零 UI 依赖**(Windows 那份只 using <c>System</c>/<c>Collections.Generic</c>/<c>Linq</c>)⇒ 逐字照搬。
 ///
-/// 与 Windows 的差异:**全角字符一字不改** —— 斜杠的两种写法是 <c>'/'(U+002F) + '／'(U+FF0F)</c>、
+/// 与 Windows 的差异:**标点宽度一律以 Windows 的字节为准** —— 斜杠的两种写法是 <c>'/'(U+002F) + '／'(U+FF0F)</c>、
 /// 冒号是 <c>'：'(U+FF1A) + ':'(U+003A)</c>(本机按字符码点核过);命令表里的中文文案照抄,不擅自走
 /// <c>I18n.L</c>(Windows 也不走,显示时那一层才翻译)。
+///
+/// <b>M10 补记(这段自述原先与代码不符)</b>:本文件初版把两处提示词里的全角逗号 <c>U+FF0C</c> 写成了半角
+/// <c>U+002C</c>(<c>"crash"</c> 与 <c>"fabric"</c> 那两行的 prompt),当时文件头写的是"全角字符一字不改"——
+/// 一句与代码不符的自述。已按 Windows 逐字节改回(现在那两行与 Windows 逐字符相等),自述也改成上面这句。
+/// 为什么必须较真:i18n 的键就是这句中文本身,半角键在 <c>en</c> 词表里查不到 ⇒ 英文界面回退显示中文;
+/// 而 <c>AiChatOpsTests.RequiredSlashCommandsExist</c> 钉的正是全角那个字节(它当初就是被这 2 个字符钉红的)。
+/// ⇒ 将来动这里的文案请**按码点核对**,半角与全角在编辑器里长得几乎一样。
 /// </summary>
 public static class AiChatOps
 {
 	/// <summary>【Windows 源】<c>:34-43</c> 内置斜杠命令(提示词与欢迎页快捷卡一致)。</summary>
 	public static readonly IReadOnlyList<SlashCommand> Commands = new List<SlashCommand>
 	{
-		new SlashCommand("崩溃分析", "读最近一次崩溃报告找原因", "刚才启动失败了,读一下日志告诉我原因", "", "crash", "bkfx"),
+		new SlashCommand("崩溃分析", "读最近一次崩溃报告找原因", "刚才启动失败了，读一下日志告诉我原因", "", "crash", "bkfx"),
 		new SlashCommand("扫模组", "检查版本不兼容和重复模组", "扫一下当前实例的模组冲突", "", "mods", "scan", "smz"),
 		new SlashCommand("新实例", "装好最新正式版并建一个实例", "帮我下载最新正式版 Minecraft", "", "instance", "xsl"),
-		new SlashCommand("装Fabric", "一步配好 1.20.1 性能优化", "给我装 1.20.1 Fabric,再装钠和 Iris 光影", "", "fabric"),
+		new SlashCommand("装Fabric", "一步配好 1.20.1 性能优化", "给我装 1.20.1 Fabric，再装钠和 Iris 光影", "", "fabric"),
 		new SlashCommand("新对话", "开一个新对话", "", "new_chat", "new", "xdh"),
 		new SlashCommand("清空", "删掉当前对话的全部消息", "", "clear", "clear", "qk"),
 		new SlashCommand("撤回", "回退上一轮并还原改过的文件", "", "rewind", "undo", "ch"),

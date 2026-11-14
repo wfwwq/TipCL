@@ -638,7 +638,7 @@ internal sealed partial class AiPage : PageBase
 		string tip = I18n.L("MCP Server 地址：{0}", McpServer.Url);
 		if (last.Length > 0)
 		{
-			tip = tip + "\n" + I18n.L("最近一次外部调用:{0}({1})", last, McpServer.LastToolAt.ToString("yyyy-MM-dd HH:mm:ss"));
+			tip = tip + "\n" + I18n.L("最近一次外部调用：{0}（{1}）", last, McpServer.LastToolAt.ToString("yyyy-MM-dd HH:mm:ss"));
 		}
 
 		ToolTip.SetTip(_mcpBadge, tip);

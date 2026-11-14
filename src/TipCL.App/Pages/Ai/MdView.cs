@@ -11,6 +11,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using TipCL.Services;
+using TipCL.Themes;
 
 namespace TipCL.Pages.Ai;
 
@@ -437,13 +438,32 @@ internal sealed class MdView : Border
 	/// <summary>
 	/// 取调色板里的画刷(<c>Run</c>/<c>Span</c> 不是 <c>Control</c>,用不了 <c>Dyn</c>)。
 	/// 主题变化时由构造函数里那个订阅重渲染一次,用户可见效果与 WPF 的 <c>SetResourceReference</c> 相同。
+	///
+	/// <b>M10 修正(这是一个真缺陷,不是实现风格)</b>:本方法原来写的是
+	/// <c>Application.Current.TryFindResource(key, out value)</c> —— 那个**不带变体**的重载看不到挂在
+	/// <c>ThemeDictionaries</c> 里的键,而本仓的色板正是那么挂的(见 <see cref="Palette.Install"/>)
+	/// ⇒ 它**恒返回 <c>Brushes.Transparent</c>**,行内代码块(<c>Run.Background</c>/<c>Foreground</c>)
+	/// 与链接标签的 <c>Foreground</c> 于是**占位却不着色**(离屏帧里表现为"行内代码后面一段空白";
+	/// 见 <c>_tmp\tasks\mac-aipage\frames\crop-assistant-bubble.png</c> 那对对照帧)。
+	/// 按本仓既有口径(<c>BlockHost.cs:51</c> 记的映射规则)改用
+	/// <c>Palette.TryGet(key, Palette.Current, out …)</c>,并**保留原来的语义**:查不到仍然是透明
+	/// (Windows 那边也是"取到才设",不是写兜底灰)。
 	/// </summary>
 	private static IBrush Res(string key)
 	{
-		if (Application.Current != null && Application.Current.TryFindResource(key, out object? value) && value is IBrush brush)
+		if (Palette.TryGet(key, Palette.Current, out object? value))
 		{
-			return brush;
+			if (value is IBrush brush)
+			{
+				return brush;
+			}
+
+			if (value is Color color)
+			{
+				return new SolidColorBrush(color);
+			}
 		}
+
 		return Brushes.Transparent;
 	}
 

@@ -257,7 +257,7 @@ internal sealed partial class AiPage
 				double ratio = AiUiText.ContextRatio(input, requests, _contextWindow);
 				_ringHost.Content = AiIcons.Ring(ratio);
 				_usageLabel.Text = $"{ratio * 100.0:0}% · {AiUiText.Tokens(input)}";
-				string tip = string.Format(I18n.L("本会话：输入 {0} / 输出 {1} tokens{2}"), Fmt(input), Fmt(output), estimatedMark) + "\n" + string.Format(I18n.L("上下文窗口 {0},圆环为每轮平均占用的估算"), AiUiText.Tokens(_contextWindow));
+				string tip = string.Format(I18n.L("本会话：输入 {0} / 输出 {1} tokens{2}"), Fmt(input), Fmt(output), estimatedMark) + "\n" + string.Format(I18n.L("上下文窗口 {0}，圆环为每轮平均占用的估算"), AiUiText.Tokens(_contextWindow));
 				ToolTip.SetTip(_usageLabel, tip);
 				ToolTip.SetTip(_ringHost, tip);
 			}

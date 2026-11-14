@@ -48,15 +48,10 @@
          改成 TestHome.Root(红线:测试临时文件必须落在仓库内),断言一字未改;
          LayoutDefaultTests.cs 一字未改。 -->
     <!-- C 类:依赖界面层命名空间(TipCL.Services / Pages / Controls / Themes),随 C 阶段对应页面恢复 -->
-    <!-- M7(2026-11-14)试摘结论:这条 Remove **恢复原状**。试摘后 AiChatOpsTests 跑成 10/11,
-         唯一那条红是 RequiredSlashCommandsExist,而它钉的是一个**真实的 1 字符漂移**:
-         Windows Pages\Ai\AiChatOps.cs:34 与 Windows 那份测试期望的都是
-         "刚才启动失败了,读一下日志告诉我原因" 里的 **U+FF0C(全角逗号)**,
-         而 mac 侧 src\TipCL.App\Pages\Ai\AiChatOps.cs 的同一句写成了 **U+002C(半角逗号)**
-         —— 与那份文件头"全角字符一字不改"的自述矛盾(属 C8a 的移植漂移,不是本包引入的)。
-         修法是 1 个字符,但 AiChatOps.cs 不在本包写入范围(且不是"编译必需"),所以按任务书
-         "红就恢复原状并报告原因"处理:还原 Remove,把这条留给 lead 定夺(见交付报告 §3)。 -->
-    <Compile Remove="Ported\AiChatOpsTests.cs" />          <!-- using TipCL.Pages.Ai → 恢复包 C3(AI 对话页);M7 试摘=红(1 字符漂移),见上 -->
+    <!-- M7(2026-11-14)试摘=红(10/11),根因是 src\TipCL.App\Pages\Ai\AiChatOps.cs 的两处标点漂移;
+         M10(同日)**恢复条件已满足**:那两处提示词已按 Windows 逐字节改回全角 U+FF0C,
+         试摘后 AiChatOpsTests 全绿(11/11)⇒ 这条 Remove 删掉。
+         测试文件本身一字未改(断言仍是 Windows 那份)。 -->
     <!-- C2a(2026-11-13):Ported\FileKindsTests.cs 已恢复编译 —— C2a 把 FileKinds.cs 搬进
          src\TipCL.App\Services 了,这个文件现在能编。按 A6 的 B 类路径规则改了 2 处:
          两处 Path.GetTempPath() 改成 TestHome.Root(红线:测试临时文件必须落在仓库内),

@@ -278,7 +278,7 @@ internal sealed partial class AiPage
 		_status.Text = I18n.L("思考中…");
 		if (echo)
 		{
-			Add(new Bubble("user", (_pendingImages.Count > 0) ? (text + "\n" + I18n.L("[附图 {0} 张]", _pendingImages.Count)) : text, RetryFrom)
+			Add(new Bubble("user", (_pendingImages.Count > 0) ? (text + "\n" + I18n.L("［附图 {0} 张］", _pendingImages.Count)) : text, RetryFrom)
 			{
 				OrigText = text
 			});
