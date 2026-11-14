@@ -78,7 +78,7 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 [docs/DELIVERY.md](DELIVERY.md) 交付物清单、发布参数、冒烟矩阵 ·
 [`progress/`](../progress/) 各工作包收尾报告 ·
 [`docs/m2-recon/`](m2-recon/) M2 立项侦察报告 ·
-[交接必读.md]（../交接必读.md） 接手流程（立项阶段写成，现状以 PROGRESS.md 为准）。
+[交接必读.md](../交接必读.md) 接手流程（立项阶段写成，现状以 PROGRESS.md 为准）。
 
 ## 与 Windows 版的关系
 
