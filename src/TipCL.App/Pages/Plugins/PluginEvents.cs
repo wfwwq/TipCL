@@ -25,10 +25,12 @@ namespace TipCL.Pages.Plugins;
 ///   <item><see cref="ChatOpener"/> —— Windows 这里是 <c>win.GetPage("ai") is AiPage ai → await ai.OpenChatAsync(...)</c>,
 ///     而 <c>AiPage</c> 属 AI 批(mac 侧还不存在)。接了缝就调它;**没接就 Navigate("ai") + 一条用户可见的如实 Toast**
 ///     (照 <c>CrashUi.AiFixLauncher</c> 的口径:**绝不静默、也不假装开过聊天窗**),AI 批落地后接线即消除;</item>
-///   <item><see cref="OverlaySink"/> —— Windows 这里是 <c>PluginOverlays.Update(plugin, p)</c>,而
-///     <c>PluginOverlays</c>(含 <c>OverlayWindow</c>,一个独立顶层窗口)是批3 的活。接了缝就调它;没接时
-///     记一条 <c>SmokeState.Note</c>(**不弹 Toast**:这是插件主动发的界面请求,每次弹会把用户刷屏),
-///     并在 DECISIONS 里如实登记这条临时缺口与接线点。</item>
+///   <item><b>插件浮层(kind "overlay")是"由 GOAL.md 第 34 行导致的设计差异",不是缺件</b>:
+///     Windows 这里是 <c>PluginOverlays.Update(plugin, p)</c> —— 造一个 **Win32 分层窗口**
+///     (点击穿透 = <c>WS_EX_TRANSPARENT|WS_EX_LAYERED</c>,透明 = DWM 玻璃扩到客户区),内容由 **WebView2** 渲染;
+///     这三条支柱在 mac 侧都没有对应物,而 GOAL-34 又规定不嵌 WebView ⇒ **不造假浮层、也不搬 <c>PluginOverlays.cs</c>**:
+///     mac 只给**一次**(每次会话一次)用户可见的如实提示 + 「在浏览器中打开」(见 <see cref="NotifyOverlayUnsupportedAsync"/>),
+///     之后只记一笔 <c>SmokeState.Note</c>。详见 DECISIONS 那条设计差异的登记。</item>
 ///   </list>
 /// </item>
 /// <item><c>ScrollViewer</c> / <c>ScrollBarVisibility</c> / <c>Ui.*</c> / <c>Dlg.*</c> 两平台同名同参,调用形状一字未改。</item>
@@ -43,10 +45,11 @@ public static class PluginEvents
 	internal static Func<string, string, string, Task>? ChatOpener { get; set; }
 
 	/// <summary>
-	/// 【注入缝 · 批3 落地后接】把插件的浮层请求交给 <c>PluginOverlays.Update(plugin, payload)</c>。
-	/// 未接时只记一笔 <c>SmokeState.Note</c>(见类注释)。
+	/// 【设计差异 · 由 GOAL.md 第 34 行导致】**插件浮层(mac 不支持)的提示只弹一次**(同一次会话里重复请求不再反复弹)。
+	/// 为什么要这个标志:浮层请求是**插件主动发来的界面请求**(用户点了插件里的东西),
+	/// 首次**必须让用户看见**否则等于"点了没反应",但每次都弹会把用户刷屏 ⇒ 一次;之后只记 <c>SmokeState.Note</c>。
 	/// </summary>
-	internal static Action<string, JsonElement>? OverlaySink { get; set; }
+	private static bool _overlayNoticeShown;
 
 	public static void Handle(BridgeEvent ev)
 	{
@@ -187,13 +190,10 @@ public static class PluginEvents
 			break;
 		}
 		case "overlay":
-			// 【Windows 源】:PluginOverlays.Update(plugin, p) —— 批3 落地后由外壳接线到 OverlaySink
-			OverlaySink?.Invoke(plugin, p);
-			if (OverlaySink == null)
-			{
-				Smoke.SmokeState.Note("plugins", "overlay 请求被忽略:PluginOverlays(批3)还没落地");
-			}
-
+			// 【Windows 源】:PluginOverlays.Update(plugin, p) —— 造一个 Win32 分层窗口,内容由 WebView2 渲染。
+			// 【mac 设计差异(GOAL.md 第 34 行)】:那三条支柱(Win32 分层窗口的点击穿透、DWM 玻璃透明、
+			// WebView2 内容宿主)在 mac 侧全都没有对应物 ⇒ **不造假浮层**,改成一次如实的用户可见提示。
+			await NotifyOverlayUnsupportedAsync(plugin, p);
 			break;
 		default:
 			result = null;
@@ -219,6 +219,55 @@ public static class PluginEvents
 		}
 
 		return null;
+	}
+
+	/// <summary>
+	/// mac 对插件浮层(kind <c>overlay</c>)的如实处置 —— **由 GOAL.md 第 34 行导致的设计差异,不是"未实现的降级"**
+	/// (见 DECISIONS):Windows 那边是造一个 Win32 分层窗口(点击穿透 = <c>WS_EX_TRANSPARENT|WS_EX_LAYERED</c>,
+	/// 透明 = DWM 玻璃扩到客户区),内容由 WebView2 渲染;这三条在 mac 侧都没有对应物,
+	/// 而 GOAL-34 又规定不嵌 WebView ⇒ **不造窗口、也不假装浮层已显示**。
+	///
+	/// 行为:首次(每次会话一次)给一张**用户可见**的如实提示 + 「在浏览器中打开」(走既有的
+	/// <c>Crash.ShellOpen</c>;测试靠 <c>Crash.ShellOpenHook</c> 拦截,绝不真开窗口);
+	/// 之后同一次会话里只记一笔 <c>SmokeState.Note</c>(重复弹会把用户刷屏)。请求本身仍照常回
+	/// <c>plugins_ui_reply</c>(见 <see cref="UiRequestAsync"/> 的公共尾部)。
+	///
+	/// 特意**没有**搬的部分(它们都依附于"那个窗口",没有窗口就没有它们要算的东西):
+	/// spec 解析(<c>width/height/anchor/margin/clickThrough/visible</c> + <c>Clamp.Of</c>)、
+	/// 贡献增删同步、跟随主窗口移动/缩放/最小化的重排。
+	/// **回溯线索**:若将来 mac 有了可嵌入的视图宿主(或原生插件 UI 想要真浮层),
+	/// 参照 Windows <c>Pages\Plugins\PluginOverlays.cs</c>(468 行,含 <c>OverlayWindow</c>)取回这套逻辑。
+	/// </summary>
+	private static async Task NotifyOverlayUnsupportedAsync(string plugin, JsonElement p)
+	{
+		Smoke.SmokeState.Note("plugins", "插件浮层请求(mac 不支持;按 GOAL.md 34 用浏览器打开):" + plugin);
+		if (_overlayNoticeShown)
+		{
+			return;
+		}
+
+		_overlayNoticeShown = true;
+		string id = FStr(p, "id");
+		string url = PluginUi.OfKind("overlay").FirstOrDefault((UiContribution c) => c.Plugin == plugin && (id.Length == 0 || c.Id == id))?.Url ?? "";
+		string text = I18n.L("mac 版的插件浮层没法就地显示:这里不内嵌浏览器(任务书规定用系统浏览器打开)。");
+		if (url.Length == 0)
+		{
+			await Dlg.Alert(I18n.L("插件浮层"), text);
+			return;
+		}
+
+		SPanel body = Ui.V(6.0, Ui.Muted(text).Wrap(), Ui.Mono(url).Trim().Wrap());
+		if (await Dlg.Ask(I18n.L("插件浮层"), body, I18n.L("在浏览器中打开"), I18n.L("知道了")))
+		{
+			try
+			{
+				TipCL.Core.Launcher.Crash.ShellOpen(url);
+			}
+			catch (Exception ex)
+			{
+				AppServices.Toast(I18n.L("打开失败"), ex.Message, ToastKind.Warning);
+			}
+		}
 	}
 
 	/// <summary>插件页 id(同插件)、完整的 plugin:&lt;plugin&gt;:&lt;page&gt;,或内置页 id(launch、ai、settings…)。
