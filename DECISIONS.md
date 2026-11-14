@@ -2431,3 +2431,33 @@ _installedHost.Columns = (_installed.Count == 0) ? 1 : SplitRatioStore.PageColum
    本次我把 `D-159`(c4-pages 的抖动包)当成空闲号引用过,**存在但讲别的事,比不存在更容易误导**。
    并发纪律:**分配新号前当场读一次 `DECISIONS.md` 的当前最大号,提交前再看一眼**(别人可能在你编辑期间追加);
    这与"每落盘一个文件就编整树""只 add 自己的路径"属同一族。
+
+## D-165 补记(同日):两条可复用的移植纪律 + 已踩实例表
+
+**纪律 A:移植任何成员名 / 类型名前,先在**仓库里**找既有用例或门面成员,不许凭 WPF 记忆写。**
+后面还有 `AiPage`(82 KB)那种大页面,**这条能省最多返工** —— 下面每一行都是一次真实的编译红。
+
+| 我凭 WPF 记忆写的 | mac 的实际口径 | 后果 |
+|---|---|---|
+| `ButtonBase` / `RepeatButton` 的命名空间 | Avalonia 11 里与 WPF **不同**(且 `ButtonBase` 直接写名字会 CS0246/CS0234) | 两次编译红;最终改成按 `Button` / `ToggleButton` **具体类型**判 |
+| `PasswordBox` + `.Password` | mac 的 `Ui.Pw(...)` 返回 **`TextBox`**,取值/清空走 **`.Text`** | 三处;`PluginsPage.Dev` 与 `PluginsPage.Settings` 各踩一次 |
+| `GetLogicalDescendants` 的 using | 在 **`Avalonia.LogicalTree`**(不是 `VisualTree`) | 两次(第二次是被人提醒说反了,按仓库现成用例才定对) |
+| `AutomationProperties.Name` 的取值路径 | 带字形的按钮 `Content` 是**图文面板**,文字在**自动化名**里 | C5b/C6b 各一次 |
+
+**判据**:`GetLogical*` / `LogicalChildren` 在 `Avalonia.LogicalTree`;`GetVisual*` / `GetSelfAndVisualAncestors` 在 `Avalonia.VisualTree`。
+
+**纪律 B:凡调用点写成 `(X as T)?.Method()` 的,测试必须显式断言 `X as T != null`,
+并在断言消息里写清"哪一环解析失败"。**
+理由:这种写法**任一环失败都会让整条调用静默 no-op**,而测试只会看到"没反应"的结果 ——
+**功能悄悄少一块,测试还是绿的**。今晚同一个模式出现两次:
+1. **接口没实现**:`(GetPage("plugins") as IPluginHostPage)?.RefreshMarketSoon()` —— `PluginsPage` 从未声明实现该接口
+   ⇒ "保存镜像后刷新市场"**一直无声失效**(由 C7b 的清单用例抓出:驱动调用点 + 断言具体结果,才发现它没被调到);
+2. **窗口不是 MainWindow**:测试里 `AppServices.Window` 不是 `MainWindow` ⇒ 同一个调用点整条被吞(那条红是**测试脚手架**问题,不是产品)。
+
+**落地形状**(照 C7b 的 `C7bChecklistTests`):
+```csharp
+Assert.True(ReferenceEquals(shell, AppServices.Window as MainWindow), "第一环解析失败:AppServices.Window 不是这个 MainWindow(调用点会被 `as` 静默吞掉)");
+Assert.NotNull(shell.GetPage("plugins") as IPluginHostPage);
+// 然后才驱动那个调用点
+```
+**这两条断言本身就是"解析链通了"的证据**,而不只是判断。
