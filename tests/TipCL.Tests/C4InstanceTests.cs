@@ -810,8 +810,8 @@ public class C4InstanceTests
             var detail = C4Files.Mount(harness, new InstanceDetailPage(new InstanceInfo { Name = "甲" }, delegate { }));
             C4Files.Flush(2);
             detail.ShowSeg(0);
-            C4Files.Pump(() => api.Count("get_installed_mod_entries") >= 1);
-            C4Files.Flush(2);
+            // 【D1 修法 · A 组】等那一行**画出来**(续体产出);删掉固定刷一次的残留 Flush。断言一字不改
+            C4Files.Pump(() => C4Files.HasText(detail, "Sodium"), 9000);
             Assert.True(C4Files.HasText(detail, "Sodium"));
             // 有 Value 为空的项 ⇒ 用共享目录(version = "")
             C4Files.AssertParam(api, "get_installed_mod_entries", "version", "");
@@ -863,8 +863,8 @@ public class C4InstanceTests
             C4Files.Flush(2);
 
             detail.ShowSeg(2);
-            C4Files.Pump(() => api.Count("get_installed_resourcepacks") >= 1);
-            C4Files.Flush(2);
+            // 【D1 修法 · A 组】等那一行**画出来**;删掉残留 Flush。断言一字不改
+            C4Files.Pump(() => C4Files.HasText(detail, "pack.zip"), 9000);
             Assert.True(C4Files.HasText(detail, "pack.zip"));
             C4Files.Click(C4Files.ByText(detail, I18n.L("删除")));
             C4Files.AnswerDialog(I18n.L("删除"));
@@ -872,8 +872,8 @@ public class C4InstanceTests
             C4Files.AssertParam(api, "delete_resourcepack", "filename", "pack.zip");
 
             detail.ShowSeg(3);
-            C4Files.Pump(() => api.Count("get_installed_shaders") >= 1);
-            C4Files.Flush(2);
+            // 【D1 修法 · A 组】等那一行**画出来**;删掉残留 Flush。断言一字不改
+            C4Files.Pump(() => C4Files.HasText(detail, "shader.zip"), 9000);
             Assert.True(C4Files.HasText(detail, "shader.zip"));
             C4Files.Click(C4Files.ByText(detail, I18n.L("删除")));
             C4Files.AnswerDialog(I18n.L("删除"));
