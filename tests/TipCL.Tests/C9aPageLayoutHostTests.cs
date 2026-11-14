@@ -201,4 +201,45 @@ public class C9aPageLayoutHostTests
 			shell.Window.SaveUiPrefs();
 		});
 	}
+
+	/// <summary>
+	/// 命中宽度(设置页传 8):默认 **0** ⇒ 分隔条只占间隙列(别的页完全不受影响);传 8 时它自带命中区,
+	/// 且该页 gap 为 0 —— 这就是"gap 0 的页面也能拖"的实现方式(裁决 A)。
+	/// </summary>
+	[Fact]
+	public void Splitter_hit_width_is_opt_in_and_zero_by_default()
+	{
+		AvaloniaSession.Run(() =>
+		{
+			PageLayoutHost plain = new PageLayoutHost("c9a-hit", "nav", new GridLength(272.0), new GridLength(1.0, GridUnitType.Star));
+			Assert.Equal(0.0, plain.SplitterHitWidth);
+			Assert.Equal(18.0, plain.GapWidth);
+			PageLayoutHost zeroGap = new PageLayoutHost("settings", "nav", new GridLength(168.0), new GridLength(1.0, GridUnitType.Star), gap: 0.0, splitterHitWidth: 8.0);
+			Assert.Equal(8.0, zeroGap.SplitterHitWidth);
+			Assert.Equal(0.0, zeroGap.GapWidth);
+		});
+	}
+
+	/// <summary>
+	/// **"零像素"的证据**:静止时那条悬停细线必须 `IsVisible=false`(只有悬停/拖动才显)、分隔条本身可见可命中。
+	/// 设置页那两帧逐字节不变(`45594 C19BF1C4…` / `43745 CE33BEFE…`)与这条同源。
+	/// </summary>
+	[Fact]
+	public void Hover_line_is_invisible_at_rest()
+	{
+		AvaloniaSession.Run(() =>
+		{
+			PageLayoutHost host = new PageLayoutHost("settings", "nav", new GridLength(168.0), new GridLength(1.0, GridUnitType.Star), gap: 0.0, splitterHitWidth: 8.0);
+			host.Width = 1000.0;
+			host.Measure(new Size(1000.0, 600.0));
+			host.Arrange(new Rect(0.0, 0.0, 1000.0, 600.0));
+			Assert.False(host.HoverLineVisible);
+			Assert.True(host.SplitterVisible);
+			// 收起(内嵌)时分隔条也要消失 ⇒ 拖动入口不存在
+			host.SetEmbedded(true);
+			Assert.False(host.SplitterVisible);
+			host.SetEmbedded(false);
+			Assert.True(host.SplitterVisible);
+		});
+	}
 }

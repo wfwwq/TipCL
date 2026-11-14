@@ -1,4 +1,5 @@
 using System;
+using TipCL.Controls;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -86,9 +87,13 @@ public sealed class FeedbackPage : PageBase
 			PageBase.Run(() => LoadArticlesAsync(_search.Text));
 		};
 		Border articles = Ui.Card(Ui.V(10.0, Ui.Section(I18n.L("常见问题"), I18n.L("启动、Java、模组、账号、联机的快速说明(点击标题展开)")), _search, _articles));
-		Grid grid = Ui.G(null, "*,360");
-		grid.Add(Ui.V(14.0, form, history), 0);
-		grid.Add(articles.M(14.0, 0.0, 0.0, 0.0).VTop(), 0, 1);
+		// 【C9a】两栏交给共用的 PageLayoutHost(Windows `FeedbackPage.cs:70`:`"feedback"` / `"side"` / `*` + `346`)。
+		// 两点如实登记:①**右栏声明值保留 mac 现状 360**(Windows 是 346;C3/C5 期间按观感适配过)——
+		// 保留现状才能"默认渲染逐字节不变",346 与 360 的差异登记为 **D2 真机对照项**;
+		// ②间距传 0:切前是 `"*,360"`(两列、无间隔带),而右卡自带 14px 左外边距 ⇒ 传 0 保像素。
+		PageLayoutHost grid = new PageLayoutHost("feedback", "side", new GridLength(1.0, GridUnitType.Star), new GridLength(360.0), gap: 0.0);
+		grid.SetLeft(Ui.V(14.0, form, history));
+		grid.SetRight(articles.M(14.0, 0.0, 0.0, 0.0).VTop());
 		// 页面布局自定义(WP-U3):左右双栏 Grid 保持一整块(纵向流会拆散两侧布局),默认与旧 ScrollBody 等价
 		Content = new BlockHost("feedback", new List<BlockSpec>
 		{
