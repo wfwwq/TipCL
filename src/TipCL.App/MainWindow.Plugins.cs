@@ -1,8 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Media;
 using TipCL.Pages;
 using TipCL.Pages.Plugins;
 using TipCL.Services;
+using TipCL.Themes;
 
 namespace TipCL;
 
@@ -31,6 +37,11 @@ internal sealed partial class MainWindow
 	private bool _pluginsHooked;
 
 	private Func<string, PageBase?>? _previousFallback;
+
+	private readonly List<ToggleButton> _pluginTabs = new List<ToggleButton>();
+
+	/// <summary>顶部页签条(懒建:没有"top"贡献时它**根本不存在**,见 <see cref="RebuildPluginTabs"/>)。</summary>
+	private SPanel? _tabStrip;
 
 	/// <summary>退订 + 还原回退口(**测试收尾用**;Windows 没有这一步 —— 主窗口活到进程结束)。
 	/// 不还原就会把订阅与进程级回退口留给下一个用例(D-149 那族纪律)。</summary>
@@ -94,7 +105,89 @@ internal sealed partial class MainWindow
 			}
 		}
 
-		// 【临时缺口 · 页签条】**批3 轮B 落地**;此处暂不重建 RebuildPluginTabs()。
+		RebuildPluginTabs();
+	}
+
+	/// <summary>
+	/// 顶部页签条(Windows 同名):<c>group == "top"</c> 的插件页在这里落脚(旧侧栏删除后,Windows 也只剩这一个落脚点)。
+	///
+	/// **零像素约定**:没有贡献、也没建过条 ⇒ 直接返回(**外壳一个像素都不动**);
+	/// 条只**第一次真的有条目时**才挂进外壳(给它插一行 <c>Auto</c> 并把正文行下移),
+	/// 条目清空后条隐藏(<c>IsVisible = false</c> ⇒ 那一行高度 0)。
+	/// 样式用**既有的** <c>StyleKeys</c> 键 <c>"Tab.Top"</c>(表里本来就有 ⇒ 不新造样式)。
+	/// </summary>
+	internal void RebuildPluginTabs()
+	{
+		List<UiContribution> tops = PluginUi.OfKind("page")
+			.Where((UiContribution c) => c.Group == "top")
+			.OrderBy((UiContribution c) => c.Order)
+			.ThenBy((UiContribution c) => c.Plugin, StringComparer.Ordinal)
+			.ToList();
+		if (tops.Count == 0 && _tabStrip == null)
+		{
+			return;
+		}
+
+		EnsureTabStrip();
+		foreach (ToggleButton t in _pluginTabs)
+		{
+			_tabStrip!.Children.Remove(t);
+		}
+
+		_pluginTabs.Clear();
+		foreach (UiContribution c in tops)
+		{
+			string pageId = c.PageId;
+			TextBlock text = new TextBlock
+			{
+				Text = (string.IsNullOrEmpty(c.Icon) ? "" : c.Icon + " ") + c.Label,
+				MaxWidth = 128.0,
+				TextTrimming = TextTrimming.CharacterEllipsis,
+			};
+			ToggleButton tab = new ToggleButton
+			{
+				Content = text,
+				Tag = pageId,
+			};
+			StyleKeys.Apply(tab, "Tab.Top");
+			tab.Tip(c.Label);
+			tab.Click += delegate
+			{
+				Navigate(pageId);
+			};
+			_tabStrip!.Children.Add(tab);
+			_pluginTabs.Add(tab);
+		}
+
+		_tabStrip!.IsVisible = _pluginTabs.Count > 0;
+		SyncTabs();
+	}
+
+	/// <summary>按当前页同步页签的选中态(Windows 的 <c>SyncTabs</c> 语义)。</summary>
+	private void SyncTabs()
+	{
+		foreach (ToggleButton t in _pluginTabs)
+		{
+			t.IsChecked = string.Equals(t.Tag as string, _host.CurrentId, StringComparison.Ordinal);
+		}
+	}
+
+	/// <summary>懒建页签条:第一次真的有条目时才插一行给外壳(空的时候连建都不建 ⇒ 零像素)。</summary>
+	private void EnsureTabStrip()
+	{
+		if (_tabStrip != null)
+		{
+			return;
+		}
+
+		_tabStrip = Ui.H(6.0);
+		_tabStrip.Margin = new Avalonia.Thickness(16.0, 6.0, 16.0, 0.0);
+		_tabStrip.IsVisible = false;
+		// 插在标题栏与正文之间的一行 Auto:条目清空后条隐藏 ⇒ 该行高度 0
+		_contentLayer.RowDefinitions.Insert(1, new RowDefinition { Height = GridLength.Auto });
+		Grid.SetRow(_tabStrip, 1);
+		_contentLayer.Children.Add(_tabStrip);
+		Grid.SetRow(_bodyGrid, 2);
 	}
 
 	/// <summary>连上后端后拉一次插件界面贡献(Windows 同名;内部可见性同上,给测试驱动用)。</summary>
