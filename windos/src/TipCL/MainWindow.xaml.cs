@@ -1465,7 +1465,7 @@ public partial class MainWindow : Window
 		}
 		catch (Exception ex)
 		{
-			Toast(I18n.L("侧栏设置读取失败"), ex.Message, ToastKind.Warning);
+			Toast(I18n.L("导航设置读取失败"), ex.Message, ToastKind.Warning);
 			return;
 		}
 		ApplyNavSettings(settings);

@@ -569,7 +569,7 @@ public sealed partial class SettingsPage : PageBase
 		{
 			PageBase.Run(RecommendAsync, I18n.L("检测失败"));
 		}, "\ue945");
-		Border border = Ui.Card(Rows(Ui.Field(I18n.L("深色模式"), _dark, I18n.L("立即生效")), Ui.Field(I18n.L("主题色"), _swatches, I18n.L("点一下就换")), Ui.Field(I18n.L("界面背景"), _bg, I18n.L("预设色调，立即生效")), Ui.Field(I18n.L("界面动画"), _motion, I18n.L("换页、进度条、悬浮动效")), Ui.Field(I18n.L("下载飞入动画"), _fly, I18n.L("安装时飞入侧栏任务列表")), Ui.Field(I18n.L("飞入动画时长"), SliderRow(_flyDur, _flyDurLbl), I18n.L("毫秒，建议 400–800"))));
+		Border border = Ui.Card(Rows(Ui.Field(I18n.L("深色模式"), _dark, I18n.L("立即生效")), Ui.Field(I18n.L("主题色"), _swatches, I18n.L("点一下就换")), Ui.Field(I18n.L("界面背景"), _bg, I18n.L("预设色调，立即生效")), Ui.Field(I18n.L("界面动画"), _motion, I18n.L("换页、进度条、悬浮动效")), Ui.Field(I18n.L("下载飞入动画"), _fly, I18n.L("安装时飞入底部任务条")), Ui.Field(I18n.L("飞入动画时长"), SliderRow(_flyDur, _flyDurLbl), I18n.L("毫秒，建议 400–800"))));
 		_bgInterval.ValueChanged += delegate(object _, RoutedPropertyChangedEventArgs<double> e)
 		{
 			_bgIntervalLbl.Text = I18n.L("{0} 分钟", (int)e.NewValue);

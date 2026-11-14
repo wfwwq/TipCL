@@ -316,7 +316,7 @@ public sealed class UiContribution
 	/// <summary>插件+类型+id，界面缓存用的键。</summary>
 	public string Key => Plugin + "|" + Kind + "|" + Id;
 
-	/// <summary>侧栏 / 页面 id：<c>plugin:&lt;plugin&gt;:&lt;id&gt;</c>。</summary>
+	/// <summary>顶栏页签 / 页面 id：<c>plugin:&lt;plugin&gt;:&lt;id&gt;</c>。</summary>
 	public string PageId => "plugin:" + Plugin + ":" + Id;
 
 	public string Group => J.Str(Spec, "group", "more");

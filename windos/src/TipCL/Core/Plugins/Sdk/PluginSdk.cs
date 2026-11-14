@@ -215,7 +215,7 @@ public interface IPluginConfig
 	IDisposable OnChange(Action<string, object> handler);
 }
 
-/// <summary>原生 WPF 页面（侧栏入口）。</summary>
+/// <summary>原生 WPF 页面（顶栏页签入口）。</summary>
 public sealed class PluginPageSpec
 {
 	public string Id { get; set; }

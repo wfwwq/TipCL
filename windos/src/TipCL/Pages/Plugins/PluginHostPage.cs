@@ -7,7 +7,7 @@ using TipCL.Services;
 namespace TipCL.Pages.Plugins;
 
 /// <summary>
-/// 插件侧栏页面（kind "page"）。页面对象被 MainWindow 缓存，切走再回来 WebView 不重建（和 DSH 保留面板一样）。
+/// 插件顶栏页签页面（kind "page"）。页面对象被 MainWindow 缓存，切走再回来 WebView 不重建（和 DSH 保留面板一样）。
 /// 显示 / 隐藏时通过 plugins_ui_event 告诉插件（Node 宿主转成 ui.event 通知），比如大肥鱼在游戏库打开时自己收起浮层。
 /// </summary>
 public sealed class PluginHostPage : PageBase

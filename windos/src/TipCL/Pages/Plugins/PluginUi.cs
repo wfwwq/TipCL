@@ -15,7 +15,7 @@ namespace TipCL.Pages.Plugins;
 
 /// <summary>
 /// 插件界面贡献的本地快照（plugins_ui），以及已安装插件列表（plugins_list）。
-/// 收到 plugins.ui_changed / plugins.changed 时刷新，然后发 <see cref="Changed"/>，侧栏、AI 页、主页卡片、浮层各自重建。
+/// 收到 plugins.ui_changed / plugins.changed 时刷新，然后发 <see cref="Changed"/>，顶栏页签、AI 页、主页卡片、浮层各自重建。
 /// </summary>
 public static class PluginUi
 {
@@ -441,7 +441,7 @@ public static class PluginPerms
 			"ai.sessions" => I18n.L("新建、读取、驱动 AI 对话"),
 			"ai.llm" => I18n.L("直接调用模型，会消耗你的 AI 额度"),
 			"credentials" => I18n.L("读写它自己的凭据（加密保存）"),
-			"ui" => I18n.L("侧栏页面、AI 标签、首页卡片、设置页、提示框"),
+			"ui" => I18n.L("顶栏页签、AI 标签、首页卡片、设置页、提示框"),
 			"ui.overlay" => I18n.L("在主窗口上显示浮层"),
 			"system" => I18n.L("可以读写你的文件、访问网络、运行程序。Node 插件做不到沙箱，只安装你信任的插件"),
 			_ => I18n.L("未知权限"),
