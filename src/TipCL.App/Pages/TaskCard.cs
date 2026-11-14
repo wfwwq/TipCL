@@ -21,7 +21,8 @@ namespace TipCL.Pages;
 /// <list type="number">
 /// <item><c>Visibility.Collapsed/Visible</c> → <c>IsVisible</c>;<c>ToolTip = …</c> → <c>Tip(…)</c>
 ///   (三处:<c>_title</c>/<c>_status</c>/重试按钮;mac 的 <c>Tip</c> 不接受 null,所以照 Windows 的 <c>?? ""</c> 取值);</item>
-/// <item><c>SetResourceReference(Border.BackgroundProperty/…, "B.Xxx")</c> → <c>Dyn(…)</c>(本仓统一口径);</item>
+/// <item><c>SetResourceReference(Border.BackgroundProperty 等, 调色板键)</c> → <c>Dyn(控件属性, 键)</c>(本仓统一口径);
+///   【注意】注释里别写字面量假键名:C1a 的调色板守卫会**扫 .cs 源码(含注释)**,假键名会被判成"查了不存在的键"(我这次就栽在这);</item>
 /// <item><c>FrameworkElement</c> → <c>Control</c>;<c>TextWrapping.Wrap</c> → Avalonia 同名枚举;</item>
 /// <item>图标/圆角/边距/字号**逐值照抄**(`CornerRadius(10)`:12/10 内边距、`26×26` 图标位、`4.0` 进度条高)。</item>
 /// </list>
