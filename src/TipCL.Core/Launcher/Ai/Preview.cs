@@ -113,7 +113,7 @@ public static class Preview
         {
             case "write_mod_config":
             {
-                string head = Tr("将要写入的变更:");
+                string head = Tr("将要写入的变更：");
                 string? target = ConfigTarget(InstanceDir(args, instance), args);
                 if (target == null)
                 {
@@ -137,7 +137,7 @@ public static class Preview
                 List<string> diff = UnifiedDiff(Py.SplitLines(old), Py.SplitLines(content), "a/" + label, "b/" + label);
                 if (!existed)
                 {
-                    lines.Add(Tr("(新建文件)"));
+                    lines.Add(Tr("（新建文件）"));
                 }
                 bool tooLarge = false;
                 if (diff.Count > MAX_PREVIEW_LINES)
@@ -148,11 +148,11 @@ public static class Preview
                     lines.AddRange(diff.Take(MAX_PREVIEW_LINES));
                     if (stored.Length > 0)
                     {
-                        lines.Add(Tr("变更过大,完整内容见 {path}").Replace("{path}", stored));
+                        lines.Add(Tr("变更过大，完整内容见 {path}").Replace("{path}", stored));
                     }
                     else
                     {
-                        lines.Add(Tr("变更过大,仅显示前 {n} 行").Replace("{n}", MAX_PREVIEW_LINES.ToString()));
+                        lines.Add(Tr("变更过大，仅显示前 {n} 行").Replace("{n}", MAX_PREVIEW_LINES.ToString()));
                     }
                 }
                 else
@@ -177,17 +177,17 @@ public static class Preview
                 List<string> targets;
                 if (name == "delete_mod")
                 {
-                    head = Tr("将被删除:");
+                    head = Tr("将被删除：");
                     targets = new List<string> { PPath.Join(mods, file), PPath.Join(mods, file + ".disabled") };
                 }
                 else if (name == "disable_mod")
                 {
-                    head = Tr("将被改名:");
+                    head = Tr("将被改名：");
                     targets = new List<string> { PPath.Join(mods, file) };
                 }
                 else
                 {
-                    head = Tr("将被改名:");
+                    head = Tr("将被改名：");
                     targets = new List<string> { PPath.Join(mods, file + ".disabled") };
                 }
                 long total = 0;
@@ -226,11 +226,11 @@ public static class Preview
                 }
                 if (count == 0)
                 {
-                    lines.Add(Tr("(没找到这个文件,执行时可能报「不存在」)"));
+                    lines.Add(Tr("（没找到这个文件，执行时可能报「不存在」）"));
                 }
                 else
                 {
-                    lines.Add(Tr("共 {n} 个文件,{size}").Replace("{n}", count.ToString()).Replace("{size}", FmtBytes(total)));
+                    lines.Add(Tr("共 {n} 个文件，{size}").Replace("{n}", count.ToString()).Replace("{size}", FmtBytes(total)));
                 }
                 return Row("summary", head, lines, tooLarge: false);
             }
@@ -244,17 +244,17 @@ public static class Preview
                 }
                 var (n, total, truncated) = DirStats(instDir);
                 lines.Add("- " + new PPath(instDir).Name + "/");
-                lines.Add(Tr("共 {n} 个文件,{size}(不可恢复)")
+                lines.Add(Tr("共 {n} 个文件，{size}（不可恢复）")
                     .Replace("{n}", (truncated ? ">" : "") + n)
                     .Replace("{size}", FmtBytes(total)));
-                return Row("summary", Tr("将被删除:"), lines, tooLarge: false);
+                return Row("summary", Tr("将被删除："), lines, tooLarge: false);
             }
 
             default:
             {
                 if (InstallTargets.Contains(name))
                 {
-                    string head = Tr("安装目标:");
+                    string head = Tr("安装目标: ");
                     string? instDir = InstanceDir(args, instance);
                     string? sub = name switch
                     {
@@ -267,8 +267,8 @@ public static class Preview
                     };
                     if (name == "download_java")
                     {
-                        lines.Add(Tr("Java 运行时目录(由启动器管理)"));
-                        lines.Add(Tr("预计新增文件数:多个(安装时确定)"));
+                        lines.Add(Tr("Java 运行时目录（由启动器管理）"));
+                        lines.Add(Tr("预计新增文件数：多个（安装时确定）"));
                     }
                     else
                     {
@@ -283,13 +283,13 @@ public static class Preview
                             case "install_shader":
                             case "install_resourcepack":
                             case "install_datapack":
-                                lines.Add(Tr("预计新增文件数:{n}").Replace("{n}", "1"));
+                                lines.Add(Tr("预计新增文件数：{n}").Replace("{n}", "1"));
                                 break;
                             case "install_world":
-                                lines.Add(Tr("预计新增文件数:存档目录(含 level.dat 等多个文件)"));
+                                lines.Add(Tr("预计新增文件数：存档目录（含 level.dat 等多个文件）"));
                                 break;
                             default:
-                                lines.Add(Tr("预计新增文件数:安装时确定(多于 1 个)"));
+                                lines.Add(Tr("预计新增文件数：安装时确定（多于 1 个）"));
                                 break;
                         }
                     }
@@ -298,28 +298,28 @@ public static class Preview
 
                 if (name == "create_instance")
                 {
-                    string head = Tr("安装目标:");
+                    string head = Tr("安装目标: ");
                     string? instDir = InstanceDir(new PyDict(), instance);
                     if (instDir != null)
                     {
                         lines.Add(PPath.Join(new PPath(instDir).Parent.ToString(), Py.S(args.Get("name"))));
                     }
-                    lines.Add(Tr("预计新增文件数:安装时确定(多于 1 个)"));
+                    lines.Add(Tr("预计新增文件数：安装时确定（多于 1 个）"));
                     return Row("summary", head, lines, tooLarge: false);
                 }
 
                 if (name == "launch_game")
                 {
-                    string head = Tr("启动目标:");
+                    string head = Tr("启动目标：");
                     string inst = Py.S(args.Get("instance"));
                     string version = Py.S(args.Get("version"));
                     if (inst.Length > 0)
                     {
-                        lines.Add(Tr("实例:{name}").Replace("{name}", inst));
+                        lines.Add(Tr("实例：{name}").Replace("{name}", inst));
                     }
                     if (version.Length > 0)
                     {
-                        lines.Add(Tr("版本:{ver}").Replace("{ver}", version));
+                        lines.Add(Tr("版本：{ver}").Replace("{ver}", version));
                     }
                     return Row("info", head, lines, tooLarge: false);
                 }

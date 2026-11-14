@@ -71,7 +71,7 @@ public sealed class PluginInstaller
 			DownloadAny(url, zip, log);
 			if (!PluginMarket.Sha256Matches(zip, sha))
 			{
-				throw new ValueError(I18nCore.Tr("插件包校验失败(sha256 不符),已拒绝安装"));
+				throw new ValueError(I18nCore.Tr("插件包校验失败（sha256 不符），已拒绝安装"));
 			}
 			return InstallPackage(zip, "market", Py.S(entry.Get("market")), id, version, granted, log);
 		}
@@ -277,7 +277,7 @@ public sealed class PluginInstaller
 			catch (Exception ex) when (!(ex is TaskCancelled))
 			{
 				last = ex;
-				log?.Invoke(I18nCore.Tr("下载失败,尝试其它源:") + ex.Message);
+				log?.Invoke(I18nCore.Tr("下载失败，尝试其它源：") + ex.Message);
 			}
 		}
 		if (!ok)

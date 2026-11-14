@@ -51,11 +51,11 @@ public class AiPreviewTests
         PyDict preview = PreviewOf("write_mod_config", args);
 
         Assert.Equal("diff", Py.S(preview.Get("kind")));
-        Assert.Equal("将要写入的变更:", Py.S(preview.Get("head")));
+        Assert.Equal("将要写入的变更：", Py.S(preview.Get("head")));
         Assert.False(Py.Truthy(preview.Get("too_large")));
         List<string> lines = Preview.Flatten(preview);
-        Assert.Equal("@@ 将要写入的变更:", lines[0]);
-        Assert.Contains("(新建文件)", lines);
+        Assert.Equal("@@ 将要写入的变更：", lines[0]);
+        Assert.Contains("（新建文件）", lines);
         Assert.Contains("+a = 1", lines);
         Assert.Contains("+b = 2", lines);
         Assert.Contains("--- a/sodium.toml", lines);
@@ -80,7 +80,7 @@ public class AiPreviewTests
         Assert.Contains("+b = 2", lines);
         Assert.Contains("@@ -1 +1,2 @@", lines);
         Assert.DoesNotContain("-a = 1", lines);    // 不能把没变的行报成删除
-        Assert.DoesNotContain("(新建文件)", lines);
+        Assert.DoesNotContain("（新建文件）", lines);
         Assert.True(AiUiText.LooksLikeDiff(lines));
     }
 
@@ -127,7 +127,7 @@ public class AiPreviewTests
 
         Assert.True(Py.Truthy(preview.Get("too_large")));
         List<string> lines = Preview.Flatten(preview);
-        // 1 行「@@ 将要写入的变更:」+ 1 行「(新建文件)」+ 前 200 行 diff + 1 行去向说明
+        // 1 行「@@ 将要写入的变更：」+ 1 行「（新建文件）」+ 前 200 行 diff + 1 行去向说明
         Assert.Equal(Preview.MAX_PREVIEW_LINES + 3, lines.Count);
         // 200 行是**连 diff 头一起**数的(--- / +++ / @@ 占掉 3 行,参考版同样如此)
         Assert.Contains("+k0 = 0", lines);
@@ -149,10 +149,10 @@ public class AiPreviewTests
         PyDict preview = PreviewOf("delete_mod", PyDict.Of("instance", inst, "filename", "sodium.jar"));
 
         Assert.Equal("summary", Py.S(preview.Get("kind")));
-        Assert.Equal("将被删除:", Py.S(preview.Get("head")));
+        Assert.Equal("将被删除：", Py.S(preview.Get("head")));
         List<string> lines = Preview.Flatten(preview);
         Assert.Contains("- mods/sodium.jar(2.0 KB)", lines);
-        Assert.Contains(lines, l => l.StartsWith("共 1 个文件,", StringComparison.Ordinal));
+        Assert.Contains(lines, l => l.StartsWith("共 1 个文件，", StringComparison.Ordinal));
         Assert.True(AiUiText.LooksLikeDiff(lines));
         Assert.True(File.Exists(jar));  // 预览不删东西
     }
@@ -172,7 +172,7 @@ public class AiPreviewTests
         string inst = NewInstance("toggle");
         File.WriteAllText(ModFile(inst, "sodium.jar"), "x");
         PyDict disabledPreview = PreviewOf("disable_mod", PyDict.Of("instance", inst, "filename", "sodium.jar"));
-        Assert.Equal("将被改名:", Py.S(disabledPreview.Get("head")));
+        Assert.Equal("将被改名：", Py.S(disabledPreview.Get("head")));
         Assert.Contains("- mods/sodium.jar → mods/sodium.jar.disabled", Preview.Flatten(disabledPreview));
 
         File.WriteAllText(ModFile(inst, "lithium.jar.disabled"), "x");
@@ -207,11 +207,11 @@ public class AiPreviewTests
 
         List<string> mod = Preview.Flatten(PreviewOf("install_mod", PyDict.Of("instance", inst, "name", "sodium")));
         Assert.Equal(Path.Combine(dir, "mods"), mod[1]);
-        Assert.Contains("预计新增文件数:1", mod);
+        Assert.Contains("预计新增文件数：1", mod);
 
         List<string> pack = Preview.Flatten(PreviewOf("install_modpack", PyDict.Of("instance", inst, "name", "fabulously")));
         Assert.Equal(dir, pack[1]);
-        Assert.Contains("预计新增文件数:安装时确定(多于 1 个)", pack);
+        Assert.Contains("预计新增文件数：安装时确定（多于 1 个）", pack);
 
         List<string> java = Preview.Flatten(PreviewOf("download_java", PyDict.Of("major", "17")));
         Assert.Contains(java, l => l.Contains("Java 运行时目录"));
@@ -227,10 +227,10 @@ public class AiPreviewTests
         string inst = NewInstance("launch");
         PyDict preview = PreviewOf("launch_game", PyDict.Of("instance", inst, "version", "1.20.1"));
         Assert.Equal("info", Py.S(preview.Get("kind")));
-        Assert.Equal("启动目标:", Py.S(preview.Get("head")));
+        Assert.Equal("启动目标：", Py.S(preview.Get("head")));
         List<string> lines = Preview.Flatten(preview);
-        Assert.Contains("实例:" + inst, lines);
-        Assert.Contains("版本:1.20.1", lines);
+        Assert.Contains("实例：" + inst, lines);
+        Assert.Contains("版本：1.20.1", lines);
     }
 
     [Fact]
@@ -246,9 +246,9 @@ public class AiPreviewTests
     [Fact]
     public void Flatten_AddsHeadPrefixAndDropsEmptyLines()
     {
-        PyDict row = PyDict.Of("kind", "summary", "head", "将被删除:",
-            "lines", new List<object> { "- mods/a.jar(1.0 KB)", "", "  ", "共 1 个文件,1.0 KB" }, "too_large", false);
-        Assert.Equal(new[] { "@@ 将被删除:", "- mods/a.jar(1.0 KB)", "  ", "共 1 个文件,1.0 KB" }, Preview.Flatten(row));
+        PyDict row = PyDict.Of("kind", "summary", "head", "将被删除：",
+            "lines", new List<object> { "- mods/a.jar(1.0 KB)", "", "  ", "共 1 个文件，1.0 KB" }, "too_large", false);
+        Assert.Equal(new[] { "@@ 将被删除：", "- mods/a.jar(1.0 KB)", "  ", "共 1 个文件，1.0 KB" }, Preview.Flatten(row));
 
         // head 已经是 @@ 开头的不再套一层
         List<string> raw = Preview.Flatten(PyDict.Of("head", "@@ 汇总", "lines", new List<object> { "+x" }));

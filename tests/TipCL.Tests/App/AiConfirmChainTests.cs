@@ -80,7 +80,7 @@ public class AiConfirmChainTests
         Assert.NotEmpty(lines);
         Assert.True(AiUiText.LooksLikeDiff(lines));
         Assert.Contains("+b = 2", lines);
-        Assert.Contains("@@ 将要写入的变更:", lines);
+        Assert.Contains("@@ 将要写入的变更：", lines);
         // 预览是写之前算的:拒绝之后原来的内容还在
         Assert.Equal("a = 1\n", File.ReadAllText(file));
     }
