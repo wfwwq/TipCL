@@ -411,6 +411,14 @@ internal sealed partial class MainWindow : Window
 		{
 			Debug.WriteLine("[wallpaper] 加载失败: " + ex);
 		}
+
+		// M8:Windows 在 connect 这条尾巴上还问两次「首次启动向导」与「反馈同意」
+		// (MainWindow.xaml.cs:378-385)。mac 侧同样接在这里,但带两道闸(非桌面生命周期 / 冒烟一律不弹)
+		// —— 判据、顺序、fire-and-forget 的理由逐条写在 MainWindow.Wiring.cs 里。
+		if (StartupPromptsAllowed())
+		{
+			AskStartupQuestions();
+		}
 	}
 
 	/// <summary>同步等待版:用例体跑在 AvaloniaSession 线程上,不能 await(见 D-79)。</summary>
