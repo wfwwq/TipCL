@@ -7,7 +7,10 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using TipCL.Models;
+using TipCL.Pages.Layout;
 using TipCL.Services;
+
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Pages;
 
@@ -75,9 +78,12 @@ public sealed class AccountPage : PageBase
 		border.Width = 240.0;
 		_heroBody.Visibility = Visibility.Collapsed;
 		RenderOptions.SetBitmapScalingMode(_heroBody, BitmapScalingMode.NearestNeighbor);
-		Grid grid3 = Ui.G(null, "Auto,*");
-		grid3.Add(border.M(0.0, 0.0, 14.0).VTop(), 0);
-		grid3.Add(_list, 0, 1);
+		// L4 分栏(设计 §4.E 第 9 处):左栏 = 头像卡(现状 Width=240),右栏 = 账号列表。
+		// 现状那 14px 右外边距改成 14px 分隔条(卡片外边距去掉),两栏几何与改动前完全等价;
+		// 比例存 v2 splits["account"]["hero"](比例模式下卡片改拉伸 + MinWidth 240,复位后回到 240 固定宽)
+		PageLayoutHost grid3 = new PageLayoutHost("account", "hero", GridLength.Auto, new GridLength(1.0, GridUnitType.Star));
+		grid3.SetLeft(border.VTop());
+		grid3.SetRight(_list);
 		// 布局自定义：账号操作与账号卡各成一个区块，默认顺序与可见性和旧版完全一致
 		base.Content = new BlockHost("account", new List<BlockSpec>
 		{

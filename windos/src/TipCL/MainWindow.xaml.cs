@@ -20,7 +20,10 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using TipCL.Models;
 using TipCL.Pages;
+using TipCL.Pages.Layout;
 using TipCL.Services;
+
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL;
 
@@ -198,6 +201,14 @@ public partial class MainWindow : Window
 		{
 			Navigate("settings");
 		};
+		// 顶栏页签 / 标题栏元素:按布局真源重建,即 v2 文档的 shell.tabs / shell.titlebar.*。
+		// 必须早于下面的 Navigate("launch") —— 它内部会调 SyncTabs 读这些页签 —— 也早于首帧渲染。
+		RebuildShellTabs();
+		LayoutStoreV2.LayoutChanged += OnLayoutChanged;
+		// 窄窗/宽窗两套布局(§0.1 Q6,D1):窗口尺寸一变就把**内容区**可用宽喂给布局层;
+		// 跨阈值时 LayoutVariantHost 会发 VariantChanged,我们据此刷新当前页的区块宿主。
+		base.SizeChanged += OnWindowSizeChanged;
+		LayoutVariantHost.VariantChanged += OnLayoutVariantChanged;
 		AiBtn.Click += delegate
 		{
 			Navigate("ai");
@@ -269,6 +280,11 @@ public partial class MainWindow : Window
 				}
 				_stagedUpdate = null;
 			}
+			LayoutStoreV2.LayoutChanged -= OnLayoutChanged;
+			// 静态事件必须对称退订(否则窗口对象被静态事件挂住);顺带把全局"可用宽"清回未知,
+			// 免得下一个窗口在首次 SizeChanged 之前用上一个窗口的宽度做变体判定。
+			LayoutVariantHost.VariantChanged -= OnLayoutVariantChanged;
+			LayoutVariantHost.Reset();
 			Wallpaper.Shutdown();
 			AppServices.Host?.Dispose();
 		};
@@ -1539,6 +1555,159 @@ public partial class MainWindow : Window
 		foreach (ToggleButton t in _pluginTabs)
 		{
 			t.IsChecked = ((string)t.Tag == _currentId);
+		}
+	}
+
+	// ————— 顶栏页签 / 标题栏元素:L7a,数据驱动,设计 §4.D —————
+	// 真源 = LayoutStoreV2,即 <数据目录>/ui_layout_v2.json 的 shell.tabs / shell.titlebar.*;
+	// 这一段只负责「把计划落到可视元素」;计划本身在 Pages/Layout/ShellTabs.cs,纯逻辑,net8 测试可直接加载。
+	private readonly Dictionary<string, ToggleButton> _shellTabMap = new Dictionary<string, ToggleButton>(StringComparer.Ordinal);
+
+	/// <summary>把 XAML 里的五个内置页签骨架登记成 key → 元素;只登记映射,不排序也不改显隐。</summary>
+	private void InitShellTabs()
+	{
+		if (_shellTabMap.Count != 0)
+		{
+			return;
+		}
+		_shellTabMap[ShellTabs.LaunchKey] = TabLaunch;
+		_shellTabMap[ShellTabs.LibraryKey] = TabLibrary;
+		_shellTabMap[ShellTabs.DownloadKey] = TabTasks;
+		_shellTabMap[ShellTabs.PluginsKey] = TabPlugins;
+		_shellTabMap[ShellTabs.SettingsKey] = TabSettings;
+	}
+
+	/// <summary>
+	/// 按 shell.tabs 重建顶栏页签:内置页签按计划顺序进可视树,隐藏的不进可视树,顺序即用户顺序;
+	/// 文案一律走 ShellTabs.Label;插件动态页签由 MainWindow.Plugins.cs 管理,这里重新追加在末尾。
+	/// 默认为 shell.tabs = 启动/实例库/下载/插件/设置 → 与改动前同顺序、同文案、同高亮,逐像素等价。
+	/// </summary>
+	private void RebuildShellTabs()
+	{
+		if (TopTabPanel == null)
+		{
+			return;
+		}
+		InitShellTabs();
+		ShellLayout shell = ShellTabs.CurrentShell();
+		TopTabPanel.Children.Clear();
+		foreach (string key in ShellTabs.OrderedKeys(shell))
+		{
+			if (_shellTabMap.TryGetValue(key, out ToggleButton tab))
+			{
+				tab.Content = ShellTabs.Label(key);
+				tab.Tag = key;
+				TopTabPanel.Children.Add(tab);
+			}
+		}
+		foreach (ToggleButton t in _pluginTabs)
+		{
+			if (!TopTabPanel.Children.Contains(t))
+			{
+				TopTabPanel.Children.Add(t);
+			}
+		}
+		ApplyTitlebarToggles(shell);
+		SyncTabs();
+	}
+
+	/// <summary>
+	/// 标题栏元素开关:只改显隐。AI 入口的右侧玻璃药丸钮 + Ctrl+K 是用户定案 D-16 的形态,
+	/// 只允许隐藏/显示;窗口按钮的最小化/最大化/关闭,以及窗口圆角与背板逻辑一律不动。
+	/// </summary>
+	private void ApplyTitlebarToggles(ShellLayout shell)
+	{
+		BridgePill.Visibility = (ShellTabs.ShowBridge(shell) ? Visibility.Visible : Visibility.Collapsed);
+		AiBtn.Visibility = (ShellTabs.ShowAi(shell) ? Visibility.Visible : Visibility.Collapsed);
+		ThemeBtn.Visibility = (ShellTabs.ShowTheme(shell) ? Visibility.Visible : Visibility.Collapsed);
+		AccBtn.Visibility = (ShellTabs.ShowAccount(shell) ? Visibility.Visible : Visibility.Collapsed);
+		// 四项全关时顺带收起它们与窗口按钮之间的那条分隔线;默认四项全开 → 这一句恒等于现状,零视觉变化
+		TitleSep.Visibility = (ShellTabs.AnyTitlebarVisible(shell) ? Visibility.Visible : Visibility.Collapsed);
+	}
+
+	// 布局 v2 保存后重建外壳:LayoutChanged 是静态事件,可能从任意线程来 → 统一 post 回 UI 线程
+	private void OnLayoutChanged()
+	{
+		try
+		{
+			base.Dispatcher.BeginInvoke((Action)RebuildShellTabs);
+		}
+		catch
+		{
+		}
+	}
+
+	// ————— 窄窗/宽窗两套布局(§0.1 Q6,D1 接线) —————
+
+	// 窗口尺寸变化:SizeChanged 触发时 PageHost 往往还没重排完 → 放到 Loaded 优先级(布局完成后)再读实测宽
+	private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
+	{
+		try
+		{
+			base.Dispatcher.BeginInvoke((Action)UpdateLayoutWidthHint, DispatcherPriority.Loaded);
+		}
+		catch
+		{
+		}
+	}
+
+	// 把内容区实测宽喂给布局层(取不到内容区宽时按窗口宽兜底;都取不到就是 0 = 不做变体判定)
+	private void UpdateLayoutWidthHint()
+	{
+		double width = 0.0;
+		try
+		{
+			if (PageHost != null && PageHost.ActualWidth > 0.0)
+			{
+				width = PageHost.ActualWidth;
+			}
+			else if (RootBorder != null && RootBorder.ActualWidth > 0.0)
+			{
+				width = RootBorder.ActualWidth;
+			}
+			else
+			{
+				width = base.ActualWidth;
+			}
+		}
+		catch
+		{
+		}
+		// 只有真的跨过阈值(变体名变了)才会回调 OnLayoutVariantChanged —— 拖动窗口不会每帧重建
+		LayoutVariantHost.Apply(width);
+	}
+
+	private void OnLayoutVariantChanged(string variant)
+	{
+		try
+		{
+			PageBase page = _current;
+			if (page != null)
+			{
+				RefreshLayoutHosts(page);
+			}
+		}
+		catch
+		{
+		}
+	}
+
+	// 当前页(含设置页里内嵌的页面)所有区块宿主按新的可用宽重读一次文档。
+	// 刻意不重建页面:区块宿主自己重排就够了,页面的筛选/滚动/选中状态一个都不丢。
+	private static void RefreshLayoutHosts(DependencyObject root)
+	{
+		int count = VisualTreeHelper.GetChildrenCount(root);
+		for (int i = 0; i < count; i++)
+		{
+			DependencyObject child = VisualTreeHelper.GetChild(root, i);
+			if (child is BlockHost host)
+			{
+				host.Editor.ApplyVariant(LayoutVariantHost.Width);
+			}
+			else if (child != null)
+			{
+				RefreshLayoutHosts(child);
+			}
 		}
 	}
 

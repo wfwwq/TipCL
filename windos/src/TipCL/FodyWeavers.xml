@@ -1,5 +1,9 @@
 <Weavers xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FodyWeavers.xsd">
   <!-- WebView2Loader.dll 不让 Costura 处理，由 WebViewHost 自己从内嵌资源释放 -->
   <!-- IncludeDebugSymbols=false：依赖 pdb 不进单 exe；WinForms 托管层全库零引用（WPF 用 WebView2.Wpf），一并排除 -->
-  <Costura ExcludeAssemblies="WebView2Loader" IncludeDebugSymbols="false" />
+  <!-- 分隔符是 | 不是逗号(Costura.Fody 6.0.0 自带 schema 对 XML **属性**形式写的是 "delimited with |";
+       写成逗号会把整串当成一个程序集名,既排除不掉目标程序集,还会把 WebView2Loader 的排除一并搞失效)。
+       System.Text.Encoding.CodePages 只是 ImageSharp 2.1.13 的传递依赖,本仓代码零引用
+       (net48 的 Encoding.GetEncoding(936/437) 由 mscorlib 原生提供) → 排除出单 exe,见 DECISIONS D-38 的 B1。 -->
+  <Costura ExcludeAssemblies="WebView2Loader|System.Text.Encoding.CodePages" IncludeDebugSymbols="false" />
 </Weavers>

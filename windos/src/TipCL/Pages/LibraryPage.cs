@@ -9,7 +9,10 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using TipCL.Models;
+using TipCL.Pages.Layout;
 using TipCL.Services;
+
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Pages;
 
@@ -117,7 +120,8 @@ public sealed class LibraryPage : PageBase
 	private object? _shell;
 
 	// WP-U3 页面布局自定义：双栏外壳与左右两栏（文件夹栏可经布局文档收起，字段与数据逻辑不受影响）
-	private readonly Grid _body;
+	// L4:双栏改由 PageLayoutHost 承载(分隔条 + 比例记忆,比例存 v2 splits["library"]["folders"])
+	private readonly PageLayoutHost _body;
 
 	private readonly Border _leftCard;
 
@@ -187,7 +191,13 @@ public sealed class LibraryPage : PageBase
 		_leftCard = left;
 		_rightCol = right;
 		// 行高显式 Auto：网格自身高度恒等于内容，杜绝隐式 * 行被外层余量撑高（左栏卡片随之拉伸的根因向量）
-		_body = Ui.G("Auto");
+		_body = new PageLayoutHost("library", "folders", new GridLength(1.0, GridUnitType.Star), new GridLength(2.0, GridUnitType.Star));
+		_body.RowDefinitions.Add(new RowDefinition
+		{
+			Height = GridLength.Auto
+		});
+		_body.SetLeft(_leftCard);
+		_body.SetRight(_rightCol);
 		base.Content = PageBase.ScrollBody(_body);
 		ApplyFolderLayout();
 		EnableDrop(() => new FileDrop.DropContext
@@ -235,33 +245,11 @@ public sealed class LibraryPage : PageBase
 		return true;
 	}
 
-	// 按布局文档应用文件夹栏显隐：可见 → 双栏（"*,18,2*"，与现状一致）；隐藏 → 列定义改 "*"、左栏移出可视树（数据逻辑照常），右栏独占
+	// 按布局文档应用文件夹栏显隐:可见 → 双栏(L4 起由 PageLayoutHost 管列宽与比例);隐藏 → 左栏与分隔条一起收起(列宽占 0),右栏独占,与原来自管列定义等价
 	private void ApplyFolderLayout()
 	{
 		bool folders = FoldersVisible();
-		_body.ColumnDefinitions.Clear();
-		// 右栏（版本选择）是页面本体，任何布局下都必须挂在 _body 里
-		if (!_body.Children.Contains(_rightCol))
-		{
-			_body.Children.Add(_rightCol);
-		}
-		if (folders)
-		{
-			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
-			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18.0) });
-			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2.0, GridUnitType.Star) });
-			if (!_body.Children.Contains(_leftCard))
-			{
-				_body.Children.Add(_leftCard);
-			}
-			Grid.SetColumn(_rightCol, 2);
-		}
-		else
-		{
-			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
-			_body.Children.Remove(_leftCard);
-			Grid.SetColumn(_rightCol, 0);
-		}
+		_body.SetLeftVisible(folders);
 		_body.ContextMenu = LayoutMenu(folders);
 	}
 

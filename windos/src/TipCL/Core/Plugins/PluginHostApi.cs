@@ -229,7 +229,7 @@ public sealed class PluginHostApi
 		case "ui.register":
 		{
 			string kind = Py.S(prm.Get("kind"));
-			if (!new[] { "page", "aiView", "dashCard", "overlay", "settings", "action" }.Contains(kind))
+			if (!new[] { "page", "aiView", "dashCard", "block", "overlay", "settings", "action" }.Contains(kind))
 			{
 				throw new PluginRpcException("invalid_params", "未知 UI 类型：" + kind);
 			}

@@ -248,6 +248,7 @@ public static class NativePluginUi
 			{
 				"page" => "CreatePage",
 				"dashCard" => "CreateDashCard",
+				"block" => "CreateBlock",
 				_ => "CreateAiView",
 			};
 			object[] args = (kind == "aiView") ? new object[3] { plugin, id, chatId ?? "" } : new object[2] { plugin, id };
@@ -274,6 +275,12 @@ public static class NativePluginUi
 		return Create(plugin, "dashCard", id, null);
 	}
 
+	/// <summary>原生区块(kind=block):布局文档里用 <c>plugin:&lt;plugin&gt;:&lt;id&gt;</c> 引用它。</summary>
+	public static FrameworkElement? CreateBlock(string plugin, string id)
+	{
+		return Create(plugin, "block", id, null);
+	}
+
 	public static FrameworkElement? CreateAiView(string plugin, string id, string chatId)
 	{
 		return Create(plugin, "aiView", id, chatId);
@@ -288,6 +295,7 @@ public static class NativePluginUi
 			{
 				"page" => CreatePage(c.Plugin, c.Id),
 				"dashCard" => CreateDashCard(c.Plugin, c.Id),
+				"block" => CreateBlock(c.Plugin, c.Id),
 				"aiView" => CreateAiView(c.Plugin, c.Id, chatId ?? ""),
 				_ => null,
 			};

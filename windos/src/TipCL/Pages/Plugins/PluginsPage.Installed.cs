@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using TipCL.Pages.Layout;
 using TipCL.Services;
 
 namespace TipCL.Pages.Plugins;
@@ -37,7 +38,9 @@ public sealed partial class PluginsPage
 		{
 			list.RemoveAll((ProgressBar b) => b.Tag as string == "installed");
 		}
-		_installedHost.Columns = (_installed.Count == 0) ? 1 : 3;
+		// L4(设计 §2.3 第 10 处):已安装网格列数进布局文档 pages["plugins"].cols(只在页面声明 mode=grid 时生效;
+		// 现状 3 列保持不变,写入方是 L2/L5 的网格编辑)
+		_installedHost.Columns = (_installed.Count == 0) ? 1 : SplitRatioStore.PageColumns("plugins", 3, 1, 6);
 		if (_installed.Count == 0)
 		{
 			SPanel empty = Ui.Empty("\uea86", I18n.L("还没有安装插件"), I18n.L("去插件市场看看，或者把插件 zip 拖进这个页面。"));

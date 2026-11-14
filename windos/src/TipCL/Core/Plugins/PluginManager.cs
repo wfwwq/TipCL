@@ -1256,7 +1256,7 @@ public sealed class PluginManager
 		{
 			throw new PluginRpcException("invalid_params", kind + " 缺少 id");
 		}
-		if ((kind == "page" || kind == "aiView" || kind == "dashCard" || kind == "overlay" || kind == "settings") && Py.S(spec.Get("view")).Length == 0)
+		if ((kind == "page" || kind == "aiView" || kind == "dashCard" || kind == "block" || kind == "overlay" || kind == "settings") && Py.S(spec.Get("view")).Length == 0)
 		{
 			throw new PluginRpcException("invalid_params", kind + " 缺少 view");
 		}
@@ -1334,7 +1334,7 @@ public sealed class PluginManager
 		{
 			list = _ui.ToList();
 		}
-		List<object> rows = new List<object>();
+		List<PyDict> rows = new List<PyDict>();
 		foreach (UiContribution u in list)
 		{
 			PluginInstance p = Get(u.Plugin);
@@ -1343,8 +1343,7 @@ public sealed class PluginManager
 				continue;
 			}
 			string view = Py.S(u.Spec.Get("view"));
-			PyDict row = PyDict.Of("plugin", u.Plugin, "kind", u.Kind, "id", u.Id, "label", Py.S(Py.Or(u.Spec.Get("label"), p.Manifest?.Name)), "icon", IconOf(p, Py.S(u.Spec.Get("icon"))), "order", Py.IntOr(u.Spec.Get("order"), 100L), "url", ViewUrl(u.Plugin, view), "spec", u.Spec.Copy(), "native", false, "key", "plugin:" + u.Plugin + "/" + u.Id);
-			rows.Add(row);
+			rows.Add(PyDict.Of("plugin", u.Plugin, "kind", u.Kind, "id", u.Id, "label", Py.S(Py.Or(u.Spec.Get("label"), p.Manifest?.Name)), "icon", IconOf(p, Py.S(u.Spec.Get("icon"))), "order", Py.IntOr(u.Spec.Get("order"), 100L), "url", ViewUrl(u.Plugin, view), "spec", u.Spec.Copy(), "native", false, "key", "plugin:" + u.Plugin + "/" + u.Id));
 		}
 		try
 		{
@@ -1353,13 +1352,49 @@ public sealed class PluginManager
 		catch (Exception)
 		{
 		}
-		return rows.OrderBy((object r) => Py.Int(((PyDict)r)["order"])).ToList();
+		return DedupNativeFirst(rows).OrderBy((PyDict r) => Py.Int(r["order"])).Cast<object>().ToList();
+	}
+
+	/// <summary>
+	/// 同一个 <c>(plugin, kind, id)</c> 只留一行,**native 行优先**。为什么需要:manifest 的
+	/// <c>contributes.&lt;kind&gt;</c> 声明与 .NET 插件的运行时 <c>ctx.Ui.Register*</c> 会为**同一个入口**
+	/// 各产生一行(前者在 <see cref="UiRows"/> 里 <c>native:false</c>,后者在 <see cref="NativeUiRows"/> 里
+	/// <c>native:true</c>)。前端 <c>PluginUi.Find</c> 是 <c>FirstOrDefault</c>,拿到非 native 那一行就会去等
+	/// WebView 地址(<c>url:""</c>)⇒ 显示「插件页面还没准备好」,**原生控件永远渲染不出来**。
+	/// 契约(<c>docs/plugins/DESIGN.md</c> §10 <c>plugins_ui</c>)只描述「.NET 插件的原生界面行上
+	/// <c>native:true</c>、<c>url:""</c>」,重复行不在契约里 ⇒ 在这里收敛成一行。
+	/// 为什么键里**必须**带 plugin:两个不同插件各自贡献一个同 id 的块是合法的,而前端查的是
+	/// <c>(plugin, kind, id)</c>、行的身份字段是 <c>key = "plugin:&lt;plugin&gt;/&lt;id&gt;"</c>;
+	/// 只按 <c>(kind, id)</c> 去重会把 B 插件的块当成 A 插件的重复行**吞掉**。
+	/// 顺序按首次出现的位置,替换成 native 行时不动位置。
+	/// **public** 是刻意的:仓库没有 <c>InternalsVisibleTo</c>,net8 单测宿主(不同程序集)要能直接钉住这条规则
+	/// (与 <c>WidgetCommon</c> 那批"给测试直接验证的门禁"同一口径)。
+	/// </summary>
+	public static List<PyDict> DedupNativeFirst(List<PyDict> rows)
+	{
+		List<PyDict> kept = new List<PyDict>();
+		Dictionary<string, int> at = new Dictionary<string, int>(StringComparer.Ordinal);
+		foreach (PyDict row in rows)
+		{
+			string key = Py.S(row["plugin"]) + "\n" + Py.S(row["kind"]) + "\n" + Py.S(row["id"]);
+			if (at.TryGetValue(key, out int i))
+			{
+				if (Py.Truthy(row["native"]) && !Py.Truthy(kept[i]["native"]))
+				{
+					kept[i] = row;
+				}
+				continue;
+			}
+			at[key] = kept.Count;
+			kept.Add(row);
+		}
+		return kept;
 	}
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	private static List<object> NativeUiRows()
+	private static List<PyDict> NativeUiRows()
 	{
-		List<object> rows = new List<object>();
+		List<PyDict> rows = new List<PyDict>();
 		foreach (TipCL.Plugins.NativeUiEntry e in TipCL.Plugins.PluginUiRegistry.Entries)
 		{
 			PyDict spec = PyDict.Of("id", e.Id, "label", e.Label, "icon", e.Icon ?? "", "order", e.Order, "group", e.Group ?? "more", "defaultW", e.DefaultW, "defaultH", e.DefaultH, "presets", (e.Presets ?? new List<string>()).Cast<object>().ToList());

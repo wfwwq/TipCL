@@ -30,12 +30,15 @@
               </Grid>
               <TextBlock Text="TipCL" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0" />
             </StackPanel>
+            <!-- 顶栏页签:顺序、显隐与文案全部由 shell.tabs 驱动,见 MainWindow.RebuildShellTabs +
+                 Pages/Layout/ShellTabs.cs;这里只留五个内置页签的骨架与样式,书写顺序无关,每次都会按计划重排。
+                 插件动态页签仍由 Pages/Plugins/MainWindow.Plugins.cs 追加在末尾。 -->
             <StackPanel x:Name="TopTabPanel" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left" shell:WindowChrome.IsHitTestVisibleInChrome="True">
-              <ToggleButton Name="TabLaunch" Style="{StaticResource Tab.Top}" Content="启动" />
-              <ToggleButton Name="TabLibrary" Style="{StaticResource Tab.Top}" Content="实例库" />
-              <ToggleButton Name="TabTasks" Style="{StaticResource Tab.Top}" Content="下载" />
-              <ToggleButton Name="TabPlugins" Style="{StaticResource Tab.Top}" Content="插件" />
-              <ToggleButton Name="TabSettings" Style="{StaticResource Tab.Top}" Content="设置" />
+              <ToggleButton Name="TabLaunch" Style="{StaticResource Tab.Top}" />
+              <ToggleButton Name="TabLibrary" Style="{StaticResource Tab.Top}" />
+              <ToggleButton Name="TabTasks" Style="{StaticResource Tab.Top}" />
+              <ToggleButton Name="TabPlugins" Style="{StaticResource Tab.Top}" />
+              <ToggleButton Name="TabSettings" Style="{StaticResource Tab.Top}" />
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
               <Button Name="AiBtn" Style="{StaticResource Btn.TitleChip}" Height="26" Padding="0" VerticalAlignment="Center" Margin="0,0,2,0" IsTabStop="True">
@@ -58,7 +61,7 @@
                   <TextBlock Name="AccName" FontSize="12.5" FontWeight="Medium" MaxWidth="120" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="7,0,0,0" />
                 </StackPanel>
               </Button>
-              <Rectangle Width="1" Height="16" Margin="6,0" Fill="{DynamicResource B.TitleSep}" />
+              <Rectangle Name="TitleSep" Width="1" Height="16" Margin="6,0" Fill="{DynamicResource B.TitleSep}" />
               <Button Name="MinBtn" Style="{StaticResource Btn.Caption}">
                 <Path Style="{StaticResource Ico.Caption}" Data="M0.5,5 H9.5" />
               </Button>

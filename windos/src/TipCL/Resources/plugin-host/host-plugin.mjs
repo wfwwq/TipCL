@@ -388,6 +388,12 @@ export function createContext(plugin, scope) {
     page: (spec) => uiRegister('page', spec),
     aiView: (spec) => uiRegister('aiView', spec),
     dashCard: (spec) => uiRegister('dashCard', spec),
+    /**
+     * 页面区块(kind=`block`):块 id 的命名空间是 `plugin:<本插件>:<块 id>`(布局文档 pages[].blocks[] 里引用它)。
+     * 与 dashCard 同形状;插件被禁用/卸载后块**保留**,界面显示「不可用」。
+     * @param {{ id: string, label?: string, view: string, group?: string }} spec
+     */
+    block: (spec) => uiRegister('block', spec),
     overlay: (spec) => uiRegister('overlay', spec),
     settings: (spec) => uiRegister('settings', { id: 'settings', ...spec }),
     /** @param {any} spec @param {(context: any) => void} handler */

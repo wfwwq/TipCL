@@ -105,6 +105,13 @@ public sealed class CatalogPage : PageBase
 
 	private List<string> _installedNames = new List<string>();
 
+	/// <summary>
+	/// 布局寻址用的稳定 pageId(设计 §5.2「CatalogPage 给 pageId」):下载页 6 个分段内嵌的都是本页,
+	/// 各自带 kind(<c>catalog:mod</c> / <c>catalog:modpack</c> / ...)。本页是单列 + 26px 外边距,没有左右分栏;
+	/// 这个 id 只供 L2/L5 以后把本页接进 v2 pages(如 grid 模式的 cols)时寻址用。
+	/// </summary>
+	public string LayoutPageId => "catalog:" + _kind.Key;
+
 	public override string Title
 	{
 		get

@@ -17,16 +17,68 @@ namespace TipCL.Tests;
 /// <summary>用一个假的手机端（按手机启动器存档互传协议实现）跑一遍：握手 → 对比 → 推送 → 拉取 → 冲突判定。</summary>
 public class PhoneLinkTests
 {
-	/// <summary>模拟手机端 HTTP 服务：世界放在 Dir/global 下。</summary>
+	/// <summary>模拟手机端 HTTP 服务:世界放在 Dir/global 下。</summary>
+	/// <remarks>
+	/// 用裸 <see cref="TcpListener"/> 手写最小 HTTP/1.1 服务端,不用 <c>HttpListener</c>:
+	/// 在受限宿主里(本仓库的机器验收环境),**派生进程**的 HTTP Server API 初始化会被拒
+	/// ——实测 <c>HttpInitialize(HTTP_INITIALIZE_SERVER, 1.0/2.0)</c> 返回 5(ERROR_ACCESS_DENIED),
+	/// 于是 <c>HttpListener.IsSupported == false</c>,<c>Start()</c> 在 <c>SetupV2Config()</c>
+	/// 建 http.sys 会话时抛 <c>HttpListenerException ErrorCode=6</c>「句柄无效」。
+	/// 这跟被测逻辑(握手/对比/推送/拉取/冲突)毫无关系,却会让整条用例在任何此类环境直接失败
+	/// (dotnet test 的 testhost 也是派生进程)。裸 socket 不受这条限制,且换到 Linux CI 上行为一致。
+	/// </remarks>
 	private sealed class FakePhone : IDisposable
 	{
+		/// <summary>解析后的请求。</summary>
+		private sealed class Req
+		{
+			public string Method = "";
+
+			public string Path = "";
+
+			public string Query = "";
+
+			public readonly Dictionary<string, string> Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+			public byte[] Body = Array.Empty<byte>();
+
+			public string Header(string name)
+			{
+				return Headers.TryGetValue(name, out string v) ? v : "";
+			}
+
+			/// <summary>取查询串参数(缺省返回 null,与 HttpListener 的 QueryString 一致)。</summary>
+			public string Q(string name)
+			{
+				foreach (string pair in Query.Split('&'))
+				{
+					int i = pair.IndexOf('=');
+					if (i > 0 && Uri.UnescapeDataString(pair.Substring(0, i)) == name)
+					{
+						return Uri.UnescapeDataString(pair.Substring(i + 1).Replace("+", " "));
+					}
+				}
+				return null;
+			}
+		}
+
+		/// <summary>要回给客户端的东西。</summary>
+		private sealed class Res
+		{
+			public int Code = 200;
+
+			public string ContentType = "application/json";
+
+			public byte[] Body = Array.Empty<byte>();
+		}
+
 		public readonly string Dir;
 
 		public readonly string Token = "123456";
 
 		public readonly int Port;
 
-		private readonly HttpListener _http = new HttpListener();
+		private readonly TcpListener _tcp;
 
 		private readonly Thread _thread;
 
@@ -36,47 +88,173 @@ public class PhoneLinkTests
 		{
 			Dir = dir;
 			Directory.CreateDirectory(Saves);
-			TcpListener probe = new TcpListener(IPAddress.Loopback, 0);
-			probe.Start();
-			Port = ((IPEndPoint)probe.LocalEndpoint).Port;
-			probe.Stop();
-			_http.Prefixes.Add("http://127.0.0.1:" + Port + "/");
-			_http.Start();
+			_tcp = new TcpListener(IPAddress.Loopback, 0);
+			_tcp.Start();
+			Port = ((IPEndPoint)_tcp.LocalEndpoint).Port;
 			_thread = new Thread(Loop) { IsBackground = true };
 			_thread.Start();
 		}
 
 		private void Loop()
 		{
-			while (_http.IsListening)
+			while (true)
 			{
-				HttpListenerContext c;
+				TcpClient client;
 				try
 				{
-					c = _http.GetContext();
+					client = _tcp.AcceptTcpClient();
 				}
 				catch (Exception)
 				{
-					return;
+					return; // Dispose 里 Stop() 让 Accept 抛异常 → 正常收工
 				}
 				try
 				{
-					Handle(c);
+					using (client)
+					using (NetworkStream s = client.GetStream())
+					{
+						Serve(s);
+					}
 				}
-				catch (Exception e)
+				catch (Exception)
 				{
-					Json(c, 500, new { ok = false, error = e.Message });
+					// 单个连接出错不影响后续请求(与原来 HttpListener 版的宽容度一致)
 				}
 			}
 		}
 
-		private static void Json(HttpListenerContext c, int code, object o)
+		private static string ReadHead(Stream s)
 		{
-			byte[] b = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(o));
-			c.Response.StatusCode = code;
-			c.Response.ContentType = "application/json";
-			c.Response.OutputStream.Write(b, 0, b.Length);
-			c.Response.Close();
+			MemoryStream ms = new MemoryStream();
+			byte[] last4 = new byte[4];
+			while (true)
+			{
+				int b = s.ReadByte();
+				if (b < 0)
+				{
+					break;
+				}
+				ms.WriteByte((byte)b);
+				last4[0] = last4[1];
+				last4[1] = last4[2];
+				last4[2] = last4[3];
+				last4[3] = (byte)b;
+				if (ms.Length >= 4 && last4[0] == 13 && last4[1] == 10 && last4[2] == 13 && last4[3] == 10)
+				{
+					break; // CRLFCRLF = 头结束
+				}
+				if (ms.Length > 65536)
+				{
+					throw new InvalidDataException("请求头过大");
+				}
+			}
+			return Encoding.UTF8.GetString(ms.ToArray());
+		}
+
+		private static Req ReadRequest(Stream s)
+		{
+			string head = ReadHead(s);
+			if (head.Length == 0)
+			{
+				return null;
+			}
+			string[] lines = head.Split(new[] { "\r\n" }, StringSplitOptions.None);
+			string[] first = lines[0].Split(' ');
+			Req req = new Req
+			{
+				Method = (first.Length > 0) ? first[0] : "GET"
+			};
+			string target = (first.Length > 1) ? first[1] : "/";
+			int q = target.IndexOf('?');
+			req.Path = ((q < 0) ? target : target.Substring(0, q));
+			req.Query = ((q < 0) ? "" : target.Substring(q + 1));
+			for (int i = 1; i < lines.Length; i++)
+			{
+				int c = lines[i].IndexOf(':');
+				if (c > 0)
+				{
+					req.Headers[lines[i].Substring(0, c).Trim()] = lines[i].Substring(c + 1).Trim();
+				}
+			}
+			return req;
+		}
+
+		private static void ReadBody(Stream s, Req req)
+		{
+			if (!int.TryParse(req.Header("Content-Length"), out int len) || len <= 0)
+			{
+				return;
+			}
+			byte[] buf = new byte[len];
+			int off = 0;
+			while (off < len)
+			{
+				int n = s.Read(buf, off, len - off);
+				if (n <= 0)
+				{
+					throw new EndOfStreamException("请求体不完整");
+				}
+				off += n;
+			}
+			req.Body = buf;
+		}
+
+		private void Serve(Stream s)
+		{
+			Req req = ReadRequest(s);
+			if (req == null)
+			{
+				return;
+			}
+			// HttpWebRequest 上传时会先发 Expect: 100-continue 再等 100 才送 body(http.sys 以前代劳,这里自己回)
+			if (req.Header("Expect").IndexOf("100-continue", StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				WriteAscii(s, "HTTP/1.1 100 Continue\r\n\r\n");
+			}
+			ReadBody(s, req);
+			Write(s, Handle(req));
+		}
+
+		private static void WriteAscii(Stream s, string text)
+		{
+			byte[] b = Encoding.ASCII.GetBytes(text);
+			s.Write(b, 0, b.Length);
+			s.Flush();
+		}
+
+		private static string Reason(int code)
+		{
+			switch (code)
+			{
+			case 200:
+				return "OK";
+			case 401:
+				return "Unauthorized";
+			case 404:
+				return "Not Found";
+			case 409:
+				return "Conflict";
+			case 500:
+				return "Internal Server Error";
+			default:
+				return "Error";
+			}
+		}
+
+		/// <summary>回 Content-Length + Connection: close:客户端(GetJson / Upload / Download)都按长度或读到 EOF 收尾,都不受影响。</summary>
+		private static void Write(Stream s, Res res)
+		{
+			WriteAscii(s, "HTTP/1.1 " + res.Code + " " + Reason(res.Code) + "\r\n"
+				+ "Content-Type: " + res.ContentType + "\r\n"
+				+ "Content-Length: " + res.Body.Length + "\r\n"
+				+ "Connection: close\r\n\r\n");
+			s.Write(res.Body, 0, res.Body.Length);
+			s.Flush();
+		}
+
+		private static Res Json(int code, object o)
+		{
+			return new Res { Code = code, Body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(o)) };
 		}
 
 		private static long MaxMtime(string d)
@@ -84,54 +262,49 @@ public class PhoneLinkTests
 			return Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories).Select(f => new DateTimeOffset(File.GetLastWriteTimeUtc(f)).ToUnixTimeMilliseconds()).DefaultIfEmpty(0).Max();
 		}
 
-		private void Handle(HttpListenerContext c)
+		private Res Handle(Req r)
 		{
-			HttpListenerRequest r = c.Request;
-			if (r.Headers["X-PyMCL-Token"] != Token)
+			if (r.Header("X-PyMCL-Token") != Token)
 			{
-				Json(c, 401, new { error = "unauthorized" });
-				return;
+				return Json(401, new { error = "unauthorized" });
 			}
-			string name = r.QueryString["name"] ?? "";
+			string name = r.Q("name") ?? "";
 			string wd = Path.Combine(Saves, name);
-			switch (r.Url.AbsolutePath)
+			switch (r.Path)
 			{
 			case "/api/ping":
-				Json(c, 200, new { app = "PyMCL", protocol = 1, device = "Test Phone", android = "14", port = Port, token = Token, deviceTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() });
-				return;
+				return Json(200, new { app = "PyMCL", protocol = 1, device = "Test Phone", android = "14", port = Port, token = Token, deviceTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() });
 			case "/api/worlds":
-				Json(c, 200, new
+				return Json(200, new
 				{
 					root = new { id = "global", label = "全局存档", exists = true },
 					roots = new[] { new { id = "global", label = "全局存档" }, new { id = "v:1.20.1", label = "版本隔离 1.20.1" } },
 					worlds = Directory.GetDirectories(Saves).Where(d => File.Exists(Path.Combine(d, "level.dat"))).Select(d => new { dirName = Path.GetFileName(d), sizeBytes = 1L, fileCount = 1L, lastModified = MaxMtime(d) }).ToArray()
 				});
-				return;
 			case "/api/worlds/download":
+			{
 				if (!Directory.Exists(wd))
 				{
-					Json(c, 404, new { error = "world not found" });
-					return;
+					return Json(404, new { error = "world not found" });
 				}
-				c.Response.ContentType = "application/zip";
-				c.Response.SendChunked = true;
-				SaveSync.ExportZip(wd, c.Response.OutputStream);
-				c.Response.Close();
-				return;
+				// 原来的实现是 SendChunked 边写边发;这里先在内存里成型,好给出 Content-Length(测试存档只有几 KB)
+				using (MemoryStream zip = new MemoryStream())
+				{
+					SaveSync.ExportZip(wd, zip);
+					return new Res { Code = 200, ContentType = "application/zip", Body = zip.ToArray() };
+				}
+			}
 			case "/api/worlds/upload":
 			{
-				if (Directory.Exists(wd) && r.QueryString["replace"] != "1")
+				if (Directory.Exists(wd) && r.Q("replace") != "1")
 				{
-					Json(c, 409, new { ok = false, error = "conflict" });
-					return;
+					return Json(409, new { ok = false, error = "conflict" });
 				}
-				MemoryStream ms = new MemoryStream();
-				r.InputStream.CopyTo(ms);
 				if (Directory.Exists(wd))
 				{
 					Directory.Delete(wd, true);
 				}
-				ms.Position = 0;
+				using (MemoryStream ms = new MemoryStream(r.Body))
 				using (ZipArchive z = new ZipArchive(ms))
 				{
 					foreach (ZipArchiveEntry e in z.Entries)
@@ -143,12 +316,10 @@ public class PhoneLinkTests
 						File.SetLastWriteTime(dst, e.LastWriteTime.DateTime);
 					}
 				}
-				Json(c, 200, new { ok = true, name, replaced = r.QueryString["replace"] == "1" });
-				return;
+				return Json(200, new { ok = true, name, replaced = r.Q("replace") == "1" });
 			}
 			default:
-				Json(c, 404, new { error = "not found" });
-				return;
+				return Json(404, new { error = "not found" });
 			}
 		}
 
@@ -156,8 +327,7 @@ public class PhoneLinkTests
 		{
 			try
 			{
-				_http.Stop();
-				_http.Close();
+				_tcp.Stop();
 			}
 			catch (Exception)
 			{

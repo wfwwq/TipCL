@@ -89,11 +89,20 @@
     <!-- 内置图标字体：替代系统 Segoe MDL2 / Fluent Icons -->
     <Resource Include="Resources\fonts\TipCLIcons.ttf" />
     <!-- 内置资源：词表与 AI 模型规则（CoreResources 以 TipCL.Core.<路径> 读取） -->
-    <EmbeddedResource Include="Resources\locales\en.json" LogicalName="TipCL.Core.locales.en.json" />
-    <EmbeddedResource Include="Resources\locales\zh_CN.json" LogicalName="TipCL.Core.locales.zh_CN.json" />
-    <EmbeddedResource Include="Resources\ai\model_rules.json" LogicalName="TipCL.Core.ai.model_rules.json" />
+    <!-- 上面这些源文件先由 tools/pack-core-resources.ps1 确定性 gzip 成同目录 .gz,再内嵌;
+         读取侧由 CoreResources.ReadByResourceName 按 gzip 魔数透明解压 → Payload / Python / Node 侧零改动。
+         注意:LogicalName 必须与未压缩时逐字相同(CoreResources.ListDir 靠「前缀 + 恰好一个点」枚举,
+         把 .gz 后缀带进 LogicalName 会让 ListDir 直接把它过滤掉);
+         改了源就必须重跑 pack-core-resources.ps1,否则 tests/TipCL.Tests/CoreResourcesPackTests.cs 会当场红。 -->
+    <EmbeddedResource Include="Resources\locales\en.json.gz" LogicalName="TipCL.Core.locales.en.json" WithCulture="false" />
+    <EmbeddedResource Include="Resources\locales\zh_CN.json.gz" LogicalName="TipCL.Core.locales.zh_CN.json" WithCulture="false" />
+    <EmbeddedResource Include="Resources\ai\model_rules.json.gz" LogicalName="TipCL.Core.ai.model_rules.json" WithCulture="false" />
     <!-- 插件 Node 宿主脚本（node-host 维护；运行时释放到 runtime/plugin-host，见 Core/Plugins/NodeRuntime.cs） -->
-    <EmbeddedResource Include="Resources\plugin-host\**\*" LogicalName="TipCL.Core.plugin-host.%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- host.mjs.gz / sdk.js.gz 这类取 %(Filename) 正好去掉 .gz;tipcl-plugin.d.ts.gz 是多点文件名,
+         %(Extension) 只取最后一段(.gz)会丢掉 .ts,所以它单独显式写全名。 -->
+    <EmbeddedResource Include="Resources\plugin-host\**\*.mjs.gz" LogicalName="TipCL.Core.plugin-host.%(RecursiveDir)%(Filename)" WithCulture="false" />
+    <EmbeddedResource Include="Resources\plugin-host\**\*.js.gz" LogicalName="TipCL.Core.plugin-host.%(RecursiveDir)%(Filename)" WithCulture="false" />
+    <EmbeddedResource Include="Resources\plugin-host\tipcl-plugin.d.ts.gz" LogicalName="TipCL.Core.plugin-host.tipcl-plugin.d.ts" WithCulture="false" />
     <!-- 内置默认背景（设置 → 壁纸 → 预设背景；点击释放到数据目录 wallpapers/ 再走 ui_background 管线） -->
     <Resource Include="Resources\wallpapers\*.jpg" />
     <!-- 启动页默认背景（无截图时的回退，两版通用；PremiumAssets 组里的同名项已移除避免重复嵌入） -->

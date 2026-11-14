@@ -9,3 +9,18 @@ dist/
 # 冒烟夹具与对比产物(假 TIPCL_HOME:假 .minecraft / ai_chats.json、对比截图、构建日志)
 _cmp/
 scratch/
+*.suo
+*.pdb
+publish/
+
+# 测试/截图产物（监工统一放仓库外 _wph_run）
+_wph_run/
+shot-*.png
+# 布局验收取证截图(87 文件 / 9.8MB,只在本机;备份见 _tmp/backup/windos-artifacts.zip)
+artifacts/
+
+# WPF 构建期临时工程文件(win-verify 2026-11-14 实测:会出现且不被任何规则覆盖)
+*_wpftmp.csproj
+*.wpftmp.*
+# E2E/冒烟运行期数据目录(与上面 _wph_run 同性质;_wph_run 与 _wpf_run 两种命名同时在用,故两条都留)
+_wpf_run/

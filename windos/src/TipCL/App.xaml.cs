@@ -90,6 +90,11 @@ public partial class App : Application
 		}
 		InitPlatform();
 		I18n.Init(e.Args);
+		// L6:注册自建区块 / 插件区块的内容工厂(显式调用,不用 ModuleInitializer)
+		TipCL.Pages.Layout.WidgetRegistry.EnsureRegistered();
+		// P1:把 v1 写通(<数据目录>/ui_page_layouts.json)的注入缝装配给 Core 的 LayoutStoreV2 ——
+		// Core 不再认识 Pages 的 v1 类型(PageLayoutDoc / PageLayoutStore),装配后行为与重构前一致
+		TipCL.Core.Launcher.Layout.LayoutStoreV2.V1Bridge = new TipCL.Pages.Layout.PagesLayoutV1Bridge();
 		Timeline.DesiredFrameRateProperty.OverrideMetadata(typeof(Timeline), new FrameworkPropertyMetadata(60));
 		RenderOptions.ProcessRenderMode = RenderMode.Default;
 		base.DispatcherUnhandledException += OnUnhandled;

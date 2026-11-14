@@ -10,7 +10,10 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using TipCL.Models;
+using TipCL.Pages.Layout;
 using TipCL.Services;
+
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Pages;
 
@@ -110,9 +113,7 @@ public sealed class VersionManagePage : PageBase
 	// 实例详情页「设置」分段内嵌时置位：隐藏文件夹列表栏（与实例库重复），只留版本选择
 	private bool _folderPreset;
 
-	private Grid? _embeddedGrid;
-
-	private Border? _folderCard;
+	private PageLayoutHost? _split;
 
 	private string _defaultInstance = "";
 
@@ -172,11 +173,11 @@ public sealed class VersionManagePage : PageBase
 		// 左右两栏之间留 18px 间距（与其他页面卡片间距一致），两栏都顶对齐
 		((FrameworkElement)el).VerticalAlignment = VerticalAlignment.Top;
 		((FrameworkElement)el2).VerticalAlignment = VerticalAlignment.Top;
-		Grid val7 = Ui.G(null, "272,18,*");
-		val7.Add((UIElement)(object)el, 0);
-		val7.Add((UIElement)(object)el2, 0, 2);
-		_embeddedGrid = val7;
-		_folderCard = el;
+		// L4 分栏(§4.E 第 6 处):顶级 = 272px + 18px 留白 + 右栏;分隔条复用现状那 18px 空白列,内嵌态收起
+		PageLayoutHost val7 = new PageLayoutHost("version-manage", "nav", new GridLength(272.0), new GridLength(1.0, GridUnitType.Star));
+		val7.SetLeft((UIElement)(object)el);
+		val7.SetRight((UIElement)(object)el2);
+		_split = val7;
 		((ContentControl)this).Content = PageBase.ScrollBody((UIElement)val7);
 		EnableDrop(() => new FileDrop.DropContext
 		{
@@ -201,11 +202,10 @@ public sealed class VersionManagePage : PageBase
 		// 嵌入态（实例详情「设置」分段）：文件夹已由详情页定死，隐藏文件夹列表栏（与实例库重复）；
 		// 若预选实例失效被回落，说明不是有效嵌入，恢复双栏
 		bool embedded = _folderPreset && _instances.Any((InstanceInfo i) => i.Name == _folder);
-		if (_embeddedGrid != null && _folderCard != null)
+		// L4:内嵌态左栏与分隔条一起收起(等价于原列宽置 0 + 卡片 Collapsed);该形态不读写比例
+		if (_split != null)
 		{
-			_embeddedGrid.ColumnDefinitions[0].Width = new GridLength(embedded ? 0.0 : 272.0);
-			_embeddedGrid.ColumnDefinitions[1].Width = new GridLength(embedded ? 0.0 : 18.0);
-			_folderCard.Visibility = (embedded ? Visibility.Collapsed : Visibility.Visible);
+			_split.SetLeftVisible(!embedded);
 		}
 		await EnsureCurrentAsync();
 		await ReloadVersionsAsync();

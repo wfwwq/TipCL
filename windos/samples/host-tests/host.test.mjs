@@ -3,7 +3,7 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHmac } from 'node:crypto';
@@ -65,7 +65,7 @@ describe('TipCL node plugin host', () => {
 
     assert.equal(t.callsOf('presets.register')[0].params.preset.id, 'hello-quick');
     const kinds = t.callsOf('ui.register').map((c) => c.params.kind).sort();
-    assert.deepEqual(kinds, ['action', 'aiView', 'dashCard', 'overlay', 'page']);
+    assert.deepEqual(kinds, ['action', 'aiView', 'block', 'dashCard', 'overlay', 'page']);
     const page = t.callsOf('ui.register', (p) => p.kind === 'page')[0].params.spec;
     assert.equal(page.url, `http://127.0.0.1:${t.port}/__tipcl/view/hello-plugin/main?k=${token}&kind=page&id=hello`);
     assert.equal(t.callsOf('hooks.register')[0].params.hook, 'launch.before');
@@ -76,6 +76,46 @@ describe('TipCL node plugin host', () => {
 
     assert.match(t.stderr, /^\[hello-plugin\] hello-plugin starting, data dir .*plugin-data[\\/]hello-plugin, DSH_HOME=.*plugin-data$/m);
     assert.ok(t.callsOf('log', (p) => p.plugin === 'hello-plugin' && p.level === 'info' && p.text === 'hello-plugin ready').length);
+  });
+
+  // A minimal plugin that only declares a layout block: proves `ctx.ui.block(...)` reaches TipCL as
+  // `ui.register {kind:'block'}` with the view URL / id namespace the C# side expects
+  // (`plugin:<plugin>:<blockId>`, see Pages/Layout/WidgetRegistry + NativePluginUi.Content).
+  it('a minimal plugin can declare a layout block (kind=block)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tipcl-block-fixture-'));
+    try {
+      await writeFile(join(dir, 'tipcl-plugin.json'), JSON.stringify({
+        id: 'block-fixture', name: 'Block fixture', version: '0.0.1', runtime: 'node',
+        main: ['block.mjs'], permissions: ['ui'],
+      }), 'utf8');
+      await writeFile(join(dir, 'block.mjs'), [
+        "export const name = 'block-fixture';",
+        'export function apply(ctx) {',
+        "  ctx.effect(() => ctx.ui.block({ id: 'farm', label: '农场概览', view: 'farm' }), 'ui block');",
+        '}',
+        '',
+      ].join('\n'), 'utf8');
+
+      const r = await t.request('plugin.load', await loadParams(dir, { home }));
+      assert.equal(r.ok, true, r.error);
+      const call = t.callsOf('ui.register', (p) => p.kind === 'block' && p.plugin === 'block-fixture');
+      assert.equal(call.length, 1, 'exactly one ui.register kind=block from this plugin');
+      assert.equal(call[0].params.plugin, 'block-fixture');
+      assert.equal(call[0].params.spec.id, 'farm');
+      assert.equal(call[0].params.spec.label, '农场概览');
+      assert.equal(call[0].params.spec.view, 'farm');
+      // view URL: 与 page/dashCard 同一个模板,kind=block
+      assert.equal(call[0].params.spec.url, `http://127.0.0.1:${t.port}/__tipcl/view/block-fixture/farm?k=${r.pageToken}&kind=block&id=farm`);
+
+      // 卸载:宿主发 ui.unregister(kind=block);块本身留在 TipCL 的布局文档里(显示「不可用」)
+      const un = await t.request('plugin.unload', { id: 'block-fixture' });
+      assert.equal(un.ok, true, un.error);
+      const gone = t.callsOf('ui.unregister', (p) => p.kind === 'block' && p.id === 'farm' && p.plugin === 'block-fixture');
+      assert.equal(gone.length, 1, 'ui.unregister kind=block on unload');
+      assert.equal(gone[0].params.plugin, 'block-fixture');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('provide/get across plugins: the earlier-loaded consumer binds late', async () => {
@@ -392,7 +432,7 @@ describe('TipCL node plugin host', () => {
     assert.deepEqual(t.callsOf('tools.unregister', (p) => p.plugin === 'hello-plugin').map((c) => c.params.name).sort(), ['hello_ask', 'hello_badge', 'hello_wait']);
     assert.equal(t.callsOf('presets.unregister', (p) => p.id === 'hello-quick').length, 1);
     assert.equal(t.callsOf('hooks.unregister', (p) => p.hook === 'launch.before').length, 1);
-    assert.equal(t.callsOf('ui.unregister', (p) => p.plugin === 'hello-plugin').length, 5);
+    assert.equal(t.callsOf('ui.unregister', (p) => p.plugin === 'hello-plugin').length, 6);
 
     await live.until(() => false, 1000).catch(() => {});
     assert.ok(live.ended, 'open route stream closed');
