@@ -9,3 +9,9 @@ publish/
 # 测试/截图产物（监工统一放仓库外 _wph_run）
 _wph_run/
 shot-*.png
+# 布局验收取证截图(87 文件 / 9.8MB,只在本机;备份见 _tmp/backup/windos-artifacts.zip)
+artifacts/
+
+# WPF 构建期临时工程文件(win-verify 2026-11-14 实测:会出现且不被任何规则覆盖)
+*_wpftmp.csproj
+*.wpftmp.*
