@@ -148,7 +148,7 @@ public static class PhoneSyncPanel
 				{
 					PageBase.Run(() => Work(async () =>
 					{
-						if (row.HasRemote && !await Dlg.Confirm(I18n.L("覆盖手机上的存档?"), I18n.L("手机上的「{0}」会先备份到电脑,再用电脑上的版本覆盖。", row.Name)))
+						if (row.HasRemote && !await Dlg.Confirm(I18n.L("覆盖手机上的存档？"), I18n.L("手机上的「{0}」会先备份到电脑，再用电脑上的版本覆盖。", row.Name)))
 						{
 							return;
 						}
@@ -161,7 +161,7 @@ public static class PhoneSyncPanel
 				{
 					PageBase.Run(() => Work(async () =>
 					{
-						if (row.HasLocal && !await Dlg.Confirm(I18n.L("覆盖电脑上的存档?"), I18n.L("电脑上的「{0}」会先自动备份,再用手机上的版本覆盖。", row.Name)))
+						if (row.HasLocal && !await Dlg.Confirm(I18n.L("覆盖电脑上的存档？"), I18n.L("电脑上的「{0}」会先自动备份，再用手机上的版本覆盖。", row.Name)))
 						{
 							return;
 						}
@@ -232,7 +232,7 @@ public static class PhoneSyncPanel
 		top.Add(phone.M(8.0, 0.0, 0.0).VCenter(), 0, 3);
 		top.Add(refresh.M(0.0, 0.0, 6.0).VCenter(), 0, 5);
 		top.Add(all.VCenter(), 0, 6);
-		SPanel body = Ui.V(12.0, Ui.Small(I18n.L("已连接") + " " + (info?.Device ?? "") + (string.IsNullOrEmpty(info?.Android) ? "" : " · Android " + info.Android) + " · " + I18n.L("两边游戏版本要一致,旧版本打开新存档会损坏")), top, scroll, log);
+		SPanel body = Ui.V(12.0, Ui.Small(I18n.L("已连接") + " " + (info?.Device ?? "") + (string.IsNullOrEmpty(info?.Android) ? "" : " · Android " + info.Android) + " · " + I18n.L("两边游戏版本要一致，旧版本打开新存档会损坏")), top, scroll, log);
 		Dlg.Panel(I18n.L("手机同步"), body, 860.0);
 		PickRoot();
 		if (phone.SelectedIndex < 0)
