@@ -351,6 +351,30 @@ internal sealed class PageLayoutHost : Grid
 	/// <summary>拖动松手:按当前左栏像素宽算比例并写回(不可写时只改本次会话的显示)。</summary>
 	private void CommitDrag()
 	{
+		CommitDragCore();
+	}
+
+	/// <summary>
+	/// 【测试缝 · D-127】拖动松手那条路的入口(与真实拖动**同一段代码**):真实路径是
+	/// <c>GridSplitter.DragCompleted</c> → <see cref="CommitDrag"/>;这里只把"松手"这一步直接暴露给用例,
+	/// 不去模拟鼠标拖拽(D-115:驱动内部处理器体,不模拟输入设备)。
+	/// </summary>
+	internal void CommitDragForTest()
+	{
+		CommitDragCore();
+	}
+
+	/// <summary>
+	/// 【测试缝 · D-127】双击分隔条那条路的入口(与真实路径同一段代码):真实路径是
+	/// <c>PointerPressed</c> 且 <c>ClickCount == 2</c> → <see cref="ResetToDefault"/>。
+	/// </summary>
+	internal void ResetToDefaultForTest()
+	{
+		ResetToDefault();
+	}
+
+	private void CommitDragCore()
+	{
 		double available = AvailableWidth();
 		if (double.IsNaN(available) || available <= 0.0)
 		{
