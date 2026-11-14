@@ -261,9 +261,121 @@ public class C1aPaletteTests
     }
 
     /// <summary>
+    /// **剥注释**(守卫的口径):守卫的意图是"**代码**只查询存在的调色板键",而注释里按文档惯例列举键名
+    /// **不是查询** ⇒ 匹配前先剥掉注释。
+    ///
+    /// 口径(刻意选"够用且不误伤",不追求完备的 C# 词法):**逐行**处理 —— ①先扫描该行,遇到 `"` 就按"字符串"
+    /// 走(支持 `\"` 转义)直到闭合,期间不认 `//`;②不在字符串里遇到 `//` 就截到行尾;③`/*` 与 `*/` 用跨行标志
+    /// 剥(**行内**出现的 `/*` 也认)。**不处理**逐字字符串(`@"..."` 里的 `""`)与正则字面量里的怪写法 ——
+    /// 本项目源码里没有那种用法需要靠注释剥离来救,写清边界以免后来人以为它完备。
+    /// </summary>
+    internal static string StripComments(string text)
+    {
+        System.Text.StringBuilder output = new System.Text.StringBuilder(text.Length);
+        bool inBlock = false;
+        foreach (string rawLine in text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+        {
+            string line = rawLine;
+            int i = 0;
+            bool inString = false;
+            while (i < line.Length)
+            {
+                if (inBlock)
+                {
+                    int close = line.IndexOf("*/", i, StringComparison.Ordinal);
+                    if (close < 0)
+                    {
+                        i = line.Length;
+                        break;
+                    }
+                    inBlock = false;
+                    i = close + 2;
+                    continue;
+                }
+                char c = line[i];
+                if (inString)
+                {
+                    if (c == '\\')
+                    {
+                        i += 2;
+                        continue;
+                    }
+                    if (c == '"')
+                    {
+                        inString = false;
+                    }
+                    i++;
+                    continue;
+                }
+                if (c == '"')
+                {
+                    inString = true;
+                    i++;
+                    continue;
+                }
+                if (c == '/' && i + 1 < line.Length && line[i + 1] == '/')
+                {
+                    line = line.Substring(0, i);
+                    break;
+                }
+                if (c == '/' && i + 1 < line.Length && line[i + 1] == '*')
+                {
+                    inBlock = true;
+                    line = line.Substring(0, i);
+                    i = line.Length;
+                    break;
+                }
+                i++;
+            }
+            output.Append(line).Append('\n');
+        }
+        return output.ToString();
+    }
+
+    /// <summary>
+    /// **验证验证者**(①③):注释里的键名**不算查询**;字符串字面量里的 `//` **不能被当成注释**切掉。
+    /// </summary>
+    [Fact]
+    public void Comment_stripping_drops_comments_but_keeps_code_strings()
+    {
+        // ① 行注释与块注释里的假键名:剥掉后**扫不到**
+        string commented = "// 示例键:B.NotARealKey\n/* 另一处示例:B.AlsoFake */\n";
+        Assert.DoesNotContain("B.NotARealKey", StripComments(commented));
+        Assert.DoesNotContain("B.AlsoFake", StripComments(commented));
+        // ② 代码里的键名必须留下(注释只是同一行后半截)
+        string mixed = "var key = \"B.Canvas\"; // 说明里提到 B.NotARealKey\n";
+        Assert.Contains("\"B.Canvas\"", StripComments(mixed));
+        Assert.DoesNotContain("B.NotARealKey", StripComments(mixed));
+        // ③ 字符串里的 // 不是注释(url)
+        string withUrl = "var u = \"https://example.com/a//b\";\n";
+        Assert.Contains("https://example.com/a//b", StripComments(withUrl));
+        // ④ 反斜杠转义后的引号不结束字符串(`\"` 之后仍算在字符串里)
+        string escaped = "var s = \"a\\\"//b\";\n";
+        Assert.Contains("a\\\"//b", StripComments(escaped));
+    }
+
+    /// <summary>
+    /// **验证验证者**(②):真的有一个"代码里查了、色板里没有"的键 ⇒ 守卫**必须报**
+    /// (这条防的是"把守卫改成永远不报")。
+    /// </summary>
+    [Fact]
+    public void A_missing_key_in_code_is_still_reported()
+    {
+        var pattern = new Regex("\"(?:B|C)\\.[A-Za-z0-9]+\"", RegexOptions.CultureInvariant);
+        string code = "var key = \"B.DefinitelyNotInThePalette\";\n" + "// 注释里再放一个:B.AlsoNotThere\n";
+        List<string> found = pattern.Matches(StripComments(code)).Select(m => m.Value.Trim('"')).ToList();
+        Assert.Contains("B.DefinitelyNotInThePalette", found);
+        Assert.DoesNotContain("B.AlsoNotThere", found);
+        // 用 DoesNotContain 而不是 Assert.False(...Contains(..., comparer)):语义同一(字符串默认序数比较),
+        // 但后者会带出 xUnit2017 警告(守卫修正落地时它贡献了唯一一条新增警告)。
+        Assert.DoesNotContain("B.DefinitelyNotInThePalette", Palette.Keys);
+    }
+
+    /// <summary>
     /// 移植过来的代码按字符串查色板键(例如 Lucide 的默认 <c>"B.InkMuted"</c>、MainWindow 的
     /// <c>"B.Canvas"</c>)。这里从源码里**扫出所有这类字面量**,逐个要求它在色板里存在
     /// —— 键名写错就是构建得起来、运行时才发现的那种错。
+    /// <b>扫之前先剥注释</b>(见 <see cref="StripComments"/>):注释里按文档惯例列的键名不是"查询"。
     /// </summary>
     [Fact]
     public void Ported_code_only_looks_up_palette_keys_that_exist()
@@ -278,7 +390,7 @@ public class C1aPaletteTests
                 continue;
             }
 
-            foreach (Match match in pattern.Matches(File.ReadAllText(file)))
+            foreach (Match match in pattern.Matches(StripComments(File.ReadAllText(file))))
             {
                 found.Add(match.Value.Trim('"'));
             }
