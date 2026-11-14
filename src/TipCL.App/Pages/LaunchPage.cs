@@ -104,7 +104,7 @@ public sealed partial class LaunchPage : PageBase
 
 	private readonly TextBox _user = Ui.Input("Player");
 
-	private readonly TextBox _server = Ui.Input(I18n.L("直连服务器 ip:port(可空)"));
+	private readonly TextBox _server = Ui.Input(I18n.L("直连服务器 ip:port（可空）"));
 
 	private readonly TextBox _wBox = Ui.Input("854", "", 74.0);
 
@@ -1053,7 +1053,7 @@ public sealed partial class LaunchPage : PageBase
 			_launchBtn.IsEnabled = list.Count > 0 && _taskId == null;
 			if (list.Count == 0)
 			{
-				_status.Text = I18n.L("这个实例还没有版本,先去「下载」装一个");
+				_status.Text = I18n.L("这个实例还没有版本，先去「下载」装一个");
 			}
 		}
 	}
@@ -1330,7 +1330,7 @@ public sealed partial class LaunchPage : PageBase
 			}
 			catch (Exception ex)
 			{
-				_newsHost.Children.Add(Ui.Muted(I18n.L("读不了自定义主页:") + ex.Message));
+				_newsHost.Children.Add(Ui.Muted(I18n.L("读不了自定义主页：") + ex.Message));
 				_newsTicker.Text = I18n.L("读不了自定义主页");
 				return;
 			}
@@ -1460,7 +1460,7 @@ public sealed partial class LaunchPage : PageBase
 				{
 					text = text + "\n\n" + string.Join("\n\n", list2.Select((PreflightItem i) => "· " + i.Title + "\n" + i.Detail));
 				}
-				text = text + "\n\n" + I18n.L("这些问题可能导致启动失败。仍要强制启动?");
+				text = text + "\n\n" + I18n.L("这些问题可能导致启动失败。仍要强制启动？");
 				if (!(await Dlg.Confirm(I18n.L("启动预检未通过"), text, I18n.L("仍要启动"))))
 				{
 					return;
@@ -1531,7 +1531,7 @@ public sealed partial class LaunchPage : PageBase
 		{
 			return true;
 		}
-		if (await Dlg.Choose(I18n.L("游戏已经在运行"), Ui.Muted(I18n.L("当前设置不允许多开。可以先关掉正在跑的那个,或者打开多开后再启动一个。")).Wrap().MinW(360.0), new string[2]
+		if (await Dlg.Choose(I18n.L("游戏已经在运行"), Ui.Muted(I18n.L("当前设置不允许多开。可以先关掉正在跑的那个，或者打开多开后再启动一个。")).Wrap().MinW(360.0), new string[2]
 		{
 			I18n.L("取消"),
 			I18n.L("打开多开并启动"),
@@ -1728,7 +1728,7 @@ public sealed partial class LaunchPage : PageBase
 				api.Text = authlibPreset.Api;
 			}
 		};
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("选择皮肤站,或直接填 Yggdrasil API")), pick, api, user, pw);
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("选择皮肤站，或直接填 Yggdrasil API")), pick, api, user, pw);
 		if (await Dlg.Ask(I18n.L("皮肤站登录"), body, I18n.L("登录")))
 		{
 			await PageBase.Api.StartTaskAsync("start_authlib_login", new
@@ -1842,7 +1842,7 @@ public sealed partial class LaunchPage : PageBase
 		bool flag = !string.IsNullOrEmpty(ver);
 		if (flag)
 		{
-			flag = await Dlg.Confirm(I18n.L("修复版本"), I18n.L("重新校验并补齐「{0}」的依赖库与资源?", ver));
+			flag = await Dlg.Confirm(I18n.L("修复版本"), I18n.L("重新校验并补齐「{0}」的依赖库与资源？", ver));
 		}
 		if (flag)
 		{
@@ -1930,7 +1930,7 @@ public sealed partial class LaunchPage : PageBase
 				if (text == "game_exited")
 				{
 					int? num = ((ev.Payload.ValueKind == JsonValueKind.Object && ev.Payload.TryGetProperty("code", out JsonElement value) && value.ValueKind == JsonValueKind.Number) ? new int?(value.GetInt32()) : ((int?)null));
-					_status.Text = ((!num.HasValue) ? I18n.L("游戏已退出") : I18n.L("游戏已退出(退出码 {0})", num));
+					_status.Text = ((!num.HasValue) ? I18n.L("游戏已退出") : I18n.L("游戏已退出（退出码 {0}）", num));
 					HideProgressSoon(0);
 				}
 			}

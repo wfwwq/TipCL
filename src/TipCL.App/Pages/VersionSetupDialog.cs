@@ -43,7 +43,7 @@ public static class VersionSetupDialog
 	private static readonly string[] IsoLabels = new string[4]
 	{
 		I18n.L("跟随全局"),
-		I18n.L("关闭(共用实例目录)"),
+		I18n.L("关闭（共用实例目录）"),
 		I18n.L("隔离存档"),
 		I18n.L("隔离全部"),
 	};
@@ -55,9 +55,9 @@ public static class VersionSetupDialog
 	private static readonly string[] GcLabels = new string[5]
 	{
 		I18n.L("自动"),
-		I18n.L("G1(通用)"),
-		I18n.L("ZGC(大内存)"),
-		I18n.L("Serial(老电脑)"),
+		I18n.L("G1（通用）"),
+		I18n.L("ZGC（大内存）"),
+		I18n.L("Serial（老电脑）"),
 		I18n.L("不指定"),
 	};
 
@@ -80,7 +80,7 @@ public static class VersionSetupDialog
 		}, new VersionSettingsDto())) ?? new VersionSettingsDto();
 		List<string> accounts = (await api.TryCallAsync("get_accounts", null, new List<string>())) ?? new List<string>();
 		// Windows 也是**插到最前**:第 0 项是「(不绑定)」,所以下标 0 = 不绑定、下标 N = 账号 N-1。
-		accounts.Insert(0, I18n.L("(不绑定)"));
+		accounts.Insert(0, I18n.L("（不绑定）"));
 
 		ComboBox iso = Ui.Combo(IsoLabels, IsoLabels[Math.Max(0, Array.IndexOf(IsoValues, data.Isolation ?? ""))]);
 		TextBox mem = Ui.Input(I18n.L("留空则用全局设置"), data.MemoryMb?.ToString() ?? "");
@@ -98,8 +98,8 @@ public static class VersionSetupDialog
 			I18n.L("全屏"),
 			I18n.L("最大化"),
 		}, (data.WindowMode == "fullscreen") ? I18n.L("全屏") : ((data.WindowMode == "maximized") ? I18n.L("最大化") : I18n.L("窗口")));
-		ComboBox acc = Ui.Combo(accounts, string.IsNullOrEmpty(data.LoginAccount) ? I18n.L("(不绑定)") : data.LoginAccount);
-		TextBox nide8 = Ui.Input(I18n.L("统一通行证 ServerId(可空)"), data.Nide8Id ?? "");
+		ComboBox acc = Ui.Combo(accounts, string.IsNullOrEmpty(data.LoginAccount) ? I18n.L("（不绑定）") : data.LoginAccount);
+		TextBox nide8 = Ui.Input(I18n.L("统一通行证 ServerId（可空）"), data.Nide8Id ?? "");
 		CheckBox hidden = Ui.Check(I18n.L("在版本列表中隐藏"), data.Hidden);
 
 		SmoothScroll scroll = Ui.Scroll(Ui.V(4.0,

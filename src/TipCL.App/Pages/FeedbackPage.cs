@@ -46,11 +46,11 @@ public sealed class FeedbackPage : PageBase
 
 	private readonly TextBox _title = Ui.Input(I18n.L("一句话说清问题"));
 
-	private readonly TextBox _body = Ui.Multi(I18n.L("详细描述:怎么触发的、期望是什么"), "", 130.0);
+	private readonly TextBox _body = Ui.Multi(I18n.L("详细描述：怎么触发的、期望是什么"), "", 130.0);
 
-	private readonly TextBox _contact = Ui.Input(I18n.L("联系方式(可空)"));
+	private readonly TextBox _contact = Ui.Input(I18n.L("联系方式（可空）"));
 
-	private readonly CheckBox _sys = Ui.Check(I18n.L("附带系统信息(显卡 / 内存 / Java)"), value: true);
+	private readonly CheckBox _sys = Ui.Check(I18n.L("附带系统信息（显卡 / 内存 / Java）"), value: true);
 
 	private readonly SPanel _history = Ui.V(6.0);
 
@@ -80,13 +80,13 @@ public sealed class FeedbackPage : PageBase
 		{
 			PageBase.Run(AttachAsync, I18n.L("附件没能上传"));
 		}, "\ue8b5");
-		Border form = Ui.Card(Ui.V(10.0, Ui.Section(I18n.L("提交反馈"), I18n.L("会发到开发者的反馈服务,不含账号密码")), Ui.Field(I18n.L("类型"), _cat, null, 74.0), Ui.Field(I18n.L("标题"), _title, null, 74.0), _body, Ui.Field(I18n.L("联系方式"), _contact, null, 74.0), _sys, _attachList, Ui.H(8.0, submit, attach, sysInfo)));
+		Border form = Ui.Card(Ui.V(10.0, Ui.Section(I18n.L("提交反馈"), I18n.L("会发到开发者的反馈服务，不含账号密码")), Ui.Field(I18n.L("类型"), _cat, null, 74.0), Ui.Field(I18n.L("标题"), _title, null, 74.0), _body, Ui.Field(I18n.L("联系方式"), _contact, null, 74.0), _sys, _attachList, Ui.H(8.0, submit, attach, sysInfo)));
 		Border history = Ui.Card(Ui.V(10.0, Ui.Section(I18n.L("我提交过的")), _history));
 		_search.TextChanged += delegate
 		{
 			PageBase.Run(() => LoadArticlesAsync(_search.Text));
 		};
-		Border articles = Ui.Card(Ui.V(10.0, Ui.Section(I18n.L("常见问题"), I18n.L("启动、Java、模组、账号、联机的快速说明(点击标题展开)")), _search, _articles));
+		Border articles = Ui.Card(Ui.V(10.0, Ui.Section(I18n.L("常见问题"), I18n.L("启动、Java、模组、账号、联机的快速说明（点击标题展开）")), _search, _articles));
 		// 【C9a】两栏交给共用的 PageLayoutHost(Windows `FeedbackPage.cs:70`:`"feedback"` / `"side"` / `*` + `346`)。
 		// 两点如实登记:①**右栏声明值保留 mac 现状 360**(Windows 是 346;C3/C5 期间按观感适配过)——
 		// 保留现状才能"默认渲染逐字节不变",346 与 360 的差异登记为 **D2 真机对照项**;
@@ -97,7 +97,7 @@ public sealed class FeedbackPage : PageBase
 		// 页面布局自定义(WP-U3):左右双栏 Grid 保持一整块(纵向流会拆散两侧布局),默认与旧 ScrollBody 等价
 		Content = new BlockHost("feedback", new List<BlockSpec>
 		{
-			new BlockSpec { Id = "header", Title = I18n.L("说明"), Content = Ui.Section(I18n.L("反馈与帮助"), I18n.L("遇到问题先看帮助,解决不了再提反馈")) },
+			new BlockSpec { Id = "header", Title = I18n.L("说明"), Content = Ui.Section(I18n.L("反馈与帮助"), I18n.L("遇到问题先看帮助，解决不了再提反馈")) },
 			new BlockSpec { Id = "content", Title = I18n.L("反馈与帮助"), Content = grid },
 		}).Root;
 	}
@@ -221,7 +221,7 @@ public sealed class FeedbackPage : PageBase
 				}
 				catch (Exception ex)
 				{
-					PageBase.Toast(I18n.L("读不了这个文件"), I18n.L("{0}:{1}", name, ex.Message), ToastKind.Warning);
+					PageBase.Toast(I18n.L("读不了这个文件"), I18n.L("{0}：{1}", name, ex.Message), ToastKind.Warning);
 					continue;
 				}
 

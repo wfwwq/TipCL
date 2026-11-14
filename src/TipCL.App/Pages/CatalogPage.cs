@@ -158,7 +158,7 @@ public sealed class CatalogPage : PageBase
 	{
 		_kind = kind;
 		_mode = Mode.Search;
-		_search.Tag = I18n.L("搜索{0},留空看热门", kind.Title);
+		_search.Tag = I18n.L("搜索{0}，留空看热门", kind.Title);
 		string[] array = new string[3]
 		{
 			I18n.L("全部"),
@@ -354,7 +354,7 @@ public sealed class CatalogPage : PageBase
 	{
 		return _kind.Key switch
 		{
-			"mod" => I18n.L("从 Modrinth / CurseForge 搜模组,装进所选实例"),
+			"mod" => I18n.L("从 Modrinth / CurseForge 搜模组，装进所选实例"),
 			"modpack" => I18n.L("一键安装整合包到独立实例"),
 			"datapack" => I18n.L("数据包会放进实例 datapacks 目录"),
 			"resourcepack" => I18n.L("资源包会放进实例 resourcepacks 目录"),
@@ -633,7 +633,7 @@ public sealed class CatalogPage : PageBase
 			{
 				if (list.Count == 0)
 				{
-					ShowPlaceholder(Ui.Empty(Glyph(), _kind.Empty, I18n.L("换个关键词,或切换来源 / 游戏版本试试")));
+					ShowPlaceholder(Ui.Empty(Glyph(), _kind.Empty, I18n.L("换个关键词，或切换来源 / 游戏版本试试")));
 				}
 				else
 				{
@@ -824,7 +824,7 @@ public sealed class CatalogPage : PageBase
 			return extra;
 		}
 		ComboBox pick = Ui.Combo(new string[1] { I18n.L("不装进存档") }.Concat(list.Select((SaveRow s) => s.Name)));
-		if (!(await Dlg.Ask(I18n.L("装进存档"), Ui.V(8.0, Ui.Muted(I18n.L("可选:把数据包直接装进某个世界,或只放到 datapacks 文件夹。")), pick), I18n.L("继续"))))
+		if (!(await Dlg.Ask(I18n.L("装进存档"), Ui.V(8.0, Ui.Muted(I18n.L("可选：把数据包直接装进某个世界，或只放到 datapacks 文件夹。")), pick), I18n.L("继续"))))
 		{
 			return extra;
 		}
@@ -851,7 +851,7 @@ public sealed class CatalogPage : PageBase
 		}
 		if (files.Count == 0)
 		{
-			return (await Dlg.Confirm(I18n.L("没有找到版本文件"), I18n.L("在线列表为空,要直接尝试安装最新版吗?"), I18n.L("安装最新"), I18n.L("取消"))) ? extra : null;
+			return (await Dlg.Confirm(I18n.L("没有找到版本文件"), I18n.L("在线列表为空，要直接尝试安装最新版吗？"), I18n.L("安装最新"), I18n.L("取消"))) ? extra : null;
 		}
 		CatalogFile chosen = files[0];
 		SPanel listHost = Ui.V(6.0);
@@ -1233,7 +1233,7 @@ public sealed class CatalogPage : PageBase
 		if (kind.Length != 0)
 		{
 			string last = (await PageBase.Api.TryCallAsync("default_export_dir", null, "")) ?? "";
-			string? folder = Dlg.PickFolder(string.IsNullOrEmpty(last) ? I18n.L("选择导出位置") : I18n.L("选择导出位置(上次:{0})", last));
+			string? folder = Dlg.PickFolder(string.IsNullOrEmpty(last) ? I18n.L("选择导出位置") : I18n.L("选择导出位置（上次：{0}）", last));
 			if (folder != null)
 			{
 				await PageBase.Api.TryCallAsync("remember_export_dir", new
@@ -1262,7 +1262,7 @@ public sealed class CatalogPage : PageBase
 			return;
 		}
 		string last = (await PageBase.Api.TryCallAsync("default_export_dir", null, "")) ?? "";
-		string? folder = Dlg.PickFolder(string.IsNullOrEmpty(last) ? I18n.L("选择导出位置") : I18n.L("选择导出位置(上次:{0})", last));
+		string? folder = Dlg.PickFolder(string.IsNullOrEmpty(last) ? I18n.L("选择导出位置") : I18n.L("选择导出位置（上次：{0}）", last));
 		if (folder == null)
 		{
 			return;
@@ -1401,7 +1401,7 @@ public sealed class CatalogPage : PageBase
 		}
 		else
 		{
-			if (!(await Dlg.Confirm(I18n.L("删除确认"), I18n.L("将删除「{0}」,不可恢复。", filename), I18n.L("删除"), I18n.L("取消"), danger: true)))
+			if (!(await Dlg.Confirm(I18n.L("删除确认"), I18n.L("将删除「{0}」，不可恢复。", filename), I18n.L("删除"), I18n.L("取消"), danger: true)))
 			{
 				return;
 			}

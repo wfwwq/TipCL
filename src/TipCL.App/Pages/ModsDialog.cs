@@ -148,7 +148,7 @@ public static class ModsDialog
 			count.Text = I18n.L("共 {0} 个模组", mods.Count);
 			if (mods.Count == 0)
 			{
-				list.Children.Add(Ui.Empty("\uea86", I18n.L("还没有模组"), I18n.L("到 Mod 页搜索安装,或直接导入 jar")));
+				list.Children.Add(Ui.Empty("\uea86", I18n.L("还没有模组"), I18n.L("到 Mod 页搜索安装，或直接导入 jar")));
 			}
 			foreach (ModEntry mod in mods)
 			{
@@ -262,7 +262,7 @@ public static class ModsDialog
 			list.Children.Add(Ui.RowCard(grid, null, 10.0));
 			picks.Add((box, row));
 		}
-		if (!await Dlg.Ask(I18n.L("{0} 个模组有更新", updates.Count), Ui.V(10.0, Ui.Muted(I18n.L("勾上要更新的,旧文件会在新包校验通过后才删除。")), scroll), I18n.L("更新所选")))
+		if (!await Dlg.Ask(I18n.L("{0} 个模组有更新", updates.Count), Ui.V(10.0, Ui.Muted(I18n.L("勾上要更新的，旧文件会在新包校验通过后才删除。")), scroll), I18n.L("更新所选")))
 		{
 			return;
 		}
@@ -286,7 +286,7 @@ public static class ModsDialog
 				}
 				catch (Exception ex)
 				{
-					failed.Add(I18n.L("{0}:{1}", row.Filename, ex.Message));
+					failed.Add(I18n.L("{0}：{1}", row.Filename, ex.Message));
 				}
 			}
 		}

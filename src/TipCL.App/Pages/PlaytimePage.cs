@@ -78,7 +78,7 @@ public sealed class PlaytimePage : PageBase
 		_total.Dyn(TextBlock.ForegroundProperty, "B.AccentDeep");
 		Border totalCard = Ui.Card(Ui.G(null, "*,Auto").Add(Ui.V(4.0, Ui.Muted(I18n.L("累计游玩")), _total, _sub), 0).Add(Ui.Glyph("\ue823", 44.0, "B.AccentSoft2").VCenter(), 0, 1), 20.0);
 		Border rangeCard = Ui.Card(Ui.H(10.0, Ui.Txt(I18n.L("范围"), 12.0, bold: false, "B.InkMuted").VCenter(), _inst.VCenter()), 12.0);
-		Grid header = Ui.Section(I18n.L("游戏时长"), I18n.L("按实例与版本统计,每次退出游戏后自动累加"), Ui.H(8.0, refresh, clearAll));
+		Grid header = Ui.Section(I18n.L("游戏时长"), I18n.L("按实例与版本统计，每次退出游戏后自动累加"), Ui.H(8.0, refresh, clearAll));
 		// 页面布局自定义(WP-U3):区块 = 概览 / 累计卡 / 范围卡 / 明细列表;默认全可见、顺序同旧 ScrollBody 实参
 		Content = new BlockHost("playtime", new List<BlockSpec>
 		{

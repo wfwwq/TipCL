@@ -124,7 +124,7 @@ public sealed class InstancePage : PageBase
 		{
 			Run(LoadAsync);
 		}, "\ue72c");
-		Grid head = Ui.Section(I18n.L("实例"), I18n.L("每个实例是一份独立的 .minecraft,互不干扰"), Ui.H(8.0, _count.VCenter(), _search.VCenter(), openDir, migrate, refresh, create));
+		Grid head = Ui.Section(I18n.L("实例"), I18n.L("每个实例是一份独立的 .minecraft，互不干扰"), Ui.H(8.0, _count.VCenter(), _search.VCenter(), openDir, migrate, refresh, create));
 		_debounce.Tick += delegate
 		{
 			_debounce.Stop();
@@ -539,7 +539,7 @@ public sealed class InstancePage : PageBase
 		});
 		Item(I18n.L("删除实例"), async delegate
 		{
-			if (await Dlg.Confirm(I18n.L("删除实例"), I18n.L("「{0}」下的版本、模组、存档都会被删除,且不可恢复。", instance), I18n.L("永久删除"), I18n.L("取消"), danger: true))
+			if (await Dlg.Confirm(I18n.L("删除实例"), I18n.L("「{0}」下的版本、模组、存档都会被删除，且不可恢复。", instance), I18n.L("永久删除"), I18n.L("取消"), danger: true))
 			{
 				await PageBase.Api.CallAsync("delete_instance", new
 				{
@@ -586,7 +586,7 @@ public sealed class InstancePage : PageBase
 		{
 			name = instance
 		}, "")) ?? "";
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("留「自动选择」由启动器按版本匹配")), string.IsNullOrEmpty(current) ? null : Ui.Small(I18n.L("当前记录:") + current), combo);
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("留「自动选择」由启动器按版本匹配")), string.IsNullOrEmpty(current) ? null : Ui.Small(I18n.L("当前记录：") + current), combo);
 		if (await Dlg.Ask(I18n.L("为「{0}」选择 Java", instance), body, I18n.L("保存")))
 		{
 			// 【Windows 源】:找不到标签对应的项就写「自动选择」(不是空串)
@@ -625,7 +625,7 @@ public sealed class InstancePage : PageBase
 
 	private async Task CreateAsync()
 	{
-		string? name = await Dlg.Prompt(I18n.L("新建实例"), I18n.L("实例名称(会创建独立的 .minecraft)"), "", I18n.L("例如:1.20.1 生存"));
+		string? name = await Dlg.Prompt(I18n.L("新建实例"), I18n.L("实例名称（会创建独立的 .minecraft）"), "", I18n.L("例如：1.20.1 生存"));
 		if (!string.IsNullOrWhiteSpace(name))
 		{
 			await PageBase.Api.CallAsync("create_instance", new { name });
@@ -644,7 +644,7 @@ public sealed class InstancePage : PageBase
 		string dir = await PageBase.Api.TryCallAsync("official_launcher_dir", null, "");
 		List<string> versions = (await PageBase.Api.TryCallAsync("scan_official_versions", null, new List<string>())) ?? new List<string>();
 		TextBox target = Ui.Input("default", "default");
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("检测到:{0}", dir)), Ui.Muted(I18n.L("可导入 {0} 个版本:{1}{2}", versions.Count, string.Join(I18n.L("、"), versions.Take(8)), (versions.Count > 8) ? " ..." : "")), Ui.Txt(I18n.L("导入到实例"), 12.0, bold: false, "B.InkMuted"), target);
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("检测到：{0}", dir)), Ui.Muted(I18n.L("可导入 {0} 个版本：{1}{2}", versions.Count, string.Join(I18n.L("、"), versions.Take(8)), (versions.Count > 8) ? " ..." : "")), Ui.Txt(I18n.L("导入到实例"), 12.0, bold: false, "B.InkMuted"), target);
 		if (await Dlg.Ask(I18n.L("导入官方启动器"), body, I18n.L("开始导入")))
 		{
 			await PageBase.Api.StartTaskAsync("migrate_official_launcher", new

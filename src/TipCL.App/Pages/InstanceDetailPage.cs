@@ -122,7 +122,7 @@ public sealed class InstanceDetailPage : PageBase
 		head.Add(Ui.V(2.0, title, meta.Length == 0 ? null : Ui.Txt(meta, 12.0, bold: false, "B.InkMuted").Trim()).VCenter(), 0, 1);
 		head.Add(launch.VCenter(), 0, 2);
 
-		_sharedNote = Ui.Txt(I18n.L("该版本为共享(大锅饭)模式,模组/存档使用实例共享目录;开启独立隔离请见版本管理页"), 12.5, bold: false, "B.InkMuted");
+		_sharedNote = Ui.Txt(I18n.L("该版本为共享（大锅饭）模式，模组/存档使用实例共享目录；开启独立隔离请见版本管理页"), 12.5, bold: false, "B.InkMuted");
 		_sharedNote.TextWrapping = TextWrapping.Wrap;
 		_sharedNote.VerticalAlignment = VerticalAlignment.Center;
 		_sharedNote.MaxWidth = 420.0;

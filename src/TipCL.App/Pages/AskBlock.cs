@@ -46,7 +46,7 @@ internal sealed class AskBlock
 		string prompt = Str(q, "prompt");
 		Prompt = ((prompt.Length > 0) ? prompt : I18n.L("请选择"));
 		_multi = q.TryGetProperty("allow_multiple", out JsonElement multiple) && multiple.ValueKind == JsonValueKind.True;
-		Root = Ui.V(5.0, Ui.Txt(Prompt + (_multi ? I18n.L("(可多选)") : ""), 12.5).Wrap());
+		Root = Ui.V(5.0, Ui.Txt(Prompt + (_multi ? I18n.L("（可多选）") : ""), 12.5).Wrap());
 		string groupName = Guid.NewGuid().ToString("N");
 		if (q.TryGetProperty("options", out JsonElement options) && options.ValueKind == JsonValueKind.Array)
 		{

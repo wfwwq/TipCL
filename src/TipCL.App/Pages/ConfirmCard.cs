@@ -93,7 +93,7 @@ internal sealed class ConfirmCard : Border
 		};
 		Grid title = Ui.G(null, "Auto,*");
 		title.Add(AiIcons.Icon(AiIcons.Alert, 16.0, (Risk == AiRisk.Delete) ? "B.Danger" : "B.Warn").VCenter(), 0);
-		title.Add(Ui.H(6.0, Ui.Txt(I18n.L("助手要执行一个操作,需要你确认"), 13.0, bold: true, "B.Ink").VCenter()).M(9.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
+		title.Add(Ui.H(6.0, Ui.Txt(I18n.L("助手要执行一个操作，需要你确认"), 13.0, bold: true, "B.Ink").VCenter()).M(9.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
 		Border head = new Border
 		{
 			Padding = new Thickness(14.0, 10.0, 14.0, 10.0),
@@ -109,7 +109,7 @@ internal sealed class ConfirmCard : Border
 		SPanel detail = Ui.V(6.0, opRow);
 		if (Risk == AiRisk.Delete)
 		{
-			detail.Children.Add(Ui.Txt(I18n.L("删除类操作:如果这一轮没有检查点,删掉后无法一键撤回"), 12.0, bold: false, "B.Danger").Wrap().M(24.0, 0.0, 0.0, 0.0));
+			detail.Children.Add(Ui.Txt(I18n.L("删除类操作：如果这一轮没有检查点，删掉后无法一键撤回"), 12.0, bold: false, "B.Danger").Wrap().M(24.0, 0.0, 0.0, 0.0));
 		}
 		List<string> lines = preview.Where((string l) => l != null).ToList();
 		if (lines.Count > 0)

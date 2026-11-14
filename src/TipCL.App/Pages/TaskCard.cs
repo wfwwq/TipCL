@@ -163,7 +163,7 @@ internal sealed class TaskCard : Border
 		{
 			_percent.Text = I18n.L("失败");
 			_percent.Dyn(TextBlock.ForegroundProperty, "B.Danger");
-			_status.Text = I18n.L("原因:") + (string.IsNullOrWhiteSpace(message) ? I18n.L("未知错误") : message);
+			_status.Text = I18n.L("原因：") + (string.IsNullOrWhiteSpace(message) ? I18n.L("未知错误") : message);
 			_status.TextWrapping = TextWrapping.Wrap;
 			_status.Dyn(TextBlock.ForegroundProperty, "B.Danger");
 			this.Dyn(BorderBrushProperty, "B.Danger");

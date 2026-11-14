@@ -42,7 +42,7 @@ public sealed partial class SettingsPage
         _themePack.Fill(list.Select((ThemeRow t) => t.Name), keep);
         _themeInfo.Text = (list.Count == 0)
             ? I18n.L("还没有主题包。调好配色后点「保存为主题包」。")
-            : (I18n.L("共 {0} 个:", list.Count) + string.Join(I18n.L("、"), list.Take(6).Select((ThemeRow t) => I18n.L("{0}({1} {2})", t.Name, t.UiDark ? I18n.L("深色") : I18n.L("浅色"), t.ThemeColor))));
+            : (I18n.L("共 {0} 个：", list.Count) + string.Join(I18n.L("、"), list.Take(6).Select((ThemeRow t) => I18n.L("{0}（{1} {2}）", t.Name, t.UiDark ? I18n.L("深色") : I18n.L("浅色"), t.ThemeColor))));
     }
 
     private async Task SaveThemeAsync()
@@ -95,7 +95,7 @@ public sealed partial class SettingsPage
         bool flag = !string.IsNullOrEmpty(name);
         if (flag)
         {
-            flag = await Dlg.Confirm(I18n.L("删除主题包"), I18n.L("删除「{0}」?", name), I18n.L("删除"), I18n.L("取消"), danger: true);
+            flag = await Dlg.Confirm(I18n.L("删除主题包"), I18n.L("删除「{0}」？", name), I18n.L("删除"), I18n.L("取消"), danger: true);
         }
         if (flag)
         {

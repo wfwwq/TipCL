@@ -203,7 +203,7 @@ public sealed partial class LaunchPage
 			}
 			if (vers.Count == 0)
 			{
-				_switchList.Children.Add(Ui.Muted(I18n.L("这个实例还没有版本,先去「下载」装一个")).M(24.0, 4.0, 4.0, 8.0));
+				_switchList.Children.Add(Ui.Muted(I18n.L("这个实例还没有版本，先去「下载」装一个")).M(24.0, 4.0, 4.0, 8.0));
 				continue;
 			}
 			foreach (string v in subs)

@@ -138,7 +138,7 @@ public sealed class AccountPage : PageBase
 		_count.Text = I18n.L("共 {0} 个", rows.Count);
 		if (rows.Count == 0)
 		{
-			_list.Children.Add(Ui.Empty("\ue77b", I18n.L("还没有账号"), I18n.L("添加离线账号,或用微软 / 皮肤站 / 统一通行证登录")));
+			_list.Children.Add(Ui.Empty("\ue77b", I18n.L("还没有账号"), I18n.L("添加离线账号，或用微软 / 皮肤站 / 统一通行证登录")));
 			await RenderHeroAsync(null);
 			return;
 		}
@@ -267,14 +267,14 @@ public sealed class AccountPage : PageBase
 	private async Task SetActiveAsync(string name)
 	{
 		await PageBase.Api.CallAsync<object>("set_active_account", new { name });
-		PageBase.Toast(I18n.L("已切换"), I18n.L("当前账号:{0}", name), ToastKind.Success);
+		PageBase.Toast(I18n.L("已切换"), I18n.L("当前账号：{0}", name), ToastKind.Success);
 		await LoadAsync();
 	}
 
 	/// <summary>【Windows 源】<c>:213-224</c>:删账号要确认(微软账号刷新令牌一起丢)。</summary>
 	private async Task DeleteAsync(AccountRow account)
 	{
-		if (await Dlg.Confirm(I18n.L("删除账号"), I18n.L("将删除「{0}」。微软账号的刷新令牌也会一并丢失,需要重新走设备码登录。", account.Name), I18n.L("删除"), I18n.L("取消"), danger: true))
+		if (await Dlg.Confirm(I18n.L("删除账号"), I18n.L("将删除「{0}」。微软账号的刷新令牌也会一并丢失，需要重新走设备码登录。", account.Name), I18n.L("删除"), I18n.L("取消"), danger: true))
 		{
 			await PageBase.Api.CallAsync<object>("remove_account", new
 			{
@@ -295,7 +295,7 @@ public sealed class AccountPage : PageBase
 			"Steve",
 			"Alex",
 		});
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("离线模式,无正版验证")), name, Ui.Field(I18n.L("默认皮肤"), skin, null, 78.0));
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("离线模式，无正版验证")), name, Ui.Field(I18n.L("默认皮肤"), skin, null, 78.0));
 		if (await Dlg.Ask(I18n.L("添加离线账号"), body, I18n.L("添加")))
 		{
 			if (string.IsNullOrWhiteSpace(name.Text))
@@ -365,10 +365,10 @@ public sealed class AccountPage : PageBase
 		TextBlock fileLabel = Ui.Small(string.IsNullOrEmpty(current.SkinFile) ? I18n.L("游戏默认皮肤") : current.SkinFile).Center();
 		ComboBox model = Ui.Combo(new string[2]
 		{
-			I18n.L("宽臂(Steve)"),
-			I18n.L("细臂(Alex)"),
-		}, current.Slim ? I18n.L("细臂(Alex)") : I18n.L("宽臂(Steve)"));
-		Button clearButton = Ui.Btn(I18n.L("清除,用游戏默认"), BtnKind.Chip, null, "\ue74d");
+			I18n.L("宽臂（Steve）"),
+			I18n.L("细臂（Alex）"),
+		}, current.Slim ? I18n.L("细臂（Alex）") : I18n.L("宽臂（Steve）"));
+		Button clearButton = Ui.Btn(I18n.L("清除，用游戏默认"), BtnKind.Chip, null, "\ue74d");
 		clearButton.IsEnabled = !string.IsNullOrEmpty(current.SkinFile) || picked.Length > 0;
 		if (picked.Length > 0)
 		{
@@ -392,7 +392,7 @@ public sealed class AccountPage : PageBase
 			picked = "";
 			clear = true;
 			clearButton.IsEnabled = false;
-			fileLabel.Text = I18n.L("保存后清除,恢复游戏默认皮肤");
+			fileLabel.Text = I18n.L("保存后清除，恢复游戏默认皮肤");
 			Refresh();
 		};
 		model.SelectionChanged += delegate
@@ -409,7 +409,7 @@ public sealed class AccountPage : PageBase
 			},
 		}, "B.Paper2", 10.0, 10.0);
 		previewPane.Width = 150.0;
-		SPanel body = Ui.V(10.0, Ui.Muted(I18n.L("64x64 或 64x32 的 PNG。进游戏后由启动器自带的本地皮肤服务发给游戏,不需要联网。")).Wrap(), previewPane.Center(), fileLabel, Ui.H(8.0, choose, clearButton), Ui.Field(I18n.L("手臂模型"), model, null, 78.0));
+		SPanel body = Ui.V(10.0, Ui.Muted(I18n.L("64x64 或 64x32 的 PNG。进游戏后由启动器自带的本地皮肤服务发给游戏，不需要联网。")).Wrap(), previewPane.Center(), fileLabel, Ui.H(8.0, choose, clearButton), Ui.Field(I18n.L("手臂模型"), model, null, 78.0));
 		if (!await Dlg.Ask(I18n.L("「{0}」的皮肤", account.Name), body, I18n.L("保存"), I18n.L("取消"), danger: false, 460.0))
 		{
 			return "";
@@ -421,7 +421,7 @@ public sealed class AccountPage : PageBase
 			{
 				name = account.Name
 			});
-			return I18n.L("已清除,回到游戏默认皮肤");
+			return I18n.L("已清除，回到游戏默认皮肤");
 		}
 
 		string path = picked;
@@ -444,7 +444,7 @@ public sealed class AccountPage : PageBase
 			if (clear)
 			{
 				preview.Source = null;
-				previewHint.Text = I18n.L("保存后清除,恢复游戏默认皮肤");
+				previewHint.Text = I18n.L("保存后清除，恢复游戏默认皮肤");
 				previewHint.IsVisible = true;
 				return;
 			}
@@ -545,7 +545,7 @@ public sealed class AccountPage : PageBase
 				apiBox.Text = preset.Api;
 			}
 		};
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("选择皮肤站,或直接填 Yggdrasil API 地址")), pick, apiBox, user, pw);
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("选择皮肤站，或直接填 Yggdrasil API 地址")), pick, apiBox, user, pw);
 		if (await Dlg.Ask(I18n.L("皮肤站登录"), body, I18n.L("登录")))
 		{
 			if (string.IsNullOrWhiteSpace(apiBox.Text) || string.IsNullOrWhiteSpace(user.Text))
@@ -560,7 +560,7 @@ public sealed class AccountPage : PageBase
 				username = user.Text.Trim(),
 				password = (pw.Text ?? "")
 			});
-			PageBase.Toast(I18n.L("正在登录"), I18n.L("皮肤站验证中,结果看下载任务"));
+			PageBase.Toast(I18n.L("正在登录"), I18n.L("皮肤站验证中，结果看下载任务"));
 		}
 	}
 
@@ -570,7 +570,7 @@ public sealed class AccountPage : PageBase
 		TextBox sid = Ui.Input(I18n.L("服务器 ID / 链接"));
 		TextBox user = Ui.Input(I18n.L("用户名"));
 		TextBox pw = Ui.Pw();
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("填 32 位服务器 ID,或把含该 ID 的链接贴进来")), sid, user, pw);
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("填 32 位服务器 ID，或把含该 ID 的链接贴进来")), sid, user, pw);
 		if (await Dlg.Ask(I18n.L("统一通行证登录"), body, I18n.L("登录")))
 		{
 			if (string.IsNullOrWhiteSpace(sid.Text))
@@ -586,7 +586,7 @@ public sealed class AccountPage : PageBase
 					username = (user.Text?.Trim() ?? ""),
 					password = (pw.Text ?? "")
 				});
-				PageBase.Toast(I18n.L("正在登录"), I18n.L("统一通行证验证中,结果看下载任务"));
+				PageBase.Toast(I18n.L("正在登录"), I18n.L("统一通行证验证中，结果看下载任务"));
 			}
 		}
 	}

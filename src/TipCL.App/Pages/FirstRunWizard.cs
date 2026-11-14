@@ -45,17 +45,17 @@ public static class FirstRunWizard
 	/// <summary>【Windows 源】<c>:14-21</c>:第四步的五个亮点(标题 + 正文)。</summary>
 	private static readonly (string Title, string Body)[] Highlights = new(string, string)[5]
 	{
-		(I18n.L("把文件直接拖进窗口"), I18n.L("整合包、模组、资源包、光影、存档、皮肤、壁纸都认;认不准会问你一句,不用先找对页面。")),
-		(I18n.L("侧栏是可以排的"), I18n.L("「游戏」「更多」里的子页拖到侧栏就固定成一级项,从侧栏拖回去就还原;排法和显隐在设置里。")),
-		(I18n.L("换个背景"), I18n.L("设置页能设静态壁纸、mp4 动态壁纸,或者指一个文件夹轮播;模糊和遮罩也在那儿调。")),
-		(I18n.L("AI 助手在侧栏「通用」组里"), I18n.L("崩溃日志看不懂、模组冲突理不清,可以直接问它。")),
-		(I18n.L("这个向导随时能再看"), I18n.L("「设置 → 启动向导」点「重新运行」,目录、下载源、内存、隔离会再问一遍。")),
+		(I18n.L("把文件直接拖进窗口"), I18n.L("整合包、模组、资源包、光影、存档、皮肤、壁纸都认；认不准会问你一句，不用先找对页面。")),
+		(I18n.L("侧栏是可以排的"), I18n.L("「游戏」「更多」里的子页拖到侧栏就固定成一级项，从侧栏拖回去就还原；排法和显隐在设置里。")),
+		(I18n.L("换个背景"), I18n.L("设置页能设静态壁纸、mp4 动态壁纸，或者指一个文件夹轮播；模糊和遮罩也在那儿调。")),
+		(I18n.L("AI 助手在侧栏「通用」组里"), I18n.L("崩溃日志看不懂、模组冲突理不清，可以直接问它。")),
+		(I18n.L("这个向导随时能再看"), I18n.L("「设置 → 启动向导」点「重新运行」，目录、下载源、内存、隔离会再问一遍。")),
 	};
 
 	/// <summary>【Windows 源】<c>:23-28</c>:下载源三选(键 + 文案)。</summary>
 	private static readonly (string Key, string Label)[] SrcOpts = new(string, string)[3]
 	{
-		("auto", I18n.L("自动(官方慢则 BMCLAPI)")),
+		("auto", I18n.L("自动（官方慢则 BMCLAPI）")),
 		("official", I18n.L("仅官方")),
 		("bmclapi", I18n.L("仅 BMCLAPI")),
 	};
@@ -63,7 +63,7 @@ public static class FirstRunWizard
 	/// <summary>【Windows 源】<c>:30-36</c>:隔离四选(键 + 文案)。</summary>
 	private static readonly (string Key, string Label)[] IsoOpts = new(string, string)[4]
 	{
-		("all", I18n.L("完全独立(推荐)")),
+		("all", I18n.L("完全独立（推荐）")),
 		("mods", I18n.L("隔离 Mod 与配置")),
 		("saves", I18n.L("隔离存档")),
 		("none", I18n.L("不隔离")),
@@ -73,9 +73,9 @@ public static class FirstRunWizard
 	private static readonly string[] Hints = new string[4]
 	{
 		I18n.L("先把游戏目录和下载源定下来。"),
-		I18n.L("版本都会装在这个目录里;下载源决定从哪儿拉文件。"),
-		I18n.L("这两项只影响以后新建的版本,已经装好的不受影响。"),
-		I18n.L("最后几句,都是容易错过的地方。"),
+		I18n.L("版本都会装在这个目录里；下载源决定从哪儿拉文件。"),
+		I18n.L("这两项只影响以后新建的版本，已经装好的不受影响。"),
+		I18n.L("最后几句，都是容易错过的地方。"),
 	};
 
 	/// <summary>
@@ -134,9 +134,9 @@ public static class FirstRunWizard
 			string current = Str("default_isolation");
 			return key == ((current != null && current.Length > 0) ? current : "all");
 		}));
-		SPanel intro = Ui.V(6.0, Ui.Txt(I18n.L("三步就能开始玩"), 14.0, bold: true), Ui.Muted(I18n.L("1. 选游戏目录和下载源")), Ui.Muted(I18n.L("2. 定默认内存和版本隔离")), Ui.Muted(I18n.L("3. 看一眼几个容易错过的功能")), Ui.Small(I18n.L("这些以后都能在设置里改;不想现在弄就点「跳过向导」。")).Wrap());
-		SPanel dirPage = Ui.V(8.0, Ui.Txt(I18n.L("游戏目录(版本都装在这里)")), dirRow, Ui.Txt(I18n.L("文件下载源")), source, Ui.Small(I18n.L("国内网络建议保持「自动」:官方慢的时候会自己切到 BMCLAPI 镜像。")).Wrap());
-		SPanel isoPage = Ui.V(8.0, Ui.Txt(I18n.L("默认内存")), memoryRow, Ui.Txt(I18n.L("新版本默认隔离")), isolation, Ui.Small(I18n.L("「完全独立」= 每个版本有自己的 mods / 配置 / 存档,换版本不会把上一个版本的模组拖进去。")).Wrap());
+		SPanel intro = Ui.V(6.0, Ui.Txt(I18n.L("三步就能开始玩"), 14.0, bold: true), Ui.Muted(I18n.L("1. 选游戏目录和下载源")), Ui.Muted(I18n.L("2. 定默认内存和版本隔离")), Ui.Muted(I18n.L("3. 看一眼几个容易错过的功能")), Ui.Small(I18n.L("这些以后都能在设置里改；不想现在弄就点「跳过向导」。")).Wrap());
+		SPanel dirPage = Ui.V(8.0, Ui.Txt(I18n.L("游戏目录（版本都装在这里）")), dirRow, Ui.Txt(I18n.L("文件下载源")), source, Ui.Small(I18n.L("国内网络建议保持「自动」：官方慢的时候会自己切到 BMCLAPI 镜像。")).Wrap());
+		SPanel isoPage = Ui.V(8.0, Ui.Txt(I18n.L("默认内存")), memoryRow, Ui.Txt(I18n.L("新版本默认隔离")), isolation, Ui.Small(I18n.L("「完全独立」= 每个版本有自己的 mods / 配置 / 存档，换版本不会把上一个版本的模组拖进去。")).Wrap());
 		SPanel highlightsPage = Ui.V(9.0);
 		foreach ((string title, string bodyText) in Highlights)
 		{

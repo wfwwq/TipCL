@@ -166,7 +166,7 @@ public sealed class LibraryPage : PageBase
 
 	private readonly StackPanel _groupsHost = new StackPanel();
 
-	private readonly SPanel _empty = Ui.Empty("\ue80a", I18n.L("这个文件夹还没有版本"), I18n.L("点左侧「添加或导入」,或到「下载」页装一个"));
+	private readonly SPanel _empty = Ui.Empty("\ue80a", I18n.L("这个文件夹还没有版本"), I18n.L("点左侧「添加或导入」，或到「下载」页装一个"));
 
 	private readonly List<FolderRow> _folderRows = new List<FolderRow>();
 
@@ -260,7 +260,7 @@ public sealed class LibraryPage : PageBase
 			Run(OpenDetailAsync, I18n.L("打开失败"));
 		}, "\ue946");
 		Grid head = Ui.G("Auto,Auto", "Auto,Auto,*,Auto,Auto,Auto");
-		TextBlock subHead = Ui.Txt(I18n.L("双击版本直接启动;行尾可收藏/删除/设置"), 12.5, bold: false, "B.InkMuted");
+		TextBlock subHead = Ui.Txt(I18n.L("双击版本直接启动；行尾可收藏/删除/设置"), 12.5, bold: false, "B.InkMuted");
 		subHead.TextWrapping = TextWrapping.Wrap;
 		head.Add(h2.VCenter(), 0, 0);
 		head.Add(_count.VCenter().M(10.0, 0.0, 10.0, 0.0), 0, 1);
@@ -1027,7 +1027,7 @@ public sealed class LibraryPage : PageBase
 	/// <summary>卸载一个版本(要确认;确认后连该版本目录下的独立模组与存档一起删)。</summary>
 	internal async Task UninstallAsync(string inst, string ver)
 	{
-		if (await Dlg.Confirm(I18n.L("卸载版本"), I18n.L("确定卸载「{0}」?该版本目录下的独立模组与存档会一并删除。", ver), I18n.L("卸载"), I18n.L("取消"), danger: true))
+		if (await Dlg.Confirm(I18n.L("卸载版本"), I18n.L("确定卸载「{0}」？该版本目录下的独立模组与存档会一并删除。", ver), I18n.L("卸载"), I18n.L("取消"), danger: true))
 		{
 			await Api.CallAsync("uninstall_version", new
 			{
@@ -1092,7 +1092,7 @@ public sealed class LibraryPage : PageBase
 		});
 		Item(I18n.L("删除实例"), async delegate
 		{
-			if (await Dlg.Confirm(I18n.L("删除实例"), I18n.L("「{0}」下的版本、模组、存档都会被删除,且不可恢复。", instance), I18n.L("永久删除"), I18n.L("取消"), danger: true))
+			if (await Dlg.Confirm(I18n.L("删除实例"), I18n.L("「{0}」下的版本、模组、存档都会被删除，且不可恢复。", instance), I18n.L("永久删除"), I18n.L("取消"), danger: true))
 			{
 				await Api.CallAsync("delete_instance", new
 				{
@@ -1141,7 +1141,7 @@ public sealed class LibraryPage : PageBase
 		{
 			name = instance
 		}, "")) ?? "";
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("留「自动选择」由启动器按版本匹配")), (string.IsNullOrEmpty(cur) ? null : Ui.Small(I18n.L("当前记录:") + cur)), combo);
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("留「自动选择」由启动器按版本匹配")), (string.IsNullOrEmpty(cur) ? null : Ui.Small(I18n.L("当前记录：") + cur)), combo);
 		if (await Dlg.Ask(I18n.L("为「{0}」选择 Java", instance), body, I18n.L("保存")))
 		{
 			string java = opts.FirstOrDefault((JavaOption o) => o.Label == combo.Str())?.Value ?? I18n.L("自动选择");
@@ -1157,7 +1157,7 @@ public sealed class LibraryPage : PageBase
 	/// <summary>「添加已有文件夹」:选目录 → 问显示名 → 起 <c>import_existing_folder</c> 任务。</summary>
 	private async Task AddFolderAsync()
 	{
-		string? path = Dlg.PickFolder(I18n.L("选择一个已有的游戏文件夹(含 versions 的 .minecraft)"));
+		string? path = Dlg.PickFolder(I18n.L("选择一个已有的游戏文件夹（含 versions 的 .minecraft）"));
 		if (!string.IsNullOrWhiteSpace(path))
 		{
 			string fileName = System.IO.Path.GetFileName(path.TrimEnd('\\', '/'));
@@ -1189,7 +1189,7 @@ public sealed class LibraryPage : PageBase
 	/// <summary>「新建实例」:问名字 → <c>create_instance</c> → 重载。</summary>
 	private async Task CreateAsync()
 	{
-		string? name = await Dlg.Prompt(I18n.L("新建实例"), I18n.L("实例名称(会创建独立的 .minecraft)"), "", I18n.L("例如:1.20.1 生存"));
+		string? name = await Dlg.Prompt(I18n.L("新建实例"), I18n.L("实例名称（会创建独立的 .minecraft）"), "", I18n.L("例如：1.20.1 生存"));
 		if (!string.IsNullOrWhiteSpace(name))
 		{
 			await Api.CallAsync("create_instance", new
@@ -1212,7 +1212,7 @@ public sealed class LibraryPage : PageBase
 		string dir = await Api.TryCallAsync("official_launcher_dir", null, "");
 		List<string> list = (await Api.TryCallAsync("scan_official_versions", null, new List<string>())) ?? new List<string>();
 		TextBox target = Ui.Input("default", "default");
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("检测到:{0}", dir)), Ui.Muted(I18n.L("可导入 {0} 个版本:{1}{2}", list.Count, string.Join(I18n.L("、"), list.Take(8)), (list.Count > 8) ? " ..." : "")), Ui.Txt(I18n.L("导入到实例"), 12.0, bold: false, "B.InkMuted"), target);
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("检测到：{0}", dir)), Ui.Muted(I18n.L("可导入 {0} 个版本：{1}{2}", list.Count, string.Join(I18n.L("、"), list.Take(8)), (list.Count > 8) ? " ..." : "")), Ui.Txt(I18n.L("导入到实例"), 12.0, bold: false, "B.InkMuted"), target);
 		if (await Dlg.Ask(I18n.L("导入官方启动器"), body, I18n.L("开始导入")))
 		{
 			await Api.StartTaskAsync("migrate_official_launcher", new

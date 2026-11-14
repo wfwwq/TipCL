@@ -58,7 +58,7 @@ public sealed class ServersPage : PageBase
 		{
 			PageBase.Run(ExportAsync);
 		}, "\uede1");
-		Grid header = Ui.Section(I18n.L("服务器"), I18n.L("直接写进实例的 servers.dat,进游戏就能看到"), Ui.H(8.0, _count.VCenter(), import, export, add));
+		Grid header = Ui.Section(I18n.L("服务器"), I18n.L("直接写进实例的 servers.dat，进游戏就能看到"), Ui.H(8.0, _count.VCenter(), import, export, add));
 		_inst.SelectionChanged += delegate
 		{
 			PageBase.Run(ReloadAsync);
@@ -102,7 +102,7 @@ public sealed class ServersPage : PageBase
 		_count.Text = I18n.L("{0} 个", rows.Count);
 		if (rows.Count == 0)
 		{
-			_list.Children.Add(Ui.Empty("\ue968", I18n.L("还没有服务器"), I18n.L("点右上角添加,或从 servers.txt 导入")));
+			_list.Children.Add(Ui.Empty("\ue968", I18n.L("还没有服务器"), I18n.L("点右上角添加，或从 servers.txt 导入")));
 			return;
 		}
 
@@ -194,7 +194,7 @@ public sealed class ServersPage : PageBase
 		TextBox name = Ui.Input(I18n.L("显示名"), row?.Name ?? "");
 		TextBox ip = Ui.Input("mc.example.com", row?.Ip ?? "");
 		TextBox port = Ui.Input("25565", (row?.Port ?? 25565).ToString());
-		TextBox desc = Ui.Input(I18n.L("备注(可空)"), row?.Description ?? "");
+		TextBox desc = Ui.Input(I18n.L("备注（可空）"), row?.Description ?? "");
 		SPanel body = Ui.V(8.0, name, ip, port, desc);
 		if (await Dlg.Ask((row == null) ? I18n.L("添加服务器") : I18n.L("编辑服务器"), body, I18n.L("保存")))
 		{

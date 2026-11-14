@@ -148,7 +148,7 @@ public sealed class VersionManagePage : PageBase
 
 	private readonly StackPanel _groupsHost = new StackPanel();
 
-	private readonly SPanel _empty = Ui.Empty("\ue80a", I18n.L("这个文件夹还没有版本"), I18n.L("点左侧「添加或导入」,或到「下载」页装一个"));
+	private readonly SPanel _empty = Ui.Empty("\ue80a", I18n.L("这个文件夹还没有版本"), I18n.L("点左侧「添加或导入」，或到「下载」页装一个"));
 
 	private readonly List<FolderRow> _folderRows = new List<FolderRow>();
 
@@ -237,7 +237,7 @@ public sealed class VersionManagePage : PageBase
 		{
 			RenderGroups();
 		};
-		Grid section = Ui.Section(I18n.L("版本选择"), I18n.L("双击版本直接启动;卡片右侧:收藏 / 卸载 / 设置"),
+		Grid section = Ui.Section(I18n.L("版本选择"), I18n.L("双击版本直接启动；卡片右侧：收藏 / 卸载 / 设置"),
 			Ui.H(8.0, BuildActionBarArea(), _count.VCenter(), _search.VCenter(), refresh));
 		_empty.Show(false);
 		SPanel right = Ui.V(12.0, section, _groupsHost, _empty);
@@ -673,7 +673,7 @@ public sealed class VersionManagePage : PageBase
 		// WP-S4 追加:行尾隔离标签(隔离=主题色,共享=灰「大锅饭」)+ 独立开关
 		tail.Children.Add(IsolationTag(v).VCenter());
 		CheckBox isolationSwitch = Ui.Switch(v.Isolated);
-		ToolTip.SetTip(isolationSwitch, I18n.L("开:这个版本用自己的 mods / config;关:与实例里其它版本共用那一份"));
+		ToolTip.SetTip(isolationSwitch, I18n.L("开：这个版本用自己的 mods / config；关：与实例里其它版本共用那一份"));
 		// 【Avalonia 差异】Windows 分别接 Checked / Unchecked;Avalonia 11.3 标成过时(CS0618)。
 		isolationSwitch.IsCheckedChanged += delegate
 		{
@@ -733,7 +733,7 @@ public sealed class VersionManagePage : PageBase
 			string label = string.IsNullOrEmpty(v.IsolationLabel) ? I18n.L("完全独立") : v.IsolationLabel;
 			return Ui.Tag(label, "B.AccentDeep", "B.AccentSoft");
 		}
-		return Ui.Tag(I18n.L("大锅饭(与其他版本共用)"));
+		return Ui.Tag(I18n.L("大锅饭（与其他版本共用）"));
 	}
 
 	/// <summary>【Windows 源】<c>:640-661</c>:切独立/共用(转为独立时问一次要不要复制现有模组)。</summary>
@@ -743,7 +743,7 @@ public sealed class VersionManagePage : PageBase
 		if (isolated)
 		{
 			int choice = await Dlg.Choose(I18n.L("转为独立模组"),
-				Ui.Muted(I18n.L("「{0}」将拥有自己的 mods / config 目录。\n\n", version) + I18n.L("要把游戏目录里现有的共享模组复制一份过去吗?\n") + I18n.L("选「复制一份」保持现在能玩的样子;选「留空」从零开始装。")).Wrap().MinW(380.0),
+				Ui.Muted(I18n.L("「{0}」将拥有自己的 mods / config 目录。\n\n", version) + I18n.L("要把游戏目录里现有的共享模组复制一份过去吗?\n") + I18n.L("选「复制一份」保持现在能玩的样子；选「留空」从零开始装。")).Wrap().MinW(380.0),
 				new string[3] { I18n.L("取消"), I18n.L("留空"), I18n.L("复制一份") }, 540.0);
 			if (choice <= 0)
 			{
@@ -760,7 +760,7 @@ public sealed class VersionManagePage : PageBase
 		});
 		PageBase.Toast(isolated ? I18n.L("已转为独立模组") : I18n.L("已改回共用"),
 			isolated
-				? (I18n.L("「{0}」以后用自己的 mods / config", version) + (seed ? I18n.L(",已复制一份现有模组") : ""))
+				? (I18n.L("「{0}」以后用自己的 mods / config", version) + (seed ? I18n.L("，已复制一份现有模组") : ""))
 				: I18n.L("「{0}」与实例里其它版本共用 mods", version),
 			ToastKind.Success);
 		await LoadAsync();
@@ -894,7 +894,7 @@ public sealed class VersionManagePage : PageBase
 	/// <summary>【Windows 源】<c>:789-800</c>:卸载一个版本(先确认;spec = <c>实例 / 版本</c>)。</summary>
 	internal async Task UninstallAsync(string inst, string ver)
 	{
-		if (await Dlg.Confirm(I18n.L("卸载版本"), I18n.L("确定卸载「{0}」?该版本目录下的独立模组与存档会一并删除。", ver), I18n.L("卸载"), I18n.L("取消"), danger: true))
+		if (await Dlg.Confirm(I18n.L("卸载版本"), I18n.L("确定卸载「{0}」？该版本目录下的独立模组与存档会一并删除。", ver), I18n.L("卸载"), I18n.L("取消"), danger: true))
 		{
 			await PageBase.Api.CallAsync("uninstall_version", new
 			{
@@ -1006,7 +1006,7 @@ public sealed class VersionManagePage : PageBase
 				PageBase.Win?.FlyToTasks(anchor, I18n.L("导出中"));
 			}
 		});
-		Item(I18n.L("修复(补全缺失文件)"), async delegate
+		Item(I18n.L("修复（补全缺失文件）"), async delegate
 		{
 			await PageBase.Api.StartTaskAsync("repair_version", new
 			{
@@ -1095,7 +1095,7 @@ public sealed class VersionManagePage : PageBase
 		});
 		Item(I18n.L("删除实例"), async delegate
 		{
-			if (await Dlg.Confirm(I18n.L("删除实例"), I18n.L("「{0}」下的版本、模组、存档都会被删除,且不可恢复。", instance), I18n.L("永久删除"), I18n.L("取消"), danger: true))
+			if (await Dlg.Confirm(I18n.L("删除实例"), I18n.L("「{0}」下的版本、模组、存档都会被删除，且不可恢复。", instance), I18n.L("永久删除"), I18n.L("取消"), danger: true))
 			{
 				await PageBase.Api.CallAsync("delete_instance", new
 				{
@@ -1144,7 +1144,7 @@ public sealed class VersionManagePage : PageBase
 		{
 			name = instance,
 		}, "")) ?? "";
-		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("留「自动选择」由启动器按版本匹配")), string.IsNullOrEmpty(current) ? null : Ui.Small(I18n.L("当前记录:") + current), combo);
+		SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("留「自动选择」由启动器按版本匹配")), string.IsNullOrEmpty(current) ? null : Ui.Small(I18n.L("当前记录：") + current), combo);
 		if (await Dlg.Ask(I18n.L("为「{0}」选择 Java", instance), body, I18n.L("保存")))
 		{
 			string java = opts.FirstOrDefault((JavaOption o) => o.Label == combo.Str())?.Value ?? I18n.L("自动选择");
@@ -1160,7 +1160,7 @@ public sealed class VersionManagePage : PageBase
 	/// <summary>【Windows 源】<c>:1035-1052</c>:「添加已有文件夹」(选目录 → 问显示名 → <c>import_existing_folder</c>)。</summary>
 	private async Task AddFolderAsync()
 	{
-		string? path = Dlg.PickFolder(I18n.L("选择一个已有的游戏文件夹(含 versions 的 .minecraft)"));
+		string? path = Dlg.PickFolder(I18n.L("选择一个已有的游戏文件夹（含 versions 的 .minecraft）"));
 		if (!string.IsNullOrWhiteSpace(path))
 		{
 			string fallback = Path.GetFileName(path.TrimEnd('\\', '/'));
@@ -1190,7 +1190,7 @@ public sealed class VersionManagePage : PageBase
 	/// <summary>【Windows 源】<c>:1063-1075</c>:「新建实例」(问名字 → <c>create_instance</c>)。</summary>
 	private async Task CreateAsync()
 	{
-		string? name = await Dlg.Prompt(I18n.L("新建实例"), I18n.L("实例名称(会创建独立的 .minecraft)"), "", I18n.L("例如:1.20.1 生存"));
+		string? name = await Dlg.Prompt(I18n.L("新建实例"), I18n.L("实例名称（会创建独立的 .minecraft）"), "", I18n.L("例如：1.20.1 生存"));
 		if (!string.IsNullOrWhiteSpace(name))
 		{
 			await PageBase.Api.CallAsync("create_instance", new
@@ -1214,8 +1214,8 @@ public sealed class VersionManagePage : PageBase
 		List<string> versions = (await PageBase.Api.TryCallAsync("scan_official_versions", null, new List<string>())) ?? new List<string>();
 		TextBox target = Ui.Input("default", "default");
 		SPanel body = Ui.V(8.0,
-			Ui.Muted(I18n.L("检测到:{0}", dir)),
-			Ui.Muted(I18n.L("可导入 {0} 个版本:{1}{2}", versions.Count, string.Join(I18n.L("、"), versions.Take(8)), (versions.Count > 8) ? " ..." : "")),
+			Ui.Muted(I18n.L("检测到：{0}", dir)),
+			Ui.Muted(I18n.L("可导入 {0} 个版本：{1}{2}", versions.Count, string.Join(I18n.L("、"), versions.Take(8)), (versions.Count > 8) ? " ..." : "")),
 			Ui.Txt(I18n.L("导入到实例"), 12.0, bold: false, "B.InkMuted"),
 			target);
 		if (await Dlg.Ask(I18n.L("导入官方启动器"), body, I18n.L("开始导入")))

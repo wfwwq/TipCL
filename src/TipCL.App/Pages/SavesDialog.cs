@@ -126,7 +126,7 @@ public static class SavesDialog
 					{
 						PageBase.Run(async delegate
 						{
-							if (await Dlg.Confirm(I18n.L("删除存档"), I18n.L("「{0}」会被永久删除,其中的建筑与进度都无法恢复。", name), I18n.L("永久删除"), I18n.L("取消"), danger: true))
+							if (await Dlg.Confirm(I18n.L("删除存档"), I18n.L("「{0}」会被永久删除，其中的建筑与进度都无法恢复。", name), I18n.L("永久删除"), I18n.L("取消"), danger: true))
 							{
 								await api.CallAsync("delete_save", new { instance, name, version });
 								await Reload();
@@ -140,7 +140,7 @@ public static class SavesDialog
 			}
 			Motion.Stagger(list);
 			List<BackupRow> backupRows = (await api.TryCallAsync("list_save_backups", new { instance, version }, new List<BackupRow>())) ?? new List<BackupRow>();
-			backups.Children.Add(Ui.Txt(I18n.L("备份({0})", backupRows.Count), 12.5, bold: true));
+			backups.Children.Add(Ui.Txt(I18n.L("备份（{0}）", backupRows.Count), 12.5, bold: true));
 			// 【Windows 源】:备份只列前 20 条(Take(20),不是分页)
 			foreach (BackupRow backup in backupRows.Take(20))
 			{
@@ -152,7 +152,7 @@ public static class SavesDialog
 					{
 						PageBase.Run(async delegate
 						{
-							if (await Dlg.Confirm(I18n.L("还原备份"), I18n.L("用「{0}」覆盖现有存档?", bn), I18n.L("还原")))
+							if (await Dlg.Confirm(I18n.L("还原备份"), I18n.L("用「{0}」覆盖现有存档？", bn), I18n.L("还原")))
 							{
 								await api.CallAsync("restore_save_backup", new
 								{
@@ -245,7 +245,7 @@ public static class SavesDialog
 			return (rows.Count == 1) ? rows[0].Value : "";
 		}
 		ComboBox pick = Ui.Combo(rows.Select((ModsTarget r) => r.Label));
-		if (!await Dlg.Ask(title, Ui.V(8.0, Ui.Muted(I18n.L("装进哪个版本的存档目录?")), pick), I18n.L("继续")))
+		if (!await Dlg.Ask(title, Ui.V(8.0, Ui.Muted(I18n.L("装进哪个版本的存档目录？")), pick), I18n.L("继续")))
 		{
 			return null;
 		}
@@ -264,7 +264,7 @@ public static class SavesDialog
 		List<string> packs = (await api.TryCallAsync("get_installed_datapacks", new { instance }, new List<string>())) ?? new List<string>();
 		if (packs.Count == 0)
 		{
-			await Dlg.Alert(I18n.L("没有数据包"), I18n.L("先到「数据包」页装一个,再回来装进存档。"));
+			await Dlg.Alert(I18n.L("没有数据包"), I18n.L("先到「数据包」页装一个，再回来装进存档。"));
 			return;
 		}
 		ComboBox pick = Ui.Combo(packs);

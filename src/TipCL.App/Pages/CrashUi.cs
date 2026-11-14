@@ -197,10 +197,10 @@ public static class CrashUi
 		});
 		Extra(I18n.L("附说明反馈"), "\ue8bd", async delegate
 		{
-			TextBox note = Ui.Multi(I18n.L("崩溃前在做什么?装了什么模组?(可空)"), "", 110.0);
+			TextBox note = Ui.Multi(I18n.L("崩溃前在做什么？装了什么模组？（可空）"), "", 110.0);
 			bool send = await Dlg.Ask(
 				I18n.L("反馈这次崩溃"),
-				Ui.V(8.0, Ui.Muted(I18n.L("会把崩溃报告连同下面这段说明发给开发者,不含账号密码。")), note),
+				Ui.V(8.0, Ui.Muted(I18n.L("会把崩溃报告连同下面这段说明发给开发者，不含账号密码。")), note),
 				I18n.L("发送"));
 			if (send)
 			{

@@ -70,7 +70,7 @@ public sealed class JavaPage : PageBase
 
 	private readonly TextBlock _instJava = Ui.Small("");
 
-	private readonly TextBox _manual = Ui.Input(I18n.L("手动填 java.exe 路径(可空)"));
+	private readonly TextBox _manual = Ui.Input(I18n.L("手动填 java.exe 路径（可空）"));
 
 	private List<InstanceInfo> _instances = new List<InstanceInfo>();
 
@@ -95,7 +95,7 @@ public sealed class JavaPage : PageBase
 		{
 			PageBase.Run(LoadAsync);
 		});
-		Grid header = Ui.Section("Java", I18n.L("游戏按版本挑 Java:26.1+ 要 25,1.20.5+ 要 21,1.18+ 要 17,老版本用 8"), Ui.H(8.0, _count.VCenter(), refresh, scan));
+		Grid header = Ui.Section("Java", I18n.L("游戏按版本挑 Java：26.1+ 要 25，1.20.5+ 要 21，1.18+ 要 17，老版本用 8"), Ui.H(8.0, _count.VCenter(), refresh, scan));
 		WrapPanel wrap = new WrapPanel();
 		foreach ((string major, string note) in Majors)
 		{
@@ -138,7 +138,7 @@ public sealed class JavaPage : PageBase
 		Grid manualRow = Ui.G(null, "*,Auto");
 		manualRow.Add(_manual, 0);
 		manualRow.Add(applyManual.M(8.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
-		Border defaultsCard = Ui.Card(Ui.V(4.0, Ui.Field(I18n.L("实例"), _inst), Ui.Field(I18n.L("默认 Java"), _java, I18n.L("「自动选择」由启动器按游戏版本匹配")), Ui.Field(I18n.L("自定义路径"), manualRow, I18n.L("填绝对路径后点右边按钮,会先做一次规范化")), Ui.Field("", _instJava)), 13.0);
+		Border defaultsCard = Ui.Card(Ui.V(4.0, Ui.Field(I18n.L("实例"), _inst), Ui.Field(I18n.L("默认 Java"), _java, I18n.L("「自动选择」由启动器按游戏版本匹配")), Ui.Field(I18n.L("自定义路径"), manualRow, I18n.L("填绝对路径后点右边按钮，会先做一次规范化")), Ui.Field("", _instJava)), 13.0);
 		// 页面布局自定义(WP-U3):区块 = 说明 / 安装方式 / 实例默认 / 已检测列表;默认全可见、顺序同旧 ScrollBody 实参
 		Content = new BlockHost("java", new List<BlockSpec>
 		{
@@ -248,7 +248,7 @@ public sealed class JavaPage : PageBase
 		{
 			name = inst
 		}, "")) ?? "";
-		_instJava.Text = (string.IsNullOrEmpty(stored) ? "" : (I18n.L("当前记录:{0}", label) + ((stored == label) ? "" : I18n.L("({0})", stored))));
+		_instJava.Text = (string.IsNullOrEmpty(stored) ? "" : (I18n.L("当前记录：{0}", label) + ((stored == label) ? "" : I18n.L("（{0}）", stored))));
 	}
 
 	/// <summary>【Windows 源】<c>:209-224</c>:把下拉选中的标签翻回后端值再写。</summary>
@@ -265,7 +265,7 @@ public sealed class JavaPage : PageBase
 				java
 			});
 			await ShowInstanceJavaAsync(inst);
-			PageBase.Toast(I18n.L("已保存"), I18n.L("「{0}」默认 Java:{1}", inst, label), ToastKind.Success);
+			PageBase.Toast(I18n.L("已保存"), I18n.L("「{0}」默认 Java：{1}", inst, label), ToastKind.Success);
 		}
 	}
 
@@ -297,7 +297,7 @@ public sealed class JavaPage : PageBase
 		});
 		_manual.Clear();
 		await ReloadJavaOptionsAsync();
-		PageBase.Toast(I18n.L("已保存"), I18n.L("「{0}」默认 Java:{1}", inst, normalized), ToastKind.Success);
+		PageBase.Toast(I18n.L("已保存"), I18n.L("「{0}」默认 Java：{1}", inst, normalized), ToastKind.Success);
 	}
 
 	/// <summary>【Windows 源】<c>:254-289</c>:先摆两个骨架条,再按 <c>scan</c> 决定要不要真扫系统。</summary>
@@ -329,7 +329,7 @@ public sealed class JavaPage : PageBase
 		_count.Text = I18n.L("共 {0} 个", list.Count);
 		if (list.Count == 0)
 		{
-			_list.Children.Add(Ui.Empty("\uec32", I18n.L("没有找到 Java"), I18n.L("点上面「下载」装一个,或扫描系统已有安装")));
+			_list.Children.Add(Ui.Empty("\uec32", I18n.L("没有找到 Java"), I18n.L("点上面「下载」装一个，或扫描系统已有安装")));
 			return;
 		}
 
@@ -380,7 +380,7 @@ public sealed class JavaPage : PageBase
 						java = java.Path
 					});
 					await ReloadJavaOptionsAsync();
-					PageBase.Toast(I18n.L("已保存"), I18n.L("「{0}」默认 Java:{1}", inst, java.Name), ToastKind.Success);
+					PageBase.Toast(I18n.L("已保存"), I18n.L("「{0}」默认 Java：{1}", inst, java.Name), ToastKind.Success);
 				}
 			}, I18n.L("保存失败"));
 		});
@@ -459,7 +459,7 @@ public sealed class JavaPage : PageBase
 			PageBase.Win?.FlyToTasks(anchor, "Java " + major);
 		}
 
-		PageBase.Toast(I18n.L("已加入队列"), I18n.L("正在下载 {0} Java {1},进度看下载任务", vendor, major));
+		PageBase.Toast(I18n.L("已加入队列"), I18n.L("正在下载 {0} Java {1}，进度看下载任务", vendor, major));
 	}
 
 	/// <summary>【Windows 源】<c>:397-412</c>:某个任务跑完且标题里有 Java ⇒ 重拉列表与下拉。</summary>

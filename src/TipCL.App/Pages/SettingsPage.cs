@@ -681,10 +681,10 @@ public sealed partial class SettingsPage : PageBase
         Border border = Ui.Card(Rows(
             Ui.Field(I18n.L("深色模式"), _dark, I18n.L("立即生效")),
             Ui.Field(I18n.L("主题色"), _swatches, I18n.L("点一下就换")),
-            Ui.Field(I18n.L("界面背景"), _bg, I18n.L("预设色调,立即生效")),
+            Ui.Field(I18n.L("界面背景"), _bg, I18n.L("预设色调，立即生效")),
             Ui.Field(I18n.L("界面动画"), _motion, I18n.L("换页、进度条、悬浮动效")),
             Ui.Field(I18n.L("下载飞入动画"), _fly, I18n.L("安装时飞入侧栏任务列表")),
-            Ui.Field(I18n.L("飞入动画时长"), SliderRow(_flyDur, _flyDurLbl), I18n.L("毫秒,建议 400–800"))));
+            Ui.Field(I18n.L("飞入动画时长"), SliderRow(_flyDur, _flyDurLbl), I18n.L("毫秒，建议 400–800"))));
         _bgInterval.ValueChanged += delegate(object? _, RangeBaseValueChangedEventArgs e)
         {
             _bgIntervalLbl.Text = I18n.L("{0} 分钟", (int)e.NewValue);
@@ -754,16 +754,16 @@ public sealed partial class SettingsPage : PageBase
             Border thumb = BuildPresetThumb(bgFile, bgLabel);
             bgThumbs.Children.Add(thumb);
         }
-        Border border2 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("图片或 mp4 动态壁纸;也可以直接把文件拖进窗口")).Wrap(), Rows(
-            Ui.Field(I18n.L("预设背景"), bgThumbs, I18n.L("点一下就换,可再叠加模糊与遮罩")),
+        Border border2 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("图片或 mp4 动态壁纸；也可以直接把文件拖进窗口")).Wrap(), Rows(
+            Ui.Field(I18n.L("预设背景"), bgThumbs, I18n.L("点一下就换，可再叠加模糊与遮罩")),
             Ui.Field(I18n.L("壁纸文件"), grid3, I18n.L("留空就不用壁纸。视频会静音循环播放")),
-            Ui.Field(I18n.L("轮播文件夹"), grid4, I18n.L("设了文件夹就按间隔换图,优先于上面那张单图")),
+            Ui.Field(I18n.L("轮播文件夹"), grid4, I18n.L("设了文件夹就按间隔换图，优先于上面那张单图")),
             Ui.Field(I18n.L("随机顺序"), _bgShuffle, I18n.L("关掉则按文件名顺序轮")),
             Ui.Field(I18n.L("轮播间隔"), SliderRow(_bgInterval, _bgIntervalLbl), I18n.L("分钟")),
-            Ui.Field(I18n.L("模糊"), SliderRow(_bgBlur, _bgBlurLbl), I18n.L("把壁纸推远一点,文字更好读;随拖随看")),
-            Ui.Field(I18n.L("遮罩浓度"), SliderRow(_bgDim, _bgDimLbl), I18n.L("按当前主题压淡 / 压暗壁纸;随拖随看")),
+            Ui.Field(I18n.L("模糊"), SliderRow(_bgBlur, _bgBlurLbl), I18n.L("把壁纸推远一点，文字更好读；随拖随看")),
+            Ui.Field(I18n.L("遮罩浓度"), SliderRow(_bgDim, _bgDimLbl), I18n.L("按当前主题压淡 / 压暗壁纸；随拖随看")),
             Ui.Field("", Ui.H(8.0, clearWall, _bgUndo, resetWall, _bgInfo.VCenter())))));
-        Border border3 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("把当前配色、背景、窗口与主页设置整包存下来,随时切回")).Wrap(), Rows(
+        Border border3 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("把当前配色、背景、窗口与主页设置整包存下来，随时切回")).Wrap(), Rows(
             Ui.Field(I18n.L("已保存"), _themePack, I18n.L("从这里挑一个加载或删除")),
             Ui.Field("", Ui.H(7.0,
                 Ui.Btn(I18n.L("保存为主题包"), BtnKind.Soft, delegate
@@ -788,32 +788,32 @@ public sealed partial class SettingsPage : PageBase
                 }, "\uede1")))), _themeInfo));
         Border border4 = Ui.Card(Rows(
             Ui.Field(I18n.L("下载并发线程数"), SliderRow(_threads, _threadsLbl), I18n.L("同时下载的文件数量")),
-            Ui.Field(I18n.L("单文件分片数"), SliderRow(_segs, _segsLbl), I18n.L("8MB 以上的大文件拆成几段同时下;1 为关闭")),
-            Ui.Field(I18n.L("文件下载源"), _src, I18n.L("自动测速,官方慢于 4 秒改走 BMCLAPI")),
-            Ui.Field(I18n.L("社区资源源"), _comm, I18n.L("模组 / 整合包:MCIM 国内镜像,挂了可改官方")),
+            Ui.Field(I18n.L("单文件分片数"), SliderRow(_segs, _segsLbl), I18n.L("8MB 以上的大文件拆成几段同时下；1 为关闭")),
+            Ui.Field(I18n.L("文件下载源"), _src, I18n.L("自动测速，官方慢于 4 秒改走 BMCLAPI")),
+            Ui.Field(I18n.L("社区资源源"), _comm, I18n.L("模组 / 整合包：MCIM 国内镜像，挂了可改官方")),
             Ui.Field(I18n.L("跟随系统代理"), _proxy, I18n.L("默认开。关掉才强制直连")),
             Ui.Field(I18n.L("下载限速 (KB/s)"), _limit.Left(), I18n.L("0 表示不限制")),
-            Ui.Field("CurseForge Key", SecretRow(_cfKey, _cfReset), I18n.L("留空不修改;不填用内置 Key"))));
+            Ui.Field("CurseForge Key", SecretRow(_cfKey, _cfReset), I18n.L("留空不修改；不填用内置 Key"))));
         Border border5 = Ui.Card(Rows(
-            Ui.Field(I18n.L("游戏目录"), grid2, I18n.L("所有实例的落脚处;切换会校验可写性")),
+            Ui.Field(I18n.L("游戏目录"), grid2, I18n.L("所有实例的落脚处；切换会校验可写性")),
             Ui.Field(I18n.L("默认内存"), SliderRow(_mem, _memLbl), I18n.L("新实例的默认 JVM 内存")),
             Ui.Field("", Ui.H(8.0, _rec, Ui.Small(I18n.L("按本机内存 / CPU 给一组推荐值")).VCenter())),
             Ui.Field(I18n.L("默认分辨率"), Ui.H(6.0, _w, Ui.Txt("×").VCenter(), _h), I18n.L("游戏窗口的默认宽高")),
             Ui.Field(I18n.L("默认实例"), _inst, I18n.L("安装与启动缺省使用的实例")),
-            Ui.Field(I18n.L("新版本默认隔离"), _iso, I18n.L("安装新版本时写入,可在版本设置里改")),
-            Ui.Field(I18n.L("内存回收器"), _gc, I18n.L("启动时写入 JVM,版本设置可覆盖")),
+            Ui.Field(I18n.L("新版本默认隔离"), _iso, I18n.L("安装新版本时写入，可在版本设置里改")),
+            Ui.Field(I18n.L("内存回收器"), _gc, I18n.L("启动时写入 JVM，版本设置可覆盖")),
             Ui.Field(I18n.L("默认游戏窗口"), _win, I18n.L("可被版本设置覆盖")),
-            Ui.Field(I18n.L("默认 JVM 参数"), _jvm, I18n.L("所有版本都会带上,版本设置可再追加")),
+            Ui.Field(I18n.L("默认 JVM 参数"), _jvm, I18n.L("所有版本都会带上，版本设置可再追加")),
             Ui.Field(I18n.L("允许多开"), _multi, I18n.L("关掉则游戏已在运行时不再启动第二个"))));
         Border border6 = Ui.Card(Rows(
-            Ui.Field(I18n.L("共享 libraries"), _shareLib, I18n.L("所有实例共享依赖库(节省空间,降低隔离性)")),
-            Ui.Field(I18n.L("共享 assets 资源"), _shareAssets, I18n.L("所有实例共享资源文件(节省空间,降低隔离性)")),
-            Ui.Field(I18n.L("空间清理"), Ui.H(8.0, _clean, _cleanInfo.VCenter()), I18n.L("扫描未引用的依赖库、残留 .part 与更新缓存,确认后再删"))));
-        Grid aiBaseRow = Ui.Field(I18n.L("端点地址"), _aiBase, I18n.L("OpenAI 兼容的 base_url,到 /v1 为止"));
-        Grid aiKeyRow = Ui.Field("API Key", SecretRow(_aiKey, _aiKeyReset), I18n.L("留空不修改;本地端点不需要可不填"));
-        Grid aiModelRow = Ui.Field(I18n.L("模型"), Ui.H(8.0, _aiModel, _aiModelFetch.VCenter()), I18n.L("填好地址和令牌后自动拉取;拉不到可直接手填"));
-        Grid aiCtxRow = Ui.Field(I18n.L("上下文窗口(token)"), _aiCtx, I18n.L("模型真实窗口未知时按 128k 保守压缩;实测后可改大"));
-        Grid aiFallbackRow = Ui.Field(I18n.L("备用模型(可选)"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它;留空不启用"));
+            Ui.Field(I18n.L("共享 libraries"), _shareLib, I18n.L("所有实例共享依赖库（节省空间，降低隔离性）")),
+            Ui.Field(I18n.L("共享 assets 资源"), _shareAssets, I18n.L("所有实例共享资源文件（节省空间，降低隔离性）")),
+            Ui.Field(I18n.L("空间清理"), Ui.H(8.0, _clean, _cleanInfo.VCenter()), I18n.L("扫描未引用的依赖库、残留 .part 与更新缓存，确认后再删"))));
+        Grid aiBaseRow = Ui.Field(I18n.L("端点地址"), _aiBase, I18n.L("OpenAI 兼容的 base_url，到 /v1 为止"));
+        Grid aiKeyRow = Ui.Field("API Key", SecretRow(_aiKey, _aiKeyReset), I18n.L("留空不修改；本地端点不需要可不填"));
+        Grid aiModelRow = Ui.Field(I18n.L("模型"), Ui.H(8.0, _aiModel, _aiModelFetch.VCenter()), I18n.L("填好地址和令牌后自动拉取；拉不到可直接手填"));
+        Grid aiCtxRow = Ui.Field(I18n.L("上下文窗口（token）"), _aiCtx, I18n.L("模型真实窗口未知时按 128k 保守压缩；实测后可改大"));
+        Grid aiFallbackRow = Ui.Field(I18n.L("备用模型（可选）"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它；留空不启用"));
         _aiCustomRows.AddRange(new Control[5] { aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow });
         Border border7 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("对话里下游戏、装模组、读崩溃日志")).Wrap(), Rows(
             Ui.Field(I18n.L("接入方式"), _aiMode),
@@ -831,12 +831,12 @@ public sealed partial class SettingsPage : PageBase
             Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")),
             Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html 文件路径")),
             Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")),
-            Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言,重启后完全生效")),
+            Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")),
             Ui.Field("", _langPreview),
             Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
             {
                 PageBase.Run(OpenWizardAsync, I18n.L("向导没能打开"));
-            }, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍,最后一步还会指一遍容易错过的功能"))));
+            }, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));
         WireAutoSave();
         Border generalCard = border;
         // 布局自定义:每个「分组小标题 + 卡片」包成一个区块(标题留在块内,重排/显隐时跟着走),
@@ -1178,7 +1178,7 @@ public sealed partial class SettingsPage : PageBase
             string dst = Wallpaper.ReleasePreset(file);
             if (string.IsNullOrEmpty(dst))
             {
-                _bgInfo.Text = I18n.L("预设背景应用失败:") + file;
+                _bgInfo.Text = I18n.L("预设背景应用失败：") + file;
                 return;
             }
             _bgPath.Text = dst;
@@ -1187,7 +1187,7 @@ public sealed partial class SettingsPage : PageBase
         }
         catch (Exception ex)
         {
-            _bgInfo.Text = I18n.L("预设背景应用失败:") + ex.Message;
+            _bgInfo.Text = I18n.L("预设背景应用失败：") + ex.Message;
         }
     }
 
@@ -1232,7 +1232,7 @@ public sealed partial class SettingsPage : PageBase
             PageBase.Run(() => RefreshVisionStatusAsync(force: true), I18n.L("检测失败"));
         });
         _visionSyncing = false;
-        return Ui.Field(I18n.L("识图"), Ui.H(8.0, mode, detect.VCenter(), status.VCenter()), I18n.L("自动检测:先查公开模型能力库,查不到就发张小图实测;也可以手动指定"));
+        return Ui.Field(I18n.L("识图"), Ui.H(8.0, mode, detect.VCenter(), status.VCenter()), I18n.L("自动检测：先查公开模型能力库，查不到就发张小图实测；也可以手动指定"));
     }
 
     /// <summary>OnShown 触发的那次刷新(= Windows 挂在 <c>base.Loaded</c> 上的那一次)。</summary>
@@ -1271,7 +1271,7 @@ public sealed partial class SettingsPage : PageBase
         }
         catch (Exception ex)
         {
-            status.Text = I18n.L("检测失败:") + ex.Message;
+            status.Text = I18n.L("检测失败：") + ex.Message;
         }
     }
 
@@ -1293,7 +1293,7 @@ public sealed partial class SettingsPage : PageBase
         {
             PageBase.Run(async delegate
             {
-                if (await Dlg.Confirm(I18n.L("清空全部记忆?"), I18n.L("助手记下的偏好、配置和修好过的问题都会删除,无法恢复。"), I18n.L("清空"), null, danger: true))
+                if (await Dlg.Confirm(I18n.L("清空全部记忆？"), I18n.L("助手记下的偏好、配置和修好过的问题都会删除，无法恢复。"), I18n.L("清空"), null, danger: true))
                 {
                     int n = TipCL.Core.Launcher.Ai.FileMemory.Clear();
                     AppServices.Toast(I18n.L("已清空记忆"), I18n.L("删除了 {0} 条", n), ToastKind.Success);
@@ -1307,7 +1307,7 @@ public sealed partial class SettingsPage : PageBase
             RenderMemory();
         }, "\ue72c");
         return Ui.Card(Rows(
-            Ui.Field(I18n.L("记忆"), Ui.H(8.0, refresh, clear), I18n.L("AI 助手跨对话记住的偏好和配置(数据目录 ai_memory.md,一行一条)")),
+            Ui.Field(I18n.L("记忆"), Ui.H(8.0, refresh, clear), I18n.L("AI 助手跨对话记住的偏好和配置（数据目录 ai_memory.md，一行一条）")),
             count,
             list));
     }
@@ -1326,8 +1326,8 @@ public sealed partial class SettingsPage : PageBase
         _memoryList.Children.Clear();
         List<string> entries = TipCL.Core.Launcher.Ai.FileMemory.Entries();
         _memoryCount.Text = (entries.Count == 0)
-            ? I18n.L("还没有记忆。对话里说出偏好或修好问题后,助手会自己记下")
-            : I18n.L("共 {0} 条,新对话开始时会带给助手", entries.Count);
+            ? I18n.L("还没有记忆。对话里说出偏好或修好问题后，助手会自己记下")
+            : I18n.L("共 {0} 条，新对话开始时会带给助手", entries.Count);
         if (_memoryClear is not null)
         {
             _memoryClear.IsEnabled = entries.Count > 0;
@@ -1374,7 +1374,7 @@ public sealed partial class SettingsPage : PageBase
         {
             return true;
         }
-        AppServices.Toast(I18n.L("记忆已变化"), I18n.L("文件刚被改过,已刷新列表"), ToastKind.Warning);
+        AppServices.Toast(I18n.L("记忆已变化"), I18n.L("文件刚被改过，已刷新列表"), ToastKind.Warning);
         return false;
     }
 
@@ -1405,14 +1405,14 @@ public sealed partial class SettingsPage : PageBase
             PageBase.Run(() => CopyTextAsync(copy, TipCL.Core.Launcher.Ai.McpServer.Url));
         };
         RefreshMcpStatus();
-        return Ui.Field("MCP Server", Ui.H(8.0, sw, copy.VCenter(), status.VCenter()), I18n.L("让 Claude、Cursor 等外部 AI 直接调用启动器的工具;只监听本机"));
+        return Ui.Field("MCP Server", Ui.H(8.0, sw, copy.VCenter(), status.VCenter()), I18n.L("让 Claude、Cursor 等外部 AI 直接调用启动器的工具；只监听本机"));
     }
 
     private void RefreshMcpStatus()
     {
         _mcpStatus.Text = TipCL.Core.Launcher.Ai.McpServer.Running
             ? TipCL.Core.Launcher.Ai.McpServer.Url
-            : (string.IsNullOrEmpty(TipCL.Core.Launcher.Ai.McpServer.LastError) ? I18n.L("未开启") : I18n.L("启动失败:") + TipCL.Core.Launcher.Ai.McpServer.LastError);
+            : (string.IsNullOrEmpty(TipCL.Core.Launcher.Ai.McpServer.LastError) ? I18n.L("未开启") : I18n.L("启动失败：") + TipCL.Core.Launcher.Ai.McpServer.LastError);
     }
 
     /// <summary>
@@ -1661,7 +1661,7 @@ public sealed partial class SettingsPage : PageBase
         }
         if (aiModelList == null)
         {
-            PageBase.Toast(I18n.L("拉取失败"), I18n.L("没能从网关取到模型列表,可直接手填模型名"), ToastKind.Warning);
+            PageBase.Toast(I18n.L("拉取失败"), I18n.L("没能从网关取到模型列表，可直接手填模型名"), ToastKind.Warning);
             return;
         }
         string text = AiModelValue();
@@ -1691,7 +1691,7 @@ public sealed partial class SettingsPage : PageBase
         }
         else
         {
-            PageBase.Toast(I18n.L("没取到模型"), string.IsNullOrEmpty(aiModelList.Error) ? I18n.L("网关没返回模型列表,可直接手填模型名") : aiModelList.Error, ToastKind.Warning);
+            PageBase.Toast(I18n.L("没取到模型"), string.IsNullOrEmpty(aiModelList.Error) ? I18n.L("网关没返回模型列表，可直接手填模型名") : aiModelList.Error, ToastKind.Warning);
         }
     }
 
@@ -2093,7 +2093,7 @@ public sealed partial class SettingsPage : PageBase
 
     private async Task OfferLanguageRestartAsync()
     {
-        if (!(await Dlg.Confirm(I18n.L("语言已切换"), I18n.L("界面文字要重启启动器才会全部变成新语言。是否现在重启?"), I18n.L("立即重启"), I18n.L("稍后"))))
+        if (!(await Dlg.Confirm(I18n.L("语言已切换"), I18n.L("界面文字要重启启动器才会全部变成新语言。是否现在重启？"), I18n.L("立即重启"), I18n.L("稍后"))))
         {
             PageBase.Toast(I18n.L("语言已切换"), I18n.L("下次启动启动器后界面才会变成新语言"));
             return;
@@ -2112,7 +2112,7 @@ public sealed partial class SettingsPage : PageBase
         }
         catch (Exception ex)
         {
-            PageBase.Toast(I18n.L("重启失败"), I18n.L("无法拉起新进程,请手动关闭后重新打开") + "\n" + ex.Message, ToastKind.Error);
+            PageBase.Toast(I18n.L("重启失败"), I18n.L("无法拉起新进程，请手动关闭后重新打开") + "\n" + ex.Message, ToastKind.Error);
         }
     }
 
@@ -2182,7 +2182,7 @@ public sealed partial class SettingsPage : PageBase
         List<string> history = (await PageBase.Api.TryCallAsync("background_history", null, new List<string>())) ?? new List<string>();
         bool isEnabled = await PageBase.Api.TryCallAsync("can_undo_background", null, fallback: false);
         _bgUndo.IsEnabled = isEnabled;
-        ToolTip.SetTip(_bgUndo, history.Count == 0 ? null : I18n.L("上一张:{0}", history[history.Count - 1]));
+        ToolTip.SetTip(_bgUndo, history.Count == 0 ? null : I18n.L("上一张：{0}", history[history.Count - 1]));
         if (!string.IsNullOrEmpty(Wallpaper.Error))
         {
             _bgInfo.Text = Wallpaper.Error;
@@ -2192,7 +2192,7 @@ public sealed partial class SettingsPage : PageBase
         string text2 = _bgPath.Text?.Trim() ?? "";
         string text3 = (text.Length > 0)
             ? I18n.L("正在轮播文件夹里的图片")
-            : ((text2.Length == 0) ? I18n.L("当前没有壁纸,界面走主题底色") : (FileKinds.IsVideo(text2) ? I18n.L("当前是动态壁纸(静音循环)") : I18n.L("当前是静态背景图")));
+            : ((text2.Length == 0) ? I18n.L("当前没有壁纸，界面走主题底色") : (FileKinds.IsVideo(text2) ? I18n.L("当前是动态壁纸（静音循环）") : I18n.L("当前是静态背景图")));
         _bgInfo.Text = (history.Count == 0) ? text3 : I18n.L("{0} · 历史 {1} 张可退", text3, history.Count);
     }
 
@@ -2213,7 +2213,7 @@ public sealed partial class SettingsPage : PageBase
 
     private async Task ResetWallpaperAsync()
     {
-        if (await Dlg.Confirm(I18n.L("恢复出厂壁纸"), I18n.L("会清掉当前壁纸与轮播文件夹;这一组仍会进历史,可以撤销回来。"), I18n.L("恢复"), I18n.L("取消")))
+        if (await Dlg.Confirm(I18n.L("恢复出厂壁纸"), I18n.L("会清掉当前壁纸与轮播文件夹；这一组仍会进历史，可以撤销回来。"), I18n.L("恢复"), I18n.L("取消")))
         {
             BackgroundState? backgroundState = await PageBase.Api.CallAsync<BackgroundState>("reset_background");
             _sync = true;
@@ -2323,10 +2323,10 @@ public sealed partial class SettingsPage : PageBase
             return;
         }
         _cleanInfo.Text = I18n.L("可清理 {0} 个文件 · {1}", cleanPreview.Count, Fmt.Size(cleanPreview.Bytes));
-        CheckBox libs = Ui.Check(I18n.L("未引用依赖库({0} 个 · {1})", cleanPreview.UnusedLibraries.Count, Fmt.Size(cleanPreview.UnusedLibraries.Sum((CleanerEntry x) => x.Bytes))), value: true);
-        CheckBox parts = Ui.Check(I18n.L("残留 .part({0} 个 · {1})", cleanPreview.Parts.Count, Fmt.Size(cleanPreview.Parts.Sum((CleanerEntry x) => x.Bytes))), value: true);
-        CheckBox cache = Ui.Check(I18n.L("更新缓存({0} 个 · {1})", cleanPreview.Cache.Count, Fmt.Size(cleanPreview.Cache.Sum((CleanerEntry x) => x.Bytes))), value: true);
-        SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("共 {0} 个文件,约 {1}。删掉的文件下次用到会自动重新下载。", cleanPreview.Count, Fmt.Size(cleanPreview.Bytes))), libs, parts, cache);
+        CheckBox libs = Ui.Check(I18n.L("未引用依赖库（{0} 个 · {1}）", cleanPreview.UnusedLibraries.Count, Fmt.Size(cleanPreview.UnusedLibraries.Sum((CleanerEntry x) => x.Bytes))), value: true);
+        CheckBox parts = Ui.Check(I18n.L("残留 .part（{0} 个 · {1}）", cleanPreview.Parts.Count, Fmt.Size(cleanPreview.Parts.Sum((CleanerEntry x) => x.Bytes))), value: true);
+        CheckBox cache = Ui.Check(I18n.L("更新缓存（{0} 个 · {1}）", cleanPreview.Cache.Count, Fmt.Size(cleanPreview.Cache.Sum((CleanerEntry x) => x.Bytes))), value: true);
+        SPanel body = Ui.V(8.0, Ui.Muted(I18n.L("共 {0} 个文件，约 {1}。删掉的文件下次用到会自动重新下载。", cleanPreview.Count, Fmt.Size(cleanPreview.Bytes))), libs, parts, cache);
         if (!(await Dlg.Ask(I18n.L("清理文件"), body, I18n.L("开始清理"), I18n.L("取消"), danger: true)))
         {
             return;
@@ -2378,7 +2378,7 @@ public sealed partial class SettingsPage : PageBase
         {
             return;
         }
-        SPanel body = Ui.V(6.0, Ui.Muted(I18n.L("本机:{0} GB 内存 / {1} 核 CPU", rec.TotalRamGb, rec.CpuCount)), Ui.Txt(I18n.L("推荐内存 {0} MB", rec.MemoryMb), 14.0, bold: true), Ui.Small(I18n.L("推荐 Java {0} · 窗口 {1}×{2} · 回收器 {3}", rec.JavaMajor, rec.WindowWidth, rec.WindowHeight, rec.GcPreset)));
+        SPanel body = Ui.V(6.0, Ui.Muted(I18n.L("本机：{0} GB 内存 / {1} 核 CPU", rec.TotalRamGb, rec.CpuCount)), Ui.Txt(I18n.L("推荐内存 {0} MB", rec.MemoryMb), 14.0, bold: true), Ui.Small(I18n.L("推荐 Java {0} · 窗口 {1}×{2} · 回收器 {3}", rec.JavaMajor, rec.WindowWidth, rec.WindowHeight, rec.GcPreset)));
         if (await Dlg.Ask(I18n.L("智能推荐"), body, I18n.L("应用推荐")))
         {
             _mem.Value = Clamp.Of(rec.MemoryMb, 512, 32768);
@@ -2391,7 +2391,7 @@ public sealed partial class SettingsPage : PageBase
                 _h.Text = rec.WindowHeight.ToString();
             }
             SelectKey(_gc, string.IsNullOrEmpty(rec.GcPreset) ? "auto" : rec.GcPreset);
-            PageBase.Toast(I18n.L("已应用"), I18n.L("内存已设为 {0} MB,保存设置后生效", rec.MemoryMb), ToastKind.Success);
+            PageBase.Toast(I18n.L("已应用"), I18n.L("内存已设为 {0} MB，保存设置后生效", rec.MemoryMb), ToastKind.Success);
         }
     }
 
@@ -2433,8 +2433,8 @@ public sealed partial class SettingsPage : PageBase
             lang,
         }, I18n.L(k))));
         _langPreview.Text = (lang == _lang0)
-            ? (I18n.L("预览:") + string.Join(" · ", value))
-            : (I18n.L("切换后界面会变成:") + string.Join(" · ", value) + I18n.L("(重启后全量生效)"));
+            ? (I18n.L("预览：") + string.Join(" · ", value))
+            : (I18n.L("切换后界面会变成：") + string.Join(" · ", value) + I18n.L("（重启后全量生效）"));
     }
 
     private void ApplySecretState(Dictionary<string, JsonElement> s)
@@ -2453,10 +2453,10 @@ public sealed partial class SettingsPage : PageBase
     {
         _cfKey.Tag = _cfClear
             ? I18n.L("已恢复为内置 Key")
-            : (_cfSet ? string.Format(I18n.L("已保存自己的 Key({0}),留空不修改"), _cfHint) : I18n.L("CurseForge API Key(留空用内置)"));
+            : (_cfSet ? string.Format(I18n.L("已保存自己的 Key（{0}），留空不修改"), _cfHint) : I18n.L("CurseForge API Key（留空用内置）"));
         _aiKey.Tag = _aiKeyClear
             ? I18n.L("令牌已清除")
-            : (_aiKeySet ? string.Format(I18n.L("已保存自己的令牌({0}),留空不修改"), _aiKeyHint) : "sk-...");
+            : (_aiKeySet ? string.Format(I18n.L("已保存自己的令牌（{0}），留空不修改"), _aiKeyHint) : "sk-...");
         _cfReset.IsVisible = _cfSet && !_cfClear;
         _aiKeyReset.IsVisible = _aiKeySet && !_aiKeyClear;
     }
@@ -2500,7 +2500,7 @@ public sealed partial class SettingsPage : PageBase
     /// <summary>【Windows 源】<c>:2006-2011</c>:关于卡片(版本 + 致谢)。</summary>
     private static Border BuildAboutCard()
     {
-        TextBlock thanks = Ui.Muted("@368****168 \u2014 " + I18n.L("帮忙测试了正版(微软)验证"));
+        TextBlock thanks = Ui.Muted("@368****168 \u2014 " + I18n.L("帮忙测试了正版（微软）验证"));
         thanks.TextWrapping = TextWrapping.Wrap;
         return Ui.Card(Ui.V(2.0, Ui.Section(I18n.L("关于"), I18n.L("TipCL 启动器")), Ui.Field(I18n.L("版本"), Ui.Muted(TipCL.Core.Launcher.AppInfo.APP_VERSION)), Ui.Field(I18n.L("致谢"), thanks, I18n.L("感谢每一位帮忙测试的朋友"))));
     }

@@ -206,7 +206,7 @@ public sealed class InstallPage : UserControl
 		}, "\ue896");
 		_go.Height = 38.0;
 		_go.Padding = new Thickness(20.0, 0.0, 20.0, 0.0);
-		ToolTip.SetTip(_size, I18n.L("估算值,不含首次下载的共享资源文件"));
+		ToolTip.SetTip(_size, I18n.L("估算值，不含首次下载的共享资源文件"));
 		Grid foot = Ui.G(null, "Auto,*,Auto");
 		foot.Add(Ui.H(6.0, Ui.Muted(I18n.L("将安装")), _sum, _size).VCenter(), 0);
 		foot.Add(_go, 0, 2);
@@ -339,7 +339,7 @@ public sealed class InstallPage : UserControl
 			_of.IsChecked = false;
 		}
 		_ofName.Opacity = ofOk ? 1.0 : 0.5;
-		_ofWhy.Text = ofOk ? "" : (!_hasOf ? I18n.L("此版本没有可用的 OptiFine") : I18n.L("与 {0} 不兼容,可改装 Sodium + Iris", Names[k]));
+		_ofWhy.Text = ofOk ? "" : (!_hasOf ? I18n.L("此版本没有可用的 OptiFine") : I18n.L("与 {0} 不兼容，可改装 Sodium + Iris", Names[k]));
 		if (_autoName)
 		{
 			_name.Text = (k == 0) ? _ver : (Names[k] + " " + _ver);

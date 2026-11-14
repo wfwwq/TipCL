@@ -251,13 +251,13 @@ internal sealed class Bubble : Border
 			{
 				resend(bubble._plain);
 			}, "B.InkMuted", 12.0, pill: true));
-			_rewindBtn = AiIcons.Flat(AiIcons.Undo, I18n.L("撤回这一轮"), I18n.L("回退到这句话之前,并尽量还原这一轮改过的文件"), delegate
+			_rewindBtn = AiIcons.Flat(AiIcons.Undo, I18n.L("撤回这一轮"), I18n.L("回退到这句话之前，并尽量还原这一轮改过的文件"), delegate
 			{
 				(bubble._rewindBtn?.Tag as Action)?.Invoke();
 			}, "B.Warn", 12.0, pill: true);
 			_rewindBtn.IsVisible = false;
 			_actions.Children.Add(_rewindBtn);
-			_editBtn = AiIcons.Flat(AiIcons.Pen, I18n.L("编辑"), I18n.L("改这句话,撤回到它之前再重新发送"), delegate
+			_editBtn = AiIcons.Flat(AiIcons.Pen, I18n.L("编辑"), I18n.L("改这句话，撤回到它之前再重新发送"), delegate
 			{
 				bubble.BeginEdit();
 			}, "B.InkMuted", 12.0, pill: true);

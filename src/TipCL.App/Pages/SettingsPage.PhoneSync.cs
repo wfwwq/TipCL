@@ -27,7 +27,7 @@ public sealed partial class SettingsPage
     /// <summary>设置页「手机同步」卡片:填手机地址(或扫描 / USB)、输入配对码连接,然后打开同步面板。</summary>
     private Border BuildPhoneSyncCard()
     {
-        TextBox addr = Ui.Input(I18n.L("手机 IP,如 192.168.1.23"), PhoneLink.LastAddress, 200.0);
+        TextBox addr = Ui.Input(I18n.L("手机 IP，如 192.168.1.23"), PhoneLink.LastAddress, 200.0);
         TextBox code = Ui.Input(I18n.L("配对码"), PhoneLink.LastToken, 90.0);
         TextBlock status = Ui.Muted("");
         status.TextWrapping = TextWrapping.Wrap;
@@ -80,7 +80,7 @@ public sealed partial class SettingsPage
                 {
                     addr.Text = found[0];
                 }
-                Refresh(found.Count == 0 ? I18n.L("没找到手机:确认在同一个 Wi-Fi,且手机上已启动同步服务") : I18n.L("找到") + " " + string.Join("  ", found));
+                Refresh(found.Count == 0 ? I18n.L("没找到手机：确认在同一个 Wi-Fi，且手机上已启动同步服务") : I18n.L("找到") + " " + string.Join("  ", found));
             });
         });
         open = Ui.Btn(I18n.L("打开同步面板"), BtnKind.Normal, delegate
@@ -89,7 +89,7 @@ public sealed partial class SettingsPage
         });
         Refresh();
         return Ui.Card(Rows(
-            Ui.Field(I18n.L("连接手机"), Ui.H(8.0, addr.VCenter(), code.VCenter(), connect.VCenter(), scan.VCenter(), usb.VCenter()), I18n.L("手机启动器 → 存档管理 → 从 zip 导入 → 启动同步服务,填上显示的地址和配对码;USB 需打开手机的 USB 调试,并把 adb.exe 放在 TipCL 同目录")),
+            Ui.Field(I18n.L("连接手机"), Ui.H(8.0, addr.VCenter(), code.VCenter(), connect.VCenter(), scan.VCenter(), usb.VCenter()), I18n.L("手机启动器 → 存档管理 → 从 zip 导入 → 启动同步服务，填上显示的地址和配对码；USB 需打开手机的 USB 调试，并把 adb.exe 放在 TipCL 同目录")),
             Ui.Field("", Ui.H(8.0, open.VCenter(), status.VCenter()))));
     }
 

@@ -138,7 +138,7 @@ public sealed class MultiplayerPage : PageBase
 		{
 			Ui.OpenUrl(ProjectHome);
 		}, "\ue71b"), Ui.Small(I18n.L("Terracotta | 陶瓦联机  © burningtnt  ·  基于 EasyTier")).VCenter());
-		Grid head = Ui.Section(I18n.L("陶瓦联机"), I18n.L("输入邀请码即可加入。陶瓦是 EasyTier P2P 打洞,不是 FRP 隧道;") + I18n.L("会与 HMCL 一样带上自定义会合节点。PCL 房间号不互通,局域网请用下面的地址。"));
+		Grid head = Ui.Section(I18n.L("陶瓦联机"), I18n.L("输入邀请码即可加入。陶瓦是 EasyTier P2P 打洞，不是 FRP 隧道；") + I18n.L("会与 HMCL 一样带上自定义会合节点。PCL 房间号不互通，局域网请用下面的地址。"));
 		// 页面布局自定义(WP-U3):块内组合沿用旧 ScrollBody 的 10 间距包一层;默认全可见、顺序同旧 ScrollBody 实参
 		// (「节点说明」块顺带承载项目主页页脚,收起它意味着同时隐藏页脚)
 		Content = new BlockHost("multiplayer", new List<BlockSpec>
@@ -184,7 +184,7 @@ public sealed class MultiplayerPage : PageBase
 			port = 25565
 		}, "")) ?? "";
 		List<string> ips = (await PageBase.Api.TryCallAsync("local_ips", null, new List<string>())) ?? new List<string>();
-		_lan.Text = ((ips.Count > 0) ? I18n.L("本机局域网地址:{0}", string.Join(I18n.L("、"), ips.Select((string ip) => ip + ":25565"))) : hint);
+		_lan.Text = ((ips.Count > 0) ? I18n.L("本机局域网地址：{0}", string.Join(I18n.L("、"), ips.Select((string ip) => ip + ":25565"))) : hint);
 		// 【Avalonia 差异】WPF 的 ToolTip 是属性;Avalonia 是附加属性,本仓统一用 UiExt.Tip(...) 这个门面
 		if (!string.IsNullOrWhiteSpace(hint))
 		{
@@ -281,10 +281,10 @@ public sealed class MultiplayerPage : PageBase
 		if (hasRoom)
 		{
 			_room.Text = (string.IsNullOrWhiteSpace(snap.Room) ? I18n.L("陶瓦联机大厅") : snap.Room);
-			_roomHint.Text = (string.IsNullOrWhiteSpace(snap.Url) ? I18n.L("让好友在联机页选「我想当房客」,填这串邀请码。") : I18n.L("启动游戏 → 多人游戏 → 双击「陶瓦联机大厅」。"));
+			_roomHint.Text = (string.IsNullOrWhiteSpace(snap.Url) ? I18n.L("让好友在联机页选「我想当房客」，填这串邀请码。") : I18n.L("启动游戏 → 多人游戏 → 双击「陶瓦联机大厅」。"));
 		}
 
-		_nodes.Text = ((snap.Nodes.Count == 0) ? "" : I18n.L("会合节点 {0} 个:{1}", snap.Nodes.Count, string.Join("  ", snap.Nodes.Take(3))));
+		_nodes.Text = ((snap.Nodes.Count == 0) ? "" : I18n.L("会合节点 {0} 个：{1}", snap.Nodes.Count, string.Join("  ", snap.Nodes.Take(3))));
 		if (state != _uiState)
 		{
 			_uiState = state;
@@ -364,10 +364,10 @@ public sealed class MultiplayerPage : PageBase
 		switch (state)
 		{
 		case "missing":
-			Action(I18n.L("瓦"), I18n.L("下载陶瓦联机内核"), I18n.L("首次使用需要下载约 8 MB 的官方内核,之后可直接开房。"), I18n.L("下载"), () => PrepareAsync(_actions), primary: true);
+			Action(I18n.L("瓦"), I18n.L("下载陶瓦联机内核"), I18n.L("首次使用需要下载约 8 MB 的官方内核，之后可直接开房。"), I18n.L("下载"), () => PrepareAsync(_actions), primary: true);
 			return;
 		case "waiting":
-			Action(I18n.L("房"), I18n.L("我想当房主"), I18n.L("创建房间并生成邀请码,与好友一起畅玩。"), I18n.L("创建"), HostAsync, primary: true);
+			Action(I18n.L("房"), I18n.L("我想当房主"), I18n.L("创建房间并生成邀请码，与好友一起畅玩。"), I18n.L("创建"), HostAsync, primary: true);
 			Action(I18n.L("客"), I18n.L("我想当房客"), I18n.L("输入房主提供的邀请码加入游戏世界。"), I18n.L("加入"), JoinAsync);
 			return;
 		case "host-ok":
@@ -376,11 +376,11 @@ public sealed class MultiplayerPage : PageBase
 				Copy(_room.Text, I18n.L("已把邀请码复制到剪贴板"));
 				return Task.CompletedTask;
 			}, primary: true);
-			Action(I18n.L("返"), I18n.L("退出"), I18n.L("这会彻底关闭房间,其他房客将一并退出。"), I18n.L("退出"), BackAsync);
+			Action(I18n.L("返"), I18n.L("退出"), I18n.L("这会彻底关闭房间，其他房客将一并退出。"), I18n.L("退出"), BackAsync);
 			return;
 		case "host-scanning":
 		case "host-starting":
-			Action(I18n.L("扫"), I18n.L("正在扫描局域网世界"), I18n.L("请启动游戏,进入单人世界,按 ESC,选择对局域网开放。"), I18n.L("退出"), BackAsync);
+			Action(I18n.L("扫"), I18n.L("正在扫描局域网世界"), I18n.L("请启动游戏，进入单人世界，按 ESC，选择对局域网开放。"), I18n.L("退出"), BackAsync);
 			return;
 		case "unsupported":
 			Action("!", I18n.L("当前系统不支持"), I18n.L("陶瓦联机暂未提供此架构的官方内核。"), I18n.L("了解"), delegate
@@ -390,7 +390,7 @@ public sealed class MultiplayerPage : PageBase
 			});
 			return;
 		case "idle":
-			Action("▶", I18n.L("启动联机内核"), I18n.L("内核已安装,点一下即可开始联机。"), I18n.L("启动"), () => PrepareAsync(_actions), primary: true);
+			Action("▶", I18n.L("启动联机内核"), I18n.L("内核已安装，点一下即可开始联机。"), I18n.L("启动"), () => PrepareAsync(_actions), primary: true);
 			return;
 		case "installing":
 		case "unknown":
@@ -402,14 +402,14 @@ public sealed class MultiplayerPage : PageBase
 			Action(I18n.L("连"), I18n.L("正在加入房间"), string.IsNullOrWhiteSpace(snap.DifficultyHint) ? I18n.L("正在与房主建立连接。") : snap.DifficultyHint, I18n.L("退出"), BackAsync);
 			return;
 		case "guest-ok":
-			Action(I18n.L("进"), I18n.L("进入世界"), I18n.L("启动游戏后到多人游戏双击「陶瓦联机大厅」,或点这里直接进入。"), I18n.L("进入"), EnterWorldAsync, primary: true);
+			Action(I18n.L("进"), I18n.L("进入世界"), I18n.L("启动游戏后到多人游戏双击「陶瓦联机大厅」，或点这里直接进入。"), I18n.L("进入"), EnterWorldAsync, primary: true);
 			Action(I18n.L("返"), I18n.L("退出"), I18n.L("这不影响其他房客加入当前房间。"), I18n.L("退出"), BackAsync);
 			return;
 		default:
 			// 【Windows 源】:exception / fatal 以及任何没列出来的状态都落到这三条兜底
-			Action("!", I18n.L("联机失败"), (!string.IsNullOrWhiteSpace(snap.ErrorHint)) ? snap.ErrorHint : (string.IsNullOrWhiteSpace(snap.Error) ? I18n.L("请返回后重试,或检查网络。") : snap.Error), I18n.L("返回"), BackAsync);
-			Action(I18n.L("直"), I18n.L("朋友是公网就直连"), I18n.L("让他把单人世界对局域网开放,并在路由映射该端口,然后填他的公网 IP:端口。"), I18n.L("直连"), DirectConnectAsync);
-			Action(I18n.L("启"), I18n.L("重新启动内核"), I18n.L("若内核已退出,点此重新拉起。"), I18n.L("重启"), () => PrepareAsync(_actions));
+			Action("!", I18n.L("联机失败"), (!string.IsNullOrWhiteSpace(snap.ErrorHint)) ? snap.ErrorHint : (string.IsNullOrWhiteSpace(snap.Error) ? I18n.L("请返回后重试，或检查网络。") : snap.Error), I18n.L("返回"), BackAsync);
+			Action(I18n.L("直"), I18n.L("朋友是公网就直连"), I18n.L("让他把单人世界对局域网开放，并在路由映射该端口，然后填他的公网 IP:端口。"), I18n.L("直连"), DirectConnectAsync);
+			Action(I18n.L("启"), I18n.L("重新启动内核"), I18n.L("若内核已退出，点此重新拉起。"), I18n.L("重启"), () => PrepareAsync(_actions));
 			return;
 		}
 	}
@@ -486,7 +486,7 @@ public sealed class MultiplayerPage : PageBase
 	/// <summary>【Windows 源】<c>:516-528</c>:公网直连(地址交给后端,Toast 用后端回的那句)。</summary>
 	private async Task DirectConnectAsync()
 	{
-		string? address = await Dlg.Prompt(I18n.L("公网直连"), I18n.L("朋友需先对局域网开放世界,并在路由器映射该端口,然后填他的公网地址。"), "", I18n.L("例如 1.2.3.4:25565"));
+		string? address = await Dlg.Prompt(I18n.L("公网直连"), I18n.L("朋友需先对局域网开放世界，并在路由器映射该端口，然后填他的公网地址。"), "", I18n.L("例如 1.2.3.4:25565"));
 		if (!string.IsNullOrWhiteSpace(address))
 		{
 			string message = await PageBase.Api.CallAsync<string>("terracotta_direct_connect", new

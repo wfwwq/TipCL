@@ -76,7 +76,7 @@ public static class PageLayoutIO
 		{
 			PageLayoutStore.Save(item.Key, item.Value);
 		}
-		AppServices.Toast(I18n.L("已导入 {0} 个页面的布局(下次打开对应页面生效)", dictionary.Count), "", ToastKind.Success);
+		AppServices.Toast(I18n.L("已导入 {0} 个页面的布局（下次打开对应页面生效）", dictionary.Count), "", ToastKind.Success);
 		return dictionary.Count;
 	}
 }

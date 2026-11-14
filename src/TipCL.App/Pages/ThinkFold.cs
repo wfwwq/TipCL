@@ -104,7 +104,7 @@ internal sealed class ThinkFold : Border
 	private void SyncHead()
 	{
 		int length = (_body.Text ?? "").Length;
-		_label.Text = (_thinking ? I18n.L("思考中...") : (I18n.L("思考过程") + ((length > 0) ? (I18n.L("(") + length + I18n.L(")")) : "")));
+		_label.Text = (_thinking ? I18n.L("思考中...") : (I18n.L("思考过程") + ((length > 0) ? (I18n.L("（") + length + I18n.L("）")) : "")));
 		Lucide.Shimmer(_label, _thinking, "B.Ink");
 		Lucide.Rotate(_chevron, _open);
 	}
