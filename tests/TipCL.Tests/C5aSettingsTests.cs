@@ -218,7 +218,7 @@ public class C5aSettingsTests
             {
                 Assert.True(C5aFiles.HasText(page, I18n.L(label)), "外观卡少了「" + label + "」这一行");
             }
-            foreach (string hint in new[] { "立即生效", "点一下就换", "预设色调,立即生效", "换页、进度条、悬浮动效", "安装时飞入侧栏任务列表", "毫秒,建议 400–800" })
+            foreach (string hint in new[] { "立即生效", "点一下就换", "预设色调，立即生效", "换页、进度条、悬浮动效", "安装时飞入侧栏任务列表", "毫秒，建议 400–800" })
             {
                 Assert.True(C5aFiles.HasText(page, I18n.L(hint)), "外观卡少了提示「" + hint + "」");
             }
@@ -434,7 +434,7 @@ public class C5aSettingsTests
             Assert.True(C5aFiles.HasText(page, I18n.L("TipCL 启动器")));
             Assert.True(C5aFiles.HasText(page, TipCL.Core.Launcher.AppInfo.APP_VERSION));
             Assert.True(C5aFiles.HasText(page, I18n.L("感谢每一位帮忙测试的朋友")));
-            Assert.True(C5aFiles.HasText(page, "@368****168 \u2014 " + I18n.L("帮忙测试了正版(微软)验证")));
+            Assert.True(C5aFiles.HasText(page, "@368****168 \u2014 " + I18n.L("帮忙测试了正版（微软）验证")));
             // Windows 把「检查更新」钮复用进这一段的右上角
             Assert.True(C5aFiles.HasButton(page, I18n.L("检查更新")));
         });
@@ -915,7 +915,7 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
-            Assert.True(C5aFiles.HasText(page, I18n.L("共 {0} 个:", 1) + I18n.L("我的主题") + "(" + I18n.L("浅色") + " #2E9B6B)"));
+            Assert.True(C5aFiles.HasText(page, I18n.L("共 {0} 个：", 1) + I18n.L("我的主题") + "(" + I18n.L("浅色") + " #2E9B6B)"));
 
             C5aFiles.Click(C5aFiles.ByText(page, I18n.L("加载")));
             C5aFiles.Pump(() => api.Count("load_theme") >= 1);
@@ -1421,7 +1421,7 @@ public class C5aSettingsTests
             C5aFiles.Click(C5aFiles.NavButton(page, I18n.L("通用")));
             C5aFiles.Settle(2);
 
-            Assert.True(C5aFiles.HasText(page, I18n.L("共 {0} 条,新对话开始时会带给助手", 2)));
+            Assert.True(C5aFiles.HasText(page, I18n.L("共 {0} 条，新对话开始时会带给助手", 2)));
             Assert.True(C5aFiles.HasText(page, "界面偏好:深色"));
             Assert.True(C5aFiles.HasText(page, "修好了 Java 路径"));
             // 记忆文件落点在隔离目录里(红线:绝不碰真实数据目录)
@@ -1430,7 +1430,7 @@ public class C5aSettingsTests
             C5aFiles.Click(C5aFiles.ByText(page, I18n.L("清空全部")));
             C3bFiles.WaitDialog();
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last();
-            Assert.Equal(I18n.L("清空全部记忆?"), card.Title);
+            Assert.Equal(I18n.L("清空全部记忆？"), card.Title);
             C5aFiles.Click(C5aFiles.ByText(card, I18n.L("清空")));
             C5aFiles.Pump(() => toasts.Has(I18n.L("已清空记忆")));
             Assert.Null(C5aFiles.Descendants(page).OfType<TextBlock>().FirstOrDefault(t => t.Text == "界面偏好:深色"));
@@ -1458,7 +1458,7 @@ public class C5aSettingsTests
             lang.SelectedIndex = 1;
             // 等**效果**(预览文案落地)再断言,而不是"泵到调了 3 次就数次数":文案落下说明 3 次 translate 都回来了,
             // 这时候计数才确定(先计数会在续体还没跑完时假红 —— 本包在 VSTest 通道踩到过,见 C5a 的 DECISIONS)。
-            string expected = I18n.L("切换后界面会变成:") + "Settings · Settings · Settings" + I18n.L("(重启后全量生效)");
+            string expected = I18n.L("切换后界面会变成：") + "Settings · Settings · Settings" + I18n.L("（重启后全量生效）");
             C5aFiles.Pump(() => C5aFiles.TextsWith(page, expected).Count > 0, 5000);
             Assert.True(C5aFiles.HasText(page, expected), "预览文案没落地;现有文案:" + string.Join("|", C5aFiles.Texts(page).Select(t => t.Text)));
             Assert.Equal(3, api.Count("translate"));

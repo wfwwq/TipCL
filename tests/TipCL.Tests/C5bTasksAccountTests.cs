@@ -349,7 +349,7 @@ public class C5bTasksAccountTests
             AccountPage page = NewAccountPage(harness);
             Assert.True(C5bFiles.HasText(page, I18n.L("共 {0} 个", 0)));
             Assert.True(C5bFiles.HasText(page, I18n.L("还没有账号")));
-            Assert.True(C5bFiles.HasText(page, I18n.L("添加离线账号,或用微软 / 皮肤站 / 统一通行证登录")));
+            Assert.True(C5bFiles.HasText(page, I18n.L("添加离线账号，或用微软 / 皮肤站 / 统一通行证登录")));
             Assert.True(C5bFiles.HasText(page, I18n.L("未登录")));
             Assert.True(C5bFiles.HasText(page, I18n.L("先添加一个账号")));
         });
@@ -558,7 +558,7 @@ public class C5bTasksAccountTests
         });
     }
 
-    /// <summary>【Windows 源】<c>AccountPage.cs:344-351</c>:皮肤浮层点「清除,用游戏默认」⇒ 只带 name 写 <c>set_account_skin</c>。</summary>
+    /// <summary>【Windows 源】<c>AccountPage.cs:344-351</c>:皮肤浮层点「清除，用游戏默认」⇒ 只带 name 写 <c>set_account_skin</c>。</summary>
     [Fact]
     public void Account_page_skin_dialog_clear_writes_only_the_name()
     {
@@ -573,7 +573,7 @@ public class C5bTasksAccountTests
             AccountPage page = NewAccountPage(harness);
             C5bFiles.Click(Button(page, I18n.L("皮肤")));
             DialogCard card = WaitAsk();
-            C5bFiles.Click(Button(card, I18n.L("清除,用游戏默认")));
+            C5bFiles.Click(Button(card, I18n.L("清除，用游戏默认")));
             C5bFiles.Click(C5bFiles.ByText(card, I18n.L("保存")));
             C5bFiles.Pump(() => api.Count("set_account_skin") >= 1);
             string args = api.ParamsOf("set_account_skin");

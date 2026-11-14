@@ -174,9 +174,9 @@ public class C7bSettingsCardTests
 			allow.IsChecked = true;
 			C5bFiles.Click(allow);
 			Control dialog = C5bFiles.AnswerDialog(I18n.L("仍然允许"));
-			Assert.True(C5bFiles.HasText(dialog, I18n.L("允许安装未审核插件?")), "弹出来的必须是真的那条确认卡");
+			Assert.True(C5bFiles.HasText(dialog, I18n.L("允许安装未审核插件？")), "弹出来的必须是真的那条确认卡");
 			Assert.True(C5bFiles.HasText(dialog,
-				I18n.L("未审核的插件没人检查过来源和代码。Node 插件拥有完整的电脑权限,只安装你信任的作者发布的插件。")));
+				I18n.L("未审核的插件没人检查过来源和代码。Node 插件拥有完整的电脑权限，只安装你信任的作者发布的插件。")));
 			C5bFiles.Pump(() => api.Count("save_settings") >= 1);
 			Assert.Contains("\"plugin_allow_unverified\":true", api.ParamsOf("save_settings"), StringComparison.Ordinal);
 			Assert.True(allow.IsChecked == true, "确认之后开关保持打开");

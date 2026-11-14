@@ -275,7 +275,7 @@ internal static class C3eFiles
     {
         Assert.True(
             Math.Abs(expected - actual) < 1e-6,
-            what + ":期望 " + expected + ",实际 " + actual);
+            what + ":期望 " + expected + "，实际 " + actual);
     }
 
     /// <summary>一个带背景色的 Border(和页面上的卡片同类,能真的被渲染)。</summary>

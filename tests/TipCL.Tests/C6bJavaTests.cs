@@ -92,7 +92,7 @@ public class C6bJavaTests
             JavaPage page = LoadJava(harness);
             Assert.True(C5bFiles.HasText(page, I18n.L("共 {0} 个", 0)));
             Assert.True(C5bFiles.HasText(page, I18n.L("没有找到 Java")));
-            Assert.True(C5bFiles.HasText(page, I18n.L("点上面「下载」装一个,或扫描系统已有安装")));
+            Assert.True(C5bFiles.HasText(page, I18n.L("点上面「下载」装一个，或扫描系统已有安装")));
             // 发行版表为空 ⇒ 兜一个 adoptium,并选中它(Windows 同)
             ComboBox vendor = C5bFiles.Descendants(page).OfType<ComboBox>().First(c => c.Items.Count == 1 && string.Equals(c.Items[0] as string, "Adoptium", StringComparison.Ordinal));
             Assert.Single(vendor.Items.Cast<object>());

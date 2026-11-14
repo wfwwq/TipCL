@@ -68,7 +68,7 @@ internal static class C3bExpected
     /// <summary>【Windows 源】<c>VersionSetupDialog.cs:31</c>:垃圾回收器的 5 个取值 / 文案。</summary>
     internal static readonly string[] GcValues = { "auto", "g1", "zgc", "serial", "none" };
 
-    internal static readonly string[] GcLabels = { "自动", "G1(通用)", "ZGC(大内存)", "Serial(老电脑)", "不指定" };
+    internal static readonly string[] GcLabels = { "自动", "G1（通用）", "ZGC（大内存）", "Serial（老电脑）", "不指定" };
 
     /// <summary>【Windows 源】<c>VersionSetupDialog.cs:49-54</c>:窗口模式的 3 个文案 ↔ 取值。</summary>
     internal static readonly string[] WinModes = { "窗口", "全屏", "最大化" };

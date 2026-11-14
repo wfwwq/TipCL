@@ -157,7 +157,7 @@ public class C4DialogsTests
             C4Files.PumpTask(show);
             Control panel = C4Files.PanelCard(I18n.L("模组管理 · {0}", "默认"));
             Assert.True(C4Files.HasText(panel, I18n.L("还没有模组")));
-            Assert.True(C4Files.HasText(panel, I18n.L("到 Mod 页搜索安装,或直接导入 jar")));
+            Assert.True(C4Files.HasText(panel, I18n.L("到 Mod 页搜索安装，或直接导入 jar")));
         });
     }
 
@@ -1378,7 +1378,7 @@ public class C4DialogsTests
             C3bFiles.WaitDialog();
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last();
             Assert.Equal(I18n.L("{0} 个模组有更新", 1), card.Title);
-            Assert.True(C4Files.HasText(card, I18n.L("勾上要更新的,旧文件会在新包校验通过后才删除。")));
+            Assert.True(C4Files.HasText(card, I18n.L("勾上要更新的，旧文件会在新包校验通过后才删除。")));
             Assert.True(C4Files.HasButton(card, I18n.L("更新所选")));
             C4Files.AnswerDialog(I18n.L("取消"));
             C4Files.PumpTask(task);

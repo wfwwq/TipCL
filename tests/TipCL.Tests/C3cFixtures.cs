@@ -125,7 +125,7 @@ internal static class C3cExpected
     internal const string BannerWithVersionSub = "实例 {0} · 点「启动游戏」进入世界";
 
     /// <summary>【Windows 源】<c>LaunchPage.cs:950</c>:空版本列表时的状态文案。</summary>
-    internal const string NoVersionsStatus = "这个实例还没有版本,先去「下载」装一个";
+    internal const string NoVersionsStatus = "这个实例还没有版本，先去「下载」装一个";
 
     /// <summary>【Windows 源】<c>LaunchPage.cs:1316-1317</c>:没选版本就点启动时的 Toast。</summary>
     internal const string NoVersionToastTitle = "没有版本";
@@ -162,7 +162,7 @@ internal static class C3cExpected
     internal const string NotesPlaceholder = "随手记点什么...";
 
     /// <summary>【Windows 源】<c>LaunchPage.cs:35</c>:直连服务器输入框的占位。</summary>
-    internal const string ServerPlaceholder = "直连服务器 ip:port(可空)";
+    internal const string ServerPlaceholder = "直连服务器 ip:port（可空）";
 
     /// <summary>【Windows 源】<c>LaunchPage.Popups.cs:67,1601</c>(+ <c>LaunchPage.cs</c>):三处浮层 / 登录框的标题。</summary>
     internal const string ConfigTitle = "启动配置";
@@ -456,7 +456,7 @@ internal sealed class C3cFakeApi : IDisposable
         lock (_calls)
         {
             List<string> list = _calls.Where(c => string.Equals(c.Method, method, StringComparison.Ordinal)).Select(c => c.Params).ToList();
-            Assert.True(list.Count > index, "假后端没有收到第 " + index + " 次 " + method + "(一共 " + list.Count + " 次)");
+            Assert.True(list.Count > index, "假后端没有收到第 " + index + " 次 " + method + "(一共 " + list.Count + " 次）");
             return list[index];
         }
     }

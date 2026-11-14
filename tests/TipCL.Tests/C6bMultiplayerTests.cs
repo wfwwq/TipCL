@@ -72,7 +72,7 @@ public class C6bMultiplayerTests
             MultiplayerPage page = LoadPage(harness, "{}");
             Assert.Equal(I18n.L("联机"), page.Title);
             Assert.True(C5bFiles.HasText(page, I18n.L("陶瓦联机")));
-            Assert.True(C5bFiles.HasText(page, I18n.L("输入邀请码即可加入。陶瓦是 EasyTier P2P 打洞,不是 FRP 隧道;") + I18n.L("会与 HMCL 一样带上自定义会合节点。PCL 房间号不互通,局域网请用下面的地址。")));
+            Assert.True(C5bFiles.HasText(page, I18n.L("输入邀请码即可加入。陶瓦是 EasyTier P2P 打洞，不是 FRP 隧道；") + I18n.L("会与 HMCL 一样带上自定义会合节点。PCL 房间号不互通，局域网请用下面的地址。")));
             Assert.True(HasButton(page, I18n.L("允许访问")));
             Assert.True(HasButton(page, I18n.L("打开设置")));
             Assert.True(HasButton(page, I18n.L("关闭内核")));

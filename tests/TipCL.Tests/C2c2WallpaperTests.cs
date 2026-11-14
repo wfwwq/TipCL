@@ -98,7 +98,7 @@ public sealed class C2c2WallpaperTests
             Wallpaper.SetSource(broken);
 
             Assert.False(Wallpaper.Active);
-            Assert.Equal(I18n.L("图片读不出来:") + broken, Wallpaper.Error);
+            Assert.Equal(I18n.L("图片读不出来：") + broken, Wallpaper.Error);
             Assert.False(Wallpaper.StillLayer.IsVisible);
         });
     }

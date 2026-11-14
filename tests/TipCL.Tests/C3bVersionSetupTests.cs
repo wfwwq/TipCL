@@ -162,7 +162,7 @@ public class C3bVersionSetupTests
             Assert.Equal(I18n.L("启动前执行的命令"), inputs[4].Tag);
             Assert.Equal(I18n.L("退出后执行的命令"), inputs[5].Tag);
             Assert.Equal(I18n.L("自定义游戏窗口标题"), inputs[6].Tag);
-            Assert.Equal(I18n.L("统一通行证 ServerId(可空)"), inputs[7].Tag);
+            Assert.Equal(I18n.L("统一通行证 ServerId（可空）"), inputs[7].Tag);
 
             C3bFiles.Click(C3bFiles.ByText(card, I18n.L("取消")));
             C3bFiles.PumpTask(task);

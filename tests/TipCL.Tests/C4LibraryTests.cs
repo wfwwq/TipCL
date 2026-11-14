@@ -277,7 +277,7 @@ public class C4LibraryTests
             PageBase page = C4Files.Mount(harness, new LibraryPage());
             C4Files.Load(page);
             Assert.True(C4Files.HasText(page, I18n.L("这个文件夹还没有版本")));
-            Assert.True(C4Files.HasText(page, I18n.L("点左侧「添加或导入」,或到「下载」页装一个")));
+            Assert.True(C4Files.HasText(page, I18n.L("点左侧「添加或导入」，或到「下载」页装一个")));
             Assert.True(C4Files.HasText(page, I18n.L("共 {0} 个版本", 0)));
         });
     }
@@ -1239,7 +1239,7 @@ public class C4LibraryTests
             C4Files.Click(C4Files.ByText(page, I18n.L("导入官方启动器")));
             C3bFiles.WaitDialog();
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last();
-            Assert.True(C4Files.HasText(card, I18n.L("检测到:{0}", "/home/me/.minecraft")));
+            Assert.True(C4Files.HasText(card, I18n.L("检测到：{0}", "/home/me/.minecraft")));
             C4Files.Click(C4Files.ByText(card, I18n.L("开始导入")));
             C4Files.Pump(() => api.Count("migrate_official_launcher") >= 1);
             Assert.Contains("\"instance\":\"default\"", api.ParamsOf("migrate_official_launcher"));

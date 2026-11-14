@@ -383,7 +383,7 @@ public sealed class C2c2AccountGateTests
             Assert.Equal("ok", task.Result);
             ToastCard warning = shell.Window.ToastHostPanel.Children.OfType<ToastCard>().First();
             Assert.Equal(I18n.L("用户名不可用"), warning.Title);
-            Assert.Equal(I18n.L("1–16 个字符,不能含空格"), warning.Body);
+            Assert.Equal(I18n.L("1–16 个字符，不能含空格"), warning.Body);
             Assert.Equal(ToastKind.Warning, warning.Kind);
         });
     }

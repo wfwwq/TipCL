@@ -683,9 +683,9 @@ public class C4InstanceTests
             Assert.All(segs.Take(4), s => Assert.False(s.IsVisible));
             Assert.True(segs[4].IsVisible);
             Assert.True(segs[4].IsChecked);
-            Assert.True(C4Files.HasText(detail, I18n.L("该版本为共享(大锅饭)模式,模组/存档使用实例共享目录;开启独立隔离请见版本管理页")));
+            Assert.True(C4Files.HasText(detail, I18n.L("该版本为共享（大锅饭）模式，模组/存档使用实例共享目录；开启独立隔离请见版本管理页")));
             // 两条说明一直都在树上,靠 IsVisible 区分(Windows 也是改 Visibility)
-            Assert.True(HasVisibleText(detail, I18n.L("该版本为共享(大锅饭)模式,模组/存档使用实例共享目录;开启独立隔离请见版本管理页")));
+            Assert.True(HasVisibleText(detail, I18n.L("该版本为共享（大锅饭）模式，模组/存档使用实例共享目录；开启独立隔离请见版本管理页")));
             Assert.False(HasVisibleText(detail, I18n.L("该版本已开启隔离:模组/日志/资源包位于 versions\\<版本> 目录下,与实例根目录分开")));
         });
     }
@@ -705,7 +705,7 @@ public class C4InstanceTests
             C4Files.Pump(() => HasVisibleText(detail, I18n.L("该版本已开启隔离:模组/日志/资源包位于 versions\\<版本> 目录下,与实例根目录分开")), 9000);
             Assert.True(C4Files.HasText(detail, I18n.L("该版本已开启隔离:模组/日志/资源包位于 versions\\<版本> 目录下,与实例根目录分开")));
             Assert.True(HasVisibleText(detail, I18n.L("该版本已开启隔离:模组/日志/资源包位于 versions\\<版本> 目录下,与实例根目录分开")));
-            Assert.False(HasVisibleText(detail, I18n.L("该版本为共享(大锅饭)模式,模组/存档使用实例共享目录;开启独立隔离请见版本管理页")));
+            Assert.False(HasVisibleText(detail, I18n.L("该版本为共享（大锅饭）模式，模组/存档使用实例共享目录；开启独立隔离请见版本管理页")));
             Assert.All(C4Files.Descendants(detail).OfType<ToggleButton>().Take(4), s => Assert.True(s.IsVisible));
         });
     }

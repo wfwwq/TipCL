@@ -108,7 +108,7 @@ internal static class Program
 
         Console.Out.WriteLine(
             "总计 " + (passed + failed + skipped + unsupported) + " 个用例,通过 " + passed +
-            ",失败 " + failed + ",跳过 " + skipped + ",不支持 " + unsupported);
+            ",失败 " + failed + "，跳过 " + skipped + ",不支持 " + unsupported);
 
         if (failed > 0 || unsupported > 0 || passed == 0)
         {

@@ -67,7 +67,7 @@ public class C6bPagesTests
             Assert.True(HasButton(page, I18n.L("添加服务器")));
             Assert.True(HasButton(page, I18n.L("导入")));
             Assert.True(HasButton(page, I18n.L("导出")));
-            Assert.True(C5bFiles.HasText(page, I18n.L("直接写进实例的 servers.dat,进游戏就能看到")));
+            Assert.True(C5bFiles.HasText(page, I18n.L("直接写进实例的 servers.dat，进游戏就能看到")));
             Assert.True(C5bFiles.HasText(page, I18n.L("概览")));
             Assert.True(C5bFiles.HasText(page, I18n.L("实例行")));
             Assert.True(C5bFiles.HasText(page, I18n.L("服务器列表")));
@@ -93,7 +93,7 @@ public class C6bPagesTests
             C5bFiles.AssertParam(api, "list_servers", "instance", "默认");
             Assert.True(C5bFiles.HasText(page, I18n.L("{0} 个", 0)));
             Assert.True(C5bFiles.HasText(page, I18n.L("还没有服务器")));
-            Assert.True(C5bFiles.HasText(page, I18n.L("点右上角添加,或从 servers.txt 导入")));
+            Assert.True(C5bFiles.HasText(page, I18n.L("点右上角添加，或从 servers.txt 导入")));
         });
     }
 
@@ -272,7 +272,7 @@ public class C6bPagesTests
             Assert.True(HasButton(page, I18n.L("刷新")));
             Assert.True(HasButton(page, I18n.L("清空统计")));
             Assert.True(C5bFiles.HasText(page, I18n.L("累计游玩")));
-            Assert.True(C5bFiles.HasText(page, I18n.L("按实例与版本统计,每次退出游戏后自动累加")));
+            Assert.True(C5bFiles.HasText(page, I18n.L("按实例与版本统计，每次退出游戏后自动累加")));
             Assert.True(C5bFiles.HasText(page, I18n.L("概览")));
             Assert.True(C5bFiles.HasText(page, I18n.L("累计卡")));
             Assert.True(C5bFiles.HasText(page, I18n.L("范围卡")));
@@ -420,7 +420,7 @@ public class C6bPagesTests
             Assert.True(HasButton(page, I18n.L("提交反馈")));
             Assert.True(HasButton(page, I18n.L("添加附件")));
             Assert.True(HasButton(page, I18n.L("查看系统信息")));
-            Assert.True(C5bFiles.HasText(page, I18n.L("会发到开发者的反馈服务,不含账号密码")));
+            Assert.True(C5bFiles.HasText(page, I18n.L("会发到开发者的反馈服务，不含账号密码")));
             Assert.True(C5bFiles.HasText(page, I18n.L("我提交过的")));
             Assert.True(C5bFiles.HasText(page, I18n.L("常见问题")));
             Assert.True(C5bFiles.HasText(page, I18n.L("说明")));
