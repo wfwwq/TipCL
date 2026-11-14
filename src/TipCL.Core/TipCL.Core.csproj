@@ -7,7 +7,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>TipCL.Core</RootNamespace>
     <AssemblyName>TipCL.Core</AssemblyName>
-    <Version>0.1.0-m3</Version>
+    <Version>1.1.0</Version>
     <NoWarn>$(NoWarn);CS0168;CS0219;CS0162;CS0649;CS0414;CS8981</NoWarn>
     <!-- 反编译还原代码风格警告不计为错误（与 Windows 版一致） -->
   </PropertyGroup>

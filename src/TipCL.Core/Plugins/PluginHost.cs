@@ -40,7 +40,7 @@ public sealed class PluginHost
 	/// <summary>当前进程内已启动的插件 id(仅用于状态展示;Linux 版没有可跑插件的运行时)。</summary>
 	private readonly HashSet<string> _running = new HashSet<string>(StringComparer.Ordinal);
 
-	public PluginHost(PluginDirs dirs = null, string tipclVersion = "0.1.0-m3")
+	public PluginHost(PluginDirs dirs = null, string tipclVersion = "1.1.0")
 	{
 		_dirs = dirs ?? new PluginDirs();
 		_store = new PluginStateStore(_dirs.StateFile);

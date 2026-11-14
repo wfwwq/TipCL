@@ -9,8 +9,13 @@ namespace TipCL.Tests;
 public class SmokeTests
 {
     [Fact]
-    public void CoreVersion_Is_M3()
+    public void CoreVersion_MatchesTheUnifiedProductVersion()
     {
-        Assert.Equal("0.1.0-m3", CoreInfo.Version);
+        // 2026-11-14 起移植侧产品版本统一为 1.1.0:两个 csproj 的 <Version> + CoreInfo.Version
+        // (启动横幅 / HTTP UA / 插件宿主默认版本)都必须与 AppInfo.APP_VERSION 一致
+        // (三处一致的约定见 docs/README.md)。
+        Assert.Equal("1.1.0", CoreInfo.Version);
+        // 顺带盯住"两个常量不许再打架"——这正是本次修的那个不一致
+        Assert.Equal(TipCL.Core.Launcher.AppInfo.APP_VERSION, CoreInfo.Version);
     }
 }
