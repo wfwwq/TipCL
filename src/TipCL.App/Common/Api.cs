@@ -588,9 +588,9 @@ public sealed class InProcessApi : IApi
                 var am = new AccountManager();
                 PyDict acc = am.GetAccount(args.Get("name"));
                 if (!Py.Truthy(acc))
-                    throw new ValueError(I18nCore.Tr("没有这个账号:{0}").Replace("{0}", Py.S(args.Get("name"))));
+                    throw new ValueError(I18nCore.Tr("没有这个账号：{0}").Replace("{0}", Py.S(args.Get("name"))));
                 if (!Py.Eq(acc.Get("type"), "offline"))
-                    throw new ValueError(I18nCore.Tr("自定义皮肤只对离线账号有效;正版和皮肤站账号的皮肤在各自的网站上改"));
+                    throw new ValueError(I18nCore.Tr("自定义皮肤只对离线账号有效；正版和皮肤站账号的皮肤在各自的网站上改"));
                 string path = Py.Strip(Py.S(args.Get("path")));
                 string dataUrl = Py.Strip(Py.S(args.Get("data")));
                 if (dataUrl.Length > 0)
@@ -855,7 +855,7 @@ public sealed class InProcessApi : IApi
             {
                 var (host, port) = Terracotta.SplitJoinUrl(args.Get("address"));
                 if (host.Length == 0 || host == "127.0.0.1" || host == "localhost")
-                    throw new TerracottaError(I18nCore.Tr("请输入房主的公网地址,例如 1.2.3.4:25565"));
+                    throw new TerracottaError(I18nCore.Tr("请输入房主的公网地址，例如 1.2.3.4:25565"));
                 return LaunchIntoLobby(host + ":" + port);
             }
             // —— M4-H P1:内容目录(下载页六分段 Mod / 整合包 / 数据包 / 资源包 / 光影 / 世界)——
@@ -1228,7 +1228,7 @@ public sealed class InProcessApi : IApi
                         prog.Log(I18nCore.Tr("未发现版本"));
                         throw new InstanceError(I18nCore.Tr("无版本可导入"));
                     }
-                    prog.Report(Py.Fmt(I18nCore.Tr("导入 {0} 个版本(含依赖库)"), (long)found.Count), 1, 3);
+                    prog.Report(Py.Fmt(I18nCore.Tr("导入 {0} 个版本（含依赖库）"), (long)found.Count), 1, 3);
                     PyDict res = OfficialMigrate.Migrate(src, args.Get("instance"));
                     var versions = Py.ListOr(res.Get("versions"));
                     var accs = Py.ListOr(res.Get("accounts"));
@@ -1739,14 +1739,14 @@ public sealed class InProcessApi : IApi
                     catch (Exception e) { failed.Add(Py.Str(m) + ": " + Py.ExcStr(e)); }
                 }
                 if (ok.Count == 0 && failed.Count > 0)
-                    return PyDict.Of("ok", false, "message", I18nCore.Tr("未能禁用:") + string.Join("; ", failed));
+                    return PyDict.Of("ok", false, "message", I18nCore.Tr("未能禁用：") + string.Join("; ", failed));
                 string msg = Py.Fmt(I18nCore.Tr("已禁用 {0} 个 Mod"), (long)ok.Count);
-                if (failed.Count > 0) msg += I18nCore.Tr(";部分失败:") + string.Join("; ", failed);
+                if (failed.Count > 0) msg += I18nCore.Tr("；部分失败：") + string.Join("; ", failed);
                 return PyDict.Of("ok", true, "message", msg);
             }
             case "repair_version":
             {
-                if (!Py.Truthy(version)) return PyDict.Of("ok", false, "message", I18nCore.Tr("报告里没有版本号,无法修复"));
+                if (!Py.Truthy(version)) return PyDict.Of("ok", false, "message", I18nCore.Tr("报告里没有版本号，无法修复"));
                 Instance.RaiseEvent(new ApiEvent { Event = "ui_changed" });
                 return PyDict.Of("ok", true,
                     "message", Py.Fmt(I18nCore.Tr("请到「版本管理」右键该版本点「修复(补全缺失文件)」")),
@@ -1785,7 +1785,7 @@ public sealed class InProcessApi : IApi
             }
             case "open_gpu_hint":
                 return PyDict.Of("ok", true, "message",
-                    I18nCore.Tr("显卡/OpenGL 相关崩溃:请更新显卡驱动,关闭独显强制、超采样/滤镜,并确认不是远程桌面/虚拟机缺 OpenGL。"));
+                    I18nCore.Tr("显卡/OpenGL 相关崩溃：请更新显卡驱动，关闭独显强制、超采样/滤镜，并确认不是远程桌面/虚拟机缺 OpenGL。"));
             case "reset_jvm_args":
             {
                 Config.CONFIG.Set("default_jvm_args", "");
