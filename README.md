@@ -35,9 +35,11 @@
 <img src="windos/docs/ui-audit/hero/launch-light.png" width="640" alt="启动页（浅色主题）" />
 </div>
 
-| 启动（深色主题 + 实例切换） | 实例库 | 设置 |
+| 下载 | 实例库 | 插件 |
 |:--:|:--:|:--:|
-| <img src="windos/docs/ui-audit/hero/pop-dark.png" width="250" /> | <img src="windos/docs/ui-audit/hero/library-light.png" width="250" /> | <img src="windos/docs/ui-audit/hero/settings-light.png" width="250" /> |
+| <img src="windos/docs/ui-audit/hero/download-light.png" width="250" /> | <img src="windos/docs/ui-audit/hero/library-light.png" width="250" /> | <img src="windos/docs/ui-audit/hero/plugins-light.png" width="250" /> |
+| **设置** | **启动(深色主题)** | **启动(深色主题 + 实例切换浮层)** |
+| <img src="windos/docs/ui-audit/hero/settings-light.png" width="250" /> | <img src="windos/docs/ui-audit/hero/launch-dark.png" width="250" /> | <img src="windos/docs/ui-audit/hero/pop-dark.png" width="250" /> |
 
 > 以上是浅色 / 深色主题下的实际界面，原图在 `windos/docs/ui-audit/hero/`。
 
