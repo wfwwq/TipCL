@@ -56,7 +56,23 @@ public static class PageRegistry
 		}
 	}
 
-	/// <summary>按 id 建一个页面;**没注册返回 null**(不抛异常,与 Windows 的 GetPage 口径一致)。</summary>
+	/// <summary>
+	/// C7b(批3):**动态页 id 的受控回退口** —— 给外壳解析 <c>plugin:&lt;plugin&gt;:&lt;id&gt;</c> 这类
+	/// 导航表里没有的 id 用(Windows 是 <c>MainWindow.CreatePluginPage(id)</c> 直接认前缀)。
+	///
+	/// 口径(与 Windows 一致,不许放宽):
+	/// <list type="bullet">
+	/// <item><b>只有注册表查不到时才问它</b> —— 已注册的 id 一律走注册表,回退口不参与(可测);</item>
+	/// <item>它返回 <c>null</c> 就**等于没注册**:<see cref="Contains"/> 仍为 false、<see cref="Ids"/> 不变、
+	///   外壳 <c>Navigate</c> 照旧**静默不切页**(这就是"未注册且非 plugin: 的 id 仍然静默不动"的落点);</item>
+	/// <item>它**不写回**注册表(不改 <see cref="Ids"/>/<see cref="Snapshot"/> 语义)。</item>
+	/// </list>
+	/// 由外壳(`MainWindow.Plugins.cs`)接上:前缀不是 <c>plugin:</c> 就返回 null。
+	/// </summary>
+	internal static Func<string, PageBase?>? FallbackFactory { get; set; }
+
+	/// <summary>按 id 建一个页面;**没注册返回 null**(不抛异常,与 Windows 的 GetPage 口径一致)。
+	/// 注册表查不到时先问一次 <see cref="FallbackFactory"/>(动态插件页);它也没给就还是 null。</summary>
 	public static PageBase? Create(string id)
 	{
 		Func<PageBase>? factory;
@@ -64,10 +80,16 @@ public static class PageRegistry
 		{
 			if (!Factories.TryGetValue(id, out factory))
 			{
-				return null;
+				factory = null;
 			}
 		}
-		return factory();
+
+		if (factory != null)
+		{
+			return factory();
+		}
+
+		return FallbackFactory?.Invoke(id);
 	}
 
 	/// <summary>当前注册表的快照(测试用来"用完还原";顺序 = 注册顺序)。</summary>
