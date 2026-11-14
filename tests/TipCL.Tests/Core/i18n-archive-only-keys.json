@@ -1,0 +1,28 @@
+{
+  "_note": "本文件由 _tmp/tasks/linux-updater/merge-locales.py 的产物 locale-merge-report.json 生成(字节原样,不经人手输入 —— 手打会被全角/半角咬:例如表里用的是 U+FF1B/U+FF0A/U+FF0C,手打很容易变成 ASCII 的 ; : , 而渲染出来一模一样)。这 16 个键只存在于用户源码压缩包 TipCL-552f3ac 的 locales 里,底表(windos\\tipcl 那份 2951 键)没有,所以内嵌词表是二者的并集 2967 键。",
+  "source": {
+    "base_table": "windos\\tipcl\\src\\TipCL\\Resources\\locales\\{en,zh_CN}.json",
+    "base_keys": 2951,
+    "archive": "TipCL-552f3ac/windos/src/TipCL/Resources/locales/{en,zh_CN}.json",
+    "archive_keys": 2809,
+    "merged_keys": 2967
+  },
+  "keys": [
+    "AI 助手在标题栏右上角",
+    "全部入口都在标题栏上",
+    "启动、实例库、下载、插件、设置五个页签都在标题栏上；插件装好后会自己在「设置」右边加一个页签。",
+    "安装到 {0}(已有 {1} 个版本)",
+    "安装时飞入底部任务条",
+    "导航设置读取失败",
+    "将新建实例,安装到 {0}",
+    "已随装前置：",
+    "插件市场里的版本号不合法:",
+    "新实例会有独立的 mods / 存档",
+    "新实例名称",
+    "新建实例…",
+    "更新包已下载，重启启动器即可完成更新",
+    "该版本已开启隔离：模组/日志/资源包位于 versions\\<版本> 目录下，与实例根目录分开",
+    "请先选择一个实例",
+    "顶栏页签、AI 标签、首页卡片、设置页、提示框"
+  ]
+}
