@@ -60,6 +60,8 @@ export interface UiSpecBase { id: string; label?: string; icon?: string; order?:
 export interface PageSpec extends UiSpecBase { view: string; group?: 'top' | 'more' }
 export interface AiViewSpec extends UiSpecBase { view: string; presets?: string[] }
 export interface DashCardSpec extends UiSpecBase { view: string; defaultW?: number; defaultH?: number }
+/** 页面区块(`kind=block`):引用 id 是 `plugin:<插件>:<id>`,插件卸载后块保留、界面显示「不可用」。 */
+export interface BlockSpec extends UiSpecBase { view: string; group?: string }
 export interface OverlaySpec { id: string; view: string; width: number; height: number; anchor?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | string; margin?: number; clickThrough?: boolean; visible?: boolean }
 export interface ActionSpec { id: string; label: string; where: 'instance' | 'launch' | 'tray' | 'ai.input'; icon?: string }
 
@@ -172,6 +174,8 @@ export interface PluginContext {
     page(spec: PageSpec): Dispose;
     aiView(spec: AiViewSpec): Dispose;
     dashCard(spec: DashCardSpec): Dispose;
+    /** 页面区块:块引用 id = `plugin:<插件>:<id>`;卸载后块保留、显示「不可用」。 */
+    block(spec: BlockSpec): Dispose;
     overlay(spec: OverlaySpec): Dispose;
     settings(spec: { view: string }): Dispose;
     action(spec: ActionSpec, handler: (context: any) => void): Dispose;
@@ -200,7 +204,7 @@ export interface PluginModule {
 
 export interface Tipcl {
   plugin: { id: string; version: string; dir: string; name?: string };
-  surface: { kind: 'page' | 'aiView' | 'dashCard' | 'overlay' | 'settings' | string; id: string };
+  surface: { kind: 'page' | 'aiView' | 'dashCard' | 'block' | 'overlay' | 'settings' | string; id: string };
   props: Record<string, any>;
   theme: { mode: 'light' | 'dark'; colors: { bg: string; fg: string; card: string; border: string; accent: string; muted: string; danger: string; [k: string]: string }; font: string; onChange(fn: (t: Tipcl['theme']) => void): Dispose };
   call<T = any>(method: string, params?: Record<string, any>): Promise<T>;

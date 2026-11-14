@@ -90,6 +90,8 @@ public partial class App : Application
 		}
 		InitPlatform();
 		I18n.Init(e.Args);
+		// L6:注册自建区块 / 插件区块的内容工厂(显式调用,不用 ModuleInitializer)
+		TipCL.Pages.Layout.WidgetRegistry.EnsureRegistered();
 		Timeline.DesiredFrameRateProperty.OverrideMetadata(typeof(Timeline), new FrameworkPropertyMetadata(60));
 		RenderOptions.ProcessRenderMode = RenderMode.Default;
 		base.DispatcherUnhandledException += OnUnhandled;

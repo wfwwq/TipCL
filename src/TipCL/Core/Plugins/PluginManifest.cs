@@ -74,7 +74,7 @@ public sealed class PluginManifest
 
 	private static readonly HashSet<string> ConfigTypes = new HashSet<string> { "string", "boolean", "integer", "number" };
 
-	private static readonly HashSet<string> UiKinds = new HashSet<string> { "page", "aiView", "dashCard", "overlay", "settings", "action" };
+	private static readonly HashSet<string> UiKinds = new HashSet<string> { "page", "aiView", "dashCard", "block", "overlay", "settings", "action" };
 
 	public PyDict Raw { get; private set; }
 

@@ -183,3 +183,92 @@
 - 数据：警告 1169→0；build 0 错误；test 157/158（唯一失败=基线 PhoneLinkTests.FullFlow，D-4 在案，Core 业务不在本轮范围）；smoke 10/10 页、17 点击、10 弹窗、0 异常。
 - 体积提示：当前树非 premium 构建 6,224,384 B，**超 D-19 红线 5,757,264**——其中约 370KB 为镜像功能提交（108d556 等，本轮之前已超）、约 110KB 为本轮词表补齐；dist 重切与体积回收（locales gzip 等）留待维护者排期，不在 UI 修复范围。
 - 可回滚：是（partial 提取可 git 还原；警告修复逐项独立）。
+
+### D-25 · 布局 v2 的存储契约:v1 文件冻结 + 新文件承载新格式 + 由 v2 单向写通
+
+- 时间:2026-11-14(「高度自定义布局」第八轮)
+- 处境:要加的新字段(x/y/w/h、style、span、splits、widgets…)不能进老文件 —— 老程序对单页 `blocks` 的**任何一次保存**都会用 `ToDict()` 重写,新字段必丢;而用户硬约束是「布局 JSON 必须向后兼容,不丢已有布局」;mac/linux 端口也在照读 v1。
+- 选项:a) 原地扩展 `ui_page_layouts.json`;b) 新文件 `ui_layout_v2.json` 承载新格式,v1 只作兼容投影;c) 两套格式并存但都可写。
+- 决定:选 b。**v1(`ui_page_layouts.json`)语义与结构冻结**(只有 `version/kind/pages[id].{version,blocks[{id,hidden}]}`,顺序即顺序);新格式全部进 `<数据目录>/ui_layout_v2.json`(`kind=tipcl-layout`、`version=2`,老程序不认识这个文件名);**v2 是唯一真源,v1 由 v2 单向写通**(先写 v2 成功才写 v1),首次升级由 `FromV1` 迁移,v2 损坏则回落 v1 子集再回落默认。
+- 理由:向后兼容不靠「小心地改旧文件」,而靠**旧文件永不承载新数据**;这让「绝不丢已有布局」从口号变成可测断言(迁移逐项相等 / 写通后冻结解析器读回全等 / 旧版重写 v1 后 v2 字段不丢 / 截断回落)。
+- 数据:`tests/LayoutV2CompatTests.cs` 11 例逐条对应上述断言,`LayoutV2ModelTests` 24 例钉契约默认值与钳位。
+- 可回滚:是(删 v2 文件即回 v1 语义;老程序全程不受影响)。
+- 偏离提示:同一数据目录里会同时存在两份布局文件,`PageLayoutStore` 的进程内缓存需要 `Reload()`(L1 已补)才能在写通后立刻看到新值。
+
+### D-26 · 「默认布局逐像素等价」改为可机器判等的验收(PNG SHA256)
+
+- 时间:2026-11-14
+- 处境:D-11 起就有「默认布局逐像素等价于现状」的口头约束,但仓库没有任何像素断言,历轮只能人眼比截图;本轮改了外壳(MainWindow 页签数据驱动)与 12 个区块宿主,靠人眼不保险。
+- 决定:每期改动前后各留一张同尺寸、同主题的 `--shot` PNG,并**保留改动前的 exe 副本**(`artifacts/l1/exe/TipCL-before.exe`),用 `Get-FileHash` + Pillow 逐像素 diff 判等;判等范围可缩到顶栏 46px 带(只验被改区域)。
+- 数据:L7a 实测两张 PNG **SHA256 完全相同**(`D212F428…8B97FD`,900×550,整图 0 像素差异);L1/L2/L4 同法逐页对照。
+- 可回滚:不适用(纯验收方法)。
+- 偏离提示:本机渲染是确定性的,才敢用整图哈希;若日后引入动画/时钟类内容,需退化为「顶栏带 + 指定裁剪区」判等。
+
+### D-27 · 整机布局方案 = 同一 v2 文档里的命名快照;应用 = 原子替换
+
+- 时间:2026-11-14
+- 处境:「整机布局方案」(一键切换/导入导出/分享)需要同时包含页签、各页区块、分栏比例、自建区块与外观参数;若方案另存成独立文件,就会与「当前布局」形成第二真源。
+- 决定:方案 = **同一份 `ui_layout_v2.json` 里的 `profiles[name]`(LAYOUT 对象快照)**,`active_profile == ""` 表示「当前是直接编辑态」;「应用方案」= 用快照**原子替换** `layout` → 写 v2 → 写通 v1;导出支持「整机 v2」与「兼容 v1 的页面布局」两种,导入按 `kind` + `version` 校验后逐字段白名单过滤 + 钳位,非法时给中文错误而不是半成品。
+- 理由:单一真源 + 快照语义让「应用」天然可回滚(应用前的直接编辑态仍在 `layout` 里),也避免方案文件与主文件互相漂移。
+- 数据:`LayoutProfileTests` 14 例;截图 `artifacts/shot-settings-layout-*.png`。
+- 可回滚:是(方案只是一段 JSON,删掉即回直接编辑态)。
+- 偏离提示:悬空的 `active_profile`(方案被删)会被 `Sanitize` 归零成「直接编辑态」,避免界面出现找不到的方案名。
+
+### D-28 · compact 体积红线对布局功能豁免(沿用 D-11 先例)与实测字节
+
+- 时间:2026-11-14
+- 处境:compact 上限 5,757,264 B(D-19),而本轮开工前实测就已 **6,238,720 B**(超 481,456 B,`DECISIONS.md:184` 自认是镜像 + 词表所致,与布局功能无关);`tools/build-both.ps1:90-97` 超线直接 `exit 1`。
+- 决定:沿用 D-11 的既有先例 —— **布局功能不受 compact 体积红线约束**,收尾只**如实记录实测字节**,体积回收另立包(候选:ImageSharp / CodePages ≈1.15 MB、locales 压缩)。
+- 数据:本轮收口实测 `TipCL.exe` = **6,439,936 B**(超红线 682,672 B);其中本功能自身增量 = L0–L7a 代码 + 词表增补(en +13.3 KB / zh +12.4 KB)。
+- 可回滚:是(把验收门槛改回即可,代码不受影响)。
+- 偏离提示:红线仍写在 D-19 里未改;豁免只针对本功能,dist 重切与体积回收由维护者排期。
+
+### D-29 · Q1 决案:只做顶栏页签,不复活侧栏
+
+- 时间:2026-11-14(用户在 §0.1 的 Q1 拍板)
+- 处境:设计阶段给出三种 D 项形态(复活可自定义侧栏 / 只自定义顶栏页签 / 两种模式可切换)。事实:侧栏早已不在可视树(`MainWindow.xaml.cs` 注释),`UiPrefs.SideWidth`、`SideMinWidth/MaxWidth`、`ui_sidebar_width`、`SideFrost` 全是**无人读的孤儿配置**。
+- 决定:**只自定义顶栏页签(顺序 + 显隐),不复活侧栏**;`shell.nav_mode/nav_side/nav_width/nav_icon_only/nav_style/nav_groups` 字段**保留在契约里但不接线**(为将来留位),孤儿键不改不删;`NavModel.cs` / `NavConfig.cs` / `UiPrefs.cs` 一行不动。
+- 理由:复活侧栏要重建可视树与拖拽重排、分组改名、宽度记忆整套交互,收益不抵回归面;顶栏页签数据驱动已经能满足「入口顺序/显隐」这一核心诉求。
+- 数据:`Pages/Layout/ShellTabs.cs`(纯逻辑)+ `MainWindow.RebuildShellTabs`;`LayoutShellTests` 27 例;默认等价见 D-26。
+- 可回滚:是(页签重建是单点;侧栏字段仍在契约里,将来要做得从 UI 重建开始)。
+- 偏离提示:设计文档 §4.D 里「侧栏模式 / 仅图标 / 拖拽重排 / 分组改名」各项**已否决**,不得据该表继续实现。
+
+### D-30 · 自建区块的危险类型(web / button)默认关闭 + 二次确认 + 内部动作白名单
+
+- 时间:2026-11-14
+- 处境:自建区块把「嵌网页」和「执行动作」交给用户配置,两者都能被当成任意代码/任意目录访问的入口(设计 §4.F 的安全边界)。
+- 决定:`web`(内嵌网页)与 `button`(执行动作)**默认不进候选列表、默认不渲染**;要开启必须在设置里显式勾选(区块 `settings.enabled = true`)并二次确认。`web` 只允许 `https`(禁 `http` 与 `file://`,禁本地文件与脚本地址);`button` 只允许**内部动作白名单** `page / launch / folder / rpc`,其中 `folder` 只允许打开启动器数据目录,`rpc` 必须命中既有 RPC 白名单;动作写成 `类型:参数`(例如 `page:launch`)。首期候选只有 `note / shortcut / clock / divider / playtime`。
+- 理由:危险能力「默认关 + 显式开 + 最小白名单」是唯一能在不引入沙箱的前提下守住边界的组合。
+- 数据:`Pages/Layout/Widgets/DangerousWidgets.cs`、`WidgetCommon.cs`、`WidgetUI.cs`;`LayoutWidgetTests` 44 例含「危险类型默认关闭」断言;截图 `artifacts/l6/tasks-widgets-dangerous-dark.png`。
+- 可回滚:是(关掉即回默认不渲染)。
+- 偏离提示:白名单是**产品决定的安全边界**,不要为了「更自由」放开 `file://` 或任意命令。
+
+### D-31 · 插件 UI 贡献新增 kind `block`(三处白名单必须同步)
+
+- 时间:2026-11-14
+- 处境:插件原本只能贡献 `page / aiView / dashCard / overlay / settings / action`,没有任何「区块」级贡献点;而布局 v2 的块 id 命名空间已定 `plugin:<plugin>:<blockId>`(与老画布的 `plugin:<plugin>:<cardId>`、用户自建区块 `custom:<widgetId>` 区分)。
+- 决定:新增 UI 贡献 kind **`block`**,渲染语义与 `dashCard` 一致(WebView 或原生 WPF);**三处白名单必须同值** —— `Core/Plugins/PluginManifest.cs:77`、`Core/Plugins/PluginHostApi.cs:232`、`Core/Plugins/PluginManager.cs:1259`(当前均为 `page / aiView / dashCard / block / overlay / settings / action`);`PluginUi.CreateBlock` 负责装配;插件卸载/禁用后区块保留并显示「不可用」。
+- 理由:三处白名单历史上就是「改一处必须同步三处」的坑(设计 §5.2 明确标注),写进决策避免下次漏改。
+- 数据:`Pages/Layout/Widgets/PluginBlocks.cs`、`Pages/Plugins/PluginUi.cs:251`;`LayoutWidgetTests` 44 例;夹具 `artifacts/l6/widget-fixture.ui_layout_v2.json`。
+- 可回滚:是(删 `block` 一行即回到旧白名单,但已保存的区块会显示「不可用」)。
+- 偏离提示:kind `block` 只对**布局 v2** 生效;老卡片画布 `dashCard` 链路按 D-2/§5.3 保持冻结。
+
+### D-32 · Core→Pages 依赖方向债务:移植 mac/linux 前必须先把 4 个纯模型文件移进 Core
+
+- 时间:2026-11-14
+- 处境:布局 v2 的 4 个**纯模型层**文件(`LayoutDocV2.cs` / `LayoutSchema.cs` / `LayoutStoreV2.cs` / `LayoutJson.cs`,禁 WPF、只用 BCL 与 `TipCL.Core.Launcher.Utils`)按 L0 的任务书放在了 `src/TipCL/Pages/Layout/` 下。这形成 **Pages → Core** 的依赖方向,而 mac/linux 端口(`mac/`、`linux/` 树)复用的是 Core;若直接移植,模型层会被锁在 WPF 侧。
+- 决定:接受本轮的目录现状(**不在包内搬迁**,避免与并发成员撞文件),但记为**方向债务**:移植 mac/linux 前,必须先把这 4 个文件整体移到 `src/TipCL/Core/Launcher/Layout/`(命名空间与 `using` 同步调整),Pages 侧只留 WPF 相关的 `LayoutEngine / LayoutEditor / GridCanvasPanel / GuideLayer / PageLayoutHost / WidgetRegistry / ShellTabs`。
+- 理由:模型层本就无 WPF 依赖(现由 net8 测试宿主直接加载,就是证据),搬进 Core 后端口能零成本复用契约与迁移/写通逻辑;但现在搬会与正在改这些文件的成员冲突。
+- 数据:4 个文件当前位于 `Pages/Layout/`(`LayoutDocV2.cs` 38 KB、`LayoutSchema.cs` 21 KB、`LayoutStoreV2.cs` 12 KB、`LayoutJson.cs` 8 KB);跨端复用面见设计 §3.3 的兼容矩阵。
+- 可回滚:是(搬迁是纯机械移动 + 改命名空间)。
+- 偏离提示:这是**已知的方向反了**,不是设计意图;下一轮做移植时必须先还这笔债,否则 mac/linux 端口要么复制一份模型、要么反向依赖 WPF。
+
+### D-33 · i18n 词表按「审计差集」补齐,不采信转述清单
+
+- 时间:2026-11-14(D2 包)
+- 处境:设计收尾时多个成员各自报过新增串条数(L5 报 108、L2 报 11、L1 报 1),加起来与真实缺口对不上;而 `--i18n-check` 在本会话环境跑不起来(见 PROGRESS 第八轮的「环境事实」)。
+- 决定:a) 补齐一律**用脚本重抓**布局相关文件的 `I18n.L(...)` / `I18nCore.Tr(...)` 中文字面量,与 `en.json` + `zh_CN.json` 求差集,以差集为准;b) 规则:`key = 中文原文`、`zh_CN` 恒等自映射、`en` 人工翻译、保留 `{0}` / `{0:P0}` 占位符、**既有键的值一个都不许改**、按文件既有格式(顶部插入新键、1 空格缩进、LF、UTF-8 无 BOM)逐行文本插入;c) 顺带补 HEAD 就缺的 `自定义布局`;d) 复核必须给数字:JSON 合法、两表键集合一致、既有行逐行原样保留、**差集归零**。
+- 数据:扫出 557 条去重 key、缺 **178** 条;`en.json` 2774 → 2952(+178),`zh_CN.json` 2773 → 2952(+179);差集 en 0 / zh 0。
+- 顺带发现(记录不修):1 两处**既有近似重复键**只差标点宽度(`(` U+0028 vs `（` U+FF08、`,` U+002C vs `，` U+FF0C),会让源码字面量在 en 下查不到译文;2 两个文件**既有**键顺序自第 365 键起分叉(集合一致),本次未动既有顺序。
+- 可回滚:是(词表为纯新增,删掉新增行即回原状)。
+- 偏离提示:补的是「源码字面量的原样形式」,因此那两处近似重复会**同时存在两个 key** —— 这是刻意的(改 .cs 字面量或改既有 key 都会动到别人的文件/既有译文,留给维护者定)。

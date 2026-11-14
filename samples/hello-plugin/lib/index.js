@@ -36,6 +36,7 @@ export function apply(ctx, config) {
   ctx.effect(() => ctx.ui.page({ id: 'hello', label: 'Hello', icon: '\ue80f', order: 50, view: 'main', group: 'top' }), 'ui page');
   ctx.effect(() => ctx.ui.aiView({ id: 'watch', label: '观察', order: 30, view: 'watch', presets: ['hello', 'hello-quick'] }), 'ui aiView');
   ctx.effect(() => ctx.ui.dashCard({ id: 'card', label: 'Hello 卡片', view: 'card', defaultW: 2, defaultH: 1 }), 'ui dashCard');
+  ctx.effect(() => ctx.ui.block({ id: 'panel', label: 'Hello 面板', view: 'card' }), 'ui block');
   status.overlayVisible = !!config.showOverlay.get();
   ctx.effect(() => ctx.ui.overlay({ id: 'bubble', view: 'bubble', width: 220, height: 120, anchor: 'bottom-right', margin: 16, clickThrough: false, visible: status.overlayVisible }), 'ui overlay');
   ctx.effect(() => ctx.ui.action({ id: 'say-hi', label: 'Say hi', where: 'launch' }, (context) => {

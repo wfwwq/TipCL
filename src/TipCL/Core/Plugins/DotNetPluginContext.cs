@@ -67,6 +67,7 @@ internal static class DotNetPluginLoader
 }
 
 /// <summary>.NET 插件拿到的上下文。大部分能力直接转到 <see cref="PluginHostApi.Invoke"/>（同一套权限检查）。</summary>
+
 internal sealed class DotNetPluginContext : IPluginContext, IPluginLogger, IPluginLlm, IPluginCredentials, IPluginSessions, IPluginConfig, IPluginUi
 {
 	private readonly PluginManager _mgr;
@@ -514,6 +515,24 @@ internal sealed class DotNetPluginContext : IPluginContext, IPluginLogger, IPlug
 			Factory = factory
 		});
 		return Track(d.Dispose, "dashCard " + spec.Id);
+	}
+
+	/// <summary>
+	/// 注册一个页面区块(kind=block):布局文档的 <c>pages[].blocks[]</c> 用
+	/// <c>plugin:&lt;本插件&gt;:&lt;id&gt;</c> 引用它;插件被禁用/卸载后块保留,界面显示「不可用」(不删用户数据)。
+	/// </summary>
+	public IDisposable RegisterBlock(PluginBlockSpec spec, Func<FrameworkElement> factory)
+	{
+		_mgr.RequirePermission(_p.Id, PluginPermissions.Ui);
+		IDisposable d = PluginUiRegistry.Register(new NativeUiEntry
+		{
+			Plugin = _p.Id,
+			Kind = "block",
+			Id = spec.Id,
+			Label = spec.Label,
+			Factory = factory
+		});
+		return Track(d.Dispose, "block " + spec.Id);
 	}
 
 	public IDisposable RegisterAiView(PluginAiViewSpec spec, Func<string, FrameworkElement> factory)

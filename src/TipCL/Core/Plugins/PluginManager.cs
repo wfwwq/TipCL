@@ -1256,7 +1256,7 @@ public sealed class PluginManager
 		{
 			throw new PluginRpcException("invalid_params", kind + " 缺少 id");
 		}
-		if ((kind == "page" || kind == "aiView" || kind == "dashCard" || kind == "overlay" || kind == "settings") && Py.S(spec.Get("view")).Length == 0)
+		if ((kind == "page" || kind == "aiView" || kind == "dashCard" || kind == "block" || kind == "overlay" || kind == "settings") && Py.S(spec.Get("view")).Length == 0)
 		{
 			throw new PluginRpcException("invalid_params", kind + " 缺少 view");
 		}

@@ -29,6 +29,7 @@
 | 网页端：设置页（表单 + 密钥字段） | settings.tsx | 自动生成的设置页（manifest config + credentials），也可以注册自定义 `ui.settings` 视图 |
 | 网页端：localStorage、Web Audio、`<video>` 透明 WebM、Canvas、EventSource | stage/wolf | WebView2（Chromium）全部支持；每个插件页面同源（Node 宿主的端口） |
 | 首页卡片（DSH 没有，TipCL 特有） | — | `ui.dashCard` |
+| 页面区块(放进任意页面的区块列表,可重排/显隐) | — | `ui.block`(块引用 id = `plugin:<插件>:<块 id>`,卸载后块保留并显示「不可用」) |
 | 启动流程钩子 / 游戏日志 / 实例操作（TipCL 特有） | — | `ctx.launcher.call(method, kwargs)` 可调用全部 BackendApi；`ctx.hooks` 启动前改参数、启动后、退出、崩溃；`ctx.events.on('game.log', ...)` |
 
 ## 1. 目录与文件
@@ -167,15 +168,17 @@ public interface IPluginContext {
   void Provide(string name, object service);  object Get(string name);
 }
 // IPluginUi 额外支持原生 WPF：RegisterPage(spec, Func<FrameworkElement>)、RegisterDashCard(spec, Func<FrameworkElement>)、RegisterAiView(spec, Func<string chatId, FrameworkElement>)
+// 2026-11-14 起:RegisterBlock(PluginBlockSpec spec, Func<FrameworkElement> factory) —— 注册页面区块(kind=block),块 id 在布局文档里是 plugin:<plugin>:<blockId>,插件卸载后块保留并显示「不可用」
 ```
 .NET 插件和 Node 插件共享同一套宿主服务实现（`PluginHostApi`），只是调用方式不同。
 
 原生 WPF 界面的登记处：`TipCL.Plugins.PluginUiRegistry`（内核实现，见 `Core/Plugins/Sdk/PluginUiRegistry.cs`）。WPF 界面用**反射**按名字调用，不做编译期依赖，所以下面的签名改动要同步：
 ```csharp
 // 主路径（内核现有实现）
-NativeUiEntry PluginUiRegistry.Find(string plugin, string kind, string id);   // kind: page | dashCard | aiView
+NativeUiEntry PluginUiRegistry.Find(string plugin, string kind, string id);   // kind: page | dashCard | block | aiView
 FrameworkElement NativeUiEntry.Create();                  // page / dashCard
 FrameworkElement NativeUiEntry.CreateAiView(string chatId); // aiView
+FrameworkElement NativeUiEntry.CreateBlock();               // block(布局文档用 plugin:<plugin>:<id> 引用它)
 // 兼容路径（Find 不存在时才用）：static CreatePage(plugin, id) / CreateDashCard(plugin, id) / CreateAiView(plugin, id, chatId)
 ```
 这些入口同样要出现在 `plugins_ui()` 里（行上 `native:true`、`url:""`），WPF 才知道侧栏 / 首页 / AI 页要放它们。控件实现 `IDisposable` 时，WPF 卸掉它时会调用 `Dispose`。首页卡片 `defaultW/defaultH`：大于 12 按 px，不超过 12 按“格”（1 格约 160×110px）。
@@ -213,7 +216,7 @@ FrameworkElement NativeUiEntry.CreateAiView(string chatId); // aiView
 | `attachments.save` | `{plugin, images:[{data(base64), mediaType, name?}]}` | `[{id, mediaType, name}]` | ai.tools |
 | `config.get` | `{plugin}` | `{key: value}` | — |
 | `config.set` | `{plugin, key, value}` | — | — |
-| `ui.register` | `{plugin, kind, spec}` kind ∈ `page`\|`aiView`\|`dashCard`\|`overlay`\|`settings`\|`action` | — | ui / ui.overlay |
+| `ui.register` | `{plugin, kind, spec}` kind ∈ `page`\|`aiView`\|`dashCard`\|`block`\|`overlay`\|`settings`\|`action` | — | ui / ui.overlay |
 | `ui.unregister` | `{plugin, kind, id}` | — | ui |
 | `ui.toast` | `{plugin, text, kind?:"info"\|"success"\|"warn"\|"error"}` | — | ui |
 | `ui.confirm` | `{plugin, title, text, ok?, cancel?}` | `true/false` | ui |
@@ -232,6 +235,7 @@ UI spec：
 - `aiView`：`{id, label, order?, view, presets?:[...]}` → AI 页对话顶部多一个标签；`presets` 为空表示所有对话都显示
 - `dashCard`：`{id, label, view, defaultW?, defaultH?}` → 首页“添加卡片”里出现
 - `overlay`：`{id, view, width, height, anchor?:"bottom-right"|..., margin?, clickThrough?:false, visible?:true}`
+- `block`:`{id, label?, view, group?}` → 页面区块:出现在布局文档 `pages[].blocks[]` 里,引用 id 是 `plugin:<本插件>:<块 id>`(块可重排/显隐/跨列;插件被卸载后**块保留**、界面显示「不可用」,不删用户数据;编辑布局时内嵌 WebView 会被临时隐藏)
 - `settings`：`{view}` → 替换自动生成的设置页（自动页仍可从“高级”打开）
 - `action`：`{id, label, where:"instance"|"launch"|"tray"|"ai.input", icon?}` → 点击时 TipCL 发 `action.invoke`
 
@@ -359,7 +363,7 @@ ctx.launcher.call(method, kwargs) / ctx.launcher.on(topic, fn)
 ctx.events.on(topic, fn) => off
 ctx.hooks.register(hook, async (data) => data | null) => dispose
 ctx.config.get() / ctx.config.set(key, value) / ctx.config.onChange(fn)
-ctx.ui.page(spec) / aiView(spec) / dashCard(spec) / overlay(spec) / settings(spec) / action(spec, handler) / toast / confirm / prompt / openPage / openExternal / overlayUpdate
+ctx.ui.page(spec) / aiView(spec) / dashCard(spec) / block(spec) / overlay(spec) / settings(spec) / action(spec, handler) / toast / confirm / prompt / openPage / openExternal / overlayUpdate
 ctx.get('llm')          // { listProviders(), listModels(provider), stream(req) => AsyncIterable<chunk> }
 ctx.get('credentials')  // { resolve(name) => {value}|undefined, set(name, value), status() }
 ctx.get('sessions')     // { get(chatId) => { id, seq, running, snapshotEvents(from) }, create(...), send(...), cancel(...) }  同步镜像

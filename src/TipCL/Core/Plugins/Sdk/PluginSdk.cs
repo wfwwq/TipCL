@@ -242,6 +242,19 @@ public sealed class PluginDashCardSpec
 	public long DefaultH { get; set; } = 2L;
 }
 
+/// <summary>页面区块(<c>kind=block</c>):布局文档的 <c>pages[].blocks[]</c> 用 <c>plugin:&lt;插件&gt;:&lt;id&gt;</c> 引用它。</summary>
+public sealed class PluginBlockSpec
+{
+	/// <summary>块 id(布局文档引用用)。</summary>
+	public string Id { get; set; }
+
+	/// <summary>块标题(用户可改;空则回落到 id)。</summary>
+	public string Label { get; set; }
+
+	/// <summary>分组(保留字段,与 page 的 group 语义一致)。</summary>
+	public string Group { get; set; }
+}
+
 public sealed class PluginAiViewSpec
 {
 	public string Id { get; set; }
@@ -259,6 +272,9 @@ public interface IPluginUi
 	IDisposable RegisterPage(PluginPageSpec spec, Func<FrameworkElement> factory);
 
 	IDisposable RegisterDashCard(PluginDashCardSpec spec, Func<FrameworkElement> factory);
+
+	/// <summary>注册页面区块(<c>kind=block</c>):插件被禁用/卸载后块保留,界面显示「不可用」(不删用户数据)。</summary>
+	IDisposable RegisterBlock(PluginBlockSpec spec, Func<FrameworkElement> factory);
 
 	IDisposable RegisterAiView(PluginAiViewSpec spec, Func<string, FrameworkElement> factory);
 

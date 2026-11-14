@@ -13,10 +13,10 @@ namespace TipCL.Core.Launcher.Ai;
 /// </summary>
 public static class ExtraTools
 {
-	public static readonly string[] Names = new string[17]
+	public static readonly string[] Names = new string[19]
 	{
 		"get_system_info", "diagnose_lag", "tune_jvm", "list_saves", "backup_save", "list_save_backups", "restore_save_backup", "multiplayer", "list_accounts", "add_offline_account",
-		"switch_account", "set_skin", "open_folder", "phone_sync", "fs_list", "fs_read", "fs_write"
+		"switch_account", "set_skin", "open_folder", "phone_sync", "fs_list", "fs_read", "fs_write", "layout_get", "layout_apply"
 	};
 
 	public static readonly Dictionary<string, string> Labels = new Dictionary<string, string>
@@ -37,10 +37,12 @@ public static class ExtraTools
 		{ "phone_sync", "手机同步" },
 		{ "fs_list", "列文件" },
 		{ "fs_read", "读文件" },
-		{ "fs_write", "写文件" }
+		{ "fs_write", "写文件" },
+		{ "layout_get", "查看界面布局" },
+		{ "layout_apply", "调整界面布局" }
 	};
 
-	public static readonly ToolMetaInfo[] Meta = new ToolMetaInfo[17]
+	public static readonly ToolMetaInfo[] Meta = new ToolMetaInfo[19]
 	{
 		new ToolMetaInfo("get_system_info", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("diagnose_lag", ro: true, "read", "low", lr: false),
@@ -58,10 +60,13 @@ public static class ExtraTools
 		new ToolMetaInfo("phone_sync", ro: false, "write_local", "low", lr: false),
 		new ToolMetaInfo("fs_list", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("fs_read", ro: true, "read", "low", lr: false),
-		new ToolMetaInfo("fs_write", ro: false, "write_local", "high", lr: false)
+		new ToolMetaInfo("fs_write", ro: false, "write_local", "high", lr: false),
+		// 布局工具(L6):读=低风险;写=write_local,必须走确认通道(ro:false)
+		new ToolMetaInfo("layout_get", ro: true, "read", "low", lr: false),
+		new ToolMetaInfo("layout_apply", ro: false, "write_local", "medium", lr: false)
 	};
 
-	public static readonly (string[] keys, string[] extra)[] Keywords = new(string[], string[])[7]
+	public static readonly (string[] keys, string[] extra)[] Keywords = new(string[], string[])[8]
 	{
 		(new string[14] { "卡顿", "很卡", "掉帧", "帧数", "fps", "FPS", "lag", "优化", "流畅", "内存", "JVM", "jvm", "GC", "电脑配置" }, new string[3] { "get_system_info", "diagnose_lag", "tune_jvm" }),
 		(new string[9] { "备份", "回滚", "还原", "恢复", "存档", "坏档", "世界", "save", "backup" }, new string[5] { "list_saves", "backup_save", "list_save_backups", "restore_save_backup", "open_folder" }),
@@ -69,7 +74,8 @@ public static class ExtraTools
 		(new string[7] { "皮肤", "账号", "账户", "披风", "离线", "skin", "account" }, new string[4] { "list_accounts", "add_offline_account", "switch_account", "set_skin" }),
 		(new string[3] { "文件夹", "目录", "folder" }, new string[1] { "open_folder" }),
 		(new string[8] { "手机", "平板", "同步", "安卓", "配对", "传到", "phone", "sync" }, new string[2] { "phone_sync", "list_saves" }),
-		(new string[8] { "latest.log", "日志文件", "读文件", "写文件", "列目录", "文件内容", "这个文件", "debug.log" }, new string[3] { "fs_list", "fs_read", "fs_write" })
+		(new string[8] { "latest.log", "日志文件", "读文件", "写文件", "列目录", "文件内容", "这个文件", "debug.log" }, new string[3] { "fs_list", "fs_read", "fs_write" }),
+		(new string[9] { "布局", "排版", "自定义布局", "页面顺序", "区块顺序", "界面太乱", "换布局", "layout", "ui_layout" }, new string[2] { "layout_get", "layout_apply" })
 	};
 
 	private const string SchemasJson = "[" +
@@ -94,7 +100,10 @@ public static class ExtraTools
 
 	public static List<object> Schemas()
 	{
-		return (List<object>)PyJson.Loads(SchemasJson);
+		List<object> list = (List<object>)PyJson.Loads(SchemasJson);
+		// 布局工具单独一个文件(LayoutTools),这里只做合并,避免往上面那大段 JSON 里插字符串
+		list.AddRange(LayoutTools.Schemas());
+		return list;
 	}
 
 	public static bool Handles(string name)
@@ -170,6 +179,10 @@ public static class ExtraTools
 		}
 		case "open_folder":
 			return OpenFolder(backend, args);
+		case "layout_get":
+		case "layout_apply":
+			// AI 布局工具(L6):读 / 写布局,写之前自动备份成命名方案
+			return LayoutTools.Run(name, args);
 		default:
 			return null;
 		}
