@@ -15,3 +15,5 @@ artifacts/
 # WPF 构建期临时工程文件(win-verify 2026-11-14 实测:会出现且不被任何规则覆盖)
 *_wpftmp.csproj
 *.wpftmp.*
+# E2E/冒烟运行期数据目录(与上面 _wph_run 同性质;_wph_run 与 _wpf_run 两种命名同时在用,故两条都留)
+_wpf_run/
