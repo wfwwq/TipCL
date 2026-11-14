@@ -6749,3 +6749,41 @@ Windows `VersionManagePage.cs` 1110 行,依赖面**没有牵出别的整页**:`V
   (`C5b*` / `C6b*` 与一批单点赋值用例)属于**文档完备性**,见 D-160 的分类,不影响本包收口。
 - 新增 DECISIONS:D-159(A 组判据)/ D-160(扫描方法 112→10)/ D-161(可编辑 `ComboBox` 只认 `SelectionChanged`)/
   D-162(等待条件=存在某次满足)/ D-163(锚点必须来自 `read`;脚本提交前必须跑一次)/ D-164(`pwsh` 实为 5.1,别写 PS7 表达式赋字)。
+
+## C9a:两栏宿主 `PageLayoutHost`(六页共用)+ 关闭 D-165
+
+### 交付物
+
+| 文件 | 说明 |
+| --- | --- |
+| `src\TipCL.App\Controls\PageLayoutHost.cs`(新) | 两栏 + 可拖动分隔条 + 比例记忆(Windows 语义逐值对齐);还带来 `leftMinWidth` / `splitterHitWidth` / `SetEmbedded` / 格子列数 `PageColumns` |
+| `src\TipCL.App\UiPrefs.cs`(改) | 新增 `Splits`(键 `"pageId/splitId"`)与 `Columns`(键 `pageId`);注释写明**与 Windows 的存储位置不同** |
+| `src\TipCL.App\Pages\VersionManagePage.cs` | 切到宿主(独立态可写 / 嵌入态 `SetEmbedded`:隐藏分隔条 + 不写比例 + 左栏收 0 + 回落 272) |
+| `src\TipCL.App\Pages\AccountPage.cs` | 切到宿主(`Auto` 左栏;gap 0) |
+| `src\TipCL.App\Pages\LibraryPage.cs` | 切到宿主(`*,2*`;`leftMinWidth 300`;删掉页内那份列定义/列号逻辑) |
+| `src\TipCL.App\Pages\SettingsPage.cs` | 切到宿主(168;gap 0 + 命中宽 8) |
+| `src\TipCL.App\Pages\FeedbackPage.cs` | 切到宿主(`*,360`;gap 0;346/360 差异登记为 D2 项) |
+| `src\TipCL.App\Pages\Plugins\PluginsPage.Installed.cs` | 固定 3 列 → `PageLayoutHost.PageColumns(…, "plugins", 3, 1, 6)`(空列表仍 1 列) |
+| `tests\TipCL.Tests\C9aPageLayoutHostTests.cs`(新) | 19 条:常量 / 夹取(含 NaN、±∞)/ 像素↔比例 / **三级回退各一条** / 键格式 / **默认列宽 = 声明值(回归钉子)** / 存储比例落像素列 / 拖动落盘 + `Writable=false` 不落盘 / 双击复位 / **命中宽可选且默认 0** / **静止时细线不可见(=零像素证据)** / 列数默认、存储夹取、`gridMode:false` 忽略存储 |
+
+### 运行(全部在**绿树**上跑)
+
+| 证据 | 结果 |
+| --- | --- |
+| `~C9aPageLayoutHostTests` | **19/19 绿** |
+| `~C4LibraryTests` | 66/66 绿(含 D-126 那处改写) |
+| `~C5aSettingsTests` | 43/43 绿 |
+| **15 帧 SHA256 逐字节比对**(带 exe 构建时间核对) | **checked=15 mismatches=0** |
+| **原子一轮**(`flake-hunt.ps1 -Rounds 1 -Prefix c9a-v`) | `BUILD_EXIT=0`(errors=0)、`VSTEST_EXIT=0`(**3588 通过 / 0 失败**)、`INPROC_EXIT=0`(**全绿**) |
+
+### 逐页帧证据(切前 = 切后,逐字节)
+
+`instance` 44163 `EBB237FB…` / 40739 `74ADDEC9…`;`account` 33173 `D3F59339…` / 29984 `148EB206…`;
+`library` 43775 `8FBA4C9F…` / 40686 `A77F3E6A…`;`settings` 45594 `C19BF1C4…` / 43745 `CE33BEFE…`。
+`FeedbackPage` **无独立帧** ⇒ 以 `~C4*`/宿主单测 + 该页自身的过滤证据为准。
+
+### 未验证 / 遗留
+
+1 **`FeedbackPage` 的单测证据**:该页无独立冒烟帧,切换后未新增页级用例(计划:给它一条"切后仍是两栏 + 右栏声明 360"的探针用例);
+2 **per-site 间距**(未移植的 `SplitCatalog`)与 **346/360** 两处登记为 **D2 真机对照项**(会改变像素);
+3 六页的"拖动 + 记忆"在**真机上的手感**(命中宽 4px 重叠是否明显)未验证 ⇒ 真机清单。

@@ -2534,3 +2534,51 @@ Assert.NotNull(shell.GetPage("plugins") as IPluginHostPage);
    ⇒ 效果:**已提交的树始终可编**,别人跑构建/测试不会被我的在途大件挡住 —— 比"允许树红一段时间"
    更省事、也更友好(那个做法要别人按规则第 10 条作废整轮)。
    ⇒ 判据:大件跨轮时**不提交**;能独立编绿的零散件**立刻单独提交**(并用它把大件的新依赖先钉住)。
+
+## D-166 帧比对的两条纪律(本包挣来的)
+
+- **比对前先确认"被比对的产物是本次改动之后构建的"**:`--smoke` 用的是 `src\TipCL.App\bin\Release\net8.0\TipCL.exe`,
+  若不核对它的**构建时间**,"逐字节相同"可能是**拿旧产物比旧产物**(看着全绿、其实没验到本次改动)。
+  本包每次都在报告里写出 exe 构建时间(如 `12:47:58` / `13:24:51`)再报 `same=True`。
+- **"帧逐字节不变"不只防渲染回归,也防把先前验收过的修正悄悄丢掉**:实例 —— 把 `LibraryPage` 切到共用的
+  `PageLayoutHost` 时,若不传 C5c 那条"左列 `MinWidth = 300`",**帧就会变**(窄页面上卡片溢出自己的星列)。
+  ⇒ **帧是先前修正的守门人**:切实现方式时,帧比对能立刻发现"顺手丢掉了别人的修正"。
+
+## D-167 C9a:两栏宿主 `PageLayoutHost` 落地(六页共用一份),并关闭 D-165
+
+- **为什么**:Windows 的 `Pages\Layout\PageLayoutHost.cs` 是"两栏 + 可拖动分隔条 + 比例记忆"的共用宿主,
+  被 **六处**依赖(`VersionManagePage` / `AccountPage` / `LibraryPage` / `SettingsPage` / `FeedbackPage` / 插件列数);
+  而 mac 侧六处**各自写死栏宽**(如 `Grid("272,18,*")`)⇒ 拖动与记忆这层能力在六处**静默丢失**。
+  按"**一次修在共用的地方**"落地。
+- **取值逐值对齐 Windows**:`RatioMin 0.15` / `RatioMax 0.85` / `RatioDefault 0.5` / `DefaultGap 18.0`;
+  夹取 = `Clamp(ratio, Min, Max, Default)`(**NaN / Infinity 落默认**);`Resolve` **三级回退**
+  (有存储 → 用声明默认 → 0.5);`Writable=false` 一律不写。
+- **交互一并搬**(逐条核过 `:628-686`,不是"默认没有"):**双击分隔条 = 恢复默认**、光标 `SizeWE`、
+  悬停/拖动显 1px 细线(`B.LineSoft`)、ToolTip「自由拖动 · 恢复默认」;**没有**键盘快捷键。
+- **存储位置(机制差异,已登记)**:Windows 存在**布局 v2 文档**的 `Splits[pageId][splitId]` / `pages[pageId].Cols`;
+  mac 复用 `UiPrefs.Splits`(键 `"pageId/splitId"`)与 `UiPrefs.Columns`(键 `pageId`)。**用户可见行为一致**。
+- **归属唯一**:列定义、列号、收起(内嵌态 / **左栏孩子自己不可见或被移出树** ⇒ 左列与间隙收 0、右栏吃满、
+  且不落盘)全部由控件负责 ⇒ 页面**只**负责挂孩子与设可见性(`LibraryPage` 里那份
+  `ColumnDefinitions.Clear()` / `Grid.SetColumn(_rightCol, 0)` 已删)。
+- **默认渲染必须逐字节不变**:没有存储比例时**直接用声明列宽**(`Auto` 也保持 `Auto`)⇒ 六页切换后
+  **`instance` / `account` / `library` / `settings` 四页八帧全部 SHA256 逐字节不变**(逐一核过 exe 构建时间)。
+- **gap 小表(实测值)**:`version-manage/nav = 18`(默认)、`account/hero = 0`、`library/folders = 18`(+`leftMinWidth 300`)、
+  `settings/nav = 0`(+命中宽 8;Windows 是 gap18 + `_view.Margin(-18)`,**可见结果等价**)、`feedback/side = 0`
+  (**右栏声明值保留 mac 现状 360**;Windows 是 346)。
+- **两处 D2 真机对照项(会改变像素,不是用户可见差异)**:①Windows 的 **per-site 间距**来自**未移植的 `SplitCatalog`**
+  ⇒ 它落地后 `account`(gap 0)与 `settings`(gap 0 + 命中宽 8)要回来按 Windows 校正;②`feedback` 的 **346 vs 360**。
+- **`splitterHitWidth`(默认 0)**:`gap` 为 0 的页面(gap 0 的 `settings`)靠它**自己带命中宽度**(8px 居中压在边界上),
+  静止透明、细线不显示 ⇒ **零像素变化但仍可拖**;**如实登记**:命中区因此**边界两侧各压住内容 4px**
+  (Windows 是 18px 带、不重叠 —— 机制差异、可见结果等价)。
+- **格子列数(同族存储)**:`PageColumns(prefs, pageId, fallback, min, max, gridMode: true)` 照 Windows
+  `SplitRatioStore.PageColumns` 的规则(**默认 fallback;只有声明 `Mode == grid` 且 `Cols > 0` 才用存储值;
+  `<= 0` 回落 fallback;夹到 `[min, max]`**);`gridMode` 默认 `true` 的理由:**调用它的页面本身就是"声明自己是格子"的那一方**;
+  将来若出现"只想拿 fallback"的调用点显式传 `false`。
+- **D-165 关闭**:插件「已安装」网格原先固定 3 列(注释自认"临时功能缺口")⇒ 现在
+  `_installedHost.Columns = (_installed.Count == 0) ? 1 : PageLayoutHost.PageColumns(…, "plugins", 3, 1, 6);`
+  ⇒ **该缺口由 C9a 的列数存储关闭**;**原版行为保留**:"空列表 ⇒ 1 列"与存储无关,照搬未动。
+  **用户可见差异总账里那一条同时划掉**(不再作为差异存在,而是"可调列数"已实现)。
+- **D-126 范例(机制改动时的测试改法)**:`C4LibraryTests.Library_folder_layout_collapses_and_restores_through_the_menu`
+  原来断言的是**机制**(`Assert.Single(body.ColumnDefinitions)` —— "收起时把列清成 1 列"),列管理搬进控件后改成断言
+  **同一件事的效果**(3 列仍在但**前两列宽为 0**、右栏 `*`),并**多出两条**(间隙也收 0、右栏吃满);
+  **断言只增不减、其余一字未改**。⇒ 以后凡"实现方式变了但能力没变"的用例,都用这个范式。
