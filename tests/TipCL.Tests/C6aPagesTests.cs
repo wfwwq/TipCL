@@ -619,7 +619,8 @@ public class C6aPagesTests
             using var api = C6aFiles.Api();
             using var harness = C4LayerHost.Show();
             InstallPage install = C5aFiles.Mount(harness, new InstallPage("1.20.1", I18n.L("正式版"), () => { }));
-            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 9000);
+            // 【D1 修法 · A 组】卡上的推荐版本 id 是**续体**写的 ⇒ 等它出现(不是等请求到 6);断言一字不改
+            C5aFiles.Pump(() => C5aFiles.HasText(install, "0.15.11"), 9000);
 
             foreach (string name in new[] { "不安装", "Fabric", "Forge", "NeoForge", "Quilt" })
             {
@@ -650,7 +651,8 @@ public class C6aPagesTests
             using var api = C6aFiles.Api();
             using var harness = C4LayerHost.Show();
             InstallPage install = C5aFiles.Mount(harness, new InstallPage("1.20.1", I18n.L("正式版"), () => { }));
-            C5aFiles.Pump(() => api.Count("list_loader_versions") >= 6, 9000);
+            // 【D1 修法 · A 组】同上:等卡上的推荐版本 id 出现(它是续体写的);断言一字不改
+            C5aFiles.Pump(() => C5aFiles.HasText(install, "0.15.11"), 9000);
 
             // 首屏 = 纯原版:名称就是版本号,摘要只有版本,估算 30 MB
             Assert.True(C5aFiles.HasText(install, I18n.L("· 约 {0} MB", 30)));
