@@ -973,3 +973,38 @@ ubuntu/windows 两个 test job(各两批 + Release build)、`package (linux-x64 
 
 **仍未做**:win job 首次失败的确切原因(未定位,已被"不阻断 + 留注解"覆盖);两条平台级提示没动(升 action 大版本另开一轮);
 跨无关历史的 PR 需要本地 `--allow-unrelated-histories` 才能合并,要不要把 Linux 移植并进 `main` 是产品决策,留给你。
+
+## M4-H R21m:布局收敛 —— 移植放仓库根、Windows 版搬进 `windos/`(2026-11-14)
+
+> 详版:`progress/M4-H-R21m-布局收敛.md`;决策 D-70。
+
+**动布局前先查"哪些路径被外部按固定 URL 引用",查出一条硬的**:
+Windows 版(`windos/src/TipCL/Core/Launcher/Config.cs:12`、`Updater.cs:12`)与移植(`src/TipCL.Core/Launcher/Config.cs:13`、`Updater.cs:12`)
+**用的是同一个** `https://raw.githubusercontent.com/wfwwq/TipCL/main/update.json`。
+⇒ **`update.json` 必须留在仓库根**(它不属于任何子项目,而是"这个仓库的发布通道";挪进子目录 = 已安装客户端更新失效)。
+本轮核对:它留在根且 blob 与上游**逐字节相同**。`LICENSE`(仓库级)与 `.github/ISSUE_TEMPLATE/**` 同理留根。
+
+**新布局**:根 = **Linux/Avalonia 移植**(当前主线,`src/` `tests/` `tools/` `docs/` `progress/` …);
+**`windos/`** = Windows 桌面版整棵树(含它自己的 README —— 原根 README 跟着工程搬进去,它的相对引用
+`docs/icon.png` / `docs/plugins/DESIGN.md` / `samples/` 就地有效,只有指向 `LICENSE`/`update.json` 的两个改成 `../`)。
+实现是纯 `git mv` + 一次 `git checkout linux-port -- .`(**历史靠 rename 检测延续,没有重写历史**),
+并**删掉了上一轮为"移植在子目录"而多加的根 workflow `ci-linux.yml`** —— 那份重复到此消掉。
+
+**随之改掉的引用**:`ci-windows.yml` 的构建/测试路径加 `windos/` 前缀 + 触发加 `paths: windos/**`;
+`release-windows.yml` 同样加前缀(它仍是 `on: release: published`,不受路径影响);移植的 `ci.yml` 加
+`paths-ignore: windos/**`(只在动移植时跑);`windos/README.md` 的 CI 徽章由 `ci.yml` 改成 `ci-windows.yml`
+(根上的 `ci.yml` 现在归移植);根上**重写**一份简短 README 说明两版位置与 `update.json` 为何留根。
+
+**验证**:三份 workflow 过真解析且触发条件符合预期;两份 README 的相对引用**逐个 `Test-Path` 解析得到**;
+`windos/` 内 csproj 的引用没有跳出 `windos/`;文件数 **1050 = 425(移植)+ 625(上游)**,一个不多一个不少;
+`git diff --cached linux-port -- .` 只有新增 ⇒ **移植内容零改动**。
+**两条流水线在新布局下真跑**:`2f7683e` 推送后,移植的 `ci` **run #237 四个 job 全绿**(产物
+`tipcl-linux-x64` 152,804,629 B / `tipcl-win-x64` 81,170,026 B),Windows 的 `CI` **run #1** 的
+`构建`/`单元测试` 两步 success ⇒ Windows 工程在 `windos/` 里照样构建/测试通过。
+
+**两个小插曲(如实记)**:1`git rm -r linux` 只删被跟踪的文件,我未跟踪的开发目录(`_cmp/` `dist/` `scratch/` + 84 张冒烟图)
+物理留在了 `linux/`,回头搬回新根(新根就是移植根,忽略规则随之生效,仓根干净);2推送遇到**网络抖动**(3 次连接失败),
+`ls-remote` 恢复后重推成功,期间本地提交已完成、没有丢东西。
+
+**回退**:`git revert 2f7683e`。**仍未做**:win job 首次失败原因未定位;两条平台级提示未处理;
+`linux-port` 分支(内容 = 现在 main 的根,历史仍独立)要不要删由你定。

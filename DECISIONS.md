@@ -670,3 +670,29 @@
   2**能用索引/退出码定性,就别等日志**:126 与 100644 的组合当场就能钉死;
   3**诊断通道要主动设计**(注解),别把"看不到日志"当成"没法查";
   4**拿环境相关的东西当门槛,等于把不稳定性写进流水线**。
+
+### D-70 · 布局收敛:移植在仓库根、Windows 版在 `windos/`;而**被外部按 URL 引用的文件必须留在根**(R21m,2026-11-14,主 agent)
+
+- **背景**:R21l 把移植以 `linux/` 子目录加进 `main`(因为两边根目录重名太多、直接合并会互相破坏),代价是
+  1本地的仓根布局与"移植的仓"错位(开发产物一度不再被忽略);2GitHub 只读根 `.github/workflows/`,
+  于是为了"移植在子目录也能跑 CI"又多加了一份根 workflow(与嵌套那份重复,得人肉同步)。
+- **决策一:把移植放到仓库根,Windows 桌面版整棵树搬进 `windos/`。** 这与本地磁盘结构一致
+  (`tipcl/linux` = 移植,`tipcl/windos/tipcl` = Windows 版),且**消掉了那份重复的 workflow**。
+  实现只用 `git mv` + 一次 `git checkout <port-branch> -- .`,**历史靠 rename 检测延续,没有重写历史**;
+  回退就是 `git revert`。
+- **决策二(这一轮最重要的发现):动布局之前必须先查"哪些路径被外部按固定 URL 引用"。** 本轮查出:
+  Windows 版(`Core/Launcher/Config.cs:12`、`Updater.cs:12`)与移植(`Config.cs:13`、`Updater.cs:12`)
+  **都用** `https://raw.githubusercontent.com/wfwwq/TipCL/main/update.json` ⇒ 它**必须留在仓库根**
+  (挪进子目录会让**已经装在用户机器上的客户端**更新失效,而且这种失效无法靠"下次发布"补救)。
+  ⇒ 于是 `update.json`、`LICENSE`、`.github/ISSUE_TEMPLATE/**` 留在根;它们不属于任何子项目,
+  而属于"这个仓库"本身。**一般化**:仓库里的某些路径是**接口**(发布清单、LICENSE、issue 模板、workflow 位置),
+  搬代码时它们要按"接口不能动"处理。
+- **决策三:跟着搬动一起修引用,并当场验证。** 需要改的:`ci-windows.yml`/`release-windows.yml` 的构建路径加
+  `windos/` 前缀、触发加 `paths`;移植的 `ci.yml` 加 `paths-ignore: windos/**`;`windos/README.md` 的 CI 徽章改名、
+  两个指回仓库根的链接加 `../`;根上重写一份简短 README 说明两版位置。验证方式:两份 README 的相对引用
+  **逐个 `Test-Path`**、三份 workflow 真解析、文件数 `1050 = 425 + 625`(不多不少)、
+  `git diff linux-port` 只有新增(移植内容零改动),最后**两条流水线各自一次真跑**(四 job 全绿 / Windows 构建与单测通过)。
+- **教训**:1**"搬代码"要先找接口**:写死的 URL、徽章、workflow 位置、相对链接,全是接口;
+  2**能用 rename 检测延续历史就别重写历史**(这次全用 `git mv`,历史与 blame 都还在);
+  3**布局一变要立刻重查忽略规则**(上一轮就吃过一次:开发产物在新根下不再被忽略);
+  4**验证要落到"外部看见的效果"上**(页面能打开的链接、流水线真跑绿),而不是"命令没报错"。
