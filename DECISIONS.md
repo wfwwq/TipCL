@@ -2401,3 +2401,33 @@ mac      Services\Dlg.cs:329          : public static async Task<T?> Form<T>(str
 - **写法**:5.1 下要包一层子表达式:`$warn = $(if (...) { ... })`,或者干脆先赋默认值再在 `if` 里改。
 - **上下文**:本会话的 `pwsh -Command` 实际跑的是 5.1;写 `tools\*.ps1` 时按 5.1 的语法写(并且只用 ASCII 匹配符 ——
   5.1 把**无 BOM** 的 `.ps1` 当 ANSI 读,中文匹配符会被吃掉,D-36)。
+
+## D-165 C7b 批4:`PluginsPage` 已安装网格的列数 = **临时功能缺口**(不是设计差异)
+
+**性质先说清**:这条是"**依赖还没落地**"的**临时功能缺口**,**不是** D-154/D-158 那种"任务书规定的设计差异"。
+写错性质会让后来的人以为这是有意的。
+
+**缺什么**:Windows 那一行是
+```csharp
+_installedHost.Columns = (_installed.Count == 0) ? 1 : SplitRatioStore.PageColumns("plugins", 3, 1, 6);
+```
+(`Windows Pages\Plugins\PluginsPage.Installed.cs:43`)。`SplitRatioStore` 属 Windows 的**布局 v2 文档**那一套
+(`Pages\Layout\PageLayoutHost.cs:294`:`LayoutStoreV2` / `LayoutSchema` / `SplitState`,把每页分栏比例持久化进布局文档)。
+**mac 侧没有它**(全仓零命中),`UiPrefs` 是另一套存储(只有 `SideWidth`/`Dark`/`Anim`/`Expanded`/`VmFavorites…`),
+既没有布局文档、也没有分栏比例。
+
+**mac 现在的做法**:`_installedHost.Columns = (_installed.Count == 0) ? 1 : 3;`
+—— **"空列表时 1 列"是原版行为,与存储无关,必须保留**(照搬);列数固定 3。
+**正解**:等布局包落地后改回 `SplitRatioStore.PageColumns("plugins", 3, 1, 6)`。
+**用户可见后果**:插件页的已安装网格**固定 3 列,用户不可调**;这与既有 16 帧的像素无关(那几帧里没有插件页)。
+**被跟踪**:本条的兑现条件是"布局包落地",未关闭前不计入已完成。
+
+**顺带记两条这一批换来的教训**(都不是 C7b 专属,后面每个页面都会撞):
+
+1. **Avalonia 11 里按钮基类的命名空间与 WPF 不同**(`ButtonBase` / `RepeatButton` 我连踩两次 CS0246/CS0234):
+   `OfType<ButtonBase>()` 那套 WPF 写法在 mac 侧编不过。**判据改成按具体类型**(`Button` / `ToggleButton`)更稳;
+   写代码时**别凭 WPF 记忆写基类名**,先在仓里找一个既有用例。
+2. **引用决策号的自检要更严**(Lead 补的那条):引用号**不仅要求"存在",还要求它确实是"讲这件事"的那一条** ——
+   本次我把 `D-159`(c4-pages 的抖动包)当成空闲号引用过,**存在但讲别的事,比不存在更容易误导**。
+   并发纪律:**分配新号前当场读一次 `DECISIONS.md` 的当前最大号,提交前再看一眼**(别人可能在你编辑期间追加);
+   这与"每落盘一个文件就编整树""只 add 自己的路径"属同一族。
