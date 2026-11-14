@@ -293,14 +293,14 @@ public class C5aSettingsTests
             foreach (string label in new[]
             {
                 "关闭（共用实例目录）", "隔离存档", "隔离 Mod 与配置", "隔离全部",
-                "G1(推荐)", "调优 G1", "ZGC", "不指定",
-                "保持显示", "最小化", "隐藏", "隐藏,退出后重开", "关闭启动器",
+                "G1（推荐）", "调优 G1", "ZGC", "不指定",
+                "保持显示", "最小化", "隐藏", "隐藏，退出后重开", "关闭启动器",
                 "Minecraft 新闻", "本地 HTML", "空白",
                 "窗口", "全屏",
-                "自动(官方慢则走 BMCLAPI)", "仅官方", "仅 BMCLAPI",
+                "自动（官方慢则走 BMCLAPI）", "仅官方", "仅 BMCLAPI",
                 "自动", "仅 MCIM",
                 "默认", "护眼绿", "暖米", "雾蓝",
-                "内置网关(免配置)", "自定义 OpenAI 兼容端点",
+                "内置网关（免配置）", "自定义 OpenAI 兼容端点",
                 "简体中文", "English",
             })
             {
@@ -915,7 +915,7 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
-            Assert.True(C5aFiles.HasText(page, I18n.L("共 {0} 个：", 1) + I18n.L("我的主题") + "(" + I18n.L("浅色") + " #2E9B6B)"));
+            Assert.True(C5aFiles.HasText(page, I18n.L("共 {0} 个：", 1) + I18n.L("{0}（{1} {2}）", "我的主题", I18n.L("浅色"), "#2E9B6B")));
 
             C5aFiles.Click(C5aFiles.ByText(page, I18n.L("加载")));
             C5aFiles.Pump(() => api.Count("load_theme") >= 1);

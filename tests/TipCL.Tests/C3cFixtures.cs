@@ -138,7 +138,7 @@ internal static class C3cExpected
     /// <summary>【Windows 源】<c>LaunchPage.cs:1814</c>:<c>game_exited</c> 的两句状态(带 / 不带退出码)。</summary>
     internal const string GameExited = "游戏已退出";
 
-    internal const string GameExitedFormat = "游戏已退出(退出码 {0})";
+    internal const string GameExitedFormat = "游戏已退出（退出码 {0}）";
 
     /// <summary>【Windows 源】<c>LaunchPage.cs:1820</c>:<c>game_started</c> 的状态。</summary>
     internal const string GameStartedText = "游戏进程已启动,正在加载世界...";
