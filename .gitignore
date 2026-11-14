@@ -1,11 +1,11 @@
 bin/
 obj/
-.vs/
+artifacts/
+smoke.png
 *.user
-*.suo
-*.pdb
-publish/
-
-# 测试/截图产物（监工统一放仓库外 _wph_run）
-_wph_run/
-shot-*.png
+.vs/
+smoke-*.png
+dist/
+# 冒烟夹具与对比产物(假 TIPCL_HOME:假 .minecraft / ai_chats.json、对比截图、构建日志)
+_cmp/
+scratch/

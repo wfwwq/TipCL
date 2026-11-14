@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "windos/**"
+      - ".github/workflows/ci-windows.yml"
+  pull_request:
+    paths:
+      - "windos/**"
+      - ".github/workflows/ci-windows.yml"
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: 构建
+        run: dotnet build windos/src/TipCL/TipCL.csproj -c Release
+      - name: 单元测试
+        run: dotnet test windos/tests/TipCL.Tests -c Release --logger "console;verbosity=normal" --logger GitHubActions
