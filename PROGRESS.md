@@ -1,4 +1,4 @@
-﻿﻿# PROGRESS — TipCL Linux 版 M1
+﻿# PROGRESS — TipCL Linux 版 M1
 
 > 工作包状态表。各代理收尾后在自己行内更新状态；详细报告见 `progress/M1-<包>.md`。
 > 共享文件编辑纪律见 GOAL.md §6：各包只追加自己的小节，禁止重写他人内容。
@@ -94,7 +94,7 @@
 
 - **修掉两处「静默失效」的调用约定缺陷(见 D-13)**:① `ToDict` 不递归 → `save_settings(new { data = … })` 的嵌套字典判不成 `PyDict`,**设置保存全是空操作且不落盘**;② `CallAsync/TryCallAsync` 不把 `PyDict` 落 POCO → 清理预览/智能推荐/语言表这类按 POCO 取结果的地方永远拿默认值。两者都已修并加测试锁定。
 - **Core 补搬**(纯 C#,无 WPF/Win32 依赖):`Servers / Cleaner / Feedback(+Defaults/Error) / Themes / Repair / Worlds / Thumbnails / UiLayout(+LayoutDoc/LayoutItem) / ContentExport / ExportPack / HelpContent / Updater / Terracotta` 及缺失的错误类型。
-- **Api 契约 +25**(UI 已在调用但原先落桩):账号行/离线账号/删除/设为当前、`authlib_presets`、`skin_urls`、`get·set_account_skin`、三种登录 `start_microsoft|authlib|nide8_login`(后台任务 + `login_code`/`login_status` 事件,`ApiEvent` 增 `Code`/`Uri`)、全局 Java `list_java`/`scan_java`/`add_java`/`set_default_java`、服务器 `list/add/update/delete/import/export_servers`、`cleaner_preview|apply`、`get_smart_recommendation`、反馈 `feedback_has_consent|consent|submit|history`、语言 `get_language`/`set_language`/`available_languages`/`translate`、`allow|set_multi_instance`、`test_ai_connection`、主题包 `list|save|load|delete|import|export_theme`、`clear_playtime`。
+- **Api 契约 +25**(UI 已在调用但原先落桩):账号行/离线账号/删除/设为当前、`authlib_presets`、`skin_urls`、`get·set_account_skin`、三种登录 `start_microsoft|authlib|nide8_login`(后台任务 + `login_code`/`login_status` 事件,`ApiEvent` 增 `Code`/`Uri`)、全局 Java `list_java`/`scan_java`/`add_java`/`set_default_java`、服务器 `list/add/update/delete/import/export_servers`、`cleaner_preview|apply`、`get_smart_recommendation`、反馈 `feedback_has_consent|consent|submit|history`、语言 `get_language`/`set_language`/`available_languages`/`translate`(**⚠️ 2026-11-14 task-30 更正:当时这四条只是"契约实现" —— 移植侧 `TipCL.Core.csproj` 里没有内嵌词表,`I18nCore.Tr()` 一律回落返回 key 本身 ⇒ 一旦把语言切成 English,整站仍显示中文;现已内嵌 en/zh_CN 各 2967 键并加用例兜底。但"整站双语"仍不成立:全树 4578 条中文字面量里只有 122 条走了查表,未走查表的那些换语言也不会变**)、`allow|set_multi_instance`、`test_ai_connection`、主题包 `list|save|load|delete|import|export_theme`、`clear_playtime`。
 - **账号页**:新增 `Pages/AccountPage.cs`(移植 Windows `AccountPage.cs`:操作区 + 英雄卡 + 账号行 + 皮肤编辑弹窗 + 设备码/皮肤站/统一通行证登录),`GetPage("account")` 接入,删 `PlaceholderAccount`。配套新增 `Pages/SkinPng.cs`(64×64 → 128×256 正面视图**纯像素合成**,不依赖绘图 API)、`Common/Thumbs.cs`(远程图 + 内存缓存)、`Common/AvatarTile.cs`(圆形头像块)。
 - **`Ui.Icon`**(见 D-13):`IconBtn`/`Empty` 都改走它,图标名不再被当文字画出来。
 - 验收:`dotnet build` 0 警告 0 错误(仅 NU1900 联网警告);`dotnet test` **120 通过 / 1 跳过 / 0 失败**(新增 `ApiContractsTests` 4 项、`AccountPageTests` 3 项);账号页冒烟出图正常。
@@ -1156,3 +1156,14 @@ Windows 版(`windos/src/TipCL/Core/Launcher/Config.cs:12`、`Updater.cs:12`)与�
 卡点与第 3 条完全相同(切 tag + 建 release + 授权推送),需 lead / 用户授权。
 `release.yml` 本体已就绪、无需再改:`on: release: [published]` + `workflow_dispatch`(带 `tag` 输入),两个 job —— `windows`(net48 exe + sha256)与 `linux`(publish → linuxdeploy → AppImage + `.deb` → xvfb 裸跑冒烟 → 上传 + 打印清单三行)。目前**从没有 Linux 发行版可发**(仓库 0 个 Linux 资产),所以这条链路一次也没跑过。
 本条与第 3 条的事实口径另见 `scratch/update-e2e2/REPORT.md` 与 `docs/HANDOFF-d95a9472.md` 的第二、三节(那两份由 `linux-updater` 写;两处结论一致,**唯一一处口径差别**已在此写明:那里写的是"发 `v0.1.0-m3`(或更高)的 release 即可闭环",而按第 3 条第 2 点实测,`v0.1.0-m4` 这类仍 **低于 `AppInfo.APP_VERSION`(1.1.0)** 的版本号即使真发出来也只会显示"已是最新版本" —— 正确的门槛是 **> 1.1.0**)。
+
+## M4-H R22 之后的 i18n 记录:词表补上了,但覆盖率只有一半(2026-11-14;task-30 落地,task-31 如实记录)
+
+- **缺陷(移植期一直存在,用户可见)**:移植侧 `src/**` 下**没有 `locales/` 目录**,`TipCL.Core.csproj` 里也没有任何 `EmbeddedResource`,而 `I18nCore.LoadStrings()`(`src/TipCL.Core/Launcher/I18nCore.cs:34-69`)是从**内嵌资源** `TipCL.Core.locales.<name>.json` 读词的 ⇒ 词表恒为空,`Tr()` 一律**回落返回 key 本身**。表现:**把语言切成 English 后整站仍显示中文**,而 Toast 还说「语言已切换,重启后生效」,更容易让人以为生效了。
+- **修复(task-30,2026-11-14)**:把词表接成移植侧内嵌资源,`en`/`zh_CN` 各 **2967** 键,`LogicalName=TipCL.Core.locales.<name>.json`(写法照 Windows 侧 `windos/src/TipCL/TipCL.csproj:92-93`)。来源:**底表 = `windos\tipcl` 那份 2951 键 + 用户源码压缩包 `TipCL-552f3ac` 独有的 16 键**,两份**互不包含**(本仓 `linux/windos` 子树那份是最旧的 2775)。用例 `tests/TipCL.Tests/Core/I18nCoreLocalesTests.cs`(4 条)钉住「资源真嵌入 + 键对齐 + 中英查表」;全量 **480/0 失败**。
+- **但"英文界面"仍不成立(实测数字,别当已完成)**:
+  - 静态查表调用点(`I18nCore.Tr("...")`)**122** 处(含动态实参共 131),**只命中 61 = 50.00%**;
+  - 全树含中文的字符串字面量 **4578** 条,其中只有 **122** 条是翻译实参 ⇒ **约 4456 条根本不走查表**,英文模式下仍显中文;
+  - 未命中集中在 `Core/Plugins/PluginInstaller.cs`(22)、`Core/Launcher/Ai/Preview.cs`(22)、`App/Common/Api.cs`(14)、`Core/Launcher/Shortcut.cs`(2)、`App/Session/CommandLine.cs`(1);这些串在三份词表里**都不存在**(其中 35 条只是全角/半角字形漂移,另 12 条是拼接片段);
+  - 未命中清单(逐条):`_tmp/tasks/linux-updater/i18n-coverage.md` + `i18n-miss-classified.json`(工作区外,lead 最终交付会引用);**补译文属内容决策,已上报用户拍板**。
+- **更新词表 / 重放生成步骤**:见 `src/TipCL.Core/Resources/locales/README.md`(那里也写明"三份词表互不包含、别以为最新那份是超集")。

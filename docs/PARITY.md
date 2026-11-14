@@ -148,6 +148,7 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 5. **Core 业务件**:`News`、`Worlds`、`Servers`、`Feedback`、`Repair`、`Themes`、`Thumbnails`、`UiLayout`、`Updater`、`Cleaner`、`ContentExport`、`HelpContent` —— 这些在 M4-D/P1/P2/P4 已陆续搬入 `src/TipCL.Core`(见 §3「已移植」);真正还缺的是 `Shortcut`(P3.5 已完成)与上表所列的 AI 服务层、插件宿主。
 6. ~~插件宿主全链~~:2026-11-12 P6 判定并落地 —— **文件级链路(市场/安装/更新/卸载/启停/日志/权限/开发链接)+ 壳侧(`plugin:` 页面、动态顶部页签、界面贡献快照)已真做**;需要在进程内跑插件代码或渲染插件网页的那一半不移植(无 Node 宿主、参考 .NET 契约基于 WPF),理由与逐项判定见 §7。
 7. **Services 视觉/交互件**:WebViewHost、SPanel、Wallpaper、SideFrost、SmoothScroll、LucideAssets(逐项结论见 §5);**`FileDrop/FileKinds` 已于 P6/P7 落地为代码级统一入口(见 §8)**;但 Linux/X11 上收不到系统拖放(平台限制,见 §8 首段与 D-38),真机可用入口是各页的显式导入按钮。
+8. **i18n(词表)—— 移植期一直缺,2026-11-14 补上,但只补了一半**:移植侧 `src/**` 下**没有 `locales/` 目录**、`TipCL.Core.csproj` 里没有任何 `EmbeddedResource`,而 `I18nCore.LoadStrings()` 是从内嵌资源 `TipCL.Core.locales.<name>.json` 读的 ⇒ 词表恒为空、`Tr()` 一律回落返回 key 本身,**把语言切成 English 后整站仍显示中文**(task-30 已修:内嵌 `en`/`zh_CN` 各 **2967** 键)。**但"英文界面"仍不成立,别当已完成**:静态查表调用点 **122** 处只命中 **61**(50.00%);全树 **4578** 条中文字面量里只有 **122** 条走了查表 ⇒ **约 4456 条换语言也不会变**(英文模式下仍是中文);未命中集中在 `Core/Plugins/PluginInstaller.cs`(22)、`Core/Launcher/Ai/Preview.cs`(22)、`App/Common/Api.cs`(14)、`Core/Launcher/Shortcut.cs`(2)、`App/Session/CommandLine.cs`(1),这些串在三份词表里**都不存在**(其中 35 条只是全角/半角字形漂移),**补译文属内容决策,已上报用户拍板**。三份词表**互不包含**(底表 2951 + 用户源码压缩包独有 16 = 2967),更新与重放方式见 `src/TipCL.Core/Resources/locales/README.md`。
 
 > 注:「真机 E2E(Fabric 安装、启动游戏)」依赖 Ubuntu 盒子(`mcp__box__*`),当前会话未接入,需盒子可用时执行。
 
