@@ -6787,3 +6787,120 @@ Windows `VersionManagePage.cs` 1110 行,依赖面**没有牵出别的整页**:`V
 1 **`FeedbackPage` 的单测证据**:该页无独立冒烟帧,切换后未新增页级用例(计划:给它一条"切后仍是两栏 + 右栏声明 360"的探针用例);
 2 **per-site 间距**(未移植的 `SplitCatalog`)与 **346/360** 两处登记为 **D2 真机对照项**(会改变像素);
 3 六页的"拖动 + 记忆"在**真机上的手感**(命中宽 4px 重叠是否明显)未验证 ⇒ 真机清单。
+
+
+## M5 收尾:最终验收(Acceptance,2026-11-14 20:0x CST)
+
+本轮续做的收尾包:**U9 冻结树复跑 + U10 最终验收与推送准备 + `docs/MAC-VERIFY.md` 扩充 + U11 归属记录**。
+写权限仅限本文档、`DECISIONS.md`、`docs/**`、`GOAL.md`;`src/**` 与 `tests/**` 一字未动(验收前后 `git status` 均为空)。
+
+### 1 本轮续做落地清单(`04fcd76` → `bd9f729`,共 33 个提交)
+
+| 主题 | 提交 |
+|---|---|
+| **抢救最脆弱资产 + 消除用户可见降级**:`AiFixWindow` 入树、块 4 接线(降级 Toast 退休) | `7777d75`、`fab6b9e`、`9365cc4` |
+| **AI 页主体 K2–K11**(12 文件入 `src\TipCL.App\Pages\Ai`)+ 注册可达 + 用例恢复 | `d1a5a1d`、`247db6d`、`e2b8a82` |
+| U3 调色板守卫修正(先剥注释再匹配)+ 回改 `6b53ce0` 的权宜之计 | `2117d31`、`ad4be74` |
+| U4 `AskCard` 2 条用例 / U7 `C7b` 3 条用例 / U8 C9a 三条遗留(含分隔条命中区几何) | `5d1341b`、`9bab9a0`、`99dedaa` |
+| U6 三件零散件:`PhoneSyncPanel`、`FeedbackConsent`、`DesignSheetPage` + 标点保真 + 用例改写 | `5078ae5`、`28055b4`、`29a46f3`、`6d3caa8`、`a13fc04` |
+| M6 设置页向导缝接线 + 按 `D-126` 改一条用例 | `000a406`、`9769c6a` |
+| M8 两条启动路径接线(带两道闸)/ M9 闸门探针收编为常驻用例 | `b5631de`、`0a182c4` |
+| M11 字面量保真守卫 + 扩展(扫"未包裹"通道、台账清零) | `a677040`、`219c7d8` |
+| M13 标点保真(5 批)+ 测试期望两轮对齐 | `497fd39`、`b0b9056`、`6894810`、`22ceb1e`、`888fbbb`、`20706d1`、`bac8303`、`bd9f729`、`13d2775`、`c7c4eb8` |
+| 文档:U11 归属决策 `D-168` | `fac0d26` |
+
+### 2 验收运行(冻结 `bd9f729`,持锁内;原始输出在 `_tmp\tasks\mac-ship\`)
+
+**冻结与环境保护**(全部满足才开跑):
+
+| 项 | 值 |
+|---|---|
+| HEAD / 分支 | **`bd9f729`** / `master`(`origin/macos-port` 之上 **ahead 100**) |
+| 工作树 | `git status --short` = **空**(验收前后都为空) |
+| SDK | `dotnet --version` = **10.0.403**(按 `D-02`) |
+| 临时目录 | `TEMP`/`TMP` → `_tmp\tasks\mac-ship\temp-test` |
+| 数据根 | **`TIPCL_HOME`** → `_tmp\tasks\mac-ship\tipcl-home`(与 TEMP **同时**重定向,理由见 `D-171`) |
+| 锁 | **先 `global` 再 `mac`**、**逆序释放**;全程只有本 agent 跑 dotnet |
+| 开关 | `-m:1`、`-p:UseSharedCompilation=false`;构建 `--no-incremental`;**未调** `dotnet build-server shutdown` |
+
+```powershell
+dotnet build TipCL.Mac.sln -c Release --no-incremental -p:UseSharedCompilation=false -m:1 -v:q -clp:Summary
+dotnet test TipCL.Mac.sln -c Release --no-build --nologo
+dotnet exec tests\TipCL.Tests\bin\Release\net8.0\TipCL.Tests.dll
+```
+
+| 项 | 结果 |
+|---|---|
+| 全量 build | **`BUILD_EXIT=0` / `0 个错误` / `1 个警告`** |
+| 唯一警告 | `SYSLIB0014` @ `src\TipCL.Core\Launcher\Sync\PhoneClient.cs(116,38)`(`WebRequest.Create` 已过时) |
+| 通道 1(VSTest) | **`VSTEST_EXIT=0`** / `失败: 0, 通过: 3624, 已跳过: 0, 总计: 3624` |
+| 通道 2(进程内) | **`INPROC_EXIT=0`** / `总计 3624 个用例, 通过 3624, 失败 0, 跳过 0, 不支持 0` |
+
+**警告口径(照 `D-169` 第 3 节)**:判据是**集合 ⊆ {`NU1900` ≤6、`SYSLIB0014` @ `PhoneClient.cs:116`}**,不是"数字等于某个数"。`lead-z1/z2` 基线是 `7 个警告`(6×`NU1900` + 1×`SYSLIB0014`),本轮 `NU1900` 为 0(这次能连上 NuGet 源)⇒ 7→1 **不是回归**。
+**总数沿革**:3600(断点基线)→ 3608(测试收口)→ 3611(M9 闸门)→ 3622(AiChatOps 恢复 11 条)→ **3624(本轮实测,`已跳过: 0`)。
+
+### 3 帧矩阵:10 个 nav 页 × 明暗 = 20 帧全绿
+
+全部 `exit=0` / `issues=0` / `pending=0`,逐页截图与哈希见 `_tmp\tasks\mac-ship\smoke-pages.csv`:
+
+| `--page` | light(字节 / SHA256 前 16) | dark(字节 / SHA256 前 16) | 与 `README.md` 基准表 |
+|---|---|---|---|
+| 不带(首屏)/ `launch` | 37,681 / `2603BF6AB2B5D491` | 33,579 / `7D7AFDD502D82EE2` | ✅ 逐字节相同(C3c 基线) |
+| `account` | 33,173 / `D3F593398D737BE9` | 29,984 / `148EB2066C1009D5` | ✅ 逐字节相同 |
+| `tasks` | 27,719 / `0E591B87A2B2B9E3` | 24,171 / `C3EE486EB65766D1` | ✅ 逐字节相同 |
+| `download` | 30,372 / `9DDD2E143C52FB5E` | 26,725 / `D602CC36868978B8` | ✅ 逐字节相同 |
+| `plugins` | 25,115 / `A48E426D29D421A4` | 21,410 / `95E2BF47A5F35DA6` | ✅ 逐字节相同 |
+| `library` | 43,810 / `99D4D032D238895B` | 40,699 / `97E46AEB7BFD9E1C` | ⚠️ 表里是 43,775 / 40,686 |
+| `instance` | 44,186 / `B46A9161B4C54D9E` | 40,798 / `EEB6F7EC7C5F69E3` | ⚠️ 表里是 44,163 / 40,739 |
+| `settings` | 45,632 / `7ECC7B1FE5449C53` | 43,723 / `20A05ED1E6575AFA` | ⚠️ 表里是 45,594 / 43,745 |
+| `multiplayer` | 35,958 / `83E9F228B2BE78CE` | 32,396 / `F134DF3BF5273B42` | ⚠️ 表里是 36,078 / 32,559 |
+| **`ai`(本轮已注册)** | **30,854 / `924837C28D2DA7B5`** | **30,431 / `DF59FD60F9D7EC8C`** | ⚠️ 表里那句"`ai` 尚未移植 ⇒ 与首屏同帧"**已失效** |
+| `ai --ai-seed` | 43,130 / `979660421221829A` | 42,725 / `B0A008EB3DB19DE3` | 新增(带种子的两张) |
+
+- **`--theme blue`(非法参数)**:`exit=2` 且**不产出文件**(错误路径仍正确)。
+- 附:`--ai-seed` 那两张的日志同时打印 `seeded=yes chats=1 messages=5 dock=0 placeholder=visible sendEnabled=False stopEnabled=True`,不带种子时打印 `seeded=no` —— 这是**防误读**的(空壳帧与喂了数据的帧不要混着看)。
+- **4 页相对 `README.md` 基准表有极小差**(`library`/`instance`/`settings`/`multiplayer`,±12~120 B),**不是渲染缺陷**:所有帧 `exit=0`/`issues=0`,且本轮确实改过这几页的**用户可见字面量**(`888fbbb` 改 `SettingsPage.cs` 11 处 + `DropVeil.cs` 1 处,`6894810`/`22ceb1e` 覆盖其余 `Pages\*.cs`/`NavModel.cs`),字面量变 ⇒ 文本重排 ⇒ 像素变;而 `account`/`tasks`/`download`/`plugins` 四页**逐字节未动**,说明变化只落在被改到的串上。**未做**:未 checkout 历史提交逐帧二分(共享树不允许 checkout)⇒ "哪处字面量造成哪页的差"没有单独钉死,如实标注。
+- ⇒ `README.md` 那张表与第 67 行需要更新,但 **`README.md` 不在本包写权限内**,已记入 `D-170` 交 Lead 决定。
+- 另有 `tools\c5a-smoke.ps1` 的基线断言:`no-page` 与 `launch-dark` **逐字节等于 C3c 基线**(脚本自己判定通过)。
+
+### 4 连续 3 轮原子运行(补 U9 那次的第 3 轮)
+
+命令:`powershell -NoProfile -ExecutionPolicy Bypass -File tools\flake-hunt.ps1 -Rounds 3 -Prefix mac-ship`(每轮 = build + VSTest + 进程内,单轮内独占构建位)。
+
+| 轮 | 构建 | 测试 |
+|---|---|---|
+| round 1(`artifacts\mac-ship-r1`) | `BUILD_EXIT=0`;`errors=0`;警告 **2 行 = 1 个唯一条**(`SYSLIB0014`) | `VSTEST_EXIT=0` **3624/3624 失败 0**;`INPROC_EXIT=0` **全绿** |
+| round 2(`artifacts\mac-ship-r2`) | 同上 | 同上 |
+| round 3(`artifacts\mac-ship-r3`) | 同上 | 同上 |
+
+- **3/3 全绿** ⇒ `U9` 那次"2 轮有效 + 第 3 轮作废"**由此补齐**;第 3 轮当时当红的根因(并发写者的在途文件 `MainWindow.Plugins.cs(57,12)` `CS0246`)在冻结树上**不存在**。
+- ⚠️ **两个数字不是矛盾**:flake-hunt 打印的 `warnings=2` 是**日志行数**(同一条警告在日志里出现两次:带/不带 `[project]` 后缀),而 MSBuild 汇总行的**唯一条数**是 `1 个警告`。判据仍按 `D-169` 的"集合"口径。
+
+### 5 U9 原始产物留档(防"清 artifacts 把证据一起抹掉")
+
+`mac\artifacts\` 被 `.gitignore` 忽略 ⇒ 已把 `lead-z1/z2/z3` 的 **12 个原始产物**拷到 `_tmp\tasks\mac-ship\U9-artifacts\`,并逐个比对 SHA256 与源文件**相等**。
+配套证据见 `_tmp\tasks\mac-ship\U9-lead-z3-evidence.md` 与 `u9-jobb-raw.txt`。
+
+### 6 推送准备(**未执行**)
+
+```powershell
+git -C D:\项目\tipcl\mac push origin master:macos-port
+```
+
+- 目标分支 `origin/macos-port`;远端当前 **`12a4b75f389b04ece1bfc859963c7054b1c44967`**(11-14 00:22 首次推送的哈希,本轮验收期间复核未变);本地 **ahead 100**。
+- **用户未授权 mac 推送** ⇒ 本节只给命令,**没有执行**;`git ls-remote` 复核见 `_tmp\tasks\mac-ship\push-handover.md`。
+- 离线备份:`_tmp\tasks\mac-ship\mac-master-ahead67-20261114.bundle`(自包含完整历史,`git bundle verify` 通过)。
+- 推送前须先跑探针(`git fetch` + `ls-remote refs/heads/macos-port` 必须仍是 `12a4b75`);**不得 `--force`**;**不推 `main`、不推 tag**。
+
+### 7 范围外声明(U11)
+
+`Pages\Layout\` 家族(Windows 布局 v2,18 文件 ≈291 KB)**不进 mac** —— 它是**移植基准 `803dd38` 之后**才在 Windows 侧出现的新功能(7 个未推送提交),且 mac 侧零活引用。五条理由、执行口径、将来复活的入口(位置 + 冻结哈希 `9bfb179` + 命令)见 `DECISIONS.md` **`D-168`**。
+已消除/已裁的三条差异:插件市场列数(已由 C9a 关闭)、AI 的 `layout_get`/`layout_apply`(已按"不适用且有据"裁剪)、六页"可拖分隔条 + 栏宽记忆"(已由 C9a 自建补回)。
+
+### 8 未验证 / 遗留(如实,不美化)
+
+1. **真机项**:`docs\MAC-VERIFY.md` 全部条目(本机是 Windows,没有 Mac);本轮已把 M 轮新增/更正的项补进去(§14–§19 + §13.1 更正)。
+2. **`README.md` 的帧基准表**与第 67 行(`ai` 那句)与 HEAD 不符(见 §3 与 `D-170`)⇒ 需 Lead 决定由谁更新(**不在本包写权限内**)。
+3. **推送未执行**(未授权);`origin/macos-port` 仍是 `12a4b75`。
+4. `U6` 的 `PhoneSyncPanel` 真机手感、AI 页真机行为、两条启动路径的真机顺序 —— 都在 `docs\MAC-VERIFY.md` 里逐条可勾选,不在本机可验范围。
+5. 本轮**未**重跑 `docs\MAC-VERIFY.md` 之外的打包结构校验(`B3` 产物已在 11-12 产出,`dist\TipCL-macos-universal.tar.gz` 85,812,352 B 未被动过)。

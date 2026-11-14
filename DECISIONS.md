@@ -2667,3 +2667,78 @@ Lead 要求「交出推送命令前先打本地备份」。已落盘 `_tmp\tasks
 - mac:`git status --short --ignored`、`git ls-files`、全仓 Layout 文件名扫描、`Controls\PageLayoutHost.cs` 等注释命中的独立复核;
 - 规模与后果的原始出处:会话记录 `_tmp\session-recon\cb015309.digest.md:13137/13146-13162`(05:03:10Z 的答复);
 - 完整三选一成本分析与三处不确定点见 `_tmp\tasks\mac-ship\U11-layout-family-advice.md`。
+
+## D-169 M5 最终验收:口径、冻结条件与结果(build 0 错 / 双通道 3624 / 20 帧全绿)
+
+**拍板来源**:Lead 2026-11-14 19:48 放行第二阶段。门槛 = mac 工作树 clean + HEAD `bd9f729` + mac-tests 整跑 3624/3624 全绿 + M11 守卫与台账收口在 `219c7d8`。
+
+### 1 冻结条件(全满足才开跑)
+
+| 项 | 值 |
+|---|---|
+| 冻结哈希 | **`bd9f729`**(`master`;`origin/macos-port` 之上 **ahead 100**) |
+| 工作树 | `git status --short` = **空**(验收前后都为空;本包未写 `src/**`、`tests/**`) |
+| SDK | `dotnet --version` = **10.0.403**(按 `D-02`;仓库无 `global.json`) |
+| 临时目录 | `TEMP`/`TMP` → `_tmp\tasks\mac-ship\temp-test` |
+| 数据根 | **`TIPCL_HOME`** → `_tmp\tasks\mac-ship\tipcl-home`(**必须与 TEMP 同时重定向**,理由见 `D-171`) |
+| 锁 | **先 `global` 再 `mac`**(Owner=mac-ship),**逆序释放**;全程只有本 agent 跑 dotnet |
+| 开关 | `-m:1`、`-p:UseSharedCompilation=false`;构建 `--no-incremental`;**未调** `dotnet build-server shutdown` |
+
+### 2 结果
+
+| 项 | 结果 | 原始输出 |
+|---|---|---|
+| 全量 build(Release) | **`BUILD_EXIT=0` / `0 个错误` / `1 个警告`** | `_tmp\tasks\mac-ship\build-full.log` |
+| 测试通道 1(VSTest) | **`VSTEST_EXIT=0` / `失败: 0, 通过: 3624, 已跳过: 0, 总计: 3624`** | `vstest-full.log` |
+| 测试通道 2(进程内) | **`INPROC_EXIT=0` / `总计 3624 个用例, 通过 3624, 失败 0, 跳过 0, 不支持 0`** | `inproc-full.log` |
+| 帧矩阵 | 10 个 nav 页 × 明暗 = **20 帧,全部 `exit=0` / `issues=0` / `pending=0`**;`no-page` 与 `launch-dark` **逐字节等于 C3c 基线**;`--theme blue` 仍 `exit=2` 且不写文件 | `smoke-matrix.log`、`smoke-pages.csv` |
+| AI 页(已注册) | 空壳帧 30,854 / `924837C2…`(**与 M7 记录逐字节相同**);`--ai-seed` 两帧 43,130 / `426,725`→见 CSV,均 `issues=0` | `ai-*-seed.log` |
+| 连续 3 轮原子运行 | 见 `PROGRESS.md` 的 M5 验收节 + `_tmp\tasks\mac-ship\flake-hunt.log` | — |
+
+唯一那条警告:`SYSLIB0014` @ `src\TipCL.Core\Launcher\Sync\PhoneClient.cs(116,38)`。
+
+### 3 两条必须记住的口径(否则下一个人拿数字对不上)
+
+1. **警告的判据是「集合 ⊆ 已知集合」,不是「数字必须相等」**。
+   已知集合 = { `NU1900`(最多 6 条;**只反映"能不能访问 NuGet 漏洞库"**,离线时出现)、`SYSLIB0014` @ `PhoneClient.cs:116`(1 条) }。
+   历史基线 `lead-z1/z2` = **`7 个警告`**(6×`NU1900` + 1×`SYSLIB0014`);本轮 = **`1 个警告`**(`NU1900` **一条都没有**,因为这次能连上源)。
+   ⇒ **7 → 1 不是回归**;`NU1900` 的条数只是网络/源可达性的函数。判据只能是「**集合外的警告 = 回归**」。
+2. **测试总数要连沿革一起记**:3600(断点基线)→ 3608(测试收口)→ 3611(M9 闸门)→ 3622(AiChatOps 恢复 11 条)→ **3624(本轮实测)**。
+   且本轮 **`已跳过: 0`** ⇒ 3624 是**真跑的条数**,不是"总数减去跳过"。只看"3624 全绿"会让人以为基线一直是 3624。
+
+## D-170 实测事实:M 轮之后帧基线的漂移面(README 的表已对不上 HEAD)
+
+**结论**:`README.md` §冒烟 那张"已确立的基准"表,在 HEAD `bd9f729` 上**有 4 页对不上**,外加上一次表里的一行已经失效。这不是渲染缺陷(所有帧 `exit=0`/`issues=0`),是**文档基线未随本轮的像素改动更新**。
+
+| `--page` | README 表(light) | HEAD 实测(light) | README 表(dark) | HEAD 实测(dark) | 判定 |
+|---|---|---|---|---|---|
+| 不带 / `launch` | 37,681 / `2603BF6A…` | **同** | 33,579 / `7D7AFDD5…` | **同** | ✅ 逐字节 |
+| `account` | 33,173 / `D3F59339…` | **同** | 29,984 / `148EB206…` | **同** | ✅ 逐字节 |
+| `tasks` | 27,719 / `0E591B87…` | **同** | 24,171 / `C3EE486E…` | **同** | ✅ 逐字节 |
+| `download` | 30,372 / `9DDD2E14…` | **同** | 26,725 / `D602CC36…` | **同** | ✅ 逐字节 |
+| `plugins` | 25,115 / `A48E426D…` | **同** | 21,410 / `95E2BF47…` | **同** | ✅ 逐字节 |
+| `library` | 43,775 | **43,810** | 40,686 | **40,699** | ⚠️ 变了 |
+| `instance` | 44,163 | **44,186** | 40,739 | **40,798** | ⚠️ 变了 |
+| `settings` | 45,594 | **45,632** | 43,745 | **43,723** | ⚠️ 变了 |
+| `multiplayer` | 36,078 | **35,958** | 32,559 | **32,396** | ⚠️ 变了 |
+| `ai` | 表里写「尚未移植的 id(如 `plugins`、`ai`)与首屏同帧」 | **30,854 / `924837C2…`(真帧)** | 同左 | **30,431 / `DF59FD60…`** | ⚠️ 该行**已失效**(`ai` 本轮已注册) |
+
+**最可能的原因(已定性、未逐提交二分)**:本轮改了这几页的**用户可见字面量** —— `888fbbb` 把 `SettingsPage.cs`(11 处)+ `DropVeil.cs`(1 处)的字面量改回 Windows 字节并补回 `I18n.L(...)`;`6894810`/`22ceb1e` 又覆盖了其余 `Pages\*.cs` 与 `NavModel.cs`;另有 M8 的两条启动提示接线与 U6 的设置页同步面板接线。字面量变 ⇒ 文本重排 ⇒ 像素变。**注意 `account`/`tasks`/`download`/`plugins` 四页逐字节未动**,说明变化的只是那几页里被改到的串。
+**未做**:没有 checkout 历史提交去逐帧二分(共享树不允许 checkout),所以"哪一处字面量造成哪一页的差"没有单独钉死 —— 如实标注。
+
+**处理(按 `README.md` 自己的要求:"改动像素就要在提交说明和 `PROGRESS.md` 里写明画了什么、为什么")**:
+- 已在 `PROGRESS.md` 的 M5 验收节把上表写进去(这是本包写权限内的那半);
+- **`mac/README.md` 不在本包的写权限内**(task-7 的 writeScopes 只有 `PROGRESS.md`/`DECISIONS.md`/`docs/`/`GOAL.md`)⇒ **表本身与第 67 行那句「`ai` 尚未移植」需要由 Lead 决定谁改**(建议:把 4 页新值 + `ai` 两帧补进表,并把 `ai` 那行改成"已注册,出真帧")。
+
+## D-171 本机两条环境事实(本轮实测,直接影响"怎么跑验收")
+
+1. **`TEMP`/`TMP` 与 `TIPCL_HOME` 必须同时重定向到工作区内**,只用其中一个会出假红。
+   本轮两条测试通道在 `TEMP=TMP=_tmp\tasks\mac-ship\temp-test` **且** `TIPCL_HOME=_tmp\tasks\mac-ship\tipcl-home` 下各 **3624/3624**;
+   机理与证据沿用 windos 侧同型坑(`W13` 记录):测试宿主若把数据根落在真实用户目录,会因写仓库外路径被拒而出现 `UnauthorizedAccessException`,或让 `PhoneLink` 那类用例走成 `Conflict`。
+   **附加**:`TEMP`/`TIPCL_HOME` 是**进程环境继承**的 —— 只要在外层 PowerShell 里设好,`powershell.exe`→`cmd.exe`→`dotnet` 整条链都吃得到(`tools\artifacts\lead-verify.cmd` 自己没有重定向,靠的就是这条继承)。
+2. **锁纪律与纠正过的坑**:
+   - 顺序:**先 `global` 再 `mac`,逆序释放**(`build-lock.ps1` 的 `ValidateSet` 现在含 `global`,实测可用);
+   - 调用方式:`Set-Location 'D:\项目\tipcl\_tmp\locks'` 后 `powershell -NoProfile -ExecutionPolicy Bypass -File .\build-lock.ps1 -Name <mac|global> -Action Acquire -Owner <owner> -Root .`
+     —— **`-Root .` 是关键**:本机只有 **Windows PowerShell 5.1**(无 PS7,`D-164` 已记),而无 BOM 的 `.ps1` 被 5.1 按 ANSI 读,**`-Root` 的默认值(内含中文路径)会被解析成 `D:\椤圭洰\…`**;该脚本现已修正并会打印 `root=…`(本轮实测打印的是真实路径 `D:\项目\tipcl\_tmp\locks`),但**调用者仍应显式带 `-Root .`** 以免回归;
+   - 子进程 argv 里**不要出现中文路径**(会被按 ANSI 解码),所以一律"先在父进程 `Set-Location`,再用相对路径调脚本";
+   - **不许**调 `dotnet build-server shutdown`(用户级,会掐掉别人的构建);`-p:UseSharedCompilation=false` 已足够。
