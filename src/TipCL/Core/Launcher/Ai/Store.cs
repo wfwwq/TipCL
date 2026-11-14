@@ -153,8 +153,31 @@ public static class Store
 		return pyDict;
 	}
 
-	public static PyDict GetChat(PyDict data, object cid)
+	/// <summary>
+	/// 按 id 取对话,不存在就建一个(放在列表最前)并落盘,不改变 active_id。
+	/// 用于调用方自带 chat_id 的场景(AiFixWindow 的 fix-xxxx):以前 SetActive 对未知 id 静默返回 null,
+	/// 回合会落到主界面当前对话上,调用方按 chat_id 过滤事件就永远等不到自己的回复。
+	/// </summary>
+	public static PyDict EnsureChat(PyDict data, object cid, string title = null)
 	{
+		PyDict chat = GetChat(data, cid);
+		if (chat != null)
+		{
+			return chat;
+		}
+		chat = _BlankChat(Py.Str(cid));
+		if (!string.IsNullOrEmpty(title))
+		{
+			chat["title"] = Py.Slice(title, null, 40);
+		}
+		List<object> list = new List<object> { chat };
+		list.AddRange(Py.ListOr(Py.Or(data.Get("chats"), new List<object>())));
+		data["chats"] = ((list.Count > 40) ? list.GetRange(0, 40) : list);
+		Save(data);
+		return chat;
+	}
+
+	public static PyDict GetChat(PyDict data, object cid)	{
 		foreach (object item in Py.ListOr(Py.Or(data.Get("chats"), new List<object>())))
 		{
 			if (Py.Eq(((PyDict)item).Get("id"), cid))

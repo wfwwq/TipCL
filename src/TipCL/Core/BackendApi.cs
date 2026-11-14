@@ -567,11 +567,22 @@ public partial class BackendApi
 	{
 		string text1 = ((text0 == null) ? null : ((text0 as string) ?? Py.Str(text0)));
 		PyDict pyDict = Store.Load();
-		if (Py.Truthy(chat_id))
+		string runCid;
+		if (Py.Truthy(chat_id) && Store.GetChat(pyDict, chat_id) == null)
 		{
-			Store.SetActive(pyDict, chat_id);
+			// 自带的 chat_id 还不存在(如 AiFixWindow 的 fix-xxxx):按这个 id 建对话并在上面跑,不抢主界面当前对话。
+			// 以前 SetActive 静默失败,回合跑到了主界面当前对话上,事件带的 chat_id 对不上,调用方把回复全过滤掉了。
+			Store.EnsureChat(pyDict, chat_id, I18nCore.Tr("AI 修复"));
+			runCid = Py.Str(chat_id);
 		}
-		string runCid = Py.S(pyDict.Get("active_id"));
+		else
+		{
+			if (Py.Truthy(chat_id))
+			{
+				Store.SetActive(pyDict, chat_id);
+			}
+			runCid = Py.S(pyDict.Get("active_id"));
+		}
 		_ai_running_chat = runCid;
 		List<object> history = Store.ApiMessages(Py.ListOr(Py.Or((Store.GetChat(pyDict, runCid) ?? new PyDict()).Get("messages"), new List<object>())));
 		HttpCancel httpCancel = new HttpCancel();
