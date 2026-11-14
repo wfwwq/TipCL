@@ -630,9 +630,10 @@ public class C4InstanceTests
                 C4Files.VersionRowJson("1.20.1", isolated: true, isolationLabel: "隔离全部") + "," +
                 C4Files.VersionRowJson("1.19.4", isolated: false) + "]");
             var detail = C4Files.Mount(harness, new InstanceDetailPage(new InstanceInfo { Name = "甲" }, delegate { }));
-            C4Files.Pump(() => api.Count("get_version_rows") >= 1);
-            C4Files.Flush(2);
+            // 【D1 修法 · A 组】等下拉**真的填好**(续体产出),不是"请求到达";
+            // 顺带删掉那处 `C4Files.Flush(2);`(固定刷一次的残留)。断言一字不改。
             ComboBox combo = C4Files.Find<ComboBox>(detail, "版本下拉");
+            C4Files.Pump(() => combo.Items.Count == 2, 9000);
             Assert.Equal(2, combo.Items.Count);
             Assert.Equal("1.20.1 · 隔离全部", combo.Items[0]);
             Assert.Equal("1.19.4", combo.Items[1]);
@@ -700,8 +701,8 @@ public class C4InstanceTests
             using var harness = C4LayerHost.Show();
             using var api = new C3cFakeApi().Route("get_version_rows", "[" + C4Files.VersionRowJson("1.20.1", isolated: true) + "]");
             var detail = C4Files.Mount(harness, new InstanceDetailPage(new InstanceInfo { Name = "甲" }, delegate { }));
-            C4Files.Pump(() => api.Count("get_version_rows") >= 1);
-            C4Files.Flush(2);
+            // 【D1 修法 · A 组】等那段说明**可见地画出来**(续体产出);删掉固定刷一次的残留 Flush;断言一字不改
+            C4Files.Pump(() => HasVisibleText(detail, I18n.L("该版本已开启隔离:模组/日志/资源包位于 versions\\<版本> 目录下,与实例根目录分开")), 9000);
             Assert.True(C4Files.HasText(detail, I18n.L("该版本已开启隔离:模组/日志/资源包位于 versions\\<版本> 目录下,与实例根目录分开")));
             Assert.True(HasVisibleText(detail, I18n.L("该版本已开启隔离:模组/日志/资源包位于 versions\\<版本> 目录下,与实例根目录分开")));
             Assert.False(HasVisibleText(detail, I18n.L("该版本为共享(大锅饭)模式,模组/存档使用实例共享目录;开启独立隔离请见版本管理页")));
