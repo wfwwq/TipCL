@@ -590,9 +590,16 @@ public class C5aSettingsTests
         });
     }
 
-    /// <summary>【A 类差异】「重新运行启动向导」的接缝:没接 → 如实 Toast;接了 → 真的跑那个 runner。</summary>
+    /// <summary>
+    /// 【D-126 前提更正 · task-16】「重新运行启动向导」的接缝:接之前它**没人接**,所以这条用例钉的是
+    /// 「点了必须出那条如实降级 Toast(「启动向导还没移植」)」;注册文件 (<c>FirstRunWizardRegistration</c>)
+    /// 把缝接到真向导之后,前提换成 **"点了必须真弹出四步向导"**:
+    /// 1 缝上挂的就是 <c>FirstRunWizard.ShowAsync</c>(Windows 设置页 <c>SettingsPage.cs:718</c> 那条入口,
+    /// <b>不是</b>启动路径的 <c>MaybeShowAsync</c>);2 点一下弹出向导那张卡(标题「欢迎使用 TipCL」+ 第 1 / 4 步);
+    /// 3 点「跳过向导」真能关掉;4 缝仍然是一次一读(换成探针就调探针);5 降级 Toast 不该再出现。
+    /// </summary>
     [Fact]
-    public void First_run_wizard_seam_toasts_when_unwired_and_runs_when_wired()
+    public void First_run_wizard_seam_opens_the_real_wizard()
     {
         AvaloniaSession.Run(() =>
         {
@@ -607,9 +614,23 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
-            C5aFiles.Click(C5aFiles.ByText(page, I18n.L("重新运行")));
-            C5aFiles.Pump(() => toasts.Has(I18n.L("启动向导还没移植")));
+            // 1 缝上挂的是真向导的**设置页入口**(不是 null、也不是启动路径的 MaybeShowAsync)。
+            Assert.NotNull(SettingsPage.FirstRunWizardRunner);
+            Assert.Equal((Func<Task>)FirstRunWizard.ShowAsync, SettingsPage.FirstRunWizardRunner);
 
+            // 2 点「重新运行」:四步向导真的弹出来。它是 Dlg.Panel 推的那张卡片,**不是** DialogCard
+            // (C4Files.PanelCard 的注释就写着这条),所以按标题文字认,不用 C3bFiles.WaitDialog。
+            C5aFiles.Click(C5aFiles.ByText(page, I18n.L("重新运行")));
+            Control wizard = C4Files.PanelCard(I18n.L("欢迎使用 TipCL"));
+            Assert.True(
+                C4Files.HasText(wizard, I18n.L("第 {0} / {1} 步", 1, 4)),
+                "向导第一步的步子计数(第 1 / 4 步)没出现");
+
+            // 3 「跳过向导」真能关掉它(跳过 = 写 first_run=false 后收场,与 Windows 同);浮层不留残留。
+            C5aFiles.Click(C5aFiles.ByText(wizard, I18n.L("跳过向导")));
+            C5aFiles.Pump(() => C4Files.LayerCount() == 0);
+
+            // 4 缝仍然是"每次点击现读":换成探针再点一次,探针必须被调到(旧用例的这条断言原样保留)。
             int ran = 0;
             SettingsPage.FirstRunWizardRunner = () =>
             {
@@ -618,7 +639,9 @@ public class C5aSettingsTests
             };
             C5aFiles.Click(C5aFiles.ByText(page, I18n.L("重新运行")));
             C5aFiles.Pump(() => ran == 1);
-            Assert.Equal(1, ran);
+
+            // 5 降级 Toast 从此不该再出现。
+            Assert.False(toasts.Has(I18n.L("启动向导还没移植")));
         });
     }
 
