@@ -7,6 +7,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using DotNetBlockSample;
+using TipCL.Core.Launcher.Ai;
 using TipCL.Core.Plugins;
 using TipCL.Pages.Layout;
 using TipCL.Pages.Plugins;
@@ -189,6 +190,16 @@ internal static class Program
 			Warn("停用后同一块 id 走「" + unavailable + "」占位(需 App 资源字典,独立驱动下可能报 " + (buildErr == null ? "无异常" : buildErr.GetType().Name) + ")",
 				buildErr == null || made2Text.IndexOf(unavailable, StringComparison.Ordinal) >= 0,
 				OneLine(made2Text));
+
+			// ─────────── 第二段:对外开放的布局 v2 RPC(经真实桥的 HTTP 往返,不是直接调方法) ───────────
+			string get1 = AppServices.Client.TryCallAsync<string>("layout_v2_get").GetAwaiter().GetResult() ?? "";
+			Check("经真实桥 POST /rpc 调 layout_v2_get 拿到布局摘要", get1.Length > 40, OneLine(get1));
+			string applyResult = AppServices.Client.TryCallAsync<string>("layout_v2_apply", new { page = "launch", mode = "grid", cols = 3 }).GetAwaiter().GetResult() ?? "";
+			Check("经真实桥调 layout_v2_apply 改了布局并自动备份",
+				applyResult.IndexOf("已更新布局", StringComparison.Ordinal) >= 0 && applyResult.IndexOf(LayoutTools.BackupPrefix, StringComparison.Ordinal) >= 0,
+				OneLine(applyResult));
+			string get2 = AppServices.Client.TryCallAsync<string>("layout_v2_get").GetAwaiter().GetResult() ?? "";
+			Check("再读一次能读到刚才那次改动(grid)", get2.IndexOf("grid", StringComparison.Ordinal) >= 0 && !string.Equals(get1, get2, StringComparison.Ordinal), OneLine(get2));
 		}
 		catch (Exception ex)
 		{
