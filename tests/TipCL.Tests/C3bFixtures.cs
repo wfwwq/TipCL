@@ -63,7 +63,7 @@ internal static class C3bExpected
     /// <summary>【Windows 源】<c>VersionSetupDialog.cs:20</c>:版本隔离的 4 个取值(下标与文案一一对应)。</summary>
     internal static readonly string[] IsoValues = { "", "none", "saves", "all" };
 
-    internal static readonly string[] IsoLabels = { "跟随全局", "关闭(共用实例目录)", "隔离存档", "隔离全部" };
+    internal static readonly string[] IsoLabels = { "跟随全局", "关闭（共用实例目录）", "隔离存档", "隔离全部" };
 
     /// <summary>【Windows 源】<c>VersionSetupDialog.cs:31</c>:垃圾回收器的 5 个取值 / 文案。</summary>
     internal static readonly string[] GcValues = { "auto", "g1", "zgc", "serial", "none" };
@@ -90,7 +90,7 @@ internal static class C3bExpected
     internal const double VersionMaxHeightFloor = 260.0;
 
     /// <summary>【Windows 源】<c>VersionSetupDialog.cs:38</c>:账号列表头部的「不绑定」项。</summary>
-    internal const string NoAccount = "(不绑定)";
+    internal const string NoAccount = "（不绑定）";
 
     /// <summary>【Windows 源】<c>VersionSetupDialog.cs:44</c>:端口输入框的占位文案(也是默认值)。</summary>
     internal const string PortPlaceholder = "25565";

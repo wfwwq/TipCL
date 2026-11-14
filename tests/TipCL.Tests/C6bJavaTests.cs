@@ -57,7 +57,7 @@ public class C6bJavaTests
             using var api = new C3cFakeApi().Route("get_instances", "[]").Route("get_java_list", "[]").Route("java_vendor_list", "[]");
             JavaPage page = LoadJava(harness);
             Assert.Equal("Java", page.Title);
-            Assert.True(C5bFiles.HasText(page, I18n.L("游戏按版本挑 Java:26.1+ 要 25,1.20.5+ 要 21,1.18+ 要 17，老版本用 8")));
+            Assert.True(C5bFiles.HasText(page, I18n.L("游戏按版本挑 Java：26.1+ 要 25，1.20.5+ 要 21，1.18+ 要 17，老版本用 8")));
             Assert.True(HasButton(page, I18n.L("扫描系统 Java")));
             Assert.True(HasButton(page, I18n.L("用这个路径")));
             Assert.True(C5bFiles.HasText(page, I18n.L("说明")));

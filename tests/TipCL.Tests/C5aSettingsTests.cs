@@ -292,7 +292,7 @@ public class C5aSettingsTests
             allOptions.AddRange(Options(page));
             foreach (string label in new[]
             {
-                "关闭(共用实例目录)", "隔离存档", "隔离 Mod 与配置", "隔离全部",
+                "关闭（共用实例目录）", "隔离存档", "隔离 Mod 与配置", "隔离全部",
                 "G1(推荐)", "调优 G1", "ZGC", "不指定",
                 "保持显示", "最小化", "隐藏", "隐藏,退出后重开", "关闭启动器",
                 "Minecraft 新闻", "本地 HTML", "空白",
@@ -885,7 +885,7 @@ public class C5aSettingsTests
             C5aFiles.Load(page);
 
             TextBox dir = C5aFiles.Descendants(page).OfType<TextBox>()
-                .First(b => (b.Tag as string) == I18n.L("游戏目录(.minecraft 的落脚处)"));
+                .First(b => (b.Tag as string) == I18n.L("游戏目录（.minecraft 的落脚处）"));
             dir.Text = "/new/games";
             C5aFiles.PumpTask(page.SaveNowAsync());
             Assert.Equal("/new/games", C5aFiles.ParamAt(api, "set_game_dir", "path"));
@@ -1182,7 +1182,7 @@ public class C5aSettingsTests
             SettingsPage page = C5aFiles.Mount(harness, new SettingsPage());
             C5aFiles.Load(page);
 
-            TextBox bgPath = C5aFiles.Descendants(page).OfType<TextBox>().First(b => (b.Tag as string) == I18n.L("图片或视频路径,留空则不用壁纸"));
+            TextBox bgPath = C5aFiles.Descendants(page).OfType<TextBox>().First(b => (b.Tag as string) == I18n.L("图片或视频路径，留空则不用壁纸"));
             bgPath.Text = "/wall.png";
             C5aFiles.PumpTask(page.SaveNowAsync());
             Assert.Equal("/wall.png", C5aFiles.ParamAt(api, "save_settings", api.Count("save_settings") - 1, "data", "ui_background"));
