@@ -1,4 +1,5 @@
 using System;
+using TipCL.Controls;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -866,9 +867,16 @@ public sealed partial class SettingsPage : PageBase
             NavBtn(6, I18n.L("反馈与关于")),
             _saveState.M(12.0, 10.0, 0.0, 0.0));
         nav.Margin = new Thickness(12.0, 16.0, 0.0, 12.0);
-        Grid root = Ui.G(null, "168,*");
-        root.Add(nav, 0);
-        root.Add(_view, 0, 1);
+        // 【C9a】两栏交给共用的 PageLayoutHost(Windows `SettingsPage.cs:753`:`"settings"` / `"nav"` / 168 + 右栏 `*`)。
+        // 间距传 **0**:mac 切前是 `"168,*"`(两列、无 18px 间隔带),而 Windows 那条带又被它自己的
+        // `_view.Margin = new Thickness(-18,0,0,0)`(`:754`)抵掉了 ⇒ **gap 0 的可见结果与 Windows 等价**,
+        // 且让"默认渲染逐字节不变"这条硬口径继续成立。分隔条因此自带 **8px 命中宽度**(居中压在边界上,
+        // 静止透明、细线不显示 ⇒ 零像素变化,但能拖、能双击复位、比例能落盘)。
+        // 【per-site 间距登记 · D2 真机对照项】Windows 的 per-site 间距来自**未移植**的 `SplitCatalog`;
+        // 等它落地后 `AccountPage`(gap 0)与本页(gap 0 + 命中宽 8)都要回来按 Windows 校正(会改变像素)。
+        PageLayoutHost root = new PageLayoutHost("settings", "nav", new GridLength(168.0), new GridLength(1.0, GridUnitType.Star), gap: 0.0, splitterHitWidth: 8.0);
+        root.SetLeft(nav);
+        root.SetRight(_view);
         base.Content = root;
         Select(0);
     }

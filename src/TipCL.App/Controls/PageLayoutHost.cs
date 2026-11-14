@@ -117,6 +117,12 @@ internal sealed class PageLayoutHost : Grid
 	/// <summary>分隔条是否可见(内嵌态应不可见 ⇒ 拖动入口不存在)。</summary>
 	internal bool SplitterVisible => _splitter.IsVisible;
 
+	/// <summary>分隔条的命中宽度(0 = 只占间隙列;设置页传 8 ⇒ 居中压在边界上)。</summary>
+	internal double SplitterHitWidth => _splitter.Width;
+
+	/// <summary>分隔条上那条"悬停/拖动才显"的细线当前是否可见(静止时应为 false ⇒ 零像素变化的证据)。</summary>
+	internal bool HoverLineVisible => _line.IsVisible;
+
 	/// <summary>该处是否允许写比例(Windows <c>SplitSite.Writable</c>;默认允许)。</summary>
 	public bool Writable { get; set; } = true;
 
@@ -129,7 +135,11 @@ internal sealed class PageLayoutHost : Grid
 	/// 某页的间距若原本由孩子自己的外边距提供就传 0,保像素不变(Windows 的 per-site 间距来自未移植的 <c>SplitCatalog</c>)。
 	/// <paramref name="leftMinWidth"/> 默认 0;`LibraryPage` 传 300 —— 那是 C5c 的修正
 	/// (「左列要兑现左卡的最小宽 300,否则窄页面上卡片会溢出自己的星列」),收起左栏时会被临时置 0。</summary>
-	public PageLayoutHost(string pageId, string splitId, GridLength left, GridLength right, double gap = DefaultGap, double leftMinWidth = 0.0)
+	/// <param name="splitterHitWidth">默认 **0**(= 只占间隙列,与现在行为一致);`SettingsPage` 传 8 —— 该页 `gap: 0`,
+	/// 所以让分隔条**自己带命中宽度**、居中压在边界上,静止时透明 ⇒ **零像素变化但能拖**。
+	/// <b>如实登记</b>:命中区因此**边界两侧各压住内容 4px**(Windows 是 18px 带、不重叠 ⇒ 机制差异、可见结果等价);
+	/// 真机上若"贴着边界点内容被分隔条吃掉"很明显,回来报 Lead 再定加宽 gap 还是改非对称。</param>
+	public PageLayoutHost(string pageId, string splitId, GridLength left, GridLength right, double gap = DefaultGap, double leftMinWidth = 0.0, double splitterHitWidth = 0.0)
 	{
 		_pageId = pageId ?? "";
 		_splitId = splitId ?? "";
@@ -167,6 +177,13 @@ internal sealed class PageLayoutHost : Grid
 			Focusable = false,
 		};
 		ToolTip.SetTip(_splitter, I18n.L("自由拖动") + " · " + I18n.L("恢复默认"));
+		if (splitterHitWidth > 0.0)
+		{
+			// 该页 gap 为 0(如 SettingsPage)⇒ 让分隔条自己带命中宽度,居中压在边界上:
+			// 静止时它透明、细线不显示 ⇒ 零像素变化;真机上仍可拖、可双击复位。
+			_splitter.Width = splitterHitWidth;
+			_splitter.HorizontalAlignment = HorizontalAlignment.Center;
+		}
 		_splitter.DragStarted += delegate
 		{
 			_dragging = true;
