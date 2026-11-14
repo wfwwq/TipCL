@@ -50,8 +50,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
@@ -78,8 +78,8 @@ jobs:
     name: package (linux-x64 → AppImage + .deb)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
@@ -144,7 +144,7 @@ jobs:
           grep -rc WARN /tmp/tipcl-smoke/home/logs | cat || true
           grep -rc ERROR /tmp/tipcl-smoke/home/logs | cat || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: tipcl-linux-x64
           path: |
@@ -158,8 +158,8 @@ jobs:
     name: package (win-x64 → zip)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
@@ -208,7 +208,7 @@ jobs:
         shell: pwsh
         run: Get-FileHash dist/TipCL-win-x64/TipCL.App.exe, dist/TipCL-win-x64.zip -Algorithm SHA256 | Format-List
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: tipcl-win-x64
           path: |
