@@ -90,6 +90,19 @@ public static class PageLayoutStore
 		}
 	}
 
+	// 清掉进程内缓存,下次 Load/LoadAll 重新读盘。
+	// L1 起 v1 是 ui_layout_v2.json 的写通投影(LayoutStoreV2):
+	// 布局保存写完 v1 文件后,本存储的缓存还是旧快照,调用方(BlockHost/LayoutEditor)写完调它一次,
+	// 让仍走 v1 路径的读取立刻看到新值。**读写语义与文件格式一个字没改**。
+	public static void Reload()
+	{
+		lock (_gate)
+		{
+			_cache = null;
+			_cacheDir = null;
+		}
+	}
+
 	// 更新内存缓存 + 原子落盘（写临时文件再 File.Replace/Move，对齐 PluginStateStore 的写法）
 	public static void Save(string pageId, PageLayoutDoc doc)
 	{
