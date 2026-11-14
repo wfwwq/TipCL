@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TipCL.Pages;
 using TipCL.Pages.Plugins;
 using TipCL.Services;
@@ -29,14 +30,29 @@ internal sealed partial class MainWindow
 {
 	private bool _pluginsHooked;
 
+	private Func<string, PageBase?>? _previousFallback;
+
+	/// <summary>退订 + 还原回退口(**测试收尾用**;Windows 没有这一步 —— 主窗口活到进程结束)。
+	/// 不还原就会把订阅与进程级回退口留给下一个用例(D-149 那族纪律)。</summary>
+	internal void UnhookPlugins()
+	{
+		if (!_pluginsHooked)
+		{
+			return;
+		}
+
+		_pluginsHooked = false;
+		PluginUi.Changed -= OnPluginUiChanged;
+		PageRegistry.FallbackFactory = _previousFallback;
+		_previousFallback = null;
+	}
+
 	/// <summary>
 	/// 构造时调用一次:订阅插件界面变化 + 接上动态页 id 的回退口(幂等,靠 <see cref="_pluginsHooked"/>)。
-	///
-	/// 【临时缺口 · 界面变化后的刷新/摘页】**下一轮**落地 —— 那时这里订阅的会换成真正的
-	/// <c>OnPluginUiChanged</c>(遍历页面缓存:`Update` / `MarkGone`,**当前页不摘、非当前页从缓存移除**)。
-	/// 本轮先订一个空处理器,免得"事件订上了却没人接"这种半状态被误读成已实现。
+	/// **内部可见性**是给测试用的(与 <c>Navigate</c>/<c>GetPage</c> 同一口径):外壳构造函数里的调用点下一轮接,
+	/// 那时本条用例改为"从构造路径驱动"。
 	/// </summary>
-	private void HookPlugins()
+	internal void HookPlugins()
 	{
 		if (_pluginsHooked)
 		{
@@ -44,23 +60,45 @@ internal sealed partial class MainWindow
 		}
 
 		_pluginsHooked = true;
-		PluginUi.Changed += OnPluginUiChangedGapForNextRound;
+		PluginUi.Changed += OnPluginUiChanged;
 		// 动态页 id:注册表查不到时才轮到它(未注册且非 plugin: 的 id 仍静默不动 —— 见 PageRegistry 的注释)
+		_previousFallback = PageRegistry.FallbackFactory;
 		PageRegistry.FallbackFactory = CreatePluginPage;
 	}
 
 	/// <summary>
-	/// 【临时缺口】**下一轮替换**成真正的 <c>OnPluginUiChanged</c>:遍历 <c>PageHost</c> 的页面缓存,
-	/// 贡献还在就 <c>Update(c)</c>,不在了就 <c>MarkGone()</c>(当前页不摘、非当前页从缓存移除),最后重建页签。
-	/// 本轮它**什么都不做** —— 这是明写的缺口,不是遗漏(轮B 收口时与本注释一并删除)。
+	/// 插件界面贡献变了(Windows 同名):遍历**已经打开过**的页面,只处理插件页 ——
+	/// 贡献还在就 <see cref="PluginHostPage.Update"/>;不在了就 <see cref="PluginHostPage.MarkGone"/>,
+	/// 并且**当前页留在缓存里(标成不可用),非当前页直接从缓存摘掉**(Windows 的 <c>_currentId != kv.Key</c> 判据)。
 	/// </summary>
-	private void OnPluginUiChangedGapForNextRound()
+	private void OnPluginUiChanged()
 	{
+		foreach (KeyValuePair<string, PageBase> kv in _host.Pages)
+		{
+			if (kv.Value is not PluginHostPage page)
+			{
+				continue;
+			}
+
+			UiContribution? c = PluginUi.FindPage(kv.Key);
+			if (c != null)
+			{
+				page.Update(c);
+				continue;
+			}
+
+			page.MarkGone();
+			if (!string.Equals(_host.CurrentId, kv.Key, StringComparison.Ordinal))
+			{
+				_host.RemovePage(kv.Key);
+			}
+		}
+
 		// 【临时缺口 · 页签条】**批3 轮B 落地**;此处暂不重建 RebuildPluginTabs()。
 	}
 
-	/// <summary>连上后端后拉一次插件界面贡献(Windows 同名)。</summary>
-	private void LoadPluginsAfterConnect()
+	/// <summary>连上后端后拉一次插件界面贡献(Windows 同名;内部可见性同上,给测试驱动用)。</summary>
+	internal void LoadPluginsAfterConnect()
 	{
 		HookPlugins();
 		PageBase.Run(PluginUi.RefreshAsync);

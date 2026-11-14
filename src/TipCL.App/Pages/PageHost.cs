@@ -76,6 +76,27 @@ internal sealed class PageHost : ContentControl
 	internal int PageCount => _pages.Count;
 
 	/// <summary>
+	/// 缓存里的页面(快照,顺序 = 首次建页顺序 —— 与 Windows `_pages.ToList()` 同一口径)。
+	/// **C7b 新增的内部口**:外壳要用它遍历"已经打开过的插件页"(不给公开 API,沿用本类"内部口"的既有做法)。
+	/// </summary>
+	internal IReadOnlyList<KeyValuePair<string, PageBase>> Pages
+	{
+		get
+		{
+			return new List<KeyValuePair<string, PageBase>>(_pages);
+		}
+	}
+
+	/// <summary>
+	/// 从缓存里摘掉一页(**只摘缓存,不动 <c>Current</c>** —— 调用方负责不摘当前页)。
+	/// 返回是否真的摘掉了。**C7b 新增的内部口**:插件页不可用时,非当前页要能被摘掉(Windows 同)。
+	/// </summary>
+	internal bool RemovePage(string id)
+	{
+		return _pages.Remove(id);
+	}
+
+	/// <summary>
 	/// 切到某一页。返回是否真的切了(未知 id / 已经是当前页 → false 且什么都不做)。
 	/// </summary>
 	/// <param name="id">页面 id。</param>
