@@ -64,7 +64,7 @@ internal sealed class DropVeil : Border
 	internal const string TitleSource = "松手就装";
 
 	/// <summary>【Windows 源】<c>MainWindow.xaml.cs:167</c> —— 提示文案。</summary>
-	internal const string HintSource = "整合包、模组、资源包、光影、数据包、存档、皮肤、壁纸都认;认不准会问你一句。";
+	internal const string HintSource = "整合包、模组、资源包、光影、数据包、存档、皮肤、壁纸都认；认不准会问你一句。";
 
 	private bool _on;
 

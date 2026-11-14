@@ -107,7 +107,7 @@ public sealed partial class SettingsPage : PageBase
     /// <summary>【Windows 源】<c>:62-68</c> 新版本默认隔离。</summary>
     private static readonly (string Key, string Label)[] IsoOpts = new(string, string)[4]
     {
-        ("none", "关闭(共用实例目录)"),
+        ("none", I18n.L("关闭（共用实例目录）")),
         ("saves", "隔离存档"),
         ("mods", "隔离 Mod 与配置"),
         ("all", "隔离全部"),
@@ -116,7 +116,7 @@ public sealed partial class SettingsPage : PageBase
     /// <summary>【Windows 源】<c>:70-77</c> 内存回收器。</summary>
     private static readonly (string Key, string Label)[] GcOpts = new(string, string)[5]
     {
-        ("auto", "G1(推荐)"),
+        ("auto", I18n.L("G1（推荐）")),
         ("g1", "G1"),
         ("g1_tuned", "调优 G1"),
         ("zgc", "ZGC"),
@@ -129,7 +129,7 @@ public sealed partial class SettingsPage : PageBase
         ("keep", "保持显示"),
         ("minimize", "最小化"),
         ("hide", "隐藏"),
-        ("hide_reopen", "隐藏,退出后重开"),
+        ("hide_reopen", I18n.L("隐藏，退出后重开")),
         ("close", "关闭启动器"),
     };
 
@@ -151,7 +151,7 @@ public sealed partial class SettingsPage : PageBase
     /// <summary>【Windows 源】<c>:101-106</c> 文件下载源。</summary>
     private static readonly (string Key, string Label)[] SrcOpts = new(string, string)[3]
     {
-        ("auto", "自动(官方慢则走 BMCLAPI)"),
+        ("auto", I18n.L("自动（官方慢则走 BMCLAPI）")),
         ("official", "仅官方"),
         ("bmclapi", "仅 BMCLAPI"),
     };
@@ -176,7 +176,7 @@ public sealed partial class SettingsPage : PageBase
     /// <summary>【Windows 源】<c>:123-127</c> AI 接入方式。</summary>
     private static readonly (string Key, string Label)[] AiModeOpts = new(string, string)[2]
     {
-        ("builtin", "内置网关(免配置)"),
+        ("builtin", I18n.L("内置网关（免配置）")),
         ("custom", "自定义 OpenAI 兼容端点"),
     };
 
@@ -237,7 +237,7 @@ public sealed partial class SettingsPage : PageBase
 
     private readonly ComboBox _win = KeyCombo(WinOpts);
 
-    private readonly TextBox _jvm = Ui.Input("例如 -XX:+UseG1GC(可空)");
+    private readonly TextBox _jvm = Ui.Input(I18n.L("例如 -XX:+UseG1GC（可空）"));
 
     private readonly CheckBox _shareLib = Ui.Switch();
 
@@ -249,7 +249,7 @@ public sealed partial class SettingsPage : PageBase
 
     private readonly ComboBox _home = KeyCombo(HomeOpts);
 
-    private readonly TextBox _homePath = Ui.Input("本地 .html 文件路径(主页选「本地 HTML」时生效)");
+    private readonly TextBox _homePath = Ui.Input(I18n.L("本地 .html 文件路径（主页选「本地 HTML」时生效）"));
 
     private readonly CheckBox _autoUpdate = Ui.Switch(value: true);
 
@@ -257,7 +257,7 @@ public sealed partial class SettingsPage : PageBase
 
     private readonly TextBlock _langPreview = Ui.Small("");
 
-    private readonly TextBox _gameDir = Ui.Input("游戏目录(.minecraft 的落脚处)");
+    private readonly TextBox _gameDir = Ui.Input(I18n.L("游戏目录（.minecraft 的落脚处）"));
 
     private readonly TextBlock _cleanInfo = Ui.Small("还没扫描");
 
@@ -287,7 +287,7 @@ public sealed partial class SettingsPage : PageBase
 
     private readonly CheckBox _aiConfirm = Ui.Switch(value: true);
 
-    private readonly TextBox _cfKey = Ui.Input("CurseForge API Key(留空用内置)");
+    private readonly TextBox _cfKey = Ui.Input(I18n.L("CurseForge API Key（留空用内置）"));
 
     private bool _cfSet;
 
@@ -305,9 +305,9 @@ public sealed partial class SettingsPage : PageBase
 
     private readonly Button _aiKeyReset;
 
-    private readonly TextBox _bgPath = Ui.Input("图片或视频路径,留空则不用壁纸");
+    private readonly TextBox _bgPath = Ui.Input(I18n.L("图片或视频路径，留空则不用壁纸"));
 
-    private readonly TextBox _bgFolder = Ui.Input("壁纸文件夹(设了就轮播,优先于上面那张)");
+    private readonly TextBox _bgFolder = Ui.Input(I18n.L("壁纸文件夹（设了就轮播，优先于上面那张）"));
 
     private readonly CheckBox _bgShuffle = Ui.Switch();
 
