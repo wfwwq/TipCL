@@ -50,7 +50,7 @@ namespace TipCL;
 /// DropVeil 由 C2c2 落地;Wallpaper 由 C2c2 落地;下载任务底条(Dock)之属 C2c 的其余部分,本包不画。</item>
 /// </list>
 /// </summary>
-internal sealed class MainWindow : Window
+internal sealed partial class MainWindow : Window
 {
 	// ==== 窗口与标题栏尺寸(任务书 / GOAL §3 的窗口行)====
 	internal const double WindowWidth = 900.0;
