@@ -48,7 +48,7 @@ internal static class C2c2Expected
     /// <summary>【Windows 源】<c>MainWindow.xaml.cs:166-167</c> —— 浮层两条文案。</summary>
     internal const string VeilTitleSource = "松手就装";
 
-    internal const string VeilHintSource = "整合包、模组、资源包、光影、数据包、存档、皮肤、壁纸都认;认不准会问你一句。";
+    internal const string VeilHintSource = "整合包、模组、资源包、光影、数据包、存档、皮肤、壁纸都认；认不准会问你一句。";
 
     /// <summary>【Windows 源】<c>FileDrop.cs:26-34</c> 的 kind → 后端方法名表。</summary>
     internal static readonly (string Kind, string Method)[] InstallMethods =
