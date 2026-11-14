@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    .NET 插件 kind=block 的**运行时**端到端驱动(net48 控制台)。
+    为什么单开一个 net48 工程:这条链要真 WPF 控件与真启动路径(FrameworkElement / Assembly.LoadFrom
+    / BridgeHost 进程内桥),而 tests\TipCL.Tests 是 net8 宿主、载不了 net48 的 WPF 程序集
+    (见 LayoutNativeBlockTests 头部那段"验不了的部分")。
+    刻意**不进 TipCL.sln**:按路径构建,不影响 `dotnet build TipCL.sln` 的既有口径。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <!-- 驱动直接摸 WPF 控件(FrameworkElement / TextBlock / LogicalTreeHelper)与启动器的 WPF 类型 -->
+    <UseWPF>true</UseWPF>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>annotations</Nullable>
+    <AssemblyName>TipCL.NativeBlockE2E</AssemblyName>
+    <RootNamespace>TipCL.NativeBlockE2E</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <NoWarn>$(NoWarn);CS0168;CS0219;NU1702</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 启动器本体:ITipCLPlugin / IPluginContext / PluginManager / WidgetRegistry / BridgeHost 都在这。
+         Private=true:驱动自己也要在运行期解析这些类型(net48 的 exe 同时是程序集)。 -->
+    <Reference Include="TipCL">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\src\TipCL\bin\$(Configuration)\net48\TipCL.exe</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <!-- 与主工程同版本,避免 CS1705(见 tests\TipCL.Tests 里同一条注释) -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 样例插件:驱动要拿它的常量与本体的 dll(运行时装进临时 TIPCL_HOME) -->
+    <ProjectReference Include="..\..\samples\dotnet-block-plugin\DotNetBlockSample.csproj" />
+  </ItemGroup>
+
+</Project>

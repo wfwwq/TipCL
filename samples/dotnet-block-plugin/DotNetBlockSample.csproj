@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    .NET 原生插件样例(kind=block)。按 DESIGN §3.2:插件实现 TipCL.Plugins.ITipCLPlugin,
+    由启动器 Assembly.LoadFrom 载入,所以 dll 必须与启动器同一 TFM(net48)、且不要把它自己的
+    依赖一起拷进插件目录(TipCL.exe 已提供这些类型)。
+    刻意**不进 TipCL.sln**:按路径构建,避免影响 `dotnet build TipCL.sln` 的既有口径。
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <!-- 插件界面直接给 WPF 控件(Func<FrameworkElement>),所以和启动器一样要 WPF 引用 -->
+    <UseWPF>true</UseWPF>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>annotations</Nullable>
+    <AssemblyName>DotNetBlockSample</AssemblyName>
+    <RootNamespace>DotNetBlockSample</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS0168;CS0219</NoWarn>
+  </PropertyGroup>
+
+  <!-- 编译期引用启动器本体(ITipCLPlugin / IPluginContext / PluginBlockSpec 都在里面)。
+       Private=false:不要把 TipCL.exe 拷进插件输出目录 —— 运行时它由启动器自己提供。 -->
+  <ItemGroup>
+    <Reference Include="TipCL">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\src\TipCL\bin\$(Configuration)\net48\TipCL.exe</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
