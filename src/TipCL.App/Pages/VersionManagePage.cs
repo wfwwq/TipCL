@@ -12,6 +12,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using TipCL.Controls;
 using TipCL.Models;
 using TipCL.Services;
 using TipCL.Themes;
@@ -160,7 +161,7 @@ public sealed class VersionManagePage : PageBase
 	/// <summary>实例详情页「设置」分段内嵌时置位:隐藏文件夹列表栏(与实例库重复),只留版本选择。</summary>
 	private bool _folderPreset;
 
-	private Grid? _embeddedGrid;
+	private PageLayoutHost? _embeddedGrid;
 
 	private Border? _folderCard;
 
@@ -243,9 +244,11 @@ public sealed class VersionManagePage : PageBase
 		// 左右两栏之间留 18px 间距(与其他页面卡片间距一致),两栏都顶对齐
 		folderCard.VerticalAlignment = VerticalAlignment.Top;
 		right.VerticalAlignment = VerticalAlignment.Top;
-		Grid shell = Ui.G(null, "272,18,*");
-		shell.Add(folderCard, 0);
-		shell.Add(right, 0, 2);
+		// 【C9a】两栏交给共用的 PageLayoutHost(与 Windows 同一处声明:`"version-manage"` / `"nav"` / 272px + 18px 间隙 + 右栏);
+		// 默认可写(独立态),内嵌态由 LoadAsync 里的 SetEmbedded 接管(隐藏分隔条 + 不写比例 + 左栏收 0)。
+		PageLayoutHost shell = new PageLayoutHost("version-manage", "nav", new GridLength(272.0), new GridLength(1.0, GridUnitType.Star));
+		shell.SetLeft(folderCard);
+		shell.SetRight(right);
 		_embeddedGrid = shell;
 		_folderCard = folderCard;
 		base.Content = PageBase.ScrollBody(shell);
@@ -293,9 +296,10 @@ public sealed class VersionManagePage : PageBase
 		bool embedded = _folderPreset && _instances.Any((InstanceInfo i) => i.Name == _folder);
 		if (_embeddedGrid != null && _folderCard != null)
 		{
-			_embeddedGrid.ColumnDefinitions[0].Width = new GridLength(embedded ? 0.0 : 272.0);
-			_embeddedGrid.ColumnDefinitions[1].Width = new GridLength(embedded ? 0.0 : 18.0);
+			// 【C9a】内嵌态交给控件处理:隐藏分隔条、不写比例、左栏与间隙收 0;退出内嵌态按**声明列宽**(272 / 18 / *)还原
+			// —— 与 Windows `Pages\Layout\PageLayoutHost.cs:249-250` 那条 Note 一字对应。
 			_folderCard.IsVisible = !embedded;
+			_embeddedGrid.SetEmbedded(embedded);
 		}
 		await EnsureCurrentAsync();
 		await ReloadVersionsAsync();

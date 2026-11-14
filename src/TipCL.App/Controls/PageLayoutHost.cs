@@ -91,6 +91,32 @@ internal sealed class PageLayoutHost : Grid
 	/// <summary>存储里读到的比例(NaN = 没存过 ⇒ 用声明列宽)。</summary>
 	private double _storedRatio = double.NaN;
 
+	private bool _embedded;
+
+	/// <summary>
+	/// 内嵌态(Windows <c>:249-250</c> 那条 Note:**内嵌态必须隐藏分隔条且不写比例,回落双栏时按 272px 现状还原**)。
+	/// 进内嵌态:左栏与间隙收 0、分隔条隐藏(拖动入口不存在)、<see cref="Writable"/> 置 false;
+	/// 退出内嵌态:按声明列宽还原(272 / 18 / *)。
+	/// </summary>
+	internal void SetEmbedded(bool embedded)
+	{
+		_embedded = embedded;
+		Writable = !embedded;
+		_splitter.IsVisible = !embedded;
+		if (embedded)
+		{
+			_dragging = false;
+			_line.IsVisible = false;
+		}
+		ApplyColumns();
+	}
+
+	/// <summary>当前是否内嵌态(测试与页面自检用)。</summary>
+	internal bool Embedded => _embedded;
+
+	/// <summary>分隔条是否可见(内嵌态应不可见 ⇒ 拖动入口不存在)。</summary>
+	internal bool SplitterVisible => _splitter.IsVisible;
+
 	/// <summary>该处是否允许写比例(Windows <c>SplitSite.Writable</c>;默认允许)。</summary>
 	public bool Writable { get; set; } = true;
 
@@ -323,9 +349,17 @@ internal sealed class PageLayoutHost : Grid
 		}
 	}
 
-	/// <summary>按当前状态把列宽落下去:有存储比例 ⇒ 左栏按 <c>ratio × 可用宽</c> 的像素列;没有 ⇒ 用声明列宽。</summary>
+	/// <summary>按当前状态把列宽落下去:内嵌态 ⇒ 左栏与间隙收成 0;有存储比例 ⇒ 像素列;否则 ⇒ 声明列宽。</summary>
 	private void ApplyColumns()
 	{
+		if (_embedded)
+		{
+			// 内嵌态(实例详情「设置」段内嵌的版本管理):左栏收 0、间隙收 0,右栏吃满
+			_colLeft.Width = new GridLength(0.0);
+			_colGap.Width = new GridLength(0.0);
+			_colRight.Width = new GridLength(1.0, GridUnitType.Star);
+			return;
+		}
 		double available = AvailableWidth();
 		if (!double.IsNaN(_storedRatio) && !double.IsNaN(available) && available > 0.0)
 		{
