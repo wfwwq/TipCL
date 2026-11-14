@@ -1167,3 +1167,12 @@ Windows 版(`windos/src/TipCL/Core/Launcher/Config.cs:12`、`Updater.cs:12`)与�
   - 未命中集中在 `Core/Plugins/PluginInstaller.cs`(22)、`Core/Launcher/Ai/Preview.cs`(22)、`App/Common/Api.cs`(14)、`Core/Launcher/Shortcut.cs`(2)、`App/Session/CommandLine.cs`(1);这些串在三份词表里**都不存在**(其中 35 条只是全角/半角字形漂移,另 12 条是拼接片段);
   - 未命中清单(逐条):`_tmp/tasks/linux-updater/i18n-coverage.md` + `i18n-miss-classified.json`(工作区外,lead 最终交付会引用);**补译文属内容决策,已上报用户拍板**。
 - **更新词表 / 重放生成步骤**:见 `src/TipCL.Core/Resources/locales/README.md`(那里也写明"三份词表互不包含、别以为最新那份是超集")。
+
+## 已知 flaky 用例(2026-11-14 记录;task-32 期间实测发现)
+
+- **`AccountPageTests.LoginEntries_ReturnTaskIds_AndBogusAuthlibFailsTheTask`(判定:已知 flaky,不计入任何改动的账)**:
+  它会对 `http://127.0.0.1:1/api/yggdrasil` 发**真实 HTTP 请求**,并在 **40 秒死线**内轮询任务收尾 ⇒ 天生吃时间/网络;
+  本机本地代理 `127.0.0.1:7890` 抖动时会偶发红。**决定性实验**:同一份代码连跑三遍 = 通过(5 s)/ 通过(8 s)/
+  **失败(勾到 40 s 死线)**;而 `HEAD` 基线工作树的同一用例 4 次全过(3–13 s)⇒ **失败不由代码差异决定**。
+  同类历史见 `PROGRESS.md` 的 R14「测试套件偶发失败 … 栈是无头会话初始化竞态」与 R21f「修掉那条全量偶发红」。
+  复现:`dotnet test --filter FullyQualifiedName~AccountPageTests.LoginEntries_ReturnTaskIds_AndBogusAuthlibFailsTheTask`(连跑几遍)。
