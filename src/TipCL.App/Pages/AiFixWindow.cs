@@ -33,10 +33,7 @@ namespace TipCL.Pages;
 ///   所以 `WindowChrome.SetIsHitTestVisibleInChrome(button, true)` 这一句**在 mac 不需要**
 ///   (没有 chrome 层,按钮本来就能点) —— 这不是降级,是换了实现方式;</item>
 /// <item><c>WindowStyle.None</c> → <c>SystemDecorations.None</c>;<c>ResizeMode.CanResize</c> → <c>CanResize = true</c>;</item>
-/// <item><c>SetResourceReference(Control.XxxProperty, 第二个参数是调色板键名)</c> → <c>Dyn(...)</c>(本仓统一口径)。
-///   【这处注释为什么不给"引号包着的键名示例"】C1a 的调色板守卫会扫 .cs 源码里带引号的调色板键名字面量,
-///   而这版守卫**连注释一起扫** —— <c>6b53ce0</c> 的 TaskCard 头注释就是这么被扫出来的假键;
-///   所以照那次的处置,这里只写中文描述,不写那个假键的字面量;</item>
+/// <item><c>SetResourceReference(Control.XxxProperty, "B.Yyy")</c> → <c>Dyn(...)</c>(本仓统一口径);</item>
 /// <item><c>Style = Ui.S("Btn.CaptionClose")</c> → <c>StyleKeys.Apply(button, "Btn.CaptionClose")</c>
 ///   (**已当场核**:该键在 <c>Themes\StyleKeys.cs</c> 的表里、样式本体在 <c>Themes\Controls.axaml</c> 的
 ///   <c>BtnCaptionClose</c> 里都存在,所以不需要退化到近似样式);</item>
