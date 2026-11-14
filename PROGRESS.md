@@ -6708,3 +6708,29 @@ Windows `VersionManagePage.cs` 1110 行,依赖面**没有牵出别的整页**:`V
    实例与版本列表都空、列表行本就不落地见 D-148)。
 2. 插件动作条仍是一句如实说明 —— **等 C7b 的 `PluginUi` / `PluginActionBar` 落地后接一行**即可。
 3. `InstancePage` 的 43 条测试继续以"显式 `Register()` 还原前提"的方式跑(D-126);它作为**产品功能**没有任何入口。
+
+### C7b 进度与"待兑现清单"(批3 轮A 进行中)
+
+**已完成并验证(全部两通道绿)**:批1a `PluginModels`(字节级搬)→ 批1b `PluginUi`(GOAL-34 设计差异:内容卡 + 系统浏览器)→ 批1c `PluginEvents` + `PluginDashCards`
+→ 批2a `PluginSettingsCard` + `IPluginHostPage` 窄接口 → 批2b 浮层并入 `PluginEvents`(D-158;`PluginOverlays.cs` 不建)
+→ 批3 轮A 前半:`PluginHostPage`(`e2ccd16`)、`PageRegistry.FallbackFactory` + 3 条守卫用例(`1802e55`)。
+`AiViewStrip.cs` 已判归 AI 批(证据:三类型 + `ai_presets` + 自身注释)。
+
+**"还没有调用方"清单 —— 每一项由谁驱动、哪一轮兑现(C7b 收尾前必须全部被真正驱动过)**
+
+| 文件 / 成员 | 由谁驱动 | 兑现轮次 |
+|---|---|---|
+| `PluginUi.cs` | `PluginSettingsCard` 的市场刷新与 `PluginEvents` 的 `plugins.*` 事件路径;批4 主页接上后由**假后端 + 假 `plugins_ui` 贡献**驱动一次(含**内容卡那条路径**) | 批4 |
+| `PluginSettingsCard.cs` | 设置页把它嵌进去(批4 接)⇒ 用假后端驱动:市场地址保存、镜像上移/下移的 **payload 形状**、未审核开关的确认分支 | 批4 |
+| `PluginHostPage.cs` | `MainWindow.Plugins.cs` 的 `CreatePluginPage`(轮A 后半)+ 批4 主页;驱动:`Update` / `MarkGone` / `plugins_ui_event` 各一次 | 轮A 后半 + 批4 |
+| `PageRegistry.FallbackFactory`(回退口) | 轮A 后半的外壳 `CreatePluginPage` 接上;驱动:两条 shell 用例(`plugin:` 命中真的换页 / 未注册且非 `plugin:` 静默不动) | 轮A 后半 |
+
+**轮A 后半(下一步,必须整块做 —— 它动外壳,不许切)**:读 `PageHost` 的页面缓存与当前页 API ⇒ `MainWindow` 改 `partial`(**只加关键字**)+ 新增 `MainWindow.Plugins.cs`:
+`HookPlugins`(只订阅 `PluginUi.Changed`;浮层已并入 `PluginEvents`,这里不挂)、`LoadPluginsAfterConnect`、
+`OnPluginUiChanged`(`Update` / `MarkGone`;**当前页不摘、非当前页从缓存移除**;并留下**临时缺口注释**「页签条在批3 轮B 落地;此处暂不重建」)、
+`CreatePluginPage`(接回退口)⇒ **改完立刻编整个解决方案**(不留两个编辑之间的空档),再落两条 shell 用例。
+
+**轮B(补完)**:顶部页签条(空条**不给孩子、不留高度/边框/背景** ⇒ 零像素;`MaxWidth=128` + `CharacterEllipsis`;点击 `Navigate(pageId)`;末尾 `SyncTabs`;样式**优先复用既有 `Seg.Item`**,不新造样式表)
+⇒ **专门报 16 帧逐字节比对**(拿不到零像素就退回侧栏方案并记用户可见差异)⇒ **删掉轮A 那条临时缺口注释**,报告里写"临时缺口已关闭"。
+
+**批4(收口)**:`PluginsPage.cs` + 4 个 partial(Market/Installed/Settings/Dev ≈53.5 KB)+ `PluginActionBar` + `PluginHostPage` 接线 + **注册 `plugins`** + `PluginsPage` 实现 `IPluginHostPage`(两个调用点**假实现 + 真实现各驱动一次**)+ 兑现上表四项 + 走通内容卡那条路径。
