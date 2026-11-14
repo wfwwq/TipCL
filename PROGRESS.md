@@ -6734,3 +6734,18 @@ Windows `VersionManagePage.cs` 1110 行,依赖面**没有牵出别的整页**:`V
 ⇒ **专门报 16 帧逐字节比对**(拿不到零像素就退回侧栏方案并记用户可见差异)⇒ **删掉轮A 那条临时缺口注释**,报告里写"临时缺口已关闭"。
 
 **批4(收口)**:`PluginsPage.cs` + 4 个 partial(Market/Installed/Settings/Dev ≈53.5 KB)+ `PluginActionBar` + `PluginHostPage` 接线 + **注册 `plugins`** + `PluginsPage` 实现 `IPluginHostPage`(两个调用点**假实现 + 真实现各驱动一次**)+ 兑现上表四项 + 走通内容卡那条路径。
+## D1 抖动猎杀收口(补充记录)
+
+- **A 组 10 处**全部落地(提交 `6321632` / `3e55043` / `d86db08` / `e8d30f4`):把"等请求到达"换成"等界面效果",
+  并删掉同一处的**残留固定刷新**(10 处里 6 处带 `C4Files.Flush(2);`,全删);断言一字未改。
+- **三连绿**:两条通道各连续 3 轮全绿(`3561 / 3561`,0 失败 / 0 跳过 / 0 不支持,构建 0 错误、警告 7 = 基线,
+  三轮都没因构建红作废)—— 日志 `artifacts\d1b-r1|r2|r3-*`。**Lead 另做独立复跑**。
+- **工具**:`tools\flake-hunt.ps1` 修好并按纪律**自己跑过一次**(`-Rounds 1 -Prefix d1tool`):
+  脚本能起锁、能调 `lead-verify.cmd <前缀>`、能打印「EXIT 三行 + 构建错误/告警计数 + 两条通道的 `[FAIL]` 计数与日志尾行」;
+  那一次恰好撞上**别人在途改动导致的红构建**(`BUILD_EXIT=1`,INPROC 尾行"application to execute does not exist")
+  ⇒ **那一轮作为测试结果作废**,但作为"脚本本身可用"的**工具自证成立**(它正是这样把红构建暴露出来的)。
+- **C 组(形状 B)**:判据 = D-149(在 `Scope`/`finally` 内 + 写回进入前的值);已核的两个非本包文件
+  (`C2c2ThumbsTests` / `C2aDlgMotionTests`)**都已正确**;fixtures 大多是"作用域本尊"。剩余"待核"名单
+  (`C5b*` / `C6b*` 与一批单点赋值用例)属于**文档完备性**,见 D-160 的分类,不影响本包收口。
+- 新增 DECISIONS:D-159(A 组判据)/ D-160(扫描方法 112→10)/ D-161(可编辑 `ComboBox` 只认 `SelectionChanged`)/
+  D-162(等待条件=存在某次满足)/ D-163(锚点必须来自 `read`;脚本提交前必须跑一次)/ D-164(`pwsh` 实为 5.1,别写 PS7 表达式赋字)。
