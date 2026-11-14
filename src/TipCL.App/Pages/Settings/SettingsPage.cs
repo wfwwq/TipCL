@@ -263,7 +263,7 @@ public sealed partial class SettingsPage : PageBase
             UiClass.Field("主题色", _swatches, "点一下就换"),
             UiClass.Field("界面背景", _bg, "预设色调，立即生效"),
             UiClass.Field("界面动画", _motion, "换页、进度条、悬浮动效"),
-            UiClass.Field("下载飞入动画", _fly, "安装时飞入侧栏任务列表"),
+            UiClass.Field("下载飞入动画", _fly, "安装时飞入底部任务条"),
             UiClass.Field("飞入动画时长", SliderRow(_flyDur, _flyDurLbl), "毫秒，建议 400–800")));
         BuildSwatches();
 
