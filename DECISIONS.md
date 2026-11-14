@@ -2728,7 +2728,7 @@ Lead 要求「交出推送命令前先打本地备份」。已落盘 `_tmp\tasks
 
 **处理(按 `README.md` 自己的要求:"改动像素就要在提交说明和 `PROGRESS.md` 里写明画了什么、为什么")**:
 - 已在 `PROGRESS.md` 的 M5 验收节把上表写进去(这是本包写权限内的那半);
-- **`mac/README.md` 不在本包的写权限内**(task-7 的 writeScopes 只有 `PROGRESS.md`/`DECISIONS.md`/`docs/`/`GOAL.md`)⇒ **表本身与第 67 行那句「`ai` 尚未移植」需要由 Lead 决定谁改**(建议:把 4 页新值 + `ai` 两帧补进表,并把 `ai` 那行改成"已注册,出真帧")。
+- **`mac/README.md` 的更新已由 Lead 授权并落地**(2026-11-14 晚,提交 **`ad2b04b`**,路径限定只带该文件):4 页新值 + `ai` 真帧已填进基准表,原「尚未移植」那行已替换为 `ai` 行;表下说明段同时写明了漂移原因与「其余 5 行逐字节未动」。⇒ 本包原写权限不含 `README.md`(task-7 的 writeScopes 只有 `PROGRESS.md`/`DECISIONS.md`/`docs/`/`GOAL.md`),**此次是 Lead 临时扩展授权的单文件改动**。
 
 ## D-171 本机两条环境事实(本轮实测,直接影响"怎么跑验收")
 
@@ -2742,3 +2742,13 @@ Lead 要求「交出推送命令前先打本地备份」。已落盘 `_tmp\tasks
      —— **`-Root .` 是关键**:本机只有 **Windows PowerShell 5.1**(无 PS7,`D-164` 已记),而无 BOM 的 `.ps1` 被 5.1 按 ANSI 读,**`-Root` 的默认值(内含中文路径)会被解析成 `D:\椤圭洰\…`**;该脚本现已修正并会打印 `root=…`(本轮实测打印的是真实路径 `D:\项目\tipcl\_tmp\locks`),但**调用者仍应显式带 `-Root .`** 以免回归;
    - 子进程 argv 里**不要出现中文路径**(会被按 ANSI 解码),所以一律"先在父进程 `Set-Location`,再用相对路径调脚本";
    - **不许**调 `dotnet build-server shutdown`(用户级,会掐掉别人的构建);`-p:UseSharedCompilation=false` 已足够。
+
+## D-172 收尾两笔:README 帧表已更新(`D-170` 的后续)+ 一条 PS 5.1 提交消息陷阱
+
+1. **`D-170` 的后续已落地**:Lead 临时把本包写范围扩到 `mac/README.md` 一个文件,帧基准表按 HEAD 更新(提交 **`ad2b04b`**,路径限定只带该文件,+6/−6):
+   - 4 页新值:`library` 43810 / 40699、`instance` 44186 / 40798、`settings` 45632 / 43723、`multiplayer` 35958 / 32396(都带完整 SHA256);
+   - 原「尚未移植的 id(如 `plugins`、`ai`)与首屏同帧」一行**替换为 `ai` 行**:`ai` 于 `247db6d` 注册后**首次出真帧**(30854 / 30431);
+   - 表下说明段写明:漂移原因 = 本轮把这几页的**用户可见字面量**改回 Windows 字节 ⇒ 文本重排(**不是渲染缺陷**,所有帧 `exit=0` / `issues=0`)、**其余 5 行(首屏/`launch`、`account`、`tasks`、`download`、`plugins`)逐字节未动**(完整 SHA256 复核)、**哪处字面量造成哪页的差未逐提交二分**(共享树不允许 checkout)、`--ai-seed` 两帧(43130 / 42725)为额外证据**不作表条目**。
+2. **一条本机工具陷阱(写提交消息时现形)**:Windows PowerShell **5.1** 会把 `git commit -m "<整句>"` 里**内嵌的英文双引号**当成参数边界 ⇒ 消息被拆成多个 argv,git 把这些碎片当 **pathspec**,报 `error: pathspec 'ids' did not match any file(s) known to git`,**提交失败**(本轮 README 那次连试 3 次结果相同)。
+   - **修法**:`git commit -F <消息文件>`(`[System.IO.File]::WriteAllText` 写 UTF-8 无 BOM 的消息文件),或消息里不出现双引号;改用 `-F` 后**一次成功**。
+   - 与 `D-12` / `D-21` / `D-164` 同族(本机工具链的引号与编码类陷阱),记在这里省下一次踩坑。
