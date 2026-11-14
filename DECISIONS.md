@@ -2517,3 +2517,20 @@ Assert.NotNull(shell.GetPage("plugins") as IPluginHostPage);
    我写 `Add`/`ScrollDown` 时未逐字读到 Windows `:509`/`:516`,只在注释里标了"未逐字读、下一轮对齐"。
    ⇒ 判据:**要么当轮读到并逐字对齐,要么在注释里写清"为什么这个等价写法与 Windows 行为一致"**;
    **不许把"未逐字读"的标记留在代码里** —— 那等于给自己发一张永久欠条,后来人会以为那是待办而不敢动。
+
+**`D-165` 补记之五:两条操作纪律(C8b 换来)**
+
+1. **`[System.IO.File]::*` 一律用 `Resolve-Path` 出来的绝对路径。**
+   我在核 `ToolLine.cs` 的编码时写了 `[IO.File]::ReadAllBytes('src\TipCL.App\Pages\ToolLine.cs')` ——
+   它**按进程 CWD**(`D:\项目\tipcl`)解析,**不是**按 PowerShell 的 `cd` 位置,于是
+   `<c>DirectoryNotFoundException</c>`,那一项校验其实**没跑成**。
+   ⇒ 判据:凡是 `[IO.File]`/`[IO.Directory]` 之类 .NET 静态调用,路径先 `(Resolve-Path <rel>).Path` 再传;
+   `Get-Content` / `Test-Path` 这类 **PowerShell cmdlet** 才跟 `cd`。
+   (**这条我踩出来的同一个动作,`Get-Content` 之前一直是对的 —— 所以它不是"我总是错",而是"两种解析规则混用时会骗人"。**)
+
+2. **跨轮落大件 ⇒ 文件留盘不提交;阶段成果用独立小件单独提交。**
+   `AiFixWindow.cs` 这块(625 行,分块搬、还要几轮才编得过)**一直留在盘上未提交**,
+   而它依赖里那个自包含的 `ToolLine.cs`(154 行)**一次编过、单独提交**。
+   ⇒ 效果:**已提交的树始终可编**,别人跑构建/测试不会被我的在途大件挡住 —— 比"允许树红一段时间"
+   更省事、也更友好(那个做法要别人按规则第 10 条作废整轮)。
+   ⇒ 判据:大件跨轮时**不提交**;能独立编绿的零散件**立刻单独提交**(并用它把大件的新依赖先钉住)。
