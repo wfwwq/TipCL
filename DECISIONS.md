@@ -2301,3 +2301,36 @@ mac      Services\Dlg.cs:329          : public static async Task<T?> Form<T>(str
 它比 `C2c1WiringTests.The_form_validation_toast_is_audible_now` **多**钉了三件:
 ①失败后**对话框仍在**(`LayerCount()` 未减)+ 任务**未完成**;②错误 Toast 的**正文里带原异常消息**;
 ③成功路径**返回收集到的值**、无 Toast;另外钉了默认确认文案「保存」与宽度 `560`、取消 ⇒ `null`。所以它不冗余,留下。
+## D-158 C7b2b:插件浮层在 mac 不落地 —— **由 `GOAL.md` 第 34 行导致的设计差异**(不是"未实现的降级")
+## D-158 C7b2b:插件浮层在 mac 不落地 —— **由 `GOAL.md` 第 34 行导致的设计差异**(不是"未实现的降级")
+
+**Lead 裁决 = A:如实的功能缺口,不造假浮层。** 判据是"**浮层这个东西的定义性性质在 mac 侧不成立**":
+
+| Windows `PluginOverlays.cs` 的三条支柱 | mac 侧 |
+|---|---|
+| **Win32 分层窗口的点击穿透**:`user32.dll` 的 `GetWindowLong`/`SetWindowLong`/`SetLayeredWindowAttributes` + `WS_EX_TRANSPARENT \| WS_EX_LAYERED` | **Avalonia 没有点击穿透 API**(无对应物) |
+| **DWM 玻璃透明**:`dwmapi.dll` 的 `DwmExtendFrameIntoClientArea` + `HwndSource.CompositionTarget.BackgroundColor` | 无对应物(远程桌面/部分驱动下 Windows 自己也常黑底) |
+| **WebView2 内容宿主**:`View = new PluginWebView(c.Url, …, transparent: true)`,且整个功能被 `if (!WebViewHost.Available) return;` 门住 | `GOAL.md` 第 34 行规定**不嵌 WebView**(用系统浏览器打开) |
+
+三条里三条都不成立 ⇒ 造一个"没有点击穿透、没有透明、内容也不是插件 UI"的窗口,得到的是
+**看起来像、但不是同一个功能**的东西 —— 那正是 GOAL 的诚实条款禁止的。**这是设计差异,性质同 D-154。**
+
+**落地(职责并进 `PluginEvents`,不建 `PluginOverlays.cs`)**:
+- `kind="overlay"` 的 `plugins.ui_request` **不再造窗口**:首次(每次会话一次)给**用户可见**的如实提示
+  (说明 mac 不嵌浏览器 ⇒ 浮层没法就地显示)+ **「在浏览器中打开」**(走既有 `Crash.ShellOpen`;
+  测试靠 `Crash.ShellOpenHook` 拦截,**绝不真开窗口**);地址拿不到就退成一条 `Dlg.Alert`。
+- **once 标志 `_overlayNoticeShown` 的存在与理由**(写进代码注释):浮层请求是**插件主动发来的**,
+  用户点了插件里的东西 ⇒ 首次**必须可见**(静默等于"点了没反应"),但每次都弹会把用户刷屏 ⇒ 一次;
+  之后只记 `SmokeState.Note`。请求本身仍照常回 `plugins_ui_reply`。
+- **特意没搬的部分(回溯线索)**——它们都依附"那个窗口",没有窗口就没有要算的东西:
+  ①spec 解析(`width/height/anchor/margin/clickThrough/visible` + `Clamp.Of`);
+  ②贡献增删同步;③跟随主窗口移动/缩放/最小化的重排(以及 `LocationChanged/SizeChanged/StateChanged/IsVisibleChanged/Closed` 那组订阅)。
+  **若将来 mac 有了可嵌入的视图宿主,或原生插件 UI(`NativePluginUi` 那条不依赖 WebView 的反射路径)想要真浮层,
+  参照 Windows `Pages\Plugins\PluginOverlays.cs`(468 行,含 `OverlayWindow`)取回这套逻辑** —— 留线索,不留死代码。
+- **一笔备查(不写代码)**:原生插件 UI 那条路**理论上**不需要 WebView,所以将来"没有 WebView 也能有真浮层"可能成立;
+  但**现在没有任何已知消费方**,故只记这一句。
+
+**"还没有调用方"清单(批4 结束前必须全部被真正用到并驱动过一次)**:①`PluginUi.cs`;②`PluginSettingsCard.cs`。
+批4 要驱动:内容卡那条路径 / 市场地址保存 + 镜像上移下移的 **payload 形状** / 未审核开关的确认分支 /
+`IPluginHostPage` 的两个调用点(假实现 + 真实现各一次)。"编译通过但没人用"是**中间态,不是终态**;
+若批4 发现某个文件确实无法被引用,**停下报 Lead 单独裁**,不许它悄悄留在仓库里。
