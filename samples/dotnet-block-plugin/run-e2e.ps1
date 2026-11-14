@@ -6,13 +6,18 @@
 #   pwsh -NoProfile -File samples\dotnet-block-plugin\run-e2e.ps1
 #   powershell -NoProfile -ExecutionPolicy Bypass -File samples\dotnet-block-plugin\run-e2e.ps1
 #
+# NOTE (2026-11-14, independent acceptance finding): the temp-home parameter is
+#   -E2eHome, NOT -Home. A parameter named Home collides with PowerShell's
+#   read-only automatic variable $HOME, so binding used to throw before the script
+#   body ever ran - which made this E2E unreproducible for any reader.
+#
 # Take the shared build lock first if other agents are working in this clone:
 #   Set-Location 'D:\...\_tmp\locks'; powershell -NoProfile -File .\build-lock.ps1 -Name windos -Action Acquire -Owner <you>
 
 [CmdletBinding()]
 param(
     [string]$Configuration = 'Release',
-    [string]$Home = '',
+    [string]$E2eHome = '',
     [switch]$SkipLauncher
 )
 
@@ -20,8 +25,8 @@ $ErrorActionPreference = 'Stop'
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $Repo
 
-if ([string]::IsNullOrWhiteSpace($Home)) {
-    $Home = Join-Path $Repo '_wpf_run\native-block-e2e-home'
+if ([string]::IsNullOrWhiteSpace($E2eHome)) {
+    $E2eHome = Join-Path $Repo '_wpf_run\native-block-e2e-home'
 }
 
 Write-Host "[1/4] build launcher (needed: the plugin references TipCL.exe)"
@@ -41,10 +46,10 @@ if ($LASTEXITCODE -ne 0) { Write-Host "driver build FAILED ($LASTEXITCODE)"; exi
 $exe = Join-Path $Repo "tests\TipCL.NativeBlockE2E\bin\$Configuration\TipCL.NativeBlockE2E.exe"
 $log = Join-Path $Repo "tests\TipCL.NativeBlockE2E\bin\$Configuration\e2e-output.txt"
 Write-Host "[4/4] run E2E: $exe"
-& $exe --home $Home --out $log
+& $exe --home $E2eHome --out $log
 $code = $LASTEXITCODE
 Write-Host ""
 Write-Host "driver exit code = $code   (0 = all assertions passed)"
-Write-Host "temp TIPCL_HOME  = $Home"
+Write-Host "temp TIPCL_HOME  = $E2eHome"
 Write-Host "driver log       = $log"
 exit $code
