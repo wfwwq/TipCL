@@ -79,7 +79,7 @@ public sealed class C2c2WallpaperTests
             Wallpaper.SetSource(missing);
 
             Assert.False(Wallpaper.Active);
-            Assert.Equal(I18n.L("文件不存在:") + missing, Wallpaper.Error);
+            Assert.Equal(I18n.L("文件不存在：") + missing, Wallpaper.Error);
             Assert.False(Wallpaper.StillLayer.IsVisible);
         });
     }

@@ -79,7 +79,7 @@ public class AskCardTests
 			Assert.Single(radios.Select(r => r.GroupName).Distinct());
 			Assert.False(string.IsNullOrEmpty(radios[0].GroupName));
 			// 多选块的标题带「(可多选)」,单选块不带
-			Assert.True(C4Files.HasText(card, "想穿哪个颜色" + I18n.L("(可多选)")));
+			Assert.True(C4Files.HasText(card, "想穿哪个颜色" + I18n.L("（可多选）")));
 			Assert.True(C4Files.HasText(card, "选一个难度"));
 
 			// 每个问题块各带一个「其它」输入框(两个问题 ⇒ 两个框),而显隐是**按块**联动的
@@ -93,7 +93,7 @@ public class AskCardTests
 			boxes[1].IsChecked = true;
 			boxes[2].IsChecked = true;
 			Assert.True(other.IsVisible);
-			Assert.False(others[1].IsVisible, "另一个问题块的输入框不该被带着显出来(SyncOther 是每块自己的)");
+			Assert.False(others[1].IsVisible, "另一个问题块的输入框不该被带着显出来（SyncOther 是每块自己的）");
 			other.Text = "紫色";
 			// 取消「其它」⇒ 输入框收回去(SyncOther 是双向的)
 			boxes[2].IsChecked = false;

@@ -107,7 +107,7 @@ public class C5cLayoutProbeTests
             try
             {
                 TextBlock title = TextOf(page, I18n.L("实例"));
-                TextBlock sub = TextOf(page, I18n.L("每个实例是一份独立的 .minecraft,互不干扰"));
+                TextBlock sub = TextOf(page, I18n.L("每个实例是一份独立的 .minecraft，互不干扰"));
                 Grid section = title.GetVisualAncestors().OfType<Grid>()
                     .First(g => g.Children.OfType<Control>().Any(c => C5bFiles.Descendants(c).OfType<Button>().Any()));
                 Control? right = section.Children.OfType<Control>().FirstOrDefault(c => C5bFiles.Descendants(c).OfType<Button>().Any());
@@ -123,8 +123,8 @@ public class C5cLayoutProbeTests
                                   " 区宽=" + section.Bounds.Width.ToString("0.#");
 
                 // 668 的页面区里:标题与副说明都必须有可用宽度(修复前实测都是 0 —— 这一条就是缺陷 1 的判据)
-                Assert.True(titleWidth >= 160.0, "窄页面下 Section 标题被压没了!(" + measured + ")");
-                Assert.True(subWidth >= 160.0, "窄页面下 Section 副说明也被压没了!(" + measured + ")");
+                Assert.True(titleWidth >= 160.0, "窄页面下 Section 标题被压没了！(" + measured + ")");
+                Assert.True(subWidth >= 160.0, "窄页面下 Section 副说明也被压没了！(" + measured + ")");
                 // 修法是"摆不开就把右簇换到第二行"(C5c):668 摆不开 653 宽的右簇 ⇒ 必须已经降级
                 Assert.Equal(1, Grid.GetRow(right));
             }

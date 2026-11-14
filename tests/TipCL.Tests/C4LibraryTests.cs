@@ -148,7 +148,7 @@ public class C4LibraryTests
             Assert.True(C4Files.HasText(page, I18n.L("文件夹列表")));
             Assert.True(C4Files.HasText(page, I18n.L("添加或导入")));
             Assert.True(C4Files.HasText(page, I18n.L("版本选择")));
-            Assert.True(C4Files.HasText(page, I18n.L("双击版本直接启动;行尾可收藏/删除/设置")));
+            Assert.True(C4Files.HasText(page, I18n.L("双击版本直接启动；行尾可收藏/删除/设置")));
             Assert.True(C4Files.HasButton(page, I18n.L("添加已有文件夹")));
             Assert.True(C4Files.HasButton(page, I18n.L("导入整合包")));
             Assert.True(C4Files.HasButton(page, I18n.L("新建实例")));
@@ -158,7 +158,7 @@ public class C4LibraryTests
             // 【Windows 源】两个大标题都是 ExtraBold
             TextBlock h = C4Files.TextsWith(page, I18n.L("文件夹列表")).First();
             Assert.Equal(FontWeight.ExtraBold, h.FontWeight);
-            Assert.False(toasts.Has(I18n.L("加载失败")), "首屏加载不该失败:" + string.Join("|", toasts.Items.Select(t => t.Title + t.Body)));
+            Assert.False(toasts.Has(I18n.L("加载失败")), "首屏加载不该失败：" + string.Join("|", toasts.Items.Select(t => t.Title + t.Body)));
         });
     }
 
@@ -939,7 +939,7 @@ public class C4LibraryTests
             C4Files.Invoke(C4Files.MenuItemByHead(page.BuildFolderMenu(new Border(), "甲"), I18n.L("选择 Java...")));
             C3bFiles.WaitDialog();
             DialogCard card = Dlg.Host!.GetLogicalDescendants().OfType<DialogCard>().Last();
-            Assert.True(C4Files.HasText(card, I18n.L("当前记录:") + "17.0.1"));
+            Assert.True(C4Files.HasText(card, I18n.L("当前记录：") + "17.0.1"));
             C4Files.Click(C4Files.ByText(card, I18n.L("保存")));
             C4Files.Pump(() => api.Count("set_instance_java") >= 1);
             Assert.Contains("\"java\":\"/jdk17/bin/java\"", api.ParamsOf("set_instance_java"));

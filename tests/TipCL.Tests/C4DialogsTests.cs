@@ -753,7 +753,7 @@ public class C4DialogsTests
             Task show = SavesDialog.ShowAsync("默认", "");
             C4Files.PumpTask(show);
             Control panel = C4Files.PanelCard(I18n.L("存档管理 · {0}", "默认"));
-            Assert.True(C4Files.HasText(panel, I18n.L("备份({0})", 25)));
+            Assert.True(C4Files.HasText(panel, I18n.L("备份（{0})", 25)));
             Assert.True(C4Files.HasText(panel, "bk20"));
             Assert.False(C4Files.HasText(panel, "bk21"));
         });
@@ -1094,7 +1094,7 @@ public class C4DialogsTests
             C4Files.PumpTask(show);
             Control panel = C4Files.PanelCard(I18n.L("存档管理 · {0}", "默认"));
             Assert.Equal(2, C4Files.Descendants(panel).OfType<Button>().Count(b => string.Equals(b.Content as string, I18n.L("备份"), StringComparison.Ordinal)));
-            Assert.True(C4Files.HasText(panel, I18n.L("备份({0})", 2)));
+            Assert.True(C4Files.HasText(panel, I18n.L("备份（{0})", 2)));
         });
     }
 

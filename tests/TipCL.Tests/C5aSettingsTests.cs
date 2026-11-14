@@ -333,16 +333,16 @@ public class C5aSettingsTests
             tags.AddRange(C5aFiles.Descendants(page).OfType<TextBox>().Select(b => b.Tag as string ?? ""));
             foreach (string placeholder in new[]
             {
-                "0", "854", "480", "例如 -XX:+UseG1GC(可空)", "本地 .html 文件路径(主页选「本地 HTML」时生效)",
-                "游戏目录(.minecraft 的落脚处)", "https://api.openai.com/v1", "sk-...", "131072", "留空不启用",
-                "CurseForge API Key(留空用内置)", "图片或视频路径,留空则不用壁纸", "壁纸文件夹(设了就轮播,优先于上面那张)",
+                "0", "854", "480", "例如 -XX:+UseG1GC（可空）", "本地 .html 文件路径（主页选「本地 HTML」时生效）",
+                "游戏目录（.minecraft 的落脚处）", "https://api.openai.com/v1", "sk-...", "131072", "留空不启用",
+                "CurseForge API Key（留空用内置）", "图片或视频路径，留空则不用壁纸", "壁纸文件夹（设了就轮播，优先于上面那张）",
             })
             {
                 Assert.Contains(I18n.L(placeholder), tags);
             }
             // 占位是占位、初值另给(854/480/0 这三个的文本初值与占位相同,是 Windows 自己给的)
             // 7(通用段)+ 2(网络段)+ 4(游戏段也在通用段里)⇒ 13 个输入框,去重后仍是 13 个不同的占位
-            Assert.True(tags.Distinct().Count() >= 13, "输入框占位:" + string.Join("|", tags));
+            Assert.True(tags.Distinct().Count() >= 13, "输入框占位：" + string.Join("|", tags));
         });
     }
 

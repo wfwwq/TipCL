@@ -73,7 +73,7 @@ public class C4InstanceTests
             using var api = new C3cFakeApi();
             InstancePage page = C4Files.Mount(harness, new InstancePage());
             C4Files.Load(page);
-            Assert.True(C4Files.HasText(page, I18n.L("每个实例是一份独立的 .minecraft,互不干扰")));
+            Assert.True(C4Files.HasText(page, I18n.L("每个实例是一份独立的 .minecraft，互不干扰")));
             Assert.True(C4Files.HasButton(page, I18n.L("新建实例")));
             Assert.True(C4Files.HasButton(page, I18n.L("导入官方启动器")));
             Assert.True(C4Files.HasButton(page, I18n.L("打开游戏目录")));
