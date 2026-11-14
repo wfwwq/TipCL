@@ -251,9 +251,11 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 
 ### dist/ 现状(2026-11-14 核对,win-docs;含 A+B1 之后的最终重切)
 
-- **交付目录 `D:\项目\tipcl\windos\dist\` 现有 5 件**(A+B1 之后的最终重切由 win-verify 执行、哈希以 `_tmp/dist-archive/MANIFEST.md` 为准):
+- **交付目录 `D:\项目\tipcl\windos\dist\` 现有 4 件**(逐件 SHA256 见 `docs/DELIVERY-2026-11-14.md` §3.1;归档件哈希以 `_tmp/dist-archive/MANIFEST.md` 与维护者重切回执为准):
   - `TipCL-compact-20261114-1546.exe` **5,533,184 B** 与 `TipCL-premium-20261114-1546.exe` **5,553,152 B** —— **A+B1 之后的最终档**,与 `DECISIONS.md` D-38 记录的实测字节**逐字节一致**(两条独立构建互为交叉验证);
-  - `TipCL-compact-20261114-1349.exe` 6,448,128 B 与 `TipCL-premium-20261114-1349.exe` 6,467,072 B —— **体积回收之前的"改动前参照件",勿当最终件**;
-  - `TipCL-premium-20261107-1308-头部共享修复.exe` 6,038,528 B —— 历史留存件(见本轮第六节的口径更正)。
-- **已归档到 `D:\项目\tipcl\_tmp\dist-archive\` 的 7 件**:`TipCL-{compact,premium}-20261114-1308.exe`、`TipCL-{compact,premium}-20261107-1333-左栏与详情入口.exe`、`TipCL-{compact,premium}-20261107-1408-遗留清理.exe`、`TipCL-premium-20261114-1522.exe`(task-15 的中间交付件)。
-- **完整 SHA256 清单见 `_tmp/dist-archive/MANIFEST.md`**(`-1308` 两件移出交付目录的归档清单与逐件哈希)。
+  - `TipCL-compact-20261114-1349.exe` 6,448,128 B 与 `TipCL-premium-20261114-1349.exe` 6,467,072 B —— **体积回收之前的"改动前参照件",勿当最终件**(维护者定:**保持不归档**)。
+- **已归档到 `D:\项目\tipcl\_tmp\dist-archive\` 的 8 件**:
+  `TipCL-{compact,premium}-20261114-1308.exe`、`TipCL-{compact,premium}-20261107-1333-左栏与详情入口.exe`、
+  `TipCL-{compact,premium}-20261107-1408-遗留清理.exe`、`TipCL-premium-20261114-1522.exe`(task-15 的中间交付件,已归档、**不回迁**)、
+  `TipCL-premium-20261107-1308-头部共享修复.exe`(原 `dist/` 的历史留存件,同日移入)。
+- **完整 SHA256 清单见 `_tmp/dist-archive/MANIFEST.md`。**
