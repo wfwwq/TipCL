@@ -242,4 +242,48 @@ public class C9aPageLayoutHostTests
 			Assert.True(host.SplitterVisible);
 		});
 	}
+
+	/// <summary>
+	/// 格子列数(Windows <c>SplitRatioStore.PageColumns</c>):**默认 = fallback**(无存储 ⇒ 插件页仍是 3 列,
+	/// 用户可见行为不变)。
+	/// </summary>
+	[Fact]
+	public void Page_columns_default_to_the_fallback_when_nothing_is_stored()
+	{
+		UiPrefs prefs = new UiPrefs();
+		Assert.Equal(3, PageLayoutHost.PageColumns(prefs, "plugins", 3, 1, 6));
+		// 没有 prefs(离屏/无外壳)也一样回落 fallback
+		Assert.Equal(3, PageLayoutHost.PageColumns(null, "plugins", 3, 1, 6));
+	}
+
+	/// <summary>存 1~6 生效,超出被夹到 1 / 6(夹取照 Windows 的 <c>ClampInt(num, min, max)</c>)。</summary>
+	[Fact]
+	public void Page_columns_are_stored_and_clamped_to_the_range()
+	{
+		UiPrefs prefs = new UiPrefs();
+		Assert.True(PageLayoutHost.WritePageColumns(prefs, "plugins", 5, 1, 6));
+		Assert.Equal(5, PageLayoutHost.PageColumns(prefs, "plugins", 3, 1, 6));
+		Assert.True(PageLayoutHost.WritePageColumns(prefs, "plugins", 99, 1, 6));
+		Assert.Equal(6, PageLayoutHost.PageColumns(prefs, "plugins", 3, 1, 6));
+		Assert.True(PageLayoutHost.WritePageColumns(prefs, "plugins", 0, 1, 6));
+		Assert.Equal(1, PageLayoutHost.PageColumns(prefs, "plugins", 3, 1, 6));
+		// 直接塞一个非法值进存储(比如旧版本写的 0 / 负数)⇒ 回落 fallback,而不是把网格算成 0 列
+		prefs.Columns["plugins"] = 0;
+		Assert.Equal(3, PageLayoutHost.PageColumns(prefs, "plugins", 3, 1, 6));
+		prefs.Columns["plugins"] = -2;
+		Assert.Equal(3, PageLayoutHost.PageColumns(prefs, "plugins", 3, 1, 6));
+	}
+
+	/// <summary>
+	/// `gridMode: false` 时**忽略存储值**(Windows 原文:只有声明 `Mode == grid` 的页面才用存储值)——
+	/// 这条语义保留着,是为了将来"只想拿 fallback、不想读存储"的调用点。
+	/// </summary>
+	[Fact]
+	public void Page_columns_ignore_storage_when_not_in_grid_mode()
+	{
+		UiPrefs prefs = new UiPrefs();
+		Assert.True(PageLayoutHost.WritePageColumns(prefs, "plugins", 5, 1, 6));
+		Assert.Equal(5, PageLayoutHost.PageColumns(prefs, "plugins", 3, 1, 6));
+		Assert.Equal(3, PageLayoutHost.PageColumns(prefs, "plugins", 3, 1, 6, gridMode: false));
+	}
 }

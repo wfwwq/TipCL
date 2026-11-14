@@ -117,8 +117,9 @@ internal sealed class PageLayoutHost : Grid
 	/// <summary>分隔条是否可见(内嵌态应不可见 ⇒ 拖动入口不存在)。</summary>
 	internal bool SplitterVisible => _splitter.IsVisible;
 
-	/// <summary>分隔条的命中宽度(0 = 只占间隙列;设置页传 8 ⇒ 居中压在边界上)。</summary>
-	internal double SplitterHitWidth => _splitter.Width;
+	/// <summary>分隔条的命中宽度(0 = 只占间隙列;设置页传 8 ⇒ 居中压在边界上)。语义值,不是视觉 Width
+	/// (默认 0 时视觉 Widt h仍是 `NaN` = 拉伸占满间隙列)。</summary>
+	internal double SplitterHitWidth => _splitterHitWidth;
 
 	/// <summary>分隔条上那条"悬停/拖动才显"的细线当前是否可见(静止时应为 false ⇒ 零像素变化的证据)。</summary>
 	internal bool HoverLineVisible => _line.IsVisible;
@@ -129,6 +130,8 @@ internal sealed class PageLayoutHost : Grid
 	private double _gap = DefaultGap;
 
 	private double _leftMinWidth;
+
+	private readonly double _splitterHitWidth;
 
 	/// <summary>【Windows 源】<c>:628</c> 的构造:pageId / splitId / 左右栏的**声明**列宽。
 	/// <paramref name="gap"/> 默认 <see cref="DefaultGap"/>(18,**永远是 Windows 那个值**,不许为某页改);
@@ -147,6 +150,7 @@ internal sealed class PageLayoutHost : Grid
 		_declaredRight = right;
 		_gap = gap;
 		_leftMinWidth = leftMinWidth;
+		_splitterHitWidth = splitterHitWidth;
 		_colLeft.Width = left;
 		_colLeft.MinWidth = leftMinWidth;
 		_colGap.Width = new GridLength(gap);
@@ -372,6 +376,53 @@ internal sealed class PageLayoutHost : Grid
 	public static string Key(string pageId, string splitId)
 	{
 		return (pageId ?? "") + "/" + (splitId ?? "");
+	}
+
+	/// <summary>
+	/// 格子类布局的**列数**(Windows <c>SplitRatioStore.PageColumns</c>,`:536-562`)。
+	/// Windows 原文规则:**默认 <paramref name="fallback"/>;只有该页在布局文档里声明了 `Mode == grid` 且 `Cols &gt; 0`
+	/// 时才用存储值**;存储值 `&lt;= 0` 回落 fallback;最后夹到 <c>[min, max]</c>。
+	/// mac 侧没有那张文档 ⇒ 存储落在 <c>UiPrefs.Columns</c>(机制差异)。
+	/// <paramref name="gridMode"/> 默认 **true**:理由 —— **mac 侧凡是调用本方法的页面,本身就是"声明自己是格子"的那一方**
+	/// (目前只有插件页已安装网格);将来若出现"只想拿 fallback、不想读存储"的调用点,显式传 <c>false</c>。
+	/// </summary>
+	public static int PageColumns(UiPrefs? prefs, string pageId, int fallback, int min, int max, bool gridMode = true)
+	{
+		int cols = fallback;
+		try
+		{
+			if (gridMode && prefs != null && !string.IsNullOrEmpty(pageId) && prefs.Columns.TryGetValue(pageId, out int stored))
+			{
+				cols = stored;
+			}
+		}
+		catch
+		{
+			cols = fallback;
+		}
+		if (cols <= 0)
+		{
+			cols = fallback;
+		}
+		return Math.Min(max, Math.Max(min, cols));
+	}
+
+	/// <summary>写该页的列数(夹到 <c>[min, max]</c> 后落盘;Windows 那边走布局文档的 <c>pages[pageId].Cols</c>)。</summary>
+	public static bool WritePageColumns(UiPrefs? prefs, string pageId, int columns, int min, int max)
+	{
+		if (prefs == null || string.IsNullOrEmpty(pageId))
+		{
+			return false;
+		}
+		try
+		{
+			prefs.Columns[pageId] = Math.Min(max, Math.Max(min, columns));
+			return true;
+		}
+		catch
+		{
+			return false;
+		}
 	}
 
 	/// <summary>当前生效比例(给测试与设置页用):有存储用存储,否则按声明与可用宽现算,再不行 0.5。</summary>

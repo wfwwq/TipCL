@@ -67,7 +67,11 @@ public sealed partial class PluginsPage
 		//   (与 Windows `PluginsPage.Installed.cs:43` 逐字一致)。
 		// 用户可见后果:插件市场/已安装网格**固定 3 列,用户不可调**。
 		// **保留原版行为**:"空列表时 1 列"与存储无关,照搬。
-		_installedHost.Columns = (_installed.Count == 0) ? 1 : 3;
+		// 【C9a】列数改为**同族的列数存储**(键 = pageId"plugins",夹到 1..6;Windows 原文:
+		//   `SplitRatioStore.PageColumns("plugins", 3, 1, 6)` —— 默认 3、只在页面声明格子模式时用存储值)。
+		// 原先这里是固定 3 列(见上面那条**临时功能缺口**注释)⇒ 该缺口由 C9a 的列数存储关闭(D-165)。
+		// **保留原版行为**:"空列表时 1 列"与存储无关,照搬(D-165 收口时不动这一支)。
+		_installedHost.Columns = (_installed.Count == 0) ? 1 : TipCL.Controls.PageLayoutHost.PageColumns(PageBase.Win?.Prefs, "plugins", 3, 1, 6);
 		if (_installed.Count == 0)
 		{
 			SPanel empty = Ui.Empty("\uea86", I18n.L("还没有安装插件"), I18n.L("去插件市场看看,或者把插件 zip 拖进这个页面。"));
