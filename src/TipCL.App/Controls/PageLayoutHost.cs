@@ -122,17 +122,23 @@ internal sealed class PageLayoutHost : Grid
 
 	private double _gap = DefaultGap;
 
+	private double _leftMinWidth;
+
 	/// <summary>【Windows 源】<c>:628</c> 的构造:pageId / splitId / 左右栏的**声明**列宽。
-	/// <paramref name="gap"/> 默认 <see cref="DefaultGap"/>(18);某页的间距若原本由孩子自己的外边距提供,
-	/// 就传 0 保持像素不变(Windows 的 per-site 间距来自未移植的 <c>SplitCatalog</c>,见类注释差异第 4 条)。</summary>
-	public PageLayoutHost(string pageId, string splitId, GridLength left, GridLength right, double gap = DefaultGap)
+	/// <paramref name="gap"/> 默认 <see cref="DefaultGap"/>(18,**永远是 Windows 那个值**,不许为某页改);
+	/// 某页的间距若原本由孩子自己的外边距提供就传 0,保像素不变(Windows 的 per-site 间距来自未移植的 <c>SplitCatalog</c>)。
+	/// <paramref name="leftMinWidth"/> 默认 0;`LibraryPage` 传 300 —— 那是 C5c 的修正
+	/// (「左列要兑现左卡的最小宽 300,否则窄页面上卡片会溢出自己的星列」),收起左栏时会被临时置 0。</summary>
+	public PageLayoutHost(string pageId, string splitId, GridLength left, GridLength right, double gap = DefaultGap, double leftMinWidth = 0.0)
 	{
 		_pageId = pageId ?? "";
 		_splitId = splitId ?? "";
 		_declaredLeft = left;
 		_declaredRight = right;
 		_gap = gap;
+		_leftMinWidth = leftMinWidth;
 		_colLeft.Width = left;
+		_colLeft.MinWidth = leftMinWidth;
 		_colGap.Width = new GridLength(gap);
 		_colRight.Width = right;
 		base.ColumnDefinitions.Add(_colLeft);
@@ -207,14 +213,29 @@ internal sealed class PageLayoutHost : Grid
 		};
 	}
 
-	/// <summary>左栏(进第 0 列)。Windows <c>SetLeft</c>。</summary>
+	/// <summary>左栏(进第 0 列)。Windows <c>SetLeft</c>。**只负责挂孩子**:显隐跟随孩子自己(见 <see cref="LeftCollapsed"/>)。</summary>
 	public void SetLeft(Control el)
 	{
 		_left = el;
 		Grid.SetColumn(el, 0);
 		base.Children.Insert(0, el);
+		// 【Windows 判据】"折叠状态以'孩子自己的 Visibility'为准" ⇒ 孩子可见性一变就重算列
+		el.PropertyChanged += delegate(object? _, AvaloniaPropertyChangedEventArgs e)
+		{
+			if (e.Property == Visual.IsVisibleProperty)
+			{
+				ApplyColumns();
+			}
+		};
 		ApplyColumns();
 	}
+
+	/// <summary>左栏是否处于"收起"状态:内嵌态之外,**左栏孩子自己不可见、或已被移出可视树**都算收起
+	/// (Windows <c>LeftVisible</c> 的同一条判据);收起时由本控件把左列与间隙收 0、右栏吃满。</summary>
+	internal bool LeftCollapsed => _left != null && (!_left.IsVisible || !base.Children.Contains(_left));
+
+	/// <summary>左栏的声明最小宽(Windows/C5c:`LibraryPage` 传 300;收起时临时置 0)。</summary>
+	internal double LeftMinWidth => _leftMinWidth;
 
 	/// <summary>右栏(进第 2 列)。Windows <c>SetRight</c>。</summary>
 	public void SetRight(Control el)
@@ -354,17 +375,19 @@ internal sealed class PageLayoutHost : Grid
 		}
 	}
 
-	/// <summary>按当前状态把列宽落下去:内嵌态 ⇒ 左栏与间隙收成 0;有存储比例 ⇒ 像素列;否则 ⇒ 声明列宽。</summary>
+	/// <summary>按当前状态把列宽落下去:**收起**(内嵌态,或左栏孩子自己不可见/已被移出可视树)⇒ 左列与间隙收 0、
+	/// 右栏吃满(页面**不要**再自己动列定义/列号,见类注释的归属说明);有存储比例 ⇒ 像素列;否则 ⇒ 声明列宽。</summary>
 	private void ApplyColumns()
 	{
-		if (_embedded)
+		if (_embedded || LeftCollapsed)
 		{
-			// 内嵌态(实例详情「设置」段内嵌的版本管理):左栏收 0、间隙收 0,右栏吃满
+			_colLeft.MinWidth = 0.0;
 			_colLeft.Width = new GridLength(0.0);
 			_colGap.Width = new GridLength(0.0);
 			_colRight.Width = new GridLength(1.0, GridUnitType.Star);
 			return;
 		}
+		_colLeft.MinWidth = _leftMinWidth;
 		double available = AvailableWidth();
 		if (!double.IsNaN(_storedRatio) && !double.IsNaN(available) && available > 0.0)
 		{
@@ -414,6 +437,11 @@ internal sealed class PageLayoutHost : Grid
 
 	private void CommitDragCore()
 	{
+		// 收起状态拖不了(分隔条本身也隐藏)⇒ 自然不该落盘
+		if (_embedded || LeftCollapsed)
+		{
+			return;
+		}
 		double available = AvailableWidth();
 		if (double.IsNaN(available) || available <= 0.0)
 		{

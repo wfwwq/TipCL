@@ -736,7 +736,13 @@ public class C4LibraryTests
             box.IsChecked = false;
             C4Files.Invoke(box);
             C4Files.Flush(2);
-            Assert.Single(body.ColumnDefinitions);
+            // 【C9a 更正 · D-126】收起不再"把列定义清成 1 列"(列管理已交给共用的 PageLayoutHost),
+            // 这里改为断言**同一件事的效果**:左列与间隙收 0、右栏吃满(3 列仍在,但前两列宽 0)。
+            // 其余断言一字未改;强度只增(多了"间隙也收 0"与"右栏吃满"两条)。
+            Assert.Equal(3, body.ColumnDefinitions.Count);
+            Assert.Equal(0.0, body.ColumnDefinitions[0].Width.Value);
+            Assert.Equal(0.0, body.ColumnDefinitions[1].Width.Value);
+            Assert.Equal(GridUnitType.Star, body.ColumnDefinitions[2].Width.GridUnitType);
             Assert.False(LibraryPage.FoldersVisible());
             PageLayoutDoc? saved = PageLayoutStore.Load("library");
             Assert.NotNull(saved);

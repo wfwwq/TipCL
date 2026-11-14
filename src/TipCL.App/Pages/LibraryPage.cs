@@ -1,4 +1,5 @@
 using System;
+using TipCL.Controls;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -193,7 +194,7 @@ public sealed class LibraryPage : PageBase
 	private object? _shell;
 
 	// WP-U3 页面布局自定义:双栏外壳与左右两栏(文件夹栏可经布局文档收起,字段与数据逻辑不受影响)
-	private readonly Grid _body;
+	private readonly PageLayoutHost _body;
 
 	private readonly Border _leftCard;
 
@@ -273,7 +274,16 @@ public sealed class LibraryPage : PageBase
 		_leftCard = left;
 		_rightCol = right;
 		// 行高显式 Auto:网格自身高度恒等于内容,杜绝隐式 * 行被外层余量撑高(左栏卡片随之拉伸的根因向量)
-		_body = Ui.G("Auto");
+		// 【C9a】两栏交给共用的 PageLayoutHost(与 Windows `LibraryPage.cs:192` 同一处声明:
+		// `"library"` / `"folders"` / `*` + `2*`)。两处页内特有口径照搬:
+		// ①`leftMinWidth: 300` —— C5c 的修正「左列要兑现左卡的最小宽 300,否则窄页面上卡片会溢出自己的星列」;
+		// ②`gap` 用默认 18(与切前写死的 18 一致)。
+		_body = new PageLayoutHost("library", "folders", new GridLength(1.0, GridUnitType.Star), new GridLength(2.0, GridUnitType.Star), leftMinWidth: 300.0);
+		// 行高显式 Auto:网格自身高度恒等于内容,杜绝隐式 * 行被外层余量撑高
+		_body.RowDefinitions.Add(new RowDefinition
+		{
+			Height = GridLength.Auto,
+		});
 		base.Content = PageBase.ScrollBody(_body);
 		ApplyFolderLayout();
 		EnableDrop(() => new FileDrop.DropContext
@@ -322,33 +332,28 @@ public sealed class LibraryPage : PageBase
 		return true;
 	}
 
-	// 按布局文档应用文件夹栏显隐:可见 → 双栏("*,18,2*",与现状一致);隐藏 → 列定义改 "*"、左栏移出可视树(数据逻辑照常),右栏独占
+	// 按布局文档应用文件夹栏显隐:可见 → 双栏("*,18,2*",与现状一致);隐藏 → 收起
+	// 【C9a】**列定义与列号统一由 PageLayoutHost 负责**(它的判据就是"左栏孩子自己的可见性",Windows 注释原文:
+	// "折叠状态以'孩子自己的 Visibility'为准")⇒ 页面这里**只**负责挂孩子 / 设孩子可见性,
+	// **不再自己动 `ColumnDefinitions`,也不再自己 `Grid.SetColumn(_rightCol, 0)`**(归属唯一,免得改一处漏一处)。
 	private void ApplyFolderLayout()
 	{
 		bool folders = FoldersVisible();
-		_body.ColumnDefinitions.Clear();
-		// 右栏(版本选择)是页面本体,任何布局下都必须挂在 _body 里
 		if (!_body.Children.Contains(_rightCol))
 		{
-			_body.Children.Add(_rightCol);
+			_body.SetRight(_rightCol);
 		}
 		if (folders)
 		{
-			// C5c:左列要**兑现**左卡的最小宽(300),否则窄页面上卡片会溢出自己的星列(见构造函数里的注释)
-			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star), MinWidth = 300.0 });
-			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18.0) });
-			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2.0, GridUnitType.Star) });
 			if (!_body.Children.Contains(_leftCard))
 			{
-				_body.Children.Add(_leftCard);
+				_body.SetLeft(_leftCard);
 			}
-			Grid.SetColumn(_rightCol, 2);
+			_leftCard.IsVisible = true;
 		}
 		else
 		{
-			_body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
-			_body.Children.Remove(_leftCard);
-			Grid.SetColumn(_rightCol, 0);
+			_leftCard.IsVisible = false;
 		}
 		_body.ContextMenu = LayoutMenu(folders);
 	}
