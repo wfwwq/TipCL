@@ -36,7 +36,7 @@ namespace TipCL.Pages.Plugins;
 ///   (Avalonia 在 <c>Avalonia.Controls.Primitives</c> 里);<c>Ui.H2</c> / <c>PageBase.ScrollBody</c> 照用。</item>
 /// </list>
 /// </summary>
-public sealed partial class PluginsPage : PageBase
+public sealed partial class PluginsPage : PageBase, IPluginHostPage
 {
 	/// <summary>页签(三条)。**internal 而非 private**:<c>SelectTab</c> 是 internal(测试要驱动"切页签"这个
 	/// 内部处理器体,而不是模拟点击 —— D-115/D-127 的口径),C# 不许外部可见的方法签名里出现更私有的类型。</summary>
@@ -220,8 +220,9 @@ public sealed partial class PluginsPage : PageBase
 		}
 	}
 
-	/// <summary>设置里改了加速镜像后强刷市场缓存(忽略 10 分钟 TTL)。</summary>
-	internal void RefreshMarketSoon()
+	/// <summary>设置里改了加速镜像后强刷市场缓存(忽略 10 分钟 TTL)。
+	/// **public 是接口要求**(<see cref="IPluginHostPage"/> 的成员隐含 public;类本身是 internal,不扩大对外可见面)。</summary>
+	public void RefreshMarketSoon()
 	{
 		if (_tab == Tab.Market)
 		{
