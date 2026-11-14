@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Version>0.1.0-m3</Version>
+    <!-- 默认 glob：后续代理新增的 .cs/.axaml 自动编入，不需要改 csproj -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <!-- M2-B4 依赖申请：App 侧布局框架（BlockHost）与插件页需要 TipCL.Core 的
+       Core/Layout（PageLayoutStore/Doc/IO）与 Core/Plugins（PluginStateStore/Manifest/Dirs）。
+       B0 落 IApi 门面后同样需要此引用；若 B0 已加，合并时保留一份即可。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\TipCL.Core\TipCL.Core.csproj" />
+  </ItemGroup>
+  <!-- M4-H P5:测试要覆盖 internal 的 AI 子系统(Markdown 解析链等纯逻辑)。
+       Core 侧早已有同样的 InternalsVisibleTo(见 TipCL.Core.csproj),这里对齐。
+       只放宽可见性:不加依赖、不改行为。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TipCL.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Headless" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.2" Condition="'$(Configuration)' == 'Debug'" />
+  </ItemGroup>
+
+  <!-- M2-B1：启动页嵌入 hero.jpg（launch2 效果图同款默认背景，只读参照仓库拷出） -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+</Project>

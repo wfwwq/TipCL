@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- M1-A5 测试工程（在 M1-A1 骨架上充实）。
+       App 工程引用按存在性启用：TipCL.App 尚未可引用时，App/ 目录的测试源码一并排除，
+       保证测试工程在任何协作进度下都可独立编译。 -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <RepoRoot Condition="'$(RepoRoot)' == ''">$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), GOAL.md))\</RepoRoot>
+    <AppProject>$(RepoRoot)src\TipCL.App\TipCL.App.csproj</AppProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TipCL.Core\TipCL.Core.csproj" />
+  </ItemGroup>
+
+  <!-- App 工程缺失时排除 App 测试目录（默认 glob 会包含它们） -->
+  <ItemGroup Condition="!Exists('$(AppProject)')">
+    <Compile Remove="App\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('$(AppProject)')">
+    <ProjectReference Include="$(AppProject)" />
+  </ItemGroup>
+
+</Project>

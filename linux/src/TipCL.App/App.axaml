@@ -1,0 +1,12 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="TipCL.App.App"
+             RequestedThemeVariant="Default">
+    <Application.Styles>
+        <FluentTheme />
+        <!-- 字体系统回退（GOAL §2：不嵌字体）。A2 主题库就位后可迁移到 Themes/ -->
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI, Noto Sans CJK SC, WenQuanYi Micro Hei, sans-serif" />
+        </Style>
+    </Application.Styles>
+</Application>

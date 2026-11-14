@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=TipCL
+Comment=AI 原生 Minecraft 启动器（Linux 版）
+Exec=TipCL
+Icon=tipcl
+Terminal=false
+Categories=Game;
+Keywords=minecraft;launcher;tipcl;
+StartupWMClass=TipCL

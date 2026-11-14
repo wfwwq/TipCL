@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="using:TipCL.App.Shell"
+        x:Class="TipCL.App.Shell.MainWindow"
+        Title="TipCL"
+        Width="900" Height="550" MinWidth="720" MinHeight="480"
+        WindowStartupLocation="CenterScreen"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="46"
+        SystemDecorations="Full"
+        Background="{DynamicResource B.Canvas}"
+        FontFamily="Microsoft YaHei UI, Noto Sans CJK SC, WenQuanYi Micro Hei, sans-serif">
+  <!-- v2 外壳(对齐 Windows `MainWindow.xaml`):46px 自定义标题栏(Logo + 5 页签 + AI/账号/主题/窗口钮)
+       + 全幅页面区,无侧边导航。默认尺寸 900×550,Min 720×480。 -->
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://TipCL.App/Themes/Palette.Light.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+
+  <Grid RowDefinitions="46,*">
+    <shell:TitleBar x:Name="TitleBarHost" Grid.Row="0" />
+    <Grid Grid.Row="1">
+      <Rectangle Fill="{DynamicResource B.PageWash}" />
+      <ContentControl x:Name="PageHost" Focusable="False" />
+    </Grid>
+  </Grid>
+</Window>

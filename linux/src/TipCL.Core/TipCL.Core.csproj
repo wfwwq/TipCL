@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>annotations</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>TipCL.Core</RootNamespace>
+    <AssemblyName>TipCL.Core</AssemblyName>
+    <Version>0.1.0-m3</Version>
+    <NoWarn>$(NoWarn);CS0168;CS0219;CS0162;CS0649;CS0414;CS8981</NoWarn>
+    <!-- 反编译还原代码风格警告不计为错误（与 Windows 版一致） -->
+  </PropertyGroup>
+
+  <!-- M1-A4：不引第三方包；JSON 用内置 PyJson（自研解析器），网络用 System.Net.Http。
+       WINDOWS_DESKTOP 常量由宿主按需定义（Windows 桌面分支：注册表/DPAPI/Win32），Linux 目标默认不定义。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TipCL.Tests" />
+  </ItemGroup>
+
+</Project>
