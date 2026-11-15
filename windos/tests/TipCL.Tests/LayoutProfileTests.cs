@@ -447,8 +447,9 @@ public class LayoutProfileTests
 	{
 		// D1 把 LayoutEditor.CanEdit 放宽到 specs ≥ 1 之后,单块页也要有入口:
 		// 设置页「布局」→「页面区块」小节必须能进 settings:network / settings:about 的编辑态
-		Assert.Equal(12, LayoutBlockEntryCatalog.All.Length);
-		Assert.Equal(12, LayoutBlockEntryCatalog.All.Select((LayoutBlockEntryCatalog.Entry e) => e.PageId).Distinct().Count());
+		// [layout-fix] 规格 §4-能力3:表里新增「实例库」(library:main)与「插件」(plugins)两项 ⇒ 12 → 14
+		Assert.Equal(14, LayoutBlockEntryCatalog.All.Length);
+		Assert.Equal(14, LayoutBlockEntryCatalog.All.Select((LayoutBlockEntryCatalog.Entry e) => e.PageId).Distinct().Count());
 		Assert.Equal(new string[2] { "settings:network", "settings:about" }, LayoutBlockEntryCatalog.SingleBlockPageIds().ToArray());
 
 		LayoutBlockEntryCatalog.Entry? network = LayoutBlockEntryCatalog.Find("settings:network");
@@ -466,7 +467,10 @@ public class LayoutProfileTests
 		// 每一行都要能真的找到页面:导航 id 必须是已知 key;文案与 pageId 都不能空
 		foreach (LayoutBlockEntryCatalog.Entry entry in LayoutBlockEntryCatalog.All)
 		{
-			Assert.True(LayoutSchema.IsKnownNavKey(entry.NavId), entry.PageId + " 的导航 id 不合法:" + entry.NavId);
+			// [layout-fix] 规格 §4-能力3:新增的「实例库」入口走的是顶栏页签 key(library),
+			// 它不在 LayoutSchema.NavKeys(那份白名单镜像的是 NavModel 的导航 key,本来就没有 library)里,
+			// 但 MainWindow.GetPage/Navigate 认它 —— 所以这里放宽到"合法导航 key 或合法页签 key"。
+			Assert.True(LayoutSchema.IsKnownNavKey(entry.NavId) || LayoutSchema.IsKnownTab(entry.NavId), entry.PageId + " 的导航 id 不合法:" + entry.NavId);
 			Assert.False(string.IsNullOrWhiteSpace(entry.Label));
 			Assert.False(string.IsNullOrWhiteSpace(entry.PageId));
 			Assert.True(entry.SettingsView >= -1);

@@ -245,6 +245,25 @@ public static class DevShot
 			plugPage.ShowSettingsSubViewForDevShot();
 			await Task.Delay(1500);
 		}
+		// dev-only(取证用):下载页切到某个分段(--devseg N)、插件页切到「市场」(--subview market)。
+		// 只走页面自己已有的入口(DownloadPage.ShowSeg 是私有方法,参考仓库既有的 dev 反射套路取它),
+		// 只有显式传参才生效,正常启动零影响。
+		string devSeg = ArgVal(args, "--devseg") ?? "";
+		if (devSeg.Length > 0 && int.TryParse(devSeg, out int segIndex) && page is DownloadPage downloadPage)
+		{
+			System.Reflection.MethodInfo? showSeg = typeof(DownloadPage).GetMethod("ShowSeg", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+			await win.Dispatcher.InvokeAsync(delegate
+			{
+				showSeg?.Invoke(downloadPage, new object[1] { segIndex });
+			}, DispatcherPriority.ContextIdle);
+			await Task.Delay(1500);
+			page = win.GetPage(pageId);
+		}
+		if (subview == "market" && page is TipCL.Pages.Plugins.PluginsPage marketPage)
+		{
+			marketPage.ShowTab("market");
+			await Task.Delay(1500);
+		}
 		// 后端主题同步可能晚到，渲染前再钉一次主题
 		await win.Dispatcher.InvokeAsync(delegate
 		{
