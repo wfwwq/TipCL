@@ -2,13 +2,26 @@
 // 全程不触网:失败路径用「已取消的 DownloadManager」让 FetchJson 在发请求前就抛,
 // 与断网 / 超时 / 源返回坏 JSON 走的是同一条 catch(都落在 Fetch 的降级分支上)。
 // 缓存文件默认在 TestIsolation 的隔离 TIPCL_HOME 里 —— 但**那是全进程共享的一份**:
-// 启动页那条后台「线上新闻」会真发 HTTP 并在成功时写它(LaunchPage.cs:885 → fetch_news → News.Fetch),
+// 启动页那条后台「线上新闻」会真发 HTTP 并在成功时写它(LaunchPage.cs:891 → fetch_news → News.Fetch),
 // 于是「坏缓存必须是空」这类断言会被那条后台抓取偶尔污染成非空(实测:全量跑里红过两次,
 // 报 5+ 条真实新闻;单独跑本类 5/5 绿)。所以本类把自己的缓存指到**私有临时文件**上,
 // 用 News.CachePathOverride 这条缝隙,R21f 起生效。
+//
+// R30-WP6a(返工单 R-WP5-02):**光把缓存换成私有文件还不够**。那条后台抓取是别的用例留下的
+// fire-and-forget 任务,它在**任意时刻**完成,而写盘时读的是「当时生效的那份 News.CACHE」——
+// 也就是本类的私有文件;进程级 static 覆盖既挡不住它、也换不来互斥。于是「写 1 条 → 读」之间
+// 会被整文件替换成 12 条真实新闻(News.cs:23 MAX_ROWS = 12),Assert.Single 报
+// 「The collection contained 12 items」(总验收:Linux 全量 9 轮里红 1 轮;单跑本类 10/10 绿)。
+// 修法(仍然只在测试侧):每次观察都在**产品自己那把按路径的锁**里做 ——
+// `Utils.JsonFileLock(News.CACHE)` 就是 `Utils.ReadJson` / `Utils.WriteJson` 读写这个文件时用的那把锁,
+// 所以后台抓取的 `WriteCache` 只能等我们这一步做完,文件内容在观察窗口内只可能是我们摆的那一份;
+// 锁内再按字节复核一次(见 Observe / AssertCacheIs),这条复核是**机制守卫**:
+// 将来谁把锁去掉、或者换一条绕开 Utils.WriteJson 的写盘路径,这条用例会当场红,而不是偶发红一次。
+// 断言一条没放宽、没有重试、没有 Skip。
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using TipCL.Core;
 using TipCL.Core.Launcher;
 using Xunit;
@@ -22,6 +35,7 @@ public class NewsTests : IDisposable
 
     public NewsTests()
     {
+        Directory.CreateDirectory(Path.GetDirectoryName(PrivateCache)!);
         News.CachePathOverride = PrivateCache;
         if (File.Exists(PrivateCache)) File.Delete(PrivateCache);
     }
@@ -57,6 +71,69 @@ public class NewsTests : IDisposable
         {
             News.CachePathOverride = saved;
         }
+    }
+    // ————————————————— 缓存文件上的观察(受保护) —————————————————
+
+    /// <summary>本类私有缓存文件的绝对路径(= 本用例期间生效的那份 News.CACHE)。</summary>
+    private static string CacheFile => PPath.Abs(News.CACHE);
+
+    /// <summary>
+    /// 在私有缓存文件上做一次**受保护**的观察,顺序是:
+    ///   1) 先拿产品读写这个文件用的那把按路径锁(<see cref="Utils.JsonFileLock"/>)——
+    ///      启动页残留的后台抓取(它写盘走 <c>Utils.WriteJson</c>)此刻只能等,
+    ///      所以它在本次观察期间**进不来**;
+    ///   2) 摆好这次要看的状态:establish 返回「盘上应该长什么样」的基准字节
+    ///      (null = 文件必须不存在),摆盘也走产品的读写路径;
+    ///   3) 调 SUT;
+    ///   4) 按字节复核文件仍是「我们摆的那一份」—— 这是机制守卫,不是容忍:
+    ///      若有人绕开那把锁改写它,这里当场红(而不是让断言去读到别人的内容)。
+    /// 对**返回值**的断言都在锁外做,和以前一字不差。
+    /// </summary>
+    private static T Observe<T>(Func<byte[]?> establish, Func<T> body, string label)
+    {
+        lock (Utils.JsonFileLock(News.CACHE))
+        {
+            byte[]? expected = establish();
+            T result = body();
+            AssertCacheIs(expected, label);
+            return result;
+        }
+    }
+
+    /// <summary>机制守卫:观察期间文件必须一直是我们摆的那份(见 <see cref="Observe"/> 的注释)。</summary>
+    private static void AssertCacheIs(byte[]? expected, string label)
+    {
+        if (expected is null)
+        {
+            Assert.False(File.Exists(CacheFile),
+                label + ":观察期间有人往本用例的私有缓存里写了东西(" + CacheFile + ")");
+            return;
+        }
+        Assert.True(File.Exists(CacheFile),
+            label + ":观察期间本用例的私有缓存不见了(" + CacheFile + ")");
+        Assert.True(File.ReadAllBytes(CacheFile).AsSpan().SequenceEqual(expected),
+            label + ":观察期间本用例的私有缓存被别人改写了(" + CacheFile + ")");
+    }
+
+    /// <summary>摆好一份 JSON 载荷(走产品同一条写盘路径 Utils.WriteJson),并返回盘上的基准字节。</summary>
+    private static byte[] WritePayload(object payload)
+    {
+        Utils.WriteJson(News.CACHE, payload);
+        return File.ReadAllBytes(CacheFile);
+    }
+
+    /// <summary>摆好一份「坏内容 / 非 UTF-8」的原始字节,并返回同一份字节当基准。</summary>
+    private static byte[] WriteRawBytes(byte[] bytes)
+    {
+        File.WriteAllBytes(CacheFile, bytes);
+        return bytes;
+    }
+
+    /// <summary>摆好「缓存文件不存在」,基准 = null。</summary>
+    private static byte[]? Absent()
+    {
+        if (File.Exists(CacheFile)) File.Delete(CacheFile);
+        return null;
     }
     // ————————————————— 载荷 → 行 —————————————————
 
@@ -135,47 +212,40 @@ public class NewsTests : IDisposable
     [Fact]
     public void LoadCached_MissingOrBrokenFile_ReturnsEmpty_WithoutThrowing()
     {
-        WithCacheBackup(() =>
-        {
-            string file = PPath.Abs(News.CACHE);
-            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        // 1) 缓存不存在
+        Assert.Empty(Observe(Absent, () => News.LoadCached(), "缓存不存在"));
 
-            // 1) 缓存不存在
-            if (File.Exists(file)) File.Delete(file);
-            Assert.Empty(News.LoadCached());
+        // 2) 坏 JSON
+        Assert.Empty(Observe(() => WriteRawBytes(Encoding.UTF8.GetBytes("{ 这不是 JSON")),
+            () => News.LoadCached(), "坏 JSON"));
 
-            // 2) 坏 JSON
-            File.WriteAllText(file, "{ 这不是 JSON");
-            Assert.Empty(News.LoadCached());
+        // 3) 非 UTF-8 字节(Utils.ReadJson 对这类内容是原样抛的,这里必须吞掉)
+        Assert.Empty(Observe(() => WriteRawBytes(new byte[] { 0xFF, 0xFE, 0x00, 0x41 }),
+            () => News.LoadCached(), "非 UTF-8"));
 
-            // 3) 非 UTF-8 字节(Utils.ReadJson 对这类内容是原样抛的,这里必须吞掉)
-            File.WriteAllBytes(file, new byte[] { 0xFF, 0xFE, 0x00, 0x41 });
-            Assert.Empty(News.LoadCached());
-
-            // 4) 合法 JSON 但结构不对
-            File.WriteAllText(file, "{\"entries\":\"oops\"}");
-            Assert.Empty(News.LoadCached());
-            File.WriteAllText(file, "12345");
-            Assert.Empty(News.LoadCached());
-        });
+        // 4) 合法 JSON 但结构不对
+        Assert.Empty(Observe(() => WriteRawBytes(Encoding.UTF8.GetBytes("{\"entries\":\"oops\"}")),
+            () => News.LoadCached(), "结构不对"));
+        Assert.Empty(Observe(() => WriteRawBytes(Encoding.UTF8.GetBytes("12345")),
+            () => News.LoadCached(), "顶层是数字"));
     }
 
     [Fact]
     public void LoadCached_RoundTripsRows_AndAcceptsRawPayload()
     {
-        WithCacheBackup(() =>
-        {
-            // 线上写盘的形态:行数组 → 原样读回
-            Utils.WriteJson(News.CACHE, Py.L(PyDict.Of("title", "缓存标题", "body", "缓存正文", "version", "26.4", "image", "/v2/i.jpg", "date", "2026-11-10")));
-            List<object> rows = News.LoadCached();
-            Assert.Single(rows);
-            Assert.Equal("缓存标题", Py.S(((PyDict)rows[0]).Get("title")));
-            Assert.Equal("缓存正文", Py.S(((PyDict)rows[0]).Get("body")));
+        // 线上写盘的形态:行数组 → 原样读回
+        List<object> rows = Observe(
+            () => WritePayload(Py.L(PyDict.Of("title", "缓存标题", "body", "缓存正文", "version", "26.4", "image", "/v2/i.jpg", "date", "2026-11-10"))),
+            () => News.LoadCached(), "行数组往返");
+        Assert.Single(rows);
+        Assert.Equal("缓存标题", Py.S(((PyDict)rows[0]).Get("title")));
+        Assert.Equal("缓存正文", Py.S(((PyDict)rows[0]).Get("body")));
 
-            // 也有人手放整份载荷进去 → 现解析
-            Utils.WriteJson(News.CACHE, PyDict.Of("entries", Py.L(PyDict.Of("title", "包在 entries 里"))));
-            Assert.Equal("包在 entries 里", Py.S(((PyDict)News.LoadCached()[0]).Get("title")));
-        });
+        // 也有人手放整份载荷进去 → 现解析
+        List<object> wrapped = Observe(
+            () => WritePayload(PyDict.Of("entries", Py.L(PyDict.Of("title", "包在 entries 里")))),
+            () => News.LoadCached(), "整份载荷");
+        Assert.Equal("包在 entries 里", Py.S(((PyDict)wrapped[0]).Get("title")));
     }
 
     // ————————————————— 抓取失败的分级 —————————————————
@@ -187,51 +257,26 @@ public class NewsTests : IDisposable
         // 与断网 / 超时 / 两条源都失败走的是同一条降级分支
         var dead = new DownloadManager(2L, cancel: () => true);
 
-        WithCacheBackup(() =>
-        {
-            string file = PPath.Abs(News.CACHE);
+        // 1) 拿不到 + 没有缓存 → 空列表(页面照旧显示「暂无新闻」),绝不抛
+        Assert.Empty(Observe(Absent, () => News.Fetch(dead), "抓取失败且无缓存"));
 
-            // 1) 拿不到 + 没有缓存 → 空列表(页面照旧显示「暂无新闻」),绝不抛
-            if (File.Exists(file)) File.Delete(file);
-            Assert.Empty(News.Fetch(dead));
+        // 2) 拿不到 + 有缓存 → 回落缓存
+        //    「回落缓存不该改写缓存文件」这条现在由 Observe 的字节复核担保(锁内保证没人插进来)
+        var (cached, again) = Observe(
+            () => WritePayload(Py.L(PyDict.Of("title", "上次抓到的"))),
+            () => (News.Fetch(dead), News.LoadCached()), "回落缓存");
+        Assert.Single(cached);
+        Assert.Equal("上次抓到的", Py.S(((PyDict)cached[0]).Get("title")));
+        Assert.Equal("上次抓到的", Py.S(((PyDict)again[0]).Get("title")));
 
-            // 2) 拿不到 + 有缓存 → 回落缓存
-            Utils.WriteJson(News.CACHE, Py.L(PyDict.Of("title", "上次抓到的")));
-            List<object> cached = News.Fetch(dead);
-            Assert.Single(cached);
-            Assert.Equal("上次抓到的", Py.S(((PyDict)cached[0]).Get("title")));
-            // 回落缓存不该改写缓存文件
-            Assert.Equal("上次抓到的", Py.S(((PyDict)News.LoadCached()[0]).Get("title")));
-
-            // 3) 缓存是坏的 → 同样只回空,不抛
-            File.WriteAllText(file, "{ 坏缓存");
-            Assert.Empty(News.Fetch(dead));
-        });
+        // 3) 缓存是坏的 → 同样只回空,不抛
+        Assert.Empty(Observe(() => WriteRawBytes(Encoding.UTF8.GetBytes("{ 坏缓存")),
+            () => News.Fetch(dead), "坏缓存"));
     }
 
     [Fact]
     public void CachePath_IsUnderRootCacheDir()
     {
         Assert.Equal(PPath.Abs(PPath.Join(Utils.ROOT, "cache", "news.json")), DefaultCachePath());
-    }
-
-    // ————————————————— 工具 —————————————————
-
-    /// <summary>备份/还原缓存文件(同进程其它用例也可能读它)。</summary>
-    private static void WithCacheBackup(Action body)
-    {
-        string file = PPath.Abs(News.CACHE);
-        byte[] backup = File.Exists(file) ? File.ReadAllBytes(file) : Array.Empty<byte>();
-        try
-        {
-            body();
-        }
-        finally
-        {
-            if (backup.Length > 0)
-                File.WriteAllBytes(file, backup);
-            else if (File.Exists(file))
-                File.Delete(file);
-        }
     }
 }
