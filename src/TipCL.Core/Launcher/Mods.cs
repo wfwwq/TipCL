@@ -178,7 +178,7 @@ public static class Mods
 		Dictionary<string, string> dictionary = new Dictionary<string, string>
 		{
 			{ "Accept", "application/json" },
-			{ "User-Agent", "TipCL/1.0.10" }
+			{ "User-Agent", "TipCL/" + TipCL.Core.Launcher.AppInfo.APP_VERSION }
 		};
 		if (!string.IsNullOrEmpty(api_key))
 		{
