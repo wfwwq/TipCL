@@ -35,16 +35,36 @@ DENOMINATOR / DIRECTION (read this before quoting any number - see R30-WP3b 8)
 
   => `coverage` is the share that IS wired. It is NOT "how much of the UI is
      translated" and it must NOT be read backwards: a LOW coverage means MOST strings
-     are unwired. Measured on this tree (2026-11-15, R30-WP3d):
-       cjk_literals 4607 | wrapped 122 (2.65%) | unwrapped 4485 (97.35%)
-     i.e. 97.35% of the CJK literals do not consult the word table at all, so the
+     are unwired. Measured on this tree (2026-11-15, R30-WP6b = after the R-WP5-01
+     lexer fix below; the pre-fix numbers 4607/4485/97.35% were under-counted by 152):
+       cjk_literals 4759 | wrapped 122 (2.56%) | unwrapped 4637 (97.44%)
+     i.e. 97.44% of the CJK literals do not consult the word table at all, so the
      interface keeps showing Chinese even with language=en.
+
+Lexer fix (R-WP5-01, 2026-11-15)
+--------------------------------
+`Lexer._string()` used to miss the `}` of an interpolation hole when the hole itself
+contained a nested string: the nested-string skip returned the index of the closing
+quote and the loop then `continue`d *without* advancing, so the hole scan hunted for
+the *next* quote instead of resuming after this one, never found `}` at depth 0 and ran
+to EOF. The literal then swallowed the rest of the file and every later literal in that
+file became invisible. Trigger (src/TipCL.App/Pages/MultiplayerPage.cs:222):
+
+    _nodes.Text = nodes.Count == 0 ? "" : $"会合节点 {nodes.Count} 个:{string.Join("  ", nodes.Take(3))}";
+
+=> 6 files had a swallowing literal; 5 of them lost 152 CJK literals in total
+   (MultiplayerPage 76, SmokeRunner 55, ModsDialog 8, PluginsPage.Settings 7,
+   VersionManagePage 6) and the 6th (Ui/UiHelpers.cs) kept its Chinese in comments
+   only, so it never showed up in the counts. Detection is structural now, not
+   count-based: `python tools/i18n-audit.py --selfcheck` asserts that no literal runs to
+   EOF, that every interpolation hole is closed, and that no `"` is left unscanned
+   behind the last literal of a file.
 
 Reported numbers
 ----------------
   cjk_literals        every CJK string literal occurrence in the scanned tree
-  wrapped             CJK literals that go through a wrapper (wired, 2.65%)
-  unwrapped           CJK literals that do not (the localisation backlog, 97.35%)
+  wrapped             CJK literals that go through a wrapper (wired, 2.56%)
+  unwrapped           CJK literals that do not (the localisation backlog, 97.44%)
   coverage            wrapped / cjk_literals  <-- the SHARE THAT IS WIRED
   wrapped_keys        distinct wrapper argument values (the D-33 "key" universe)
   missing_en/_zh      wrapped_keys absent from that table  <-- the D-33 actionable 差集
@@ -107,16 +127,21 @@ Denominator / direction - READ THIS BEFORE QUOTING A NUMBER
   coverage     = wrapped / cjk_literals = the share that IS wired.
 
   coverage is NOT "how much of the UI is translated", and it must not be read backwards.
-  Last measured 2026-11-15 (R30-WP3d):
-      cjk_literals 4607 | wrapped 122 (2.65%) | unwrapped 4485 (97.35%)
-  => 97.35% of the CJK literals never consult the word table, which is why the UI stays
-     Chinese even with language=en. See progress/R30-WP3b.md 8 for the reconciliation.
+  Last measured 2026-11-15 (R30-WP6b, after the R-WP5-01 lexer fix; the pre-fix numbers
+  4607/4485/97.35% under-counted 152 literals in 5 files):
+      cjk_literals 4759 | wrapped 122 (2.56%) | unwrapped 4637 (97.44%)
+  => 97.44% of the CJK literals never consult the word table, which is why the UI stays
+     Chinese even with language=en. See progress/R30-WP3b.md 8 for the reconciliation
+     and progress/R30-WP6b.md for the 152-literal lexer defect.
 
 Options
   --json             machine-readable output
   --out PATH         write the report to PATH instead of stdout
   --list-unwrapped   also list every unwrapped literal with file:line
   --top-files N      how many files to list in the "unwrapped by file" table (default 20)
+  --selfcheck        assert the lexer invariants over every scanned file (exit 1 on
+                     failure). Run this after touching Lexer: a scanner that silently
+                     stops half-way through a file is exactly what R-WP5-01 was.
   --help, -h         this text
 """
 
@@ -142,47 +167,100 @@ ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", "a": "\a",
 
 
 class Lexer:
-    """String-literal scanner following I18nCheck.ScanCode / ScanString."""
+    """String-literal scanner following I18nCheck.ScanCode / ScanString.
+
+    Structural invariants (asserted by `run_selfcheck`, i.e. `--selfcheck`):
+      1. every literal ends *on* a closing quote: the returned offset is > start and
+         `s[ret - 1] == '"'`. A literal must never run to EOF;
+      2. every `{}` interpolation hole is closed by a `}` found at depth 0;
+      3. no line break inside a non-verbatim, non-raw literal (a plain `"..."` cannot
+         span lines in C#, so a span that does means the scanner has lost sync with the
+         quotes - the desync that follows shows up as wrong values, not as missing
+         counts);
+      4. no `"` is left unscanned behind the last literal of a file (quotes inside
+         comments and char literals do not count).
+    These are invariants, not counters, on purpose: R-WP5-01 was silent (the totals just
+    came out 152 too low), and the buggy literal satisfied "the scan reached EOF", so a
+    count- or EOF-based check would have stayed green. `self.anomalies` is empty for a
+    healthy tree.
+    """
 
     def __init__(self, text: str):
         self.s = text
         self.n = len(text)
-        self.lits = []  # (start_offset, value)
+        self.lits = []       # (start_offset, value)
+        self.spans = []      # (start_offset, offset_after_literal, terminated, may_span_lines)
+        self.anomalies = []  # (offset, kind, detail)
+        self.comments = []   # (start_offset, offset_after_comment) - for the tail check
+        self.chars = []      # (start_offset, offset_after_char_literal)
 
     def run(self):
         self._code(0, self.n)
         return self.lits
+
+    def _literal_start(self, i, end):
+        """True if a string literal starts at i (the prefixes C# allows)."""
+        s = self.s
+        if i >= end:
+            return False
+        c = s[i]
+        if c == '"':
+            return True
+        if c == "$":
+            return (i + 1 < end and s[i + 1] == '"') or \
+                   (i + 2 < end and s[i + 1] == "@" and s[i + 2] == '"')
+        if c == "@":
+            return (i + 1 < end and s[i + 1] == '"') or \
+                   (i + 2 < end and s[i + 1] == "$" and s[i + 2] == '"')
+        return False
 
     def _code(self, i, end):
         s = self.s
         while i < end:
             c = s[i]
             if c == "/" and i + 1 < end and s[i + 1] == "/":
+                start = i
                 while i < end and s[i] != "\n":
                     i += 1
+                self.comments.append((start, i))
                 continue
             if c == "/" and i + 1 < end and s[i + 1] == "*":
+                start = i
                 j = s.find("*/", i + 2)
                 i = end if j < 0 else j + 2
+                self.comments.append((start, i))
                 continue
             if c == "'":
+                start = i
                 i += 1
                 while i < end and s[i] != "'":
                     if s[i] == "\\":
                         i += 1
                     i += 1
                 i += 1
+                self.chars.append((start, min(end, i)))
                 continue
-            if c == '"' or (c == "@" and i + 1 < end and s[i + 1] == '"') \
-                    or (c == "$" and i + 1 < end and (s[i + 1] == '"'
-                        or (s[i + 1] == "@" and i + 2 < end and s[i + 2] == '"'))) \
-                    or (c == "@" and i + 1 < end and s[i + 1] == "$" and i + 2 < end
-                        and s[i + 2] == '"'):
+            if self._literal_start(i, end):
                 i = self._string(i, end)
                 continue
             i += 1
 
     def _string(self, start, end):
+        """Record one literal (scanned by `_literal`) and return the offset after it."""
+        ret, value, terminated, may_span_lines = self._literal(start, end)
+        self.lits.append((start, value))
+        self.spans.append((start, ret, terminated, may_span_lines))
+        if not terminated:
+            self.anomalies.append((start, "unterminated-literal",
+                                   "string literal opened at %d (line offset %d) is never closed"
+                                   % (start, start)))
+        return ret
+
+    def _literal(self, start, end):
+        """Scan one string literal without recording it.
+
+        Returns (offset_after_literal, value, terminated, may_span_lines).
+        """
         s = self.s
         i = start
         verbatim = interpolated = False
@@ -199,20 +277,26 @@ class Lexer:
                 j += 1
             fence = '"' * (j - i)
             close = s.find(fence, j)
-            if close < 0:
+            terminated = close >= 0
+            if not terminated:
                 close = end
             value = s[j:close]
             if interpolated:
                 value = value.replace("{{", "{").replace("}}", "}")
-            self.lits.append((start, value.strip("\r\n ")))
-            return min(end, close + len(fence))
+            ret = min(end, close + len(fence))
+            if not terminated:
+                self.anomalies.append((start, "unterminated-raw-string",
+                                       "raw string fence %r has no closing fence" % fence))
+            return ret, value.strip("\r\n "), terminated, True
         i += 1
         out = []
+        terminated = False
         while i < end:
             c = s[i]
             if c == '"':
                 if not verbatim or i + 1 >= end or s[i + 1] != '"':
                     i += 1
+                    terminated = True
                     break
                 out.append('"')
                 i += 2
@@ -248,6 +332,7 @@ class Lexer:
                     i += 2
                     continue
                 # skip the interpolation hole; remember it as {}
+                hole = i
                 depth = 0
                 j = i + 1
                 while j < end:
@@ -258,12 +343,31 @@ class Lexer:
                         if depth == 0:
                             break
                         depth -= 1
-                    elif d == '"':
-                        j = self._skip_nested_string(j, end)
+                    elif self._literal_start(j, end):
+                        # R-WP5-01: resume *after* the nested literal. Keeping j on its
+                        # closing quote (the old `continue`) made the hole scan jump from
+                        # quote to quote, skip the hole's `}` and run to EOF, so the
+                        # literal swallowed the rest of the file.
+                        #
+                        # Scanning the nested literal with `_literal` (not with the old
+                        # quote-to-quote shortcut) also fixes the *nested interpolated*
+                        # case, e.g. SmokeRunner.cs:459
+                        #   $"...({(acc.Total == 0 ? "无数据" : $"{acc.Ok}/{acc.Total}")})"
+                        # whose inner `{acc.Ok}` used to be mistaken for the hole's `}`,
+                        # leaving the scanner one quote out of sync for the rest of the
+                        # file (wrong values, same totals - which is why the desync check
+                        # below matters).
+                        nret, _v, _term, _sl = self._literal(j, end)
+                        j = min(end, nret)
                         continue
                     j += 1
                 out.append("{}")
                 i = min(end, j + 1)
+                if j >= end or s[j] != "}":
+                    self.anomalies.append(
+                        (hole, "unclosed-interpolation-hole",
+                         "interpolation hole opened at %d has no closing brace "
+                         "(hole scan stopped at %d, file length %d)" % (hole, j, self.n)))
                 continue
             if interpolated and c == "}" and i + 1 < end and s[i + 1] == "}":
                 out.append("}")
@@ -271,20 +375,7 @@ class Lexer:
                 continue
             out.append(c)
             i += 1
-        self.lits.append((start, "".join(out)))
-        return i
-
-    def _skip_nested_string(self, j, end):
-        # scan a nested string inside an interpolation hole; returns index of closing quote
-        s = self.s
-        j += 1
-        if j + 1 < end and s[j] == "{":
-            return j
-        while j < end and s[j] != '"':
-            if s[j] == "\\":
-                j += 1
-            j += 1
-        return j
+        return i, "".join(out), terminated, (verbatim or False)
 
 
 CALLEE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -350,6 +441,87 @@ def scan_file(path, root):
     return rel, rows, False
 
 
+def selfcheck_tree(root, src_dirs, show=10):
+    """Assert the Lexer invariants over the whole scanned tree.
+
+    Returns (lines, failures). See Lexer's docstring for what is asserted. The point is
+    to fail loudly when a scanner change (or a new C# construct) makes a file stop being
+    lexed half-way: that is invisible in the totals, which is how R-WP5-01 survived.
+    """
+    out = []
+    checked = literals = 0
+    failures = []
+    for d in src_dirs:
+        if not os.path.isdir(d):
+            continue
+        for f in iter_cs_files(d):
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+            rel = os.path.relpath(f, root).replace("\\", "/")
+            if is_file_ignored(text):
+                continue
+            checked += 1
+            lex = Lexer(text)
+            lex.run()
+            literals += len(lex.lits)
+            probs = list(lex.anomalies)
+            for start, ret, terminated, may_span_lines in lex.spans:
+                if not terminated:
+                    probs.append((start, "literal-not-closed",
+                                  "literal at %d (line %d) is not closed by a quote"
+                                  % (start, line_of(text, start))))
+                elif ret <= start or ret > len(text) or text[ret - 1] != '"':
+                    probs.append((start, "literal-does-not-end-on-a-quote",
+                                  "literal at %d (line %d) returned end offset %d, but "
+                                  "text[%d] is %r - the scanner did not stop on a closing quote"
+                                  % (start, line_of(text, start), ret, ret - 1,
+                                     text[ret - 1] if 0 < ret <= len(text) else None)))
+                elif not may_span_lines and "\n" in text[start:ret]:
+                    probs.append((start, "literal-crosses-a-line-break",
+                                  "a plain (non-verbatim, non-raw) literal at %d (line %d) "
+                                  "spans %d line breaks, which C# does not allow; the scanner "
+                                  "is out of sync with the quotes from here on (span %d..%d)"
+                                  % (start, line_of(text, start),
+                                     text[start:ret].count("\n"), start, ret)))
+            # Every '"' in code position must have been looked at: nothing may hide behind
+            # the end of the last literal. Quotes inside comments / char literals / the
+            # literals themselves do not count as hitting this invariant.
+            masked = sorted([(sp[0], sp[1]) for sp in lex.spans] + lex.comments + lex.chars)
+            last_q = text.rfind('"')
+            while last_q >= 0 and any(a <= last_q < b for a, b in masked):
+                last_q = text.rfind('"', 0, last_q)
+            reached = max([sp[1] for sp in lex.spans], default=0)
+            if last_q >= 0 and reached < last_q + 1:
+                probs.append((last_q, "tail-not-reached",
+                              "the file's last quote in code position is at %d (line %d) but "
+                              "lexing stopped at %d: %d bytes never scanned"
+                              % (last_q, line_of(text, last_q), reached, len(text) - reached)))
+            for off, kind, detail in probs:
+                if len(failures) < 200:
+                    failures.append("%s:%d  [%s] %s"
+                                    % (rel, line_of(text, off), kind, detail))
+    out.append("== i18n-audit --selfcheck (Lexer invariants) ==")
+    out.append("  files checked   : %d" % checked)
+    out.append("  literals lexed  : %d" % literals)
+    out.append("  scope           : %s"
+               % ", ".join(os.path.relpath(d, root).replace("\\", "/") for d in src_dirs))
+    out.append("  invariants      : (1) every literal ends on a closing quote; (2) every {..}"
+               " interpolation hole is closed at depth 0; (3) no line break inside a plain"
+               " literal (scanner desync); (4) no quote in code position is left behind the"
+               " last literal")
+    if failures:
+        out.append("  FAIL: %d problem(s) in the tree:" % len(failures))
+        for f in failures[:show]:
+            out.append("      " + f)
+        if len(failures) > show:
+            out.append("      ... and %d more" % (len(failures) - show))
+        out.append("  => a file is not being lexed correctly; the counts above cannot be"
+                   " trusted. See R-WP5-01 / R-WP5-06 (Lexer string scanning).")
+        return out, failures
+    out.append("  PASS: all %d files lexed to their end, no literal swallowed a file tail,"
+               " no desync." % checked)
+    return out, []
+
 def main(argv):
     if "--help" in argv or "-h" in argv:
         print(HELP)
@@ -369,6 +541,18 @@ def main(argv):
     top_files = 20
     if "--top-files" in argv:
         top_files = int(argv[argv.index("--top-files") + 1])
+
+    if "--selfcheck" in argv:
+        lines, failures = selfcheck_tree(root, src_dirs)
+        text = "\n".join(lines) + "\n"
+        if out_path:
+            with open(out_path, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(text)
+            print("wrote " + out_path)
+        else:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            print(text, end="")
+        return 1 if failures else 0
 
     tables, raw = {}, {}
     for lang in ("en", "zh_CN"):

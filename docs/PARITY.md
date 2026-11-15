@@ -148,7 +148,9 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 5. **Core 业务件**:`News`、`Worlds`、`Servers`、`Feedback`、`Repair`、`Themes`、`Thumbnails`、`UiLayout`、`Updater`、`Cleaner`、`ContentExport`、`HelpContent` —— 这些在 M4-D/P1/P2/P4 已陆续搬入 `src/TipCL.Core`(见 §3「已移植」);真正还缺的是 `Shortcut`(P3.5 已完成)与上表所列的 AI 服务层、插件宿主。
 6. ~~插件宿主全链~~:2026-11-12 P6 判定并落地 —— **文件级链路(市场/安装/更新/卸载/启停/日志/权限/开发链接)+ 壳侧(`plugin:` 页面、动态顶部页签、界面贡献快照)已真做**;需要在进程内跑插件代码或渲染插件网页的那一半不移植(无 Node 宿主、参考 .NET 契约基于 WPF),理由与逐项判定见 §7。
 7. **Services 视觉/交互件**:WebViewHost、SPanel、Wallpaper、SideFrost、SmoothScroll、LucideAssets(逐项结论见 §5);**`FileDrop/FileKinds` 已于 P6/P7 落地为代码级统一入口(见 §8)**;但 Linux/X11 上收不到系统拖放(平台限制,见 §8 首段与 D-38),真机可用入口是各页的显式导入按钮。
-8. **i18n(词表)—— 移植期一直缺,2026-11-14 补上,但只补了一半**:移植侧 `src/**` 下**没有 `locales/` 目录**、`TipCL.Core.csproj` 里没有任何 `EmbeddedResource`,而 `I18nCore.LoadStrings()` 是从内嵌资源 `TipCL.Core.locales.<name>.json` 读的 ⇒ 词表恒为空、`Tr()` 一律回落返回 key 本身,**把语言切成 English 后整站仍显示中文**(task-30 已修:内嵌 `en`/`zh_CN` 各 **2967** 键)。**但"英文界面"仍不成立,别当已完成**:静态查表调用点 **122** 处只命中 **61**(50.00%);全树 **4578** 条中文字面量里只有 **122** 条走了查表 ⇒ **约 4456 条换语言也不会变**(英文模式下仍是中文);未命中集中在 `Core/Plugins/PluginInstaller.cs`(22)、`Core/Launcher/Ai/Preview.cs`(22)、`App/Common/Api.cs`(14)、`Core/Launcher/Shortcut.cs`(2)、`App/Session/CommandLine.cs`(1),这些串在三份词表里**都不存在**(其中 35 条只是全角/半角字形漂移),**补译文属内容决策,已上报用户拍板**。三份词表**互不包含**(底表 2951 + 用户源码压缩包独有 16 = 2967),更新与重放方式见 `src/TipCL.Core/Resources/locales/README.md`。
+8. **i18n(词表)—— 移植期一直缺,2026-11-14 补上,但只补了一半**:移植侧 `src/**` 下**没有 `locales/` 目录**、`TipCL.Core.csproj` 里没有任何 `EmbeddedResource`,而 `I18nCore.LoadStrings()` 是从内嵌资源 `TipCL.Core.locales.<name>.json` 读的 ⇒ 词表恒为空、`Tr()` 一律回落返回 key 本身,**把语言切成 English 后整站仍显示中文**(task-30 已修:内嵌 `en`/`zh_CN`;**2026-11-15 复算:各 2995 键、两份键集相等、缺键 0**;来源与合成见 `src/TipCL.Core/Resources/locales/README.md`,该 README 的表仍是 task-30 当时的合成记录,键数此后已增长)。**但"英文界面"仍不成立,别当已完成**:全树 **4759** 条中文字面量(`src/TipCL.App` + `src/TipCL.Core`,304 个 `.cs`,`obj/bin` 排除)里只有 **122** 条走了词表 = **2.56%** ⇒ **4637 条(97.44%)换语言也不会变**(英文模式下仍是中文);未接线的 **3455** 个去重值里有 **1071**(31.00%)译文已存在、只差接线 ⇒ **接这 1071 处属下一轮 P4,补译文属内容决策(已上报用户拍板)**。覆盖率的**唯一口径** = `wrapped / cjk_literals`(「走词表」的比例,**别读反**),见 §9.17 与 `tools/i18n-audit.py --help`。
+
+   > **口径变更(2026-11-15,R-WP5-01 + R-WP5-06)**:本节此前引用的是 2026-11-14 的移植期旧口径 —— 它有两个互不相同的分母,且把 `L`/`Gt`/`T` 也算成查表包装器。`tools/i18n-audit.py` 的扫描器在「插值字符串的 `{}` 洞里含嵌套字符串」时会静默吞掉该文件剩余部分(6 个文件触发、其中 5 个文件少计 152 条中文字面量;已修,并新增 `--selfcheck` 结构不变量防止复发),`WRAPPERS` 也已收紧为 `{"Tr"}`(`I18nCore.cs:135`,本树唯一的真查表)。**旧值不再复述、不要再引用**;当前唯一口径见 §9.17、`progress/R30-WP6b.md` 与 `progress/R30-ACCEPT.md` §2.8。
 
 > 注:「真机 E2E(Fabric 安装、启动游戏)」依赖 Ubuntu 盒子(`mcp__box__*`),当前会话未接入,需盒子可用时执行。
 
@@ -750,7 +752,7 @@ $env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
 `" en "` → `"en"` 这一步**只有 `SetLanguage` 的规范化会做**(`LauncherConfig.Load` 会原样保留该值),所以这一行就是「配置 → `CurrentLang`」链接通的直接证据。
 
 > **8 帧冒烟矩阵无法体现这条修复**,原因有两条硬事实,都已实测:
-> 1. **8 个页面的可见文案里没有任何一处走词表。** 全仓 `Tr(` 调用点只落在 `Common/Api.cs`(55)、`Core/.../Ai/Preview.cs`(23)、`Core/Plugins/PluginInstaller.cs`(21)、`Common/Launch/LaunchCore.cs`(16)等**运行时消息**上;8 个冒烟页的 UI 文本全部是未接线的中文字面量(见 §9.15 那批报告的 i18n 审计:**全树 4607 条中文字面量里只有 122 条走词表 = 2.65%**,也就是 **97.35% 不走** —— `coverage` 是「走词表」的比例,**别读反**;口径与分母见 `tools/i18n-audit.py --help`)。
+> 1. **8 个页面的可见文案里没有任何一处走词表。** 全仓 `Tr(` 调用点只落在 `Common/Api.cs`(55)、`Core/.../Ai/Preview.cs`(23)、`Core/Plugins/PluginInstaller.cs`(21)、`Common/Launch/LaunchCore.cs`(16)等**运行时消息**上;8 个冒烟页的 UI 文本全部是未接线的中文字面量(见 §9.15 那批报告的 i18n 审计:**全树 4759 条中文字面量里只有 122 条走词表 = 2.56%**,也就是 **97.44% 不走** —— `coverage` 是「走词表」的比例,**别读反**;口径与分母见 `tools/i18n-audit.py --help`)。
 > 2. **唯一随语言变化的界面元素在折叠线以下。** 设置页「语言」下拉 + 预览行位于「通用」页 `壁纸` 之后,而主窗尺寸是 `MainWindow.axaml` 里写死的 `Width="900" Height="550"`。
 
 **逐像素实测**(两次运行使用**完全相同的 home 路径**,只改 `language`):`lang=en` vs `lang=zh_CN` → 8 帧中 **7 帧逐字节相同、`diff_pixels` 全 0**;`library-dark` 差 **1 个像素**,而该像素在「同一语言跑两遍」的对照里也出现 ⇒ 属抗锯齿抖动底噪,与语言无关。
@@ -759,4 +761,4 @@ $env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
 
 > ⚠️ **踩过的坑(记下来省得再踩)**:第一次对比用的是两个**名字不同**的输出目录(`lang-en` / `lang-zh_CN`),结果 `library` / `library-dark` 稳定差约 70 像素。原因**不是语言**,而是**库页会把数据目录路径画在界面上**,而那条路径里带着我自己的输出目录名。把两次运行的 home 路径做成完全一致后差异归零。**做逐像素 A/B 时,隔离目录的名字本身就是一个变量。**
 
-**结论**:语言设置**接线已通**(机制层已验证),但「中英双语界面」在 8 个静态页面上**仍然看不出来**。要让界面整体切换,需要先把那 **1024 处「已有译文、只是没接线」的字面量**接上(见 R30-WP3 报告 §5.2 的 P4)。
+**结论**:语言设置**接线已通**(机制层已验证),但「中英双语界面」在 8 个静态页面上**仍然看不出来**。要让界面整体切换,需要先把那 **1071 处「已有译文、只是没接线」的字面量**接上(见 R30-WP3 报告 §5.2 的 P4)(分母口径说明:R30-WP3 §5.2 当时用的是那一轮扫描器的口径,不是本文这个口径。)
