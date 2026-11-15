@@ -25,7 +25,7 @@ public sealed class BlockSpec
 
 // 页面区块宿主(WP-U1 冻结契约,公共 API 一字不改):
 //   常态按布局文档顺序渲染非隐藏区块,视觉零装饰(间距/边距对齐 PageBase.ScrollBody,默认渲染与旧版逐像素等价);
-//   Root 右键「自定义布局…」(specs.Count >= 2 才有该菜单项)进入编辑模式;
+//   右键「自定义布局…」进入编辑模式(菜单由 LayoutShellHooks 的全局钩子弹,本类不挂 ContextMenu);
 //   编辑态的拖拽重排 / 显隐 / 托盘 / 工具条在 LayoutEditor 里。
 //   L1 起:本类只是 LayoutEditor(布局引擎 + v2 持久化)的薄壳 —— 不再直接读写 ui_page_layouts.json,
 //   真源是 ui_layout_v2.json(LayoutStoreV2),v1 由 v2 单向写通;BlockSpec / 构造签名 / Root / Changed 均未变。
@@ -50,24 +50,9 @@ public sealed class BlockHost : UserControl
 		};
 		base.Focusable = false;
 		base.Content = _editor.Root;
-		// 入口:右键菜单(≥1 个区块就有「自定义布局...」;页面内容自带 ContextMenu 时天然对方优先)。
-		// [layout-fix] 规格 §3-问题5:门槛从「区块数 ≥ 2」改成「≥ 1」——
-		// 启动页(新闻/下载任务/游戏时长/便签/日志只占页面底部一条)这类页面过去右键落不到菜单上,
-		// 单块页同样应该能右键进去调外观 / 标题 / 显隐。
-		if (specs != null && specs.Count >= 1)
-		{
-			ContextMenu contextMenu = new ContextMenu();
-			MenuItem menuItem = new MenuItem
-			{
-				Header = I18n.L("自定义布局...")
-			};
-			menuItem.Click += delegate
-			{
-				_editor.EnterEdit();
-			};
-			contextMenu.Items.Add(menuItem);
-			base.ContextMenu = contextMenu;
-		}
+		// 入口:右键菜单统一由主窗口的全局钩子弹(LayoutShellHooks:「自定义布局...」/ 编辑中的「完成编辑」
+		//「重置本页布局」/「布局设置...」)。宿主自己不再挂 ContextMenu —— 钩子沿祖先链遇到自带菜单就让位,
+		// 宿主一挂,整页右键就只剩这一项。页面要专属菜单就自己挂(实例库的文件夹栏 / 导入导出)。
 		base.Loaded += delegate
 		{
 			App.ThemeVisualsChanged -= _themeRefresh;

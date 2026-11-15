@@ -651,6 +651,31 @@ public static class LayoutEngine
 		return ((id.Length > 0) ? id : null);
 	}
 
+	/// <summary>
+	/// 自建区块定义的指纹:<c>custom:&lt;widgetId&gt;</c> → 该定义的 JSON 文本,文档里没有这个定义 → "";
+	/// 不是自建块返回 null。匹配规则同 WidgetRegistry.FindWidgetById(按 id 取第一个)。
+	/// 编辑器按块 id 常驻缓存卡片,重新装载时拿它比对:指纹变了才丢掉那张卡重建。
+	/// </summary>
+	public static string? WidgetSignature(LayoutBody? body, string? blockId)
+	{
+		string? widgetId = WidgetIdOf(blockId);
+		if (widgetId == null)
+		{
+			return null;
+		}
+		if (body?.Widgets != null)
+		{
+			foreach (WidgetDef widget in body.Widgets)
+			{
+				if (widget != null && string.Equals(widget.Id, widgetId, StringComparison.Ordinal))
+				{
+					return System.Text.Json.JsonSerializer.Serialize(widget.ToDict());
+				}
+			}
+		}
+		return "";
+	}
+
 	/// <summary>拆插件块 id:<c>plugin:&lt;plugin&gt;:&lt;blockId&gt;</c> → (plugin, blockId);不是插件块返回 false。</summary>
 	public static bool TryParsePluginId(string? blockId, out string plugin, out string inner)
 	{
@@ -841,6 +866,41 @@ public static class LayoutEngine
 			doc.Layout = new LayoutBody();
 		}
 		doc.Layout.Pages[pageId] = page;
+	}
+
+	/// <summary>
+	/// 同上,但写回 <paramref name="variant"/> 那一份(<see cref="LayoutVariants.SourceOf"/> 的结果;空串 = 主 body):
+	/// 窄窗下显示的是变体,改动也只能写变体,否则会把"窄版 + 这次改动"盖到宽版上。
+	/// </summary>
+	public static void ApplyPage(LayoutV2 doc, string pageId, PageLayoutV2 page, string? variant)
+	{
+		if (string.IsNullOrEmpty(variant))
+		{
+			ApplyPage(doc, pageId, page);
+			return;
+		}
+		if (doc == null || string.IsNullOrEmpty(pageId) || page == null)
+		{
+			return;
+		}
+		if (doc.Layout == null)
+		{
+			doc.Layout = new LayoutBody();
+		}
+		if (doc.Layout.Variants == null)
+		{
+			doc.Layout.Variants = new Dictionary<string, LayoutBody>(StringComparer.Ordinal);
+		}
+		if (!doc.Layout.Variants.TryGetValue(variant, out LayoutBody? body) || body == null)
+		{
+			body = new LayoutBody();
+			doc.Layout.Variants[variant] = body;
+		}
+		if (body.Pages == null)
+		{
+			body.Pages = new Dictionary<string, PageLayoutV2>(StringComparer.Ordinal);
+		}
+		body.Pages[pageId] = page;
 	}
 
 	/// <summary>把"顺序 + 显隐 + span"写成 v1 子集口径的块列表(顺序即顺序,隐藏项也占位)。</summary>
@@ -2216,6 +2276,24 @@ public static class LayoutVariants
 			return fromMain;
 		}
 		return null;
+	}
+
+	/// <summary>
+	/// <see cref="PageOf"/> 读的是哪一份:变体里有该页就返回变体名,否则空串(主 body 或白名单默认)。
+	/// 编辑器写回时把它交给 <see cref="LayoutEngine.ApplyPage(LayoutV2, string, PageLayoutV2, string)"/>,显示哪份就写哪份。
+	/// </summary>
+	public static string SourceOf(LayoutBody? body, string pageId, double availableWidth, double threshold)
+	{
+		if (body == null || string.IsNullOrEmpty(pageId))
+		{
+			return "";
+		}
+		LayoutBody? variant = BodyOf(body, availableWidth, threshold);
+		if (variant != null && variant.Pages != null && variant.Pages.TryGetValue(pageId, out PageLayoutV2? fromVariant) && fromVariant != null)
+		{
+			return NameOf(availableWidth, threshold);
+		}
+		return "";
 	}
 }
 

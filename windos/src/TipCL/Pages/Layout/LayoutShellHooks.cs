@@ -12,7 +12,8 @@ namespace TipCL.Pages.Layout;
 /// <summary>
 /// [layout-fix] 规格 §4-能力1 + §3-问题3 + 规格2-问题1:主窗口级的两个钩子(在 MainWindow 构造时挂一次)。
 ///   1) 全局右键「自定义布局...」:页面里任何**没有自带右键菜单**的地方(空白处 / 按钮 / 卡片 / 页头……)右键都弹菜单。
-///      文本框、密码框和本来就有右键菜单的控件保持原样。菜单项 =「自定义布局...」/「完成编辑」(正在编辑时)/
+///      文本框、密码框和本来就有右键菜单的控件保持原样(区块宿主 BlockHost 自己不挂菜单,否则整页都被它挡住)。
+///      菜单项 =「自定义布局...」(没在编辑时)/「完成编辑」「重置本页布局」(正在编辑时)/
 ///      分隔线 /「布局设置...」。目标的选取顺序 = 鼠标所在元素最内层的区块宿主 → 包含鼠标位置的最小宿主
 ///      → 页面里最大的宿主;当前页面完全没有可拖动的区块时给一句提示(指向「设置 → 布局」),而不是右键了没反应。
 ///   2) 统一滚轮:最内层能滚就交给原生逻辑(保留 SmoothScroll 的平滑动画);最内层滚不动(没高度 / 已经到头)
@@ -145,16 +146,20 @@ public static class LayoutShellHooks
 			return host.Editor.IsEditing;
 		});
 		ContextMenu menu = new ContextMenu();
-		MenuItem enter = new MenuItem
+		// 编辑中不再给「自定义布局...」:点了只会落到已经在编辑的宿主上,什么也不发生
+		if (editing == null)
 		{
-			Header = I18n.L("自定义布局...")
-		};
-		enter.Click += delegate
-		{
-			EnterEditAt(win, page, source, point);
-		};
-		menu.Items.Add(enter);
-		if (editing != null)
+			MenuItem enter = new MenuItem
+			{
+				Header = I18n.L("自定义布局...")
+			};
+			enter.Click += delegate
+			{
+				EnterEditAt(win, page, source, point);
+			};
+			menu.Items.Add(enter);
+		}
+		else
 		{
 			MenuItem done = new MenuItem
 			{

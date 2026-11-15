@@ -71,6 +71,41 @@ public class AuditFixTests
 		Assert.Equal(3, north.Y);
 	}
 
+	// ————— D-03:窄窗下显示的是变体,改动写回变体,不盖掉宽版 —————
+
+	[Fact]
+	public void NarrowVariantIsTheSourceOnlyWhenItHasThePage()
+	{
+		LayoutBody body = new LayoutBody();
+		body.Pages["p"] = new PageLayoutV2();
+		body.Pages["q"] = new PageLayoutV2();
+		body.Variants[LayoutVariants.Narrow] = new LayoutBody();
+		body.Variants[LayoutVariants.Narrow].Pages["p"] = new PageLayoutV2();
+
+		Assert.Equal(LayoutVariants.Narrow, LayoutVariants.SourceOf(body, "p", 600, 760));
+		Assert.Equal("", LayoutVariants.SourceOf(body, "p", 1200, 760));
+		Assert.Equal("", LayoutVariants.SourceOf(body, "q", 600, 760));
+		Assert.Equal("", LayoutVariants.SourceOf(body, "p", 0, 760));
+	}
+
+	[Fact]
+	public void ApplyPageWritesBackToTheVariantItWasReadFrom()
+	{
+		LayoutV2 doc = new LayoutV2();
+		PageLayoutV2 wide = new PageLayoutV2 { Blocks = new List<BlockLayout> { new BlockLayout { Id = "a", W = 8, H = 1 } } };
+		doc.Layout.Pages["p"] = wide;
+		PageLayoutV2 narrow = new PageLayoutV2 { Blocks = new List<BlockLayout> { new BlockLayout { Id = "a", W = 12, H = 2 } } };
+
+		LayoutEngine.ApplyPage(doc, "p", narrow, LayoutVariants.Narrow);
+		Assert.Same(wide, doc.Layout.Pages["p"]);
+		Assert.Same(narrow, doc.Layout.Variants[LayoutVariants.Narrow].Pages["p"]);
+
+		PageLayoutV2 edited = narrow.Clone();
+		LayoutEngine.ApplyPage(doc, "p", edited, "");
+		Assert.Same(edited, doc.Layout.Pages["p"]);
+		Assert.Same(narrow, doc.Layout.Variants[LayoutVariants.Narrow].Pages["p"]);
+	}
+
 	// ————— D-04 / M-01 / G-01:编辑器工具条与实例库菜单共用的页面布局导入 —————
 
 	[Fact]
@@ -149,5 +184,31 @@ public class AuditFixTests
 		Assert.Equal(0, PageLayoutIO.MergeImport(doc, LayoutStoreV2.ExportJson(new LayoutV2())));
 		Assert.Empty(doc.Layout.Pages);
 		Assert.ThrowsAny<Exception>(() => PageLayoutIO.MergeImport(doc, "{\"kind\":\"something-else\"}"));
+	}
+
+	// ————— F-01:自建块定义变了才重建那张卡 —————
+
+	[Fact]
+	public void WidgetSignatureChangesOnlyWhenThatDefinitionChanges()
+	{
+		LayoutV2 doc = new LayoutV2();
+		WidgetDef note = new WidgetDef { Id = "w-note", Type = "note", Title = "便签" };
+		note.Settings["text"] = "第一版";
+		doc.Layout.Widgets.Add(note);
+		doc.Layout.Widgets.Add(new WidgetDef { Id = "w-clock", Type = "clock", Title = "时钟" });
+
+		string? before = LayoutEngine.WidgetSignature(doc.Clone().Layout, "custom:w-note");
+		Assert.False(string.IsNullOrEmpty(before));
+		Assert.Equal(before, LayoutEngine.WidgetSignature(doc.Clone().Layout, "custom:w-note"));
+
+		doc.Layout.Widgets[1].Title = "别的时钟";
+		Assert.Equal(before, LayoutEngine.WidgetSignature(doc.Clone().Layout, "custom:w-note"));
+
+		note.Settings["text"] = "第二版";
+		Assert.NotEqual(before, LayoutEngine.WidgetSignature(doc.Clone().Layout, "custom:w-note"));
+
+		Assert.Equal("", LayoutEngine.WidgetSignature(doc.Layout, "custom:w-gone"));
+		Assert.Equal("", LayoutEngine.WidgetSignature(null, "custom:w-note"));
+		Assert.Null(LayoutEngine.WidgetSignature(doc.Layout, "hero"));
 	}
 }

@@ -708,6 +708,9 @@ public partial class MainWindow : Window
 		case "ui_changed":
 			ScheduleRefresh();
 			break;
+		case "game_exited":
+			PlaytimeWidget.NotifyChanged();
+			break;
 		case "finished":
 			if (!ev.Success)
 			{
