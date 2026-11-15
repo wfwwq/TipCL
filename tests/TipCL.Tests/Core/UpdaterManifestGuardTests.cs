@@ -63,7 +63,7 @@ public class UpdaterManifestGuardTests
         //    那份 sha256 就只能是格式非法值:填一个 64 位十六进制的"真值"等于伪造发布状态
         //    (那个 release 资产并不存在),而且它会被 `ValidSha256` 当成可用更新接受。
         //    注意判据是 `Newer` 为假、不是"版本号相等":当前清单写 `0.1.0-m3` 而客户端
-        //    `AppInfo.APP_VERSION` 已经到 `1.1.0`,两者并不相等,但同样属于"没发过版"。
+        //    `AppInfo.APP_VERSION` 已经到 `1.2.0`,两者并不相等,但同样属于"没发过版"。
         if (!Updater.Newer(version, AppInfo.APP_VERSION))
         {
             // 先证明这条断言不是摆设:`ValidSha256` 对"64 个 0"这种假值**是**返回 true 的,
@@ -87,10 +87,10 @@ public class UpdaterManifestGuardTests
     /// 仓库里那份清单**原样**喂给 `Updater.Check()`:它**绝不能**让客户端以为"有更新"。
     ///
     /// 实测现状(这条也把真实行为记下来,免得下一位误解):仓库里那份清单写的是 `0.1.0-m3`,
-    /// 而客户端 `AppInfo.APP_VERSION` 已经是 `1.1.0` —— 清单**比客户端旧**,`Newer` 为假
+    /// 而客户端 `AppInfo.APP_VERSION` 已经是 `1.2.0` —— 清单**比客户端旧**,`Newer` 为假
     /// ⇒ `has_update=false`、`ok=true`、文案是「已是最新版本」。
     /// 也就是说这份未发版的占位清单是**中性**的:既不伪造更新,也不会误报"被拒绝"。
-    /// (要真正闭环自动更新,得发一个**版本号高于 `1.1.0`** 的包并填上它自己的 sha256。)
+    /// (要真正闭环自动更新,得发一个**版本号高于 `1.2.0`** 的包并填上它自己的 sha256。)
     /// </summary>
     [Fact]
     public void CommittedManifest_AsIs_NeverClaimsAnUpdateIsAvailable()

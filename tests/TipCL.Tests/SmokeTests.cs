@@ -11,7 +11,7 @@ public class SmokeTests
     [Fact]
     public void CoreVersion_MatchesTheUnifiedProductVersion()
     {
-        // 2026-11-14 起移植侧产品版本统一为 1.1.0:两个 csproj 的 <Version> + CoreInfo.Version
+        // 2026-11-14 起移植侧产品版本统一为 1.1.0,2026-11-15 抬到 1.2.0:两个 csproj 的 <Version> + CoreInfo.Version
         // (启动横幅 / HTTP UA / 插件宿主默认版本)都必须与 AppInfo.APP_VERSION 一致
         // (三处一致的约定见 docs/README.md)。
         Assert.Equal("1.2.0", CoreInfo.Version);

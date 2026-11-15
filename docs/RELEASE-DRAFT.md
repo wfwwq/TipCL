@@ -117,6 +117,16 @@ windos/docs/size-report.md:10      (历史体积报表)
 ⇒ 两条路选一条,**不要混**:① 发布时由人把 W1/W3 的标准件**手工上传**(推荐,零改动);② 改 `release.yml` 给 Windows job 加上那两个参数(需 `.github/` 的属主动手 —— **不是 WP-1 的地盘**)。
 **本轮不碰 `release.yml`**,只把冲突如实记在这里。
 
+**⚠️ 可选清理项(低优先级,发版前不要动):`build-both.ps1` 的 `-Dist` 用了硬编码绝对路径 + 旧布局名。**
+`windos\tools\build-both.ps1:103,126` 把产物复制到 `D:\项目\tipcl\windos\dist`。
+**这里更正一处此前的误述**:`D:\项目\tipcl` 与 `D:\项目\TipCL` 在大小写不敏感的文件系统上是**同一个目录**
+(`(Get-Item 'D:\项目\tipcl').FullName -eq (Get-Item 'D:\项目\TipCL').FullName` → `True`),
+所以它就是**仓库内**的 `<repo>\windos\dist`,与相对路径 `windos/dist` 是同一落点;
+仓库根 `.gitignore` 的 `dist/`(无前导斜杠 ⇒ 匹配任意层级)也覆盖它,**不会污染 `git status`**。
+⇒ 它是「**硬编码绝对路径 + 旧布局名**」的**可移植性瑕疵**(换台机器/换 clone 路径带 `-Dist` 跑,会在 `D:\项目\tipcl\...` 这个陌生位置建目录),
+**不是脏写、不是红线风险**;而且本草案的 Windows 链路**不依赖它**(§2.1 的 W2/W3 是手工留档,§2.1 顶部也明确"发布重切不带 `-Dist`")。
+⇒ **发版前不改这个脚本**;是否清理(改成 `$Repo\windos\dist` / 去掉开关 / 保持现状)由用户拍板。
+
 ### 2.2 Linux / Avalonia 链路
 
 | # | 动作 | 命令 / 说明 |
