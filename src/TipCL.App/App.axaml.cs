@@ -16,6 +16,14 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // R30-WP3b:语言设置接线。此前整棵 Linux 树没有任何地方调用 I18nCore.InitLanguage(),
+        // 于是 CurrentLang 永远是字段初值 "zh_CN" —— 设置页写进 config.json 的 language
+        // 从来没有人读回来,界面上的「重启后完全生效」是空承诺。
+        // 这里在建任何窗口/页面之前补上这一次调用(必须在 lifetime 判断之外:
+        // --smoke 走 SetupWithoutStarting(),此时没有 classic desktop lifetime,
+        // 放进 if 里就覆盖不到无头截图路径,本项修复也就无法自证)。
+        TipCL.Core.Launcher.I18nCore.InitLanguage();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             TipCL.App.Pages.Layout.LayoutFx.Wire(); // M2-B4：布局 JSON 导出/导入与 Toast 接线

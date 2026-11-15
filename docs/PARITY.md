@@ -735,3 +735,28 @@ $env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
 **跨端往返风险(即使本轮不移植也需知道)**:Windows 端 v2 保存时会由 v2 重建 v1 子集并原子写 `ui_page_layouts.json`(§3.3 第 3 行),所以 Linux 读 v1 永远读得到正确的顺序与显隐。但反过来:用户在 **Linux** 上改了布局 → v1 变"新鲜" → Windows 端按 §3.3 第 2 行会**提示「检测到旧格式更新,是否并入」**。新的 `ui_layout_v2.json` Linux 端既不认识也不会写,故 v2 侧新字段不会丢。
 
 **建议**:R30 发布说明中 layout-v2 标注为 **Windows-only**;Linux 端维持 v1 读取(行为零变化)。若后续要移植,**先做前置 1**(把 5 个模型文件搬进 `src/TipCL.Core/`、取消 `Core→Pages` 反向引用),再单独评估 UI 重写。
+
+### 9.17 Linux 端语言设置接线(R30 / WP-3b,2026-11-15)
+
+**修的是什么**:`I18nCore.InitLanguage()` 此前在整棵 Linux 树**没有任何调用点**,于是 `CurrentLang` 永远是字段初值 `zh_CN` —— 设置页写进 `config.json` 的 `language` 从来没有人读回来(界面上的「重启后完全生效」是空承诺)。修法只有一次调用:补在 `src/TipCL.App/App.axaml.cs` 的 `OnFrameworkInitializationCompleted()` 里、**且在 lifetime 判断之外**(`--smoke` 走 `SetupWithoutStarting()`,此时没有 classic desktop lifetime;放进 `if` 里就覆盖不到无头截图路径)。**写入侧本来就是通的**:`set_language` → `I18nCore.SetLanguage` → `Config.CONFIG.Set("language", s)` + `Save()`。
+
+**验证(机制层,可复核)**:在隔离 `TIPCL_HOME` 里预置 `config.json` 的 `language`,启动后读回:
+
+| 预置值 | 启动后被改写成 | 说明 |
+|---|---|---|
+| `" en "` | `"en"` | `InitLanguage` 跑了,且**接受了 `en`**(`SetLanguage` 先 strip 再校验) |
+| `" fr "` | `"zh_CN"` | 词表里没有 `fr` → 回落默认语言 |
+
+`" en "` → `"en"` 这一步**只有 `SetLanguage` 的规范化会做**(`LauncherConfig.Load` 会原样保留该值),所以这一行就是「配置 → `CurrentLang`」链接通的直接证据。
+
+> **8 帧冒烟矩阵无法体现这条修复**,原因有两条硬事实,都已实测:
+> 1. **8 个页面的可见文案里没有任何一处走词表。** 全仓 `Tr(` 调用点只落在 `Common/Api.cs`(55)、`Core/.../Ai/Preview.cs`(23)、`Core/Plugins/PluginInstaller.cs`(21)、`Common/Launch/LaunchCore.cs`(16)等**运行时消息**上;8 个冒烟页的 UI 文本全部是未接线的中文字面量(见 §9.15 那批报告的 i18n 审计:整树绕词率 **3.02%**)。
+> 2. **唯一随语言变化的界面元素在折叠线以下。** 设置页「语言」下拉 + 预览行位于「通用」页 `壁纸` 之后,而主窗尺寸是 `MainWindow.axaml` 里写死的 `Width="900" Height="550"`。
+
+**逐像素实测**(两次运行使用**完全相同的 home 路径**,只改 `language`):`lang=en` vs `lang=zh_CN` → 8 帧中 **7 帧逐字节相同、`diff_pixels` 全 0**;`library-dark` 差 **1 个像素**,而该像素在「同一语言跑两遍」的对照里也出现 ⇒ 属抗锯齿抖动底噪,与语言无关。
+
+**修复前后对照**(同一 home 路径、默认语言、pre-fix 二进制 vs post-fix 二进制):**7/8 帧逐字节相同**,第 8 帧(`library`)只差 **5 个单像素**,且这 5 个像素与「同一构建同一语言跑两遍」的差异集合**完全一致** ⇒ 默认可视行为未变。
+
+> ⚠️ **踩过的坑(记下来省得再踩)**:第一次对比用的是两个**名字不同**的输出目录(`lang-en` / `lang-zh_CN`),结果 `library` / `library-dark` 稳定差约 70 像素。原因**不是语言**,而是**库页会把数据目录路径画在界面上**,而那条路径里带着我自己的输出目录名。把两次运行的 home 路径做成完全一致后差异归零。**做逐像素 A/B 时,隔离目录的名字本身就是一个变量。**
+
+**结论**:语言设置**接线已通**(机制层已验证),但「中英双语界面」在 8 个静态页面上**仍然看不出来**。要让界面整体切换,需要先把那 **1024 处「已有译文、只是没接线」的字面量**接上(见 R30-WP3 报告 §5.2 的 P4)。
