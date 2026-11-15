@@ -1168,6 +1168,6 @@
   c) **凡是启动 App 的脚本,必须回读应用日志里的 `home=` 并断言**它等于预期的隔离目录 —— 这是唯一能在"静默写错地方"时当场抓住的判据(WP-3b 就是靠它当场发现的)。
   d) `.ps1` 里的**绝对路径一律给全**(PS 5.1 的 `Set-Location` **不会**同步 .NET 的当前目录,`[IO.File]::ReadAllBytes('docs\x.md')` 这类相对路径会解析到会话起始目录)。
 - 理由:这两个坑的共同特征是**失败是静默的**(不抛异常、退出码 0),只能靠"落地位置对不对"这类**外部断言**发现;而它们各自的后果都不轻 —— 一个让产物凭空消失,一个直接污染真实用户数据。
-- 数据:WP-1 报告 §4.6 / §7.2;WP-4 报告 §9.6;WP-3b 报告 §8.1。主 agent 处置:核实内容后删除乱码树的 `progress\` 子树(同树下 `_tmp\` 是上一轮遗留、空目录,未动);并**独立复核**用户主目录 —— `config.json` / `ai_chats.json` / `ui-theme.json` / `phone_link.json` / `accounts.json` / `ai_memory.md` 全部 absent,`logs\` 与 `cache\` 目录都不存在。
+- 数据:WP-1 报告 §4.6 / §7.2;WP-4 报告 §9.6;WP-3b 报告 §8.1。主 agent 处置:核实内容后删除乱码树的 `progress\` 子树;同树下 `_tmp\tasks\win-accept-aipage` 是上一轮(2026-11-14)遗留的**空目录树**,R30 收尾时已复核「无任何文件」后一并删除,`D:\椤圭洰` 这棵乱码树**现已不存在**(`Test-Path` = False);并**独立复核**用户主目录 —— `config.json` / `ai_chats.json` / `ui-theme.json` / `phone_link.json` / `accounts.json` / `ai_memory.md` 全部 absent,`logs\` 与 `cache\` 目录都不存在。
 - 可回滚:是(纯纪律,无代码影响)。
 - 偏离提示:**「加 UTF-8 BOM」和「纯 ASCII」二选一,别一半一半** —— 只加 BOM 不加 ASCII 也安全,只写 ASCII 不加 BOM 也安全,但"中文 + 无 BOM"就是上面第 1 条。另外:**下一个在本机写 `.ps1` 的人,请把这条当成硬约束**,而不是"这次小心点"。
