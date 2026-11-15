@@ -1,20 +1,21 @@
 # TipCL R30 发版草案(RELEASE-DRAFT)
 
-> **状态:全部未生效。** 本文件只记录"发版那天要做什么、要填什么",**不构成任何发布动作**。
+> **状态:仍是草案;版本号一项已由用户拍板生效(R31,见 §0)。** 本文件只记录"发版那天要做什么、要填什么",**不构成任何发布动作**。
 > 本轮(R30-WP1)**没有** push、**没有**打 tag、**没有**发 release,**没有**改 `update.json` / `update-linux.json` 的任何一个字节。
 > 落笔:`2026-11-15`(本地 +08:00),`R30-WP1` 工作包;工作树基线 HEAD = `25c4e64c0104d83514dfbcf31b684f7e302f0349`(见 §1.5 的"演练产物不可复现"说明)。
 > **`R30-WP6c` 补记(2026-11-15,落笔时工作树 HEAD = `34006c6`)**:按总验收报告 `progress/R30-ACCEPT.md` §4 的返工单 `R-WP5-03 / R-WP5-04 / R-WP5-05 / R-WP5-07` 修正了本文件里若干**过期或与 HEAD 不符的口径**,改动集中在 §1.2 / §1.2.1 / §1.2.2 / §2.1(W5)/ §3.2 / §3.5 / §4 / §5。**本轮没有改任何版本号生效值,清单三行仍是 `<<...>>` 占位。** **⚠️ HEAD 会随并行提交继续前进**(核对期间已从 `3fdee8a` 走到 `09ea6eb`);全文凡"HEAD = xxx"的表述一律以**发版那天冻结的那个 commit**为准,见 §1.5 末条。
+> **`R31` 补记(2026-11-15,施工成员 `rel-version`)**:用户**已拍板版本号 = `1.2.0`**(口径与依据见 §0),本文件里"版本号是占位 / 待拍板 / 拍板后再替换一次"的写法**全部改成已定稿生效**;**版本号的值一个都没改**(§1.1 的 13 条本来就是 `1.2.0`)。同一轮按拍板落地了 §1.2.1 的硬编码版本串:**形态 A 与 B 的活字面量已改为派生自 `AppInfo.APP_VERSION`**(提交 `5056f5b` / `6ea4a24`,逐处清单见 §1.2.3),**形态 C(`-Dminecraft.launcher.version=1.0.10`)按拍板明确保留不改**;**清单三行仍未填**(那是发版当天在真资产上算出来的,见 §2.3)。
 
 ---
 
-## 0. 先把口径钉死:版本号是**占位**,不是生效值
+## 0. 先把口径钉死:版本号**已定稿生效 = `1.2.0`**(用户 2026-11-15 拍板)
 
 | 项 | 值 | 说明 |
 |---|---|---|
-| 本轮演练用的占位号 | **`1.2.0`** | 用户尚未拍板。这只是为了让"版本号统一 + 构建 + 测试"这条链路能被真跑一遍。 |
-| **WP-1 的推荐号** | **`1.2.0`** | 理由见下面 5 条。 |
-| 硬约束(不可违反) | **必须严格大于 `1.1.0`** | 更新判据是 `Updater.Newer(remote, local = AppInfo.APP_VERSION)`,**严格大于**;填成等于则预览永远是「已是最新版本」(实测见 §3.4 case 2)。 |
-| 用户拍板后要不要再改一次 | **要**。一次纯文本替换,共 **13 个落点** | 清单见 §1.1 表(13 行)+ §1.2。这是一次机械替换,没有逻辑改动。(**`R-WP5-04`/`R30-WP6c` 更正**:此处原写"12 个落点",与 §1.1 的 13 行、§1.2 的"13 条"自相矛盾;实测落点 = **13**,逐行核对见 `progress/evidence/wp5c/veri-docs.md` §3.1。) |
+| **生效版本号(已定稿)** | **`1.2.0`** | 用户 **2026-11-15 明确拍板**取 `1.2.0`,依据就是下面 5 条推荐理由(+ 同号约束)。§1.1 的 13 个落点已经是这个值 ⇒ 本文件原先写的"占位号 / 待拍板 / 拍板后再替换一次"**全部作废**,改为**生效值**。 |
+| 这个号的来源 | WP-1 推荐号 `1.2.0` + 用户 2026-11-15 拍板 | 推荐理由见下。 |
+| 硬约束(不可违反) | **必须严格大于 `1.1.0`** | 更新判据是 `Updater.Newer(remote, local = AppInfo.APP_VERSION)`,**严格大于**;填成等于则预览永远是「已是最新版本」(实测见 §3.4 case 2)。`1.2.0 > 1.1.0` ✅ |
+| 拍板后还要不要再改一次 | **不要** | 13 个落点**已是**生效值,与拍板号一致;R31 只把口径从"占位"改成"生效",**一个版本号的值都没动**。清单见 §1.1 表(13 行)+ §1.2。(**`R-WP5-04`/`R30-WP6c` 更正**:此处原写"12 个落点",与 §1.1 的 13 行、§1.2 的"13 条"自相矛盾;实测落点 = **13**,逐行核对见 `progress/evidence/wp5c/veri-docs.md` §3.1。) |
 
 **推荐 `1.2.0` 的理由**
 
@@ -22,7 +23,7 @@
 2. 不该走 PATCH(`1.1.1`):本次带的是一整套新布局系统与 AI 排版能力,不是修补。
 3. 两棵树保持**同号**:2026-11-14 刚把 Windows 与 Linux 统一到 `1.1.0`,本轮两个仓库一起抬到 `1.2.0`,继续维持"一个产品一个号"。
 4. 与"是否移植 Linux"**不冲突**:布局 v2 只在 Windows(§4 口径),但 Linux 侧本轮同样有自更新、账号闸门等 NET CHANGE;即便用户以后决定移植,`1.2.0` 依然成立(Linux 只是多一个功能),不需要再换号。
-5. 用户想自由挑号也没有阻碍:**唯一硬约束就是 > `1.1.0`**。任何满足该约束的号都只需按 §1.2 做一次替换。
+5. 用户想换号也没有阻碍,**但已经不需要换了**:唯一硬约束就是 > `1.1.0`;用户 2026-11-15 已拍板 `1.2.0`,13 个落点就是这个值(万一以后要换,才需要按 §1.2 做一次替换)。
 
 ### 0.1 两步走,不许合成一步(硬约束)
 
@@ -35,17 +36,17 @@
 ## 1. 版本号:落点、演练实测、以及"发版那天还要改什么"
 
 > 本章有三类落点,**别混**:
-> 1 **§1.1 的 13 条** —— 本轮已经改成 `1.2.0`(用户拍板后一次替换即可换最终号);
-> 2 **§1.2.1 的 22 处硬编码版本串**(每棵树 11 处:UA / 客户端头 / `-Dminecraft.launcher.version`)**本轮一个字节都没改** ⇒ **发版时必须一并处理,或由用户明确批准刻意保留 `1.0.10`**;
+> 1 **§1.1 的 13 条** —— 已经是 `1.2.0`,并且**已定稿生效**(2026-11-15 用户拍板,见 §0)⇒ 不再需要任何替换;
+> 2 **§1.2.1 的 22 处硬编码版本串**(每棵树 11 处:UA / 客户端头 / `-Dminecraft.launcher.version`)**已按用户拍板处置**:形态 A/B 的**活**字面量改成派生自 `AppInfo.APP_VERSION`(R31 两笔提交,见 §1.2.3),形态 C **刻意保留 `1.0.10`**、死常量按原样保留;
 > 3 **§1.2.2 的布局档 `app` 字段**(程序集版本派生,只登记提示,不改)。
 
-### 1.1 本轮实际改掉的 13 个落点(已提交,见 §6 提交号)
+### 1.1 本轮实际改掉的 13 个落点(已提交,见 §6 提交号;值 = 拍板生效值)
 
 | # | 文件:行 | 现值(改前) | 目标值(改后) | 消费者 |
 |---|---|---|---|---|
 | 1 | `src/TipCL.Core/Launcher/AppInfo.cs:10` | `APP_VERSION = "1.1.0"` | `"1.2.0"` | **更新判据**、关于页、插件兼容、反馈 `app_version`、sysinfo |
 | 2 | `src/TipCL.Core/Launcher/AppInfo.cs:16` | `LAUNCHER_VERSION = "1.1.0"` | `"1.2.0"` | 拼 `--launcher_version` 传给 Minecraft |
-| 3 | `src/TipCL.Core/Launcher/AppInfo.cs:18` | `__version__ = "1.1.0"` | `"1.2.0"` | 占位,无消费者 |
+| 3 | `src/TipCL.Core/Launcher/AppInfo.cs:18` | `__version__ = "1.1.0"` | `"1.2.0"` | 兼容字段,无消费者(R31 前被记作"占位";值本身已是生效值) |
 | 4 | `src/TipCL.Core/CoreInfo.cs:8` | `Version = "1.1.0"` | `"1.2.0"` | **启动横幅**(`AppLog.cs:67`);**`tools/deb.sh:49-51,64` 从它取 .deb 版本号** |
 | 5 | `src/TipCL.Core/TipCL.Core.csproj:10` | `<Version>1.1.0</Version>` | `1.2.0` | 程序集版本 |
 | 6 | `src/TipCL.App/TipCL.App.csproj:8` | `<Version>1.1.0</Version>` | `1.2.0` | 程序集版本 |
@@ -53,19 +54,19 @@
 | 8 | `windos/src/TipCL/TipCL.csproj:17` | `<Version>1.1.0</Version>` | `1.2.0` | 程序集版本 + `AssemblyInformationalVersion` + **第 4 个消费者 `LayoutStoreV2.AppVersion()`**(它会写进用户布局档的 `app` 字段,见 §1.2.2) |
 | 9 | `windos/src/TipCL/Core/Launcher/AppInfo.cs:9` | `APP_VERSION = "1.1.0"` | `"1.2.0"` | **更新判据**、关于页(`SettingsPage.cs:2030`)、插件版本、反馈、sysinfo |
 | 10 | `windos/src/TipCL/Core/Launcher/AppInfo.cs:15` | `LAUNCHER_VERSION = "1.1.0"` | `"1.2.0"` | 拼 `--launcher_version` |
-| 11 | `windos/src/TipCL/Core/Launcher/AppInfo.cs:17` | `__version__ = "1.1.0"` | `"1.2.0"` | 占位 |
+| 11 | `windos/src/TipCL/Core/Launcher/AppInfo.cs:17` | `__version__ = "1.1.0"` | `"1.2.0"` | 兼容字段,无消费者 |
 | 12 | `src/TipCL.App/Session/SmokeRunner.cs:592` | 字面量 `"TipCL/1.1.0"` | **派生** `"TipCL/" + AppInfo.APP_VERSION` | 冒烟网络探针的 HTTP UA |
 | 13 | `src/TipCL.Core/Plugins/PluginHost.cs:43` | 默认参数字面量 `"1.1.0"` | **派生** `AppInfo.APP_VERSION` | 插件宿主默认 `tipclVersion`(喂 `PluginManifest.EngineOk`) |
 
 > 12 / 13 号是 WP-0 点名的两个"隐身硬编码"。本轮按"派生"处理(不加 `using`、只改那一行,用全限定名),派生等价性有独立实测,见 §3.3。
 
-### 1.2 用户拍板后要再改一次的落点(**含本轮没改、也不该由 WP-1 改的**)
+### 1.2 版本号落点(**值已定稿,不再需要替换**;含 R30 当时没动、也不该由 WP-1 动的项)
 
 > **`R-WP5-04` / `R30-WP6c` 更正**:这张表原先有三行写"仍写 `1.1.0` / 未动",**现在都已过期** —— 提交 `7f7cab9`(`R30-WP1(补2)`)已经把那三处的版本数字改成 `1.2.0`。下表按 **落笔时 HEAD(`34006c6`,之后仓库仍在推进)的当前事实**重写,并把已闭合的项标出来。
 
 | 落点 | 现状(HEAD 实测) | 谁改 |
 |---|---|---|
-| §1.1 的 13 条 | 已写成 `1.2.0` | 一次文本替换 |
+| §1.1 的 13 条 | 已写成 `1.2.0` = 拍板生效值 | 已闭合(R31 只改口径,没改值) |
 | `tests/TipCL.Tests/SmokeTests.cs:14`(注释) | **已由 `7f7cab9` 处理**:原句"2026-11-14 起移植侧产品版本统一为 1.1.0"后面补上了",2026-11-15 抬到 `1.2.0`"(把 2026-11-14 那次统一保留为历史事实)⇒ **无需再动** | 已闭合 |
 | `tests/TipCL.Tests/Core/UpdaterManifestGuardTests.cs:66,90,93`(注释) | **已由 `7f7cab9` 处理**:`:66` 现写"`AppInfo.APP_VERSION` 已经到 `1.2.0`"、`:90`/`:93` 现写 `1.2.0` ⇒ **无需再动** | 已闭合 |
 | `docs/README.md:19-20` | **已由 `7f7cab9` 处理**:现写"版本号 `1.2.0` 必须三处一致",括注里同时保留了 `0.1.0-m3`→`1.1.0`→`1.2.0` 的沿革 ⇒ **无需再动** | 已闭合 |
@@ -75,19 +76,28 @@
 | `update.json` / `update-linux.json` 的 `version` | `1.1.0` / `0.1.0-m3`(活值,**故意未改**) | **只有真发版时才改**,见 §2 |
 | `windos/src/TipCL/app.manifest:3` 的 `version="3.2.0.0"` | **不要动** | 这是 Win32 清单 schema 版本,不是产品版本 |
 
-⇒ 上面"已闭合"的三处都是**注释/文档里的数字**,`7f7cab9` 只换数字、零代码语义改动。所以:发版时要替换的**活落点**仍然只有 §1.1 的 13 条 + 两份清单;**但 §1.2.1 那 22 处硬编码版本串不在这个替换范围里,必须单独处置。**
+⇒ 上面"已闭合"的三处都是**注释/文档里的数字**,`7f7cab9` 只换数字、零代码语义改动。所以:要替换的**活落点**只有 §1.1 的 13 条 + 两份清单(且 13 条**已是拍板生效值,不用再替换**);**§1.2.1 那 22 处硬编码版本串按用户拍板单独处置,R31 的结果见 §1.2.3。**
 
 ### 1.2.1 ⚠️ `R-WP5-03`:两棵树各有 **11 处硬编码版本串**(范围里共 22 处),既不在 §1.1,也不在 WP-0 §2.5 的普查里
 
-> **本节结论(标题口径)**:这 22 处**发版时必须一并处理,或由用户明确批准刻意保留 `1.0.10`**。
-> **本轮不实际改代码**(lead 裁定:产品行为变更一律不在无人值守期间动手)⇒ 本节只做"登记 + 建议",下面列出的每一处**本轮都一个字节没改**;不处理的后果是发版后发往外部服务的 UA / 客户端头里仍是 `TipCL/1.0.10`、传给游戏 JVM 的启动参数里仍是 `1.0.10`,而关于页与更新判据显示新号 —— 又是一个"两个源打架"的形状(与 §1.4 讲的 1.0.15 事故同类)。
+> **本节结论(标题口径,已按用户拍板更新)**:这 22 处**已处置完毕** —— 形态 A/B 的**活**字面量改成派生自 `AppInfo.APP_VERSION`(R31,提交 `5056f5b` / `6ea4a24`,清单见 §1.2.3),形态 C **由用户拍板刻意保留 `1.0.10`**,死常量按"不动"处理。下面是 R30 当时登记建议的原口径(保留为历史记录)。
+> **R30 当时的结论(历史)**:这 22 处**发版时必须一并处理,或由用户明确批准刻意保留 `1.0.10`**;当时 lead 裁定"产品行为变更一律不在无人值守期间动手"⇒ 本节只做"登记 + 建议",列出的每一处**当时一个字节没改**;不处理的后果是发版后发往外部服务的 UA / 客户端头里仍是 `TipCL/1.0.10`、传给游戏 JVM 的启动参数里仍是 `1.0.10`,而关于页与更新判据显示新号 —— 又是一个"两个源打架"的形状(与 §1.4 讲的 1.0.15 事故同类)。**这个后果已在 R31 消除(A/B 部分);形态 C 是拍板刻意保留。**
 
 **我自己查到的确切清单**(命令与原文,均在本 HEAD 上跑;`docs/RELEASE-DRAFT.md` 自身不在范围内):
 
 ```
-$ cd TipCL; git grep -n '1\.0\.10' HEAD -- src windos/src          # 命中 10 行(每棵树 5 行)
-$ cd TipCL; git grep -n 'TipCL/1\.0' HEAD -- src windos/src        # 命中 20 行(每棵树 10 行)
+$ cd TipCL; git grep -n '1\.0\.10' HEAD -- src windos/src          # 改前(R30):命中 10 行(每棵树 5 行)
+$ cd TipCL; git grep -n 'TipCL/1\.0' HEAD -- src windos/src        # 改前(R30):命中 20 行(每棵树 10 行)
 ```
+
+**R31 改后实测(HEAD = `6ea4a24`,范围同上)**:
+
+```
+$ cd TipCL; git grep -n 'TipCL/1\.0' HEAD -- src windos/src        # 命中 6 行(每棵树 3 行)
+$ cd TipCL; git grep -n '1\.0\.10' HEAD -- src windos/src          # 命中 4 行:FeedbackDefaults ×2(死常量)+ McLauncher ×2(形态 C,刻意保留)
+```
+
+⇒ 改后剩下的 6 行**全是 0 调用点的死常量**(`FeedbackDefaults.CLIENT_HEADER`、`Net.SHORT_USER_AGENT`、`MicrosoftAuthenticator.UA`,各树各 1),外加形态 C 的 2 行;**没有任何一条请求路径再发 `1.0.10`。**
 
 去重后**每棵树 11 处、两棵树共 22 处**,形态三种:
 
@@ -104,10 +114,12 @@ $ cd TipCL; git grep -n 'TipCL/1\.0' HEAD -- src windos/src        # 命中 20 �
 | 形态 | 现值 | 目标值(建议) | 建议改法(一行 diff 示例) | 风险 |
 |---|---|---|---|---|
 | **A**(各 4 处) | `"TipCL/1.0.10"` | `TipCL/<最终版本号>` | `- public const string CLIENT_HEADER = "TipCL/1.0.10";`<br>`+ public const string CLIENT_HEADER = "TipCL/" + AppInfo.APP_VERSION;`(`Mods.cs:181` 与 `Net.cs:66` 同形,只是字段名/上下文不同) | **低风险,但会改变对外可见字符串** —— 实测的对外调用点:`Ai/Client.cs:176`(AI 网关的 `X-TipCL-Client` 头)、`Ai/VisionCaps.cs:265`(视觉接口的 `User-Agent`)、`Ai/McpServer.cs:269`(MCP 客户端看到的 serverInfo `version` = `Defaults.CLIENT_HEADER.Replace("TipCL/","")`)、`Net.cs:284` / `Source.cs:143`(通用 HTTP 请求)、`Mods.cs:181`(模组源请求)。若对方按 UA 统计或限流,发版后那边会看到口径跳变一次。**还要分开说清**:`FeedbackDefaults.cs:7` 那个同名 `CLIENT_HEADER` **目前 0 调用点**(反馈实际走 `Feedback.cs:126-127` 的 `X-PyMCL-Client: PyMCL/<APP_VERSION>`,已经是派生值;代码注释还写明 ingest 服务器只认这个头、`X-TipCL-Client` 会被 403)⇒ 它是**死常量**,改不改都不改变对外行为。**保留不动的话,"外部永远看到 `1.0.10`"这个事实必须写进发版说明** |
-| **B**(各 6 处) | `"TipCL/1.0"` | `TipCL/<最终版本号>`(**或明确批准保留短号**) | 同 A 的派生写法。⚠️ 两处要注意:1 `MicrosoftAuthenticator.cs:15`(Win `:14`)是 `const`,改成派生会引入对 `AppInfo` 的依赖(或需改成 `static readonly`);2 `Net.cs:43`(Win `:42`)的 `SHORT_USER_AGENT` **目前 0 调用点**(我全树 grep 只有它自己的声明)⇒ 它是**死常量**,真正要改的只有 **5 处**(这也正是 exe 里 `TipCL/1.0` 只命中 5 处的原因) | **低风险,但更"对外"**:`AuthHttp.cs` / `MicrosoftAuthenticator.cs` 是 **Microsoft 登录链**,UA 是登录请求的一部分。协议语义不受影响,但"动登录链上对外的字面量"建议**单独一笔提交 + 一次真机登录验证**,不要塞在发版前最后一刻 |
-| **C**(各 1 处) | `-Dminecraft.launcher.version=1.0.10` | `1.2.0`(与 `AppInfo.APP_VERSION` 同号) | `- list3.Add("-Dminecraft.launcher.version=1.0.10");`<br>`+ list3.Add("-Dminecraft.launcher.version=" + AppInfo.APP_VERSION);` | **⚠️ 必须单独提示:这是传给游戏 JVM 的启动参数** —— 游戏、模组、整合包脚本、以及玩家贴出来的启动日志/崩溃报告都会读到它。它**不发给外部 HTTP 服务**,但会改变"游戏侧看到的启动器版本"(模组按启动器版本做分支的情形真实存在)。⇒ **这一条只能由用户明确拍板**:要么改成与版本号同号,要么在这里写明"**刻意保留 `1.0.10`**",否则发版后没人知道这是有意为之 |
+| **B**(各 6 处) | `"TipCL/1.0"` | `TipCL/<最终版本号>`(**或明确批准保留短号**) | 同 A 的派生写法。⚠️ 两处要注意:1 `MicrosoftAuthenticator.cs:15`(Win `:14`)是 `const`,改成派生会引入对 `AppInfo` 的依赖(或需改成 `static readonly`);2 `Net.cs:43`(Win `:42`)的 `SHORT_USER_AGENT` **目前 0 调用点**(我全树 grep 只有它自己的声明)⇒ 它是**死常量**,真正要改的只有 **5 处**(这也正是 exe 里 `TipCL/1.0` 只命中 5 处的原因) | **低风险,但更"对外"**:`AuthHttp.cs` / `MicrosoftAuthenticator.cs` 是 **Microsoft 登录链**,UA 是登录请求的一部分。协议语义不受影响,但"动登录链上对外的字面量"建议**单独一笔提交 + 一次真机登录验证**,不要塞在发版前最后一刻 | (**R31 更正**:这里的"真正要改的只有 **5 处**"把 `MicrosoftAuthenticator.cs:15`(Win `:14`)的 `const UA` 算成"活的";实测它也是 **0 调用点**的死常量 ⇒ B 的**活落点 = 4 处/树**,见 §1.2.3) |
+| **C**(各 1 处) | `-Dminecraft.launcher.version=1.0.10` | `1.2.0`(与 `AppInfo.APP_VERSION` 同号) | `- list3.Add("-Dminecraft.launcher.version=1.0.10");`<br>`+ list3.Add("-Dminecraft.launcher.version=" + AppInfo.APP_VERSION);` | **⚠️ 必须单独提示:这是传给游戏 JVM 的启动参数** —— 游戏、模组、整合包脚本、以及玩家贴出来的启动日志/崩溃报告都会读到它。它**不发给外部 HTTP 服务**,但会改变"游戏侧看到的启动器版本"(模组按启动器版本做分支的情形真实存在)。⇒ **这一条只能由用户明确拍板**:要么改成与版本号同号,要么在这里写明"**刻意保留 `1.0.10`**",否则发版后没人知道这是有意为之。**R31 结果:用户拍板"刻意保留 `1.0.10`"(代码不动),本行即定案口径** |
 
-**给 lead 的推荐口径(仅建议,未拍板)**:形态 A 与 B 都改成**与 `AppInfo.APP_VERSION` 派生**,和 §1.1 #12 的 `SmokeRunner` UA 完全同形(`src/TipCL.App/Session/SmokeRunner.cs:592`:`"TipCL/" + TipCL.Core.Launcher.AppInfo.APP_VERSION`)—— 这样"一个产品一个号"才闭环,且**不新增任何依赖**(用全限定名,不加 `using`);形态 C **单独拍板**,排在"做完 A/B 之后、发版之前";若用户不想在发版日动登录链,可先做 A,把 B 显式记为"刻意保留"、C 显式记为"刻意保留"。
+**给 lead 的推荐口径(当时"仅建议,未拍板";**已被用户采纳**)**:形态 A 与 B 都改成**与 `AppInfo.APP_VERSION` 派生**,和 §1.1 #12 的 `SmokeRunner` UA 完全同形(`src/TipCL.App/Session/SmokeRunner.cs:592`:`"TipCL/" + TipCL.Core.Launcher.AppInfo.APP_VERSION`)—— 这样"一个产品一个号"才闭环,且**不新增任何依赖**(用全限定名,不加 `using`);形态 C **单独拍板**,排在"做完 A/B 之后、发版之前";若用户不想在发版日动登录链,可先做 A,把 B 显式记为"刻意保留"、C 显式记为"刻意保留"。
+
+> **R31 落地结果(2026-11-15)**:用户采纳了上面的推荐 —— **A 与 B 都已改派生**(A 每树 3 处活落点、B 每树 4 处活落点;`Ai/Defaults.cs` 的 `CLIENT_HEADER` 由 `const` 改成 `static readonly`),**形态 C 由用户拍板刻意保留 `1.0.10`**,**死常量保持原样**;逐处清单、提交号与"未验证项"见 §1.2.3。上表其余文字保持 R30 当时的原文(除上面两处 R31 更正标记)。
 
 ### 1.2.2 已知口径提示(`R-WP5-07`):用户布局档里的 `app` 字段来自**程序集版本**,不是 `APP_VERSION`
 
@@ -117,6 +129,35 @@ $ cd TipCL; git grep -n 'TipCL/1\.0' HEAD -- src windos/src        # 命中 20 �
 - ✅ **已定案:三段号 `1.2.0`**(由返工复验定案，`R30-WP6c-03` 归档)。依据就是 `AppVersion()` 的**函数体本身**:`version.Revision > 0` 才 `return version.ToString()`(四段)，否则 `return version.Major + "." + version.Minor + "." + version.Build`(三段)；本版程序集版本是 `1.2.0.0` 而 **`Revision == 0`** ⇒ 走三段分支 ⇒ 导出 / 落盘是 **`"app": "1.2.0"`**(与产品号同形)。
 - 📌 **口径注记(免得下一个人再翻案)**:`progress/R30-ACCEPT.md` §4 `R-WP5-07` **原先**写"导出的 `"app"` 是**四段号 `1.2.0.0`**"，那是只读了赋值行 `Assembly.GetName().Version`(类型是四段)**而没读 `AppVersion()` 的分支**；该报告已在自身"自我更正"一节里改成三段，总验收的返工复验也按三段定案。`R30-WP6c` 当时把它标成"待复核、我复现不出来"是**从保守出发**(我没真跑 GUI、没真导出布局档)，现按复验定案 —— **不要再按"四段"写发版说明。**
 - **提示本身(降级为"已澄清")**:`app` 是 Windows csproj `<Version>` 的**第 4 个消费者**(另三个:程序集版本、`AssemblyInformationalVersion`、`FileVersion`)；值形是**三段 `1.2.0`、与产品号同形**，所以"一个产品一个号"**没有被破坏**，不再有"多一个形状"的问题。**本轮只登记，不改代码。**
+
+### 1.2.3 R31 落地记录(2026-11-15):形态 A/B 已改派生,形态 C 保留
+
+**依据(用户 2026-11-15 拍板)**:版本号 = `1.2.0`;硬编码版本串**形态 A 与 B 都改成派生自 `AppInfo.APP_VERSION`**,**形态 C(`-Dminecraft.launcher.version`)明确保留不动**。
+
+**两笔提交(本地,未 push)**
+
+| 提交 | 内容 | 落点(改后行号不变) |
+|---|---|---|
+| `5056f5b` | 形态 A:活字面量改派生(每树 3 处,共 6 处) | Linux `Ai/Defaults.cs:37`、`Mods.cs:181`、`Net.cs:66`;Windows `Ai/Defaults.cs:36`、`Mods.cs:180`、`Net.cs:65` |
+| `6ea4a24` | 形态 B:**登录链**,活字面量改派生(每树 4 处,共 8 处);**单独一笔,便于单独 revert** | Linux `AuthHttp.cs:93`、`MicrosoftAuthenticator.cs:25`/`:30`/`:39`;Windows `AuthHttp.cs:92`、`MicrosoftAuthenticator.cs:24`/`:29`/`:38` |
+
+**派生写法**(与 `SmokeRunner.cs:592` 完全同形,**不新增 `using`**):`"TipCL/" + TipCL.Core.Launcher.AppInfo.APP_VERSION`。
+
+**类型只变了 1 处**:`Ai/Defaults.cs` 的 `CLIENT_HEADER`(`public const string` → `public static readonly string`)。它原来的 3 个消费者 `Ai/Client.cs:176`、`Ai/VisionCaps.cs:265`、`Ai/McpServer.cs:269` **都是运行时取值**,没有 `const` 上下文消费者。其余各处声明类型未变(`Mods.cs:181` 是字典字面量;`Net.cs:66` 赋给的 `USER_AGENT` 本来就是 `static readonly`)。
+
+**改后源码里 `TipCL/1.0` 只剩 6 行,全部是 0 调用点的死常量 ⇒ 按"死常量不动"处理**
+
+| 死常量 | 处 | 为什么不动 |
+|---|---|---|
+| `FeedbackDefaults.CLIENT_HEADER`(形态 A) | 两树各 1 | 0 调用点(反馈实际走 `Feedback.cs:127` 的 `X-PyMCL-Client`,已是派生值);且是 `public const`,改派生会牵动类型 |
+| `Net.SHORT_USER_AGENT`(形态 B) | 两树各 1 | 0 调用点 |
+| `MicrosoftAuthenticator.UA`(形态 B) | 两树各 1 | **0 调用点(本次复算确认)**,见 §1.2.1 的 R31 更正 |
+
+> ⚠️ 死常量虽然不再被任何请求路径读取,但 `const` 的字面量**仍可能以元数据形式留在产物里** ⇒ 发版说明里**不要**写"产物里已经没有任何 `TipCL/1.0` 字样",要写"**没有任何请求路径会发出旧号**"。
+
+**⇒ 这一版对外显示什么号**:形态 A(通用 HTTP UA、AI 网关的 `X-TipCL-Client`、视觉接口 UA)与形态 B(Microsoft 登录链 UA)在运行时发 **`TipCL/1.2.0`**(MCP 客户端看到的 serverInfo `version` 是去掉 `TipCL/` 前缀后的 **`1.2.0`**);`Net.USER_AGENT` 的完整值是 `TipCL/1.2.0 (python; +minecraft launcher)`;**传给游戏 JVM 的仍是 `-Dminecraft.launcher.version=1.0.10`(刻意保留)**。
+
+**⚠️ 未验证项**:形态 B 动的是**登录链**上的 UA,本机**没有可用账号/真机** ⇒ 这一笔**未经真机登录验证**;现有证据只到"两棵树编译 0 错误 + 两个产物(`TipCL.exe` / `TipCL.Core.dll`)里都能字节级扫到折叠后的 `TipCL/1.2.0` 字面量 + 两套全量测试全绿(487 / 465)",**没有真正走过 device-code 登录**(见 `progress/R31-A.md`)。**单独 revert 这一笔**:`git revert --no-edit 6ea4a24`(该笔只碰 `AuthHttp.cs` / `MicrosoftAuthenticator.cs` 两个文件,不依赖本笔之外的任何改动)。
 
 ### 1.3 `1.0.15` 残留复核(1.1 出过"应用内显示 1.0.15、反复提示更新"的事故)
 
@@ -152,7 +193,7 @@ windos/docs/size-report.md:10      (历史体积报表)
 
 ## 2. 两条发版链路(照这个走)
 
-> 前置:**版本号已由用户拍板**(把 §1.1 的 13 条替换成最终号),并且**已提交**;下面每一步都在该 commit 上执行。
+> 前置:**版本号已由用户拍板生效 = `1.2.0`**(§1.1 的 13 条就是这个值,**不需要再替换**;口径见 §0),并且**已提交**;下面每一步都在该 commit 上执行。
 
 ### 2.1 Windows 链路
 
@@ -208,25 +249,25 @@ windos/docs/size-report.md:10      (历史体积报表)
 **⚠️ `.deb` 的版本号来自 `src/TipCL.Core/CoreInfo.cs`**(`tools/deb.sh:49-51`),所以本轮把 `CoreInfo.Version` 改成 `1.2.0` 也会让包名变成 `tipcl_1.2.0_amd64.deb`。
 **⚠️ Linux 资产没有 `.sha256` 附件**:`release.yml` 只给 Windows 传了 `TipCL.exe.sha256`,Linux 的 sha256 只出现在 Actions 日志里。README 的写法已按这个事实写(§5)。
 
-### 2.3 待填的清单三行(**未生效·待用户拍板**)
+### 2.3 待填的清单三行(**发版当天在真资产上填**;版本号已定稿 `1.2.0`,只剩 `sha256` / `url` 要回填)
 
 **A. `update.json`(Windows)** —— 现值 `version = 1.1.0` / `sha256 = 8d5f266bbf9d9c3f4231479d4c4e06a692ea5423863f63a7242126c6aa9b759f`(v1.1.0 的真值,**未改**)
 
 ```json
-"version": "1.2.0",                                                                // 占位:必须 > 1.1.0,以用户拍板号为准
-"url":     "https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL.exe",    // 占位:tag 名要跟着改
+"version": "1.2.0",                                                                // = 已拍板生效号(硬约束仍是 > 1.1.0;R31 起不再叫"占位")
+"url":     "https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL.exe",    // 待填:tag 名要跟着改
 "sha256":  "<<发版那天用最终 commit 重新出包后再算,见 §1.5>>"
 ```
 
 **B. `update-linux.json`(Linux)** —— 现值 `version = 0.1.0-m3` / `sha256 = REPLACE-WITH-THE-REAL-SHA256`(**故意格式非法**,未改)
 
 ```json
-"version": "1.2.0",                                                                          // 占位:必须 > 1.1.0
-"url":     "https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL-linux-x64.AppImage", // 占位
+"version": "1.2.0",                                                                          // = 已拍板生效号(硬约束仍是 > 1.1.0)
+"url":     "https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL-linux-x64.AppImage", // 待填(tag 名跟着改)
 "sha256":  "<<Actions 日志里打印的那一行,见 §2.2 L4>>"
 ```
 
-> 两份清单都**留在仓库根**、都没被本轮改动(红线)。
+> 两份清单都**留在仓库根**、都没被 R30/R31 改动(红线)。
 > `sha256` **绝不允许**写成 64 个 0 那种"格式合法但不存在"的假值 —— 那正是 R22 修掉的洞(`UpdaterManifestGuardTests` 守着)。
 
 ---
@@ -425,3 +466,4 @@ Windows 本机走 **无头** `--smoke`(`Program.cs:17` 是 `--smoke` 判定,调�
 - 发版相关既有文档:`windos/docs/DELIVERY-2026-11-14.md`(体积/可追溯性/9 条隐蔽坑)、`docs/HANDOFF-d95a9472.md`(自更新闭环判定与"必须 > 1.1.0")、`windos/docs/layout-v2-design.md`(布局 v2 契约与已拍板的 7 个决策)
 - 返工单处置:本文件的口径修正由 `R30-WP6c` 完成,自证命令与改前/改后片段见 `progress/R30-WP6c.md`
 - 独立核对证据:`progress/evidence/wp5c/veri-docs.md`(**只读**核对:13 个落点逐行核对、`TipCL/1.0` 家族清单、`app` 字段、行号失真清单)
+- R31(版本号转生效 + UA 派生)施工报告:`progress/R31-A.md`(提交 `5056f5b` / `6ea4a24`,证据 `progress/evidence/r31/`);**未 push、未打 tag、未发 release**
