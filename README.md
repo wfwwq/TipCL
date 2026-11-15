@@ -201,7 +201,7 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，点「更多信息 → 仍要运行」即可。个别杀软会对未签名的单文件程序报启发式误报，源码完全公开，也可以自己编译。
 
 - v1.1.0 SHA-256:`8d5f266bbf9d9c3f4231479d4c4e06a692ea5423863f63a7242126c6aa9b759f`(Windows 的 `TipCL.exe` 每个 Release 都带同名 `.sha256` 附件，可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
-- Linux 的 AppImage 与 `.deb` **不带** `.sha256` 附件：AppImage 的 SHA-256 会写在该 Release 的说明里，也可以自己 `sha256sum TipCL-linux-x64.AppImage` 比对。
+- Linux 的 AppImage 与 `.deb` **不带** `.sha256` 附件：AppImage 的 SHA-256 会在发版时打印进 CI 的 Actions 日志（`.github/workflows/release.yml`），也可以自己 `sha256sum TipCL-linux-x64.AppImage` 比对。
 
 ## 💬 社区建议
 
