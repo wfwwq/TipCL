@@ -671,3 +671,67 @@ AppImage 形态取 **`$APPIMAGE`**(磁盘上那个 `.AppImage`,不是 `/tmp/.mou
 > 4**真发一次版**:未做 —— 卡点是**要真的切 tag / 建 release**(GitHub 写权限),且本轮授权不含 linux 推送;`release.yml` 的 linux job 已就绪但从未跑过。
 > ⇒ 四条里 1、2 已关闭;3、4 属外部卡点,清单文件**保持现状不改**(现在填任何 sha 都对应不到真实资产)。
 > 另:第 1、2 条与第 3、4 条的事实口径见 `scratch/update-e2e2/REPORT.md` 与 `docs/HANDOFF-d95a9472.md`(由 `linux-updater` 写);第 3 条有一处需留意 —— 那边写的是"发 `v0.1.0-m3`(或更高)的 release 即可闭环",而按 `AppInfo.APP_VERSION = 1.1.0` 实测,只有 **> 1.1.0** 的版本号才会让客户端看见更新。
+
+### 9.15 八帧冒烟矩阵基线钉死(R30 / WP-3,2026-11-15)
+
+R22 之后这套矩阵一直没重跑。本轮重跑并把**帧集与命令钉死在此处**,以后任何一轮只认这 8 帧(顺序与 `PROGRESS.md` 2026-11-13 R13 记录一致)。
+
+| # | 帧名 | 环境变量 | 备注 |
+|---|---|---|---|
+| 1 | `launch` | (不设) | 默认启动页,浅色 |
+| 2 | `library` | `SMOKE_PAGE=library` | |
+| 3 | `download` | `SMOKE_PAGE=download` | |
+| 4 | `plugins` | `SMOKE_PAGE=plugins` | |
+| 5 | `settings` | `SMOKE_PAGE=settings` | |
+| 6 | `ai` | `SMOKE_PAGE=ai` | **旧脚本完全没覆盖这一页** |
+| 7 | `library-dark` | `SMOKE_PAGE=library SMOKE_DARK=1` | 旧脚本深色只跑默认页 |
+| 8 | `plugins-dark` | `SMOKE_PAGE=plugins SMOKE_DARK=1` | 同上 |
+
+命令(三条等价入口,任选其一):
+
+```bash
+# Linux 真机(需 Linux x86_64 + linuxdeploy 产物 + xvfb 可选)
+tools/verify-linux.sh [产物目录]        # 现在按上表跑满 8 帧,逐帧留图到 $OUT/frames/<帧名>.png
+```
+
+```powershell
+# 本仓库当前环境可跑的等价矩阵(Avalonia 无头 + Skia,渲染是真渲染,不是模拟)
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify-smoke.ps1 -Batches 2
+# 单帧手跑:先把 TIPCL_HOME 指到一个空目录,再在空工作目录里执行(Tab 出来的 .exe)
+$env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
+```
+
+**判定口径(D-26)**:退出码 0 **且** 应用日志 0 个 `[WARN]` / 0 个 `[ERROR]` **且** 人工看图。**不比 PNG 字节** —— 非同包隔离 A/B 的帧字节天然会漂(WP-3 实测 `launch` 帧逐次抖动 62~231 B,见 D-42)。
+
+> **旧 `verify-linux.sh` 的两处缺口(本轮修掉)**:原来只跑 `library download plugins settings` 四页 + 默认页 `SMOKE_DARK=1`,于是 (a) **漏掉 `SMOKE_PAGE=ai`**,(b) 深色**只覆盖启动页**,没有 `library-dark` / `plugins-dark`。现已改成上表 8 帧,并给每帧加了「日志 0 WARN / 0 ERROR」判定和逐帧截图留存。
+
+> **与 `PROGRESS.md` 历史 sha 的比对口径**:WP-3 本轮实测 8 帧中 `download` / `plugins` / `ai` / `plugins-dark` 与 2026-11-13 R13 的帧**逐字节相同**;`launch` / `library` / `settings` / `library-dark` 不同(源码树已变,`launch` 还会逐次抖动)。**"哪些帧变了"不是回归判据** —— 判据是这两条:退出码与日志干净、人工看图正常。
+
+### 9.16 layout-v2 → Linux 移植评估(R30 / WP-3,2026-11-15;**只评估,未移植**)
+
+**结论:本轮不移植,建议维持现状。** 依据不是"来不及",而是设计方案本身就把 mac/linux 排除在范围外,并且 v1 冻结契约让 Linux 端**不需要**跟着改:
+
+- 设计文档 §1.2 非目标原文:「不碰 mac/linux 树;**但保持 v1 文件语义冻结**,让 mac/linux 端口继续照读(见 §3.3)」。
+- §3.3 兼容矩阵最后一行:「mac/linux 端口 | 继续读 v1,行为完全不变 | v1 冻结 | **端口侧无需改动**」。
+
+所以「Linux 端没有 layout-v2」**不是欠债,是契约**。会让用户丢已有布局的动作是**去动 v1 文件**,而不是"不移植 v2"。
+
+真要移植的工作量(本轮实测数字,按注释剥离后统计"真 WPF 类型命中"):
+
+| 层 | 位置(Windows 树) | 文件 | 代码行 | 真 WPF 命中 | 可移植性 |
+|---|---|---|---|---|---|
+| 模型层 | `windos/src/TipCL/Core/Launcher/Layout/` | 5 | 2587 | **0** | 只用 `System` / `System.IO` / `System.Text.Json`,**可逐字节复制** |
+| 引擎层 | `windos/src/TipCL/Pages/Layout/LayoutEngine.cs` | 1 | 2256 | **0** | 纯几何;注释明写"引擎层不引 WPF、不能用 `System.Windows.Rect`",**可逐字节复制** |
+| 宿主 / UI 层 | `windos/src/TipCL/Pages/Layout/`(其余 14 个) | 14 | 4246 | 121 | 需按 Avalonia **重写**;命中集中在 `LayoutEditor`(51)、`PageLayoutHost`(24)、`GridCanvasPanel`(10)、`WidgetUI`(9) |
+
+即约 **4843 行可直接搬**,约 **4246 行(含 121 处 WPF 触点)要重写**。
+
+**移植的三个硬前置(任一没做都会卡住)**:
+
+1. **D-32 的引用方向必须先还**。Windows 树里 `Core` 已反向引用 `Pages`(`Core/Launcher/Ai/LayoutTools.cs` 用到了 `LayoutStoreV2`);两者同属 `TipCL.exe` 一个程序集,所以编得过。但移植的既有做法是把 `Core/**` 逐字节复制进独立的 `TipCL.Core`,那样**直接编不过**。设计文档 §9 第 13 条自己写了:「在真正开始移植 mac/linux 之前必须先做这一步」。
+2. **Avalonia 侧目前没有对等物**。本轮全仓检索确认 Linux 树中 `LayoutEngine` / `WidgetRegistry` / `LayoutEditor` / `GridCanvasPanel` / `GuideLayer` / `ShellTabs` / `PageLayoutHost` / `LayoutDocV2` / `LayoutSchema` / `LayoutStoreV2` / `LayoutJson` / `LayoutV1Bridge` / `LayoutMigrator` **全部 ABSENT**。Linux 端现在只有 `src/TipCL.App/Pages/Layout/BlockHost.cs`(489 行,承载 v1 的 stack 语义)和 `src/TipCL.Core/Layout/` 的 `PageBlock.cs` / `PageLayoutIO.cs` / `PageLayoutStore.cs`。
+3. **D-39 测试改造**:无头布局测试必须真的跑过一次布局过程(`AvaloniaHeadlessPlatform.ForceRenderTimerTick` + `Dispatcher.UIThread.RunJobs`),否则测到的是空壳。
+
+**跨端往返风险(即使本轮不移植也需知道)**:Windows 端 v2 保存时会由 v2 重建 v1 子集并原子写 `ui_page_layouts.json`(§3.3 第 3 行),所以 Linux 读 v1 永远读得到正确的顺序与显隐。但反过来:用户在 **Linux** 上改了布局 → v1 变"新鲜" → Windows 端按 §3.3 第 2 行会**提示「检测到旧格式更新,是否并入」**。新的 `ui_layout_v2.json` Linux 端既不认识也不会写,故 v2 侧新字段不会丢。
+
+**建议**:R30 发布说明中 layout-v2 标注为 **Windows-only**;Linux 端维持 v1 读取(行为零变化)。若后续要移植,**先做前置 1**(把 5 个模型文件搬进 `src/TipCL.Core/`、取消 `Core→Pages` 反向引用),再单独评估 UI 重写。

@@ -33,12 +33,34 @@ else
   tail -20 "$OUT/run.log" | sed 's/^/     /'
 fi
 
-say "逐页冒烟矩阵"
-for pg in library download plugins settings; do
-  if (cd "$OUT" && SMOKE_PAGE="$pg" timeout 120 "$BIN" --smoke >/dev/null 2>&1) \
-     && [ -s "$OUT/smoke.png" ]; then ok "SMOKE_PAGE=$pg"; else bad "SMOKE_PAGE=$pg"; fi
-done
-if (cd "$OUT" && SMOKE_DARK=1 timeout 120 "$BIN" --smoke >/dev/null 2>&1); then ok "深色主题帧"; else bad "深色主题帧"; fi
+say "逐页冒烟矩阵(R30 钉死的 8 帧,权威清单见 docs/PARITY.md §9.15)"
+# 判定口径(D-26):退出码 0 + 日志 0 个 [WARN] / 0 个 [ERROR] + 人工看图。
+# 不比 PNG 字节:同机同包以外的帧字节天然会漂(见 D-42)。
+mkdir -p "$OUT/frames"
+run_frame() { # $1=帧名 $2=SMOKE_PAGE(空=默认启动页) $3=SMOKE_DARK(1=深色)
+  local name="$1" pg="$2" dark="$3" log="$OUT/frame-$name.log"
+  local -a envs=()
+  [ -n "$pg" ] && envs+=("SMOKE_PAGE=$pg")
+  [ "$dark" = "1" ] && envs+=("SMOKE_DARK=1")
+  if (cd "$OUT" && env "${envs[@]+"${envs[@]}"}" timeout 120 "$BIN" --smoke >"$log" 2>&1) \
+     && [ -s "$OUT/smoke.png" ] \
+     && ! grep -qE '\[(WARN|ERROR)\]' "$log"; then
+    ok "帧 $name (SMOKE_PAGE=${pg:-<默认>} SMOKE_DARK=${dark})"
+  else
+    bad "帧 $name (SMOKE_PAGE=${pg:-<默认>} SMOKE_DARK=${dark}) — 见 $log"
+    grep -E '\[(WARN|ERROR)\]' "$log" 2>/dev/null | head -5 | sed 's/^/     /'
+  fi
+  [ -s "$OUT/smoke.png" ] && cp -f "$OUT/smoke.png" "$OUT/frames/$name.png"
+}
+run_frame launch         ""        0
+run_frame library        library   0
+run_frame download       download  0
+run_frame plugins        plugins   0
+run_frame settings       settings  0
+run_frame ai             ai        0
+run_frame library-dark   library   1
+run_frame plugins-dark   plugins   1
+printf '  已留存 8 帧到 %s/frames/(逐一人工核对:中文、图标、圆角、深色、空态)\n' "$OUT"
 
 say "运行期依赖（缺字体/图形库时人工核对截图）"
 ldconfig -p 2>/dev/null | grep -qE "libfontconfig" && ok "fontconfig 存在（中文字体渲染需要）" || bad "缺 fontconfig：apt install fontconfig fonts-noto-cjk"
