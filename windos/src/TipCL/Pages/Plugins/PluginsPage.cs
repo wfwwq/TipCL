@@ -8,7 +8,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using TipCL.Pages.Layout;
 using TipCL.Services;
+
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Pages.Plugins;
 
@@ -39,6 +42,27 @@ public sealed partial class PluginsPage : PageBase
 	private bool _subView;
 
 	private readonly UIElement _installedView;
+
+	// [layout-fix] 规格 §3-问题4:插件页的区块宿主(页面 ID = plugins)。
+	// 插件市场是它里面**自己**的区块宿主(plugins:market,见 PluginsPage.Market.cs),右键时最内层优先。
+	private readonly BlockHost _host;
+
+	/// <summary>
+	/// [layout-fix] 规格 §4-能力2:插件页的出厂默认布局 —— 单列 stack、间距与页边距都是 0
+	/// (head 与 _body 自带边距,区块之间不留空隙)。
+	/// </summary>
+	private static PageLayoutV2 PluginsDefaultPage()
+	{
+		PageLayoutV2 page = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeStack,
+			Gap = 0.0,
+			Pad = new double[4] { 0.0, 0.0, 0.0, 0.0 }
+		};
+		page.Blocks.Add(new BlockLayout { Id = "tabs", Span = 1, Z = 0 });
+		page.Blocks.Add(new BlockLayout { Id = "body", Span = 1, Z = 1 });
+		return page;
+	}
 
 	private readonly Dictionary<string, string> _taskPlugin = new Dictionary<string, string>();
 
@@ -84,10 +108,25 @@ public sealed partial class PluginsPage : PageBase
 				PageBase.Run(() => InstallLocalAsync(path, dev: false, null), I18n.L("安装失败"));
 			}
 		}), more).VCenter(), 0, 1);
-		Grid root = Ui.G("Auto,*");
-		root.Add(head, 0);
-		root.Add(_body, 1);
-		base.Content = root;
+		// [layout-fix] 规格 §3-问题4:插件页整体改成区块宿主 BlockHost("plugins"),两个区块 =「页签」「内容」。
+		// 边距 / 间距都传 0:head 与 _body 自己管各自的边距,区块之间不额外留空隙
+		// (原来就是 Grid("Auto,*") 两行贴合,这样默认(非编辑态)渲染与旧版一致)。
+		_host = new BlockHost("plugins", new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "tabs",
+				Title = I18n.L("页签"),
+				Content = head
+			},
+			new BlockSpec
+			{
+				Id = "body",
+				Title = I18n.L("内容"),
+				Content = _body
+			}
+		}, new Thickness(0.0), PluginsDefaultPage());
+		base.Content = _host;
 		_installedHost = new UniformGrid
 		{
 			Columns = 3,

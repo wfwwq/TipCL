@@ -12,7 +12,10 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TipCL.Models;
+using TipCL.Pages.Layout;
 using TipCL.Services;
+
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Pages;
 
@@ -71,6 +74,28 @@ public sealed class CatalogPage : PageBase
 	private readonly SPanel _placeholder = Ui.V(10.0);
 
 	private readonly Grid _listHost = new Grid();
+
+	// [layout-fix] 规格 §3-问题2:本分段的区块宿主(页面 ID = catalog:<类型>,见 LayoutPageId)。
+	// 三个区块 =「标题」「筛选」「结果列表」,过去这里是写死的 Grid,右键没有任何入口。
+	private readonly BlockHost _host;
+
+	/// <summary>
+	/// [layout-fix] 规格 §4-能力2:各 catalog 分段的出厂默认布局 —— 单列 stack(三块纵向流),
+	/// 区间距 14(等于原来 el2 的上下外边距) —— 于是"没写过布局文档"时渲染与改动前一致。
+	/// </summary>
+	private static PageLayoutV2 CatalogDefaultPage()
+	{
+		PageLayoutV2 page = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeStack,
+			Gap = 14.0,
+			Pad = new double[4] { 26.0, 20.0, 26.0, 20.0 }
+		};
+		page.Blocks.Add(new BlockLayout { Id = "header", Span = 1, Z = 0 });
+		page.Blocks.Add(new BlockLayout { Id = "filters", Span = 1, Z = 1 });
+		page.Blocks.Add(new BlockLayout { Id = "results", Span = 1, Z = 2 });
+		return page;
+	}
 
 	private readonly ToggleButton _modeSearch;
 
@@ -283,12 +308,32 @@ public sealed class CatalogPage : PageBase
 		_results = Ui.VirtualList<object>(BuildRow);
 		_listHost.Children.Add(_results);
 		_listHost.Children.Add(Ui.Scroll(_placeholder));
-		Grid grid2 = Ui.G("Auto,Auto,*");
-		grid2.Add(el3, 0);
-		grid2.Add(el2.M(0.0, 14.0, 0.0, 14.0), 1);
-		grid2.Add(_listHost, 2);
-		grid2.Margin = new Thickness(26.0, 20.0, 26.0, 20.0);
-		base.Content = grid2;
+		// [layout-fix] 规格 §3-问题2:原来是一个写死的三行 Grid(Auto/Auto/*),现在换成区块宿主,
+		// 分成「标题」「筛选」「结果列表」三个区块。页面 ID 沿用原有的 catalog:<类型>(如 catalog:mod)。
+		// 边距沿用原来的 26,20,26,20;区间距取 14 = 原来 el2 自己的上下 14 外边距(去掉它,改由宿主统一给),
+		// 所以默认(非编辑态)渲染与旧版逐步等价。
+		_host = new BlockHost(LayoutPageId, new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "header",
+				Title = I18n.L("标题"),
+				Content = el3
+			},
+			new BlockSpec
+			{
+				Id = "filters",
+				Title = I18n.L("筛选"),
+				Content = el2
+			},
+			new BlockSpec
+			{
+				Id = "results",
+				Title = I18n.L("结果列表"),
+				Content = _listHost
+			}
+		}, null, CatalogDefaultPage());
+		base.Content = _host;
 		EnableDrop(() => new FileDrop.DropContext
 		{
 			Instance = CurrentInstance(),

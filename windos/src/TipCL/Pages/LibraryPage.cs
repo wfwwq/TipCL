@@ -19,7 +19,8 @@ namespace TipCL.Pages;
 // 实例库（2026-11 效果图）：左栏文件夹列表（420 宽）+ 右栏版本选择（按加载器分组折叠）。
 // 数据/行为与 VersionManagePage 同源：get_instances / get_version_rows（当前实例）/ 收藏走 Prefs.VmFavorites；
 // 双击版本 = 设默认实例后跳启动页；行尾 收藏 / 卸载 / 版本设置。
-// WP-U3：双栏页不套 BlockHost，右键「自定义布局…」显隐文件夹栏 / 导出导入布局（PageLayoutStore 直读直写 "library"，版本列表恒可见）。
+// [layout-fix] 规格 §3-问题6:实例库改成区块宿主 BlockHost("library:main"),右键「自定义布局…」直接进拖动编辑
+// (「显示文件夹栏」「导出布局」「导入布局」平铺成同级菜单项),显隐与几何全部写进 v2 的 ui_layout_v2.json。
 public sealed class LibraryPage : PageBase
 {
 	private sealed class Ver
@@ -119,9 +120,56 @@ public sealed class LibraryPage : PageBase
 	// 页内切换前的原始内容（进入实例详情后返回时恢复；PageBase.Content 是 object）
 	private object? _shell;
 
-	// WP-U3 页面布局自定义：双栏外壳与左右两栏（文件夹栏可经布局文档收起，字段与数据逻辑不受影响）
-	// L4:双栏改由 PageLayoutHost 承载(分隔条 + 比例记忆,比例存 v2 splits["library"]["folders"])
-	private readonly PageLayoutHost _body;
+	// [layout-fix] 规格 §3-问题6 + §4-能力3:实例库改成区块宿主 BlockHost("library:main")(表 1 的页面 ID)。
+	// 两个区块 =「文件夹列表」与「版本选择」,默认 12 列网格里占 4 列 / 8 列(与原来 1:2 星号列的观感一致)。
+	// 旧的 PageLayoutHost + v1 ui_page_layouts.json 路径整体退场:library/folders 分栏比例不再生效(§6 兼容性)。
+	private readonly BlockHost _host;
+
+	/// <summary>「文件夹列表」区块 id(进布局文档;右键菜单的显隐开关按它走)。</summary>
+	private const string FoldersBlockId = "folders";
+
+	/// <summary>「版本选择」区块 id。</summary>
+	private const string ListBlockId = "versions";
+
+	/// <summary>
+	/// [layout-fix] 规格 §4-能力2:实例库的出厂默认布局 —— 12 列网格,文件夹列表 4 列 / 版本选择 8 列
+	/// (与原 1:2 星号分栏的观感一致;间距取 18 = 原来那条分隔条的宽度)。布局文件里还没有
+	/// <c>library:main</c> 记录时用它(老用户升上来第一眼仍然是左右并排)。
+	/// </summary>
+	private static PageLayoutV2 LibraryDefaultPage()
+	{
+		PageLayoutV2 page = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeGrid,
+			Cols = LayoutSchema.ColsDefault,
+			RowH = 0.0,
+			Gap = 18.0,
+			Pad = LayoutSchema.PadDefaultCopy()
+		};
+		page.Blocks.Add(new BlockLayout
+		{
+			Id = FoldersBlockId,
+			X = 0.0,
+			Y = 0.0,
+			W = 4.0,
+			H = 1.0,
+			Span = 4,
+			MinH = 1.0,
+			Z = 0
+		});
+		page.Blocks.Add(new BlockLayout
+		{
+			Id = ListBlockId,
+			X = 4.0,
+			Y = 0.0,
+			W = 8.0,
+			H = 1.0,
+			Span = 8,
+			MinH = 1.0,
+			Z = 1
+		});
+		return page;
+	}
 
 	private readonly Border _leftCard;
 
@@ -156,9 +204,10 @@ public sealed class LibraryPage : PageBase
 		TextBlock h = Ui.Txt(I18n.L("文件夹列表"), 18.0, bold: true);
 		h.FontWeight = FontWeights.ExtraBold;
 		Border left = Ui.Card(Ui.V(10.0, h, _folderPath, _folders, Ui.Sep(), Ui.Txt(I18n.L("添加或导入"), 13.0, bold: true), add, pack, create, migrate), 14.0);
-		// 左栏随窗口比例伸缩，窄窗不挤右栏（2026-11-07 用户反馈：420 固定宽在窄窗占比过大）
-		left.MinWidth = 300.0;
-		left.MaxWidth = 380.0;
+		// [layout-fix] 规格 §3-问题1:去掉左卡的 MinWidth / MaxWidth,改为随所在列拉伸(见下面的 HorizontalAlignment)。
+		// 原来窗口较窄或高 DPI 时星号列算出来不到 300,Grid 会把放不下的部分直接裁掉,文件夹行的右边框与圆角就看不到了。
+		left.HorizontalAlignment = HorizontalAlignment.Stretch;
+		// MaxWidth 一并去掉:宽度完全由 4/12 列决定,窄窗下不再被裁。
 		left.VerticalAlignment = VerticalAlignment.Top;
 		// 右栏头部两行：第一行 标题+计数+搜索+刷新；第二行 副说明完整换行显示
 		TextBlock h2 = Ui.Txt(I18n.L("版本选择"), 21.0, bold: true);
@@ -190,15 +239,27 @@ public sealed class LibraryPage : PageBase
 		right.VerticalAlignment = VerticalAlignment.Top;
 		_leftCard = left;
 		_rightCol = right;
-		// 行高显式 Auto：网格自身高度恒等于内容，杜绝隐式 * 行被外层余量撑高（左栏卡片随之拉伸的根因向量）
-		_body = new PageLayoutHost("library", "folders", new GridLength(1.0, GridUnitType.Star), new GridLength(2.0, GridUnitType.Star));
-		_body.RowDefinitions.Add(new RowDefinition
+		// [layout-fix] 规格 §3-问题6:实例库整体改成区块宿主(两个区块 =「文件夹列表」「版本选择」)。
+		// 第 3 参边距不传(用布局文档的 pad,默认就是 PageBase.ScrollBody 的 18,14,18,16);
+		// 第 4 参 defaultPage = 出厂默认网格布局,布局文件里还没有 library:main 时用它兜底。
+		_host = new BlockHost("library:main", new List<BlockSpec>
 		{
-			Height = GridLength.Auto
-		});
-		_body.SetLeft(_leftCard);
-		_body.SetRight(_rightCol);
-		base.Content = PageBase.ScrollBody(_body);
+			new BlockSpec
+			{
+				Id = FoldersBlockId,
+				Title = I18n.L("文件夹列表"),
+				Content = _leftCard
+			},
+			new BlockSpec
+			{
+				Id = ListBlockId,
+				Title = I18n.L("版本选择"),
+				Content = _rightCol
+			}
+		}, null, LibraryDefaultPage());
+		// [layout-fix] 规格2-问题8:菜单在**每次弹出前**按当前状态重建(见 ApplyFolderLayout),
+		// 不再像原来那样只在创建时生成一次 —— 在编辑托盘里隐藏/恢复之后菜单也不会过期。
+		base.Content = _host;
 		ApplyFolderLayout();
 		EnableDrop(() => new FileDrop.DropContext
 		{
@@ -207,79 +268,49 @@ public sealed class LibraryPage : PageBase
 		});
 	}
 
-	// ————— 页面布局自定义（WP-U3）：双栏页不套 BlockHost，直接用 PageLayoutStore 读写 "library" 文档 —————
+	// ————— 页面布局自定义([layout-fix] 规格 §3-问题6):全部走 v2 区块系统,不再读写 v1 的 ui_page_layouts.json —————
 
-	// 读取布局文档并补全：list 恒可见（Hidden 强制 false），folders 条目缺失时按可见补齐
-	private static PageLayoutDoc LoadLayoutDoc()
+	/// <summary>[layout-fix] 规格 §4-能力2:文件夹栏是否显示 —— 直接读区块宿主的 v2 状态(block「folders」没被隐藏就是显示)。</summary>
+	private bool FoldersVisible()
 	{
-		PageLayoutDoc doc = PageLayoutStore.Load("library") ?? PageLayoutDoc.Default(new[] { "folders", "list" }, new[] { "folders", "list" });
-		doc.Blocks ??= new List<BlockState>();
-		bool hasFolders = false;
-		foreach (BlockState b in doc.Blocks)
-		{
-			if (b.Id == "folders")
-			{
-				hasFolders = true;
-			}
-			else if (b.Id == "list")
-			{
-				b.Hidden = false; // 版本列表是页面本体，任何情况下不允许隐藏
-			}
-		}
-		if (!hasFolders)
-		{
-			doc.Blocks.Add(new BlockState { Id = "folders", Hidden = false });
-		}
-		return doc;
+		return !_host.Editor.State.Hidden.Contains(FoldersBlockId);
 	}
 
-	private static bool FoldersVisible()
-	{
-		foreach (BlockState b in LoadLayoutDoc().Blocks)
-		{
-			if (b.Id == "folders")
-			{
-				return !b.Hidden;
-			}
-		}
-		return true;
-	}
-
-	// 按布局文档应用文件夹栏显隐:可见 → 双栏(L4 起由 PageLayoutHost 管列宽与比例);隐藏 → 左栏与分隔条一起收起(列宽占 0),右栏独占,与原来自管列定义等价
+	// 重建右键菜单:创建时一次 + **每次弹出前**一次(规格2-问题8:在编辑托盘里隐藏 / 恢复之后菜单也不会过期)
 	private void ApplyFolderLayout()
 	{
-		bool folders = FoldersVisible();
-		_body.SetLeftVisible(folders);
-		_body.ContextMenu = LayoutMenu(folders);
+		_host.ContextMenu = LayoutMenu(FoldersVisible());
+		_host.ContextMenuOpening -= OnBodyMenuOpening;
+		_host.ContextMenuOpening += OnBodyMenuOpening;
 	}
 
-	// 右键「自定义布局…」：显隐文件夹栏（勾选即时生效并保存）、导出/导入布局（导入由 PageLayoutIO 落盘，重读文档立即生效）
+	private void OnBodyMenuOpening(object sender, ContextMenuEventArgs e)
+	{
+		_host.ContextMenu = LayoutMenu(FoldersVisible());
+	}
+
+	// [layout-fix] 规格 §3-问题6:「自定义布局...」变成**可以直接点击**的入口(过去是只带子菜单的父项,点它本身没反应),
+	// 「显示文件夹栏」「导出布局」「导入布局」平铺成同级菜单项。
+	// [layout-fix] 规格2-问题8:文件夹栏那一项**按状态直说** —— 显示中写「隐藏文件夹栏」,隐藏时写「显示文件夹栏」
+	// (原来是勾选项,而主题样式不画勾,等于没提示)。
 	private ContextMenu LayoutMenu(bool foldersShown)
 	{
 		ContextMenu menu = new ContextMenu();
-		MenuItem root = new MenuItem
+		MenuItem enter = new MenuItem
 		{
-			Header = I18n.L("自定义布局…")
+			Header = I18n.L("自定义布局...")
+		};
+		enter.Click += delegate
+		{
+			_host.EnterEdit();
 		};
 		MenuItem foldersItem = new MenuItem
 		{
-			Header = I18n.L("显示文件夹栏"),
-			IsCheckable = true,
-			IsChecked = foldersShown
+			Header = (foldersShown ? I18n.L("隐藏文件夹栏") : I18n.L("显示文件夹栏"))
 		};
 		foldersItem.Click += delegate
 		{
-			menu.IsOpen = false; // 勾选项点击默认不收起菜单，这里主动关掉再应用
-			PageLayoutDoc doc = LoadLayoutDoc();
-			foreach (BlockState b in doc.Blocks)
-			{
-				if (b.Id == "folders")
-				{
-					b.Hidden = !(foldersItem.IsChecked == true);
-				}
-			}
-			PageLayoutStore.Save("library", doc);
-			ApplyFolderLayout();
+			SetFoldersVisible(!foldersShown);
 		};
 		MenuItem exportItem = new MenuItem
 		{
@@ -287,7 +318,8 @@ public sealed class LibraryPage : PageBase
 		};
 		exportItem.Click += delegate
 		{
-			PageLayoutIO.ExportToFileDialog("library");
+			// 页面 ID 随区块系统升级成表格里的 library:main(旧 v1 条目 "library" 不再被读取)
+			PageLayoutIO.ExportToFileDialog("library:main");
 		};
 		MenuItem importItem = new MenuItem
 		{
@@ -295,17 +327,54 @@ public sealed class LibraryPage : PageBase
 		};
 		importItem.Click += delegate
 		{
-			// 取消（null）不动布局；导入成功后 PageLayoutIO 已落盘，重读文档立即生效
+			// 取消(null)不动布局;导入成功后 PageLayoutIO 已落盘,重读文档立即生效
 			if (PageLayoutIO.ImportFromFileDialog().HasValue)
 			{
+				_host.Editor.ReloadFromStore();
 				ApplyFolderLayout();
 			}
 		};
-		root.Items.Add(foldersItem);
-		root.Items.Add(exportItem);
-		root.Items.Add(importItem);
-		menu.Items.Add(root);
+		menu.Items.Add(enter);
+		menu.Items.Add(new Separator());
+		menu.Items.Add(foldersItem);
+		menu.Items.Add(exportItem);
+		menu.Items.Add(importItem);
 		return menu;
+	}
+
+	/// <summary>
+	/// [layout-fix] 规格 §3-问题6 + §4-能力2:显示 / 隐藏「文件夹列表」区块。
+	/// 隐藏时「版本选择」铺满整行(0/12 列),重新显示时回到右侧 8 列 —— 一次 MutatePage 里把"显隐 + 列位"一起改完
+	/// (只落盘一次)。不再读 v1 的「实例库隐藏文件夹栏」设置(§6 兼容性:那个设置不再生效,需要在右键菜单里重新关一次)。
+	/// </summary>
+	private void SetFoldersVisible(bool visible)
+	{
+		_host.Editor.MutatePage(delegate(PageLayoutV2 page)
+		{
+			if (page.Blocks == null)
+			{
+				return;
+			}
+			bool grid = page.Mode == LayoutSchema.ModeGrid;
+			foreach (BlockLayout block in page.Blocks)
+			{
+				if (block == null)
+				{
+					continue;
+				}
+				if (block.Id == FoldersBlockId)
+				{
+					block.Hidden = !visible;
+				}
+				else if (block.Id == ListBlockId && grid && block.Y < 0.5)
+				{
+					block.X = (visible ? 4.0 : 0.0);
+					block.W = (visible ? 8.0 : 12.0);
+					block.Span = (int)block.W;
+				}
+			}
+		});
+		ApplyFolderLayout();
 	}
 
 	protected override async Task LoadAsync()

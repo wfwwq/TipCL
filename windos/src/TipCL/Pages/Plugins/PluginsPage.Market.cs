@@ -6,7 +6,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using TipCL.Pages.Layout;
 using TipCL.Services;
+
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Pages.Plugins;
 
@@ -14,6 +17,9 @@ namespace TipCL.Pages.Plugins;
 public sealed partial class PluginsPage
 {
 	private readonly SPanel _marketHost;
+
+	// [layout-fix] 规格 §3-问题4:市场自己的区块宿主(页面 ID = plugins:market)
+	private BlockHost _marketBlock = null!;
 
 	private UIElement _marketView = null!;
 
@@ -54,7 +60,49 @@ public sealed partial class PluginsPage
 		top.Add(Ui.H(6.0, Ui.Glyph("\ue721", 13.0, "B.InkMuted"), _search).VCenter(), 0);
 		top.Add(_marketInfo.VCenter().M(12.0, 0.0, 0.0, 0.0), 0, 1);
 		top.Add(Ui.H(6.0, sources, refresh).VCenter(), 0, 2);
-		_marketView = PageBase.ScrollBody(top, _tagBar, _marketHost);
+		// [layout-fix] 规格 §3-问题4:插件市场从 PageBase.ScrollBody(...) 改成区块宿主 BlockHost("plugins:market"),
+		// 三个区块 =「搜索栏」「标签」「插件列表」。间距 10 / 边距 18,14,18,16 = ScrollBody 的原值,
+		// 所以默认(非编辑态)渲染与旧版一致;在市场区域内右键进的是市场自己的编辑态(最内层优先)。
+		_marketBlock = new BlockHost("plugins:market", new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "toolbar",
+				Title = I18n.L("搜索栏"),
+				Content = top
+			},
+			new BlockSpec
+			{
+				Id = "tags",
+				Title = I18n.L("标签"),
+				Content = _tagBar
+			},
+			new BlockSpec
+			{
+				Id = "list",
+				Title = I18n.L("插件列表"),
+				Content = _marketHost
+			}
+		}, null, MarketDefaultPage());
+		_marketView = _marketBlock;
+	}
+
+	/// <summary>
+	/// [layout-fix] 规格 §4-能力2:插件市场的出厂默认布局 —— 单列 stack,间距 10 / 边距 18,14,18,16
+	/// (就是原来 PageBase.ScrollBody 的那一套值)。
+	/// </summary>
+	private static PageLayoutV2 MarketDefaultPage()
+	{
+		PageLayoutV2 page = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeStack,
+			Gap = LayoutSchema.GapDefault,
+			Pad = LayoutSchema.PadDefaultCopy()
+		};
+		page.Blocks.Add(new BlockLayout { Id = "toolbar", Span = 1, Z = 0 });
+		page.Blocks.Add(new BlockLayout { Id = "tags", Span = 1, Z = 1 });
+		page.Blocks.Add(new BlockLayout { Id = "list", Span = 1, Z = 2 });
+		return page;
 	}
 
 	private async Task LoadSettingsAsync()
