@@ -270,6 +270,30 @@ windos/docs/size-report.md:10      (历史体积报表)
 > 两份清单都**留在仓库根**、都没被 R30/R31 改动(红线)。
 > `sha256` **绝不允许**写成 64 个 0 那种"格式合法但不存在"的假值 —— 那正是 R22 修掉的洞(`UpdaterManifestGuardTests` 守着)。
 
+### 2.3.1 实际回填记录(2026-11-15)
+
+由 R31 发版执行成员 `rel-release` 真机回填。tag `v1.2.0` 打在 `39056c8e596cb77e0e71bb2f8507e90f95aadf47`,
+release id `445878011`:https://github.com/wfwwq/TipCL/releases/tag/v1.2.0
+
+**资产真值(哈希均为回下载校验后取的值):**
+
+| 资产 | 字节数 | SHA-256 |
+|---|---|---|
+| `TipCL.exe`(premium 标准件,人工上传) | 5,554,176 | `fcc10d90cda88f404047172ed147a9848ebac06739554237e4f913ec00f78857` |
+| `TipCL-linux-x64.AppImage` | 39,090,680 | `a98e7d35930315258fb5980b042a56957c06a24a41576c9225d976132cd2f178` |
+| `tipcl_1.2.0_amd64.deb` | 37,641,702 | 未单独校验(仅 `curl -sIL` 核 200) |
+
+**两份清单实际填的值(§2.3 A/B 两处已按上表落地):**
+
+- `update.json`:`version = 1.2.0`;`url = https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL.exe`;
+  `sha256 = fcc10d90cda88f404047172ed147a9848ebac06739554237e4f913ec00f78857`。
+- `update-linux.json`:`version = 1.2.0`;`url = https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL-linux-x64.AppImage`;
+  `sha256 = a98e7d35930315258fb5980b042a56957c06a24a41576c9225d976132cd2f178`。
+
+AppImage 的 sha256 与 `release.yml` linux job 日志里打印的清单行一致(两者各自独立取得:日志一行、回下载 `Get-FileHash` 一行)。
+Windows 侧 `release.yml` 自建的 `TipCL.exe`(5,534,720 B,sha256 `eb7a369b26f6c3ec3696b112653bbd00a61e360ff1c5b8febc34c567429a8f8c`)
+已按 §2.1 推荐口径 1 **删除并替换**为 premium 标准件。`README.md` 的 v1.1.0 SHA 行(`:203`)同步改为本次 `TipCL.exe` 的 sha256。
+
 ---
 
 ## 3. 本轮演练实测(全部真跑,原始输出在 `progress/evidence/wp1/`)

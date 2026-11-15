@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0-m3",
-  "notes": "Linux / Avalonia 移植的可自更新版本。发布新版本时改这三项:version(清单版本号,要比客户端 AppInfo.APP_VERSION 新)、url(那支 AppImage 的下载地址)、sha256(它的 SHA-256)。注意:这里的 sha256 占位值**故意写成格式非法的**(不是 64 位十六进制)—— 客户端的 ValidSha256 只校验格式,所以像 64 个 0 那种'看起来合法'的占位值会被当成真 sha 接受、一路走到下载才失败;格式非法则会让客户端直接拒绝并说明原因。",
-  "url": "https://github.com/wfwwq/TipCL/releases/download/v0.1.0-m3/TipCL-linux-x64.AppImage",
-  "sha256": "REPLACE-WITH-THE-REAL-SHA256"
+  "version": "1.2.0",
+  "notes": "Linux / Avalonia 移植 1.2.0:自包含 AppImage(免安装,可就地自更新)与 .deb(安装形态只下载、需手动安装)。sha256 是本次发布的 TipCL-linux-x64.AppImage 真值。",
+  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL-linux-x64.AppImage",
+  "sha256": "a98e7d35930315258fb5980b042a56957c06a24a41576c9225d976132cd2f178"
 }
