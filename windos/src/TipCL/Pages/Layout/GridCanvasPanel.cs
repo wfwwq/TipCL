@@ -251,10 +251,12 @@ public sealed class GridCanvasPanel : Panel
 	/// 第一趟:grid 用 (列宽 × Infinite) 量出每块需求高 → 算行高;canvas 直接按归一化矩形量。
 	/// 返回值的高 = 内容总高(滚动区据此给出滚动条)。
 	/// </summary>
+	// [layout-fix] 参考件v2-对齐:自动行高的行高下限从 120 降到 40(折叠块 / 固定高度块要能压到很矮)
+	private const double RowFallback = 40.0;
+
 	protected override Size MeasureOverride(Size available)
 	{
-		double width = ((double.IsInfinity(available.Width) || available.Width <= 0.0) ? 900.0 : available.Width);
-		if (IsCanvas)
+		double width = ((double.IsInfinity(available.Width) || available.Width <= 0.0) ? 900.0 : available.Width);		if (IsCanvas)
 		{
 			double height = ResolveCanvasHeight(available.Height);
 			_rects = LayoutCanvas.Rects(_cells, width, height);
@@ -267,6 +269,7 @@ public sealed class GridCanvasPanel : Panel
 		}
 		_columnWidth = LayoutGrid.ColumnWidth(width, Cols, Gap);
 		Dictionary<string, double> desired = new Dictionary<string, double>(StringComparer.Ordinal);
+		HashSet<string> noMin = new HashSet<string>(StringComparer.Ordinal);
 		foreach (UIElement child in base.InternalChildren)
 		{
 			string id = IdOf(child);
@@ -277,11 +280,43 @@ public sealed class GridCanvasPanel : Panel
 				continue;
 			}
 			double cellWidth = _columnWidth * cell.W + Gap * Math.Max(0, cell.W - 1);
+			// [layout-fix] 参考件v2-对齐:编辑态折叠的区块只占标题栏高度;拖出了固定高度(HeightPx)的区块
+			// 按固定高度量(内容改在块内滚动),这两种都不参与行高下限(MinH),否则行高会被内容顶回去。
+			bool folded = child is LayoutCard { IsFolded: true };
+			if (!folded && RowH <= 0.0 && cell.HeightPx > 0.0)
+			{
+				child.Measure(new Size(Math.Max(1.0, cellWidth), cell.HeightPx));
+				desired[id] = cell.HeightPx;
+				noMin.Add(cell.Id);
+				continue;
+			}
 			child.Measure(new Size(Math.Max(1.0, cellWidth), double.PositiveInfinity));
 			desired[id] = child.DesiredSize.Height;
+			if (folded)
+			{
+				noMin.Add(cell.Id);
+			}
 		}
 		_rows = LayoutGrid.RowCount(_cells);
-		_rowHeights = LayoutGrid.RowHeights(_cells, _rows, RowH, desired, LayoutCanvas.FallbackMinH);
+		List<LayoutCell> rowCells = _cells;
+		if (noMin.Count > 0)
+		{
+			rowCells = new List<LayoutCell>(_cells.Count);
+			foreach (LayoutCell cell2 in _cells)
+			{
+				if (cell2 != null && noMin.Contains(cell2.Id))
+				{
+					LayoutCell copy = cell2.Clone();
+					copy.MinH = 0.0;
+					rowCells.Add(copy);
+				}
+				else
+				{
+					rowCells.Add(cell2);
+				}
+			}
+		}
+		_rowHeights = LayoutGrid.RowHeights(rowCells, _rows, RowH, desired, RowFallback);
 		_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
 		double total = 0.0;
 		for (int i = 0; i < _rowHeights.Length; i++)

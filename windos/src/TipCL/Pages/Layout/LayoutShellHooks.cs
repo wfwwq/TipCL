@@ -165,6 +165,16 @@ public static class LayoutShellHooks
 				editing.Editor.ExitEdit();
 			};
 			menu.Items.Add(done);
+			// [layout-fix] 参考件v2-对齐:工具栏「重置本页」之外再给一个右键入口
+			MenuItem reset = new MenuItem
+			{
+				Header = I18n.L("重置本页布局")
+			};
+			reset.Click += delegate
+			{
+				editing.Editor.ResetPage();
+			};
+			menu.Items.Add(reset);
 		}
 		menu.Items.Add(new Separator());
 		MenuItem settings = new MenuItem

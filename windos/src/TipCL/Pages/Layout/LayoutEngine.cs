@@ -1009,6 +1009,49 @@ public sealed class LayoutCell
 	/// <summary>叠放序(canvas 用;顺序索引)。</summary>
 	public int Z { get; set; }
 
+	/// <summary>
+	/// [layout-fix] 参考件v2-对齐:grid 自动行高模式下**用户拖出来的固定像素高度**(0 = 跟随内容)。
+	/// 存在区块的 <c>extra.height_px</c> 里(不改 v2 契约字段)。自动行高的页面里"按行改 H"是无效的
+	/// (行高本来就跟着内容走),所以拉下边改的是这个像素高度 —— 这正是"高卡片拉不了大小"的解法。
+	/// </summary>
+	public double HeightPx { get; set; }
+
+	/// <summary>[layout-fix] 参考件v2-对齐:从区块的 <c>extra.height_px</c> 读固定高度(缺失 / 非法 → 0)。</summary>
+	public static double ReadHeightPx(BlockLayout? block)
+	{
+		if (block?.Extra == null || !block.Extra.TryGetValue("height_px", out object? value) || value == null)
+		{
+			return 0.0;
+		}
+		try
+		{
+			double px = ((value is System.Text.Json.JsonElement element) ? element.GetDouble() : Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture));
+			return ((px > 0.0 && !double.IsNaN(px) && !double.IsInfinity(px)) ? px : 0.0);
+		}
+		catch
+		{
+			return 0.0;
+		}
+	}
+
+	/// <summary>[layout-fix] 参考件v2-对齐:把固定高度写回区块的 <c>extra.height_px</c>(≤0 = 删掉该字段)。</summary>
+	public static void WriteHeightPx(BlockLayout? block, double px)
+	{
+		if (block == null)
+		{
+			return;
+		}
+		block.Extra ??= LayoutJson.Map();
+		if (px > 0.0)
+		{
+			block.Extra["height_px"] = Math.Round(px);
+		}
+		else
+		{
+			block.Extra.Remove("height_px");
+		}
+	}
+
 	/// <summary>深拷贝。</summary>
 	public LayoutCell Clone()
 	{
@@ -1025,7 +1068,8 @@ public sealed class LayoutCell
 			NH = NH,
 			MinW = MinW,
 			MinH = MinH,
-			Z = Z
+			Z = Z,
+			HeightPx = HeightPx
 		};
 	}
 
@@ -1049,10 +1093,11 @@ public sealed class LayoutCell
 		cell.MinW = LayoutCanvas.FallbackMinW;
 		cell.MinH = ((block.MinH > 0.0) ? block.MinH : LayoutCanvas.FallbackMinH);
 		cell.Z = block.Z;
+		cell.HeightPx = ReadHeightPx(block);
 		return cell;
 	}
 
-	/// <summary>把网格坐标写回块(只动 x/y/w/h,不动 span —— span 是 stack 模式的字段)。</summary>
+	/// <summary>把网格坐标写回块(只动 x/y/w/h 与固定高度,不动 span —— span 是 stack 模式的字段)。</summary>
 	public void ApplyGrid(BlockLayout? block)
 	{
 		if (block != null)
@@ -1061,6 +1106,7 @@ public sealed class LayoutCell
 			block.Y = Y;
 			block.W = W;
 			block.H = H;
+			WriteHeightPx(block, HeightPx);
 		}
 	}
 
@@ -1154,7 +1200,9 @@ public static class LayoutGrid
 				NH = block.H,
 				MinW = LayoutCanvas.FallbackMinW,
 				MinH = ((block.MinH > 0.0) ? block.MinH : LayoutCanvas.FallbackMinH),
-				Z = block.Z
+				Z = block.Z,
+				// [layout-fix] 参考件v2-对齐:拖出来的固定像素高度跟着格子走(渲染时按它量高度)
+				HeightPx = LayoutCell.ReadHeightPx(block)
 			});
 		}
 		return cells;
