@@ -24,7 +24,11 @@ public class UpdaterTests : IDisposable
     public void Dispose()
     {
         Updater.JsonFetcher = null;
-        Updater.TargetOverride = "";
+        // R31-CIFLAKE:本类的用例各自把 TargetOverride 指向自己的临时目标,收尾要**还原成隔离根内的
+        // 进程级沙箱**,而不是清成空串 —— 空串等于让产品回落到 MainModule(测试宿主自己,
+        // Linux runner 上就是 /usr/share/dotnet/dotnet),那正是 ubuntu CI 把 runner 的 dotnet 宿主
+        // 写坏的路径(见 TestWriteGuard 的文件头)。
+        TestWriteGuard.RestoreProcessSandbox();
         try { Directory.Delete(_dir, true); } catch (Exception) { }
     }
 
@@ -140,13 +144,19 @@ public class UpdaterTests : IDisposable
     {
         string fake = Write("Fake.AppImage", "APPIMAGE-BYTES");
         string? old = Environment.GetEnvironmentVariable("APPIMAGE");
-        try
+        // R31-CIFLAKE:测试进程默认把更新目标钉在隔离根内的沙箱上(TestWriteGuard),而注入点优先级
+        // 最高,会盖住这里要验的 `$APPIMAGE` 分支 —— 所以本用例显式临时退出沙箱(它只读
+        // UpdateTarget(),不做任何替换),收尾由 SuppressSandbox 的 Dispose 还原成沙箱。
+        using (TestWriteGuard.SuppressSandbox())
         {
-            Environment.SetEnvironmentVariable("APPIMAGE", fake);
-            Assert.True(Updater.IsAppImage());
-            Assert.Equal(fake, Updater.UpdateTarget());
+            try
+            {
+                Environment.SetEnvironmentVariable("APPIMAGE", fake);
+                Assert.True(Updater.IsAppImage());
+                Assert.Equal(fake, Updater.UpdateTarget());
+            }
+            finally { Environment.SetEnvironmentVariable("APPIMAGE", old); }
         }
-        finally { Environment.SetEnvironmentVariable("APPIMAGE", old); }
     }
 
     [Fact]
@@ -184,7 +194,7 @@ public class UpdaterTests : IDisposable
                 Assert.True((mode & UnixFileMode.UserExecute) != 0, "替换后可执行位丢了");
             }
         }
-        finally { Updater.TargetOverride = ""; }
+        finally { TestWriteGuard.RestoreProcessSandbox(); }
     }
 
     /// <summary>目标不可写(典型:.deb 装到 /opt)⇒ 不硬来,返回 download-only 并把包留在原处。</summary>
@@ -203,7 +213,7 @@ public class UpdaterTests : IDisposable
             Assert.Contains("不可写", Py.S(res["message"]));
             Assert.True(File.Exists(pkg));
         }
-        finally { Updater.TargetOverride = ""; }
+        finally { TestWriteGuard.RestoreProcessSandbox(); }
     }
 
     [Fact]
@@ -215,7 +225,7 @@ public class UpdaterTests : IDisposable
             var ex = Assert.Throws<RuntimeError>(() => Updater.ApplyStaged(Path.Combine(_dir, "missing.bin"), restart: false));
             Assert.Contains("更新包不存在", ex.Message);
         }
-        finally { Updater.TargetOverride = ""; }
+        finally { TestWriteGuard.RestoreProcessSandbox(); }
     }
 
     [Fact]
