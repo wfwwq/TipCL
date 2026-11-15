@@ -33,6 +33,20 @@ public sealed class LayoutEditor
 	// 页面对宿主的显式边距覆盖(构造第 3 参);null = 用布局文档的 pad
 	private readonly Thickness? _marginOverride;
 
+	// [layout-fix] 规格 §4-能力2:页面的「出厂默认布局」(构造第 4 参 defaultPage)。
+	// 布局文件里还没有该页的记录时用它;「重置本页」也回到它(见 ResetPage)。null = 白名单默认布局(stack)。
+	private readonly PageLayoutV2? _defaultPage;
+
+	// [layout-fix] 规格 §3-问题7 + 规格2-问题2.3:stack 页进编辑态会被**临时**折算成 12 列网格。
+	//   _preEditPage   = 折算前的原样快照(退出时若一次都没动过,原样还原 —— 磁盘上不该留下任何痕迹)
+	//   _autoGrid      = 这次编辑态是"临时折算"出来的
+	//   _gridTouched   = 这次编辑动过(拖 / 缩放 / 隐藏 / 恢复 / 落盘)⇒ 退出时保留网格
+	private PageLayoutV2? _preEditPage;
+
+	private bool _autoGrid;
+
+	private bool _gridTouched;
+
 	private readonly SPanel _list = new SPanel
 	{
 		Orientation = Orientation.Vertical,
@@ -95,6 +109,15 @@ public sealed class LayoutEditor
 
 	private readonly Dictionary<string, LayoutCell> _gestureCells = new Dictionary<string, LayoutCell>(StringComparer.Ordinal);
 
+	// [layout-fix] 规格2-问题2.2:手势开始时的**全部**槽位快照 + 行高快照。
+	// 每次鼠标移动都从这份快照重新算(而不是在上一次的结果上继续叠),否则反复经过同一格会越拖越乱;
+	// 行高快照用来把"鼠标落在哪一行"折算成行号 —— 过去用"位移 ÷ 被拖卡片自身高度",
+	// 于是高卡片几乎拖不动、矮卡片一拖跳好几行。
+	private readonly Dictionary<string, LayoutCell> _gestureAll = new Dictionary<string, LayoutCell>(StringComparer.Ordinal);
+
+	private double[] _gestureRows = new double[0];
+
+	// 被拖块**原来的**列(左右互换的候选落点;见 LayoutGrid.Compact 的 swapX)
 	private LayoutRect _gestureAnchor;
 
 	// 工具条上的撤销/重做按钮(按栈的可用性置灰)
@@ -106,10 +129,15 @@ public sealed class LayoutEditor
 	private Button? _snapBtn;
 
 	/// <summary>构造:pageId + 页面块描述 + 可选的页级边距覆盖(null = 用文档 pad,一般是 18,14,18,16)。</summary>
-	public LayoutEditor(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null)
+	/// <param name="defaultPage">
+	/// [layout-fix] 规格 §4-能力2:该页的「出厂默认布局」。布局文件里还没有该页记录时用它(实例库就靠它默认左右排布),
+	/// null = 白名单默认布局(单列 stack + 默认间距边距,与改动前完全一致)。
+	/// </param>
+	public LayoutEditor(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null, PageLayoutV2? defaultPage = null)
 	{
 		_pageId = pageId ?? "";
 		_marginOverride = contentMargin;
+		_defaultPage = ((defaultPage != null) ? defaultPage.Clone() : null);
 		if (specs != null)
 		{
 			foreach (BlockSpec spec in specs)
@@ -162,13 +190,24 @@ public sealed class LayoutEditor
 			ImportLayout();
 		}));
 		sPanel2.HorizontalAlignment = HorizontalAlignment.Right;
+		// [layout-fix] 规格2-问题6:工具条改成两列 Grid(*,Auto) —— 左列提示文字(宽度不够用省略号截断 +
+		// 鼠标悬停显示完整内容),右列按钮组靠右。设置页这种窄区域里按钮不会被挤掉、提示也不会被裁一半。
+		// [layout-fix] 规格 §3-问题7:提示文案「按住区块拖动移动 · 拖右/下边角缩放」。
+		TextBlock hintText = Ui.Txt(I18n.L("按住区块拖动移动 · 拖右/下边角缩放"), 12.0, bold: false, "B.InkMuted");
+		hintText.TextTrimming = TextTrimming.CharacterEllipsis;
+		hintText.VerticalAlignment = VerticalAlignment.Center;
+		hintText.ToolTip = I18n.L("按住区块拖动移动 · 拖右/下边角缩放");
+		hintText.M(0.0, 0.0, 10.0, 0.0);
+		Grid barGrid = Ui.G(null, "*,Auto");
+		barGrid.Add(hintText, 0);
+		barGrid.Add(sPanel2, 0, 1);
 		_barHost.CornerRadius = new CornerRadius(10.0);
 		_barHost.Padding = new Thickness(10.0, 8.0, 10.0, 8.0);
 		_barHost.Visibility = Visibility.Collapsed;
 		_barHost.SetResourceReference(Border.BackgroundProperty, "B.Paper");
 		_barHost.SetResourceReference(Border.BorderBrushProperty, "B.Line");
 		_barHost.BorderThickness = new Thickness(1.0);
-		_barHost.Child = sPanel2;
+		_barHost.Child = barGrid;
 		Motion.Shadow(_barHost, 16.0, 0.07, 3.0);
 		// 根结构:上滚动内容区,下托盘/工具条(仅编辑态占位出现,不悬浮遮挡内容)
 		SPanel bottom = Ui.V(8.0, _trayHost, _barHost);
@@ -244,13 +283,17 @@ public sealed class LayoutEditor
 		}
 	}
 
-	/// <summary>
-	/// 重新从真源装载本页并重排(D1):设置页改完布局文档、或整机方案被应用之后,
-	/// 已存在的编辑器实例靠它立刻刷新(不重建页面,页面自己的状态不丢)。
-	/// </summary>
+	/// <summary>重新从真源装载本页并重排(D1):设置页改完布局文档、或整机方案被应用之后,
+	/// 已存在的编辑器实例靠它立刻刷新(不重建页面,页面自己的状态不丢)。</summary>
 	public void ReloadFromStore()
 	{
 		LoadFromStore();
+		// [layout-fix] 规格 §3-问题7:编辑态里文档被换掉(导入 / 别处保存)之后,临时网格要按新内容重折一次;
+		// 已经动过(_gridTouched)就不动用户改出来的网格。
+		if (_edit && _autoGrid && !_gridTouched)
+		{
+			ConvertStackToGrid();
+		}
 		Render();
 	}
 
@@ -275,6 +318,12 @@ public sealed class LayoutEditor
 		// 每次进编辑态都是一次新会话:多选与撤销栈清空(历史上的改动已经即时落盘,不需要跨会话撤销)
 		_session.ClearHistory();
 		_session.ClearSelection();
+		// [layout-fix] 规格 §3-问题7:stack 页临时折算成 12 列网格 → 整块都能自由拖
+		PrepareFreeDrag();
+		// [layout-fix] 规格2-问题2.3:进编辑先压紧一次 —— 旧存档里被放到很靠下、看起来"消失"的区块
+		// (录屏里实例库的「版本选择」、原版页的「筛选」)会浮回能看到的位置。**只在编辑态生效**,
+		// 不进入编辑就不会改动任何既有网格布局(启动页刻意留出的空白必须保留)。
+		CompactState();
 		Render();
 		_barHost.Visibility = Visibility.Visible;
 		// 键盘(§4.G)需要根元素拿到焦点;拿不到也不影响鼠标交互
@@ -287,6 +336,56 @@ public sealed class LayoutEditor
 		}
 	}
 
+	// [layout-fix] 规格 §3-问题7:进编辑态时把 stack 页面临时换成 12 列 grid(按现状逐行折算坐标),
+	// 这样整块按住就能上下左右自由拖动、拖边缩放;一次都没动过就在退出时还原。
+	private void PrepareFreeDrag()
+	{
+		_autoGrid = false;
+		_gridTouched = false;
+		_preEditPage = null;
+		if (_specs.Count == 0 || _state?.Page == null || _state.Page.Mode != LayoutSchema.ModeStack)
+		{
+			return;
+		}
+		_preEditPage = _state.ToPage();
+		_autoGrid = true;
+		ConvertStackToGrid();
+	}
+
+	// [layout-fix] 规格 §3-问题7:按排布计划**逐行**折算到 12 列网格 —— 两栏 / 三栏的行各块按比例分列位
+	// (列宽 = 原列位 × 12 ÷ 原列数),行号就是原来的行号,行高仍自适应(row_h = 0),所以画面看起来不变。
+	// 排布计划里没有的块(隐藏块等)排到最后一行之后。
+	private void ConvertStackToGrid()
+	{
+		if (_state?.Page == null || _state.Page.Mode != LayoutSchema.ModeStack)
+		{
+			return;
+		}
+		// 折算规则在纯模型里(LayoutEngine.StackToGrid):排布计划的行划分 → 12 栅格的列位 / 列跨度,
+		// 行号不变、行高自适应(row_h = 0),所以画面看起来不变。这里只负责"换一份状态"。
+		PageLayoutV2 grid = _state.ToPage();
+		if (!LayoutEngine.StackToGrid(grid, _pageId))
+		{
+			return;
+		}
+		_state = LayoutEngine.LoadState(_pageId, grid, _refs, _state.ExistedInDoc);
+	}
+
+	// [layout-fix] 规格2-问题2.3:网格页压紧 —— 消除空洞(旧存档里被拖到很下面、看起来"消失"的区块会浮回可见区域)。
+	// 只在编辑过程中被调用(EnterEdit / CommitBox);canvas 模式不参与。
+	private void CompactState()
+	{
+		if (_state?.Page == null || _state.Page.Mode != LayoutSchema.ModeGrid)
+		{
+			return;
+		}
+		PageLayoutV2 page = _state.ToPage();
+		List<LayoutCell> cells = LayoutGrid.Pack(page);
+		LayoutGrid.Compact(cells, LayoutGrid.Columns(page), null, null);
+		LayoutGrid.Apply(page, cells);
+		_state = LayoutEngine.LoadState(_pageId, page, _refs, _state.ExistedInDoc);
+	}
+
 	/// <summary>退出编辑态(落盘 + Toast,与旧版一致)。</summary>
 	public void ExitEdit()
 	{
@@ -295,6 +394,15 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = false;
+		if (_autoGrid && !_gridTouched && _preEditPage != null)
+		{
+			// [layout-fix] 规格 §5「进入编辑后不动任何东西直接「完成编辑」,页面应该和之前完全一样」:
+			// 这次只是临时折算成了网格,一个手势都没发生 → 把原来的 stack 放回去,不悄悄改用户的页面。
+			_state = LayoutEngine.LoadState(_pageId, _preEditPage, _refs, _state.ExistedInDoc);
+		}
+		_autoGrid = false;
+		_gridTouched = false;
+		_preEditPage = null;
 		Persist();
 		Render();
 		_session.ClearSelection();
@@ -326,7 +434,11 @@ public sealed class LayoutEditor
 		PageLayoutV2? page = LayoutVariants.PageOf(doc.Layout, _pageId, width, LayoutVariantHost.Threshold);
 		// 全局密度也来自 v2(缺省 standard → 间距档 10 = 现状)
 		_density = ((doc.Layout?.Shell != null && LayoutSchema.IsKnownDensity(doc.Layout.Shell.Density)) ? doc.Layout.Shell.Density : LayoutSchema.DensityStandard);
-		_state = LayoutEngine.LoadState(_pageId, page, _refs);
+		// [layout-fix] 规格 §4-能力2:真源里没有这一页时用该页的 defaultPage 兜底(实例库的默认左右排布就靠它)。
+		// 注意 ExistedInDoc 要如实传 false —— 兜底布局只是"读到空气时的默认值",没有被写进任何文件。
+		bool existed = page != null;
+		PageLayoutV2? effective = (page ?? _defaultPage);
+		_state = LayoutEngine.LoadState(_pageId, ((effective != null) ? effective.Clone() : null), _refs, existed);
 	}
 
 	// 当前是否 grid / canvas 模式(stack = 缺省,走与改动前完全相同的纵向流)
@@ -631,20 +743,71 @@ public sealed class LayoutEditor
 		{
 			return;
 		}
+		// [layout-fix] 规格 §3-问题7:恢复也算"动过"(退出时保留网格,不再还原成 stack)
+		_gridTouched = true;
 		_session.PushUndo(_state.ToPage());
 		_state.Restore(spec.Id);
 		Render();
 		Persist();
 	}
 
-	// 重置本页 = 回到白名单默认布局(等价 PageLayoutDoc.Default)并落盘
+	// 重置本页 = 回到该页出厂布局(含默认模式)并落盘。
+	// [layout-fix] 规格 §3-问题7:出厂布局 = BlockHost 传进来的 defaultPage(没有才是白名单默认 = stack),
+	// 不再是"只重排顺序";编辑态下重置完再补一次"临时网格"折算,免得刚重置就掉出可拖动状态。
 	private void ResetPage()
 	{
 		_session.PushUndo(_state.ToPage());
-		_state.Reset(_refs);
+		_state = LayoutEngine.LoadState(_pageId, ((_defaultPage != null) ? _defaultPage.Clone() : null), _refs, false);
+		_autoGrid = false;
+		_gridTouched = false;
+		_preEditPage = null;
 		Persist();
+		if (_edit)
+		{
+			PrepareFreeDrag();
+		}
 		Render();
 		AppServices.Window?.Toast(I18n.L("布局已重置"), "", ToastKind.Success);
+	}
+
+	// ————— 页面自己调整布局用的公开口子([layout-fix] 规格 §4-能力2) —————
+
+	/// <summary>
+	/// [layout-fix] 规格 §4-能力2:不进编辑态直接切换本页某个块的显隐(实例库右键菜单用它)。
+	/// </summary>
+	public void SetBlockHidden(string id, bool hidden)
+	{
+		if (string.IsNullOrEmpty(id) || !_state.Order.Contains(id))
+		{
+			return;
+		}
+		if (hidden)
+		{
+			_state.Hide(id);
+		}
+		else
+		{
+			_state.Restore(id);
+		}
+		Persist();
+		Render();
+	}
+
+	/// <summary>
+	/// [layout-fix] 规格 §4-能力2:把本页 v2 条目交给页面自己改一次(改页级参数或某块的几何),
+	/// 改完立刻落盘并重排。实例库的「显示文件夹栏」用它一次改完"显隐 + 版本选择的列位"。
+	/// </summary>
+	public void MutatePage(Action<PageLayoutV2> mutate)
+	{
+		if (mutate == null)
+		{
+			return;
+		}
+		PageLayoutV2 page = _state.ToPage();
+		mutate(page);
+		_state = LayoutEngine.LoadState(_pageId, page, _refs, _state.ExistedInDoc);
+		Persist();
+		Render();
 	}
 
 	// 导入:PageLayoutIO 仍按 v1 语义写盘(整机 v2 方案导入由 L5 做);这里把 v1 的顺序/显隐并进 v2,
@@ -684,6 +847,12 @@ public sealed class LayoutEditor
 	// _saving 守卫:Save 会同步触发 LayoutChanged,自己不用被自己触发的那一次再重排一遍
 	private void Persist()
 	{
+		// [layout-fix] 规格 §3-问题7:编辑期间的任何一次落盘都算"这次编辑动过" ——
+		// 退出时据此决定是保留网格还是还原原来的 stack(见 ExitEdit)。
+		if (_edit)
+		{
+			_gridTouched = true;
+		}
 		_saving = true;
 		try
 		{
@@ -833,6 +1002,17 @@ public sealed class LayoutEditor
 	// 起手:压一份撤销快照 + 记下所有选中块的起始槽位(用绝对值算位移,避免逐帧累积误差)
 	private void StartGesture(string kind, LayoutCard card, MouseButtonEventArgs e)
 	{
+		// [layout-fix] 规格2-问题2.2:先留"全部槽位 + 行高"的快照 ——
+		// 之后每一帧都从这份快照重算,让位不累积;行高快照用来把鼠标位置折算成行号。
+		_gestureAll.Clear();
+		foreach (LayoutCell cell in _box.Cells)
+		{
+			if (cell != null && !string.IsNullOrEmpty(cell.Id))
+			{
+				_gestureAll[cell.Id] = cell.Clone();
+			}
+		}
+		_gestureRows = ((double[])(_box.RowHeightValues?.Clone() ?? new double[0]));
 		_session.PushUndo(_state.ToPage());
 		_gesture = kind;
 		_gestureHandle = "";
@@ -840,10 +1020,10 @@ public sealed class LayoutEditor
 		_gestureCells.Clear();
 		foreach (string id in _session.OrderedSelection(_state.Order))
 		{
-			LayoutCell? cell = _box.CellOf(id);
-			if (cell != null)
+			LayoutCell? cell2 = _box.CellOf(id);
+			if (cell2 != null)
 			{
-				_gestureCells[id] = cell.Clone();
+				_gestureCells[id] = cell2.Clone();
 			}
 		}
 		if (_gestureCells.Count == 0)
@@ -967,6 +1147,10 @@ public sealed class LayoutEditor
 	private void EndBoxGesture(bool persist, bool rollback)
 	{
 		bool active = _gesture.Length != 0;
+		// [layout-fix] 规格 §3-问题7:拖 / 缩放过的块要"优先占住落点"(PromoteToFront),
+		// 先把它们记下来 —— 下面立刻会清掉 _gesture / _gestureCells,清完就问不出来了。
+		bool movedSomething = _gesture == "move" || _gesture == "resize";
+		List<string> touchedIds = new List<string>(_gestureCells.Keys);
 		_gesture = "";
 		_gestureHandle = "";
 		_gestureCells.Clear();
@@ -996,7 +1180,7 @@ public sealed class LayoutEditor
 		}
 		if (persist)
 		{
-			CommitBox();
+			CommitBox(movedSomething ? touchedIds : null);
 		}
 		else
 		{
@@ -1005,11 +1189,20 @@ public sealed class LayoutEditor
 	}
 
 	// 画布槽位 → 页面块 → v2(唯一入口 LayoutStoreV2)并落盘
-	private void CommitBox()
+	private void CommitBox(List<string>? touchedIds = null)
 	{
 		PageLayoutV2 page = _state.ToPage();
 		_box.ApplyTo(page);
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
+		if (touchedIds != null && touchedIds.Count > 0)
+		{
+			// [layout-fix] 规格 §3-问题7:拖到别人位置时,被拖的区块优先占住落点,其余区块自动往下让位。
+			// grid 的自动流按块表顺序抢格子(见 LayoutPageState.PromoteToFront),所以把它们挪到最前面。
+			_state.PromoteToFront(touchedIds);
+			_gridTouched = true;
+		}
+		// [layout-fix] 规格2-问题2.3:松手后再压紧一次再保存(拖动过程中已经实时让位,这一步抹掉残留空洞)
+		CompactState();
 		_session.Retain(_state.Order);
 		Persist();
 		Render();
@@ -1067,63 +1260,80 @@ public sealed class LayoutEditor
 		}
 	}
 
-	// grid:按网格单位整体拖拽 / 缩放(位移折成格数);对齐线按像素算完再折回格数,线仍画在真正对齐的位置
+	// [layout-fix] 规格2-问题2.2(重写网格拖动 / 缩放):
+	//  - 列 = 卡片左上角跟随鼠标后的最近列;行 = 鼠标指针所在的行(按手势开始时的行高快照算),
+	//    不再用"卡片自身高度"当行步长(高卡片几乎拖不动、矮卡片一动就跳好几行的根源)。
+	//  - 每次移动都从全部槽位快照恢复,再以被拖块为固定点做一次压紧:其他块自动让位 / 上浮,不留空洞;
+	//    同一行里被占位的块优先换到被拖块原来的列(左右互换)。
+	//  - 对齐辅助线在 grid 模式去掉:格子吸附已经足够,辅助线吸附会和让位逻辑互相打架(canvas 模式仍保留)。
 	private void ApplyGridGesture(double dx, double dy)
 	{
 		int cols = LayoutGrid.Columns(_state.Page);
 		double columnStep = Math.Max(1.0, _box.ColumnWidthValue + _box.Gap);
 		string? primary = PrimaryId();
-		LayoutRect? anchorRect = _box.RectOf(primary);
-		double rowStep = Math.Max(1.0, ((anchorRect.HasValue ? anchorRect.Value.H : LayoutCanvas.FallbackMinH) + _box.Gap));
-		int stepX = (int)Math.Round(dx / columnStep);
-		int stepY = (int)Math.Round(dy / rowStep);
-		foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
+		if (primary == null || !_gestureCells.TryGetValue(primary, out LayoutCell? start))
+		{
+			return;
+		}
+		// ① 全部槽位回到起手时的样子(让位不累积)
+		foreach (KeyValuePair<string, LayoutCell> kv in _gestureAll)
 		{
 			LayoutCell? cell = _box.CellOf(kv.Key);
-			if (cell == null)
+			if (cell != null)
 			{
-				continue;
-			}
-			LayoutCell start = kv.Value;
-			cell.X = start.X;
-			cell.Y = start.Y;
-			cell.W = start.W;
-			cell.H = start.H;
-			if (_gesture == "resize")
-			{
-				LayoutGrid.ResizeCell(cell, _gestureHandle, stepX, stepY, cols);
-			}
-			else
-			{
-				LayoutGrid.MoveCell(cell, stepX, stepY, cols, 0);
+				cell.X = kv.Value.X;
+				cell.Y = kv.Value.Y;
+				cell.W = kv.Value.W;
+				cell.H = kv.Value.H;
 			}
 		}
-		LayoutRect? rect = GridRectOf(_box.CellOf(primary));
-		if (primary != null && rect.HasValue)
+		Dictionary<string, int>? swap = null;
+		if (_gesture == "resize")
 		{
-			LayoutGuideResult guides = LayoutGuides.Align(rect.Value, OtherRects(primary, false), LayoutGuides.Threshold);
-			if (_gesture == "move" && guides.HasSnap)
+			// 缩放:行步长取"起手时这张卡自己的像素高 + 间距"(缩放的手感与卡片尺寸挂钩是对的)
+			double rowStep = Math.Max(1.0, ((_gestureAnchor.H > 0.0) ? _gestureAnchor.H : LayoutCanvas.FallbackMinH) + _box.Gap);
+			int dc = (int)Math.Round(dx / columnStep);
+			int dr = (int)Math.Round(dy / rowStep);
+			foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
 			{
-				int fixX = (int)Math.Round(guides.Dx / columnStep);
-				int fixY = (int)Math.Round(guides.Dy / rowStep);
-				if (fixX != 0 || fixY != 0)
+				LayoutCell? cell = _box.CellOf(kv.Key);
+				if (cell != null)
 				{
-					foreach (KeyValuePair<string, LayoutCell> kv2 in _gestureCells)
-					{
-						LayoutCell? cell2 = _box.CellOf(kv2.Key);
-						if (cell2 != null)
-						{
-							LayoutGrid.MoveCell(cell2, fixX, fixY, cols, 0);
-						}
-					}
+					LayoutGrid.ResizeCell(cell, _gestureHandle, dc, dr, cols);
 				}
 			}
-			_guide.ShowLines(guides.Lines);
 		}
 		else
 		{
-			_guide.Clear();
+			// 列:卡片左上角跟随鼠标 → 最近的列
+			int nx = (int)Math.Round((_gestureAnchor.X + dx) / columnStep);
+			nx = Math.Max(0, Math.Min(cols - start.W, nx));
+			// 行:鼠标指针落在第几行(带半个间距的容差)
+			int ny = LayoutGrid.RowAt(_gestureRows, _gestureStart.Y + dy, _box.Gap);
+			int dcol = nx - start.X;
+			int drow = ny - start.Y;
+			foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
+			{
+				LayoutCell? cell = _box.CellOf(kv.Key);
+				if (cell != null)
+				{
+					cell.X = Math.Max(0, Math.Min(cols - cell.W, kv.Value.X + dcol));
+					cell.Y = Math.Max(0, kv.Value.Y + drow);
+				}
+			}
+			// 其余块的"备选列" = 被拖块**原来的**列:那样能放得更高就换过去(左右互换)
+			swap = new Dictionary<string, int>(StringComparer.Ordinal);
+			foreach (KeyValuePair<string, LayoutCell> kv in _gestureAll)
+			{
+				if (!_gestureCells.ContainsKey(kv.Key))
+				{
+					swap[kv.Key] = start.X;
+				}
+			}
 		}
+		// ② 钉住被拖 / 缩放中的块,其余块实时让位(重力上浮 + 左右互换)
+		_box.CompactCells(new HashSet<string>(_gestureCells.Keys, StringComparer.Ordinal), swap);
+		_guide.Clear();
 	}
 
 	// 手势主角:多选时取选择里的第一块(它带动整组)
@@ -1429,13 +1639,16 @@ internal sealed class LayoutCard : Border
 		Spec = spec;
 		CornerRadius = new CornerRadius(10.0);
 		SetResourceReference(Border.BorderBrushProperty, "B.Accent");
-		// 操作条:拖拽手柄(Ico.Sort)+ 块标题 + 显隐按钮
-		Button uIElement = Ui.IconBtn(Ico.Sort, I18n.L("拖拽排序"), null, 12.0);
-		uIElement.Cursor = Cursors.SizeAll;
-		uIElement.PreviewMouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
-		{
-			_host.BeginHandleDrag(this, (UIElement)s, e);
-		};
+		// [layout-fix] 规格 §3-问题7 + 规格2-问题7:去掉 ⇅「拖拽排序」按钮,换成一个**不可点**的拖动提示图标。
+		// 拖动不再需要按住这个小按钮 —— 编辑态下整张卡片任意位置都能按住拖(见 OnCardMouseDown / SetEdit 的十字光标);
+		// 图标本身不参与命中(IsHitTestVisible=false),免得它挡住它下面那块的按下事件。
+		// 偏离说明:规格2-问题7 建议把码位换成 U+E76F,但那一位**不在**内置图标字体 TipCLIcons.ttf 里
+		// (IconFontTests.EveryGlyphUsedInSourceIsInEmbeddedFont 守卫;缺字体时 Win7/精简系统会显示成方框)。
+		// 补码位要重做 tools/iconfont 的子集字体,不在本轮范围内 ⇒ 仍然用 \ue8cb(⇅),但已经是"不可点的提示"而非按钮。
+		TextBlock dragIcon = Ui.Glyph(Ico.Sort, 12.0);
+		dragIcon.ToolTip = I18n.L("按住区块拖动移动");
+		dragIcon.IsHitTestVisible = false;
+		dragIcon.VerticalAlignment = VerticalAlignment.Center;
 		Button button = Ui.IconBtn(Ico.Close, I18n.L("隐藏"), delegate
 		{
 			_host.HideBlock(Spec);
@@ -1443,7 +1656,7 @@ internal sealed class LayoutCard : Border
 		TextBlock textBlock = Ui.Txt(spec.Title, 12.5, bold: true);
 		textBlock.VerticalAlignment = VerticalAlignment.Center;
 		textBlock.TextTrimming = TextTrimming.CharacterEllipsis;
-		_bar = Ui.H(8.0, uIElement, textBlock, Ui.Spring(), button);
+		_bar = Ui.H(8.0, dragIcon, textBlock, Ui.Spring(), button);
 		_bar.Margin = new Thickness(6.0, 6.0, 6.0, 2.0);
 		// 常态块标题(§4.B 的 title;缺省 false → 整行折叠,与改动前一致)
 		TextBlock titleText = Ui.Txt(spec.Title, 12.5, bold: true);
@@ -1502,6 +1715,8 @@ internal sealed class LayoutCard : Border
 		_edit = edit;
 		_bar.Show(edit);
 		_body.IsHitTestVisible = !edit;
+		// [layout-fix] 规格 §3-问题7:编辑态整卡可拖 → 光标变十字移动箭头(隐藏 × 按钮自己会盖成手型)
+		Cursor = (edit ? Cursors.SizeAll : null);
 		UpdateHandles();
 		ApplyLook();
 	}
