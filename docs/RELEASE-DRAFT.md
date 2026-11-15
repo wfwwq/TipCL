@@ -277,11 +277,31 @@ Windows 本机走 **无头** `--smoke`(`Program.cs:17` → `SmokeRunner.Run`,`Sm
 |---|---|
 | 反馈弹窗的「AI 修复」在 `chat_id` 不存在时按 id 建对话 | 不再把 AI 修复的回合错误地落到主界面当前对话里 |
 | `-p:Premium=true` 干净 HEAD 下编译报 `CS0103(_immersive)` | 此前 **premium 交付件不可复现**,已修 |
-| 受限宿主里假手机端的 `HttpListener` 被拒导致用例必失败 | 改用裸 socket;验收口径从"排除 `PhoneLinkTests`"**恢复为全量** |
+| 受限宿主里**测试夹具**的假手机端 `HttpListener` 被拒导致用例必失败 | 改用裸 socket;验收口径从"排除 `PhoneLinkTests`"**恢复为全量**(纯测试基建修复,**不代表手机同步已端到端可用**,见下方「已知问题」第 1 条) |
 | 插件页 `plugins_ui` 重复行 | 已修(含 7 例单测) |
 | i18n:两处"只差标点宽度"的近似重复 key,以及 3 处因此查不到译文的源码字面量 | 词表 en/zh 各 2951 条、差集 0 |
 | 体积回收引入的两个隐蔽坑(见上) | 已带漂移守卫用例(15 例) |
 | 仓库卫生:`.gitignore` 补 `artifacts/`、`*_wpftmp.csproj`、`_wpf_run/` | 生成物不再长期挂脏 |
+
+#### ⚠️ 已知问题(本轮**都不修**;发版说明请按这里的口径措辞)
+
+1. **「手机同步」目前只有桌面端一半 —— 不要写成端到端可用的新功能。**
+   桌面端(`windos/src/TipCL/Core/Launcher/Sync/`、设置页「手机同步」与同步面板)在仓库里;
+   **手机端服务端在 `TipCL-Android` 里找不到对应实现**(WP-4 全库取证:19,336 个 smali + Java 源码 + `android-app`,
+   `X-PyMCL-Token` / `/api/ping` / `/api/worlds` / `deviceTimeMs` / `配对码` **全部 0 命中**;`27531` 的唯一命中是 Compose
+   编译期 sourceInformation 字面量,属假阳性)。
+   ⇒ 措辞只能是「**桌面端协议与 UI 已就绪,手机端待配套**」,**别写「现在就能和手机互传存档」**;
+   `README.md` 的「📱 手机同步」一节若要改,**只能减少承诺、不能增加**;「手机端代码在哪个仓库」= **待用户确认**。
+2. **桌面 `PhoneClient` 从不校验 `/api/ping` 返回的 `protocol`**(本轮独立复核:全树 `protocol` 命中只有
+   `Sync/PhoneClient.cs:15`(注释)、`:28-29`(`public int Protocol;`)、`:217`(`Protocol = (int)Num(j, "protocol")`)——
+   **写进去之后再没有任何一处读它、更没有任何比较**)⇒ 将来手机端上到「协议 2」会被**静默当协议 1 用**。
+3. **`windos/src/TipCL/Core/Launcher/Utils.cs:790`:`WriteJson` 自称的 6 轮重试覆盖不到 `MkStemp` 抛的异常**
+   (本轮独立复核源码:`MkStemp(...)` 在 `:790`,包住它的 `try` 从 `:791` 才开始;而 `MkStemp` 内部 `:768` **只 catch `IOException`**,
+   `FileMode.CreateNew` 撞上杀软拦截抛的 `UnauthorizedAccessException` 会**直接穿出 `WriteJson`**)⇒
+   杀软拦"新建 tmp 文件"时,保存配置/存档会**偶发失败**,注释里承诺的 6 轮 + 直写兜底全部失效。(WP-0 的 R2 与 WP-4 各自报过,本轮复核一致)
+4. **安卓版本号现状(不要替用户宣布"与桌面同号")**:新线 `android-app` = `versionName 0.1.0` / `versionCode 1`;
+   旧线 `app/Android` = `versionName 0.9.3` / `versionCode 14`;包名也不同(`com.tipcl.android` vs `com.pymcl.android`)。
+   **是否与桌面统一到 `1.2.0` 是拍板项**,发版说明里只写现状。
 
 #### ⚠️ 待决口径(发版前必须由用户/维护者确认,别默认)
 
@@ -289,6 +309,11 @@ Windows 本机走 **无头** `--smoke`(`Program.cs:17` → `SmokeRunner.Run`,`Sm
    本稿按"**仅 Windows**"口径写。**若用户选择本轮就把布局 v2 移植到 Linux,本节标题里的「仅 Windows」必须去掉,并补一份 Linux 侧的验收证据**;移植评估以 WP-3 的结论为准。
 2. **Windows 交付件到底用哪一份**:见 §2.1 的 W5 冲突(CI 的 `dotnet build` 产物 vs 标准件差 512 B)。
 3. **`README.md` 里的 SHA256 行**:本轮**没有**把 v1.2.0 的哈希写进 README(没发版就不能写),发版那天要补。
+4. **「手机同步」的措辞与手机端归属**:见上「已知问题」第 1 条。**手机端在哪个仓库、本轮是否随发** = 用户拍板项;
+   桌面 README 现在那句"先在手机启动器里打开 存档管理 → 从 zip 导入 → 启动同步服务"在本仓库**找不到对应实现**,
+   属**应当减少承诺**的句子 —— 本轮**没有**改它(本包对 `README.md` 的授权只有"版本相关段落"),
+   已上报 lead,请指派。
+5. **安卓是否与桌面同号**:见上「已知问题」第 4 条,`1.2.0` 只覆盖桌面(Windows + Linux)两棵树,**不含安卓**。
 
 ---
 
