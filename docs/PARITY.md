@@ -750,7 +750,7 @@ $env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
 `" en "` → `"en"` 这一步**只有 `SetLanguage` 的规范化会做**(`LauncherConfig.Load` 会原样保留该值),所以这一行就是「配置 → `CurrentLang`」链接通的直接证据。
 
 > **8 帧冒烟矩阵无法体现这条修复**,原因有两条硬事实,都已实测:
-> 1. **8 个页面的可见文案里没有任何一处走词表。** 全仓 `Tr(` 调用点只落在 `Common/Api.cs`(55)、`Core/.../Ai/Preview.cs`(23)、`Core/Plugins/PluginInstaller.cs`(21)、`Common/Launch/LaunchCore.cs`(16)等**运行时消息**上;8 个冒烟页的 UI 文本全部是未接线的中文字面量(见 §9.15 那批报告的 i18n 审计:整树绕词率 **3.02%**)。
+> 1. **8 个页面的可见文案里没有任何一处走词表。** 全仓 `Tr(` 调用点只落在 `Common/Api.cs`(55)、`Core/.../Ai/Preview.cs`(23)、`Core/Plugins/PluginInstaller.cs`(21)、`Common/Launch/LaunchCore.cs`(16)等**运行时消息**上;8 个冒烟页的 UI 文本全部是未接线的中文字面量(见 §9.15 那批报告的 i18n 审计:**全树 4607 条中文字面量里只有 122 条走词表 = 2.65%**,也就是 **97.35% 不走** —— `coverage` 是「走词表」的比例,**别读反**;口径与分母见 `tools/i18n-audit.py --help`)。
 > 2. **唯一随语言变化的界面元素在折叠线以下。** 设置页「语言」下拉 + 预览行位于「通用」页 `壁纸` 之后,而主窗尺寸是 `MainWindow.axaml` 里写死的 `Width="900" Height="550"`。
 
 **逐像素实测**(两次运行使用**完全相同的 home 路径**,只改 `language`):`lang=en` vs `lang=zh_CN` → 8 帧中 **7 帧逐字节相同、`diff_pixels` 全 0**;`library-dark` 差 **1 个像素**,而该像素在「同一语言跑两遍」的对照里也出现 ⇒ 属抗锯齿抖动底噪,与语言无关。

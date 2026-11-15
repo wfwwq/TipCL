@@ -14,25 +14,44 @@ Criterion (deliberately identical to I18nCheck.HasCjk / IsWrapped, adapted wrapp
 ------------------------------------------------------------------------------------
 CJK  = any char in U+4E00..U+9FFF, U+3400..U+4DBF, U+3000..U+303F, U+FF00..U+FFEF
        (exactly I18nCheck.HasCjk, I18nCheck.cs:145-155).
-Wrapped = the string literal is the first argument of a call whose callee name is in
-       WRAPPERS below. I18nCheck.IsWrapped only accepts `L` / `*.L`; on the Linux side
-       the wrapper is `I18nCore.Tr` (plus the Core-side `L` wrappers), so the callee is
-       resolved the same way - walk back over whitespace, expect `(`, then read the
-       dotted identifier backwards - and matched against WRAPPERS.
+Wrapped = the string literal is an argument of a call whose callee name is in WRAPPERS
+       below. On the Linux/Avalonia side there is exactly ONE real word-table lookup:
+       `I18nCore.Tr` (`I18nCore.cs:135`, plus the `Tr` alias at `Ai/Preview.cs:602`).
+       I18nCheck.IsWrapped only accepts `L` / `*.L`, which is the Windows tree's
+       convention and does NOT transfer here - see the WRAPPERS comment for the
+       verified counter-examples.
 Ignored = the line contains `i18n:ignore`, or one of the file's first 10 lines contains
        `i18n:ignore-file` (I18nCheck.cs:157-173, :195-198).
 
+DENOMINATOR / DIRECTION (read this before quoting any number - see R30-WP3b 8)
+------------------------------------------------------------------------------
+  cjk_literals = the DENOMINATOR: every CJK string literal occurrence in the scanned
+                 tree (occurrences, not distinct values; distinct is reported separately).
+  wrapped      = literals that GO THROUGH the word table  -> changing the language CAN
+                 change them.
+  unwrapped    = literals that do NOT                       -> changing the language
+                 CANNOT change them (this is the backlog).
+  coverage     = wrapped / cjk_literals.
+
+  => `coverage` is the share that IS wired. It is NOT "how much of the UI is
+     translated" and it must NOT be read backwards: a LOW coverage means MOST strings
+     are unwired. Measured on this tree (2026-11-15, R30-WP3d):
+       cjk_literals 4607 | wrapped 122 (2.65%) | unwrapped 4485 (97.35%)
+     i.e. 97.35% of the CJK literals do not consult the word table at all, so the
+     interface keeps showing Chinese even with language=en.
+
 Reported numbers
 ----------------
-  cjk_literals        every CJK string literal in the scanned tree
-  wrapped             CJK literals that go through a wrapper
-  unwrapped           CJK literals that do not (the localisation backlog)
-  coverage            wrapped / cjk_literals  <-- the "50%" style figure
+  cjk_literals        every CJK string literal occurrence in the scanned tree
+  wrapped             CJK literals that go through a wrapper (wired, 2.65%)
+  unwrapped           CJK literals that do not (the localisation backlog, 97.35%)
+  coverage            wrapped / cjk_literals  <-- the SHARE THAT IS WIRED
   wrapped_keys        distinct wrapper argument values (the D-33 "key" universe)
   missing_en/_zh      wrapped_keys absent from that table  <-- the D-33 actionable 差集
 
 Usage:
   python tools/i18n-audit.py                 # human summary
+  python tools/i18n-audit.py --help          # criterion + denominator/口径
   python tools/i18n-audit.py --json          # machine-readable
   python tools/i18n-audit.py --list-unwrapped --top-files 25
 """
@@ -44,9 +63,62 @@ import sys
 from collections import Counter
 
 # Callee names that count as a localisation wrapper on the Linux/Avalonia side.
-# `Tr` is the port's own entry point (I18nCore.Tr); `L` matches the Windows criterion
-# and the two Core-side wrappers (I18nCore's `L(...)` and PageLayoutIO.L).
-WRAPPERS = {"Tr", "L", "Gt", "T"}
+#
+# CORRECTED in R30-WP3d. The original set was {"Tr", "L", "Gt", "T", } which
+# over-counted: it produced 139 wrapped (3.02%) instead of the true 122 (2.65%),
+# because it matched four callee names that are NOT word-table lookups at all.
+# Verified against the tree (R30-WP3b 8.2):
+#
+#   Tr   -> I18nCore.cs:135  Tr(key, lang, dflt)          = REAL word-table lookup
+#           Ai/Preview.cs:602 `Tr(key) => I18nCore.Tr(key)` = alias of the above
+#   L    -> Py.cs:91         `L(params object[])`          = python-style LIST constructor
+#           Manifest.cs:360  `L(object)`                   = list coercion helper
+#           Conflict.cs:337  `L(object)`                   = string coercion helper
+#           Layout/PageLayoutIO.cs:12 `LayoutText.L(key)`  = IDENTITY STUB: body is
+#                                                            `return key;` - it never
+#                                                            consults the word table
+#   Gt   -> Pages/Settings/SettingsPage.cs:453 `Gt(t) => UiClass.GroupTitle(t)`
+#                                                          = group-title widget builder
+#           Launcher/Mods.cs:1305 / Modpack.cs:1136 `Gt(o, k)` = dict getter
+#   T    -> no definition and no call site anywhere in the Linux tree
+#
+# So the strict, verified set is exactly {"Tr"}. Anything added here must be a
+# *proven* word-table lookup (read the callee's body, do not guess from the name);
+# a wrong entry makes this tool report a nicer coverage than reality, which is worse
+# than having no tool at all - the next person uses this to plan the P4 wiring work.
+WRAPPERS = {"Tr"}
+
+HELP = r"""i18n audit (Linux/Avalonia tree)
+
+Criterion
+  CJK literal  = a string literal containing a char in U+4E00..U+9FFF, U+3400..U+4DBF,
+                 U+3000..U+303F or U+FF00..U+FFEF (same ranges as I18nCheck.HasCjk).
+  wrapped      = the literal is an argument of a call whose callee is in WRAPPERS.
+                 WRAPPERS is {"Tr"} = I18nCore.Tr (I18nCore.cs:135) only, because that
+                 is the only *verified* word-table lookup in this tree. Do not add a
+                 name from the Windows tree without reading its body first: `L` here is
+                 mostly Py.L / coercion helpers and LayoutText.L is `return key;`,
+                 `Gt` is a group-title builder or a dict getter.
+
+Denominator / direction - READ THIS BEFORE QUOTING A NUMBER
+  cjk_literals = DENOMINATOR: every CJK literal occurrence in src/TipCL.App + src/TipCL.Core.
+  wrapped      = literals that DO consult the word table  -> language switching can affect them.
+  unwrapped    = literals that do NOT                      -> language switching cannot affect them.
+  coverage     = wrapped / cjk_literals = the share that IS wired.
+
+  coverage is NOT "how much of the UI is translated", and it must not be read backwards.
+  Last measured 2026-11-15 (R30-WP3d):
+      cjk_literals 4607 | wrapped 122 (2.65%) | unwrapped 4485 (97.35%)
+  => 97.35% of the CJK literals never consult the word table, which is why the UI stays
+     Chinese even with language=en. See progress/R30-WP3b.md 8 for the reconciliation.
+
+Options
+  --json             machine-readable output
+  --out PATH         write the report to PATH instead of stdout
+  --list-unwrapped   also list every unwrapped literal with file:line
+  --top-files N      how many files to list in the "unwrapped by file" table (default 20)
+  --help, -h         this text
+"""
 
 CJK_RANGES = (
     (0x4E00, 0x9FFF),
@@ -279,6 +351,10 @@ def scan_file(path, root):
 
 
 def main(argv):
+    if "--help" in argv or "-h" in argv:
+        print(HELP)
+        return 0
+
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.abspath(os.path.join(here, ".."))
     src_dirs = [os.path.join(root, "src", "TipCL.App"),
@@ -381,9 +457,12 @@ def main(argv):
     L.append("  tables     : en=%d zh_CN=%d  key sets equal: %s"
              % (len(tables["en"]), len(tables["zh_CN"]), result["table_key_sets_equal"]))
     L.append("  CJK literals: %d" % total)
-    L.append("  wrapped     : %d   (%.2f%%)" % (len(wrapped), 100.0 * result["coverage"]))
-    L.append("  unwrapped   : %d   (distinct %d, across %d files)"
-             % (len(unwrapped), len(unwrapped_distinct), len(unwrapped_files)))
+    L.append("  wrapped     : %d   (%.2f%% - these DO consult the word table)"
+             % (len(wrapped), 100.0 * result["coverage"]))
+    L.append("  unwrapped   : %d   (%.2f%% - these do NOT, language switching cannot"
+             " affect them; distinct %d, across %d files)"
+             % (len(unwrapped), 100.0 * len(unwrapped) / total if total else 0.0,
+                len(unwrapped_distinct), len(unwrapped_files)))
     L.append("  of the distinct unwrapped values, %d already have an en key and %d a zh_CN key"
              % (len(unwrapped_have_en), len(unwrapped_have_zh)))
     L.append("  => translation-available-but-unwired share of unwrapped: en %.2f%%"
