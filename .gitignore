@@ -24,3 +24,5 @@ artifacts/
 *.wpftmp.*
 # E2E/冒烟运行期数据目录(与上面 _wph_run 同性质;_wph_run 与 _wpf_run 两种命名同时在用,故两条都留)
 _wpf_run/
+# R32-LC 测试临时目录(lead 授权):dotnet test 在本机必须把 TEMP/TMP 指到工作区内
+.testtmp/
