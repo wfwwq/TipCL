@@ -1,0 +1,35 @@
+# .gitattributes —— 只为「离线 gzip 打包 + 逐字节漂移守卫」这一类资源固定 LF 结帐。
+#
+# 为什么必须有这个文件(R30-WP2b):
+#   windos\src\TipCL\Resources\{locales,ai,plugin-host} 下的源文件被 tools\pack-core-resources.ps1
+#   离线 gzip 成同目录的 <file>.gz,csproj 内嵌的是 .gz,而守卫用例
+#   windos\tests\TipCL.Tests\CoreResourcesPackTests.cs:63 断言「.gz 解压出来的字节 == 源文件字节」。
+#   那些 .gz 是在 LF 工作区里打出来的;GitHub 的 windows runner 系统 gitconfig 是 core.autocrlf=true,
+#   而本仓库此前**没有** .gitattributes ⇒ 文本被结帐成 CRLF ⇒ 每个 LF 多一个 CR
+#   ⇒ 守卫假红(ci-windows.yml run #8 / sha 335cb3c,10 条断言;
+#   判据:本机源文件长度 + 本机 LF 数 == 该 runner 上报的期望长度,10/10 命中)。
+#   固定成 LF 之后,结帐结果与打包时的工作区一致,守卫在两边的机器上都成立。
+#
+# 窄范围纪律(重要):这里**不写** `* text=auto` 之类的全库策略 —— 那会改写整个仓库的结帐行为,
+# 属于用户级决策,而且会打破仓库里既有 CRLF 文件(例如 src/TipCL/Pages/{AiPage,SettingsPage}.cs,
+# 见 DECISIONS D-34)的现状。只覆盖「被打成 .gz 且逐字节比对」的那几类源文件。
+#
+# Linux/Avalonia 侧(src/TipCL.Core/Resources/**)**刻意不在这里**:那边没有离线 gzip 打包
+# (该目录下 .gz 数量为 0),csproj 直接把源文件当 EmbeddedResource 内嵌
+# (src/TipCL.Core/TipCL.Core.csproj:39-40),守卫 tests/TipCL.Tests/Core/I18nCoreLocalesTests.cs:76-82
+# 只断言非空 / 体积 / 能解析 JSON,不做逐字节比对 ⇒ 与 EOL 无关,加了反而是无谓的越界。
+
+# —— 被打成 .gz 且逐字节比对的源文件:固定 LF ——
+windos/src/TipCL/Resources/locales/*.json    text eol=lf
+windos/src/TipCL/Resources/ai/*.json         text eol=lf
+windos/src/TipCL/Resources/plugin-host/*.mjs     text eol=lf
+windos/src/TipCL/Resources/plugin-host/*.js      text eol=lf
+windos/src/TipCL/Resources/plugin-host/*.d.ts    text eol=lf
+windos/src/TipCL/Resources/plugin-host/**/*.mjs  text eol=lf
+windos/src/TipCL/Resources/plugin-host/**/*.js   text eol=lf
+windos/src/TipCL/Resources/plugin-host/**/*.d.ts text eol=lf
+
+# —— 打包产物本身:显式声明二进制 ——
+# (git 的启发式本来就会把 .gz 判成 binary;写出来是为了将来万一有人加 `* text=auto` 时,
+#  .gz 不会被反解成文本,那会直接把内嵌资源弄坏。)
+windos/src/TipCL/Resources/**/*.gz  binary
