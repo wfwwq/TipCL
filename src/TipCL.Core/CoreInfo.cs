@@ -5,5 +5,5 @@ namespace TipCL.Core;
 /// </summary>
 public static class CoreInfo
 {
-    public const string Version = "1.1.0";
+    public const string Version = "1.2.0";
 }

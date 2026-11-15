@@ -8,13 +8,14 @@
 
 一句话装模组、诊断崩溃卡顿、备份存档、开房联机——说出来就行
 
-<sub>An AI-native Minecraft launcher for Windows</sub>
+<sub>An AI-native Minecraft launcher for Windows and Linux</sub>
 
 <br/>
 
 <img src="https://img.shields.io/badge/Windows-7%20%2F%208.1%20%2F%2010%20%2F%2011-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows" />
 <img src="https://img.shields.io/badge/.NET%20Framework-4.8-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET Framework 4.8" />
 <img src="https://img.shields.io/badge/UI-WPF-6CB33E?style=flat-square" alt="WPF" />
+<img src="https://img.shields.io/badge/Linux-Avalonia-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux (Avalonia)" />
 <img src="https://img.shields.io/badge/MCP-Server-000000?style=flat-square" alt="MCP Server" />
 <img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E4%B8%AD%E6%96%87%20%7C%20English-F4A93B?style=flat-square" alt="中文 | English" />
 <img src="https://img.shields.io/github/v/release/wfwwq/TipCL?style=flat-square&label=Release" alt="Release" />
@@ -99,6 +100,23 @@ dotnet test windos/tests/TipCL.Tests
 
 产物在 `windos/src/TipCL/bin/Release/net48/TipCL.exe`，依赖已通过 Costura 打进单个 exe。每次 push 和 PR 都会由 CI 自动构建并跑测试。
 
+**Linux 直接使用**：在同一个 [Releases](https://github.com/wfwwq/TipCL/releases) 下载 `TipCL-linux-x64.AppImage` 或 `tipcl_<版本>_amd64.deb`（x64）：
+
+| 资产 | 安装 / 运行 |
+|---|---|
+| `TipCL-linux-x64.AppImage` | `chmod +x TipCL-linux-x64.AppImage && ./TipCL-linux-x64.AppImage` |
+| `tipcl_<版本>_amd64.deb` | `sudo apt install ./tipcl_<版本>_amd64.deb`（或 `sudo dpkg -i`） |
+
+两个都是**自包含单文件**，机器上不需要装 .NET。数据目录是 `~/.tipcl`，可以用环境变量 `TIPCL_HOME` 指到别处。自更新走 [`update-linux.json`](update-linux.json)：AppImage 能就地替换自己（文件得可写），`.deb` 安装的形态只下载、装好后提示你手动安装。
+
+自己编译 Linux 版（源码在仓库根，与 `windos/` 那棵树独立）：
+
+```bat
+dotnet build TipCL.Linux.sln
+```
+
+打包成 AppImage / `.deb` 要 Linux 环境，脚本是 `tools/package.sh` 与 `tools/deb.sh`；发版时由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 CI 上跑。
+
 ## 📁 目录结构
 
 <details>
@@ -182,7 +200,8 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 
 exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，点「更多信息 → 仍要运行」即可。个别杀软会对未签名的单文件程序报启发式误报，源码完全公开，也可以自己编译。
 
-- v1.1.0 SHA-256:`8d5f266bbf9d9c3f4231479d4c4e06a692ea5423863f63a7242126c6aa9b759f`(每个 Release 附件都带 `.sha256` 文件，可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
+- v1.1.0 SHA-256:`8d5f266bbf9d9c3f4231479d4c4e06a692ea5423863f63a7242126c6aa9b759f`(Windows 的 `TipCL.exe` 每个 Release 都带同名 `.sha256` 附件，可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
+- Linux 的 AppImage 与 `.deb` **不带** `.sha256` 附件：AppImage 的 SHA-256 会写在该 Release 的说明里，也可以自己 `sha256sum TipCL-linux-x64.AppImage` 比对。
 
 ## 💬 社区建议
 

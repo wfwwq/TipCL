@@ -589,7 +589,7 @@ internal static class SmokeRunner
         try
         {
             using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("TipCL/1.1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("TipCL/" + TipCL.Core.Launcher.AppInfo.APP_VERSION);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var resp = http.GetAsync(url).GetAwaiter().GetResult();
             var body = resp.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
