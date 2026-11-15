@@ -154,6 +154,243 @@ jobs:
             dist/TipCL-linux-x64.zip
           if-no-files-found: error
 
+  # ---- R31:出包之后「真装真跑」--------------------------------------------------------
+  # 目的:让 CI 自己证明**打出来的产物**在这台 runner 上装得上、起得来,而不是只到「构建成功」为止
+  # (R31 之前 Linux 首发的验证靠本机/人工,流水线只保证编译和出包不报错)。
+  #
+  # 为什么单独一个 job、而且先把 artifact **下载回来**再验:验的是「用户真正下载到的那份文件」,
+  # 顺带证明 upload/download 往返没弄丢可执行位 —— 所以下面每个二进制都先 chmod +x
+  # (artifact 下载回来确实没有执行位,这一步是必需的,不是装饰)。
+  #
+  # 判据与 tools/verify-linux.sh(D-26)同一口径:退出码 0 + smoke.png 有内容 +
+  # 日志 0 个 [WARN] / 0 个 [ERROR];再加两条硬门槛:
+  #   * smoke.png **> 10 KB**(近空 / 纯背景的帧说明界面根本没画出来);
+  #   * .deb 的版本三方一致:源码 src/TipCL.Core/CoreInfo.cs == 文件名 == dpkg -s tipcl 的 Version。
+  # 一条不过就红。这里唯一的「重试」是两条**有意的后备**(与仓库既有口径一致):
+  # APPIMAGE_EXTRACT_AND_RUN=1(无 /dev/fuse)、dpkg -i + apt-get -f install(apt 直装失败),
+  # 全程没有 `|| true` 把结论吞掉。
+  #
+  # xvfb + 隔离 TIPCL_HOME + 预写 config.json 的写法**照抄 release.yml 的 linux job**(不另发明):
+  # 隔离目录里先写 {"first_run": false, "feedback_consent": true},免得弹首启同意框。
+  verify-linux:
+    name: verify (linux-x64 装得上 + 起得来)
+    runs-on: ubuntu-latest
+    needs: package-linux
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+
+      - name: 取回 package-linux 上传的产物(download-artifact)
+        uses: actions/download-artifact@v6
+        with:
+          name: tipcl-linux-x64
+          path: dist
+
+      # 先摆出「下载回来的到底是什么」:这是后面所有断言的前提
+      - name: list the downloaded artifacts
+        run: |
+          set +e
+          mkdir -p dist/verify-evidence
+          find dist -type f -printf '%10s  %p\n' | sort -k2 | tee dist/verify-evidence/downloaded-files.txt
+
+      - name: AppImage 真跑(chmod + xvfb + 隔离 TIPCL_HOME)
+        run: |
+          # 这条脚本要自己收集每条判据的结果再决定红绿,所以**不要** -e(否则第一条失败就看不到后面的结论)
+          set +e
+          set -uo pipefail
+          EVID=dist/verify-evidence
+          mkdir -p "$EVID"
+          : > "$EVID/appimage.md"
+          FAILS=0
+          note() { printf '%s\n' "$*" | tee -a "$EVID/appimage.md"; }
+          chk() { if [ "$2" -eq 0 ]; then note "- ✅ $1"; else note "- ❌ $1"; FAILS=$((FAILS+1)); fi; }
+
+          note "### 1) AppImage 真跑(下载回来的那一份)"
+          APP="$(find dist -type f -name '*.AppImage' | sort | head -1)"
+          if [ -z "$APP" ]; then
+            note "- ❌ 没找到 AppImage 产物(dist/ 下没有 *.AppImage)"
+            echo FAIL > "$EVID/appimage.result"
+            exit 1
+          fi
+          chmod +x "$APP"
+          note "- 产物:$APP($(stat -c%s "$APP") B)sha256=$(sha256sum "$APP" | cut -d' ' -f1)"
+          sudo apt-get install -y -qq xvfb
+
+          WORK=/tmp/tipcl-verify-appimage
+          rm -rf "$WORK"
+          mkdir -p "$WORK/home" "$WORK/run"
+          printf '%s\n' '{"first_run": false, "feedback_consent": true}' > "$WORK/home/config.json"
+
+          LOG="$EVID/appimage-console.log"
+          MODE="裸 FUSE"
+          (cd "$WORK/run" && timeout 300 xvfb-run -a env TIPCL_HOME="$WORK/home" "$GITHUB_WORKSPACE/$APP" --smoke) > "$LOG" 2>&1
+          CODE=$?
+          if [ "$CODE" -ne 0 ]; then
+            MODE="APPIMAGE_EXTRACT_AND_RUN=1"
+            note "- 裸 FUSE 失败(退出码 $CODE),按 release.yml 的口径改用 APPIMAGE_EXTRACT_AND_RUN=1 重试"
+            (cd "$WORK/run" && timeout 300 xvfb-run -a env APPIMAGE_EXTRACT_AND_RUN=1 TIPCL_HOME="$WORK/home" "$GITHUB_WORKSPACE/$APP" --smoke) >> "$LOG" 2>&1
+            CODE=$?
+          fi
+
+          PNG="$WORK/run/smoke.png"
+          PNG_BYTES=0
+          [ -f "$PNG" ] && PNG_BYTES=$(stat -c%s "$PNG")
+          WARN_N="$(grep -cE '\[WARN\]' "$LOG")"
+          [ -n "$WARN_N" ] || WARN_N=0
+          ERR_N="$(grep -cE '\[ERROR\]' "$LOG")"
+          [ -n "$ERR_N" ] || ERR_N=0
+
+          note "- 运行方式:$MODE"
+          chk "退出码 0(实际 $CODE)" "$([ "$CODE" -eq 0 ] && echo 0 || echo 1)"
+          chk "smoke.png 存在且 > 10 KB(实际 $PNG_BYTES B)" "$([ "$PNG_BYTES" -gt 10240 ] && echo 0 || echo 1)"
+          chk "日志 0 个 [WARN](实际 $WARN_N 行)" "$([ "$WARN_N" -eq 0 ] && echo 0 || echo 1)"
+          chk "日志 0 个 [ERROR](实际 $ERR_N 行)" "$([ "$ERR_N" -eq 0 ] && echo 0 || echo 1)"
+
+          # 留证:smoke.png + 应用自己的文件日志 + [WARN]/[ERROR] 原文
+          [ -f "$PNG" ] && cp -f "$PNG" "$EVID/appimage-smoke.png"
+          if [ -d "$WORK/home/logs" ]; then
+            mkdir -p "$EVID/appimage-applogs"
+            cp -f "$WORK/home/logs/"* "$EVID/appimage-applogs/" 2>/dev/null
+          fi
+          grep -nE '\[(WARN|ERROR)\]' "$LOG" > "$EVID/appimage-warn-error.txt"
+
+          if [ "$FAILS" -eq 0 ]; then
+            echo PASS > "$EVID/appimage.result"
+            note "**结论:PASS**"
+          else
+            echo FAIL > "$EVID/appimage.result"
+            note "**结论:FAIL($FAILS 条判据没过)**"
+          fi
+          exit $([ "$FAILS" -eq 0 ] && echo 0 || echo 1)
+
+      - name: .deb 真装 + 用装好的二进制真跑(不是拿 AppImage 糊弄)
+        run: |
+          set +e
+          set -uo pipefail
+          EVID=dist/verify-evidence
+          mkdir -p "$EVID"
+          : > "$EVID/deb.md"
+          FAILS=0
+          note() { printf '%s\n' "$*" | tee -a "$EVID/deb.md"; }
+          chk() { if [ "$2" -eq 0 ]; then note "- ✅ $1"; else note "- ❌ $1"; FAILS=$((FAILS+1)); fi; }
+
+          note "### 2) .deb 真装 + 真跑"
+          DEB="$(find dist -type f -name 'tipcl_*_amd64.deb' | sort | head -1)"
+          if [ -z "$DEB" ]; then
+            note "- ❌ 没找到 .deb 产物(dist/ 下没有 tipcl_*_amd64.deb)"
+            echo FAIL > "$EVID/deb.result"
+            exit 1
+          fi
+          DEB_ABS="$GITHUB_WORKSPACE/$DEB"
+          EXPECTED="$(sed -n 's/.*Version *= *"\([^"]*\)".*/\1/p' src/TipCL.Core/CoreInfo.cs | head -1)"
+          note "- 产物:$(basename "$DEB")($(stat -c%s "$DEB") B)"
+          note "- 期望版本(源码 src/TipCL.Core/CoreInfo.cs):${EXPECTED:-<空>}"
+          chk "期望版本非空(能从 CoreInfo.cs 抽出版本号)" "$([ -n "$EXPECTED" ] && echo 0 || echo 1)"
+          chk ".deb 文件名带期望版本(应为 tipcl_${EXPECTED}_amd64.deb)" "$([ "$(basename "$DEB")" = "tipcl_${EXPECTED}_amd64.deb" ] && echo 0 || echo 1)"
+
+          # 真装:先 apt 直装;不行就退回 dpkg -i + apt-get -f install(FHS 依赖没拉齐时的标准后备)
+          INSTALL_MODE="sudo apt-get install -y ./dist/$(basename "$DEB")"
+          if ! sudo apt-get install -y "$DEB_ABS"; then
+            INSTALL_MODE="sudo dpkg -i ./dist/$(basename "$DEB") + sudo apt-get -f install -y"
+            note "- apt-get 直装返回非 0,按标准后备改用 dpkg -i + sudo apt-get -f install -y"
+            sudo dpkg -i "$DEB_ABS"
+            sudo apt-get -f install -y
+          fi
+          note "- 安装方式:$INSTALL_MODE"
+
+          dpkg -s tipcl > "$EVID/dpkg-s-tipcl.txt" 2>&1
+          STATUS_LINE="$(grep -m1 '^Status:' "$EVID/dpkg-s-tipcl.txt")"
+          INSTALLED_VER="$(grep -m1 '^Version:' "$EVID/dpkg-s-tipcl.txt" | awk '{print $2}')"
+          chk "dpkg -s tipcl 的状态是 install ok installed(实际:${STATUS_LINE:-<无>})" "$([ "$STATUS_LINE" = "Status: install ok installed" ] && echo 0 || echo 1)"
+          chk "dpkg -s tipcl 的 Version == 期望版本(期望 $EXPECTED,实际 ${INSTALLED_VER:-<无>})" "$([ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "$EXPECTED" ] && echo 0 || echo 1)"
+
+          dpkg -L tipcl > "$EVID/dpkg-L-tipcl.txt" 2>&1
+          chk "dpkg -L tipcl 里有 /usr/bin/tipcl" "$(grep -qx '/usr/bin/tipcl' "$EVID/dpkg-L-tipcl.txt" && echo 0 || echo 1)"
+
+          # 「装好的那个二进制」的硬证据:PATH 上的入口是包里的壳,它 exec 的 /opt 那份必须与产物字节一致
+          BIN_TIPCL="$(command -v tipcl)"
+          chk "PATH 上的 tipcl 就是包里的入口 /usr/bin/tipcl(实际:${BIN_TIPCL:-<无>})" "$([ "$BIN_TIPCL" = "/usr/bin/tipcl" ] && echo 0 || echo 1)"
+          SHIPPED="$(find dist -type f -name 'TipCL.App' | sort | head -1)"
+          SHA_INST="$(sha256sum /opt/TipCL/TipCL.App 2>/dev/null | cut -d' ' -f1)"
+          SHA_SHIP="$(sha256sum "$SHIPPED" 2>/dev/null | cut -d' ' -f1)"
+          note "- /opt/TipCL/TipCL.App sha256=${SHA_INST:-<无>};产物里的单文件 sha256=${SHA_SHIP:-<无>}"
+          chk "装进系统的二进制与产物里的单文件字节一致(sha256 相同)" "$([ -n "$SHA_INST" ] && [ "$SHA_INST" = "$SHA_SHIP" ] && echo 0 || echo 1)"
+
+          sudo apt-get install -y -qq xvfb
+          WORK=/tmp/tipcl-verify-deb
+          rm -rf "$WORK"
+          mkdir -p "$WORK/home" "$WORK/run"
+          printf '%s\n' '{"first_run": false, "feedback_consent": true}' > "$WORK/home/config.json"
+
+          LOG="$EVID/deb-console.log"
+          (cd "$WORK/run" && timeout 300 xvfb-run -a env TIPCL_HOME="$WORK/home" /usr/bin/tipcl --smoke) > "$LOG" 2>&1
+          CODE=$?
+
+          PNG="$WORK/run/smoke.png"
+          PNG_BYTES=0
+          [ -f "$PNG" ] && PNG_BYTES=$(stat -c%s "$PNG")
+          WARN_N="$(grep -cE '\[WARN\]' "$LOG")"
+          [ -n "$WARN_N" ] || WARN_N=0
+          ERR_N="$(grep -cE '\[ERROR\]' "$LOG")"
+          [ -n "$ERR_N" ] || ERR_N=0
+
+          note "- 运行:cd \$WORK/run && xvfb-run -a env TIPCL_HOME=\$WORK/home /usr/bin/tipcl --smoke"
+          chk "装好的二进制退出码 0(实际 $CODE)" "$([ "$CODE" -eq 0 ] && echo 0 || echo 1)"
+          chk "smoke.png 存在且 > 10 KB(实际 $PNG_BYTES B)" "$([ "$PNG_BYTES" -gt 10240 ] && echo 0 || echo 1)"
+          chk "日志 0 个 [WARN](实际 $WARN_N 行)" "$([ "$WARN_N" -eq 0 ] && echo 0 || echo 1)"
+          chk "日志 0 个 [ERROR](实际 $ERR_N 行)" "$([ "$ERR_N" -eq 0 ] && echo 0 || echo 1)"
+
+          [ -f "$PNG" ] && cp -f "$PNG" "$EVID/deb-smoke.png"
+          if [ -d "$WORK/home/logs" ]; then
+            mkdir -p "$EVID/deb-applogs"
+            cp -f "$WORK/home/logs/"* "$EVID/deb-applogs/" 2>/dev/null
+          fi
+          grep -nE '\[(WARN|ERROR)\]' "$LOG" > "$EVID/deb-warn-error.txt"
+
+          if [ "$FAILS" -eq 0 ]; then
+            echo PASS > "$EVID/deb.result"
+            note "**结论:PASS**"
+          else
+            echo FAIL > "$EVID/deb.result"
+            note "**结论:FAIL($FAILS 条判据没过)**"
+          fi
+          exit $([ "$FAILS" -eq 0 ] && echo 0 || echo 1)
+
+      # 失败也要把证据带出来(否则只能登 runner 才能看日志)
+      - name: upload evidence (应用日志 / smoke.png / dpkg -L)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tipcl-linux-verify-evidence
+          path: dist/verify-evidence
+          if-no-files-found: error
+
+      - name: job summary(一眼能看懂的结论)
+        if: always()
+        run: |
+          set +e
+          EVID=dist/verify-evidence
+          AI_RESULT="$(cat "$EVID/appimage.result" 2>/dev/null)"
+          DEB_RESULT="$(cat "$EVID/deb.result" 2>/dev/null)"
+          {
+            echo "## Linux 真装真跑(AppImage 与 .deb 在这台 runner 上装得上、起得来吗?)"
+            echo ""
+            echo "| 验证步骤 | 结论 |"
+            echo "| --- | --- |"
+            echo "| 1) AppImage 真跑(--smoke) | ${AI_RESULT:-未执行(没产出结论)} |"
+            echo "| 2) .deb 真装 + 装好的二进制真跑 | ${DEB_RESULT:-未执行(没产出结论)} |"
+            echo ""
+            echo "判据:退出码 0 + smoke.png > 10 KB + 日志 0 个 [WARN] / 0 个 [ERROR];.deb 另加 install ok installed + 版本三方一致。"
+            echo ""
+            [ -f "$EVID/appimage.md" ] && cat "$EVID/appimage.md"
+            echo ""
+            [ -f "$EVID/deb.md" ] && cat "$EVID/deb.md"
+            echo ""
+            echo "证据(应用日志 / smoke.png / dpkg -L tipcl)见 artifact tipcl-linux-verify-evidence。"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "===== job summary 预览 ====="
+          cat "$GITHUB_STEP_SUMMARY"
+
   package-win:
     name: package (win-x64 → zip)
     runs-on: windows-latest
