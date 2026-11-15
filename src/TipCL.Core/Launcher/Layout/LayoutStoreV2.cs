@@ -4,8 +4,8 @@ using System.IO;
 
 namespace TipCL.Core.Launcher.Layout;
 
-// 来源: Windows 版参考仓库 src/TipCL/Core/Launcher/Layout/LayoutStoreV2.cs(分支 layout-shell-hooks @ fa1b3d7 + fix/r31-ui-audit @ 33b5fff)
-// L1↔L2 裁定:本文件在 fix/r31-ui-audit 上有相对 fa1b3d7 的改动,逐字采用 L2(逐条裁定见 progress/R32-MC.md)。
+// 来源: Windows 版冻结件 wt-r31-merge @0a304a7(lead 裁定 R32-D6:布局 v2 模型层以冻结件为准)
+//       Windows 参考仓库 src/TipCL/Core/Launcher/Layout/LayoutStoreV2.cs(layout-shell-hooks @ fa1b3d7 ∪ fix/r31-ui-audit @ 33b5fff;L1↔L2 差异与裁定逐条见 progress/R32-MC.md)
 
 // 布局 v2 的持久化(设计文档 §3.1 D2/D3 + §3.3 兼容矩阵):
 //   真源 = <数据目录>/ui_layout_v2.json(kind=tipcl-layout, version=2);

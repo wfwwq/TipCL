@@ -4,7 +4,8 @@ using System.Text.Json;
 
 namespace TipCL.Core.Launcher.Layout;
 
-// 来源: Windows 版参考仓库 src/TipCL/Core/Launcher/Layout/LayoutJson.cs(分支 layout-shell-hooks @ fa1b3d7 + fix/r31-ui-audit @ 33b5fff)
+// 来源: Windows 版冻结件 wt-r31-merge @0a304a7(lead 裁定 R32-D6:布局 v2 模型层以冻结件为准)
+//       Windows 参考仓库 src/TipCL/Core/Launcher/Layout/LayoutJson.cs(layout-shell-hooks @ fa1b3d7 ∪ fix/r31-ui-audit @ 33b5fff;L1↔L2 差异与裁定逐条见 progress/R32-MC.md)
 
 // 布局文档 v2 的 JSON 值搬运工具(纯模型层,禁 WPF、禁界面):
 //   1) 宽容读取:字段类型不符合契约时一律退回默认值,绝不抛(对齐 PageLayoutStore.ParseLoose 的思路);

@@ -5,7 +5,8 @@ using System.Text.Json;
 
 namespace TipCL.Core.Launcher.Layout;
 
-// 来源: Windows 版参考仓库 src/TipCL/Core/Launcher/Layout/LayoutV1Bridge.cs(分支 layout-shell-hooks @ fa1b3d7 + fix/r31-ui-audit @ 33b5fff)
+// 来源: Windows 版冻结件 wt-r31-merge @0a304a7(lead 裁定 R32-D6:布局 v2 模型层以冻结件为准)
+//       Windows 参考仓库 src/TipCL/Core/Launcher/Layout/LayoutV1Bridge.cs(layout-shell-hooks @ fa1b3d7 ∪ fix/r31-ui-audit @ 33b5fff;L1↔L2 差异与裁定逐条见 progress/R32-MC.md)
 
 // v1 投影(<数据目录>/ui_page_layouts.json)的**注入缝**与 Core 自带的读写实现。
 // 为什么需要它:LayoutStoreV2 要把 v2 单向写通 v1,而 v1 的类型(PageLayoutDoc/PageLayoutStore)在 Pages 里 ——

@@ -9,7 +9,9 @@ namespace TipCL.Tests;
 /// <summary>
 /// R32-MC:布局文档 v2 的模型层测试 —— 从 Windows 参考仓库逐条搬来
 /// (<c>windos\tests\TipCL.Tests\LayoutV2ModelTests.cs</c>,分支 layout-shell-hooks @ fa1b3d7
-/// + fix/r31-ui-audit @ 33b5fff;被测代码 = 本仓 <c>src\TipCL.Core\Launcher\Layout\*</c>)。
+/// (判定口径按 lead 裁定 R32-D6/R32-D2 **以冻结件 `wt-r31-merge @0a304a7` 为准** = L1
+/// (layout-shell-hooks @ fa1b3d7)口径,不再以审计修复线 fix/r31-ui-audit @ 33b5fff 的 L2 为准;
+/// 被测代码 = 本仓 <c>src\TipCL.Core\Launcher\Layout\*</c>,已与该冻结件逐字节一致)。
 /// 覆盖 §3.2 逐字段默认值 / 钳位 / 白名单、未知字段保留、导入校验。
 ///
 /// 移植差异(逐条):
@@ -18,8 +20,11 @@ namespace TipCL.Tests;
 ///      (<c>ParseImport</c> / <c>ExportJson</c>),没有用到它们(Windows 源里同样是死 using)。
 ///   2) Windows 源注释里的 CS1705 理由(net48 主工程 System.Text.Json 是 8.0.0.5)在 mac 树不成立
 ///      (全树 net8.0),故该段说明留在本注释里、不照抄。
-///   3) 类名按 mac 约定以工作包号开头(<c>R32Mc…</c>,见 C3aBlockHostTests 等既有文件);
-///      **断言、用例名、用例数量(24)一字未改**。
+///   3) 类名按 mac 约定以工作包号开头(R32Mc…,见 C3aBlockHostTests 等既有文件);
+///      **断言的取值一条未改**;用例名与注释措辞按冻结件对齐(修订 1,逐条见 progress/R32-MC.md)。
+///   4) 修订 1 补 1 条:冻结件 <c>AuditFixTests.cs:30-40 SanitizeStillCapsAbsurdGridRows</c> ——
+///      把裁定 R32-D2(行方向防御上限取 <c>RowMax</c>,不是 <c>RowMax - 1</c>)直接钉在 Core 模型层。
+///      故本文件 **25 条 = 源的 24 条 + 本包追加 1 条**。
 /// </summary>
 public class R32McLayoutV2ModelTests
 {
@@ -223,7 +228,7 @@ public class R32McLayoutV2ModelTests
 	// ————— 单块:grid / canvas 两套档位 —————
 
 	[Fact]
-	public void GridBlocksClampToPageColumnsAndStyleWhitelist()
+	public void GridBlocksClampColumnsNotRowsAndStyleWhitelist()
 	{
 		LayoutV2 doc = LayoutStoreV2.ParseImport("""
 		{
@@ -244,15 +249,30 @@ public class R32McLayoutV2ModelTests
 		}
 		""");
 		BlockLayout block = Assert.Single(doc.Layout.Pages["p"].Blocks);
-		Assert.Equal(5.0, block.X); // 0..cols-1
-		Assert.Equal(9.0, block.Y); // 行号与列数无关(A-01),只钳下限和防御上限
+		Assert.Equal(5.0, block.X); // 0..cols-1(x 是列,仍然按列数夹)
+		// [A-01] y 是**行号**:行数自适应增长,与列数无关 ⇒ 6 列的页面里 y=9 原样保留
+		// (1.2.0 会压成 5,把第 6 行以后的块叠到最后一行上)
+		Assert.Equal(9.0, block.Y);
 		Assert.Equal(6.0, block.W); // 1..cols
-		Assert.Equal(1.0, block.H); // 0 → 1
+		Assert.Equal(1.0, block.H); // 0 → 1(只钳下限)
 		Assert.Equal(6, block.Span); // 1..cols
 		Assert.Equal("plain", block.Style); // 未知外观 → plain(默认渲染与现状等价)
 		Assert.False(block.Title); // 非布尔 → false
 		Assert.Equal(0.0, block.MinH);
 		Assert.Equal(0, block.Z); // 负数 → 顺序索引
+	}
+
+	// [R32-MC 追加 · 冻结件 AuditFixTests.cs:30-40 逐字搬]裁定 R32-D2:行方向的防御上限两种模式都取 RowMax
+	[Fact]
+	public void SanitizeStillCapsAbsurdGridRows()
+	{
+		BlockLayout block = new BlockLayout { Id = "b", Y = 1e9, H = 1e9 };
+		LayoutSchema.SanitizeBlock(block, LayoutSchema.ModeGrid, 12, 0);
+		// [R32-MERGE] 本用例原属 cd3f680(与 L1 的 32fcd6f 是重复实现)。cd3f680 整笔不采纳,
+		// Y 的防御上限按 L1 口径取 RowMax(对方取 RowMax-1;差 1 行对真实页面无差别,
+		// 但同一份代码只能有一个天花板 —— 见 LayoutRowClampTests.AbsurdRowsAreCappedByDefensiveValueNotByColumns)。
+		Assert.Equal(LayoutSchema.RowMax, block.Y);
+		Assert.Equal(LayoutSchema.RowMax, block.H);
 	}
 
 	[Fact]

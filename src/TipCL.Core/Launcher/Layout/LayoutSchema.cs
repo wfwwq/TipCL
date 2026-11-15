@@ -3,8 +3,8 @@ using System.Collections.Generic;
 
 namespace TipCL.Core.Launcher.Layout;
 
-// 来源: Windows 版参考仓库 src/TipCL/Core/Launcher/Layout/LayoutSchema.cs(分支 layout-shell-hooks @ fa1b3d7 + fix/r31-ui-audit @ 33b5fff)
-// L1↔L2 裁定:本文件在 fix/r31-ui-audit 上有相对 fa1b3d7 的改动,逐字采用 L2(逐条裁定见 progress/R32-MC.md)。
+// 来源: Windows 版冻结件 wt-r31-merge @0a304a7(lead 裁定 R32-D6:布局 v2 模型层以冻结件为准)
+//       Windows 参考仓库 src/TipCL/Core/Launcher/Layout/LayoutSchema.cs(layout-shell-hooks @ fa1b3d7 ∪ fix/r31-ui-audit @ 33b5fff;L1↔L2 差异与裁定逐条见 progress/R32-MC.md)
 
 // 布局文档 v2 的**唯一契约真相**:字段白名单、类型门禁、逐字段钳位、结构上限。
 // 设计依据 = docs/layout-v2-design.md §3.2 的数据契约表(每一行都对应下面一个常量或一处 Clamp)。
@@ -148,12 +148,17 @@ public static class LayoutSchema
 	/// <summary>canvas 坐标上限(归一化)。</summary>
 	public const double CanvasMaxPos = 1.0;
 
-	/// <summary>页数上限(防御性上限:挡住恶意/损坏文档把界面撑爆)。</summary>
+	/// <summary>
+	/// 页数上限(防御性上限:挡住恶意/损坏文档把界面撑爆)。
+	/// </summary>
 	public const int MaxPages = 256;
 
 	/// <summary>
-	/// 网格行号 / 行跨度的防御上限:只挡手改 JSON 写进来的离谱数值(如 "y": 1e9),不是语义上限。
-	/// 网格的行数随内容增长,与列数无关。
+	/// [A-01] 网格**行号 / 行跨度**的防御上限。
+	/// 这是防手改 JSON 写进来的天文数字(如 <c>"y": 1e9</c> 把画布撑爆),**不是语义上限**:
+	/// 网格的行数由内容自适应增长(契约见 <c>LayoutEngine.LayoutCell.Y</c>「行数自适应增长」与
+	/// <c>LayoutGrid.Pack</c>),与列数 <c>cols</c> 无关 —— 2/3/4 列的页面完全可以有几十行。
+	/// 4096 行远超任何真实页面(4096 × 120px 行高 ≈ 49 万像素)。
 	/// </summary>
 	public const int RowMax = 4096;
 
@@ -578,9 +583,13 @@ public static class LayoutSchema
 		else
 		{
 			// stack 与 grid 共用栅格档位:stack 只认 span,x/y/w/h 保持默认(0,0,1,1)时不受影响
-			// 列向(X/W)受列数约束;行向(Y/H)与列数无关,只钳下限和防御上限 RowMax
 			block.X = Clamp(block.X, 0.0, colMax - 1, 0.0);
-			block.Y = Clamp(block.Y, 0.0, RowMax - 1, 0.0);
+			// [A-01] 行号 Y 与行跨度 H **不跟列数挂钩**:过去的 0..cols-1 / 1..cols 把"行"的上限
+			// 绑在了"列数"上,而网格的行数本来就不受列数限制(见 RowMax 的注释)。影响是数据被静默改坏:
+			// 2/3/4/6 列网格里行数多于列数的页、或 12 列里第 13 行以后的块,每次 Save/Load/Export/Import
+			// (都会跑一遍 Sanitize)都被压到最后一行并互相重叠,行跨度超过列数的块被压矮。
+			// 现在只钳下限,上限用与列数无关的防御值 RowMax。
+			block.Y = Clamp(block.Y, 0.0, RowMax, 0.0);
 			block.W = Clamp(block.W, 1.0, colMax, 1.0);
 			block.H = Clamp(block.H, 1.0, RowMax, 1.0);
 		}

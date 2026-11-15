@@ -5,8 +5,8 @@ using System.Text.Json;
 
 namespace TipCL.Core.Launcher.Layout;
 
-// 来源: Windows 版参考仓库 src/TipCL/Core/Launcher/Layout/LayoutDocV2.cs(分支 layout-shell-hooks @ fa1b3d7 + fix/r31-ui-audit @ 33b5fff)
-// L1↔L2 裁定:本文件在 fix/r31-ui-audit 上有相对 fa1b3d7 的改动,逐字采用 L2(逐条裁定见 progress/R32-MC.md)。
+// 来源: Windows 版冻结件 wt-r31-merge @0a304a7(lead 裁定 R32-D6:布局 v2 模型层以冻结件为准)
+//       Windows 参考仓库 src/TipCL/Core/Launcher/Layout/LayoutDocV2.cs(layout-shell-hooks @ fa1b3d7 ∪ fix/r31-ui-audit @ 33b5fff;L1↔L2 差异与裁定逐条见 progress/R32-MC.md)
 
 // 布局文档 v2 的模型(设计文档 §3.2 数据契约)。纯模型层:禁 WPF、禁界面依赖,
 // 这样 net8 的测试宿主也能直接加载(与 PageLayoutDoc / PageLayoutStore 同理)。
@@ -953,13 +953,22 @@ public sealed class BlockLayout
 	/// <summary>位置 X(grid: 0..cols-1;canvas: 归一化 0..1)。</summary>
 	public double X { get; set; }
 
-	/// <summary>位置 Y(grid: ≥0 的行号,行数随内容增长、与列数无关,防御上限 RowMax-1;canvas: 归一化 0..1)。</summary>
+	/// <summary>
+	/// 位置 Y(grid: ≥0 的**行号**,行数自适应增长、**与列数无关**,上限只有防御值
+	/// <see cref="LayoutSchema.RowMax"/>;canvas: 归一化 0..1)。
+	/// [A-01] 1.2.0 曾把这里钳在 <c>0..cols-1</c>(把行数上限绑在列数上),每次 Save/Load/Export/Import
+	/// 都会把行号超过列数的块压到最后一行并互相重叠;[A-01] 起只钳下限。
+	/// </summary>
 	public double Y { get; set; }
 
 	/// <summary>尺寸 W(grid: 1..cols;canvas: 0.04..1)。</summary>
 	public double W { get; set; } = 1.0;
 
-	/// <summary>尺寸 H(grid: ≥1 的行跨度,与列数无关,防御上限 RowMax;canvas: 0.04..1)。</summary>
+	/// <summary>
+	/// 尺寸 H(grid: ≥1 的**行跨度**,**与列数无关**,上限只有防御值 <see cref="LayoutSchema.RowMax"/>;
+	/// canvas: 0.04..1)。[A-01] 1.2.0 曾把这里钳在 <c>1..cols</c>,行跨度超过列数的块在重新加载时被压矮。
+	/// 竖直手柄('n' / 's')、Pack、Sanitize 现在共用同一口径。
+	/// </summary>
 	public double H { get; set; } = 1.0;
 
 	/// <summary>stack 模式下占几列(1..cols,对齐 §4.A 的"多列栈模式")。</summary>
