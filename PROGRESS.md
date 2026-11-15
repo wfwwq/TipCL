@@ -1,4 +1,4 @@
-﻿# PROGRESS — TipCL Linux 版 M1
+# PROGRESS — TipCL Linux 版 M1
 
 > 工作包状态表。各代理收尾后在自己行内更新状态；详细报告见 `progress/M1-<包>.md`。
 > 共享文件编辑纪律见 GOAL.md §6：各包只追加自己的小节，禁止重写他人内容。
@@ -1437,3 +1437,55 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
   `TipCL-{compact,premium}-20261107-1408-遗留清理.exe`、`TipCL-premium-20261114-1522.exe`(task-15 的中间交付件,已归档、**不回迁**)、
   `TipCL-premium-20261107-1308-头部共享修复.exe`(原 `dist/` 的历史留存件,同日移入)。
 - **完整 SHA256 清单见 `_tmp/dist-archive/MANIFEST.md`。**
+
+## R30:新版正式发布准备(2026-11-15,主 agent 监工;「1 + 5」模式)
+
+> 任务书:工作根 `D:\项目\TipCL` 下交付的《TipCL 新版正式发布准备(自主执行任务书)》(下称「任务书」)。
+> 工作模式:**主 agent 只拆活/派活/裁决/写本节/写待拍板清单,不亲手写业务代码、不亲手验收**;同一时间最多 5 个子代理在线。
+> 各包详细报告落**工作根** `D:\项目\TipCL\progress\R30-<包号>.md`(注意:它们**不在本仓库内**,是本轮交付物的一部分)。
+
+### 阶段 A:WP-0 仓库与基线(子代理 `wp0-baseline`;主 agent 验收通过)
+
+- **报告**:`progress\R30-WP0.md`(工作根下);证据 `progress\evidence\wp0\`。**本包无代码改动、无提交**,两仓库收尾时工作区干净、HEAD 未变。
+- 仓库 HEAD:`TipCL` = `25c4e64c0104d83514dfbcf31b684f7e302f0349`(`main`);`TipCL-Android` = `b2b1e22d9507d228508ac37edc0ca53b85eda677`(`main`,**浅克隆 `--depth 1`**)。
+- **构建 0 错误**:`dotnet build windos/src/TipCL/TipCL.csproj -c Release`、`dotnet build TipCL.Linux.sln` 均成功;全部警告是 `NU1900`(华为镜像不可达),与代码无关。两仓库**都没有 `global.json`**,默认 SDK 10.0.403。
+- **测试基线(实测,非转述)**:两个 `dotnet test` 工程合计 **930 条** —— Linux 侧 `tests\TipCL.Tests` **480**(479 通过 + 1 固定跳过);Windows 侧 `windos\tests\TipCL.Tests` **450**。**没有稳定红,但有 2 处顺序相关 flaky**:Linux 侧 `PhoneSyncPanelTests.SyncPanelEntry_RefusesWhenNotConnected`(3 轮 2 红)、Windows 侧 `AiFixChatStoreTests` ×2 + `PhoneLinkTests.FullFlow`(3 轮 1 红,相关 5 条隔离复跑必绿)。
+- **主 agent 的验收裁定(口径)**:任务书写「桌面全量 ≥476 条(476 = 248 + 227 + 1)」,与实测对不上 —— 那个数字是 `docs/HANDOFF-d95a9472.md` 里 **Linux 侧的历史值**,现已涨到 480。⇒ **本轮验收口径 = 两个测试工程各自全量跑通、稳定红为 0、flaky 单列并附说明**;报告一律给**实测**条数。476 不作为判据。
+- **新发现的高风险缺陷(仅记录,WP-0 未修,主 agent 已派单)**:Windows 测试工程的 `TestHome` 只设 `TIPCL_HOME` 环境变量、**不调 `Utils.SetRoot()`**,而 `Utils.ROOT`(`windos\src\TipCL\Core\Launcher\Utils.cs:263-277`)是惰性缓存的静态量 ⇒ 一旦有用例先碰到 `Utils.ROOT`,整个进程的 ROOT 被钉在**真实用户目录** `%LOCALAPPDATA%\TipCL`,之后所有隔离失效。本轮实测真实用户数据 mtime 未被改写(那几次写被拒),但**这是运气不是设计**。Linux 侧有 `TestIsolation.cs` 的 `[ModuleInitializer]` 兜住,Windows 侧没有。→ 派给 WP-2 修(限测试工程内)。
+- WP-0 另外交回 4 张返工单(报告 §5.5):R1 上述隔离缺陷、R2 `Utils.WriteJson` 的 6 轮重试覆盖不到 `MkStemp` 抛的 `UnauthorizedAccessException`(`windos\src\TipCL\Core\Launcher\Utils.cs:790` 在 `try` 之外)、R3 Linux 侧 flaky、R4 口径核对(已由上文裁定销账)。
+- **安卓两条线都「条件不具备」**:本机无 JDK 17+(`where java` 退出码 1、`JAVA_HOME` 空)、无 Android SDK、无 NDK r26+;`gradlew.bat` exit 9009。WP-0 主动**没有**运行自举脚本 `scripts\build_rewrite_release.bat`(会下载数百 MB + 需 NDK),把决定权交回主 agent。
+- **主 agent 的处置**:R1 → 派 WP-2(只在 `windos\tests\` 内修,要求修前红/修后绿对照 + 连跑 ≥3 轮);R2 → **本轮不改**(产品行为变更,发版前不动),只登记进报告与 `docs/RELEASE-DRAFT.md` 的已知问题;R3 → 派 WP-3(只改那一条用例,不放宽断言、不加 skip);自举脚本 → **不跑**(保守口径),让 WP-4 把「需跑什么、下载多少、写到哪里、怎么清理」写清楚交用户拍板。
+- **红线核对**:WP-0 未 push、未打 tag、未发 release、未改 `update.json` / `update-linux.json` / `LICENSE` 的内容与位置;唯一越界副作用(`dotnet test --logger trx` 默认在仓库内建 `TestResults\`)**已回滚**并复核 `git status` 为空。
+
+### 主 agent 本轮补充的工作约定
+
+1. **并发构建用锁**:阶段 B 有 4 个包同时在同一个仓库里动手,所有 `dotnet build` / `dotnet test` / 出包脚本一律持 `D:\项目\TipCL\progress\.build.lock`(目录即锁),避免 MSBuild 争用造成假红。
+2. **跨包在途不算谁的账**:看到**不是自己地盘**的文件造成的红,标「跨包在途」并重试,不许替别人改。
+3. **报告落点固定为工作根** `D:\项目\TipCL\progress\`,不要写进本仓库的 `progress\`(那里是历史包 M1–M4 的报告)。
+4. **共享文件归主 agent**:各包不得改 `PROGRESS.md` / `DECISIONS.md`,只在自己的报告里给材料,由主 agent 统一落「主 agent」小节。
+
+### 阶段 B:并行施工(4 个包 + 3 个追加小包;子代理施工,主 agent 只裁决)
+
+各包报告在**工作根** `D:\项目\TipCL\progress\`(`R30-WP0/1/2/2b/3/3b/4.md`),本仓库内不落报告。本轮**全部业务改动都由子代理完成**,主 agent 只写了本节的 `PROGRESS.md` / `DECISIONS.md` 小节与工作根下的汇总文件。
+
+| 包 | 做了什么 | 提交 | 关键结论 |
+|---|---|---|---|
+| **WP-1** 版本号与发版工程 | 版本号占位 `1.2.0` 铺满 13 个落点 + 两个"隐身字面量"改成派生 + 守卫用例 + `docs/RELEASE-DRAFT.md`(312+26 行)+ README 版本段 | `d496025` `de7d1a0` `7f7cab9` | 推荐号 **`1.2.0`**(MINOR、两树同号)。实测:远端 version 严格大于客户端才 `has_update=true`,等于时不更新;格式非法 sha 当场被拒。**清单刻意未闭环**(未发版就填真 sha = 伪造发布状态,`UpdaterManifestGuardTests` 会判红) |
+| **WP-2** Windows 验证 | R1 测试隔离缺陷修复 + 默认布局逐像素等价 + Windows CI 根因 | `59f1c91` | R1 **已修**(`TestIsolation.cs` 的 `[ModuleInitializer]` + `TestHome` 增 2 处 `SetRoot`;修复前 4 条 3 红 → 修复后 4 绿;9 轮 × 454 全绿;跑测前后真实用户目录 9328 个文件的 路径\|长度\|mtime 逐条不变)。**像素等价 = 0 像素**(D-37 同包隔离 A/B,7 页 × 2 批 × 2 exe = 28 帧逐字节相等) |
+| **WP-2b** CRLF 门槛 | 新建仓库根 `.gitattributes` | `25c44a1` | 定位**发布门槛**:`windows-latest` 的 `core.autocrlf=true` 把文本结帐成 CRLF,而 `winos` 资源的 `.gz` 是在 LF 工作区重打的 ⇒ `CoreResourcesPackTests` 一 push 就红。规则**刻意窄**(15 个非 `.gz` 源文件 `text eol=lf` + `*.gz` 标 `binary`,**没有** `* text=auto`);已证零重新规范化、范围外仍 CRLF、模拟 CRLF clone 上守卫 15/15 绿且整个 Windows 工程 454/454 绿 |
+| **WP-3** Linux 验证与口径 | 8 帧冒烟矩阵钉死 + i18n 精确口径 + R3 flaky 修复 + 布局 v2 移植评估 | `97458e6` | 8 帧 **24/24** 退出码 0、0 WARN / 0 ERROR(`docs/PARITY.md` §9.15 钉死;补了原脚本漏掉的 `SMOKE_PAGE=ai` 与两帧深色)。启动页底部「下载任务」区块失败任务**确实可见**(但不显示失败原因) |
+| **WP-3b** 语言断链 | 修 Linux `language` 设置不生效 | `e273e5c` | `App.axaml.cs` **+8 行**(唯一逻辑 = 1 次 `I18nCore.InitLanguage()`,`I18nCore.cs` 零改动);默认语言帧 7/8 逐字节相同 ⇒ 无副作用 |
+| **WP-3c** 守卫用例 | 锁住「配置 → `CurrentLang`」接线 | `a2f29d7` | 4 条用例;**变异验证**:注释掉那行 `InitLanguage()` → 守卫立红 |
+| **WP-3d** 工具口径 | 收掉 `tools/i18n-audit.py` 的 `WRAPPERS` 误判 + 改 PARITY 1 行 | `9042ef0` | 见下「i18n 口径」 |
+| **WP-4** 安卓端对齐 | 现状摸底 + 主线判断 + 协议对照 + 版本/品牌建议 | **无代码改动**(工作根不是 git 仓库,安卓仓库零改动) | **手机端同步服务在 `TipCL-Android` 里根本不存在**;主线 = `android-app`,旧线建议冻结;两条安卓线构建都「条件不具备」 |
+
+### 主 agent 的关键裁决(详见 `DECISIONS.md` D-73 ~ D-77 与 `progress/R30-DECISIONS-PENDING.md`)
+
+- **口径**:任务书的「桌面全量 ≥476 条」是交接文档里 Linux 侧的历史值,按**实测**为准 ⇒ **最终 Linux 484**(483 通过 + 1 固定跳过)/ **Windows 454**(454 通过),**稳定红 0**,flaky 单列。
+- **修 / 不修的分界线**(本轮自定的裁定原则):**测试基建缺陷与"已实现、已翻译、已暴露却因断链而失效的功能"→ 修**;**异常路径下的健壮性硬化 → 只登记不修**(发版前不动产品行为)。据此:R1 修、R3 修、语言断链修;`Utils.WriteJson` 的 `MkStemp` 重试缺口(R2)、`Dlg.AnyOpen` 无 try/finally、`.deb` 下「立即重启」的按钮文案 **只登记**,已写进 `docs/RELEASE-DRAFT.md` 的已知问题。
+- **文件级冲突的解法**:WP-1 与 WP-3 都在 `tests/TipCL.Tests/` 里有过授权,故按**文件/行**划死(`SmokeTests.cs` 只给 WP-1 那一行;`PhoneSyncTests.cs` 归 WP-3),并让 WP-1 先落地版本号再让 WP-3 跑全量。
+- **`.gitattributes` 越界授权**:该文件是仓库根共享文件,平时各包不许动;因其是**发布门槛**的修法,由主 agent 显式授权 WP-2b 单独创建,并附「零重新规范化 + 模拟 CRLF clone 复现」的强自证。
+- **i18n 口径(勘误,发布说明不要用错)**:Linux 树 4607 条中文字面量里,**只有 122 条(2.65%)走词表,4485 条(97.35%)不走**;未接线去重 3346 个,其中 **1027 个已有译文、只差接线**。任务书那对数字的**真实出处**是 `docs/PARITY.md:151` —— 「约 50%」是**命中率**(61/122),「约 4456」是 4578−122;**任务书把命中率当成了覆盖率**,不是两棵树混用(这一点 WP-3 先是猜错了,自己查证后更正)。
+- **发布说明口径**:布局 v2 标 **Windows-only**(设计文档 §1.2/§3.3 本就把 mac/linux 排除在外,v1 冻结是契约不是欠债);**「中英双语界面」不能写**(Linux 界面文案根本没接线);**「手机同步」不能写成可用功能**(手机端不存在)。
+- **踩过的两个环境坑(已记进 DECISIONS)**:①PS 5.1 按 cp936 读 UTF-8 无 BOM 的 `.ps1`,把 `D:\项目` 写成乱码目录 `D:\椤圭洰`(WP-1/WP-4 都中招;主 agent 已清理该乱码树的 `progress\` 子树,内容先核实);②`$home` 变量名撞 PowerShell 只读变量 `$HOME`,把 `TIPCL_HOME` 静默变成 `C:\Users\Administrator`,在用户主目录建了 `config.json`/`logs`/`cache`(**正是 D-43 那个老坑**)。WP-3b 当场发现并删除,**主 agent 已独立复核**:6 个 D-43 特征文件全部 absent、`logs\` 与 `cache\` 都不存在。
+- **红线核对(截至阶段 B 收尾)**:`origin/main..HEAD` 上的每一笔都是子代理的,`git diff origin/main..HEAD -- update.json update-linux.json LICENSE` **为空**、三文件仍在仓库根;无 tag、无 push、无 release。

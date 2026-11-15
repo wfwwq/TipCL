@@ -1100,3 +1100,74 @@
   6. **`.ps1` 若含中文必须存成 UTF-8 带 BOM**:本机没有 PowerShell 7,Windows PowerShell 5.1 按 ANSI(cp936)读**无 BOM** 的 UTF-8 脚本,中文字符串字面量会解析失败(`The string is missing the terminator`)—— 本轮实测踩到。仓库现状:`tools/build-both.ps1` = UTF-8 带 BOM,`tools/dump-embedded-resources.ps1` = 纯 ASCII。
   7. **B1 的安全性不能用"全量用例全绿"证明**:`TipCL.Tests` 是 **net8.0** 且以 `SetTargetFramework=TargetFramework=net48` 引用 TipCL,测试宿主加载的是**它自己那份** CodePages。本轮以"**单 exe 隔离目录(同目录零 .dll)+ 真实 WebP 解码**"实测证明(见数据)。静态支撑证据:`TipCL.exe` 里 `System.Text.Encoding.CodePages` 的 **2 次出现都在 Costura 自己的 `costura.metadata` 资源内,不是 TipCL.exe 的 AssemblyRef** —— 即 TipCL 自身代码不引用它,真正引用它的是 `SixLabors.ImageSharp.dll`(其 #Strings 堆含 `CodePagesEncodingProvider`)。
   8. **Costura `ExcludeAssemblies` 的分隔符是 `|` 不是逗号**(XML **属性**形式,依据 Costura.Fody 6.0.0 自带 `Costura.Fody.xcf` schema:"delimited with **|**";XML **元素**形式才是"delimited with line breaks"):写成逗号会把整串当成**一个**程序集名 —— **既拿不到这 527 KB,还会把原有的 WebView2Loader 排除一并搞失效**。
+
+### D-73 · R30 轮次的工作模式与验收口径:子代理施工 + 独立子代理验收;测试口径以实测为准(R30,2026-11-15,主 agent)
+
+- 时间:2026-11-15
+- 处境:本轮任务书(`D:\项目\TipCL` 工作根下的《TipCL 新版正式发布准备》)把工作模式写成硬规定「1 + 5」:主 agent 只拆活/派活/裁决/写本节/写待拍板清单,**不亲手写业务代码、不亲手验收**;同一时间最多 5 个子代理在线;验收子代理不能是做这个包的同一个。这**覆盖**了仓库历史里「M3 起禁用子代理、主 agent 亲自执行」的做法(`PROGRESS.md:33` 那条)。
+- 决定:
+  a) **工作模式按「1 + 5」执行**:WP-0 基线(1 个)、阶段 B 施工 4 个(WP-1 版本号与发版工程 / WP-2 Windows 验证 / WP-3 Linux 验证与口径 / WP-4 安卓端对齐)、阶段 C 总验收 1 个独立子代理(WP-5)。**验收交给没参与过施工的子代理**,只读、只跑、只报告,不修;发现问题开返工单由主 agent 派发。
+  b) **各包报告落工作根,不落本仓库**:`D:\项目\TipCL\progress\R30-<包号>.md` + 证据 `progress\evidence\<包号>\`。本仓库内的 `progress\` 保留给历史包(M1–M4)。各包**不得**改 `PROGRESS.md` / `DECISIONS.md`,只在自己的报告里给材料,由主 agent 统一落「主 agent」小节。
+  c) **测试口径以实测为准**:任务书写的「桌面全量 ≥476 条(476 = 248 + 227 + 1)」与实测对不上 —— 那个数字是 `docs/HANDOFF-d95a9472.md` 里 **Linux 侧的历史值**。本轮实测:Linux 侧 `tests\TipCL.Tests` **480**(479 通过 + 1 固定跳过)、Windows 侧 `windos\tests\TipCL.Tests` **450**,合计 **930**。⇒ **验收口径 = 两个测试工程各自全量跑通、稳定红为 0、已知 flaky 单列并附说明**;报告一律给实测条数,`476` 不作为判据。
+  d) **并发构建用锁**:阶段 B 有 4 个包同时在同一仓库动手,所有 `dotnet build` / `dotnet test` / 出包脚本一律持 `D:\项目\TipCL\progress\.build.lock`(目录即锁);看到**不是自己地盘**的文件造成的红,标「跨包在途」并重试,不许替别人改。
+- 理由:验收和施工分开才能避免「自己证明自己」;报告落在工作根是因为仓库根已是 Linux/Avalonia 移植树、而 `progress/` 在本仓库里已被历史包占用(命名冲突);口径以实测为准是因为历史数字会随手交接漂移,照抄会造出永远无法达成的验收条件。
+- 数据:WP-0 报告 `progress\R30-WP0.md`(工作根);本轮主 agent 自己在 `PROGRESS.md` 落的「R30」小节。
+- 可回滚:是(纯流程约定;报告是新增文件)。
+- 偏离提示:**主 agent 的提交只应涉及 `PROGRESS.md` / `DECISIONS.md` 的主 agent 小节**;若某轮主 agent 不得不亲手改业务代码,必须在本条旁边补一条显式例外并写清原因。
+
+### D-74 · R30 返工单处置:测试隔离缺陷本轮修、产品行为变更本轮不改(R30,2026-11-15,主 agent)
+
+- 时间:2026-11-15
+- 处境:WP-0 基线交回 4 张返工单(报告 §5.5):**R1** Windows 测试会读写**真实**用户目录 `%LOCALAPPDATA%\TipCL`(根因:`Utils.ROOT` 惰性缓存 + `windos\tests\TipCL.Tests\TestHome.cs:19-22` 只设环境变量、**不调 `Utils.SetRoot()`**;Linux 侧有 `TestIsolation.cs` 的 `[ModuleInitializer]` 兜住,Windows 侧没有);**R2** `Utils.WriteJson` 自称的 6 轮重试**覆盖不到** `MkStemp` 抛的 `UnauthorizedAccessException`(`windos\src\TipCL\Core\Launcher\Utils.cs:790` 的调用在 `try` 之外,`MkStemp` 只 `catch (IOException)`);**R3** Linux 侧 flaky `PhoneSyncPanelTests.SyncPanelEntry_RefusesWhenNotConnected`(`tests\TipCL.Tests\App\PhoneSyncTests.cs:66-67`,断言依赖静态 `Dlg` 全局状态);**R4** 口径核对(已由 D-73 销账)。
+- 决定:
+  a) **R1 本轮修**,但**限定在测试工程内**(照 Linux 侧 `TestIsolation.cs` 的做法给 Windows 测试工程补等价机制),要求「修前红 / 修后绿」或「修前写真实目录 / 修后只写隔离目录」的**对照证据**,并连跑 ≥3 轮全量。派给 WP-2(地盘 `windos\tests\`)。
+  b) **R2 本轮不改**,只登记。它是**产品代码的行为变更**(杀软拦截新 tmp 文件时的重试与直写兜底),发版前改动它需要单独的验证轮次与用户可见影响评估;按本轮「无人值守、更保守、可回滚、不对外」的口径,本轮**不碰**。要求写进报告 + 建议登记进 `docs/RELEASE-DRAFT.md` 的已知问题。
+  c) **R3 本轮修**,只改那一条用例(在断言前重置静态状态),**不放宽断言、不加 skip**;修完连跑 ≥3 轮证明不再红。派给 WP-3。
+  d) **不跑安卓自举脚本 `TipCL-Android\scripts\build_rewrite_release.bat`**:它会从国内镜像下载数百 MB 的便携 JDK + Gradle + Android cmdline-tools 到仓库内 `.tools\`,还需要 NDK r26+ —— 无人值守期间属「制造大额外部副作用、不易回滚」。改为要求 WP-4 把「需跑什么、预计下载多少、写到哪里、怎么清理」写清楚,交用户拍板。
+- 理由:R1 的风险是**真实用户数据可能被测试改写**(本轮只是"碰巧被拒"),属测试基建缺陷,修它边界清晰、可回滚、不改变产品行为;R2 是产品行为变更,风险与 R1 不同量级,不能顺手改;R3 是让「全量 0 失败」变得**可重复达成**的必要条件。
+- 数据:WP-0 §5.5(含 `windows.trx` 里的堆栈证据 `Utils.MkStemp(...) Utils.cs:line 763` 由 `WriteJson :790` 调用);WP-0 §5.3 缺件清单。
+- 可回滚:是(R1/R3 都是各自独立一笔提交)。
+- 偏离提示:**「全量绿」不是 R1 修好的证据** —— 必须给「隔离根里写了、真实目录 mtime 没变」这类**定向**证据;同理 R2 未被修这件事要**主动写进发版草案的已知问题**,不能因为它没修就悄悄不写。
+
+### D-75 · R30「修 / 不修」的分界线:修测试基建与断链功能,不修异常路径硬化(R30,2026-11-15,主 agent)
+
+- 时间:2026-11-15
+- 处境:阶段 B 四个包在施工中交回 11 张返工单,性质差别很大 —— 有的是**测试基建缺陷**(Windows 测试会读写真实用户目录)、有的是**已实现已翻译已暴露却因断链失效的功能**(Linux `language` 设置完全不生效)、有的是**异常路径下的健壮性硬化**(`Utils.WriteJson` 的重试缺口、`Dlg.AnyOpen` 无 try/finally)、有的是**文案诚信问题**(`.deb` 下「立即重启」其实不可达)。若无统一分界线,「顺手改」会把发版前的产品行为搅乱。
+- 决定(本轮裁定原则):
+  a) **修**:①**测试基建缺陷**(改它边界清晰、可回滚、不改变产品行为)—— R1 测试隔离、R3 flaky 用例侧防御;②**已实现、已翻译、已在界面上暴露、却因为少一根线而完全失效的功能** —— Linux `language` 断链(`I18nCore.InitLanguage()` 全树无调用点)。
+  b) **只登记不修**:①**异常路径下的健壮性硬化**(`Utils.WriteJson` 的重试覆盖不到 `MkStemp`、`Dlg.AnyOpen` 无 try/finally)—— 属产品行为变更,发版前动它需要单独的验证轮次与用户可见影响评估;②**按钮文案诚信问题**(`.deb`/download-only 下「立即重启」不可达)—— 程序行为本身是对的(不替换、不重启、提示手动安装),缺陷只在文案;③**大额外部副作用**(安卓自举脚本 `build_rewrite_release.bat`,≥600 MB~1.5 GB 下载 + 需 NDK)。
+  c) 所有「只登记不修」项**必须主动写进 `docs/RELEASE-DRAFT.md` 的已知问题**,不许因为有缺陷就悄悄不提。
+  d) 「修」的包必须做**定向对照证据**,不接受「全量绿」当代证:R1 要「修复前红/修复后绿」或「隔离根里写了、真实目录 mtime 未变」;语言接线要「默认语言帧逐字节不变」+「注释掉那行守卫立刻变红」的变异验证。
+- 理由:「产品行为变更」与「测试基建/断链修复」的风险量级不同 —— 前者会改变用户看到的东西,后者不会。用一条明确的分界线代替逐案拍脑袋,才能让「保守」可复核,而不是变成「什么都不做」或「什么都顺手改」。
+- 数据:返工单与处置逐条见 `progress/R30-DECISIONS-PENDING.md` §二/§三;R1 的证据见 `progress/R30-WP2.md`;语言接线的证据见 `progress/R30-WP3b.md`。
+- 可回滚:是(每个「修」各是一笔独立可 revert 的提交:`59f1c91`、`97458e6`、`e273e5c`、`a2f29d7`)。
+- 偏离提示:**「全量测试全绿」既不能证明测试隔离修好了,也不能证明产品没变**。R1 必须给「真实用户目录 9328 个文件的 路径|长度|mtime 逐条不变」这类定向证据;语言接线必须给「默认语言 8 帧 SHA256 不变」。拿全量绿交差是本条最容易被打回的地方。
+
+### D-76 · 文本资产的换行必须是仓库级约定,不能靠每台机器的 `core.autocrlf`(R30 WP-2b,2026-11-15,子代理施工 + 主 agent 授权)
+
+- 时间:2026-11-15
+- 处境:`.github/workflows/ci-windows.yml` 在 `windows-latest` 上**一 push 就红**(run #8,10 条 `CoreResourcesPackTests` 断言)。根因已算术证明:GitHub 的 Windows runner 系统级 `core.autocrlf=true`,而仓库**没有 `.gitattributes`** ⇒ 文本被结帐成 CRLF;而 `windos/src/TipCL/Resources/{locales,ai,plugin-host}` 那 15 个源文件是**构建期 gzip 成 `.gz` 再内嵌**,`.gz` 是在 LF 工作区重打的 ⇒ 「结帐后的源文件字节 == 内嵌 `.gz` 解压字节」这条守卫必然不成立。
+- 决定:新建**仓库根** `.gitattributes`,**刻意只覆盖出问题的窄范围** —— `windos/src/TipCL/Resources/{locales,ai,plugin-host}/**` 的 `json|mjs|js|d.ts` 标 `text eol=lf`,外加 `Resources/**/*.gz` 标 `binary`(给将来可能引入的 `* text=auto` 兜底)。**明确不写 `* text=auto`**:那是全库结帐策略,属用户级决策,不是本包能替用户定的。
+- 理由:①这是**发布门槛**(一 push 到 `windos/**` 就红),不是测试洁癖;②CRLF 结帐还会让 **exe 哈希随机器变化**,直接威胁「清单里的 sha256 对得上」;③窄范围保证**零重新规范化**(39 个资源文件的 `i/` 与 `w/` 两列与加入前逐条一致),不会把仓库变成一次大规模换行重写(对照 D-34)。
+- 数据:`git status` 相对基线**只多出 `?? .gitattributes` 自身**,无任何 `M`;`git check-attr` 15/15 命中、范围外全部 unspecified;**模拟 CRLF clone**(`git clone -c core.autocrlf=true`)—— 加属性前 15 条守卫全红且 `Expected 192167 / Actual 189212` 与 CI 注解**逐字节相同**,加属性后 15 个文件 CR 全 0、守卫 15/15 绿、整个 Windows 工程 **454/454 绿**;范围外仍 CRLF(README 242、PROGRESS 1439、PARITY 673、update.json 6、SmokeTests.cs 21、verify-linux.sh 51)⇒ 规则是窄的。
+- 可回滚:是(删掉 `.gitattributes` 即回到原状;它不改变任何已提交内容的字节)。
+- 偏离提示:
+  1. **不要用 `git checkout-index` 验 `eol=` 是否生效** —— plumbing 不做结帐转换,会给**假阴性**;必须用 porcelain `git checkout`。
+  2. **未闭环的一环**:红线禁止 push,所以「GitHub runner 上真的绿了」要等下一次真实 CI。下一个人看到 CI 红了,先按 `CoreResourcesPackTests.cs:57-64` 的 Expected/Actual 口径复核,别先怀疑代码。
+  3. Linux/Avalonia 侧 `src/TipCL.Core/Resources/**` **刻意没加**:该目录 `.gz` 数为 0、csproj 直接内嵌源文件(`TipCL.Core.csproj:39-40`)、守卫 `I18nCoreLocalesTests.cs:76-82` 只断言非空/体积/可解析而**不做逐字节比对**,与 EOL 无关(旁证:CI 的 `test (windows-latest)` job 一直在 CRLF 结帐的 runner 上跑且一直绿)。将来若给 Linux 侧也上 gzip 内嵌,**必须把这批文件一并纳入 `.gitattributes`**。
+
+### D-77 · R30 两条环境纪律:`.ps1` 纯 ASCII + 禁用易撞名变量(R30,2026-11-15,主 agent)
+
+- 时间:2026-11-15
+- 处境:本轮**同一天里被同两个坑咬了两轮**,各有一个包中招:
+  1. **PS 5.1 按 ANSI(cp936)读 UTF-8 无 BOM 的 `.ps1`** ⇒ 脚本里的中文**路径字面量**被读成乱码。WP-1 与 WP-4 都中招:第一次的脚本把 `D:\项目` 写成了 **`D:\椤圭洰`**,于是 6 个日志文件被静默写进一棵**乱码目录树** `D:\椤圭洰\tipcl\progress\evidence\{wp1,wp4}\` —— 不报错、不崩,只是"东西不见了"。
+  2. **`$home` 变量名撞 PowerShell 只读变量 `$HOME`**(变量名大小写不敏感)⇒ 赋值静默失败,`TIPCL_HOME` 实际变成 `C:\Users\Administrator`,于是一次冒烟在**用户主目录根**写下了 `config.json` / `logs\` / `cache\`。**这正是 D-43 记过的老坑**(当年就是这么在用户目录根写下 `config.json` / `ai_chats.json` 的)。
+- 决定:
+  a) **`.ps1` 一律纯 ASCII(含注释)**,路径用 `$PSScriptRoot` 往上推或由参数传入,**不在脚本里写死中文路径**;确需中文则**必须存成 UTF-8 带 BOM**。
+  b) **禁用易撞名变量**:不要用 `$home` / `$home` 的任何大小写变体当隔离目录变量;一律用 `$isolatedHome` 这类明确名字。
+  c) **凡是启动 App 的脚本,必须回读应用日志里的 `home=` 并断言**它等于预期的隔离目录 —— 这是唯一能在"静默写错地方"时当场抓住的判据(WP-3b 就是靠它当场发现的)。
+  d) `.ps1` 里的**绝对路径一律给全**(PS 5.1 的 `Set-Location` **不会**同步 .NET 的当前目录,`[IO.File]::ReadAllBytes('docs\x.md')` 这类相对路径会解析到会话起始目录)。
+- 理由:这两个坑的共同特征是**失败是静默的**(不抛异常、退出码 0),只能靠"落地位置对不对"这类**外部断言**发现;而它们各自的后果都不轻 —— 一个让产物凭空消失,一个直接污染真实用户数据。
+- 数据:WP-1 报告 §4.6 / §7.2;WP-4 报告 §9.6;WP-3b 报告 §8.1。主 agent 处置:核实内容后删除乱码树的 `progress\` 子树(同树下 `_tmp\` 是上一轮遗留、空目录,未动);并**独立复核**用户主目录 —— `config.json` / `ai_chats.json` / `ui-theme.json` / `phone_link.json` / `accounts.json` / `ai_memory.md` 全部 absent,`logs\` 与 `cache\` 目录都不存在。
+- 可回滚:是(纯纪律,无代码影响)。
+- 偏离提示:**「加 UTF-8 BOM」和「纯 ASCII」二选一,别一半一半** —— 只加 BOM 不加 ASCII 也安全,只写 ASCII 不加 BOM 也安全,但"中文 + 无 BOM"就是上面第 1 条。另外:**下一个在本机写 `.ps1` 的人,请把这条当成硬约束**,而不是"这次小心点"。
