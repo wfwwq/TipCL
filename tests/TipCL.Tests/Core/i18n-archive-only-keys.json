@@ -1,5 +1,5 @@
 {
-  "_note": "本文件由 _tmp/tasks/linux-updater/merge-locales.py 的产物 locale-merge-report.json 生成(字节原样,不经人手输入 —— 手打会被全角/半角咬:例如表里用的是 U+FF1B/U+FF0A/U+FF0C,手打很容易变成 ASCII 的 ; : , 而渲染出来一模一样)。这 16 个键只存在于用户源码压缩包 TipCL-552f3ac 的 locales 里,底表(windos\\tipcl 那份 2951 键)没有,所以内嵌词表是二者的并集 2967 键。",
+  "_note": "本文件由 _tmp/tasks/linux-updater/merge-locales.py 的产物 locale-merge-report.json 生成(字节原样,不经人手输入 —— 手打会被全角/半角咬:例如表里用的是 U+FF1B/U+FF0A/U+FF0C,手打很容易变成 ASCII 的 ; : , 而渲染出来一模一样)。这 16 个键只存在于用户源码压缩包 TipCL-552f3ac 的 locales 里,底表(windos\\tipcl 那份 2951 键)没有,所以内嵌词表是二者的并集 2967 键(合成当次记录);2026-11-15 复算:内嵌两表各 2995 键(键集相等、缺键 0),口径见 docs/PARITY.md §5 第 8 条 / §9.17。",
   "source": {
     "base_table": "windos\\tipcl\\src\\TipCL\\Resources\\locales\\{en,zh_CN}.json",
     "base_keys": 2951,
