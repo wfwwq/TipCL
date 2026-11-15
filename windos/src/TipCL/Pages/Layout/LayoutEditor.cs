@@ -38,7 +38,8 @@ public sealed class LayoutEditor
 	private readonly PageLayoutV2? _defaultPage;
 
 	// [layout-fix] 规格 §3-问题7 + 规格2-问题2.3:stack 页进编辑态会被**临时**折算成 12 列网格。
-	//   _preEditPage   = 折算前的原样快照(退出时若一次都没动过,原样还原 —— 磁盘上不该留下任何痕迹)
+	//   _preEditPage   = 进编辑前的原样快照,各种模式都留(退出时若一次都没动过,原样还原、不写盘 ——
+	//                    临时折算和进编辑时的压紧都只是编辑视图,磁盘上不该留下任何痕迹)
 	//   _autoGrid      = 这次编辑态是"临时折算"出来的
 	//   _gridTouched   = 这次编辑动过(拖 / 缩放 / 隐藏 / 恢复 / 落盘)⇒ 退出时保留网格
 	private PageLayoutV2? _preEditPage;
@@ -356,12 +357,11 @@ public sealed class LayoutEditor
 	{
 		_autoGrid = false;
 		_gridTouched = false;
-		_preEditPage = null;
+		_preEditPage = ((_state?.Page != null) ? _state.ToPage() : null);
 		if (_specs.Count == 0 || _state?.Page == null || _state.Page.Mode != LayoutSchema.ModeStack)
 		{
 			return;
 		}
-		_preEditPage = _state.ToPage();
 		_autoGrid = true;
 		ConvertStackToGrid();
 	}
@@ -422,22 +422,29 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = false;
-		if (_autoGrid && !_gridTouched && _preEditPage != null)
+		PageLayoutV2? untouched = (_gridTouched ? null : _preEditPage);
+		if (untouched != null)
 		{
 			// [layout-fix] 规格 §5「进入编辑后不动任何东西直接「完成编辑」,页面应该和之前完全一样」:
-			// 这次只是临时折算成了网格,一个手势都没发生 → 把原来的 stack 放回去,不悄悄改用户的页面。
-			_state = LayoutEngine.LoadState(_pageId, _preEditPage, _refs, _state.ExistedInDoc);
+			// 临时折算成网格、进编辑时的压紧都只是编辑视图,一个改动都没发生 → 放回原样,不写盘。
+			_state = LayoutEngine.LoadState(_pageId, untouched, _refs, _state.ExistedInDoc);
 		}
 		_autoGrid = false;
 		_gridTouched = false;
 		_preEditPage = null;
-		Persist();
+		if (untouched == null)
+		{
+			Persist();
+		}
 		Render();
 		_session.ClearSelection();
 		_session.ClearHistory();
 		_trayHost.Visibility = Visibility.Collapsed;
 		_barHost.Visibility = Visibility.Collapsed;
-		AppServices.Window?.Toast(I18n.L("布局已保存"), "", ToastKind.Success);
+		if (untouched == null)
+		{
+			AppServices.Window?.Toast(I18n.L("布局已保存"), "", ToastKind.Success);
+		}
 	}
 
 	/// <summary>按主题刷新编辑态蒙版。</summary>
@@ -869,33 +876,22 @@ public sealed class LayoutEditor
 		Render();
 	}
 
-	// 导入:PageLayoutIO 仍按 v1 语义写盘(整机 v2 方案导入由 L5 做);这里把 v1 的顺序/显隐并进 v2,
-	// 其它 v2 字段按块 id 保留 —— 既保持旧行为,也不丢 v2 专属字段。
+	// 导入:读文件、合并、落盘都在 PageLayoutIO(v2 文件按页整条覆盖,旧版 v1 文件只并入顺序与显隐)。
+	// 导入算一次改动,能撤销;编辑态下按导入后的页面重新取进编辑快照(同 ResetPageCore),
+	// 退出时就不会把导入前的样子还原回去。
 	private void ImportLayout()
 	{
-		int? num = PageLayoutIO.ImportFromFileDialog();
-		if (num == null)
+		PageLayoutV2 before = _state.ToPage();
+		if (PageLayoutIO.ImportFromFileDialog() == null)
 		{
 			return;
 		}
-		PageLayoutStore.Reload();
-		LayoutV2 doc = LayoutStoreV2.Load();
-		foreach (KeyValuePair<string, PageLayoutDoc> kv in PageLayoutStore.LoadAll())
-		{
-			if (string.IsNullOrEmpty(kv.Key) || kv.Value == null)
-			{
-				continue;
-			}
-			PageLayoutV2? existing = null;
-			if (doc.Layout.Pages.TryGetValue(kv.Key, out PageLayoutV2? stored))
-			{
-				existing = stored;
-			}
-			LayoutEngine.ApplyPage(doc, kv.Key, LayoutEngine.MergeV1(existing, kv.Value));
-		}
-		LayoutStoreV2.Save(doc);
-		PageLayoutStore.Reload();
+		_session.PushUndo(before);
 		LoadFromStore();
+		if (_edit)
+		{
+			PrepareFreeDrag();
+		}
 		Render();
 		this.Changed?.Invoke();
 	}

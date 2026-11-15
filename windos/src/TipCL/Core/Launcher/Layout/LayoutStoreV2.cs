@@ -151,14 +151,16 @@ public static class LayoutStoreV2
 
 	/// <summary>
 	/// 保存:先原子写 v2,再**由 v2 单向写通 v1**;两次写都吞异常(写不进去也不能崩 UI),
-	/// 内存里始终保留最新值,并触发 <see cref="LayoutChanged"/>。
+	/// 内存里始终保留最新值,并触发 <see cref="LayoutChanged"/>。返回 v2 文件是否写成功
+	/// (想告诉用户"没存上"的调用方用它;不关心的忽略即可)。
 	/// </summary>
-	public static void Save(LayoutV2 doc)
+	public static bool Save(LayoutV2 doc)
 	{
 		if (doc == null)
 		{
-			return;
+			return false;
 		}
+		bool written;
 		lock (_gate)
 		{
 			LayoutSchema.Sanitize(doc);
@@ -168,13 +170,15 @@ public static class LayoutStoreV2
 			_cache = doc.Clone();
 			_cacheDir = dir;
 			_lastSource = "v2";
-			if (WriteV2File(dir, doc))
+			written = WriteV2File(dir, doc);
+			if (written)
 			{
 				// 只有 v2 落地成功才写通 v1:反过来会让 v1 比 v2 新,违反"v2 是唯一真源"
 				WriteV1Projection(dir, doc);
 			}
 		}
 		RaiseChanged();
+		return written;
 	}
 
 	// L1 接线须知(本包不改 PageLayoutStore):它按目录在进程内只读一次,没有 Reload()

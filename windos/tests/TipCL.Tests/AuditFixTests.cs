@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using TipCL.Core.Launcher.Layout;
+using TipCL.Pages;
 using TipCL.Pages.Layout;
 using Xunit;
 
@@ -67,5 +69,85 @@ public class AuditFixTests
 		Assert.True(LayoutGrid.ResizeCell(north, "n", 0, -3, 2));
 		Assert.Equal(5, north.H);
 		Assert.Equal(3, north.Y);
+	}
+
+	// ————— D-04 / M-01 / G-01:编辑器工具条与实例库菜单共用的页面布局导入 —————
+
+	[Fact]
+	public void ImportV2FileReplacesWholePageAndBringsReferencedWidgets()
+	{
+		LayoutV2 file = new LayoutV2();
+		file.Layout.Pages["p"] = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeGrid,
+			Cols = 6,
+			Blocks = new List<BlockLayout>
+			{
+				new BlockLayout { Id = "hero", X = 2, Y = 3, W = 4, H = 2 },
+				new BlockLayout { Id = "custom:w-note", X = 0, Y = 0, W = 2, H = 1 },
+				new BlockLayout { Id = "custom:w-mine", X = 0, Y = 1, W = 2, H = 1 },
+			},
+		};
+		file.Layout.Variants["narrow"] = new LayoutBody();
+		file.Layout.Variants["narrow"].Pages["p"] = new PageLayoutV2 { Blocks = new List<BlockLayout> { new BlockLayout { Id = "hero" } } };
+		file.Layout.Widgets.Add(new WidgetDef { Id = "w-note", Type = "note", Title = "便签" });
+		file.Layout.Widgets.Add(new WidgetDef { Id = "w-clock", Type = "clock", Title = "时钟" });
+		file.Layout.Widgets.Add(new WidgetDef { Id = "w-mine", Type = "note", Title = "文件里的" });
+
+		LayoutV2 doc = new LayoutV2();
+		doc.Layout.Pages["p"] = new PageLayoutV2 { Blocks = new List<BlockLayout> { new BlockLayout { Id = "hero" } } };
+		doc.Layout.Pages["other"] = new PageLayoutV2 { Blocks = new List<BlockLayout> { new BlockLayout { Id = "x" } } };
+		doc.Layout.Widgets.Add(new WidgetDef { Id = "w-mine", Type = "note", Title = "我的" });
+
+		Assert.Equal(1, PageLayoutIO.MergeImport(doc, LayoutStoreV2.ExportJson(file)));
+
+		PageLayoutV2 page = doc.Layout.Pages["p"];
+		Assert.Equal(LayoutSchema.ModeGrid, page.Mode);
+		BlockLayout hero = page.Blocks.Find(b => b.Id == "hero")!;
+		Assert.Equal(2.0, hero.X);
+		Assert.Equal(3.0, hero.Y);
+		Assert.Equal(4.0, hero.W);
+		Assert.Equal(2.0, hero.H);
+		Assert.True(doc.Layout.Pages.ContainsKey("other"));
+		Assert.True(doc.Layout.Variants["narrow"].Pages.ContainsKey("p"));
+		// 只带上页里引用到的自建区块;同 id 的保留用户现有的定义
+		Assert.Contains(doc.Layout.Widgets, w => w.Id == "w-note");
+		Assert.DoesNotContain(doc.Layout.Widgets, w => w.Id == "w-clock");
+		Assert.Equal("我的", doc.Layout.Widgets.Find(w => w.Id == "w-mine")!.Title);
+	}
+
+	[Fact]
+	public void ImportV1FileOnlyMergesOrderAndHidden()
+	{
+		LayoutV2 doc = new LayoutV2();
+		doc.Layout.Pages["p"] = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeGrid,
+			Cols = 6,
+			Blocks = new List<BlockLayout>
+			{
+				new BlockLayout { Id = "a", X = 0, Y = 0, W = 3, H = 2 },
+				new BlockLayout { Id = "b", X = 3, Y = 0, W = 3, H = 2 },
+			},
+		};
+		string v1 = "{\"version\":1,\"kind\":\"tipcl-page-layout\",\"pages\":{\"p\":{\"version\":1,\"blocks\":[{\"id\":\"b\",\"hidden\":true},{\"id\":\"a\",\"hidden\":false}]}}}";
+
+		Assert.Equal(1, PageLayoutIO.MergeImport(doc, v1));
+
+		PageLayoutV2 page = doc.Layout.Pages["p"];
+		Assert.Equal(LayoutSchema.ModeGrid, page.Mode);
+		Assert.Equal(new[] { "b", "a" }, page.Blocks.ConvertAll(x => x.Id));
+		Assert.True(page.Blocks[0].Hidden);
+		Assert.Equal(3.0, page.Blocks[0].X);
+		Assert.Equal(3.0, page.Blocks[1].W);
+	}
+
+	[Fact]
+	public void ImportCountsZeroPagesAndRejectsUnknownFiles()
+	{
+		LayoutV2 doc = new LayoutV2();
+		Assert.Equal(0, PageLayoutIO.MergeImport(doc, LayoutStoreV2.ExportJson(new LayoutV2())));
+		Assert.Empty(doc.Layout.Pages);
+		Assert.ThrowsAny<Exception>(() => PageLayoutIO.MergeImport(doc, "{\"kind\":\"something-else\"}"));
 	}
 }
