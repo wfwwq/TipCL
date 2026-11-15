@@ -985,7 +985,7 @@ public sealed class LayoutCell
 	/// <summary>grid 列跨度(1..cols)。</summary>
 	public int W { get; set; } = 1;
 
-	/// <summary>grid 行跨度(1..cols)。</summary>
+	/// <summary>grid 行跨度(≥1,与列数无关;防御上限 LayoutSchema.RowMax)。</summary>
 	public int H { get; set; } = 1;
 
 	/// <summary>canvas 归一化左(0..1)。</summary>
@@ -1164,7 +1164,7 @@ public static class LayoutGrid
 				w = block.Span;
 			}
 			w = LayoutSchema.ClampInt(w, 1, cols);
-			int h = LayoutSchema.ClampInt(Math.Max(1, (int)Math.Round(block.H)), 1, Math.Max(1, cols));
+			int h = LayoutSchema.ClampInt(Math.Max(1, (int)Math.Round(block.H)), 1, LayoutSchema.RowMax);
 			bool hasPosition = !(block.X <= 0.0 && block.Y <= 0.0 && block.W <= 1.0 && block.H <= 1.0);
 			int x;
 			int y;
@@ -1405,7 +1405,7 @@ public static class LayoutGrid
 
 	/// <summary>
 	/// 手柄缩放(按网格单位):'w'/'e' 改列跨度(西侧手柄同时改起始列),'n'/'s' 改行跨度(北侧手柄同时改起始行)。
-	/// 列跨度夹在 1..cols,行跨度夹在 1..cols,起始列/行不为负。
+	/// 列跨度夹在 1..cols;行跨度与列数无关,夹在 1..RowMax;起始列/行不为负。
 	/// </summary>
 	public static bool ResizeCell(LayoutCell? cell, string? handle, int dw, int dh, int cols)
 	{
@@ -1438,7 +1438,7 @@ public static class LayoutGrid
 		}
 		if (handle.IndexOf('s') >= 0)
 		{
-			h = LayoutSchema.ClampInt(h + dh, 1, count);
+			h = LayoutSchema.ClampInt(h + dh, 1, LayoutSchema.RowMax);
 		}
 		w = Math.Max(1, w);
 		h = Math.Max(1, h);

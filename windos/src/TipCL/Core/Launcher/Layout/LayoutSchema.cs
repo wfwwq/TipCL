@@ -148,6 +148,12 @@ public static class LayoutSchema
 	/// <summary>页数上限(防御性上限:挡住恶意/损坏文档把界面撑爆)。</summary>
 	public const int MaxPages = 256;
 
+	/// <summary>
+	/// 网格行号 / 行跨度的防御上限:只挡手改 JSON 写进来的离谱数值(如 "y": 1e9),不是语义上限。
+	/// 网格的行数随内容增长,与列数无关。
+	/// </summary>
+	public const int RowMax = 4096;
+
 	/// <summary>单页块数上限(防御性上限)。</summary>
 	public const int MaxBlocksPerPage = 512;
 
@@ -569,10 +575,11 @@ public static class LayoutSchema
 		else
 		{
 			// stack 与 grid 共用栅格档位:stack 只认 span,x/y/w/h 保持默认(0,0,1,1)时不受影响
+			// 列向(X/W)受列数约束;行向(Y/H)与列数无关,只钳下限和防御上限 RowMax
 			block.X = Clamp(block.X, 0.0, colMax - 1, 0.0);
-			block.Y = Clamp(block.Y, 0.0, colMax - 1, 0.0);
+			block.Y = Clamp(block.Y, 0.0, RowMax - 1, 0.0);
 			block.W = Clamp(block.W, 1.0, colMax, 1.0);
-			block.H = Clamp(block.H, 1.0, colMax, 1.0);
+			block.H = Clamp(block.H, 1.0, RowMax, 1.0);
 		}
 		block.Span = ClampInt(block.Span, 1, colMax);
 		if (!IsKnownStyle(block.Style))

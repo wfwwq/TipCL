@@ -192,8 +192,8 @@
 |---|---|---|---|---|---|
 | `id` | string | — | 非空,去重 | ✅ 同名同义 | 块 id(现有 13 页的 id 清单见 R3 报告 §4.3) |
 | `hidden` | bool | `false` | 只认 JSON `true` | ✅ 同名同义 | 隐藏 |
-| `x`,`y` | int | `0` | grid: `0..cols-1` / `canvas`: 归一化 0..1 | — | 位置(仅 grid/canvas) |
-| `w`,`h` | int/number | `1` | grid: `1..cols` / `canvas`: 0.04..1 | — | 尺寸 |
+| `x`,`y` | int | `0` | grid: `x` 为 `0..cols-1`,`y` 为 ≥0 的行号(与列数无关,防御上限 4095) / `canvas`: 归一化 0..1 | — | 位置(仅 grid/canvas) |
+| `w`,`h` | int/number | `1` | grid: `w` 为 `1..cols`,`h` 为 ≥1 的行跨度(与列数无关,防御上限 4096) / `canvas`: 0.04..1 | — | 尺寸 |
 | `span` | int | `1` | `1..cols` | — | stack 模式下"占几列"(多列栈模式) |
 | `style` | string | `"plain"` | `plain`(现状零装饰) \| `card` \| `divider` | — | 外观(B) |
 | `title` | bool | `false` | — | — | 常态是否显示块标题(`BlockSpec.Title` 已存在) |

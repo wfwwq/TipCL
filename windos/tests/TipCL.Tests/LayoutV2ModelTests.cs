@@ -239,7 +239,7 @@ public class LayoutV2ModelTests
 		""");
 		BlockLayout block = Assert.Single(doc.Layout.Pages["p"].Blocks);
 		Assert.Equal(5.0, block.X); // 0..cols-1
-		Assert.Equal(5.0, block.Y);
+		Assert.Equal(9.0, block.Y); // 行号与列数无关(A-01),只钳下限和防御上限
 		Assert.Equal(6.0, block.W); // 1..cols
 		Assert.Equal(1.0, block.H); // 0 → 1
 		Assert.Equal(6, block.Span); // 1..cols

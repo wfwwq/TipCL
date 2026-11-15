@@ -950,13 +950,13 @@ public sealed class BlockLayout
 	/// <summary>位置 X(grid: 0..cols-1;canvas: 归一化 0..1)。</summary>
 	public double X { get; set; }
 
-	/// <summary>位置 Y(grid: 0..cols-1;canvas: 归一化 0..1)。</summary>
+	/// <summary>位置 Y(grid: ≥0 的行号,行数随内容增长、与列数无关,防御上限 RowMax-1;canvas: 归一化 0..1)。</summary>
 	public double Y { get; set; }
 
 	/// <summary>尺寸 W(grid: 1..cols;canvas: 0.04..1)。</summary>
 	public double W { get; set; } = 1.0;
 
-	/// <summary>尺寸 H(grid: 1..cols;canvas: 0.04..1)。</summary>
+	/// <summary>尺寸 H(grid: ≥1 的行跨度,与列数无关,防御上限 RowMax;canvas: 0.04..1)。</summary>
 	public double H { get; set; } = 1.0;
 
 	/// <summary>stack 模式下占几列(1..cols,对齐 §4.A 的"多列栈模式")。</summary>
