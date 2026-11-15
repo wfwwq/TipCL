@@ -3,7 +3,7 @@
 > **状态:全部未生效。** 本文件只记录"发版那天要做什么、要填什么",**不构成任何发布动作**。
 > 本轮(R30-WP1)**没有** push、**没有**打 tag、**没有**发 release,**没有**改 `update.json` / `update-linux.json` 的任何一个字节。
 > 落笔:`2026-11-15`(本地 +08:00),`R30-WP1` 工作包;工作树基线 HEAD = `25c4e64c0104d83514dfbcf31b684f7e302f0349`(见 §1.5 的"演练产物不可复现"说明)。
-> **`R30-WP6c` 补记(2026-11-15,落笔时工作树 HEAD = `34006c6`)**:按总验收报告 `progress/R30-ACCEPT.md` §4 的返工单 `R-WP5-03 / R-WP5-04 / R-WP5-05 / R-WP5-07` 修正了本文件里若干**过期或与 HEAD 不符的口径**,改动集中在 §1.2 / §1.2.1 / §1.2.2 / §2.1(W5)/ §3.2 / §3.5 / §4 / §5。**本轮没有改任何版本号生效值,清单三行仍是 `<<...>>` 占位。** **⚠️ HEAD 会随并行提交继续前进**(核对期间已从 `3fde8a` 走到 `09ea6eb`);全文凡"HEAD = xxx"的表述一律以**发版那天冻结的那个 commit**为准,见 §1.5 末条。
+> **`R30-WP6c` 补记(2026-11-15,落笔时工作树 HEAD = `34006c6`)**:按总验收报告 `progress/R30-ACCEPT.md` §4 的返工单 `R-WP5-03 / R-WP5-04 / R-WP5-05 / R-WP5-07` 修正了本文件里若干**过期或与 HEAD 不符的口径**,改动集中在 §1.2 / §1.2.1 / §1.2.2 / §2.1(W5)/ §3.2 / §3.5 / §4 / §5。**本轮没有改任何版本号生效值,清单三行仍是 `<<...>>` 占位。** **⚠️ HEAD 会随并行提交继续前进**(核对期间已从 `3fdee8a` 走到 `09ea6eb`);全文凡"HEAD = xxx"的表述一律以**发版那天冻结的那个 commit**为准,见 §1.5 末条。
 
 ---
 
@@ -113,9 +113,10 @@ $ cd TipCL; git grep -n 'TipCL/1\.0' HEAD -- src windos/src        # 命中 20 �
 
 - **写侧**:`windos/src/TipCL/Core/Launcher/Layout/LayoutStoreV2.cs:139`(v1→v2 迁移)与 `:166`(保存)都写 `doc.App = AppVersion()`;`AppVersion()` 在 `:531-549`,取的是 `typeof(LayoutStoreV2).Assembly.GetName().Version`(即 csproj `<Version>` 生成的**程序集版本**),**不是** `AppInfo.APP_VERSION`。落盘在 `windos/src/TipCL/Core/Launcher/Layout/LayoutDocV2.cs:115`(`dict["app"] = App;`)。
 - **读侧**:`LayoutDocV2.cs:167-169` 只 `LayoutJson.Text(app, "")` **解析**、`LayoutSchema.cs:350` 只做 `doc.App ??= ""` 的空值兜底,**全树没有任何一处比较它** ⇒ **不影响更新判据,也不影响关于页**。
-- **形态(三段还是四段)**:`AppVersion()` 在 `version.Revision > 0` 时返回**四段** `ToString()`,否则返回 `Major.Minor.Build` **三段**。本机实测演练产物 `TipCL-compact.exe` 的 `AssemblyName.GetName().Version = 1.2.0.0`,**`Revision = 0`** ⇒ 按代码路径走的是**三段**分支,**预期导出 `"app": "1.2.0"`**;这与 `windos/tests/TipCL.Tests/LayoutV2CompatTests.cs:214` 夹具的三段写法(`"app": "1.1.0"`)一致。
-- ⚠️ **与总验收报告的口径不一致,如实登记**:`progress/R30-ACCEPT.md` §4 `R-WP5-07` 写"导出的 `"app"` 是**四段号 `1.2.0.0`**";我在**源码路径 + 程序集版本实测**上都复现不出来(四段只在 `Revision > 0` 时才会出现)。我**没有真跑 GUI、没有真导出一份布局档**(纪律:不跑构建、不起界面)⇒ 这条标为**待复核,不当作结论**;两种形态我都登记在案,谁去真导出一次即可定案。
-- **提示本身**:`app` 是 Windows csproj `<Version>` 的**第 4 个消费者**(另三个:程序集版本、`AssemblyInformationalVersion`、`FileVersion`)。在"一个产品一个号"的口径下,要么接受"布局档里可能出现第二个形状的号",要么把它也改成读 `AppInfo.APP_VERSION`。**本轮只登记,不改代码。**
+- **形态(三段还是四段)**:`AppVersion()` 在 `version.Revision > 0` 时返回**四段** `ToString()`,否则返回 `Major.Minor.Build` **三段**。本机实测演练产物 `TipCL-compact.exe` 的 `AssemblyName.GetName().Version = 1.2.0.0`,**`Revision = 0`** ⇒ 按代码路径走的是**三段**分支 ⇒ 导出 / 落盘的就是 **`"app": "1.2.0"`**;这与 `windos/tests/TipCL.Tests/LayoutV2CompatTests.cs:214` 夹具的三段写法(`"app": "1.1.0"`)一致。
+- ✅ **已定案:三段号 `1.2.0`**(由返工复验定案，`R30-WP6c-03` 归档)。依据就是 `AppVersion()` 的**函数体本身**:`version.Revision > 0` 才 `return version.ToString()`(四段)，否则 `return version.Major + "." + version.Minor + "." + version.Build`(三段)；本版程序集版本是 `1.2.0.0` 而 **`Revision == 0`** ⇒ 走三段分支 ⇒ 导出 / 落盘是 **`"app": "1.2.0"`**(与产品号同形)。
+- 📌 **口径注记(免得下一个人再翻案)**:`progress/R30-ACCEPT.md` §4 `R-WP5-07` **原先**写"导出的 `"app"` 是**四段号 `1.2.0.0`**"，那是只读了赋值行 `Assembly.GetName().Version`(类型是四段)**而没读 `AppVersion()` 的分支**；该报告已在自身"自我更正"一节里改成三段，总验收的返工复验也按三段定案。`R30-WP6c` 当时把它标成"待复核、我复现不出来"是**从保守出发**(我没真跑 GUI、没真导出布局档)，现按复验定案 —— **不要再按"四段"写发版说明。**
+- **提示本身(降级为"已澄清")**:`app` 是 Windows csproj `<Version>` 的**第 4 个消费者**(另三个:程序集版本、`AssemblyInformationalVersion`、`FileVersion`)；值形是**三段 `1.2.0`、与产品号同形**，所以"一个产品一个号"**没有被破坏**，不再有"多一个形状"的问题。**本轮只登记，不改代码。**
 
 ### 1.3 `1.0.15` 残留复核(1.1 出过"应用内显示 1.0.15、反复提示更新"的事故)
 
@@ -145,7 +146,7 @@ windos/docs/size-report.md:10      (历史体积报表)
 - **提交之后 HEAD 变了**,再构建一次内嵌的 `+sha` 就不同 ⇒ **exe 哈希不同**(体积基本不变)。
 - 依据:`windos/docs/DELIVERY-2026-11-14.md` §6 第 4 条("换 commit 换哈希、体积基本不变";同 commit 换目录可复现)。
 - ⇒ **§2.3 的 SHA256 只用于"演练取数"演示,不能直接填进清单**。真发版时必须:先定 commit → 在那个 commit 上重新出包 → 用**那次**的 sha256。
-- ⚠️ **最终件必须在"冻结且干净"的那个 commit 上出**：并行成员会把 HEAD 一直往前推(核对期间就从 `3fde8a` 走到 `09ea6eb`)，**别在被追着的树上出包**；出包前先确认 `git status` 干净、HEAD = 你打算写进清单的那个 commit，再按 §2.1 在同一份产物上算 sha256。
+- ⚠️ **最终件必须在"冻结且干净"的那个 commit 上出**：并行成员会把 HEAD 一直往前推(核对期间就从 `3fdee8a` 走到 `09ea6eb`)，**别在被追着的树上出包**；出包前先确认 `git status` 干净、HEAD = 你打算写进清单的那个 commit，再按 §2.1 在同一份产物上算 sha256。
 
 ---
 
@@ -328,7 +329,7 @@ Windows 本机走 **无头** `--smoke`(`Program.cs:17` 是 `--smoke` 判定,调�
 
 - 插件的 UI 贡献新增 `block` 类型:插件可以往布局里注册一个**自己的控件**当区块。
 - Node 插件:`tipcl-plugin.d.ts` 里新增 `block(spec): Dispose`。
-- .NET 插件：提供了最小真实样例(`windos/samples/dotnet-block-plugin/`)与端到端驱动(走启动器自己的启动路径 + 真实 127.0.0.1 桥)，实测 **PASS 13 / FAIL 0**(口径：.NET 插件 `kind=block` 的端到端驱动项；`windos/docs/verify-wp2-2026-11-15.md:106`，原始日志末行 `RESULT: PASS  (通过 13 / 失败 0)`，`progress/evidence/wp2/native-block-e2e.log`。另有 2 条 `[WARN]` 是独立驱动没有 `App.xaml` 资源字典所致，非产品缺陷；插件经真加载器进注册表、停用后条目与 RPC 行同时消失)。
+- .NET 插件：提供了最小真实样例(`windos/samples/dotnet-block-plugin/`)与端到端驱动(走启动器自己的启动路径 + 真实 127.0.0.1 桥)，实测 **PASS 13 / FAIL 0**(口径：.NET 插件 `kind=block` 的端到端驱动项；`windos/docs/verify-wp2-2026-11-15.md:106`;原始日志 `progress/evidence/wp2/native-block-e2e.log` **第 90 行**的 `RESULT: PASS  (通过 13 / 失败 0)` 行(该文件共 94 行,这一行之后还有 `driver exit code = 0` 与两行路径 ⇒ **不是末行**)。另有 2 条 `[WARN]` 是独立驱动没有 `App.xaml` 资源字典所致，非产品缺陷；插件经真加载器进注册表、停用后条目与 RPC 行同时消失)。
 - 插件卸载后它在布局里的块**不会被删**,界面上显示「不可用」,装回来即恢复。
 
 #### 🐧 Linux 版(AppImage / `.deb` / 自包含 / 自更新)
