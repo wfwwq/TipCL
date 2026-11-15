@@ -22,6 +22,10 @@ internal static class TestIsolation
         Directory.CreateDirectory(dir);
         Environment.SetEnvironmentVariable("TIPCL_HOME", dir);
         Utils.SetRoot(dir);
+        // R31-CIFLAKE:同一时刻把产品的"求和自身路径"注入点钉在隔离根内(见 TestWriteGuard 的说明)。
+        // 必须在任何测试体之前:泄漏出来的 `update_staged` 反应是 Post 到 UI 线程的续体,
+        // 可能在"发出事件的用例"结束之后才由别的用例的 pump 落地。
+        TestWriteGuard.Install(dir);
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             try { Directory.Delete(dir, recursive: true); }

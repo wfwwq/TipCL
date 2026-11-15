@@ -147,6 +147,16 @@ public class SelfUpdateFeedbackTests
             var toasts = new List<(string Title, string Body, ToastKind Kind)>();
             try
             {
+                // R31-CIFLAKE:本用例是那段假包字节(`TipCL-fake-package-bytes-...`)的唯一产地,而
+                // `update_staged` 是**进程级**事件:别的用例留下的 MainWindow 实例(全仓唯一订阅者,
+                // MainWindow.axaml.cs:46-54)收到它就会走 `apply_update` → `Updater.ApplyStaged()`,
+                // 目标取自 `Updater.UpdateTarget()`。不隔离的话,那个目标就是**测试宿主自己**
+                // (Linux runner 上 = `/usr/share/dotnet/dotnet`),runner 的 dotnet 宿主被这份假字节覆盖,
+                // 紧接着同一 shell 里的 batch 2/2 直接 `command not found` + exit 127(CI 原始日志)。
+                // 这里先钉住本用例的两个落点都必须在隔离根内(进程级沙箱见 TestWriteGuard/TestIsolation)。
+                TestWriteGuard.AssertInsideIsolation(Updater.UpdateTarget(), "本用例期间产品的就地替换目标");
+                TestWriteGuard.AssertInsideIsolation(Path.Combine(Utils.ROOT, "cache", "TipCL-99.0.2.bin"), "本用例的更新包落点");
+
                 Updater.JsonFetcher = _ => Manifest("99.0.2", server.Url("/pkg.AppImage"), sha);
 
                 await SelfUpdate.StartAsync(InProcessApi.Instance, (t, b, k) => toasts.Add((t, b, k)));
