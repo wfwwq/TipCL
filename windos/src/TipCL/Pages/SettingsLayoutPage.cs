@@ -65,6 +65,16 @@ public sealed partial class SettingsPage
 		}
 	}
 
+	/// <summary>
+	/// [layout-fix] 规格 §4-能力1:公开的「跳到 设置 → 布局」入口(壳层右键菜单的「布局设置...」走这里)。
+	/// 刻意做成**实例方法**、只调一次已有的 <see cref="Select"/> —— 不动任何静态初始化
+	/// (仓库里有 StaticInitOrderTests 守卫;设置页曾经因为 cctor 里加顺序依赖字段而在启动阶段崩过)。
+	/// </summary>
+	public void OpenLayoutView()
+	{
+		Select(LayoutView);
+	}
+
 	/// <summary>重建「布局」视图;当前正显示它时同步换掉宿主内容。</summary>
 	private void RefreshLayoutView()
 	{
@@ -803,8 +813,8 @@ public static class LayoutBlockEntryCatalog
 		public bool SingleBlock { get; set; }
 	}
 
-	/// <summary>12 个宿主:设置页内 7 个 + 顶栏导航 5 个。</summary>
-	public static readonly Entry[] All = new Entry[12]
+	/// <summary>14 个宿主:设置页内 7 个 + 顶栏导航 5 个 + [layout-fix] 规格 §4-能力3 新增的实例库 / 插件 2 个。</summary>
+	public static readonly Entry[] All = new Entry[14]
 	{
 		new Entry
 		{
@@ -886,6 +896,20 @@ public static class LayoutBlockEntryCatalog
 			PageId = "multiplayer",
 			NavId = "multiplayer",
 			Label = "联机"
+		},
+		new Entry
+		{
+			// [layout-fix] 规格 §4-能力3:实例库改成区块宿主(library:main,见 §3-问题6)
+			PageId = "library:main",
+			NavId = "library",
+			Label = "实例库"
+		},
+		new Entry
+		{
+			// [layout-fix] 规格 §4-能力3:插件页改成区块宿主(plugins,见 §3-问题4;插件市场的 plugins:market 是子视图)
+			PageId = "plugins",
+			NavId = "plugins",
+			Label = "插件"
 		}
 	};
 

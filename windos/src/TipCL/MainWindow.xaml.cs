@@ -171,6 +171,10 @@ public partial class MainWindow : Window
 		AppServices.Window = this;
 		Dlg.Host = DialogHost;
 		Dlg.BlurTarget = ContentLayer;
+		// [layout-fix] 规格 §4-能力1 + §3-问题3:全局右键「自定义布局...」与统一滚轮在窗口层挂一次
+		// (挂在窗口而不是 PageHost:启动页背景是 IsHitTestVisible=false,空白处的右键命中结果落在窗口根元素上,
+		//  只挂 PageHost 的话那些位置永远收不到事件)。幂等,重复挂载同一个窗口是空操作。
+		LayoutShellHooks.Attach(this);
 		base.SourceInitialized += delegate
 		{
 			Backdrop.Apply(this);

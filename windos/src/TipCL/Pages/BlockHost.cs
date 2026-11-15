@@ -39,9 +39,9 @@ public sealed class BlockHost : UserControl
 	// 布局文档变更的稳定委托引用(LayoutStoreV2.LayoutChanged 是静态事件,同样必须对称 -=)
 	private readonly Action _storeRefresh;
 
-	public BlockHost(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null)
+	public BlockHost(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null, PageLayoutV2? defaultPage = null)
 	{
-		_editor = new LayoutEditor(pageId, specs, contentMargin);
+		_editor = new LayoutEditor(pageId, specs, contentMargin, defaultPage);
 		_themeRefresh = _editor.RefreshThemeVisuals;
 		_storeRefresh = OnLayoutStoreChanged;
 		_editor.Changed += delegate
@@ -50,10 +50,11 @@ public sealed class BlockHost : UserControl
 		};
 		base.Focusable = false;
 		base.Content = _editor.Root;
-		// 入口:右键菜单(specs.Count >= 2 才有「自定义布局...」;页面内容自带 ContextMenu 时天然对方优先)。
-		// 注意:门槛与 _editor.CanEdit 解耦 —— 单块页**能编辑**(设置页的入口按钮用 CanEdit),但右键菜单
-		// 在单块页上会是个没用的项(连"顺序"都没有),所以这里仍按 >= 2 出现。
-		if (specs != null && specs.Count >= 2)
+		// 入口:右键菜单(≥1 个区块就有「自定义布局...」;页面内容自带 ContextMenu 时天然对方优先)。
+		// [layout-fix] 规格 §3-问题5:门槛从「区块数 ≥ 2」改成「≥ 1」——
+		// 启动页(新闻/下载任务/游戏时长/便签/日志只占页面底部一条)这类页面过去右键落不到菜单上,
+		// 单块页同样应该能右键进去调外观 / 标题 / 显隐。
+		if (specs != null && specs.Count >= 1)
 		{
 			ContextMenu contextMenu = new ContextMenu();
 			MenuItem menuItem = new MenuItem
@@ -84,6 +85,20 @@ public sealed class BlockHost : UserControl
 		{
 			App.ThemeVisualsChanged -= _themeRefresh;
 			LayoutStoreV2.LayoutChanged -= _storeRefresh;
+			// [layout-fix] 规格2-问题9:页面被切走(缓存复用页面的宿主进了 ContentControl 的更替)时,
+			// 还停在编辑态就自动收尾 —— 保存布局、收起工具栏、提示「布局已保存」,
+			// 避免"切页面回来还残留编辑态"。进入编辑后什么都没动的话,布局会照常还原(见 LayoutEditor.ExitEdit)。
+			if (_editor.IsEditing)
+			{
+				try
+				{
+					_editor.ExitEdit();
+				}
+				catch
+				{
+					// 窗口正在销毁 / 调度器已关:收尾失败也不能崩
+				}
+			}
 		};
 	}
 
@@ -124,6 +139,32 @@ public sealed class BlockHost : UserControl
 		{
 			return this;
 		}
+	}
+
+	/// <summary>[layout-fix] 规格 §4-能力2:本宿主的页面 id(与布局文档里的 pageId 一致)。</summary>
+	public string PageId
+	{
+		get
+		{
+			return _editor.State.PageId;
+		}
+	}
+
+	/// <summary>[layout-fix] 规格 §4-能力2:进入编辑态并提示(全局右键菜单 / 页面自己的入口走这里)。
+	/// 返回 false = 这一页没有可编辑的区块(调用方据此给"没有可拖动的区块"的提示)。
+	/// 提示只用现成的 Toast(title, body, kind) —— 不要自己拼图标 / 富文本(历史上那条崩溃路径就是这么来的)。</summary>
+	public bool EnterEdit()
+	{
+		if (!_editor.CanEdit)
+		{
+			return false;
+		}
+		if (!_editor.IsEditing)
+		{
+			_editor.EnterEdit();
+			AppServices.Window?.Toast(I18n.L("已进入自定义布局"), I18n.L("按住区块拖动即可移动,完成编辑后自动保存"), ToastKind.Success);
+		}
+		return true;
 	}
 
 	public event Action? Changed;

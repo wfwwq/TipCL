@@ -842,6 +842,10 @@ public sealed class PageLayoutHost : Grid
 		_syncing = true;
 		try
 		{
+			// [layout-fix] 规格 §3-问题1(通用加固):左列的 ColumnDefinition.MinWidth 同步左孩子的 MinWidth。
+			// 星号列的可用宽不够时,左卡片的 MinWidth 会让列撑开、右侧让位,而不是被 Grid 直接裁掉
+			// (实例库"文件夹行右边框/圆角看不到"就是这个裁剪的表现)。折叠态下左列宽为 0,不设下限。
+			SyncLeftMinWidth();
 			bool leftShown = LeftVisible;
 			bool rightShown = ((_right != null) ? (_right.Visibility == Visibility.Visible) : _rightVisible);
 			if (!leftShown || !rightShown)
@@ -879,6 +883,28 @@ public sealed class PageLayoutHost : Grid
 		if (!_syncing)
 		{
 			SyncColumns();
+		}
+	}
+
+	/// <summary>
+	/// [layout-fix] 规格 §3-问题1:把左孩子的 MinWidth 同步给左列(折叠态 / 宽度不可用 → 0)。
+	/// 这是"其他还在用左右分栏的页面"(设置导航、版本管理、AI 历史栏、反馈、账号)的通用加固:
+	/// 列不够宽时由列撑开、右侧让位,不再裁掉内容。只加下限,不动孩子自己的尺寸。
+	/// </summary>
+	private void SyncLeftMinWidth()
+	{
+		double min = 0.0;
+		if (_leftVisible && _left is FrameworkElement element)
+		{
+			double wanted = element.MinWidth;
+			if (!double.IsNaN(wanted) && !double.IsInfinity(wanted) && wanted > 0.0)
+			{
+				min = wanted;
+			}
+		}
+		if (Math.Abs(_colLeft.MinWidth - min) > 0.001)
+		{
+			_colLeft.MinWidth = min;
 		}
 	}
 

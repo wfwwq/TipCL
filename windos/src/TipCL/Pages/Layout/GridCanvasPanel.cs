@@ -137,6 +137,22 @@ public sealed class GridCanvasPanel : Panel
 		InvalidateVisual();
 	}
 
+	/// <summary>
+	/// [layout-fix] 规格2-问题2.2:拖动 / 缩放过程中的**实时让位** —— 把 <paramref name="pinned"/> 里的块
+	/// (正在拖的那几个)钉在当前位置,其余块按重力上浮重新落格(判定在纯模型 <see cref="LayoutGrid.Compact"/>)。
+	/// <paramref name="swapX"/> = 每块"备选列"(被拖块原来的列)⇒ 允许左右互换;canvas 模式不参与。
+	/// 只在 grid 模式且编辑态被调用。
+	/// </summary>
+	public void CompactCells(ICollection<string>? pinned, IReadOnlyDictionary<string, int>? swapX)
+	{
+		if (IsCanvas || _cells.Count == 0)
+		{
+			return;
+		}
+		LayoutGrid.Compact(_cells, Cols, pinned, swapX);
+		Reflow();
+	}
+
 	/// <summary>取槽位;不存在返回 null。</summary>
 	public LayoutCell? CellOf(string? id)
 	{

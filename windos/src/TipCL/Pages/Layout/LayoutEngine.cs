@@ -312,13 +312,15 @@ public sealed class LayoutPageState
 	/// 装载一页:v2 里有这一页就按它(未知 id 丢弃、缺失 id 按 DefaultVisible 补到末尾,语义等价
 	/// PageLayoutDoc.Normalize);没有就用页面白名单生成默认布局(语义等价 PageLayoutDoc.Default)。
 	/// </summary>
-	public static LayoutPageState Load(string pageId, PageLayoutV2? page, IReadOnlyList<LayoutBlockRef> refs)
+	public static LayoutPageState Load(string pageId, PageLayoutV2? page, IReadOnlyList<LayoutBlockRef> refs, bool? existedInDoc = null)
 	{
 		LayoutPageState state = new LayoutPageState
 		{
 			PageId = pageId ?? "",
 			Page = ((page != null) ? page.Clone() : new PageLayoutV2()),
-			ExistedInDoc = page != null
+			// [layout-fix] 规格 §4-能力2:defaultPage 也是"这份 page 从哪来"的一种,调用方知道真源里有没有该页时
+			// 用 existedInDoc 如实覆盖(宿主用 defaultPage 兜底时真源里其实**没有**这一页)。
+			ExistedInDoc = (existedInDoc ?? (page != null))
 		};
 		Dictionary<string, LayoutBlockRef> known = new Dictionary<string, LayoutBlockRef>(StringComparer.Ordinal);
 		if (refs != null)
@@ -378,7 +380,10 @@ public sealed class LayoutPageState
 	}
 
 	/// <summary>按白名单重建默认布局(= 重置本页;语义等价 PageLayoutDoc.Default)。
-	/// 文档里的 custom: / plugin: 块**不删**,按原顺序接到末尾(数据保留,删除入口在 L6 的区块管理里)。</summary>
+	/// 文档里的 custom: / plugin: 块**不删**,按原顺序接到末尾(数据保留,删除入口在 L6 的区块管理里)。
+	/// [layout-fix] 规格 §3-问题7:块表整体清空 ⇒ 每块的坐标 / 尺寸 / 外观 / 标题 / 内边距 / 自定义设置都回到默认值。
+	/// 「重置本页」要真正回到**该页出厂布局(含默认模式)**:编辑器那边会把整页状态换成出厂页
+	/// (BlockHost 的 <c>defaultPage</c>,没有才是白名单默认 = stack),所以这里只负责"清空块"。</summary>
 	public void Reset(IReadOnlyList<LayoutBlockRef> refs)
 	{
 		List<string> extra = new List<string>();
@@ -414,6 +419,39 @@ public sealed class LayoutPageState
 				Order.Add(id2);
 			}
 		}
+		// 不沿用旧块:坐标 / 尺寸 / 外观 / 内边距 / 自定义设置一概丢掉(「重置」的本意)
+		Page.Blocks = new List<BlockLayout>();
+		RebuildPage();
+	}
+
+	/// <summary>
+	/// [layout-fix] 规格 §3-问题7:「拖到别的区块位置上时,被拖的区块优先占住落点,其余区块自动往下让位」
+	/// (PromoteToFront)。被拖 / 缩放过的块挪到顺序表最前面:grid 的自动流(<see cref="LayoutGrid.Pack"/>)
+	/// 按块表顺序抢占格子,排在前面的块先坐进自己的位置,后来的块原位放不下就被顶到下面的行。
+	/// </summary>
+	public void PromoteToFront(IEnumerable<string>? ids)
+	{
+		if (ids == null)
+		{
+			return;
+		}
+		List<string> moved = new List<string>();
+		foreach (string id in ids)
+		{
+			if (!string.IsNullOrEmpty(id) && Order.Contains(id) && !moved.Contains(id))
+			{
+				moved.Add(id);
+			}
+		}
+		if (moved.Count == 0)
+		{
+			return;
+		}
+		foreach (string id2 in moved)
+		{
+			Order.Remove(id2);
+		}
+		Order.InsertRange(0, moved);
 		RebuildPage();
 	}
 
@@ -514,20 +552,34 @@ public sealed class LayoutPageState
 		return y;
 	}
 
-	/// <summary>把 Order/Hidden/Spans 同步进 Page.Blocks(顺序即顺序,隐藏项也占位)。</summary>
+	/// <summary>把 Order/Hidden/Spans 同步进 Page.Blocks(顺序即顺序,隐藏项也占位)。
+	/// [layout-fix] 规格 §3-问题7 第 2 点(原有 bug):旧实现每次都 new BlockLayout,只写 Id/Hidden/Span/Z ——
+	/// grid/canvas 里拖完的 X/Y/W/H 与外观(style/title/pad/min_h)每次重建都被清空,所以"拖完就弹回原位"。
+	/// 现在改为**在旧块基础上更新**:按 id 复用旧块(拷贝),只刷新 Id/Hidden/Span/Z,其余字段一个不动。
+	/// 「重置本页」的清空语义由 <see cref="Reset"/> 负责(它先把 Page 换成新对象,这里就找不到旧块了)。</summary>
 	public void RebuildPage()
 	{
+		Dictionary<string, BlockLayout> previous = new Dictionary<string, BlockLayout>(StringComparer.Ordinal);
+		if (Page.Blocks != null)
+		{
+			foreach (BlockLayout old in Page.Blocks)
+			{
+				if (old != null && !string.IsNullOrEmpty(old.Id))
+				{
+					previous[old.Id] = old;
+				}
+			}
+		}
 		List<BlockLayout> blocks = new List<BlockLayout>();
 		for (int i = 0; i < Order.Count; i++)
 		{
 			string id = Order[i];
-			blocks.Add(new BlockLayout
-			{
-				Id = id,
-				Hidden = Hidden.Contains(id),
-				Span = (Spans.TryGetValue(id, out int span) ? span : 1),
-				Z = i
-			});
+			BlockLayout block = (previous.TryGetValue(id, out BlockLayout? kept) ? kept.Clone() : new BlockLayout());
+			block.Id = id;
+			block.Hidden = Hidden.Contains(id);
+			block.Span = (Spans.TryGetValue(id, out int span) ? span : 1);
+			block.Z = i;
+			blocks.Add(block);
 		}
 		Page.Blocks = blocks;
 	}
@@ -659,9 +711,9 @@ public static class LayoutEngine
 	}
 
 	/// <summary>装载一页状态(v2 条目可能为 null = 用白名单默认布局)。</summary>
-	public static LayoutPageState LoadState(string pageId, PageLayoutV2? page, IReadOnlyList<LayoutBlockRef> refs)
+	public static LayoutPageState LoadState(string pageId, PageLayoutV2? page, IReadOnlyList<LayoutBlockRef> refs, bool? existedInDoc = null)
 	{
-		return LayoutPageState.Load(pageId, page, refs);
+		return LayoutPageState.Load(pageId, page, refs, existedInDoc);
 	}
 
 	/// <summary>算排布计划(行 / 列位 / 可视顺序)。</summary>
@@ -713,6 +765,68 @@ public static class LayoutEngine
 			}
 		}
 		return plan;
+	}
+
+	/// <summary>
+	/// [layout-fix] 规格 §3-问题7:把 stack 页**就地**折算成 12 列网格(「按现在的样子逐行折算坐标,
+	/// 两栏 / 三栏的行也能正确折算,画面看起来不变」)。
+	/// 规则与参考实现同源:用排布计划的行划分(<see cref="Plan"/>),每块按其列位 / span 等比换成 12 栅格的
+	/// 列位与列跨度(1 列页 → 整行 12 列;2 列页 → span1=6 / span2=12;3 列页 → 4/8/12),行号不变、行高自适应;
+	/// 计划里没有的块(隐藏块等)排在最后一行之后。返回是否真的折算过(非 stack 返回 false)。
+	/// 纯模型、零 WPF —— 编辑器只负责调用它(见 LayoutEditor.ConvertStackToGrid)。
+	/// </summary>
+	public static bool StackToGrid(PageLayoutV2? page, string pageId = "")
+	{
+		if (page == null || page.Mode != LayoutSchema.ModeStack || page.Blocks == null)
+		{
+			return false;
+		}
+		LayoutPlan plan = Plan(pageId ?? "", page);
+		int from = Math.Max(1, plan.Columns);
+		Dictionary<string, int[]> pos = new Dictionary<string, int[]>(StringComparer.Ordinal);
+		for (int r = 0; r < plan.Rows.Count; r++)
+		{
+			foreach (LayoutSlot slot in plan.Rows[r].Slots)
+			{
+				int x = slot.Column * LayoutSchema.ColsDefault / from;
+				int w = Math.Max(1, slot.Span * LayoutSchema.ColsDefault / from);
+				if (x + w > LayoutSchema.ColsDefault)
+				{
+					w = LayoutSchema.ColsDefault - x;
+				}
+				pos[slot.Id] = new int[3] { x, r, w };
+			}
+		}
+		int extraRow = plan.Rows.Count;
+		foreach (BlockLayout block in page.Blocks)
+		{
+			if (block == null)
+			{
+				continue;
+			}
+			if (pos.TryGetValue(block.Id, out int[]? p))
+			{
+				block.X = p[0];
+				block.Y = p[1];
+				block.W = p[2];
+			}
+			else
+			{
+				block.X = 0.0;
+				block.Y = extraRow++;
+				block.W = LayoutSchema.ColsDefault;
+			}
+			block.H = 1.0;
+			block.Span = (int)block.W;
+			if (block.MinH <= 0.0)
+			{
+				block.MinH = 1.0;
+			}
+		}
+		page.Mode = LayoutSchema.ModeGrid;
+		page.Cols = LayoutSchema.ColsDefault;
+		page.RowH = 0.0;
+		return true;
 	}
 
 	/// <summary>把一页状态写回 v2 文档(没有该页就新建;不动别的页)。</summary>
@@ -1317,9 +1431,108 @@ public static class LayoutGrid
 		}
 	}
 
-	// 占用表:按行惰性增长(行数自适应),w×h 矩形查询/填充
-	private sealed class Occupancy
+	// ————————————— [layout-fix] 规格2-问题2:实时让位 + 自动压紧 —————————————
+	//
+	// 录屏暴露的三个症状是同一件事的不同侧面:
+	//   ① 拖动只改被拖块的坐标,其他块不动 → 留下空洞、互相覆盖、不让位;
+	//   ② 进编辑时旧存档里被放到很靠下的行 → 看起来"消失了"(要拖一下才出来);
+	//   ③ 每拖一行的距离按"被拖卡片自身高度"折算 → 高卡片几乎拖不动,矮卡片一拖跳好几行。
+	// 这里给出纯模型的解:Compact(重力上浮 + 让位 + 左右互换)/ CellsOf(不做冲突解算地读格子)/ RowAt(行定位)。
+	// **只在编辑过程中被调用** —— 不进入编辑态,一页网格一个格子的位置都不会被动(启动页刻意留的空白必须保留)。
+
+	/// <summary>
+	/// [layout-fix] 规格2-问题2.1:网格压紧。
+	/// <paramref name="pinned"/> 里的块(正在拖 / 正在缩放的)**固定在当前位置先占格子**;
+	/// 其余块按 (Y, X) 升序逐个放到**本列能放下的最高一行**(重力上浮,不留空洞);
+	/// <paramref name="swapX"/> 给出某块的"备选列"(= 被拖块**原来的**列),该列能放得更高就换过去
+	/// —— 这就是"把文件夹栏拖到右边,版本选择自动换到左边"的左右互换。
+	/// 压紧只向上浮、不向左浮:列位置由拖放决定,同一行左边留空列是有意保留的。
+	/// </summary>
+	public static void Compact(List<LayoutCell>? cells, int cols, ICollection<string>? pinned, IReadOnlyDictionary<string, int>? swapX)
 	{
+		if (cells == null || cells.Count == 0)
+		{
+			return;
+		}
+		int count = Math.Max(1, cols);
+		Occupancy occupancy = new Occupancy(count);
+		List<LayoutCell> rest = new List<LayoutCell>();
+		foreach (LayoutCell cell in cells)
+		{
+			if (cell == null)
+			{
+				continue;
+			}
+			cell.W = LayoutSchema.ClampInt(cell.W, 1, count);
+			cell.X = LayoutSchema.ClampInt(cell.X, 0, count - cell.W);
+			cell.H = Math.Max(1, cell.H);
+			if (pinned != null && pinned.Contains(cell.Id))
+			{
+				cell.Y = Math.Max(0, cell.Y);
+				occupancy.Fill(cell.X, cell.Y, cell.W, cell.H);
+			}
+			else
+			{
+				rest.Add(cell);
+			}
+		}
+		rest.Sort(delegate(LayoutCell a, LayoutCell b)
+		{
+			int byY = a.Y.CompareTo(b.Y);
+			return ((byY != 0) ? byY : a.X.CompareTo(b.X));
+		});
+		foreach (LayoutCell cell2 in rest)
+		{
+			occupancy.FirstFreeInColumnH(cell2.X, cell2.W, cell2.H, 0, out int y);
+			if (swapX != null && swapX.TryGetValue(cell2.Id, out int swapColumn))
+			{
+				swapColumn = LayoutSchema.ClampInt(swapColumn, 0, count - cell2.W);
+				occupancy.FirstFreeInColumnH(swapColumn, cell2.W, cell2.H, 0, out int swapY);
+				if (swapY < y)
+				{
+					cell2.X = swapColumn;
+					y = swapY;
+				}
+			}
+			cell2.Y = y;
+			occupancy.Fill(cell2.X, cell2.Y, cell2.W, cell2.H);
+		}
+	}
+
+	/// <summary>
+	/// [layout-fix] 规格2-问题2.2:y 落在第几行(按手势开始时的行高快照算)。
+	/// 与参考实现同一套判定:逐行累加"行高 + 间距",带半个间距的容差;越过最后一行时给出下一行
+	/// (拖动允许往画布下方拖出新行),y 为负按第 0 行。
+	/// </summary>
+	public static int RowAt(IReadOnlyList<double>? rowHeights, double y, double gap)
+	{
+		if (rowHeights == null || rowHeights.Count == 0)
+		{
+			return 0;
+		}
+		int row = 0;
+		double top = 0.0;
+		int rows = rowHeights.Count;
+		while (row < rows && y > top + rowHeights[row] + gap / 2.0)
+		{
+			top += rowHeights[row] + gap;
+			row++;
+		}
+		if (y < 0.0)
+		{
+			return 0;
+		}
+		return row;
+	}
+
+	// 两个整格矩形是否重叠(边贴边不算)—— Compact 用不到它,但留作同族判定的单一实现
+	private static bool Overlaps(LayoutRect rect, int x, int y, int w, int h)
+	{
+		return x + w > rect.X && rect.X + rect.W > (double)x && y + h > rect.Y && rect.Y + rect.H > (double)y;
+	}
+
+	// 占用表:按行惰性增长(行数自适应),w×h 矩形查询/填充
+	private sealed class Occupancy	{
 		private readonly int _cols;
 
 		private readonly List<bool[]> _rows = new List<bool[]>();
@@ -1401,6 +1614,20 @@ public static class LayoutGrid
 				}
 			}
 			y = limit;
+		}
+
+		/// <summary>
+		/// [layout-fix] 规格2-问题2.1:同列里第一个放得下 <c>w×h</c> 的行 —— 与 <see cref="FirstFreeInColumn"/>
+		/// 的区别是**按块的实际高度(H 行)判空**,跨行块(比如高度 2 的卡片)不会只压住第一行就以为放得下。
+		/// </summary>
+		public void FirstFreeInColumnH(int x, int w, int h, int startRow, out int y)
+		{
+			int row = Math.Max(0, startRow);
+			while (!IsFree(x, row, w, h))
+			{
+				row++;
+			}
+			y = row;
 		}
 
 		private bool[] Row(int r)

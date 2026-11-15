@@ -54,7 +54,22 @@ public sealed class SmoothScroll : ScrollViewer
 			return;
 		}
 		e.Handled = true;
-		double toValue = (_target = Clamp.Of(((_target < 0.0) ? base.VerticalOffset : _target) - (double)e.Delta * 0.95, 0.0, base.ScrollableHeight));
+		WheelBy(e.Delta);
+	}
+
+	/// <summary>
+	/// [layout-fix] 规格 §3-问题3:把平滑滚动抽成公开方法,供外层容器被转交滚轮时走同一套动画
+	/// (LayoutShellHooks 判定"最内层滚不动 → 转交外层第一个还能滚的"之后,直接调这里)。
+	/// </summary>
+	public void WheelBy(int delta)
+	{
+		if (!Motion.Enabled || base.ScrollableHeight <= 0.0)
+		{
+			// 自己没有可滚高度时也给出一点反馈,但不做动画(外层要的就是"照做一次")
+			ScrollToVerticalOffset(Clamp.Of(base.VerticalOffset - (double)delta * 0.4, 0.0, Math.Max(0.0, base.ScrollableHeight)));
+			return;
+		}
+		double toValue = (_target = Clamp.Of(((_target < 0.0) ? base.VerticalOffset : _target) - (double)delta * 0.95, 0.0, base.ScrollableHeight));
 		DoubleAnimation doubleAnimation = new DoubleAnimation(base.VerticalOffset, toValue, TimeSpan.FromMilliseconds(230.0))
 		{
 			EasingFunction = new CubicEase
