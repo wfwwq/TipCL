@@ -21,12 +21,12 @@ public class MicrosoftAuthenticator
 
 	private AuthResponse PostForm(string url, PyDict form)
 	{
-		return AuthHttp.Send("POST", url, form, null, hasJson: false, null, timeout, "TipCL/1.0");
+		return AuthHttp.Send("POST", url, form, null, hasJson: false, null, timeout, "TipCL/" + TipCL.Core.Launcher.AppInfo.APP_VERSION);
 	}
 
 	private AuthResponse PostJson(string url, object json)
 	{
-		return AuthHttp.Send("POST", url, null, json, hasJson: true, null, timeout, "TipCL/1.0");
+		return AuthHttp.Send("POST", url, null, json, hasJson: true, null, timeout, "TipCL/" + TipCL.Core.Launcher.AppInfo.APP_VERSION);
 	}
 
 	private AuthResponse GetBearer(string url, object token)
@@ -35,7 +35,7 @@ public class MicrosoftAuthenticator
 		{
 			"Authorization",
 			"Bearer " + Py.Str(token)
-		} }, timeout, "TipCL/1.0");
+		} }, timeout, "TipCL/" + TipCL.Core.Launcher.AppInfo.APP_VERSION);
 	}
 
 	public PyDict GetDeviceCode()

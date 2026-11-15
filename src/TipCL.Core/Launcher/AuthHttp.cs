@@ -90,7 +90,7 @@ public static class AuthHttp
 				{
 					using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(8.0));
 					using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Head, u);
-					req.Headers.TryAddWithoutValidation("User-Agent", "TipCL/1.0");
+					req.Headers.TryAddWithoutValidation("User-Agent", "TipCL/" + TipCL.Core.Launcher.AppInfo.APP_VERSION);
 					using HttpResponseMessage resp = Client().SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).GetAwaiter().GetResult();
 				}
 				catch
