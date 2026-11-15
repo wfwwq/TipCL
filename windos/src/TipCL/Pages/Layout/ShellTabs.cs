@@ -13,6 +13,7 @@ namespace TipCL.Pages.Layout;
 // 三条不变量,与改动前的写死页签逐项对齐(依据设计 §4.D 与 §0.1 的 Q1 决策):
 //   1. 默认顺序/集合恒为 启动/实例库/下载/插件/设置,即 LayoutSchema.DefaultTabs;
 //   2. 空列表一定回落默认 —— 任何情况下都不会出现「一个页签都没有」的壳,用户永远有入口;
+//      「设置」页签不许隐藏(CanHide),不然改不回来;
 //   3. 高亮映射不许变:launch→launch、library→library、download|tasks→download、plugins→plugins、
 //      settings|account→settings;其余页面(ai / instance / multiplayer / 插件页)不高亮任何内置页签。
 public static class ShellTabs
@@ -65,7 +66,35 @@ public static class ShellTabs
 				list.Add(key);
 			}
 		}
+		// 「设置」永远在(见 CanHide):文档里没有它(手改 JSON / AI 的 shell_tabs 漏了)就补在末尾
+		if (!list.Contains(SettingsKey))
+		{
+			list.Add(SettingsKey);
+		}
 		return list;
+	}
+
+	/// <summary>
+	/// 该页签能不能隐藏。「设置」不行:页签显隐就是在设置里改的,藏掉以后顶栏没有入口回去改回来
+	/// (只剩 Ctrl+逗号,一般用户不知道)。
+	/// </summary>
+	public static bool CanHide(string key)
+	{
+		return !string.Equals(key, SettingsKey, StringComparison.Ordinal);
+	}
+
+	/// <summary>启动时进入的页面:第一个可见的内置页签(默认就是启动页;启动页签被隐藏时不再把人放到回不去的页上)。</summary>
+	public static string StartPageId(ShellLayout? shell)
+	{
+		foreach (string key in OrderedKeys(shell))
+		{
+			string? page = PageIdOf(key);
+			if (page != null)
+			{
+				return page;
+			}
+		}
+		return LaunchKey;
 	}
 
 	/// <summary>该页签当前是否显示,即是否出现在 <see cref="OrderedKeys"/> 里。</summary>
@@ -222,7 +251,7 @@ public static class ShellTabs
 				keys.Add(key);
 			}
 		}
-		else
+		else if (CanHide(key))
 		{
 			keys.Remove(key);
 		}

@@ -149,6 +149,12 @@ public sealed partial class SettingsPage
 			string tab = key;
 			int index = order.IndexOf(tab);
 			CheckBox visible = Ui.Switch(ShellTabs.IsVisible(shell, tab));
+			if (!ShellTabs.CanHide(tab))
+			{
+				visible.IsEnabled = false;
+				visible.ToolTip = I18n.L("「设置」页签始终显示，否则没有入口改回来");
+				ToolTipService.SetShowOnDisabled(visible, true);
+			}
 			visible.Checked += delegate
 			{
 				if (!_layoutRebuilding)
@@ -524,13 +530,13 @@ public sealed partial class SettingsPage
 
 	private void ApplyProfile(string name)
 	{
-		string error = LayoutProfiles.Apply(name);
+		string error = LayoutProfiles.Apply(name, out string kept);
 		if (error.Length > 0)
 		{
 			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
 			return;
 		}
-		PageBase.Toast(I18n.L("布局已应用，可直接「另存为方案」保留"), name, ToastKind.Success);
+		PageBase.Toast(I18n.L("布局方案「{0}」已应用", name), (kept.Length > 0) ? I18n.L("原来的布局已存为方案「{0}」，可随时切回", kept) : "", ToastKind.Success);
 		RefreshLayoutView();
 	}
 
@@ -641,13 +647,13 @@ public sealed partial class SettingsPage
 			}, 560.0);
 			if (choice == 1)
 			{
-				string error = LayoutProfiles.ApplySnapshot(whole.Layout);
+				string error = LayoutProfiles.ApplySnapshot(whole.Layout, out string kept);
 				if (error.Length > 0)
 				{
 					PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
 					return;
 				}
-				PageBase.Toast(I18n.L("布局已应用，可直接「另存为方案」保留"), System.IO.Path.GetFileName(path), ToastKind.Success);
+				PageBase.Toast(I18n.L("布局已应用"), (kept.Length > 0) ? I18n.L("原来的布局已存为方案「{0}」，可随时切回", kept) : System.IO.Path.GetFileName(path), ToastKind.Success);
 				RefreshLayoutView();
 			}
 			else if (choice == 2)
@@ -703,6 +709,9 @@ public sealed partial class SettingsPage
 	private Border LayoutJsonCard()
 	{
 		TextBox box = Ui.LogBox();
+		// 借用日志框的等宽 / 多行 / 滚动条样式,但那个样式是只读的:这里是编辑器,要能输入、粘贴、用 Tab 缩进
+		box.IsReadOnly = false;
+		box.AcceptsTab = true;
 		box.Height = 220.0;
 		box.Text = ((_layoutJsonText.Length > 0) ? _layoutJsonText : LayoutJsonEditor.Text(LayoutStoreV2.Load()));
 		box.TextChanged += delegate
@@ -1068,9 +1077,22 @@ public static class LayoutProfiles
 		}
 	}
 
+	/// <summary>
+	/// 应用方案 / 导入整机方案前自动留底的方案名(同名覆盖,只留一份):当前布局没原样存在激活方案里
+	/// (手调过,或本来就是直接编辑态)时,换掉之前先存到这里,换错了可以在方案列表里切回。
+	/// </summary>
+	public static string PreviousName => I18n.L("上一次布局");
+
 	/// <summary>应用方案:原子替换 layout(整块换掉)并把 active_profile 记成它。</summary>
 	public static string Apply(string? name)
 	{
+		return Apply(name, out _);
+	}
+
+	/// <summary>同上;<paramref name="kept"/> = 替换前把当前布局留底成的方案名(不必留底时为 "")。</summary>
+	public static string Apply(string? name, out string kept)
+	{
+		kept = "";
 		try
 		{
 			LayoutV2 doc = LayoutStoreV2.Load();
@@ -1079,13 +1101,18 @@ public static class LayoutProfiles
 			{
 				return I18n.L("布局方案「{0}」不存在", name ?? "");
 			}
-			doc.Layout = body.Clone();
-			doc.ActiveProfile = name!.Trim();
+			string target = name!.Trim();
+			LayoutBody next = body.Clone();
+			kept = KeepPrevious(doc);
+			doc.Layout = next;
+			// 应用的正是「上一次布局」= 和当前布局对调:这个名字里现在存的是刚换下来的那份,不再是正在用的
+			doc.ActiveProfile = ((kept.Length > 0 && string.Equals(kept, target, StringComparison.Ordinal)) ? "" : target);
 			LayoutStoreV2.Save(doc);
 			return "";
 		}
 		catch (Exception ex)
 		{
+			kept = "";
 			return ex.Message;
 		}
 	}
@@ -1093,9 +1120,17 @@ public static class LayoutProfiles
 	/// <summary>直接替换当前布局(导入整机方案):原子替换 + 回到直接编辑态(active_profile 清空)。</summary>
 	public static string ApplySnapshot(LayoutBody? body)
 	{
+		return ApplySnapshot(body, out _);
+	}
+
+	/// <summary>同上;<paramref name="kept"/> 含义同 <see cref="Apply(string, out string)"/>。</summary>
+	public static string ApplySnapshot(LayoutBody? body, out string kept)
+	{
+		kept = "";
 		try
 		{
 			LayoutV2 doc = LayoutStoreV2.Load();
+			kept = KeepPrevious(doc);
 			doc.Layout = ((body != null) ? body.Clone() : new LayoutBody());
 			doc.ActiveProfile = "";
 			LayoutStoreV2.Save(doc);
@@ -1103,8 +1138,27 @@ public static class LayoutProfiles
 		}
 		catch (Exception ex)
 		{
+			kept = "";
 			return ex.Message;
 		}
+	}
+
+	// 当前布局已经原样存在激活方案里就不必留底;否则存成「上一次布局」(覆盖上一份),返回留底的方案名
+	private static string KeepPrevious(LayoutV2 doc)
+	{
+		LayoutBody? active = doc.GetProfile(doc.ActiveProfile ?? "");
+		if (active != null && SameBody(active, doc.Layout))
+		{
+			return "";
+		}
+		string name = PreviousName;
+		doc.Profiles[name] = doc.Layout.Clone();
+		return name;
+	}
+
+	private static bool SameBody(LayoutBody a, LayoutBody b)
+	{
+		return string.Equals(System.Text.Json.JsonSerializer.Serialize(a.ToDict()), System.Text.Json.JsonSerializer.Serialize(b.ToDict()), StringComparison.Ordinal);
 	}
 
 	/// <summary>重命名方案(被激活的方案跟着改 active_profile)。</summary>
