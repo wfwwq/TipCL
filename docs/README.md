@@ -80,6 +80,9 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 [`docs/m2-recon/`](m2-recon/) M2 立项侦察报告 ·
 [交接必读.md](../交接必读.md) 接手流程（立项阶段写成，现状以 PROGRESS.md 为准）。
 
+布局 v2(1.2.0,**仅 Windows 桌面版**):[docs/布局使用指南.md](布局使用指南.md) 完整手册(三个入口 / 手势 / 三种模式 / 分栏 / 整机方案导入导出 / 自建区块 / AI 排版回退 / 本版的坑)·
+[docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 9 条 FAQ。
+
 ## 与 Windows 版的关系
 
 - `windos/` 是**只读参照**:移植只从它复制可跨平台的文件（搬来的文件头会注明来源路径），
