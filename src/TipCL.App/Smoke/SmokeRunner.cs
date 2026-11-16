@@ -59,13 +59,24 @@ internal static class SmokeRunner
 
             // --page:页面还没移植(C3)时 Navigate 静默不动,行为与 A1 起的"只解析"一致;
             // 页面注册进来之后,这里就会真的切过去。
-            if (options.Page.Length > 0)
+            // [R32-MACMORE] --layout-view 单独用时等价于 --page settings(见下)。
+            string page = (options.Page.Length > 0) ? options.Page
+                : (options.LayoutView ? SettingsPageRegistration.PageId : string.Empty);
+            if (page.Length > 0)
             {
-                window.Navigate(options.Page, instant: true);
+                window.Navigate(page, instant: true);
             }
 
             window.ApplyThemeVisuals();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+
+            // [R32-MACMORE] --layout-view:切到「设置 → 布局」内层视图(第 8 段)再截图。
+            // 走生产同一个公开入口 SettingsPage.OpenLayoutView(),不开新 API。
+            if (options.LayoutView && window.GetPage(SettingsPageRegistration.PageId) is SettingsPage layoutHost)
+            {
+                layoutHost.OpenLayoutView();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            }
 
             // M7:AI 页的帧证据。离屏不连后端 ⇒ BridgeReady=false ⇒ MainWindow.Navigate 传的 runHooks
             // 是 false(D-92),页面的 EnsureLoadedAsync/OnShown 都不会跑,所以不带 --ai-seed 时

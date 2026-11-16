@@ -7,7 +7,8 @@
 // 纪律:
 //   * 每条碰 Avalonia 的用例体都经 AvaloniaSession.Run(...);落盘一律 C3aHome(或 C4Files.LayoutDir)注入目录;
 //   * 外壳一律 ShellFixture.Create(smoke: true) 造并按 Dispose 还原全局静态(与 C2b/C7b 同一套);
-//   * 断言只读可视化树 / 文档 / Toast,不做像素断言(像素证据在 progress/R32-MACMORE.md 的矩阵与 UIA 段)。
+//   * 断言只读可视化树 / 文档 / Toast,不做像素断言(像素证据走 headless 可视化树与 `--smoke` 截图,
+//     见 progress/R32-MACMORE.md 的「GUI 使用与焦点纪律」)。
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,9 +18,11 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
+using TipCL.Controls;
 using TipCL.Core.Launcher.Layout;
 using TipCL.Models;
 using TipCL.Pages;
+using TipCL.Pages.Ai;
 using TipCL.Pages.Plugins;
 using TipCL.Services;
 using Xunit;
@@ -243,7 +246,25 @@ public class R32MacMoreWiringTests
 				Assert.True(NavButtons(page)[0].IsChecked, "加块后应当自动切到目标页「通用」");
 				// 上屏:等 LayoutChanged → BlockHost.ReloadFromStore → Render 把新块画出来(全量跑时
 				// 渲染队列里可能还排着别的用例的活儿,所以这里泵到出现为止,不用固定轮数)
-				C3bFiles.Pump(() => Descendants(page).OfType<TextBlock>().Any(t => (t.Text ?? "") == def.Title), 8000);
+				try
+				{
+					C3bFiles.Pump(() => Descendants(page).OfType<TextBlock>().Any(t => (t.Text ?? "") == def.Title), 8000);
+				}
+				catch (TimeoutException)
+				{
+					BlockHost diagHost = Descendants(page).OfType<BlockHost>().First(h => h.PageId == "settings:general");
+					LayoutV2 fresh = LayoutStoreV2.Load();
+					PageLayoutV2? freshPage = fresh.Layout.Pages.TryGetValue("settings:general", out PageLayoutV2? fp) ? fp : null;
+					string diag = "stateOrder=[" + string.Join(",", diagHost.Editor.State.Order) + "]"
+						+ " freshDocBlocks=[" + string.Join(",", freshPage?.Blocks.Select(b => b.Id) ?? new List<string>()) + "]"
+						+ " variantWidth=" + LayoutVariantHost.Width.ToString("0.#")
+						+ " variantSrc=" + LayoutVariants.SourceOf(fresh.Layout, "settings:general", LayoutVariantHost.Width, LayoutVariantHost.Threshold)
+						+ " widgets=" + fresh.Layout.Widgets.Count
+						+ " hostCount=" + Descendants(page).OfType<BlockHost>().Count()
+						+ " sameAsDisplayed=" + ReferenceEquals(page, shell.Window.GetPage("settings"))
+						+ " titles=[" + string.Join("|", Descendants(page).OfType<TextBlock>().Select(t => t.Text ?? "").Where(t => t.Contains("便签") || t.Contains("custom"))) + "]";
+					throw new TimeoutException("加块上屏超时:" + diag);
+				}
 				Assert.Contains(Descendants(page).OfType<TextBlock>(), t => (t.Text ?? "") == def.Title);
 				// 不只是"有个标题":内容工厂(WidgetUI.Note)必须真造出便签卡片 —— 便签正文的默认引导语
 				// 是 LayoutWidgetAdd 给 note 的 settings 为空时的固定文案(WidgetCommon/ BasicWidgets.Note)。
@@ -283,6 +304,77 @@ public class R32MacMoreWiringTests
 			Assert.Equal(8, nav.Count);
 			Assert.True(nav[7].IsChecked, "OpenLayoutSettings 必须真的切到「布局」内层视图");
 			Assert.Contains(Descendants(page).OfType<TextBlock>(), t => t.Text == I18n.L("外观与密度"));
+		});
+	}
+
+	/// <summary>
+	/// R32-D26 的界面判据:「页签与标题栏」小节按 **Mac 页集(7)** 列行 —— 其中 5 个语义键
+	/// 各有显隐/上移/下移(写 `shell.tabs`),多出的 2 页(ai / tasks)是只读的原生行。
+	/// 分子:五个「页签顺序与显隐(&lt;key&gt;)」说明 + 两行「多出的页:布局 v2 不接管(保持原生行为)」。
+	/// </summary>
+	[Fact]
+	public void Settings_shell_section_lists_the_seven_mac_pages_and_marks_the_two_native_ones()
+	{
+		AvaloniaSession.Run(() =>
+		{
+			using var scope = new C3aHome();
+			using var api = new C3cFakeApi();
+			using var harness = C4LayerHost.Show();
+			using var toasts = new C3cToasts();
+			SettingsPage page = C4Files.Mount(harness, new SettingsPage());
+			page.OpenLayoutView();
+			C3bFiles.Flush(4);
+
+			List<string> texts = Descendants(page).OfType<TextBlock>().Select(t => t.Text ?? "").ToList();
+
+			// 5 个语义键:每一行都写清落到 shell.tabs 的哪个键(说明列用**持久化键**,
+			// 所以「版本管理」那一行写的是 (library)、「更多」那一行写的是 (plugins))
+			foreach (string tabKey in new[] { "launch", "library", "download", "plugins", "settings" })
+			{
+				Assert.Contains(I18n.L("页签顺序与显隐({0})", tabKey), texts);
+			}
+			// Mac 页名(取自侧栏同一套词条)
+			foreach (string label in new[] { "启动", "游戏", "版本管理", "更多", "设置", "AI 助手", "下载任务" })
+			{
+				Assert.Contains(I18n.L(label), texts);
+			}
+			// 多出的 2 页:只读原生行(两行同一句说明)
+			Assert.Equal(2, texts.Count(t => t == I18n.L("多出的页:布局 v2 不接管(保持原生行为)")));
+			// 原生行不给开关:这两页在 shell.tabs 里没有键,IsMacNativeOnly 为真(逻辑层钉死)
+			Assert.True(ShellTabs.IsMacNativeOnly("ai") && ShellTabs.IsMacNativeOnly("tasks"));
+			Assert.False(ShellTabs.IsMacNativeOnly("instance"));
+			// 持久化不因界面扩到 7 行而变:仍是 5 个 Windows 语义键
+			Assert.Equal(5, ShellTabs.BuiltinKeys.Length);
+		});
+	}
+
+	// ─────────────────────── ai 分栏间隙(唯一真偏离 8px) ───────────────────────
+
+	/// <summary>
+	/// R32-D26 / ROUND2-SPEC §3.2:`ai/history` 是 4 处留白里**唯一真数值偏离** —— Mac 早先用了默认
+	/// `gap = 18` 却保留 Windows 的 `-10` 补偿(净 +8px)。现在按 Windows 站点声明 `gap 10 + −10`
+	/// 修正:宿主 <see cref="PageLayoutHost.GapWidth"/> 必须是 10,且与 <see cref="SplitCatalog"/> 的
+	/// `ai/history` 站点声明一致(去掉其中任一处,这条会红)。
+	/// </summary>
+	[Fact]
+	public void AiPage_history_split_uses_the_windows_gap_of_ten()
+	{
+		AvaloniaSession.Run(() =>
+		{
+			using var scope = new C3aHome();
+			using var api = new C3cFakeApi();
+			// 只构造、不挂树:分栏宿主在构造期就建好了,断言它的间隙不需要渲染,也就不会往
+			// 全套件的渲染队列 / 事件里塞东西(全套件串行跑时这点很重要)。
+			AiPage page = new AiPage();
+			PageLayoutHost host = page.HistorySplit;
+			// Windows `PageLayoutHost.cs:170-181` 的 ai/history 站点:DefaultPixels=220 / Gap=10
+			SplitSite? site = SplitCatalog.Find("ai", "history");
+			Assert.NotNull(site);
+			Assert.Equal(10.0, site!.Gap);
+			Assert.Equal(site.Gap, host.GapWidth);
+			// 反证:默认值(18)会让这条红 —— 也就是"把 gap 改成默认、漏了站点声明"必被抓住
+			Assert.NotEqual(PageLayoutHost.DefaultGap, host.GapWidth);
+			Assert.Equal("left", site.PixelsSide);
 		});
 	}
 
