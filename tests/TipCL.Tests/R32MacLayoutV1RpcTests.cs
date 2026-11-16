@@ -529,7 +529,7 @@ public class R32MacLayoutV1RpcTests : IDisposable
 			//    注意:reset_layout / activate / import / delete / save_layout_profile 的返回值是 get_layout()
 			//    快照(与 Windows 一字不差),没有 "saved" 键 —— 别在这里断言它。
 			PyDict reset = _api.reset_layout();
-			Assert.Equal(0, ((Dictionary<string, object?>)reset["pages"]!).Count);
+			Assert.Empty((Dictionary<string, object?>)reset["pages"]!);
 			UiHost.Flush();
 			Assert.Equal(new[] { "news", "tasks" }, C3aTree.RenderedIds(host).ToArray());
 			Assert.Empty(LayoutStoreV2.Load().Layout.Pages);
