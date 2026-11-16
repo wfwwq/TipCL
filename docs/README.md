@@ -53,9 +53,23 @@ dotnet run --project src/TipCL.App                        # 正常开窗
 dotnet run --project src/TipCL.App -c Release -- --smoke  # 无头冒烟，写 smoke.png 后退出
 ```
 
-`--smoke` 用 Avalonia Headless（`UseHeadlessDrawing = false` + 真 Skia）离屏渲染主窗口，截图落到仓库根 `smoke.png`，
-退出码 0 = 渲染成功；`build.ps1` 把小于 1 KB 的截图当作疑似空白渲染。可选环境变量：`SMOKE_PAGE=<页面键>`（先切到该页）、
-`SMOKE_DARK=1`（深色帧）、`SMOKE_SEG=1..6`（下载页目录分段）、`SMOKE_SETTINGS_TAB=0..6`（设置页内层导航项）。
+`--smoke` 用 Avalonia Headless(`UseHeadlessDrawing = false` + 真 Skia)离屏渲染主窗口,**截图写到进程的当前工作目录**下的 `smoke.png`(在仓库根用 `dotnet run --project ...` 跑才是仓库根;换工作目录就跟着换),尺寸固定 **900×550**(窗口尺寸常量,不可覆盖)。退出码 0 = 渲染成功;`build.ps1` 把小于 1 KB 的截图当作疑似空白渲染。
+
+**Linux 树只认环境变量,不解析命令行开关**(2026-11-16 实测,`1823c3c`):`Session/SmokeRunner.cs` 不读参数数组,`--smoke` 之外的一切开关都被**静默忽略** —— 实测 `--smoke --page library`、`--smoke --theme dark`、`--smoke --out x.png`、`--smoke --shot`、`--smoke --size 900x550`、`--smoke --width 1000 --height 600` **全部 exit 0**,出的帧与不带这些开关时**同尺寸同亮度**,产物仍然只有 `smoke.png`。`--shot / --size / --width / --height` 是 **Windows 版开发通道**,Linux 与 mac 都没有(mac 上同类开关是 exit 2 + stderr「未知参数」,见 mac 树的 `docs/布局使用指南.md`)。
+
+真实通道是这些环境变量(全部读自 `Session/SmokeRunner.cs`):
+
+| 环境变量 | 作用(实测口径) |
+|---|---|
+| `SMOKE_PAGE=<页面键>` | 先切到该页。合法键:`launch` / `library` / `instance` / `download` / `plugins` / `settings` / `ai` / `account` / `tasks` / `multiplayer`;未知键**静默留在首屏**(实测 `SMOKE_PAGE=no-such-page` → exit 0,帧与首屏同尺寸同亮度) |
+| `SMOKE_DARK=1` | 深色帧。实测 `SMOKE_PAGE=settings SMOKE_DARK=1` 平均亮度 **34.0**,浅色帧 242.7(`library`)/ 95.6(启动页) |
+| `SMOKE_SEG=1..6` | 下载页目录分段。实测下载页帧 23 655 B → 36 275 B |
+| `SMOKE_SETTINGS_TAB=0..6` | 设置页内层导航项。实测设置页帧 37 729 B → 44 294 B |
+| `SMOKE_WAIT=<秒>` | 截图前 settle 等待;不给时用 400 ms 的最小 settle |
+| `SMOKE_TASKS=1` | 塞两条假任务(任务页视觉回归) |
+| `SMOKE_PROBE=1` | 打印整棵可视树(类型 / 样式类 / 边界) |
+| `SMOKE_PROBE=dialog-close\|popup-theme\|widgets\|widgets-lifetime` | 四支专用回归探针 |
+| `SMOKE_NET=<url>` / `SMOKE_INSTALL=<版本>` | 网络探针 / 无头安装 E2E 钩子 |
 
 其余命令行入口在 `src/TipCL.App/Session/`:`--ai-selftest` 跑 AI 功能自检（不起 GUI、不联网，结果打到 stdout）；`-i <实例> launch <版本> [--force] [--print-command]` 走与界面相同的启动链路拉起游戏，实例不存在时按用法错误退出（退出码 4）。
 数据目录由 `TIPCL_HOME` 决定，文件日志落在 `$TIPCL_HOME/logs/tipcl-YYYYMMDD.log`；冒烟截图与 `dist/` 都在 `.gitignore` 里，不入库。
@@ -80,8 +94,22 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 [`docs/m2-recon/`](m2-recon/) M2 立项侦察报告 ·
 [交接必读.md](../交接必读.md) 接手流程（立项阶段写成，现状以 PROGRESS.md 为准）。
 
-布局 v2(1.2.0,**仅 Windows 桌面版**):[docs/布局使用指南.md](布局使用指南.md) 完整手册(三个入口 / 手势 / 三种模式 / 分栏 / 整机方案导入导出 / 自建区块 / AI 排版回退 / 本版的坑)·
-[docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 9 条 FAQ。
+布局 v2 的 **Windows 版**手册(1.2.0):[docs/布局使用指南.md](布局使用指南.md) 完整手册(三个入口 / 手势 / 三种模式 / 分栏 / 整机方案导入导出 / 自建区块 / AI 排版回退 / 本版的坑)·
+[docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 9 条 FAQ。**这两份写的是 Windows 桌面版行为;Linux 树当前只落地了核心,见下一节。**
+
+### 布局 v2:Linux 移植版的真实进度(截至 `1823c3c`,2026-11-16 实测)
+
+已落地(都能在本树 `src/` 里指到文件):
+
+| 能力 | 落点 |
+|---|---|
+| v2 文档真源 + v1 单向写通 | `src/TipCL.Core/Launcher/Layout/LayoutStoreV2.cs`、`LayoutSchema.cs`、`LayoutDocV2.cs` |
+| 布局引擎(stack / grid / canvas、打包、手势模型、撤销) | `src/TipCL.App/Pages/Layout/LayoutEngine.cs` |
+| 编辑器 + 区块宿主 + 右键「自定义布局...」全局钩子 | `Pages/Layout/LayoutEditor.cs`、`BlockHost.cs`、`LayoutShellHooks.cs` |
+| 自建区块内容工厂(5 个安全类型 + 2 个危险类型) | `Pages/Layout/WidgetRegistry.cs`、`Pages/Layout/Widgets/` |
+| 启动时注册部件(R32-LINT 实测真窗口上屏 5 个部件) | `App.axaml.cs` |
+
+**尚未落地**(别再按 Windows 手册去找这些入口):设置页整页「布局」视图(`SettingsLayoutPage`)、分栏比例 UI(`PageLayoutHost` / `SplitRatioStore`)、整机方案与「AI 备份」(profiles / `LayoutTools`)、布局 JSON 卡片(`LayoutJsonEditor`)、页签编辑(`ShellTabs`)。对应能力由 R32 的 LIN-MORE 工作包在途,截至上表那个代码尖**未进入本树**。
 
 ## 与 Windows 版的关系
 
