@@ -10,6 +10,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using TipCL.App.Common;
+using TipCL.App.Controls;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core;
@@ -82,9 +83,14 @@ public sealed class AccountPage : PageBase
                 .Add(UiClass.V(2, _heroName, _heroKind).VCenter().Mk(10, 0, 0, 0), 0, 1)));
         heroCard.Width = 240;
 
-        var body = UiClass.G(null, "Auto,*");
-        body.Add(heroCard.Mk(0, 0, 14, 0).VTop(), 0, 0);
-        body.Add(_list, 0, 1);
+        // R32-LINSPLIT:分栏(设计 §4.E 第 9 处)= 左栏头像卡(现状 Width=240)+ 14px 分隔条 + 账号列表。
+        // 现状那 14px 右外边距改成 14px 分隔条(卡片外边距去掉)⇒ 两栏几何与改动前完全等价
+        // (左栏仍 240,列表仍从 x=254 起);比例存 v2 splits["account"]["hero"]。
+        // 声明列宽用 Auto:与 Windows 源一致(现状就是 Auto)—— 无存储比例时保持 Auto(逐像素不变),
+        // 只有拖过之后才切成星号比例。
+        var body = new PageLayoutHost("account", "hero", GridLength.Auto, new GridLength(1.0, GridUnitType.Star));
+        body.SetLeft(heroCard.VTop());
+        body.SetRight(_list);
 
         Body = new BlockHost("account", new List<BlockSpec>
         {

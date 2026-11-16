@@ -22,6 +22,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using TipCL.App.Common;
+using TipCL.App.Controls;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Pages.Library;
 using TipCL.App.Shell;
@@ -130,9 +131,12 @@ public sealed class VersionManagePage : PageBase
         right.VerticalAlignment = VerticalAlignment.Top;
         _empty.IsVisible = false;
 
-        var grid = UiClass.G(null, "272,18,*");
-        grid.Add(folderCard, 0, 0);
-        grid.Add(right, 0, 2);
+        // R32-LINSPLIT:分栏(设计 §4.E 第 6 处)= 272px + 18px 留白 + 右栏。
+        // 分隔条直接复用现状那 18px 空白列 ⇒ 与改动前的 `G(null,"272,18,*")` 逐像素等价;
+        // 比例存 v2 splits["version-manage"]["nav"],双击分隔条复位(见 Controls/PageLayoutHost.cs)。
+        var grid = new PageLayoutHost("version-manage", "nav", new GridLength(272.0), new GridLength(1.0, GridUnitType.Star));
+        grid.SetLeft(folderCard);
+        grid.SetRight(right);
         grid.Margin = new Thickness(22, 20, 22, 20);
         var scroll = new ScrollViewer { Content = grid, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         _shell = scroll;

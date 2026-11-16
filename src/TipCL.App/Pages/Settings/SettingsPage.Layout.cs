@@ -9,8 +9,11 @@
 // 与 Windows 源的差异(全部记在 R32-LINMORE.md 的知情降级表):
 //   T-01 WPF 的 `Ui.*` → 本树 `UiClass.*`(同 SettingsPage 既有写法);`I18n.L(x,a)` → `Py.Fmt(I18nCore.Tr(x),a)`。
 //   T-02 `DispatcherPriority.Loaded` 保留(Avalonia 11 有同名优先级);`PageBase.Win` → `TopLevel.GetTopLevel(this)`。
-//   T-03 Windows 的「分栏比例」表来自 SplitCatalog;Linux 树没有 SplitCatalog(没有任何可拖分栏站点),
-//        本节降级为「列出文档里已存的比例 + 一键清空」,不伪造站点。
+//   T-03 【R32-LINSPLIT 已解除降级】Windows 的「分栏比例」表来自 SplitCatalog;LIN-MORE 时期 Linux 树
+//        没有 SplitCatalog ⇒ 本节曾降级为「列出文档里已存的比例 + 一键清空」。R32-LINSPLIT 已把
+//        `SplitCatalog` / `SplitRatioStore` / `PageLayoutHost` 按 Windows 冻结件搬进本树
+//        (`src/TipCL.App/Controls/PageLayoutHost.cs`,13 条站点表 + 4 处接线),
+//        本节随之恢复成 Windows 的表驱动形态(逐条现状 + 恢复默认 + 全部复位)。
 //   T-04 「添加自建区块」在 Windows 冻结件里是**永久禁用**(L6 未落地);Linux 侧按任务书要求补齐为可用的
 //        部件选择器(枚举 SafeTypes → 添加到选定页面 → 立刻上屏)。见 §e。
 //   T-05 Windows 标题栏有「桥接」药丸钮,Linux 标题栏没有该控件 ⇒ 开关保留但禁用并写明原因。
@@ -25,6 +28,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using TipCL.App.Common;
+using TipCL.App.Controls;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core;
@@ -346,38 +350,97 @@ public sealed partial class SettingsPage
         return null;
     }
 
-    // ————— d 分栏比例(Linux 降级:没有 SplitCatalog 站点) —————
+    // ————— d 分栏比例(现状表直接来自 SplitCatalog,视图里不重复硬编码) —————
+    //
+    // R32-LINSPLIT:本小节此前是 LIN-MORE 的降级版(该文件 T-03 / R32-LINMORE D-4:「Linux 树没有
+    // SplitCatalog(没有可拖动的左右分栏站点)」)。SplitCatalog / SplitRatioStore 已按 Windows 冻结件
+    // @0a304a7 搬进本树(src/TipCL.App/Controls/PageLayoutHost.cs)⇒ 本节按 Windows
+    // `SettingsLayoutPage.cs:356-440 LayoutSplitRows/ResetAllSplits/SplitNowText/SplitKindLabel`
+    // 逐条恢复到"表驱动"形态:13 条现状 + 每条「恢复默认」(仅两栏且有存储时可点)+ 末尾「全部复位」。
+    //
+    // 与 Windows 的差异(仅格式化,无功能差):
+    //   * Windows 用 `I18n.L("当前 {0:P0}", ratio)`,本树没有 I18nCore 的复合格式化门面 ⇒ 手写
+    //     `Math.Round(ratio*100) + "%"`(与 `P0` 的可见结果一致,且不受区域设置影响);
+    //   * 每条按钮补了 AutomationProperties.Name(Windows 没有),供无头用例按名定位。
 
     private Control[] LayoutSplitRows()
     {
-        LayoutV2 doc = LayoutStoreV2.Load();
-        int stored = 0;
-        if (doc.Layout != null && doc.Layout.Splits != null)
+        List<Control> rows = new();
+        foreach (SplitSite site in SplitCatalog.All)
         {
-            foreach (KeyValuePair<string, SplitState> page in doc.Layout.Splits)
+            SplitSite current = site;
+            string where = "#" + site.Index + "  " + site.PageId + " / " + site.SplitId;
+            double? stored = SplitRatioStore.Read(site.PageId, site.SplitId);
+            string now = SplitNowText(site);
+            if (!site.IsTwoColumn)
             {
-                if (page.Value != null && page.Value.Ratios != null)
+                // 说明(为什么这处不是可拖分栏)放进 ToolTip:表格里保持一行,长文案不把行撑高
+                Control plain = UiClass.Field(where, UiClass.Small(now), SplitKindLabel(site.Kind));
+                ToolTip.SetTip(plain, site.Note);
+                rows.Add(plain);
+                continue;
+            }
+            Button reset = UiClass.Btn("恢复默认", BtnKind.Chip, delegate
+            {
+                if (SplitRatioStore.Clear(current.PageId, current.SplitId))
                 {
-                    stored += page.Value.Ratios.Count;
+                    PageBase.Toast("已恢复默认", "", ToastKind.Success);
+                    RefreshLayoutView();
                 }
+            });
+            Avalonia.Automation.AutomationProperties.SetName(reset, "恢复默认分栏:" + current.PageId + "/" + current.SplitId);
+            reset.IsEnabled = stored.HasValue;
+            string cur = (stored.HasValue ? ("当前 " + Math.Round(stored.Value * 100.0) + "%") : "当前 = 现状");
+            Control row = UiClass.Field(where, UiClass.H(8, UiClass.Small(now).VCenter(), UiClass.Small(cur).VCenter(), reset), SplitKindLabel(site.Kind));
+            ToolTip.SetTip(row, site.Note);
+            rows.Add(row);
+        }
+        Button resetAll = UiClass.Btn("全部复位", BtnKind.Normal, delegate
+        {
+            ResetAllSplits();
+        });
+        Avalonia.Automation.AutomationProperties.SetName(resetAll, "全部复位分栏");
+        rows.Add(UiClass.Field("分栏比例", resetAll, "复位只删掉存储比例,回到各页现状列定义"));
+        return rows.ToArray();
+    }
+
+    private void ResetAllSplits()
+    {
+        int count = 0;
+        foreach (SplitSite site in SplitCatalog.All)
+        {
+            if (site.IsTwoColumn && SplitRatioStore.Clear(site.PageId, site.SplitId))
+            {
+                count++;
             }
         }
-        Button clear = UiClass.Btn("清空已存比例", BtnKind.Chip, delegate
+        PageBase.Toast((count > 0) ? "已恢复默认" : "没有需要复位的分栏", (count > 0) ? ("已复位 " + count + " 处") : "", ToastKind.Success);
+        RefreshLayoutView();
+    }
+
+    // 现状文本:比例 / 像素 / 留白,全部来自 SplitCatalog 的声明
+    private static string SplitNowText(SplitSite site)
+    {
+        if (!site.IsTwoColumn)
         {
-            WriteLayout(delegate(LayoutV2 d)
-            {
-                d.Layout.Splits.Clear();
-            }, "已清空分栏比例");
-            RefreshLayoutView();
-        });
-        Avalonia.Automation.AutomationProperties.SetName(clear, "清空已存比例");
-        clear.IsEnabled = stored > 0;
-        List<Control> rows = new()
+            return "没有左右分栏";
+        }
+        string size = ((site.DefaultPixels > 0.0) ? (site.DefaultPixels + "px") : ("星号 " + Math.Round(site.DefaultRatio * 100.0) + "%"));
+        string side = ((site.PixelsSide == "right") ? "右栏" : "左栏");
+        return "现状:" + side + " " + size + " · 留白 " + site.Gap + "px";
+    }
+
+    private static string SplitKindLabel(string? kind)
+    {
+        return kind switch
         {
-            UiClass.Field("分栏站点", UiClass.H(8, UiClass.Small(stored > 0 ? ("文档里已存 " + stored + " 处比例") : "文档里没有已存比例").VCenter(), clear), ""),
-            UiClass.Field("本树现状", UiClass.Muted("Linux 树没有 SplitCatalog(没有可拖动的左右分栏站点);本小节只保留「看 / 清空已存比例」,不伪造站点"), ""),
+            SplitKind.TwoColumn => "左右两栏",
+            SplitKind.Rows => "纵向分行",
+            SplitKind.ListRow => "列表行内列宽",
+            SplitKind.GridCols => "网格列数",
+            SplitKind.HeightClamp => "限宽限高",
+            _ => "单列"
         };
-        return rows.ToArray();
     }
 
     // ————— e 自建区块(Linux 侧补齐:Windows 冻结件该按钮永久禁用) —————

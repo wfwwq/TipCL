@@ -19,6 +19,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher;
 using TipCL.App.Common;
+using TipCL.App.Controls;
 using TipCL.App.Common.Plugins;
 using TipCL.Core;
 using TipCL.Core.Plugins;
@@ -159,7 +160,10 @@ public sealed partial class PluginsPage
     private void RenderInstalled()
     {
         _installedHost.Children.Clear();
-        _installedHost.Columns = (_installed.Count == 0) ? 1 : 3;
+        // R32-LINSPLIT:分栏(设计 §2.3 第 10 处)已安装网格列数进布局文档 pages["plugins"].cols
+        // (只在页面声明 mode=grid 时生效;现状 3 列保持不变,写入方是 L2/L5 的网格编辑)。
+        // 与 Windows `PluginsPage.Installed.cs:43` 同一口径、同一回落值。
+        _installedHost.Columns = (_installed.Count == 0) ? 1 : SplitRatioStore.PageColumns("plugins", 3, 1, 6);
         if (_installed.Count == 0)
         {
             _installedHost.Children.Add(U.Empty("◇", "还没有安装插件", "去插件市场看看，或者把插件 zip 拖进这个页面。"));
