@@ -361,7 +361,8 @@ internal sealed class PageLayoutHost : Grid
 		}
 	}
 
-	/// <summary>从 v2 文档删该处比例(空掉的 pageId 一并清掉);返回是否真的删掉了。</summary>
+	/// <summary>从 v2 文档删该处比例(**该页再没有比例、也没有未知字段残留时**才把空掉的 pageId 一并清掉);
+	/// 返回是否真的删掉了。</summary>
 	private static bool V2ClearRatio(string pageId, string splitId)
 	{
 		try
@@ -375,7 +376,10 @@ internal sealed class PageLayoutHost : Grid
 			{
 				return false;
 			}
-			if (state.Ratios.Count == 0)
+			// 该页一个比例都不剩**且没有未知字段残留**时才把 pageId 这一层去掉(Windows `:419`
+			// `split.Ratios.Count == 0 && split.Extra.Count == 0`)—— 有 Extra 就留着壳,免得把用户
+			// 文档里的未知字段顺手删掉(宽容读取的承诺:未知字段保留)。
+			if (state.Ratios.Count == 0 && state.Extra.Count == 0)
 			{
 				doc.Layout.Splits.Remove(pageId);
 			}
@@ -530,6 +534,64 @@ internal sealed class PageLayoutHost : Grid
 		{
 			return removed;
 		}
+	}
+
+	/// <summary>
+	/// 逐页复位(**Windows <c>SplitRatioStore.ClearPage</c>**,`:433-455`;L5 设置页「布局」用):
+	/// 删掉该页**全部**比例,返回删掉的条数(该页没有比例 / 没有这一页 ⇒ 0,不抛)。
+	/// 与镇里的"清一处"不同:这一层连未知字段 <c>Extra</c> 一起删掉(整页复位就是要它干净)。
+	/// mac 侧多一步(**Windows 没有遗留落点,所以那边没有这一步**):把该页的遗留偏好键
+	/// <c>"&lt;pageId&gt;/&lt;splitId&gt;"</c> 一并清掉 —— 否则 <see cref="Read"/> 会从遗留值里把它们读回来,
+	/// "整页复位"就复位不干净。
+	/// </summary>
+	public static int ClearPage(UiPrefs? prefs, string pageId)
+	{
+		if (string.IsNullOrEmpty(pageId))
+		{
+			return 0;
+		}
+		int removed = 0;
+		try
+		{
+			LayoutV2 doc = LayoutStoreV2.Load();
+			if (doc.Layout.Splits.TryGetValue(pageId, out SplitState? state) && state != null)
+			{
+				removed = state.Ratios.Count;
+				if (removed > 0)
+				{
+					doc.Layout.Splits.Remove(pageId);
+					LayoutStoreV2.Save(doc);
+				}
+			}
+		}
+		catch
+		{
+			return removed;
+		}
+		if (prefs == null)
+		{
+			return removed;
+		}
+		try
+		{
+			string prefix = pageId + "/";
+			List<string> keys = new List<string>();
+			foreach (string key in prefs.Splits.Keys)
+			{
+				if (key != null && key.StartsWith(prefix, StringComparison.Ordinal))
+				{
+					keys.Add(key);
+				}
+			}
+			foreach (string key in keys)
+			{
+				prefs.Splits.Remove(key);
+			}
+		}
+		catch
+		{
+		}
+		return removed;
 	}
 
 	/// <summary>存储键(<c>"&lt;pageId&gt;/&lt;splitId&gt;"</c>)。</summary>

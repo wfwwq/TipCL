@@ -51,6 +51,13 @@ public class C9aPageLayoutHostTests : IDisposable
 		return state.Ratios.TryGetValue(splitId, out double ratio) ? ratio : null;
 	}
 
+	/// <summary>v2 文档里该页那一层分栏(没有 = null;用来证"空壳有没有被收掉")。</summary>
+	private static SplitState? DocSplit(string pageId)
+	{
+		LayoutV2 doc = LayoutStoreV2.Load();
+		return doc.Layout.Splits.TryGetValue(pageId, out SplitState? state) ? state : null;
+	}
+
 	/// <summary>v2 文档里该页(没有 = null)。</summary>
 	private static PageLayoutV2? DocPage(string pageId)
 	{
@@ -140,6 +147,113 @@ public class C9aPageLayoutHostTests : IDisposable
 		// 删不存在的返回 false;空 id 不写
 		Assert.False(PageLayoutHost.Clear(prefs, "settings", "nav"));
 		Assert.False(PageLayoutHost.Write(prefs, "", "nav", 0.5));
+	}
+
+	/// <summary>
+	/// 写别处 / 别页**不影响**已存的比例(Windows <c>WriteKeepsOtherSplitsAndPagesIntact</c>):
+	/// 逐处复位只动一处,同页其它比例与别页比例都不受影响。
+	/// </summary>
+	[Fact]
+	public void Write_keeps_other_splits_and_pages_intact()
+	{
+		UiPrefs prefs = new UiPrefs();
+		Assert.True(PageLayoutHost.Write(prefs, "library", "folders", 0.30));
+		Assert.True(PageLayoutHost.Write(prefs, "settings", "nav", 0.25));
+		Assert.True(PageLayoutHost.Write(prefs, "settings", "side", 0.70));
+		// 逐处复位只动一处,同页其它比例与别页比例都不受影响
+		Assert.True(PageLayoutHost.Clear(prefs, "settings", "nav"));
+		Assert.Null(PageLayoutHost.Read(prefs, "settings", "nav"));
+		Assert.Equal(0.70, PageLayoutHost.Read(prefs, "settings", "side")!.Value, 6);
+		Assert.Equal(0.30, PageLayoutHost.Read(prefs, "library", "folders")!.Value, 6);
+		// 真源(文档)逐条对上:删掉的那处没了,settings 这一页与 library 那一页都还在
+		Assert.Null(DocRatio("settings", "nav"));
+		Assert.Equal(0.70, DocRatio("settings", "side")!.Value, 6);
+		Assert.Equal(0.30, DocRatio("library", "folders")!.Value, 6);
+	}
+
+	/// <summary>
+	/// 清掉**最后一处**比例 ⇒ 该页那一层空壳也一并收掉(Windows <c>SplitRatioStore.Clear</c> 的收尾:
+	/// <c>Ratios.Count == 0 &amp;&amp; Extra.Count == 0</c> 时 <c>Splits.Remove(pageId)</c>);
+	/// 落盘之后 <see cref="LayoutStoreV2.ResetCache"/> 重读,证的是**文件里**也没有空壳。
+	/// 反向那条:该页还留着未知字段(<c>Extra</c>)时**不收壳** —— 容忍读取承诺"未知字段保留"。
+	/// </summary>
+	[Fact]
+	public void Clear_of_the_last_ratio_drops_the_whole_page_layer()
+	{
+		UiPrefs prefs = new UiPrefs();
+		Assert.True(PageLayoutHost.Write(prefs, "library", "folders", 0.30));
+		Assert.True(PageLayoutHost.Clear(prefs, "library", "folders"));
+		LayoutStoreV2.ResetCache();
+		Assert.Null(DocRatio("library", "folders"));
+		Assert.Null(DocSplit("library"));
+
+		// 还留着未知字段 ⇒ 不收壳(免得把用户文档里的未知字段顺手删掉)
+		LayoutV2 doc = LayoutStoreV2.Load();
+		SplitState keep = new SplitState();
+		keep.Ratios["folders"] = 0.30;
+		keep.Extra["future_thing"] = "keep-me";
+		doc.Layout.Splits["library"] = keep;
+		Assert.True(LayoutStoreV2.Save(doc));
+		Assert.True(PageLayoutHost.Clear(prefs, "library", "folders"));
+		LayoutStoreV2.ResetCache();
+		Assert.NotNull(DocSplit("library"));
+		Assert.True(DocSplit("library")!.Extra.ContainsKey("future_thing"));
+		Assert.Null(DocRatio("library", "folders"));
+	}
+
+	/// <summary>
+	/// 逐页复位(Windows <c>SplitRatioStore.ClearPage</c> / <c>ClearPageRemovesWholePage</c>):
+	/// 返回删掉的条数;同页其它处与别页都不受影响;没有比例的页 / 空 id 返回 0 且不抛;
+	/// 复位不存在的分栏返回 <c>false</c>。**Mac 侧多一条**(Windows 没有遗留落点):该页的遗留偏好键一并清掉。
+	/// </summary>
+	[Fact]
+	public void Clear_page_drops_the_whole_page_layer_and_reports_the_count()
+	{
+		UiPrefs prefs = new UiPrefs();
+		Assert.True(PageLayoutHost.Write(prefs, "library", "folders", 0.30));
+		Assert.True(PageLayoutHost.Write(prefs, "library", "list", 0.40));
+		Assert.True(PageLayoutHost.Write(prefs, "ai", "history", 0.50));
+		Assert.Equal(2, PageLayoutHost.ClearPage(prefs, "library"));
+		LayoutStoreV2.ResetCache();
+		Assert.Null(PageLayoutHost.Read(prefs, "library", "folders"));
+		Assert.Null(PageLayoutHost.Read(prefs, "library", "list"));
+		Assert.Null(DocSplit("library"));
+		Assert.Equal(0.50, PageLayoutHost.Read(prefs, "ai", "history")!.Value, 6);
+		// 没有比例的页再复位一次:什么也不做,不报错
+		Assert.Equal(0, PageLayoutHost.ClearPage(prefs, "library"));
+		Assert.Equal(0, PageLayoutHost.ClearPage(prefs, ""));
+		// 复位不存在的分栏:返回 false,不抛
+		Assert.False(PageLayoutHost.Clear(prefs, "settings", "nav"));
+
+		// Mac 侧加固:该页的遗留偏好键也一并清掉,否则 Read 会从旧值里把它读回来
+		// (文档里这一页已经空了 ⇒ 计数仍是 0,但旧键必须消失)
+		prefs.Splits[PageLayoutHost.Key("library", "folders")] = 0.2;
+		Assert.Equal(0, PageLayoutHost.ClearPage(prefs, "library"));
+		Assert.False(prefs.Splits.ContainsKey("library/folders"));
+		Assert.Null(PageLayoutHost.Read(prefs, "library", "folders"));
+	}
+
+	/// <summary>
+	/// 容错(Windows <c>CorruptV2FileIsTreatedAsNothingStored</c>):v2 文件被截断 / 坏掉 ⇒ **读不抛**,
+	/// 当作"没存过比例"(页面按现状列定义渲染);此刻写一次会重建一份完整的 v2,而不是静默清空其它页面布局。
+	/// </summary>
+	[Fact]
+	public void Corrupt_v2_file_is_treated_as_nothing_stored()
+	{
+		UiPrefs prefs = new UiPrefs();
+		Assert.True(PageLayoutHost.Write(prefs, "library", "folders", 0.30));
+		Assert.True(PageLayoutHost.Write(prefs, "ai", "history", 0.50));
+		// 截断的 v2(与 Windows 用例同一份坏文本)
+		File.WriteAllText(LayoutStoreV2.FilePath, "{\"version\":2,\"kind\":\"tipcl-layout\",\"layout\":{\"splits\":{\"lib");
+		LayoutStoreV2.ResetCache();
+		// 截断的 v2:不抛,当作"没存过比例"
+		Assert.Null(PageLayoutHost.Read(prefs, "library", "folders"));
+		Assert.False(PageLayoutHost.IsStored(prefs, "library", "folders"));
+		// 此刻写一次会重建一份完整的 v2(坏文件被一份好文档取代,写成功)
+		Assert.True(PageLayoutHost.Write(prefs, "library", "folders", 0.33));
+		Assert.Equal(0.33, PageLayoutHost.Read(prefs, "library", "folders")!.Value, 6);
+		LayoutStoreV2.ResetCache();
+		Assert.Equal(0.33, DocRatio("library", "folders")!.Value, 6);
 	}
 
 	/// <summary>
