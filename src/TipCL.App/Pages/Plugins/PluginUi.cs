@@ -282,6 +282,7 @@ public static class NativePluginUi
 			{
 				"page" => "CreatePage",
 				"dashCard" => "CreateDashCard",
+				"block" => "CreateBlock",
 				_ => "CreateAiView",
 			};
 			object[] args = (kind == "aiView") ? new object[3] { plugin, id, chatId ?? "" } : new object[2] { plugin, id };
@@ -308,6 +309,13 @@ public static class NativePluginUi
 		return Create(plugin, "dashCard", id, null);
 	}
 
+	/// <summary>原生区块(kind=block):布局文档里用 <c>plugin:&lt;plugin&gt;:&lt;id&gt;</c> 引用它
+	/// (【Windows 源】<c>0a304a7:PluginUi.cs:278-282</c> 同名同义;本仓移植时漏了这一支)。</summary>
+	public static Control? CreateBlock(string plugin, string id)
+	{
+		return Create(plugin, "block", id, null);
+	}
+
 	public static Control? CreateAiView(string plugin, string id, string chatId)
 	{
 		return Create(plugin, "aiView", id, chatId);
@@ -329,6 +337,9 @@ public static class NativePluginUi
 			{
 				"page" => CreatePage(c.Plugin, c.Id),
 				"dashCard" => CreateDashCard(c.Plugin, c.Id),
+				// 【Windows 源】0a304a7:PluginUi.cs:298 `"block" => CreateBlock(...)`:缺了这一支 ⇒
+				// 原生区块会掉到下面的「插件没有提供这个界面」,而插件明明提供了区块(文案误导)。
+				"block" => CreateBlock(c.Plugin, c.Id),
 				"aiView" => CreateAiView(c.Plugin, c.Id, chatId ?? ""),
 				_ => null,
 			};
@@ -339,6 +350,14 @@ public static class NativePluginUi
 
 			if (c.Url.Length == 0)
 			{
+				// R32-DEGRADE-FIX:区块按 Windows 的区块口径给「区块不可用」占位
+				// (Windows LayoutEditor.cs:949-951 对造不出内容的块用这一句,本仓 LayoutEditor.cs:951 同);
+				// 对 page / dashCard / aiView 才用「插件没有提供这个界面」。
+				if (c.Kind == "block")
+				{
+					return Ui.Empty("\uea86", I18n.L("区块不可用"), I18n.L("可能需要重启 TipCL 才能生效"));
+				}
+
 				return Ui.Empty("\uea86", I18n.L("插件没有提供这个界面"), I18n.L("可能需要重启 TipCL 才能生效"));
 			}
 		}
