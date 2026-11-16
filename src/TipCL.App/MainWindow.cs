@@ -99,6 +99,12 @@ internal sealed partial class MainWindow : Window
 
 	private NavConfig _navCfg = new NavConfig();
 
+	/// <summary>
+	/// R32-MAC-TABS:布局文档变更的稳定委托引用 —— <c>LayoutStoreV2.LayoutChanged</c> 是静态事件,
+	/// 必须缓存**同一个**委托实例才能对称 <c>-=</c>(见 <c>BlockHost</c> 的同一条纪律)。
+	/// </summary>
+	private readonly Action _layoutChangedHandler;
+
 	private readonly PageHost _host;
 
 	private readonly Border _rootBorder;
@@ -274,6 +280,8 @@ internal sealed partial class MainWindow : Window
 			FileDrop.Detach(this);
 			// 布局全局钩子摘钩(静态类,必须缓存同一批委托才能对称 RemoveHandler)
 			LayoutShellHooks.Detach();
+			// R32-MAC-TABS:布局文档变更的订阅同样要对称摘掉(否则关掉的窗口会被静态事件一直拎着)。
+			TipCL.Core.Launcher.Layout.LayoutStoreV2.LayoutChanged -= _layoutChangedHandler;
 			// 背景管线收摊(Windows 的 Closed → Wallpaper.Shutdown;mac 多一步摘图层引用,
 			// 免得下一个外壳往新宿主里挂时那两个静态图层还挂在旧宿主上)。
 			Wallpaper.Shutdown();
@@ -293,6 +301,12 @@ internal sealed partial class MainWindow : Window
 			ApplyPrefs(prefs);
 		}
 		ApplySidebarWidth(_prefs.SideWidth);
+
+		// R32-MAC-TABS:布局 v2 文档一变(shell.tabs 被设置页 / RPC / 导入写掉)侧栏要立刻跟上。
+		// LayoutChanged 是静态事件且可能从任意线程来(Windows `MainWindow.OnLayoutChanged` 同名逻辑),
+		// 所以缓存同一批委托、关窗时对称解绑(BlockHost 也是这个纪律)。
+		_layoutChangedHandler = OnLayoutChanged;
+		TipCL.Core.Launcher.Layout.LayoutStoreV2.LayoutChanged += _layoutChangedHandler;
 
 		// ---- 首屏:与 Windows 一样先切"启动"页(instant,不带动画)----
 		SyncSidebar();
@@ -640,13 +654,18 @@ internal sealed partial class MainWindow : Window
 	// 侧栏
 	// =====================================================================
 
-	/// <summary>按当前 <see cref="NavConfig"/> 重建侧栏行(分组头 / 撑条 / 条目)。</summary>
+	/// <summary>
+	/// 按当前 <see cref="NavConfig"/>(叠加布局 v2 文档的 <c>shell.tabs</c>)重建侧栏行(分组头 / 撑条 / 条目)。
+	/// R32-MAC-TABS:5 个映射键的显隐 / 顺序改由 <see cref="ShellTabPlan"/> 按 <c>shell.tabs</c> 决定;
+	/// 文档未设置时 <see cref="ShellTabPlan.NavItems(NavConfig?)"/> 原样返回 <c>NavModel.NavItemsFromConfig</c>
+	/// ⇒ 默认外观与改动前逐字节一致。
+	/// </summary>
 	internal void SyncSidebar()
 	{
 		_navGrid.Children.Clear();
 		_navGrid.RowDefinitions.Clear();
 		int row = 0;
-		foreach (NavEntry entry in NavModel.NavItemsFromConfig(_navCfg))
+		foreach (NavEntry entry in ShellTabPlan.NavItems(_navCfg))
 		{
 			Control? control = entry.Kind switch
 			{
@@ -667,6 +686,29 @@ internal sealed partial class MainWindow : Window
 		}
 		ApplyThemeVisuals();
 		SyncNavSelection();
+	}
+
+	/// <summary>
+	/// 布局文档变更(保存后)的外壳侧反应:R32-MAC-TABS 起侧栏的页签集合/顺序/显隐也来自
+	/// <c>ui_layout_v2.json</c> 的 <c>shell.tabs</c>,所以文档一变就要重建侧栏与菜单
+	/// (Windows 的 <c>MainWindow.OnLayoutChanged → RebuildShellTabs</c> 是同一职责)。
+	/// </summary>
+	private void OnLayoutChanged()
+	{
+		if (!Dispatcher.UIThread.CheckAccess())
+		{
+			Dispatcher.UIThread.Post(OnLayoutChanged);
+			return;
+		}
+		try
+		{
+			SyncSidebar();
+			SyncMenu();
+		}
+		catch (Exception)
+		{
+			// 外壳重建失败不能把保存流程带崩(Windows 那边也是 try/catch 吞掉)。
+		}
 	}
 
 	private static Control NavHeader(string label)
@@ -951,7 +993,9 @@ internal sealed partial class MainWindow : Window
 	{
 		List<(string Key, string PageId)> list = new List<(string, string)>();
 		Dictionary<string, List<string>> members = NavModel.SectionMembersFromConfig(_navCfg);
-		foreach (NavEntry item in NavModel.NavItemsFromConfig(_navCfg))
+		// R32-MAC-TABS:菜单「页面」顺序与 ⌘1..⌘9 必须跟**侧栏上真正看得见的顺序**一致
+		// (Windows 的顶栏页签顺序也是这一条:计划改了,可见顺序跟着改)。
+		foreach (NavEntry item in ShellTabPlan.NavItems(_navCfg))
 		{
 			if (item.Kind != NavEntryKind.Item)
 			{
