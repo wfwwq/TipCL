@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using TipCL.App.Common;
+using TipCL.Core.Launcher;
 using TipCL.Core.Layout;
 
 namespace TipCL.App.Pages.Layout;
@@ -16,13 +17,25 @@ public static class LayoutFx
 {
     private static bool _wired;
 
-    /// <summary>在应用启动早期调用一次（App.OnFrameworkInitializationCompleted）。</summary>
+    /// <summary>
+    /// 「导出布局」文件对话框标题(走词表:Core 侧 I18nCore)。
+    /// <para>R32-I18NFIX:此前这里是裸字面量 <c>"导出布局"</c> —— 同一个串在工具条**按钮**上已走
+    /// <c>I18nCore.Tr("导出布局")</c>(<c>LayoutEditor.cs</c>),只有对话框标题漏了 i18n,
+    /// 英文界面下会出现中文标题。对位 Windows <c>Pages/PageLayoutIO.cs:25</c> 的 <c>I18n.L("导出布局")</c>。</para>
+    /// <para>抽成方法只是为了能在无头测试里断言中英切换(与 mac 的 <c>LayoutShellHooks.BuildContextMenu</c> 同一做法)。</para>
+    /// </summary>
+    internal static string ExportDialogTitle() => I18nCore.Tr("导出布局");
+
+    /// <summary>「导入布局」文件对话框标题(走词表);理由同 <see cref="ExportDialogTitle"/>。</summary>
+    internal static string ImportDialogTitle() => I18nCore.Tr("导入布局");
+
+    /// <summary>在应用启动早期调用一次(App.OnFrameworkInitializationCompleted)。</summary>
     public static void Wire()
     {
         if (_wired) return;
         _wired = true;
-        PageLayoutIO.SaveFileDialog = (filter, suggestedName) => Dlg.SaveFile("导出布局", suggestedName).GetAwaiter().GetResult();
-        PageLayoutIO.PickFileDialog = filter => Dlg.PickFile("导入布局", "*.json").GetAwaiter().GetResult();
+        PageLayoutIO.SaveFileDialog = (filter, suggestedName) => Dlg.SaveFile(ExportDialogTitle(), suggestedName).GetAwaiter().GetResult();
+        PageLayoutIO.PickFileDialog = filter => Dlg.PickFile(ImportDialogTitle(), "*.json").GetAwaiter().GetResult();
         PageLayoutIO.Toast = (title, detail, kind) => Dispatcher.UIThread.Post(() => ToastHost.Show(title, detail, ToCommon(kind)));
         // 数据目录定位：对齐 Core 侧 PluginDirs 的默认根（Utils.ROOT，可用 TIPCL_HOME 覆盖）
         PageLayoutStore.RootProvider = () => TipCL.Core.Launcher.Utils.ROOT;

@@ -2994,5 +2994,20 @@
 "更新包已下载，重启启动器即可完成更新": "Update downloaded; restart the launcher to finish updating",
 "该版本已开启隔离：模组/日志/资源包位于 versions\\<版本> 目录下，与实例根目录分开": "Isolation is enabled for this version: mods, logs and resource packs live under versions\\<version>, separate from the instance root",
 "请先选择一个实例": "Please choose an instance first",
-"顶栏页签、AI 标签、首页卡片、设置页、提示框": "Title-bar tabs, AI tabs, home cards, settings pages, dialogs"
+"顶栏页签、AI 标签、首页卡片、设置页、提示框": "Title-bar tabs, AI tabs, home cards, settings pages, dialogs",
+ "按住区块拖动即可移动,完成编辑后自动保存": "Drag the block to move it; changes are saved automatically when you finish editing",
+ "全部折叠": "Collapse all",
+ "把所有区块收成标题栏,方便拖动排列(只在编辑时有效,不影响保存的布局)": "Collapse every block to its title bar for easier dragging (editing only; the saved layout is untouched)",
+ "按住区块拖动移动 · 拖右/下边角缩放": "Drag to move · drag the right or bottom edge to resize",
+ "重置失败": "Reset failed",
+ "本页已恢复默认布局": "This page was restored to its default layout",
+ "全部展开": "Expand all",
+ "按住区块拖动移动": "Drag the block to move it",
+ "折叠(仅编辑时)": "Collapse (editing only)",
+ "展开": "Expand",
+ "上一次布局": "Previous layout",
+ "重置本页布局": "Reset this page's layout",
+ "布局设置...": "Layout settings...",
+ "这个页面没有可拖动的区块": "This page has no draggable blocks",
+ "页签、密度、分栏比例可以在「设置 → 布局」里调整": "Tabs, density and split ratios can be adjusted in Settings → Layout"
 }

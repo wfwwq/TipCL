@@ -238,8 +238,11 @@ public static class LayoutShellHooks
         {
             return true;
         }
-        // 移植降级:Linux 设置页暂无「布局」内层视图(见 R32-LW.md §7),文案改为指向现存入口
-        LayoutFx.ShowToast(I18nCore.Tr("这个页面没有可拖动的区块"), I18nCore.Tr("页签、主题可以在「设置」里调整;区块布局的整机设置在后续包补"), ToastKind.Warning);
+        // R32-I18NFIX:本句此前是 Linux 独有的一版「页签、主题可以在「设置」里调整;区块布局的整机设置在后续包补」,
+        // 同一语义在 Windows(`LayoutShellHooks.cs:223`)与 mac(`LayoutShellHooks.cs:275`)各写了一版,三处都不在词表。
+        // 现在统一成一版 = Windows 原文,R32-LINMORE 落地真正的「设置 → 布局」内层视图后这条提示不再是降级文案,
+        // 也顺带去掉了「后续包补」这种把内部排期写进用户文案的口吻(见 R32-I18N §2.6-A / R32-I18N-ACCEPT)。
+        LayoutFx.ShowToast(I18nCore.Tr("这个页面没有可拖动的区块"), I18nCore.Tr("页签、密度、分栏比例可以在「设置 → 布局」里调整"), ToastKind.Warning);
         return false;
     }
 
