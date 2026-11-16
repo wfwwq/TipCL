@@ -2585,6 +2585,20 @@ Assert.NotNull(shell.GetPage("plugins") as IPluginHostPage);
 
 ## D-168 `Pages\Layout\` 家族(Windows 布局 v2)**不进 mac** —— 事实澄清 + 保持「按需补能力」+ 复活入口
 
+> **⚠ 本决策已被覆盖(2026-11-16,R32)。** 布局 v2 家族**已经移植进 mac 树**,不再是"不进 mac"。
+> 覆盖后的现状(代码尖 `26097e5`,本树实测):
+>
+> - 编辑器 / 引擎 / 区块宿主 / 全局右键钩子:`Pages/LayoutEditor.cs`、`Pages/LayoutEngine.cs`、
+>   `Pages/BlockHost.cs`、`Pages/LayoutShellHooks.cs`(右键「自定义布局...」);
+> - 自建区块:`Pages/WidgetRegistry.cs` + `BasicWidgets/DangerousWidgets/PlaytimeWidget/ShortcutWidget/WidgetUI/WidgetCommon`;
+> - 两栏分隔条与比例记忆:`Controls/PageLayoutHost.cs`(6 处可拖);
+> - 模型层:`Core/Launcher/Layout/`(`LayoutDocV2` / `LayoutJson` / `LayoutSchema` / `LayoutStoreV2` / `LayoutV1Bridge`);
+> - 用户文档:`docs/布局使用指南.md`(第 4 节要求的"降级写进 docs/布局使用指南.md(若存在)"——该文件现已存在)。
+>
+> **仍然没有**的:设置页整页「布局」视图(`SettingsLayoutPage`)、页签编辑(`ShellTabs`)、`SplitCatalog` 的
+> per-site 间距、AI 布局工具(`layout_get`/`layout_apply`)与「AI 备份」、布局 JSON 卡片。逐条清单见
+> `docs/布局使用指南.md` §10。下文第 1–4 节的"不进 src"结论**仅为历史记录**,执行以本块为准。
+
 **拍板来源**:用户经 Lead 转达(2026-11-14 14:5x CST):该家族**保持忽略、写清理由**,不要移动、不要删除、不要提交它。本记录落地该决定,并**改正口径里的两处事实错误**(见第 2 节)——记录如果照着错的写法写,以后每个接手人都会被它误导。
 
 ### 1 它到底是什么(实测,非转述)
@@ -2667,6 +2681,13 @@ Lead 要求「交出推送命令前先打本地备份」。已落盘 `_tmp\tasks
 - mac:`git status --short --ignored`、`git ls-files`、全仓 Layout 文件名扫描、`Controls\PageLayoutHost.cs` 等注释命中的独立复核;
 - 规模与后果的原始出处:会话记录 `_tmp\session-recon\cb015309.digest.md:13137/13146-13162`(05:03:10Z 的答复);
 - 完整三选一成本分析与三处不确定点见 `_tmp\tasks\mac-ship\U11-layout-family-advice.md`。
+
+### 9 覆盖记录(2026-11-16,R32)
+
+本决策被 R32「布局 v2 移植到 Linux / Mac」轮**明确推翻**:mac 侧由三个工作包落地并验收——编辑器/可视化层
+(`b22e87b`)、接线层 + 部件 + 分栏比例(`26097e5`)、真窗口编辑态驱动与 v2 真源判别(`26097e5`,与前者同一线性链尖)。
+证据:双配置测试 3824/0/0;真窗口右键→「自定义布局...」→四个标记→`hideFirst` / `resetPage` 真实落盘;
+`ui_layout_v2.json` 作为真源的判别对照(见 `docs/布局使用指南.md` §12)。原文保留作历史,现状以顶部更正块为准。
 
 ## D-169 M5 最终验收:口径、冻结条件与结果(build 0 错 / 双通道 3624 / 20 帧全绿)
 
