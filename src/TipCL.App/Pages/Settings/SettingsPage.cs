@@ -18,6 +18,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using TipCL.App.Common;
+using TipCL.App.Controls;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Shell;
 using TipCL.App.Ui;
@@ -369,9 +370,20 @@ public sealed partial class SettingsPage : PageBase
             _saveState.M(12, 10, 0, 0));
         nav.Margin = new Thickness(12, 16, 0, 12);
 
-        var root = UiClass.G(null, "168,*");
-        root.Add(nav, 0);
-        root.Add(_view, 0, 1);
+        // R32-LINSPLIT:左导航 168px(现状值)+ 18px 分隔条 + 视图。
+        // 分隔条占住视图本来就有的 18px 左留白(_view 左移 18px 回到原位)⇒ 首屏逐像素不变。
+        // **[Linux 与 Windows 的唯一差别】Windows 的 `_views[]` 顶层没有外边距(18px 在 SettingsPage
+        // 自己身上,故 Windows 能直接给 _view 加 -18);Linux 的 18px 在视图**内部**
+        // (LayoutEditor 的 `_list.Margin` = PadDefault 左 18,见 LayoutEditor.cs:216)。
+        // 所以这里改的是**同一件事的另一头**:把承载视图的 ContentControl 整体左移 18,
+        // 视图内部那 18px 原样不动 ⇒ 内容 x 坐标与改动前一致(168 + 18 = 186)。
+        // 不做成 Mac 那种 "gap=0 + 命中宽度" 的原因:gap=18 让分隔条自带 18px 命中带、不与内容重叠,
+        // 与 Windows 的机制一致(见 R32-LINSPLIT.md 的知情降级表 D-08)。
+        // 比例存 v2 splits["settings"]["nav"];双击分隔条复位。
+        var root = new PageLayoutHost("settings", "nav", new GridLength(168.0), new GridLength(1.0, GridUnitType.Star));
+        _view.Margin = new Thickness(-18.0, 0.0, 0.0, 0.0);
+        root.SetLeft(nav);
+        root.SetRight(_view);
         Body = root;
 
         WireAutoSave();
