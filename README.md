@@ -22,7 +22,7 @@
 <img src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat-square" alt="MIT" />
 <a href="https://github.com/wfwwq/TipCL/actions/workflows/ci-windows.yml"><img src="https://github.com/wfwwq/TipCL/actions/workflows/ci-windows.yml/badge.svg" alt="CI" /></a>
 
-[界面预览](#-界面预览) · [AI 助手](#-ai-助手) · [功能](#-功能) · [自定义布局](#-自定义布局) · [下载与构建](#-下载与构建) · [目录结构](#-目录结构) · [MCP Server](#-mcp-server) · [手机同步](#-手机同步) · [插件系统](#-插件系统) · [开发者选项](#-开发者选项) · [更新机制](#-更新机制) · [安全说明](#-安全说明) · [社区建议](#-社区建议) · [致谢](#-致谢) · [仓库结构](#仓库结构) · [许可证](#-许可证)
+[界面预览](#-界面预览) · [AI 助手](#-ai-助手) · [功能](#-功能) · [自定义布局](#-自定义布局) · [下载与构建](#-下载与构建) · [目录结构](#-目录结构) · [MCP Server](#-mcp-server) · [手机同步](#-手机同步) · [插件系统](#-插件系统) · [开发者选项](#️-开发者选项) · [更新机制](#-更新机制) · [安全说明](#️-安全说明) · [社区建议](#-社区建议) · [致谢](#-致谢) · [仓库结构](#仓库结构) · [许可证](#-许可证)
 
 </div>
 
