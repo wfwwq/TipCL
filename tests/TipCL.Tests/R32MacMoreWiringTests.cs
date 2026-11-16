@@ -245,6 +245,13 @@ public class R32MacMoreWiringTests
 				// 渲染队列里可能还排着别的用例的活儿,所以这里泵到出现为止,不用固定轮数)
 				C3bFiles.Pump(() => Descendants(page).OfType<TextBlock>().Any(t => (t.Text ?? "") == def.Title), 8000);
 				Assert.Contains(Descendants(page).OfType<TextBlock>(), t => (t.Text ?? "") == def.Title);
+				// 不只是"有个标题":内容工厂(WidgetUI.Note)必须真造出便签卡片 —— 便签正文的默认引导语
+				// 是 LayoutWidgetAdd 给 note 的 settings 为空时的固定文案(WidgetCommon/ BasicWidgets.Note)。
+				Assert.Contains(Descendants(page).OfType<TextBlock>(),
+					t => (t.Text ?? "").Contains("settings.text", StringComparison.Ordinal));
+				// 便签卡片是 Ui.Card(Border) 包着 标题 + 正文:标题的 Border 祖先存在(证明确实渲染成卡片)
+				TextBlock title = Descendants(page).OfType<TextBlock>().First(t => (t.Text ?? "") == def.Title);
+				Assert.Contains(title.GetVisualAncestors(), a => a is Border);
 			}
 			finally
 			{
