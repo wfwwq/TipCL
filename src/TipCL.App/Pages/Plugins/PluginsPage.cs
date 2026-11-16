@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using TipCL.Core.Launcher.Layout;
 using TipCL.Services;
 using TipCL.Themes;
 
@@ -64,6 +65,29 @@ public sealed partial class PluginsPage : PageBase, IPluginHostPage
 
 	private readonly Dictionary<string, string> _taskPlugin = new Dictionary<string, string>();
 
+	/// <summary>
+	/// [layout-fix] 规格 §3-问题4:插件页整体是区块宿主 <c>BlockHost("plugins")</c>,两个区块 =「页签」「内容」。
+	/// 声明在所有视图字段之后的使用点(构造函数里)再赋值 —— 类型在这里只为持有引用。
+	/// </summary>
+	private readonly BlockHost _host;
+
+	/// <summary>
+	/// [layout-fix] 规格 §4-能力2:插件页的出厂默认布局 —— 单列 stack、间距与页边距都是 0
+	/// (head 与 _body 自带边距,区块之间不留空隙)。Windows <c>PluginsPage.cs:50-66</c> 逐字同构。
+	/// </summary>
+	private static PageLayoutV2 PluginsDefaultPage()
+	{
+		PageLayoutV2 page = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeStack,
+			Gap = 0.0,
+			Pad = new double[4] { 0.0, 0.0, 0.0, 0.0 }
+		};
+		page.Blocks.Add(new BlockLayout { Id = "tabs", Span = 1, Z = 0 });
+		page.Blocks.Add(new BlockLayout { Id = "body", Span = 1, Z = 1 });
+		return page;
+	}
+
 	public override string Title => I18n.L("插件");
 
 	public string TabName => _tab.ToString();
@@ -108,10 +132,31 @@ public sealed partial class PluginsPage : PageBase, IPluginHostPage
 				PageBase.Run(() => InstallLocalAsync(path, dev: false, null), I18n.L("安装失败"));
 			}
 		}), more).VCenter(), 0, 1);
-		Grid root = Ui.G("Auto,*");
-		root.Add(head, 0);
-		root.Add(_body, 1);
-		Content = root;
+		// [layout-fix] V-1:标记「内容」块 = 页面主体块 —— 它在非编辑态吃掉内容区剩下的高度。
+		// 改版前这一页的根是 Grid("Auto,*"):页签在 Auto 行、_body 在 * 行,空状态占位(Ui.Empty,
+		// 自带 VerticalAlignment=Center)因此是页面中部居中的。改成区块宿主之后所有块都按各自内容高度
+		// 排布,那 422px 剩余高度没了 ⇒ 空状态整块上移 151 行贴到页签下面(R31 复验单 V-1)。
+		// 只有这一页挂这个标记,别的页面(启动 / 下载 / 任务......)渲染一个像素都不变。
+		LayoutFill.SetFillsBody(_body, true);
+		// [layout-fix] 规格 §3-问题4:插件页整体改成区块宿主 BlockHost("plugins"),两个区块 =「页签」「内容」。
+		// 边距 / 间距都传 0:head 与 _body 自己管各自的边距,区块之间不额外留空隙
+		// (原来就是 Grid("Auto,*") 两行贴合,这样默认(非编辑态)渲染与旧版一致)。
+		_host = new BlockHost("plugins", new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "tabs",
+				Title = I18n.L("页签"),
+				Content = head
+			},
+			new BlockSpec
+			{
+				Id = "body",
+				Title = I18n.L("内容"),
+				Content = _body
+			}
+		}, new Avalonia.Thickness(0.0), PluginsDefaultPage());
+		base.Content = _host;
 		_installedHost = new UniformGrid
 		{
 			Columns = 3,
