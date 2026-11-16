@@ -40,7 +40,7 @@
 
 - 本机是 **Windows**，dotnet SDK 8.0.427 / 10.0.403，**没有 Mac**。mac 产物跑不了，但 Avalonia 能在 Windows 上编译运行，所以：
   - `dotnet build` / `dotnet test` 必须真跑；
-  - `TipCL --smoke [--page <id>] [--theme light|dark] [--out x.png]`：Avalonia.Headless 离屏渲染截图后退出（退出码 0=成功），用它在 Windows 上验收界面；
+  - `TipCL --smoke [--page <id>] [--theme light|dark] [--out x.png] [--ai-seed]`:Avalonia.Headless 离屏渲染截图后退出(退出码 0=成功 / 2=参数错误;未知参数一律 exit 2 —— `--shot`/`--size`/`--width`/`--height` 在 mac 通道**不存在**,2026-11-16 实测),用它在 Windows 上验收界面;
   - mac 专属逻辑（路径、平台键、下载包名、Keychain 命令行拼装等）写成**可注入 OS/ARCH 的纯函数**并配单测；
   - osx 产物只能做结构校验：Mach-O 魔数、`.app` 目录结构、`Info.plist`、tar 内权限位。
 - 「在 Mac 上真机启动 Minecraft」本机**无法验证**，一律标「未验证」，并把待验步骤写进 `docs/MAC-VERIFY.md`。
