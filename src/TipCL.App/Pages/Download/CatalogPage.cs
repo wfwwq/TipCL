@@ -24,6 +24,7 @@ using TipCL.App.Shell;
 using TipCL.App.Ui;
 using TipCL.Core;
 using TipCL.Core.Launcher;
+using TipCL.Core.Launcher.Layout;
 using UiClass = TipCL.App.Ui.Ui;
 
 namespace TipCL.App.Pages.Download;
@@ -170,12 +171,17 @@ public sealed class CatalogPage : PageBase
             kind.InstalledMethod.Length > 0 ? _modeInstalled : null, _modeFav);
         var head = UiClass.Section(kind.Title, SubTitle(), modes);
 
-        var root = UiClass.G("Auto,Auto,*");
-        root.Add(head, 0, 0);
-        root.Add(card.Mk(0, 14, 0, 14), 1, 0);
-        root.Add(listHost, 2, 0);
-        root.Margin = new Thickness(26, 20, 26, 20);
-        Content = root;
+        // [layout-fix] 规格 §3-问题2:原来是一个写死的三行 Grid(Auto/Auto/*),现在换成区块宿主,
+        // 分成「标题」「筛选」「结果列表」三个区块。页面 ID 沿用原有的 catalog:<类型>(如 catalog:mod)。
+        // 边距沿用原来的 26,20,26,20;区间距取 14 = 原来 card 自己的上下 14 外边距(去掉它,改由宿主统一给),
+        // 所以默认(非编辑态)渲染与旧版逐步等价。
+        var host = new BlockHost(LayoutPageId, new List<BlockSpec>
+        {
+            new BlockSpec { Id = "header", Title = I18nCore.Tr("标题"), Content = head },
+            new BlockSpec { Id = "filters", Title = I18nCore.Tr("筛选"), Content = card },
+            new BlockSpec { Id = "results", Title = I18nCore.Tr("结果列表"), Content = listHost },
+        }, null, CatalogDefaultPage());
+        Content = host;
 
         void Labeled(string label, Control ctl)
         {
@@ -184,6 +190,32 @@ public sealed class CatalogPage : PageBase
             wrap.Mk(0, 0, 14, 8);
             filters.Children.Add(wrap);
         }
+    }
+
+    /// <summary>
+    /// 布局寻址用的稳定 pageId(设计 §5.2「CatalogPage 给 pageId」):下载页 6 个分段内嵌的都是本页,
+    /// 各自带 kind(<c>catalog:mod</c> / <c>catalog:modpack</c> / ...)。本页是单列 + 26px 外边距,没有左右分栏;
+    /// 这个 id 只供把本页接进 v2 pages(如 grid 模式的 cols)时寻址用。
+    /// 注意 PageBase 的页面 id 仍是连字符版(catalog-mod),只有布局文档用冒号版。
+    /// </summary>
+    public string LayoutPageId => "catalog:" + _kind.Key;
+
+    /// <summary>
+    /// [layout-fix] 规格 §4-能力2:各 catalog 分段的出厂默认布局 —— 单列 stack(三块纵向流),
+    /// 区间距 14(等于原来 card 的上下外边距)—— 于是"没写过布局文档"时渲染与改动前一致。
+    /// </summary>
+    private static PageLayoutV2 CatalogDefaultPage()
+    {
+        var page = new PageLayoutV2
+        {
+            Mode = LayoutSchema.ModeStack,
+            Gap = 14.0,
+            Pad = new double[] { 26.0, 20.0, 26.0, 20.0 },
+        };
+        page.Blocks.Add(new BlockLayout { Id = "header", Span = 1, Z = 0 });
+        page.Blocks.Add(new BlockLayout { Id = "filters", Span = 1, Z = 1 });
+        page.Blocks.Add(new BlockLayout { Id = "results", Span = 1, Z = 2 });
+        return page;
     }
 
     private static ToggleButton ModeTab(string text, bool on, Action click)

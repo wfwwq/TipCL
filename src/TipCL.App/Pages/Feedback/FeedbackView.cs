@@ -52,10 +52,12 @@ internal sealed class FeedbackView : SettingsSubView
             _sys,
             _attachList,
             UiClass.H(8, submit, attach, sysInfo));
-        _stack.Children.Add(UiClass.Card(form, 14));
+        // [R32-LINMORE] 四张卡不再挂进 _stack(下面 UseBlockHost 会把它们作为 content 块的内容)——
+        // 否则同一控件两个父级(先用 V(...) 装进容器、容器再挂树,Avalonia 直接抛)。
+        var formCard = UiClass.Card(form, 14);
 
         // ── 我提交过的 ──
-        _stack.Children.Add(UiClass.Card(UiClass.V(10, UiClass.Section("我提交过的"), _history), 14));
+        var historyCard = UiClass.Card(UiClass.V(10, UiClass.Section("我提交过的"), _history), 14);
 
         // ── 常见问题 ──
         _search.TextChanged += (_, _) => Run(() => LoadArticlesAsync(_search.Text), "读取失败");
@@ -64,13 +66,22 @@ internal sealed class FeedbackView : SettingsSubView
         var runWizard = U.Btn("重新运行向导", BtnKind.Chip, (_, _) => Run(FirstRunWizard.ShowAsync), "Rocket");
         runWizard.M(8, 0, 0, 0).VCenter();
         searchRow.Add(runWizard, 0, 1);
-        _stack.Children.Add(UiClass.Card(UiClass.V(10,
+        var faqCard = UiClass.Card(UiClass.V(10,
             UiClass.Section("常见问题", "启动、Java、模组、账号、联机的快速说明(点标题展开)"),
-            searchRow, _articles), 14));
-        _stack.Children.Add(UiClass.Card(UiClass.V(10,
+            searchRow, _articles), 14);
+        var aboutCard = UiClass.Card(UiClass.V(10,
             UiClass.Section("关于", "TipCL · AI 原生 Minecraft 启动器"),
             UiClass.Small($"启动器版本 {TipCL.Core.Launcher.AppInfo.APP_VERSION}"),
-            UiClass.Small($"数据目录 {Utils.ROOT}").Wrap()), 14));
+            UiClass.Small($"数据目录 {Utils.ROOT}").Wrap()), 14);
+
+        // [R32-LINMORE] 区块宿主(§2.1-7):header(标题行)/ content(四张卡纵向流,卡片间 10 = 原 _stack 间距)。
+        // 块 id / 顺序对齐 Windows FeedbackPage 的 BlockHost("feedback", ...)。两处偏离,登记在报告里:
+        //   1) Windows 的 content 块内部还有一层 PageLayoutHost("feedback","side") 左右分栏(右栏 346 帮助文章),
+        //      Linux 这页历史上就是单列,本树也没有 PageLayoutHost ⇒ 单列;
+        //   2) 「关于」卡留在 content 里,不另建 settings:about 宿主(§2.1-10 的方案 B)——
+        //      这样设置内层 #6 的首屏顺序与改动前完全一致(方案 A 会把标题行挤到「关于」下面)。
+        UseBlockHost("feedback", "header", "反馈与帮助",
+            ("content", "内容", UiClass.V(10, formCard, historyCard, faqCard, aboutCard)));
     }
 
     protected override async Task LoadCoreAsync()

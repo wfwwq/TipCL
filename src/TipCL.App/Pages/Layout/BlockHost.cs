@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using UiFacade = TipCL.App.Ui.Ui;
 using TipCL.Core.Launcher;
 using TipCL.Core.Launcher.Layout;
@@ -53,8 +54,16 @@ public sealed class BlockHost : UserControl
     // 布局文档变更的稳定委托引用(LayoutStoreV2.LayoutChanged 是静态事件,同样必须对称 -=)
     private readonly Action _storeRefresh;
 
+    // 构造时捕获的 UI 调度器(R32-LINMORE)。为什么不在回调里现读 Dispatcher.UIThread:
+    // 无头测试宿主每次派发都会 ResetForUnitTests(),存在"全局 UIThread 被另一个线程重建"的窗口;
+    // 现读会让 CheckAccess 在错误线程上返回 true、渲染被拉到没有平台的线程上(实测:全量套件
+    // 偶发 Unable to locate IPlatformRenderInterface,集中在 LayoutCard 建图标处)。
+    // 捕获实例后,判断与回投都锚在"宿主构造时那个调度器"上,与全局静态的后续重建无关。
+    private readonly Dispatcher _ui;
+
     public BlockHost(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null, PageLayoutV2? defaultPage = null)
     {
+        _ui = Dispatcher.UIThread;
         _editor = new LayoutEditor(pageId, specs, contentMargin, defaultPage);
         _themeRefresh = _editor.RefreshThemeVisuals;
         _storeRefresh = OnLayoutStoreChanged;
@@ -104,6 +113,13 @@ public sealed class BlockHost : UserControl
     // 自己刚提交过的那一次跳过(编辑器已经重排过了,避免同一次改动渲染两遍)。
     private void OnLayoutStoreChanged()
     {
+        // 没挂在任何可视根上的宿主不必重排:它下次进可视树时 Loaded 会补读一次
+        // (见构造函数里 Loaded 的 ReloadFromStore)。这条同时挡掉"页面已构造但从未上屏"的
+        // 测试场景下、由别的用例触发的无意义渲染。
+        if (this.GetVisualRoot() == null)
+        {
+            return;
+        }
         LayoutEditor editor = _editor;
         if (editor.IsSaving)
         {
@@ -111,13 +127,13 @@ public sealed class BlockHost : UserControl
         }
         try
         {
-            if (Dispatcher.UIThread.CheckAccess())
+            if (_ui.CheckAccess())
             {
                 editor.ReloadFromStore();
             }
             else
             {
-                Dispatcher.UIThread.Post(editor.ReloadFromStore);
+                _ui.Post(editor.ReloadFromStore);
             }
         }
         catch

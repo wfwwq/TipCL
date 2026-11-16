@@ -246,10 +246,14 @@ public static class LayoutShellHooks
     /// <summary>打开「布局设置」。</summary>
     public static void OpenLayoutSettings(Shell.MainWindow win)
     {
-        // Windows: win.Navigate("settings") + SettingsPage.OpenLayoutView()(切到第 8 个内层「布局」视图)。
-        // 移植降级:Linux SettingsPage 目前只有 7 个内层视图、没有 OpenLayoutView/BuildLayoutView
-        // (grep 全树零命中),所以这里只保证"切到设置页";整页布局设置在后续包补(见 R32-LW.md §7)。
+        // 对齐 Windows LayoutShellHooks.OpenLayoutSettings(win.Navigate("settings") + SettingsPage.OpenLayoutView())。
+        // [R32-LINMORE] 本树现在有真正的第 8 个内层视图「布局」:设置页可能已经在前台(Navigate 会早退),
+        // 所以一律从 PageHost 的当前内容取页面实例,再调实例方法(与 Windows 的 win.GetPage("settings") 同义)。
         win.Navigate("settings");
+        if (win.PageHostControl?.Content is Pages.Settings.SettingsPage page)
+        {
+            page.OpenLayoutView();
+        }
     }
 
     // ───────────────────────────── 可视树小工具 ─────────────────────────────

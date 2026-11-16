@@ -20,6 +20,7 @@ using Avalonia.Threading;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher;
+using TipCL.Core.Launcher.Layout;
 using TipCL.App.Common;
 using TipCL.App.Common.Plugins;
 using TipCL.Core;
@@ -103,10 +104,17 @@ public sealed partial class PluginsPage : PageBase
                 string? path = await Dlg.PickFile("选择插件包", "*.zip");
                 if (path != null) await InstallLocalAsync(path, dev: false);
             }), more).VCenter(), 0, 1);
-        var root = U.G("Auto,*");
-        root.Add(head, 0);
-        root.Add(_body, 1);
-        Content = root;
+        // [R32-LINMORE] 规格 §3-问题3:插件页整体改成区块宿主 BlockHost("plugins"),两个区块 =「页签」「内容」。
+        // 边距 / 间距都传 0:head 与 _body 自己管各自的边距,区块之间不额外留空隙
+        // (原来就是 Grid("Auto,*") 两行贴合,这样默认(非编辑态)渲染与旧版一致)。
+        // V-1(Windows 复验单):「内容」块在非编辑态吃掉内容区剩下的高度 —— 原来 _body 在 Grid 的 * 行,
+        // 空状态占位(U.Empty 自带 VerticalAlignment=Center)是页面中部居中的;挂上这个标记后仍然居中。
+        LayoutFill.SetFillsBody(_body, true);
+        Content = new BlockHost("plugins", new List<BlockSpec>
+        {
+            new BlockSpec { Id = "tabs", Title = "页签", Content = head },
+            new BlockSpec { Id = "body", Title = "内容", Content = _body },
+        }, new Thickness(0), PluginsDefaultPage());
         BuildMarketChrome();
         BuildDev();
         HookDrop();
@@ -115,6 +123,21 @@ public sealed partial class PluginsPage : PageBase
     }
 
     /// <summary>给外部用：直接打开某个标签（比如设置页里的「模型供应商」入口）。</summary>
+    // [R32-LINMORE] 规格 §4-能力2:插件页的出厂默认布局 —— 单列 stack、间距与页边距都是 0
+    // (head 与 _body 自带边距,区块之间不留空隙)。布局文件里还没有 plugins 记录时用它。
+    private static PageLayoutV2 PluginsDefaultPage()
+    {
+        var page = new PageLayoutV2
+        {
+            Mode = LayoutSchema.ModeStack,
+            Gap = 0.0,
+            Pad = new double[] { 0.0, 0.0, 0.0, 0.0 },
+        };
+        page.Blocks.Add(new BlockLayout { Id = "tabs", Span = 1, Z = 0 });
+        page.Blocks.Add(new BlockLayout { Id = "body", Span = 1, Z = 1 });
+        return page;
+    }
+
     public void ShowTab(string name)
     {
         SelectTab(name switch

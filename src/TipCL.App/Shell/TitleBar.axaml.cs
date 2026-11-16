@@ -33,12 +33,10 @@ public partial class TitleBar : UserControl
     public TitleBar()
     {
         InitializeComponent();
-        foreach (var (id, title) in NavRegistry.TopTabs)
-        {
-            var tab = new Button { Classes = { "topTab" }, Content = title, Tag = id };
-            tab.Click += (_, _) => TabClicked?.Invoke(this, id);
-            TabPanel.Children.Add(tab);
-        }
+        // R32-LINMORE:内置页签的**顺序 / 显隐 / 文案**改由 LayoutStoreV2 的 shell.tabs 决定
+        //(纯逻辑在 Pages/Layout/ShellTabs,逐项等价 Windows ShellTabs/BuiltinKeys);
+        // 默认文档下仍是 启动/实例库/下载/插件/设置 五项、顺序不变 ⇒ 默认渲染零变化。
+        ApplyShellLayout(TipCL.App.Pages.Layout.ShellTabs.CurrentShell());
 
         // 账号钮默认态:未登录 = 首字母圆 + 「未登录」(对齐 Windows `MainWindow` 构造函数)
         AccName.Text = "未登录";
@@ -53,6 +51,40 @@ public partial class TitleBar : UserControl
         MinBtn.Click += (_, _) => (TopLevel.GetTopLevel(this) as Window)!.WindowState = WindowState.Minimized;
         MaxBtn.Click += (_, _) => ToggleMax();
         CloseBtn.Click += (_, _) => (TopLevel.GetTopLevel(this) as Window)!.Close();
+    }
+
+    // ───── 布局 v2:内置页签与标题栏元素显隐(R32-LINMORE) ─────
+
+    private readonly System.Collections.Generic.List<Button> _builtinTabs = new();
+
+    /// <summary>
+    /// 按布局文档的 shell 段重建内置页签(顺序 / 显隐 / 文案),并同步标题栏三个钮的显隐。
+    /// 插件动态页签不参与排序,始终接在内置页签之后(SetPluginTabs 维护)。
+    /// 「桥接」药丸钮在 Linux 标题栏没有对应控件 ⇒ 该字段只写文档,这里不处理(见 R32-LINMORE 降级表)。
+    /// </summary>
+    public void ApplyShellLayout(TipCL.Core.Launcher.Layout.ShellLayout? shell)
+    {
+        foreach (var b in _builtinTabs) TabPanel.Children.Remove(b);
+        _builtinTabs.Clear();
+        // 先把插件页签摘下来,重建完内置页签再按原顺序接回去(否则它们会夹在中间)
+        foreach (var b in _pluginTabs) TabPanel.Children.Remove(b);
+        foreach (string key in TipCL.App.Pages.Layout.ShellTabs.OrderedKeys(shell))
+        {
+            var tab = new Button
+            {
+                Classes = { "topTab" },
+                Content = TipCL.App.Pages.Layout.ShellTabs.Label(key),
+                Tag = key,
+            };
+            Avalonia.Automation.AutomationProperties.SetName(tab, TipCL.App.Pages.Layout.ShellTabs.Label(key));
+            tab.Click += (_, _) => TabClicked?.Invoke(this, key);
+            TabPanel.Children.Add(tab);
+            _builtinTabs.Add(tab);
+        }
+        foreach (var b in _pluginTabs) TabPanel.Children.Add(b);
+        AiBtn.IsVisible = TipCL.App.Pages.Layout.ShellTabs.ShowAi(shell);
+        ThemeBtn.IsVisible = TipCL.App.Pages.Layout.ShellTabs.ShowTheme(shell);
+        AccBtn.IsVisible = TipCL.App.Pages.Layout.ShellTabs.ShowAccount(shell);
     }
 
     /// <summary>浅色时显示月亮（点了变深），深色时显示太阳。</summary>

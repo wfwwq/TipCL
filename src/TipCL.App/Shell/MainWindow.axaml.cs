@@ -60,8 +60,20 @@ public partial class MainWindow : Window
         // 全局右键「自定义布局...」+ 统一滚轮路由。BlockHost 自己不再挂 ContextMenu(E-01),
         // 页面内容区任意处右键都由这一处弹菜单 —— 所以窗口一建好就挂。
         TipCL.App.Pages.Layout.LayoutShellHooks.Attach(this);
-        // 窗口关闭时摘钩:静态钩子攥着窗口引用,不摘会拦着一整棵可视树不放(R32-D11 起测试也复用窗口)
+        // R32-LINMORE:窗口关闭时摘钩:静态钩子攥着窗口引用,不摘会拦着一整棵可视树不放
+        //(R32-D11 起测试也复用窗口)。
+        // 注意:这里**不**订阅 LayoutStoreV2.LayoutChanged —— 那是静态事件,测试里大量窗口不 Close,
+        // 订阅会把每个窗口永久钉在事件上(实测:全量套件里 LayoutChanged 从任意线程触发时会把
+        // LayoutCard 的渲染拉到无平台线程,出现 IPlatformRenderInterface 缺失的假红)。
+        // 标题栏重排改由设置页「布局」视图/导航时显式调用 ApplyShellLayout()。
         Closed += (_, _) => TipCL.App.Pages.Layout.LayoutShellHooks.Detach();
+    }
+
+    /// <summary>按布局文档的 shell 段重排标题栏(页签顺序/显隐 + 标题栏钮显隐)。</summary>
+    public void ApplyShellLayout()
+    {
+        TitleBarHost.ApplyShellLayout(TipCL.App.Pages.Layout.ShellTabs.CurrentShell());
+        TitleBarHost.SetActiveTab(_currentId);
     }
 
     // ───────── 插件外壳接线(M4-H P6/P8) ─────────

@@ -19,6 +19,7 @@ using Avalonia.Threading;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher;
+using TipCL.Core.Launcher.Layout;
 using TipCL.App.Common;
 using TipCL.App.Common.Plugins;
 using TipCL.Core;
@@ -41,16 +42,43 @@ public sealed partial class PluginsPage
             if (next != null) await LoadMarketAsync(refresh: true);
         }, "✎");
         var info = U.Small("");
+        // [R32-LINMORE] 基线遗留:字段 _marketInfo 之前只在 LoadMarketAsync 里被读、从未赋值,
+        // 首次读市场成功时会在 Dispatcher 回调里空引用(市场页永远渲染不出卡片)。这里补上赋值。
+        _marketInfo = info;
         _tagBar = new WrapPanel();
         var top = U.G(null, "Auto,*,Auto");
         top.Add(U.H(6, U.Txt(SearchGlyph, 13, fg: "B.InkMuted").VCenter(), _search).VCenter(), 0);
         top.Add(info.VCenter().Mk(12, 0, 0, 0), 0, 1);
         top.Add(U.H(6, sources, refresh).VCenter(), 0, 2);
-        _marketView = new ScrollViewer
+        // [R32-LINMORE] 规格 §3-问题3:插件市场从「一个 ScrollViewer 套 StackPanel」改成区块宿主
+        // BlockHost("plugins:market"),三个区块 =「搜索栏」「标签」「插件列表」。
+        // 间距 10 / 边距 15,4,15,16 = 原来 U.V(10,...) + Mk(15,4,15,16) 的逐值等价;
+        // 注意:这里**不能**照抄 Windows 的 PadDefaultCopy(18,14,18,16) —— Windows 原来就是
+        // PageBase.ScrollBody(18,14,18,16),Linux 原来是自己给的 15,4,15,16。默认(非编辑态)渲染与 Linux 旧版一致。
+        _marketView = new BlockHost("plugins:market", new List<BlockSpec>
         {
-            Content = U.V(10, top, _tagBar, _marketHost).Mk(15, 4, 15, 16),
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            new BlockSpec { Id = "toolbar", Title = "搜索栏", Content = top },
+            new BlockSpec { Id = "tags", Title = "标签", Content = _tagBar },
+            new BlockSpec { Id = "list", Title = "插件列表", Content = _marketHost },
+        }, null, MarketDefaultPage());
+    }
+
+    /// <summary>
+    /// [R32-LINMORE] 规格 §4-能力2:插件市场的出厂默认布局 —— 单列 stack,间距 10 / 边距 15,4,15,16
+    /// (Linux 旧版页面主体的那一套值)。布局文件里还没有 plugins:market 记录时用它。
+    /// </summary>
+    private static PageLayoutV2 MarketDefaultPage()
+    {
+        var page = new PageLayoutV2
+        {
+            Mode = LayoutSchema.ModeStack,
+            Gap = LayoutSchema.GapDefault,
+            Pad = new double[] { 15.0, 4.0, 15.0, 16.0 },
         };
+        page.Blocks.Add(new BlockLayout { Id = "toolbar", Span = 1, Z = 0 });
+        page.Blocks.Add(new BlockLayout { Id = "tags", Span = 1, Z = 1 });
+        page.Blocks.Add(new BlockLayout { Id = "list", Span = 1, Z = 2 });
+        return page;
     }
 
     private async Task LoadMarketAsync(bool refresh)
