@@ -54,6 +54,23 @@ public sealed class SmoothScroll : ScrollViewer
     }
 
     /// <summary>
+    /// [layout-fix] R32-MWG 实测:派生控件在 Avalonia 11 里默认按**自己的类型**找控件主题;WPF 靠
+    /// <c>DefaultStyleKey</c> 的元数据继承天然拿到基类样式,所以 Windows 的 SmoothScroll 能滚,而这个
+    /// 移植版少了这一句就找不到 <c>ScrollViewer</c> 的 <c>ControlTheme</c> —— 模板退化成只有一个
+    /// <c>ContentPresenter</c> 的 <c>FuncControlTemplate</c>(没有 <c>ScrollContentPresenter</c>),
+    /// <c>Extent</c>/<c>Viewport</c>/<c>ScrollBarMaximum</c> 恒 (0,0):页面主体根本滚不动,外层路由的
+    /// <c>LayoutShellHooks.CanScroll</c> 恒 false、<see cref="WheelBy"/> 的目标被 ScrollableHeight=0
+    /// 夹成 0(滚轮没有任何反应)。把主题查找键改回基类即恢复。
+    /// 无头实测(同一次运行里的三条对照,资源与模板名称取自失败断言原文):
+    ///   <c>TryFindResource(typeof(ScrollViewer))</c> = true(ControlTheme 存在),
+    ///   <c>TryFindResource(typeof(SmoothScroll))</c> = false;
+    ///   <c>new ScrollViewer</c> → tpl=ControlTemplate     Extent=(200,400) Viewport=(200,100) max=(0,300);
+    ///   <c>new SmoothScroll</c> → tpl=FuncControlTemplate Extent=(0,0)     Viewport=(0,0)     max=(0,0);
+    ///   本类(加了这一句)   → tpl=ControlTemplate        Extent=(200,400) Viewport=(200,100) max=(0,300)。
+    /// </summary>
+    protected override Type StyleKeyOverride => typeof(ScrollViewer);
+
+    /// <summary>
     /// 纵向偏移。<c>new</c> 是必须的:Avalonia 的 <c>ScrollViewer</c> 自带一个 <c>Vector</c> 类型的
     /// <c>Offset</c>,而 WPF 版的 <c>SmoothScroll.Offset</c> 是 <c>double</c> —— 保持 WPF 的公开类型,
     /// 于是显式隐藏基类成员(类型不同,不能 override)。
@@ -131,6 +148,33 @@ public sealed class SmoothScroll : ScrollViewer
         double to = Clamp.Of(((_target < 0.0) ? from : _target) - delta * 0.95, 0.0, ScrollableHeight);
         _target = to;
         AnimateTo(from, to);
+    }
+
+    /// <summary>
+    /// [layout-fix] R32-MWG 规格 §3-问题3:把平滑滚动抽成公开方法,供外层容器被转交滚轮时走同一套动画
+    /// (LayoutShellHooks 判定"最内层滚不动 → 转交外层第一个还能滚的"之后,直接调这里)。
+    ///
+    /// 单位与 <see cref="OnPointerWheelChanged"/> 一致:<paramref name="notches"/> 是 Avalonia 的格数
+    /// (<c>PointerWheelEventArgs.Delta.Y</c>,±1.0/格),内部换算成 WPF 量纲(×120)后乘 0.95。
+    /// Windows 版签名是 <c>WheelBy(int delta)</c>(±120/格);mac 的调用方手里只有格数,
+    /// 所以入口收格数,换算在内部做 —— 与 OnPointerWheelChanged 同一个换算,避免两处单位漂移。
+    /// 没有可滚高度 / 平滑关闭时按 Windows 的 0.4 系数直接落一次(不做动画)。
+    /// </summary>
+    public void WheelBy(double notches)
+    {
+        double delta = notches * 120.0;
+        if (!Motion.Enabled || ScrollableHeight <= 0.0)
+        {
+            // 自己没有可滚高度时也给出一点反馈,但不做动画(外层要的就是"照做一次")
+            double target = Clamp.Of(base.Offset.Y - delta * 0.4, 0.0, ScrollableHeight);
+            SetCurrentValue(OffsetProperty, target);
+            return;
+        }
+
+        double from = base.Offset.Y;
+        double toValue = Clamp.Of(((_target < 0.0) ? from : _target) - delta * 0.95, 0.0, ScrollableHeight);
+        _target = toValue;
+        AnimateTo(from, toValue);
     }
 
     private async void AnimateTo(double from, double to)
