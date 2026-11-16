@@ -1096,9 +1096,12 @@ public sealed class LayoutEditor
 			LayoutV2 doc = LayoutStoreV2.Load();
 			LayoutEngine.ApplyPage(doc, _pageId, _state.ToPage(), _variant);
 			LayoutStoreV2.Save(doc);
-			// [Avalonia/移植差异] Windows 这里还调 `PageLayoutStore.Reload()`(清 v1 读取缓存)。
-			// Linux 的 PageLayoutStore 没有 Reload()(只有 RootProvider/DirOverride),缓存刷新由
-			// LayoutStoreV2.Save → V1Bridge.RefreshV1Cache() 承担 ⇒ 本行删除,语义等价(见报告差异表 M-04)。
+			// R32-LIN-IO:恢复 Windows :1038 的这一行(PARITY D-02 / D-21-1)。
+			// 旧注释断言「Linux 的 PageLayoutStore 没有 Reload()」已被证伪 —— 它就在
+			// Core/Layout/PageLayoutStore.cs:100。Save 只把 v2 单向写通 v1 **文件**,不动 v1 的
+			// 进程内快照(V1Bridge.RefreshV1Cache() 只在明确时点被调用),所以仍走 v1 读取的调用方
+			// 会拿到过期缓存;这里显式清一次,与 Windows 语义一致。
+			PageLayoutStore.Reload();
 		}
 		finally
 		{
