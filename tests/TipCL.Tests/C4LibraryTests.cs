@@ -12,6 +12,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
+using TipCL.Core.Launcher.Layout;
 using TipCL.Models;
 using TipCL.Pages;
 using TipCL.Services;
@@ -155,8 +156,9 @@ public class C4LibraryTests
             Assert.True(C4Files.HasButton(page, I18n.L("导入官方启动器")));
             Assert.True(C4Files.HasButton(page, I18n.L("实例详情")));
             Assert.True(C4Files.HasButton(page, I18n.L("刷新")));
-            // 【Windows 源】两个大标题都是 ExtraBold
-            TextBlock h = C4Files.TextsWith(page, I18n.L("文件夹列表")).First();
+            // 【Windows 源】两个大标题都是 ExtraBold。
+            // 区块宿主还会给区块加一条 12.5 号同名标题(「文件夹列表」),所以按大字号取左卡那个。
+            TextBlock h = C4Files.TextsWith(page, I18n.L("文件夹列表")).First(t => t.FontSize >= 16.0);
             Assert.Equal(FontWeight.ExtraBold, h.FontWeight);
             Assert.False(toasts.Has(I18n.L("加载失败")), "首屏加载不该失败：" + string.Join("|", toasts.Items.Select(t => t.Title + t.Body)));
         });
@@ -661,33 +663,50 @@ public class C4LibraryTests
         });
     }
 
-    // ================================================================ 布局自定义(WP-U3)
+    // ================================================================ 布局自定义(BlockHost,Windows [layout-fix] §3-问题6)
 
-    /// <summary>【Windows 源】<c>LibraryPage.cs:203-224</c>:布局文档里 <c>list</c> 恒可见,<c>folders</c> 缺失时按可见补上。</summary>
+    /// <summary>
+    /// 【Windows 源】<c>LibraryPage.cs:123-172</c>:实例库是 <c>BlockHost("library:main")</c> 两区块宿主;
+    /// 旧 v1 文档里的 <c>"library"</c> 页不再被读取(Windows `:321` 注释原文:「旧 v1 条目 "library" 不再被读取」)。
+    /// </summary>
     [Fact]
-    public void Library_layout_doc_forces_the_version_list_visible()
+    public void Library_layout_host_is_library_main_and_ignores_legacy_v1_folder_state()
     {
         AvaloniaSession.Run(() =>
         {
             using var scope = C4Scope.Capture();
             C4Files.LayoutDir();
+            // v1 里写着"文件夹栏隐藏 + 版本列表隐藏",旧实现会照它收起左栏
             PageLayoutStore.Save("library", new PageLayoutDoc
             {
                 Blocks = new List<BlockState>
                 {
+                    new BlockState { Id = "folders", Hidden = true },
                     new BlockState { Id = "list", Hidden = true },
                 },
             });
-            Assert.True(LibraryPage.FoldersVisible());
-            PageLayoutDoc? doc = PageLayoutStore.Load("library");
-            Assert.NotNull(doc);
-            Assert.False(doc!.Blocks!.First(b => b.Id == "list").Hidden);
+            using var toasts = new C3cToasts();
+            using var api = new C3cFakeApi();
+            using var harness = C4LayerHost.Show();
+            LibraryPage page = C4Files.Mount(harness, new LibraryPage());
+            C4Files.Load(page);
+            BlockHost host = HostOf(page);
+            Assert.Equal("library:main", host.PageId);
+            // 出厂默认页:两个区块都可见(文件夹栏不因 v1 的 hidden 收起)
+            Assert.Equal(new List<string> { "folders", "versions" }, host.OrderNow.Select(b => b.Id).ToList());
+            Assert.Empty(host.HiddenNow);
+            Assert.True(page.FoldersVisible());
+            // 出厂默认页是"兜底"而不是"落盘":真源里还没有 library:main 这一页
+            Assert.False(LayoutStoreV2.Load().Layout.Pages.ContainsKey("library:main"));
         });
     }
 
-    /// <summary>【Windows 源】<c>LibraryPage.cs:239-266</c>:文件夹栏可见时是双栏("*,18,2*",左栏有最小/最大宽)。</summary>
+    /// <summary>
+    /// 【Windows 源】<c>LibraryPage.cs:139-172 + 206-211</c>:出厂默认页 = 12 列网格、间距 18、默认 pad,
+    /// 文件夹栏 4 列 / 版本选择 8 列;左卡不再带 MinWidth/MaxWidth(宽度由列决定)。
+    /// </summary>
     [Fact]
-    public void Library_folder_layout_defaults_to_two_columns()
+    public void Library_block_host_default_page_is_the_four_eight_grid()
     {
         AvaloniaSession.Run(() =>
         {
@@ -698,20 +717,38 @@ public class C4LibraryTests
             using var harness = C4LayerHost.Show();
             LibraryPage page = C4Files.Mount(harness, new LibraryPage());
             C4Files.Load(page);
-            Grid body = BodyGrid(page);
-            Assert.Equal(3, body.ColumnDefinitions.Count);
-            Assert.Equal(18.0, body.ColumnDefinitions[1].Width.Value);
-            Assert.Equal(2.0, body.ColumnDefinitions[2].Width.Value);
-            // 左栏卡:300 最小、380 最大、靠上(Windows 的三条几何)
-            Border left = C4Files.Descendants(page).OfType<Border>().First(b => C4Files.HasText(b, I18n.L("文件夹列表")));
-            Assert.Equal(300.0, left.MinWidth);
-            Assert.Equal(380.0, left.MaxWidth);
+            BlockHost host = HostOf(page);
+            PageLayoutV2 model = host.Editor.State.Page;
+            Assert.Equal(LayoutSchema.ModeGrid, model.Mode);
+            Assert.Equal(12, model.Cols);
+            Assert.Equal(18.0, model.Gap);
+            Assert.Equal(LayoutSchema.PadDefaultCopy(), model.Pad);
+            BlockLayout folders = model.Blocks.First(b => b.Id == "folders");
+            Assert.Equal(0.0, folders.X);
+            Assert.Equal(4.0, folders.W);
+            Assert.Equal(4, folders.Span);
+            BlockLayout versions = model.Blocks.First(b => b.Id == "versions");
+            Assert.Equal(4.0, versions.X);
+            Assert.Equal(8.0, versions.W);
+            Assert.Equal(8, versions.Span);
+            // 左栏卡:几何三条全部由布局文档决定,不再自己设宽。
+            // 注意区块宿主会给每个区块加一条 12.5 号标题(同名「文件夹列表」),所以要按左卡自己那个
+            // 18 号大标题认,并取**最内层**满足条件的 Border(= 卡片本体,不是外层容器)。
+            Border left = C4Files.Descendants(page).OfType<Border>().Last(b =>
+                C4Files.Descendants(b).OfType<TextBlock>()
+                    .Any(t => t.Text == I18n.L("文件夹列表") && t.FontSize >= 16.0));
+            Assert.Equal(0.0, left.MinWidth);
+            Assert.Equal(double.PositiveInfinity, left.MaxWidth);
+            Assert.Equal(HorizontalAlignment.Stretch, left.HorizontalAlignment);
             Assert.Equal(VerticalAlignment.Top, left.VerticalAlignment);
-            Assert.True(LibraryPage.FoldersVisible());
+            Assert.True(page.FoldersVisible());
         });
     }
 
-    /// <summary>【Windows 源】<c>LibraryPage.cs:269-321</c>:右键菜单四项的顺序、勾选态与「点了就落盘」,收起后变单栏。</summary>
+    /// <summary>
+    /// 【Windows 源】<c>LibraryPage.cs:345-378</c>:菜单里收起文件夹栏 ⇒ 版本列表在网格里吃满 12 列;
+    /// 状态落在 v2 的 <c>library:main</c> 页(不再写 v1),再点一次恢复 4/8。
+    /// </summary>
     [Fact]
     public void Library_folder_layout_collapses_and_restores_through_the_menu()
     {
@@ -724,42 +761,42 @@ public class C4LibraryTests
             using var harness = C4LayerHost.Show();
             LibraryPage page = C4Files.Mount(harness, new LibraryPage());
             C4Files.Load(page);
-            Grid body = BodyGrid(page);
-            MenuItem root = body.ContextMenu!.Items.OfType<MenuItem>().First();
-            MenuItem box = root.Items.OfType<MenuItem>().First(mi => (mi.Header as string) == I18n.L("显示文件夹栏"));
-            Assert.True(box.IsChecked, "首屏文件夹栏可见 ⇒ 勾选态是真的");
-
-            // 【本机探针实测】Avalonia 11.3.23 的 MenuItem 是在**指针点击那条路**里先翻转 IsChecked
-            // 再抛 Click;`RaiseEvent(ClickEvent)` 只抛事件、不翻转(而它自己的 `IMenuItem.RaiseClick`
-            // 是 internal,测试里碰不到)。所以这里按"真实点击进处理器那一刻的状态"先把翻转做掉,
-            // 再抛 Click —— 页面处理器读到的值与真机上一致(Windows 也是这样读的)。
-            box.IsChecked = false;
-            C4Files.Invoke(box);
+            BlockHost host = HostOf(page);
+            ContextMenu menu = host.ContextMenu!;
+            Assert.Equal(
+                new List<string>
+                {
+                    I18n.L("自定义布局..."), "—", I18n.L("隐藏文件夹栏"), I18n.L("导出布局"), I18n.L("导入布局"),
+                },
+                C4Files.MenuHeads(menu));
+            C4Files.Invoke(C4Files.MenuItemByHead(menu, I18n.L("隐藏文件夹栏")));
             C4Files.Flush(2);
-            // 【C9a 更正 · D-126】收起不再"把列定义清成 1 列"(列管理已交给共用的 PageLayoutHost),
-            // 这里改为断言**同一件事的效果**:左列与间隙收 0、右栏吃满(3 列仍在,但前两列宽 0)。
-            // 其余断言一字未改;强度只增(多了"间隙也收 0"与"右栏吃满"两条)。
-            Assert.Equal(3, body.ColumnDefinitions.Count);
-            Assert.Equal(0.0, body.ColumnDefinitions[0].Width.Value);
-            Assert.Equal(0.0, body.ColumnDefinitions[1].Width.Value);
-            Assert.Equal(GridUnitType.Star, body.ColumnDefinitions[2].Width.GridUnitType);
-            Assert.False(LibraryPage.FoldersVisible());
-            PageLayoutDoc? saved = PageLayoutStore.Load("library");
-            Assert.NotNull(saved);
-            Assert.True(saved!.Blocks!.First(b => b.Id == "folders").Hidden);
+            Assert.False(page.FoldersVisible());
+            Assert.Contains("folders", host.HiddenNow);
+            PageLayoutV2 saved = LayoutStoreV2.Load().Layout.Pages["library:main"];
+            Assert.True(saved.Blocks.First(b => b.Id == "folders").Hidden);
+            BlockLayout versions = saved.Blocks.First(b => b.Id == "versions");
+            Assert.Equal(0.0, versions.X);
+            Assert.Equal(12.0, versions.W);
+            Assert.Equal(12, versions.Span);
 
-            // 再点一次:菜单对象被重建过(ApplyFolderLayout 会重新建菜单),取新的那一份
-            MenuItem box2 = BodyGrid(page).ContextMenu!.Items.OfType<MenuItem>().First()
-                .Items.OfType<MenuItem>().First(mi => (mi.Header as string) == I18n.L("显示文件夹栏"));
-            box2.IsChecked = true;
-            C4Files.Invoke(box2);
+            // 菜单被重建过(ApplyFolderLayout 重新挂了一份),取新的那一份:措辞已变成「显示文件夹栏」
+            ContextMenu menu2 = host.ContextMenu!;
+            Assert.Equal(
+                I18n.L("显示文件夹栏"),
+                C4Files.MenuHeads(menu2)[2]);
+            C4Files.Invoke(C4Files.MenuItemByHead(menu2, I18n.L("显示文件夹栏")));
             C4Files.Flush(2);
-            Assert.Equal(3, BodyGrid(page).ColumnDefinitions.Count);
-            Assert.True(LibraryPage.FoldersVisible());
+            Assert.True(page.FoldersVisible());
+            PageLayoutV2 restored = LayoutStoreV2.Load().Layout.Pages["library:main"];
+            BlockLayout back = restored.Blocks.First(b => b.Id == "versions");
+            Assert.Equal(4.0, back.X);
+            Assert.Equal(8.0, back.W);
+            Assert.Equal(8, back.Span);
         });
     }
 
-    /// <summary>【Windows 源】<c>LibraryPage.cs:269-321</c>:菜单四项的顺序与「最终子项是可勾选的复选框」。</summary>
+    /// <summary>【Windows 源】<c>LibraryPage.cs:296-343</c>:四项平铺 + 一条分隔线(不再是嵌套勾选)。</summary>
     [Fact]
     public void Library_layout_menu_matches_windows()
     {
@@ -771,21 +808,19 @@ public class C4LibraryTests
             using var harness = C4LayerHost.Show();
             LibraryPage page = C4Files.Mount(harness, new LibraryPage());
             C4Files.Load(page);
-            ContextMenu menu = BodyGrid(page).ContextMenu!;
-            MenuItem root = menu.Items.OfType<MenuItem>().First();
-            Assert.Equal(I18n.L("自定义布局..."), root.Header);
-            // 【Windows 源】<c>:316-319</c>:顶层只有一项「自定义布局...」,另外三项是它的子项(顺序如此)
-            Assert.Equal(new List<string> { I18n.L("自定义布局...") }, C4Files.MenuHeads(menu));
-            Assert.Equal(
-                new List<string> { I18n.L("显示文件夹栏"), I18n.L("导出布局"), I18n.L("导入布局") },
-                root.Items.OfType<MenuItem>().Select(mi => mi.Header as string ?? "").ToList());
-            MenuItem box = root.Items.OfType<MenuItem>().First();
-            Assert.Equal(MenuItemToggleType.CheckBox, box.ToggleType);
-            Assert.True(box.IsChecked);
+            ContextMenu menu = HostOf(page).ContextMenu!;
             Assert.Equal(new List<string>
             {
-                I18n.L("显示文件夹栏"), I18n.L("导出布局"), I18n.L("导入布局"),
-            }, C4Expected.LibraryLayoutMenuItems.Skip(1).ToList());
+                I18n.L("自定义布局..."), "—", I18n.L("隐藏文件夹栏"), I18n.L("导出布局"), I18n.L("导入布局"),
+            }, C4Files.MenuHeads(menu));
+            Assert.Equal(new List<string>
+            {
+                "自定义布局...", "隐藏文件夹栏", "导出布局", "导入布局",
+            }, C4Expected.LibraryLayoutMenuItems.ToList());
+            // 四项都是平铺的 MenuItem(没有子菜单),文件夹栏那项不是可勾选态(Windows 是动态措辞)
+            MenuItem folders = C4Files.MenuItemByHead(menu, I18n.L("隐藏文件夹栏"));
+            Assert.Equal(MenuItemToggleType.None, folders.ToggleType);
+            Assert.DoesNotContain(menu.Items.OfType<MenuItem>(), mi => mi.Items.Count > 0);
         });
     }
 
@@ -802,15 +837,12 @@ public class C4LibraryTests
             using var harness = C4LayerHost.Show();
             LibraryPage page = C4Files.Mount(harness, new LibraryPage());
             C4Files.Load(page);
-            ContextMenu menu = BodyGrid(page).ContextMenu!;
-            MenuItem root = menu.Items.OfType<MenuItem>().First();
-            MenuItem export = root.Items.OfType<MenuItem>().First(mi => (mi.Header as string) == I18n.L("导出布局"));
-            MenuItem import = root.Items.OfType<MenuItem>().First(mi => (mi.Header as string) == I18n.L("导入布局"));
-            C4Files.Invoke(export);
-            C4Files.Invoke(import);
+            ContextMenu menu = HostOf(page).ContextMenu!;
+            C4Files.Invoke(C4Files.MenuItemByHead(menu, I18n.L("导出布局")));
+            C4Files.Invoke(C4Files.MenuItemByHead(menu, I18n.L("导入布局")));
             C4Files.Settle(4);
             // 没有崩溃就是全部要求了:两条路都如实降级(PageLayoutIO 自己处理 null)
-            Assert.True(LibraryPage.FoldersVisible());
+            Assert.True(page.FoldersVisible());
         });
     }
 
@@ -1292,11 +1324,11 @@ public class C4LibraryTests
 
     // ---------------------------------------------------------------- 小工具
 
-    /// <summary>页面的双栏外壳那个 Grid(唯一带 ContextMenu 的那一层)。</summary>
-    private static Grid BodyGrid(Control page)
+    /// <summary>页面里的区块宿主(<c>BlockHost("library:main")</c>;整页只有一个)。</summary>
+    private static BlockHost HostOf(Control page)
     {
-        Grid? hit = C4Files.Descendants(page).OfType<Grid>().FirstOrDefault(g => g.ContextMenu != null);
-        Assert.True(hit != null, "页面里找不到带 ContextMenu 的双栏 Grid");
+        BlockHost? hit = C4Files.Descendants(page).OfType<BlockHost>().FirstOrDefault();
+        Assert.True(hit != null, "页面里找不到 BlockHost 区块宿主");
         return hit!;
     }
 

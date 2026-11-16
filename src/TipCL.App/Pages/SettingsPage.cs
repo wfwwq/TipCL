@@ -857,6 +857,8 @@ public sealed partial class SettingsPage : PageBase
         {
             new BlockSpec { Id = "network", Title = I18n.L("下载与网络"), Content = Ui.V(10.0, PTitle(I18n.L("下载与网络")), Gt(I18n.L("下载")), border4) },
         }).Root;
+        // L5:「布局」是第 8 个视图(见 SettingsPage.Layout.cs 的 BuildLayoutView;Windows SettingsPage.cs:749 同)
+        _views[LayoutView] = BuildLayoutView();
         SPanel nav = Ui.V(2.0,
             NavBtn(0, I18n.L("通用")),
             NavBtn(1, I18n.L("账号")),
@@ -865,15 +867,18 @@ public sealed partial class SettingsPage : PageBase
             NavBtn(4, I18n.L("服务器")),
             NavBtn(5, I18n.L("游戏时长")),
             NavBtn(6, I18n.L("反馈与关于")),
+            NavBtn(LayoutView, I18n.L("布局")),
             _saveState.M(12.0, 10.0, 0.0, 0.0));
         nav.Margin = new Thickness(12.0, 16.0, 0.0, 12.0);
-        // 【C9a】两栏交给共用的 PageLayoutHost(Windows `SettingsPage.cs:753`:`"settings"` / `"nav"` / 168 + 右栏 `*`)。
+        // 【C9a】两栏交给共用的 PageLayoutHost(Windows `SettingsPage.cs:755`:`"settings"` / `"nav"` / 168 + 右栏 `*`)。
         // 间距传 **0**:mac 切前是 `"168,*"`(两列、无 18px 间隔带),而 Windows 那条带又被它自己的
-        // `_view.Margin = new Thickness(-18,0,0,0)`(`:754`)抵掉了 ⇒ **gap 0 的可见结果与 Windows 等价**,
+        // `_view.Margin = new Thickness(-18,0,0,0)`(`:756`)抵掉了 ⇒ **gap 0 的可见结果与 Windows 等价**,
         // 且让"默认渲染逐字节不变"这条硬口径继续成立。分隔条因此自带 **8px 命中宽度**(居中压在边界上,
         // 静止透明、细线不显示 ⇒ 零像素变化,但能拖、能双击复位、比例能落盘)。
-        // 【per-site 间距登记 · D2 真机对照项】Windows 的 per-site 间距来自**未移植**的 `SplitCatalog`;
-        // 等它落地后 `AccountPage`(gap 0)与本页(gap 0 + 命中宽 8)都要回来按 Windows 校正(会改变像素)。
+        // 【per-site 间距登记】`SplitCatalog` 已随本包落地(Pages/SplitCatalog.cs,因果依赖:布局视图的
+        // 「分栏比例」小节直接迭代它);此处按 §2.3 第 2 行的现状值就是 168px + 18px 留白,而 mac 没有那 18px
+        // 间隔带(Windows 用 `_view.Margin=-18` 抵掉),故 **mac 保持 gap 0 才是与 Windows 等价的结果**,
+        // 不再需要"等 SplitCatalog 落地后回来校正"。
         PageLayoutHost root = new PageLayoutHost("settings", "nav", new GridLength(168.0), new GridLength(1.0, GridUnitType.Star), gap: 0.0, splitterHitWidth: 8.0);
         root.SetLeft(nav);
         root.SetRight(_view);
@@ -883,10 +888,10 @@ public sealed partial class SettingsPage : PageBase
 
     // ================================================================= 左导航与内嵌分段
 
-    /// <summary>左导航:0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于。</summary>
-    private readonly ToggleButton[] _nav = new ToggleButton[7];
+    /// <summary>左导航:0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于 / 7 布局(L5)。</summary>
+    private readonly ToggleButton[] _nav = new ToggleButton[8];
 
-    private readonly Control?[] _views = new Control?[7];
+    private readonly Control?[] _views = new Control?[8];
 
     private readonly ContentControl _view = new ContentControl
     {
@@ -901,7 +906,7 @@ public sealed partial class SettingsPage : PageBase
     /// 单独用一个数组存,**不能**和 <see cref="_views"/>(段视图)共用一个格子:
     /// 分段 6 的段视图是个 Grid(上标题卡 + 下内嵌页),两者共用一个格子会让 Grid 被内嵌页顶掉(本包实测踩到)。
     /// </summary>
-    private readonly PageBase?[] _subs = new PageBase?[7];
+    private readonly PageBase?[] _subs = new PageBase?[8];
 
     /// <summary>「反馈与关于」那一段的视图(Grid;懒建一次)。</summary>
     private Grid? _aboutView;
@@ -934,7 +939,7 @@ public sealed partial class SettingsPage : PageBase
     /// </summary>
     private void Select(int i)
     {
-        for (int k = 0; k < 7; k++)
+        for (int k = 0; k < 8; k++)
         {
             _nav[k].IsChecked = k == i;
         }
@@ -944,6 +949,11 @@ public sealed partial class SettingsPage : PageBase
             _sub?.OnHidden();
             _sub = sub;
             ShowSub();
+        }
+        // L5:每次切到「布局」都重建一次,保证读到的方案 / 分栏比例是最新的(Windows `:826-829` 同)
+        if (i == LayoutView)
+        {
+            _views[LayoutView] = BuildLayoutView();
         }
         _view.Content = ViewFor(i);
     }
@@ -975,7 +985,7 @@ public sealed partial class SettingsPage : PageBase
         return page;
     }
 
-    /// <summary>这一段的视图(分段 0/3/6 是块宿主或组合,其余是子页;子页缺件时给如实占位)。</summary>
+    /// <summary>这一段的视图(分段 0/3/6 是块宿主或组合,7 是布局视图,其余是子页;子页缺件时给如实占位)。</summary>
     private Control ViewFor(int i)
     {
         switch (i)
@@ -985,6 +995,8 @@ public sealed partial class SettingsPage : PageBase
                 return _views[i]!;
             case 6:
                 return _aboutView ??= BuildAboutView();
+            case LayoutView:
+                return _views[LayoutView]!;
             default:
                 return SubPageFor(i) ?? MissingSectionFor(i);
         }

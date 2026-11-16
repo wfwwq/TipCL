@@ -12,6 +12,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using TipCL.Core.Launcher.Layout;
 using TipCL.Models;
 using TipCL.Services;
 using TipCL.Themes;
@@ -33,9 +34,12 @@ namespace TipCL.Pages;
 ///   + 收藏 / 卸载 / 版本设置三个行尾钮。</item>
 /// </list>
 ///
-/// <b>WP-U3:这个页面不套 <c>BlockHost</c></b>,而是自己用 <see cref="PageLayoutStore"/> 直读直写 <c>"library"</c>
-/// 布局文档:右键「自定义布局...」可显隐文件夹栏(勾选即时生效并落盘)、导出/导入布局;版本列表恒可见
-/// (<c>list</c> 的 <c>Hidden</c> 被强制回 false)。
+/// <b>[layout-fix] 这个页面是区块宿主 <c>BlockHost("library:main")</c></b>(Windows <c>LibraryPage.cs:242-263</c> 同构):
+/// 两个区块 =「文件夹列表」(id <c>folders</c>)与「版本选择」(id <c>versions</c>);出厂默认布局是 12 列网格里
+/// 4 列 / 8 列、间距 18、pad 用默认 18,14,18,16(<see cref="LibraryDefaultPage"/>)。右键菜单四项 —— 「自定义布局...」
+/// (直接进编辑态)/「隐藏或显示文件夹栏」/「导出布局」/「导入布局」—— 与 Windows <c>:296-343</c> 同序同义。
+/// 旧 v1 路径(<see cref="PageLayoutStore"/> 的 <c>"library"</c> 文档 + <c>PageLayoutHost</c> 双栏)整体退场
+/// (Windows §6 兼容性:v1 里 library 的分栏比例不再生效)。
 ///
 /// 数据/行为与 Windows 同源:<c>get_instances</c> / <c>get_setting(default_instance)</c> / <c>game_root_path</c> /
 /// <c>get_version_rows</c> / <c>get_playtime</c>(派生「上次游玩」,无需新后端方法)/ <c>uninstall_version</c> /
@@ -193,8 +197,56 @@ public sealed class LibraryPage : PageBase
 	/// <summary>页内切换前的原始内容(进入实例详情后返回时恢复;PageBase.Content 是 object)。</summary>
 	private object? _shell;
 
-	// WP-U3 页面布局自定义:双栏外壳与左右两栏(文件夹栏可经布局文档收起,字段与数据逻辑不受影响)
-	private readonly PageLayoutHost _body;
+	/// <summary>「文件夹列表」区块 id(进布局文档;右键菜单的显隐开关按它走)。</summary>
+	private const string FoldersBlockId = "folders";
+
+	/// <summary>「版本选择」区块 id。</summary>
+	private const string ListBlockId = "versions";
+
+	// [layout-fix] 实例库改成区块宿主 BlockHost("library:main")(Windows `LibraryPage.cs:123-126` 同构):
+	// 两个区块 =「文件夹列表」/「版本选择」,默认 12 列网格里占 4 / 8 列(与原来 1:2 星号列的观感一致)。
+	// 旧 PageLayoutHost + v1 ui_page_layouts.json 路径整体退场。
+	private readonly BlockHost _host;
+
+	/// <summary>
+	/// [layout-fix] 实例库的出厂默认布局(Windows <c>LibraryPage.cs:139-172</c> 逐字同构):
+	/// 12 列网格,文件夹列表 4 列 / 版本选择 8 列(与原 1:2 星号分栏的观感一致;间距 18 = 原来那条分隔条的宽度)。
+	/// 布局文件里还没有 <c>library:main</c> 记录时用它(老用户升上来第一眼仍然是左右并排)。
+	/// </summary>
+	private static PageLayoutV2 LibraryDefaultPage()
+	{
+		PageLayoutV2 page = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeGrid,
+			Cols = LayoutSchema.ColsDefault,
+			RowH = 0.0,
+			Gap = 18.0,
+			Pad = LayoutSchema.PadDefaultCopy()
+		};
+		page.Blocks.Add(new BlockLayout
+		{
+			Id = FoldersBlockId,
+			X = 0.0,
+			Y = 0.0,
+			W = 4.0,
+			H = 1.0,
+			Span = 4,
+			MinH = 1.0,
+			Z = 0
+		});
+		page.Blocks.Add(new BlockLayout
+		{
+			Id = ListBlockId,
+			X = 4.0,
+			Y = 0.0,
+			W = 8.0,
+			H = 1.0,
+			Span = 8,
+			MinH = 1.0,
+			Z = 1
+		});
+		return page;
+	}
 
 	private readonly Border _leftCard;
 
@@ -229,19 +281,9 @@ public sealed class LibraryPage : PageBase
 		TextBlock h = Ui.Txt(I18n.L("文件夹列表"), 18.0, bold: true);
 		h.FontWeight = FontWeight.ExtraBold;
 		Border left = Ui.Card(Ui.V(10.0, h, _folderPath, _folders, Ui.Sep(), Ui.Txt(I18n.L("添加或导入"), 13.0, bold: true), add, pack, create, migrate), 14.0);
-		// 左栏随窗口比例伸缩,窄窗不挤右栏(2026-11-07 用户反馈:420 固定宽在窄窗占比过大)
-		// 300 是 Windows 那一版给左卡的最小宽(卡片自己的构图需要),这条地板留着 —— 但地板必须由**列**来兑现。
-		//
-		// C5c(缺陷 2)实测更正:原来只给卡片设了 MinWidth = 300,而左列是一条**星列** ——
-		// 页面被侧栏压到 668 时那条星列只有 205 宽,于是 300 宽的卡片**溢出自己的格子**;
-		// Avalonia 把"宽于格子的子元素"居中摆放 ⇒ 卡片左移 (205-300)/2 ≈ 48px,
-		// 压掉左页边距(截图里白卡白像素从 x=196 起、应当从 216 起 = 196+18 页边距),
-		// 同时向右多占 95px,盖住右栏标题的头几个字。
-		// 修法:把地板同时写到**列**上(列 300 + 分隔 18 + 右列 314),卡片就正好填满自己的列,
-		// 既不越界也不越位;宽窗口时星列本来就 ≥ 300,MinWidth 从不生效 ⇒ 宽页面像素不变。
-		left.MinWidth = 300.0;
+		// [layout-fix] 规格 §3-问题1:去掉左卡的 MinWidth / MaxWidth,改为随所在列拉伸 ——
+		// 宽度完全由布局文档的 4/12 列决定,窄窗下不再被裁(Windows `LibraryPage.cs:206-211` 同改法)。
 		left.HorizontalAlignment = HorizontalAlignment.Stretch;
-		left.MaxWidth = 380.0;
 		left.VerticalAlignment = VerticalAlignment.Top;
 		// 右栏头部两行:第一行 标题+计数+搜索+刷新;第二行 副说明完整换行显示
 		TextBlock h2 = Ui.Txt(I18n.L("版本选择"), 21.0, bold: true);
@@ -273,18 +315,25 @@ public sealed class LibraryPage : PageBase
 		right.VerticalAlignment = VerticalAlignment.Top;
 		_leftCard = left;
 		_rightCol = right;
-		// 行高显式 Auto:网格自身高度恒等于内容,杜绝隐式 * 行被外层余量撑高(左栏卡片随之拉伸的根因向量)
-		// 【C9a】两栏交给共用的 PageLayoutHost(与 Windows `LibraryPage.cs:192` 同一处声明:
-		// `"library"` / `"folders"` / `*` + `2*`)。两处页内特有口径照搬:
-		// ①`leftMinWidth: 300` —— C5c 的修正「左列要兑现左卡的最小宽 300,否则窄页面上卡片会溢出自己的星列」;
-		// ②`gap` 用默认 18(与切前写死的 18 一致)。
-		_body = new PageLayoutHost("library", "folders", new GridLength(1.0, GridUnitType.Star), new GridLength(2.0, GridUnitType.Star), leftMinWidth: 300.0);
-		// 行高显式 Auto:网格自身高度恒等于内容,杜绝隐式 * 行被外层余量撑高
-		_body.RowDefinitions.Add(new RowDefinition
+// [layout-fix] 实例库整体改成区块宿主(两个区块 =「文件夹列表」「版本选择」)。
+		// 第 3 参边距不传(用布局文档的 pad,默认就是 PageBase.ScrollBody 的 18,14,18,16);
+		// 第 4 参 defaultPage = 出厂默认网格布局,布局文件里还没有 library:main 时用它兜底。
+		_host = new BlockHost("library:main", new List<BlockSpec>
 		{
-			Height = GridLength.Auto,
-		});
-		base.Content = PageBase.ScrollBody(_body);
+			new BlockSpec
+			{
+				Id = FoldersBlockId,
+				Title = I18n.L("文件夹列表"),
+				Content = _leftCard
+			},
+			new BlockSpec
+			{
+				Id = ListBlockId,
+				Title = I18n.L("版本选择"),
+				Content = _rightCol
+			}
+		}, null, LibraryDefaultPage());
+		base.Content = _host;
 		ApplyFolderLayout();
 		EnableDrop(() => new FileDrop.DropContext
 		{
@@ -293,101 +342,42 @@ public sealed class LibraryPage : PageBase
 		});
 	}
 
-	// ————— 页面布局自定义(WP-U3):双栏页不套 BlockHost,直接用 PageLayoutStore 读写 "library" 文档 —————
+	// ————— 页面布局自定义(BlockHost):所有状态都进 ui_layout_v2.json 的 "library:main" 页 —————
+	// 来源:Windows `windos/src/TipCL/Pages/LibraryPage.cs:271-378`(逐字同构,菜单由"四项平铺"取代旧的嵌套勾选版)。
 
-	// 读取布局文档并补全:list 恒可见(Hidden 强制 false),folders 条目缺失时按可见补齐
-	private static PageLayoutDoc LoadLayoutDoc()
+	/// <summary>文件夹栏现在可见吗(布局文档里 <c>folders</c> 块是否被隐藏取反)。</summary>
+	internal bool FoldersVisible()
 	{
-		PageLayoutDoc doc = PageLayoutStore.Load("library") ?? PageLayoutDoc.Default(new[] { "folders", "list" }, new[] { "folders", "list" });
-		doc.Blocks ??= new List<BlockState>();
-		bool hasFolders = false;
-		foreach (BlockState b in doc.Blocks)
-		{
-			if (b.Id == "folders")
-			{
-				hasFolders = true;
-			}
-			else if (b.Id == "list")
-			{
-				b.Hidden = false; // 版本列表是页面本体,任何情况下不允许隐藏
-			}
-		}
-		if (!hasFolders)
-		{
-			doc.Blocks.Add(new BlockState { Id = "folders", Hidden = false });
-		}
-		return doc;
+		return !_host.Editor.State.Hidden.Contains(FoldersBlockId);
 	}
 
-	/// <summary>文件夹栏现在可见吗(布局文档里 <c>folders.Hidden</c> 取反;条目缺失按可见)。</summary>
-	internal static bool FoldersVisible()
-	{
-		foreach (BlockState b in LoadLayoutDoc().Blocks)
-		{
-			if (b.Id == "folders")
-			{
-				return !b.Hidden;
-			}
-		}
-		return true;
-	}
-
-	// 按布局文档应用文件夹栏显隐:可见 → 双栏("*,18,2*",与现状一致);隐藏 → 收起
-	// 【C9a】**列定义与列号统一由 PageLayoutHost 负责**(它的判据就是"左栏孩子自己的可见性",Windows 注释原文:
-	// "折叠状态以'孩子自己的 Visibility'为准")⇒ 页面这里**只**负责挂孩子 / 设孩子可见性,
-	// **不再自己动 `ColumnDefinitions`,也不再自己 `Grid.SetColumn(_rightCol, 0)`**(归属唯一,免得改一处漏一处)。
+	// Windows 在每次右键前重建菜单(按当前显隐决定「显示/隐藏文件夹栏」的措辞)。
+	// 【Avalonia 差异】WPF 的 `Control.ContextMenuOpening` 在 Avalonia 11.3 没有对应事件,
+	// 改为在 `ContextMenu.Opening` 里刷新那一项的 Header(等价:菜单打开时措辞必是当前状态)。
 	private void ApplyFolderLayout()
 	{
-		bool folders = FoldersVisible();
-		if (!_body.Children.Contains(_rightCol))
-		{
-			_body.SetRight(_rightCol);
-		}
-		if (folders)
-		{
-			if (!_body.Children.Contains(_leftCard))
-			{
-				_body.SetLeft(_leftCard);
-			}
-			_leftCard.IsVisible = true;
-		}
-		else
-		{
-			_leftCard.IsVisible = false;
-		}
-		_body.ContextMenu = LayoutMenu(folders);
+		_host.ContextMenu = LayoutMenu(FoldersVisible());
 	}
 
-	// 右键「自定义布局...」:显隐文件夹栏(勾选即时生效并保存)、导出/导入布局(导入由 PageLayoutIO 落盘,重读文档立即生效)
 	private ContextMenu LayoutMenu(bool foldersShown)
 	{
 		ContextMenu menu = new ContextMenu();
-		MenuItem root = new MenuItem
+		MenuItem enter = new MenuItem
 		{
 			Header = I18n.L("自定义布局...")
 		};
+		enter.Click += delegate
+		{
+			_host.EnterEdit();
+		};
 		MenuItem foldersItem = new MenuItem
 		{
-			Header = I18n.L("显示文件夹栏"),
-			// 【Avalonia 差异】WPF 是 IsCheckable = true;Avalonia 11 的 MenuItem 改叫
-			// ToggleType = MenuItemToggleType.CheckBox(语义相同:可勾选、点了不收起菜单)
-			ToggleType = MenuItemToggleType.CheckBox,
-			IsChecked = foldersShown
+			Header = (foldersShown ? I18n.L("隐藏文件夹栏") : I18n.L("显示文件夹栏"))
 		};
 		foldersItem.Click += delegate
 		{
-			// 勾选项点击默认不收起菜单,这里主动关掉再应用(Avalonia 的 MenuBase 只有 Close())
-			menu.Close();
-			PageLayoutDoc doc = LoadLayoutDoc();
-			foreach (BlockState b in doc.Blocks)
-			{
-				if (b.Id == "folders")
-				{
-					b.Hidden = !(foldersItem.IsChecked == true);
-				}
-			}
-			PageLayoutStore.Save("library", doc);
-			ApplyFolderLayout();
+			// 定值读 foldersShown(菜单项在构造时就绑定了当时的可见性)
+			SetFoldersVisible(!foldersShown);
 		};
 		MenuItem exportItem = new MenuItem
 		{
@@ -395,7 +385,7 @@ public sealed class LibraryPage : PageBase
 		};
 		exportItem.Click += delegate
 		{
-			PageLayoutIO.ExportToFileDialog("library");
+			PageLayoutIO.ExportToFileDialog("library:main");
 		};
 		MenuItem importItem = new MenuItem
 		{
@@ -406,14 +396,52 @@ public sealed class LibraryPage : PageBase
 			// 取消(null)不动布局;导入成功后 PageLayoutIO 已落盘,重读文档立即生效
 			if (PageLayoutIO.ImportFromFileDialog().HasValue)
 			{
+				_host.Editor.ReloadFromStore();
 				ApplyFolderLayout();
 			}
 		};
-		root.Items.Add(foldersItem);
-		root.Items.Add(exportItem);
-		root.Items.Add(importItem);
-		menu.Items.Add(root);
+		menu.Items.Add(enter);
+		menu.Items.Add(new Separator());
+		menu.Items.Add(foldersItem);
+		menu.Items.Add(exportItem);
+		menu.Items.Add(importItem);
+		// 打开时按最新状态重写措辞(用户在编辑态里改过显隐后,再右键也说得对)
+		menu.Opening += delegate
+		{
+			foldersItem.Header = (FoldersVisible() ? I18n.L("隐藏文件夹栏") : I18n.L("显示文件夹栏"));
+		};
 		return menu;
+	}
+
+	// Windows `LibraryPage.cs:345-378` 逐字同构:网格模式下横向也重排(隐藏文件夹栏后版本列表吃掉整行)
+	private void SetFoldersVisible(bool visible)
+	{
+		_host.Editor.MutatePage(delegate(PageLayoutV2 page)
+		{
+			if (page.Blocks == null)
+			{
+				return;
+			}
+			bool grid = page.Mode == LayoutSchema.ModeGrid;
+			foreach (BlockLayout block in page.Blocks)
+			{
+				if (block == null)
+				{
+					continue;
+				}
+				if (block.Id == FoldersBlockId)
+				{
+					block.Hidden = !visible;
+				}
+				else if (block.Id == ListBlockId && grid && block.Y < 0.5)
+				{
+					block.X = (visible ? 4.0 : 0.0);
+					block.W = (visible ? 8.0 : 12.0);
+					block.Span = (int)block.W;
+				}
+			}
+		});
+		ApplyFolderLayout();
 	}
 
 	protected override async Task LoadAsync()

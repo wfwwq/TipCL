@@ -107,9 +107,13 @@ public class C5aSettingsTests
 
     // ================================================================ 静态结构
 
-    /// <summary>【Windows 源】<c>:745</c> 左导航七段(顺序与文案一字不改)。</summary>
+    /// <summary>
+    /// 【Windows 源】<c>:745</c> 左导航七段(顺序与文案一字不改)+
+    /// 【R32-MACMORE】第 8 段「布局」(<c>LayoutView = 7</c>,与 Windows <c>SettingsLayoutPage.cs:27</c> 同下标)。
+    /// mac 在 R32-MACMORE 之前只有 7 段(布局视图整页缺失),本包把它补齐 —— 断言随真源变 8 段。
+    /// </summary>
     [Fact]
-    public void Left_nav_is_the_seven_windows_segments()
+    public void Left_nav_is_the_eight_windows_segments()
     {
         AvaloniaSession.Run(() =>
         {
@@ -128,7 +132,7 @@ public class C5aSettingsTests
                 .Where(t => t.Length > 0)
                 .ToList();
             Assert.Equal(
-                new List<string> { I18n.L("通用"), I18n.L("账号"), "Java", I18n.L("下载与网络"), I18n.L("服务器"), I18n.L("游戏时长"), I18n.L("反馈与关于") },
+                new List<string> { I18n.L("通用"), I18n.L("账号"), "Java", I18n.L("下载与网络"), I18n.L("服务器"), I18n.L("游戏时长"), I18n.L("反馈与关于"), I18n.L("布局") },
                 labels);
             // 每个都带 Seg.Item 类名(C1b 的类名表)
             ToggleButton first = C5aFiles.NavButton(page, I18n.L("通用"));

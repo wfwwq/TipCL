@@ -137,8 +137,15 @@ public class C5cLayoutProbeTests
     }
 
     /// <summary>
-    /// 探针 2(<b>缺陷 2</b>):窄页面下 <c>ScrollBody</c> 的那根 <c>ScrollViewer</c> **水平偏移必须是 0**,
+    /// 探针 2(<b>缺陷 2</b>):窄页面下正文的那根 <c>ScrollViewer</c> **水平偏移必须是 0**,
     /// 白卡左缘应当落在页面左边缘 + 18px 页边距处。
+    ///
+    /// 【R32-MACMORE 适配】实例库在 Windows `[layout-fix] §3-问题6`(= 本包的移植件)里从
+    /// "手写三列 Grid + PageLayoutHost"改成了 <c>BlockHost("library:main")</c>:滚动宿主随之从
+    /// <c>SmoothScroll</c> 变成 <see cref="LayoutEditor"/> 内部的**原生 ScrollViewer**
+    /// (LayoutEditor.cs:36 的既有机械差异),三列体也不再存在 —— 左卡落在宿主 12 栅格的 4/12 列里。
+    /// 探针的**判据不变**(不水平偏移 / 卡片贴 18px 页边距 / 卡片不溢出页面),只是从"抓三列 Grid"
+    /// 改成"抓左卡本身"。旧的 300px 地板已按 Windows 同改法去掉(宽度由列决定),故那条断言退场。
     /// </summary>
     [Fact]
     public void Probe_library_body_has_no_horizontal_offset_on_a_narrow_page()
@@ -152,37 +159,32 @@ public class C5cLayoutProbeTests
             (UiHost window, Border frame) = MountNarrow(page);
             try
             {
-                SmoothScroll scroll = C5bFiles.Descendants(page).OfType<SmoothScroll>().First();
-                Vector offset = ((ScrollViewer)scroll).Offset;
+                ScrollViewer scroll = C5bFiles.Descendants(page).OfType<ScrollViewer>().First();
+                Vector offset = scroll.Offset;
                 Size extent = scroll.Extent;
                 Size viewport = scroll.Viewport;
                 Point frameOrigin = OriginInWindow(frame, window.Window);
                 Point scrollOrigin = OriginInWindow(scroll, window.Window);
-                // 左侧那张卡:双栏 body(3 列)里第 0 列的那个 Border
-                Grid body = C5bFiles.Descendants(page).OfType<Grid>().First(g => g.ColumnDefinitions.Count >= 3);
-                Border leftCard = body.Children.OfType<Border>().First(c => Grid.GetColumn(c) == 0);
+                // 左侧那张卡:区块宿主的「文件夹列表」块内容(大字号标题所在卡片)
+                TextBlock heading = C5bFiles.Descendants(page).OfType<TextBlock>()
+                    .First(t => t.Text == I18n.L("文件夹列表") && t.FontSize >= 16.0);
+                Border leftCard = heading.GetVisualAncestors().OfType<Border>().First();
                 Point cardOrigin = OriginInWindow(leftCard, window.Window);
                 string measured = "Offset=(" + offset.X.ToString("0.#") + "," + offset.Y.ToString("0.#") + ") Extent=" + extent.Width.ToString("0.#") +
                                   " Viewport=" + viewport.Width.ToString("0.#") + " 水平滚动=" + scroll.HorizontalScrollBarVisibility +
                                   " 页面起x=" + frameOrigin.X.ToString("0.#") + " 页面宽=" + page.Bounds.Width.ToString("0.#") +
                                   " 滚动框起x=" + scrollOrigin.X.ToString("0.#") + " 滚动框宽=" + scroll.Bounds.Width.ToString("0.#") +
                                   " 左卡起x=" + cardOrigin.X.ToString("0.#") + " 左卡宽=" + leftCard.Bounds.Width.ToString("0.#") +
-                                  " 左卡布局x=" + leftCard.Bounds.X.ToString("0.#") + " 左卡变换=" + (leftCard.RenderTransform?.ToString() ?? "null") +
-                                  " 左卡Margin=" + leftCard.Margin +
-                                  " 列宽=" + string.Join("/", body.ColumnDefinitions.Select(c => c.ActualWidth.ToString("0.#"))) +
-                                  " 列间距=" + body.ColumnSpacing.ToString("0.#") +
+                                  " 左卡布局x=" + leftCard.Bounds.X.ToString("0.#") + " 左卡Margin=" + leftCard.Margin +
                                   "\n链路 = " + Chain(leftCard, window.Window);
 
                 Assert.True(Math.Abs(offset.X) < 0.5, "窄页面下正文被水平滚走了!(" + measured + ")");
-                // 页边距 18:左卡左缘 = 页面左缘 + 18
+                // 页边距 18(布局文档默认 pad):左卡左缘 = 页面左缘 + 18
                 Assert.True(Math.Abs(cardOrigin.X - (frameOrigin.X + 18.0)) <= 1.0, "库页白卡没有落在 18px 页边距上!(" + measured + ")");
-                // 左卡必须**正好填满**它自己那一列(300 的地板由列兑现,不再溢出格子)
-                Assert.True(Math.Abs(leftCard.Bounds.Width - 300.0) <= 1.0, "左卡没有兑现 300 的最小宽!(" + measured + ")");
-                // 右栏不许因为左列要 300 而被挤到"内容宽于自己的列"(那就是把缺陷换了个方向)
-                Control rightCol = body.Children.OfType<Control>().First(c => Grid.GetColumn(c) == 2);
-                double column2 = body.ColumnDefinitions[2].ActualWidth;
-                Assert.True(rightCol.Bounds.Width <= column2 + 1.0, "右栏内容宽于自己的列,会被裁掉!(" + measured +
-                    " 右栏宽=" + rightCol.Bounds.Width.ToString("0.#") + " 列2宽=" + column2.ToString("0.#") + ")");
+                // 卡片不许宽过页面可用宽(18px 左 + 18px 右),否则窄窗下会被裁
+                Assert.True(leftCard.Bounds.Width <= page.Bounds.Width - 36.0 + 1.0, "左卡宽过页面可用宽,会被裁!(" + measured + ")");
+                // 4/12 栅格:窄页面(668)下左卡不可能还是 300 以上(旧的 300 地板已按 Windows 同改法去掉)
+                Assert.True(leftCard.Bounds.Width < 300.0, "左卡仍按 300 地板摆放(旧 v1 口径)!(" + measured + ")");
             }
             finally
             {
