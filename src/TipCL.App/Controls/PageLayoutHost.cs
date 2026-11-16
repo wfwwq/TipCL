@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using TipCL.Core.Launcher.Layout;
 using TipCL.Pages;
 using TipCL.Services;
 
@@ -38,8 +39,11 @@ namespace TipCL.Controls;
 ///
 /// <b>与 Windows 的差异</b>(逐条登记):
 /// <list type="number">
-/// <item><b>存储位置</b>:Windows 写**布局 v2 文档**的 <c>Splits[pageId][splitId]</c>;mac 写既有偏好
-///   <c>UiPrefs.Splits</c>(键 <c>"&lt;pageId&gt;/&lt;splitId&gt;"</c>)—— **机制差异,用户可见行为一致**;</item>
+/// <item><b>存储位置</b>(R32-MWG 已统一):与 Windows **同一处** —— 布局 v2 文档
+///   <c>Layout.Splits[pageId].Ratios[splitId]</c>(经 <c>LayoutStoreV2.Save</c> 落 <c>ui_layout_v2.json</c>,
+///   并单向写通 v1 投影);列数落同文档的 <c>Layout.Pages[pageId].Cols</c>(需 <c>Mode == grid</c>);
+///   C9a 时期写在 <c>UiPrefs.Splits</c>(键 <c>"&lt;pageId&gt;/&lt;splitId&gt;"</c>)与 <c>UiPrefs.Columns</c> 的旧值
+///   **仍读得到**:v2 里没有该处时按遗留值代入并就地迁进 v2,写入成功后删掉旧键(落点统一,见各类注释);</item>
 /// <item><b>比例→像素的时机</b>:Windows 在布局回调里随时算;mac 在拿到 <c>Bounds.Width</c> 后应用(首次布局前先按声明列宽,
 ///   所以**没有存储时渲染与写死版逐字节相同**);</item>
 /// <item><b>Auto 左栏</b>(<c>AccountPage</c> 的 <c>GridLength.Auto</c>):无存储时**不用比例算**,保持 Auto(与 Windows 一致:
@@ -296,26 +300,157 @@ internal sealed class PageLayoutHost : Grid
 		return (available <= 0.0) ? double.NaN : ratio * available;
 	}
 
+	// ————— 落点统一(R32-MWG):布局 v2 文档是分栏比例/列数的**唯一真源** —————
+	//
+	// 分工:v2 文档 = Windows 那一份(Splits[pageId][splitId] / Pages[pageId].Cols);
+	//       UiPrefs.Splits / UiPrefs.Columns = C9a 时期的旧落点,**只读兜底 + 读时迁移**,写成功即删旧键。
+	// 所有 IO 都吞异常:读失败当"没存过"、写失败退旧落点(与 Windows SplitRatioStore 的"读失败 = 没存过"同口径)。
+
+	/// <summary>读 v2 文档(副本;失败一律当"没有")。</summary>
+	private static LayoutV2? V2Doc()
+	{
+		try
+		{
+			return LayoutStoreV2.Load();
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	/// <summary>从 v2 文档读该处比例(没有 / NaN 返回 null;读到就夹取)。</summary>
+	private static double? V2ReadRatio(string pageId, string splitId)
+	{
+		try
+		{
+			LayoutV2? doc = V2Doc();
+			if (doc == null || !doc.Layout.Splits.TryGetValue(pageId, out SplitState? state) || state == null)
+			{
+				return null;
+			}
+			if (!state.Ratios.TryGetValue(splitId, out double ratio) || double.IsNaN(ratio))
+			{
+				return null;
+			}
+			return ClampRatio(ratio);
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	/// <summary>把比例写进 v2 文档并落盘(先夹再写);返回 v2 文件是否写成功。</summary>
+	private static bool V2WriteRatio(string pageId, string splitId, double ratio)
+	{
+		try
+		{
+			LayoutV2 doc = LayoutStoreV2.Load();
+			if (!doc.Layout.Splits.TryGetValue(pageId, out SplitState? state) || state == null)
+			{
+				state = new SplitState();
+				doc.Layout.Splits[pageId] = state;
+			}
+			state.Ratios[splitId] = ClampRatio(ratio);
+			return LayoutStoreV2.Save(doc);
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	/// <summary>从 v2 文档删该处比例(空掉的 pageId 一并清掉);返回是否真的删掉了。</summary>
+	private static bool V2ClearRatio(string pageId, string splitId)
+	{
+		try
+		{
+			LayoutV2 doc = LayoutStoreV2.Load();
+			if (!doc.Layout.Splits.TryGetValue(pageId, out SplitState? state) || state == null)
+			{
+				return false;
+			}
+			if (!state.Ratios.Remove(splitId))
+			{
+				return false;
+			}
+			if (state.Ratios.Count == 0)
+			{
+				doc.Layout.Splits.Remove(pageId);
+			}
+			LayoutStoreV2.Save(doc);
+			return true;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// 该页在 v2 文档里的列数。返回 <c>false</c> = **文档里没有这一页** ⇒ 调用方该走遗留回退;
+	/// 返回 <c>true</c> 而 <paramref name="cols"/> 为 0 = 文档里有这一页但它没声明格子模式(或列数非法)⇒
+	/// 按 Windows 原文回落 fallback,**不再看遗留值**(v2 里有这一页就由 v2 说了算)。
+	/// </summary>
+	private static bool V2ReadColumns(string pageId, out int cols)
+	{
+		cols = 0;
+		try
+		{
+			LayoutV2? doc = V2Doc();
+			if (doc == null || !doc.Layout.Pages.TryGetValue(pageId, out PageLayoutV2? page) || page == null)
+			{
+				return false;
+			}
+			cols = (page.Mode == LayoutSchema.ModeGrid) ? page.Cols : 0;
+			return true;
+		}
+		catch
+		{
+			cols = 0;
+			return false;
+		}
+	}
+
 	/// <summary>该处是否已有存储比例(Windows <c>SplitRatioStore.IsStored</c>)。</summary>
 	public static bool IsStored(UiPrefs? prefs, string pageId, string splitId)
 	{
 		return Read(prefs, pageId, splitId).HasValue;
 	}
 
-	/// <summary>读该处已存比例;没有存过(或读失败)返回 null(Windows <c>Read</c>,失败一律按"没存过")。</summary>
+	/// <summary>
+	/// 读该处已存比例;没有存过(或读失败)返回 null(Windows <c>Read</c>,失败一律按"没存过")。
+	/// 顺序:**v2 文档 → 遗留 <c>UiPrefs.Splits</c>**;命中遗留值时顺手迁进 v2(迁成功才删旧键)。
+	/// </summary>
 	public static double? Read(UiPrefs? prefs, string pageId, string splitId)
 	{
-		if (prefs == null || string.IsNullOrEmpty(pageId) || string.IsNullOrEmpty(splitId))
+		if (string.IsNullOrEmpty(pageId) || string.IsNullOrEmpty(splitId))
+		{
+			return null;
+		}
+		double? stored = V2ReadRatio(pageId, splitId);
+		if (stored.HasValue)
+		{
+			return stored;
+		}
+		if (prefs == null)
 		{
 			return null;
 		}
 		try
 		{
-			if (!prefs.Splits.TryGetValue(Key(pageId, splitId), out double ratio))
+			if (!prefs.Splits.TryGetValue(Key(pageId, splitId), out double legacy) || double.IsNaN(legacy))
 			{
 				return null;
 			}
-			return double.IsNaN(ratio) ? null : ClampRatio(ratio);
+			double clamped = ClampRatio(legacy);
+			if (V2WriteRatio(pageId, splitId, clamped))
+			{
+				// 迁移成功才删旧键:调用方随后照旧 SaveUiPrefs(),这次删除也就落了盘
+				prefs.Splits.Remove(Key(pageId, splitId));
+			}
+			return clamped;
 		}
 		catch
 		{
@@ -344,32 +479,57 @@ internal sealed class PageLayoutHost : Grid
 	/// <summary>
 	/// 写该处比例(唯一入口;Windows <c>SplitRatioStore.Write</c>):先夹再写,失败吞掉并返回 false。
 	/// <b>未声明可写(Writable=false)一律不写</b>(Windows <c>:361-375</c>)。
+	/// 落点是 **v2 文档**(真源);写成功就删掉遗留偏好键(落点统一),v2 写不进去时才退回偏好,免得这一次拖动白拖。
 	/// </summary>
 	public static bool Write(UiPrefs? prefs, string pageId, string splitId, double ratio, bool writable = true)
 	{
-		if (prefs == null || string.IsNullOrEmpty(pageId) || string.IsNullOrEmpty(splitId) || !writable)
+		if (string.IsNullOrEmpty(pageId) || string.IsNullOrEmpty(splitId) || !writable)
 		{
 			return false;
 		}
+		double clamped = ClampRatio(ratio);
+		bool ok = V2WriteRatio(pageId, splitId, clamped);
+		if (prefs == null)
+		{
+			return ok;
+		}
 		try
 		{
-			prefs.Splits[Key(pageId, splitId)] = ClampRatio(ratio);
+			if (ok)
+			{
+				prefs.Splits.Remove(Key(pageId, splitId));
+				return true;
+			}
+			prefs.Splits[Key(pageId, splitId)] = clamped;
 			return true;
 		}
 		catch
 		{
-			return false;
+			return ok;
 		}
 	}
 
-	/// <summary>复位:删掉该处比例(Windows <c>SplitRatioStore.Clear</c>);返回是否真的删掉了东西。</summary>
+	/// <summary>复位:删掉该处比例(Windows <c>SplitRatioStore.Clear</c>);**v2 与遗留两处都删**,
+	/// 返回是否真的删掉了东西(两处都没有 = false)。</summary>
 	public static bool Clear(UiPrefs? prefs, string pageId, string splitId)
 	{
-		if (prefs == null || string.IsNullOrEmpty(pageId) || string.IsNullOrEmpty(splitId))
+		if (string.IsNullOrEmpty(pageId) || string.IsNullOrEmpty(splitId))
 		{
 			return false;
 		}
-		return prefs.Splits.Remove(Key(pageId, splitId));
+		bool removed = V2ClearRatio(pageId, splitId);
+		if (prefs == null)
+		{
+			return removed;
+		}
+		try
+		{
+			return prefs.Splits.Remove(Key(pageId, splitId)) || removed;
+		}
+		catch
+		{
+			return removed;
+		}
 	}
 
 	/// <summary>存储键(<c>"&lt;pageId&gt;/&lt;splitId&gt;"</c>)。</summary>
@@ -382,7 +542,8 @@ internal sealed class PageLayoutHost : Grid
 	/// 格子类布局的**列数**(Windows <c>SplitRatioStore.PageColumns</c>,`:536-562`)。
 	/// Windows 原文规则:**默认 <paramref name="fallback"/>;只有该页在布局文档里声明了 `Mode == grid` 且 `Cols &gt; 0`
 	/// 时才用存储值**;存储值 `&lt;= 0` 回落 fallback;最后夹到 <c>[min, max]</c>。
-	/// mac 侧没有那张文档 ⇒ 存储落在 <c>UiPrefs.Columns</c>(机制差异)。
+	/// R32-MWG:mac 侧现在**读同一张布局文档**(<c>Layout.Pages[pageId]</c>)—— 文档里有这一页就由它说了算;
+	/// 文档里没有这一页才回退到旧偏好 <c>UiPrefs.Columns</c>(C9a 时期的落点,读得到就不算丢)。
 	/// <paramref name="gridMode"/> 默认 **true**:理由 —— **mac 侧凡是调用本方法的页面,本身就是"声明自己是格子"的那一方**
 	/// (目前只有插件页已安装网格);将来若出现"只想拿 fallback、不想读存储"的调用点,显式传 <c>false</c>。
 	/// </summary>
@@ -391,9 +552,16 @@ internal sealed class PageLayoutHost : Grid
 		int cols = fallback;
 		try
 		{
-			if (gridMode && prefs != null && !string.IsNullOrEmpty(pageId) && prefs.Columns.TryGetValue(pageId, out int stored))
+			if (gridMode && !string.IsNullOrEmpty(pageId))
 			{
-				cols = stored;
+				if (V2ReadColumns(pageId, out int fromDoc))
+				{
+					cols = fromDoc;
+				}
+				else if (prefs != null && prefs.Columns.TryGetValue(pageId, out int legacy))
+				{
+					cols = legacy;
+				}
 			}
 		}
 		catch
@@ -407,21 +575,52 @@ internal sealed class PageLayoutHost : Grid
 		return Math.Min(max, Math.Max(min, cols));
 	}
 
-	/// <summary>写该页的列数(夹到 <c>[min, max]</c> 后落盘;Windows 那边走布局文档的 <c>pages[pageId].Cols</c>)。</summary>
+	/// <summary>写该页的列数(夹到 <c>[min, max]</c> 后落盘;落点是布局 v2 文档的 <c>Pages[pageId].Cols</c>,
+	/// 并把该页声明成格子模式 <c>Mode = grid</c> —— Windows 的读侧就是这么筛的;旧偏好键一并删掉)。
+	/// R32-MWG 实测:**保存会被 schema 归一化**,<c>LayoutSchema.SanitizePage</c> 用 <c>SnapCols</c>
+	/// 把列数吸附到 <c>ColChoices</c> = {2,3,4,6,12}(Windows 同一套词表,列数真源是 L2/L5 的格子编辑器)
+	/// —— 所以本方法写 5 会落成 4、写 1 会落成 2;要断言"只夹不吸"就传正好落在词表里的值。</summary>
 	public static bool WritePageColumns(UiPrefs? prefs, string pageId, int columns, int min, int max)
 	{
-		if (prefs == null || string.IsNullOrEmpty(pageId))
+		if (string.IsNullOrEmpty(pageId))
 		{
 			return false;
 		}
+		int clamped = Math.Min(max, Math.Max(min, columns));
+		bool ok = false;
 		try
 		{
-			prefs.Columns[pageId] = Math.Min(max, Math.Max(min, columns));
+			LayoutV2 doc = LayoutStoreV2.Load();
+			if (!doc.Layout.Pages.TryGetValue(pageId, out PageLayoutV2? page) || page == null)
+			{
+				page = new PageLayoutV2();
+				doc.Layout.Pages[pageId] = page;
+			}
+			page.Mode = LayoutSchema.ModeGrid;
+			page.Cols = clamped;
+			ok = LayoutStoreV2.Save(doc);
+		}
+		catch
+		{
+			ok = false;
+		}
+		if (prefs == null)
+		{
+			return ok;
+		}
+		try
+		{
+			if (ok)
+			{
+				prefs.Columns.Remove(pageId);
+				return true;
+			}
+			prefs.Columns[pageId] = clamped;
 			return true;
 		}
 		catch
 		{
-			return false;
+			return ok;
 		}
 	}
 
