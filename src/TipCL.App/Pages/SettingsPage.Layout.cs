@@ -160,9 +160,21 @@ public sealed partial class SettingsPage
 		ShellLayout shell = ShellTabs.CurrentShell();
 		List<Control> rows = new List<Control>();
 		List<string> order = ShellTabs.OrderedKeys(shell);
-		foreach (string key in ShellTabs.BuiltinKeys)
+		// [R32-D26] 布局 v2 的 `shell.tabs` 只有 5 个语义键,而 mac 侧栏页集是 7 键 ⇒
+		// **以 Mac 页集为超集**:这里按 Mac 页集列行,5 个语义键各自映射到 Mac 页键
+		// (`ShellTabs.MacKeyOf` / `TabKeyOfMac`);多出的 2 页(ai / tasks)保持原生侧栏行为、
+		// 布局 v2 不接管 —— 只读展示并登记为偏离,不为对齐键数删 mac 页面。
+		foreach (string macKey in ShellTabs.MacPageKeys)
 		{
-			string tab = key;
+			if (ShellTabs.IsMacNativeOnly(macKey))
+			{
+				rows.Add(Ui.Field(ShellTabs.MacPageLabel(macKey), Ui.Muted(I18n.L("由侧栏原生导航控制")),
+					I18n.L("多出的页:布局 v2 不接管(保持原生行为)")));
+				continue;
+			}
+			// 反向映射拿回 shell.tabs 的语义键 —— 读写文档时只用这个键(跨树可读)。
+			string tab = ShellTabs.TabKeyOfMac(macKey) ?? macKey;
+			string label = ShellTabs.MacPageLabel(macKey);
 			int index = order.IndexOf(tab);
 			CheckBox visible = Ui.Switch(ShellTabs.IsVisible(shell, tab));
 			if (!ShellTabs.CanHide(tab))
@@ -193,7 +205,8 @@ public sealed partial class SettingsPage
 			{
 				MoveTab(order, tab, 1);
 			};
-			rows.Add(Ui.Field(ShellTabs.Label(tab), Ui.H(8.0, visible, up, down), I18n.L("页签顺序与显隐")));
+			// 说明列写清「这一行落到 shell.tabs 的哪个键」,避免 Mac 页名与 Windows 键名对不上。
+			rows.Add(Ui.Field(label, Ui.H(8.0, visible, up, down), I18n.L("页签顺序与显隐({0})", tab)));
 		}
 		TitlebarLayout bar = shell.Titlebar ?? new TitlebarLayout();
 		rows.Add(TitlebarRow(I18n.L("桥接"), bar.Bridge, delegate(bool on)

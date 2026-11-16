@@ -47,6 +47,95 @@ public static class ShellTabs
 	/// <summary>内置页签集合(顺序 = 出厂顺序)。直接取契约层的默认值副本。</summary>
 	public static readonly string[] BuiltinKeys = (string[])LayoutSchema.DefaultTabs.Clone();
 
+	// ───────────────────────── R32-D26:Mac 页集是 shell.tabs 的超集 ─────────────────────────
+	//
+	// 裁定(R32-PLAN.md 第 128 行):Windows 的 `shell.tabs` 只有 5 个语义键,而 mac 侧栏页集是 7 键
+	// (`NavModel.DefaultNavOrder`)⇒ **以 Mac 页集为超集**,5 个语义键全映射,多出 2 页保持原生行为
+	// 并登记偏离,**不许为对齐键数删 Mac 页面**。
+	//
+	// 映射(mac 侧栏没有 library 行、library 页靠 Navigate 进入;`more` 是分区不是页):
+	//   launch → launch / library → instance / download → download / plugins → more / settings → settings
+	// 多出的 2 页 = ai / tasks(布局 v2 不接管,继续由侧栏原生导航控制)。
+	//
+	// 注意:**持久化的 `shell.tabs` 仍旧只写 5 个 Windows 语义键**(跨树可读,Windows 认得出),
+	// 这里只把"给用户看的页集"扩到 Mac 的 7 键。
+
+	/// <summary>Mac 侧栏页集(7 键;逐字等于 <see cref="NavModel.DefaultNavOrder"/> —— 由单测钉死防漂移)。</summary>
+	public static readonly string[] MacPageKeys = new string[7] { "launch", "download", "instance", "ai", "more", "settings", "tasks" };
+
+	/// <summary>Mac 页集里**不由布局 v2 接管**、保持原生侧栏行为的页(多出的 2 页;R32-D26 登记为偏离)。</summary>
+	public static readonly string[] MacNativeOnlyKeys = new string[2] { "ai", "tasks" };
+
+	/// <summary>`shell.tabs` 的 5 个语义键 → Mac 页键(5 键全映射)。未知键原样返回。</summary>
+	public static string MacKeyOf(string tabKey)
+	{
+		switch (tabKey)
+		{
+			case LaunchKey:
+				return "launch";
+			case LibraryKey:
+				return "instance";
+			case DownloadKey:
+				return "download";
+			case PluginsKey:
+				return "more";
+			case SettingsKey:
+				return "settings";
+			default:
+				return tabKey ?? "";
+		}
+	}
+
+	/// <summary>Mac 页键 → `shell.tabs` 语义键(反向映射;`ai`/`tasks` 这类原生页返回 null)。</summary>
+	public static string? TabKeyOfMac(string macKey)
+	{
+		switch (macKey)
+		{
+			case "launch":
+				return LaunchKey;
+			case "instance":
+				return LibraryKey;
+			case "download":
+				return DownloadKey;
+			case "more":
+				return PluginsKey;
+			case "settings":
+				return SettingsKey;
+			default:
+				return null;
+		}
+	}
+
+	/// <summary>该 Mac 页键是否保持原生行为(即"多出的 2 页":布局 v2 不接管)。</summary>
+	public static bool IsMacNativeOnly(string macKey)
+	{
+		return Array.IndexOf(MacNativeOnlyKeys, macKey) >= 0;
+	}
+
+	/// <summary>Mac 页键的显示名(与 mac 侧栏文案同一套词条,避免出现第二份页签名)。</summary>
+	public static string MacPageLabel(string macKey)
+	{
+		switch (macKey)
+		{
+			case "launch":
+				return I18n.L("启动");
+			case "download":
+				return I18n.L("游戏");
+			case "instance":
+				return I18n.L("版本管理");
+			case "ai":
+				return I18n.L("AI 助手");
+			case "more":
+				return I18n.L("更多");
+			case "settings":
+				return I18n.L("设置");
+			case "tasks":
+				return I18n.L("下载任务");
+			default:
+				return macKey ?? "";
+		}
+	}
+
 	/// <summary>
 	/// 生效的页签顺序:白名单过滤 + 去重(保留首次出现)+ 保留用户顺序;空 → 内置五键。
 	/// 无论怎么配,<c>settings</c> 一定在(缺失则追加到末尾)。

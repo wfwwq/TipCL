@@ -162,6 +162,12 @@ internal sealed partial class AiPage : PageBase
 	/// <summary>L4 历史栏分栏外壳(收起历史栏时左栏与分隔条一起收起;比例存 v2 <c>splits["ai"]["history"]</c>)。</summary>
 	private readonly PageLayoutHost _histSplit;
 
+	/// <summary>
+	/// [R32-MACMORE] 历史栏分栏宿主(只读投影,给接线单测用)。构造后即为最终实例、不随挂树变化,
+	/// 所以用例可以**只构造不挂树**地断言它的间隙 —— 避开挂树带来的渲染队列 / RPC 副作用。
+	/// </summary>
+	internal PageLayoutHost HistorySplit => _histSplit;
+
 	private readonly TextBox _histSearch;
 
 	private readonly TextBlock _titleText = Ui.Txt("", 14.0, bold: true, "B.Ink");
@@ -540,10 +546,16 @@ internal sealed partial class AiPage : PageBase
 		grid6.Add(border, 0);
 		grid6.Add(_scroll, 1);
 		grid6.Add(sPanel, 2);
-		// L4 分栏(设计 §4.E 第 7 处):历史栏(现状固定 220)+ 10px 分隔条 + 对话区。
+		// L4 分栏(设计 §4.E 第 7 处):历史栏(现状固定 220)+ **10px** 分隔条 + 对话区。
 		// 分隔条占住对话区顶部操作条本来就有的 10px 左内边距(grid6 左移 10px 回到原位),首屏逐像素不变;
 		// 比例存 v2 splits["ai"]["history"];历史栏收起时左栏与分隔条一起收起(见上面的开关)
-		PageLayoutHost grid7 = new PageLayoutHost("ai", "history", GridLength.Auto, new GridLength(1.0, GridUnitType.Star));
+		//
+		// [R32-D26 / R32-MACMORE] 间隙必须显式传 **10**(Windows 冻结件 `PageLayoutHost.cs:170-181` 的
+		// `DefaultPixels=220 / Gap=10`,调用点 `AiPage.cs:513` 也按站点声明)。mac 早先把 gap 留给默认值
+		// (`PageLayoutHost.DefaultGap = 18`)却照抄了 Windows 的 `-10` 补偿 ⇒ 净偏移 **18 − 10 = +8px**,
+		// 正是 R32-ROUND2-SPEC §3.2 里 4 处留白中**唯一**的真偏离。改 Mac 一侧 `gap: 10` 后与 Windows
+		// 同为 `10 − 10 = 0` 净偏移;操作条(`border`)的左内边距实测 12px(≥10),分隔条仍落在内边距内。
+		PageLayoutHost grid7 = new PageLayoutHost("ai", "history", GridLength.Auto, new GridLength(1.0, GridUnitType.Star), gap: 10.0);
 		grid6.Margin = new Thickness(-10.0, 0.0, 0.0, 0.0);
 		grid7.SetLeft(_hist);
 		grid7.SetRight(grid6);

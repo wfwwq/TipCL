@@ -65,6 +65,13 @@ public sealed class WidgetRegistry : ILayoutContentProvider
 		{
 			if (_instance != null)
 			{
+				// 【R32-MACMORE 修的上屏竞态】`LayoutContentRegistry.Clear()` 是公开的测试口
+				// (R32McWidgetTests / R32McLayoutEngineTests / R32McLayoutEditorTests 都直接调),
+				// 它只清**注册表**、不会把这里的 _instance 置空。早先这里见 _instance 非空就直接 return,
+				// 于是"别人 Clear 过之后"的 EnsureRegistered 成了空操作 ⇒ 自建块渲染时被当成
+				// 「区块不可用」,「加块 → 上屏」全量用例约 1/4 概率拿不到标题。
+				// Register 对同一实例本来就幂等(见 LayoutContentRegistry.Register),所以每次都补一次。
+				LayoutContentRegistry.Register(_instance);
 				return false;
 			}
 			_instance = new WidgetRegistry();

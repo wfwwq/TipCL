@@ -3,12 +3,12 @@ using System;
 namespace TipCL.Smoke;
 
 /// <summary>
-/// <c>--smoke [--page &lt;id&gt;] [--theme light|dark] [--out x.png] [--ai-seed]</c> 的解析结果。
+/// <c>--smoke [--page &lt;id&gt;] [--theme light|dark] [--out x.png] [--ai-seed] [--layout-view]</c> 的解析结果。
 /// </summary>
 internal sealed class SmokeOptions
 {
     public const string Usage =
-        "用法: TipCL --smoke [--page <id>] [--theme light|dark] [--out <file.png>] [--ai-seed]";
+        "用法: TipCL --smoke [--page <id>] [--theme light|dark] [--out <file.png>] [--ai-seed] [--layout-view]";
 
     public string Page { get; private set; } = string.Empty;
 
@@ -24,6 +24,14 @@ internal sealed class SmokeOptions
     /// 所以不进这个开关,AI 页永远只有空壳 —— 消息区、卡片、状态行都拿不到帧证据。
     /// </summary>
     public bool AiSeed { get; private set; }
+
+    /// <summary>
+    /// [R32-MACMORE] <c>--layout-view</c>:截「设置 → 布局」内层视图(第 8 段)那一帧。
+    /// 单独用等于 <c>--page settings</c>;与 <c>--page</c> 同用时以 <c>--page</c> 为准,再切到布局视图。
+    /// 为什么用布尔开关而不是给 <c>SettingsPage.Select</c> 开公开 API:mac 侧唯一有公开入口的内层视图
+    /// 就是布局视图(<c>SettingsPage.OpenLayoutView()</c>),离屏截它不需要动生产 API。
+    /// </summary>
+    public bool LayoutView { get; private set; }
 
     public bool Dark => string.Equals(Theme, "dark", StringComparison.OrdinalIgnoreCase);
 
@@ -87,6 +95,12 @@ internal sealed class SmokeOptions
             if (string.Equals(arg, "--ai-seed", StringComparison.OrdinalIgnoreCase))
             {
                 options.AiSeed = true;
+                continue;
+            }
+
+            if (string.Equals(arg, "--layout-view", StringComparison.OrdinalIgnoreCase))
+            {
+                options.LayoutView = true;
                 continue;
             }
 

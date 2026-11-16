@@ -137,6 +137,46 @@ public class R32MacMoreLayoutTests
 		Assert.Equal("下载", ShellTabs.Label("download"));
 	}
 
+	/// <summary>
+	/// R32-D26:Mac 页集是 `shell.tabs`(5 键)的**超集**(7 键)。这里钉三件事:
+	/// 1页集逐字等于 <c>NavModel.DefaultNavOrder</c>(防两处漂移);
+	/// 2 5 个语义键全部映射到 Mac 页键,且反向映射能还原(其余 2 页是原生页);
+	/// 3「多出的 2 页」= ai / tasks,持久化的 `shell.tabs` 语义键**不变**(仍是那 5 个)。
+	/// </summary>
+	[Fact]
+	public void ShellTabs_mac_page_set_is_the_superset_of_the_five_semantic_tabs()
+	{
+		// 1) 页集与 mac 侧栏的默认顺序逐字一致(不许为对齐键数删 Mac 页面)
+		Assert.Equal(NavModel.DefaultNavOrder, ShellTabs.MacPageKeys);
+		Assert.Equal(7, ShellTabs.MacPageKeys.Length);
+		// 2) 5 个语义键全映射,且 round-trip 还原
+		Dictionary<string, string> expected = new Dictionary<string, string>
+		{
+			["launch"] = "launch",
+			["library"] = "instance",
+			["download"] = "download",
+			["plugins"] = "more",
+			["settings"] = "settings"
+		};
+		foreach (KeyValuePair<string, string> pair in expected)
+		{
+			Assert.Equal(pair.Value, ShellTabs.MacKeyOf(pair.Key));
+			Assert.Equal(pair.Key, ShellTabs.TabKeyOfMac(pair.Value));
+		}
+		// 3) 多出的 2 页 = ai / tasks,保持原生(布局 v2 不接管);它们在 shell.tabs 里没有语义键
+		Assert.Equal(new[] { "ai", "tasks" }, ShellTabs.MacNativeOnlyKeys);
+		foreach (string macKey in ShellTabs.MacNativeOnlyKeys)
+		{
+			Assert.True(ShellTabs.IsMacNativeOnly(macKey));
+			Assert.Null(ShellTabs.TabKeyOfMac(macKey));
+		}
+		// 页集 = 5 个映射页 + 2 个原生页,一个不多一个不少
+		Assert.Equal(7, expected.Count + ShellTabs.MacNativeOnlyKeys.Length);
+		// 持久化侧仍是 5 个 Windows 语义键(跨树可读)
+		Assert.Equal(5, ShellTabs.BuiltinKeys.Length);
+		Assert.All(ShellTabs.BuiltinKeys, key => Assert.False(ShellTabs.IsMacNativeOnly(ShellTabs.MacKeyOf(key))));
+	}
+
 	// ─────────────────────────────────────────────────────────── SplitCatalog
 
 	/// <summary>13 处现状表:序号 1..13 不重、PageId/SplitId 非空、每处都有说明。</summary>
