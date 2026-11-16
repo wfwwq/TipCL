@@ -42,6 +42,15 @@ internal static class SmokeRunner
         if (string.Equals(Environment.GetEnvironmentVariable("SMOKE_PROBE"), "popup-theme", StringComparison.Ordinal))
             return PopupThemeProbe(builder);
 
+        // SMOKE_PROBE=widgets:R32-LINT 部件层接线实测（注册表项数 + 每个部件的 id/标题/生效尺寸 + 真造一次内容）
+        if (string.Equals(Environment.GetEnvironmentVariable("SMOKE_PROBE"), "widgets", StringComparison.Ordinal))
+            return WidgetsProbe(builder);
+
+        // SMOKE_PROBE=widgets-lifetime:R32-LINT 部件层接线实测(走 SetupWithLifetime,
+        // 与生产启动同一条路。补上 --smoke 通道够不到的那一半
+        if (string.Equals(Environment.GetEnvironmentVariable("SMOKE_PROBE"), "widgets-lifetime", StringComparison.Ordinal))
+            return WidgetsProbeWithLifetime(builder);
+
         int exitCode = 0;
         var output = Path.GetFullPath("smoke.png");
 
@@ -488,6 +497,284 @@ internal static class SmokeRunner
         }
         foreach (var p in problems) Console.Error.WriteLine("POPUP-THEME FAIL: " + p);
         return 6;
+    }
+
+    /// <summary>
+    /// SMOKE_PROBE=widgets 的部件层接线实测探针(通道 A:--smoke 的 SetupWithoutStarting)。
+    ///
+    /// 为什么需要它:Linux 侧没有「加块 / 选部件」界面(Windows 的 SettingsLayoutPage.LayoutWidgetRows
+    /// 与写 custom: 引用的 LayoutTools 都还没移植),无头截图通道够不到那个交互。于是把「部件到底进不进得来」
+    /// 拆成几条可量的:注册表插没插电、注册了几个工厂、「选部件」白名单里每类的 id + 中文标题、文档里每个
+    /// 部件的定义、以及每个 custom:&lt;id&gt; 真造一次内容后是什么控件、带什么文字、在页面里占多大
+    /// (BlockLayout 的 W/H;没写进页面就是默认 1.0 x 1.0)。外加文档里没有定义的 custom:&lt;ghost&gt; 做对照。
+    ///
+    /// 实测发现(详见 progress/R32-LINT.md §4):--smoke 走的 SetupWithoutStarting **只装平台服务、
+    /// 不初始化应用** —— App.OnFrameworkInitializationCompleted() 一次都不被调用,因此本通道里注册表
+    /// 必然没插电,custom:&lt;id&gt; 一律造不出内容。这条边界由本通道原样记录(见 NOTE 行),正面的
+    /// 「部件真进得来」由同一个 dll 的通道 B(SMOKE_PROBE=widgets-lifetime,SetupWithLifetime,
+    /// 与生产启动同一条路)给出。
+    ///
+    /// 退出码:0 = 本通道下所有「应该成立」的断言成立;7 = 有任一条不成立(沿用 SMOKE_NET=2 /
+    /// SMOKE_INSTALL=3 / 4 兜底 / dialog-close=5 / popup-theme=6 的约定)。
+    /// </summary>
+    private static int WidgetsProbe(AppBuilder builder)
+    {
+        var problems = new System.Collections.Generic.List<string>();
+
+        builder
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            .UseSkia()
+            .AfterSetup(_ =>
+            {
+                try
+                {
+                    Motion.Enabled = false;
+                    TipCL.Core.Launcher.Config.CONFIG.Set("ui_dark", Environment.GetEnvironmentVariable("SMOKE_DARK") == "1");
+                    var window = new Shell.MainWindow();
+                    window.Show();
+                    var pageId = Environment.GetEnvironmentVariable("SMOKE_PAGE");
+                    if (string.IsNullOrEmpty(pageId)) pageId = "launch";
+                    window.Navigate(pageId);
+                    RenderPass();
+                    Settle(DefaultSettleMs);
+                    RenderPass();
+
+                    Console.WriteLine("=== WIDGETS 通道 A:--smoke(SetupWithoutStarting,进程里没有 classic desktop lifetime)===");
+                    WidgetsReport(problems, window, pageId);
+                    SaveWidgetsFrame(window);
+                    window.Close();
+                }
+                catch (Exception ex)
+                {
+                    problems.Add("探针自身抛异常: " + ex);
+                }
+            })
+            .SetupWithoutStarting();
+
+        return WidgetsVerdict(problems, "A:--smoke / setup-without-starting(无 lifetime 通道)");
+    }
+
+    /// <summary>
+    /// SMOKE_PROBE=widgets-lifetime 的部件层接线实测探针(通道 B:SetupWithLifetime)。
+    ///
+    /// 与生产启动同一条路:SetupWithLifetime 会装上 classic desktop lifetime 并让应用完成初始化 ——
+    /// App.axaml.cs 里 lifetime 判断之外的 EnsureRegistered() 与判断之内的 V1Bridge 注入都会跑,
+    /// 主窗口也由 App 自己建(desktop.MainWindow),所以这里量到的是**真宿主启动后的部件层**。
+    /// 平台仍是 headless(无头平台 + Skia):不出现真窗口、不抢前台焦点。
+    /// </summary>
+    private static int WidgetsProbeWithLifetime(AppBuilder builder)
+    {
+        var problems = new System.Collections.Generic.List<string>();
+
+        Console.WriteLine("=== WIDGETS 通道 B:SetupWithLifetime(与生产启动同路:有 classic desktop lifetime)===");
+        try
+        {
+            var lifetime = new Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime();
+            builder
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .SetupWithLifetime(lifetime);
+
+            Motion.Enabled = false;
+            TipCL.Core.Launcher.Config.CONFIG.Set("ui_dark", Environment.GetEnvironmentVariable("SMOKE_DARK") == "1");
+
+            var window = lifetime.MainWindow as Shell.MainWindow;
+            var pageId = Environment.GetEnvironmentVariable("SMOKE_PAGE");
+            if (string.IsNullOrEmpty(pageId)) pageId = "launch";
+            if (window != null)
+            {
+                window.Show();
+                window.Navigate(pageId);
+            }
+            RenderPass();
+            Settle(DefaultSettleMs);
+            RenderPass();
+
+            WidgetsReport(problems, window, pageId);
+            if (window != null) SaveWidgetsFrame(window);
+            window?.Close();
+        }
+        catch (Exception ex)
+        {
+            problems.Add("探针自身抛异常: " + ex);
+        }
+
+        return WidgetsVerdict(problems, "B:setup-with-lifetime(生产启动通道)");
+    }
+
+    /// <summary>
+    /// 两条通道共用的实测体:注册表状态/工厂数 + 五类内置部件的 id 与中文标题 + 文档里每个部件的定义
+    /// 与其生效尺寸 + 每个 custom:&lt;id&gt; 真造一次内容 + 屏幕可视树里核对标记文本与占位对照。
+    /// </summary>
+    private static void WidgetsReport(System.Collections.Generic.List<string> problems, Shell.MainWindow? window, string pageId)
+    {
+        Console.WriteLine($"WIDGETS TIPCL_HOME={TipCL.Core.Launcher.Utils.ResolveRoot()}");
+        Console.WriteLine($"WIDGETS Store.FilePath={TipCL.Core.Launcher.Layout.LayoutStoreV2.FilePath}");
+        Console.WriteLine($"WIDGETS Store.LastLoadSource={TipCL.Core.Launcher.Layout.LayoutStoreV2.LastLoadSource}");
+        var lifetime = Avalonia.Application.Current?.ApplicationLifetime;
+        var cfgLang = TipCL.Core.Launcher.Config.CONFIG.Get("language", "");
+        Console.WriteLine($"WIDGETS App={Avalonia.Application.Current?.GetType().FullName} Lifetime={(lifetime == null ? "(null)" : lifetime.GetType().Name)} I18n.CurrentLang={TipCL.Core.Launcher.I18nCore.CurrentLang} Config.language=[{cfgLang}]");
+
+        bool registered = TipCL.App.Pages.Layout.WidgetRegistry.Registered;
+        int factories = TipCL.App.Pages.Layout.LayoutContentRegistry.Count;
+        Console.WriteLine($"WIDGETS Registry.Registered={registered} ContentFactories={factories}");
+        if (!registered)
+        {
+            Console.WriteLine("WIDGETS NOTE: 本进程里 WidgetRegistry 没插电 —— App.OnFrameworkInitializationCompleted() 一次都没被调用(Avalonia 的 SetupWithoutStarting 只装平台服务、不初始化应用;只有 SetupWithLifetime 那条路才会走进去)。");
+            Console.WriteLine("WIDGETS NOTE: 因此本通道下 custom:<id> 一律造不出内容,Build 类断言不参与判定;部件真进得来的正面证据见通道 B。");
+        }
+        else if (factories < 1)
+        {
+            problems.Add("WidgetRegistry 注册了但 LayoutContentRegistry 里一个工厂都没有");
+        }
+
+        // 「选部件」列表该有的东西:五类内置部件的 id + 中文标题(Windows 由设置页列出来)。与注册表插没插电无关。
+        Console.WriteLine($"WIDGETS SafeTypes={TipCL.App.Pages.Layout.WidgetRegistry.SafeTypes.Length}");
+        foreach (var t in TipCL.App.Pages.Layout.WidgetRegistry.SafeTypes)
+        {
+            var label = TipCL.App.Pages.Layout.WidgetUI.TypeLabel(t);
+            Console.WriteLine($"WIDGET-TYPE type={t} label={label}");
+            if (string.IsNullOrEmpty(label) || label == t) problems.Add($"类型 {t} 没有中文标题");
+        }
+
+        var doc = TipCL.Core.Launcher.Layout.LayoutStoreV2.Load();
+        var widgets = TipCL.App.Pages.Layout.WidgetRegistry.AllWidgets();
+        Console.WriteLine($"WIDGETS WidgetDefs={widgets.Count}");
+        foreach (var w in widgets)
+        {
+            var settings = (w.Settings == null) ? "" : string.Join(",", w.Settings.Select(kv => kv.Key + "=" + kv.Value));
+            Console.WriteLine($"WIDGET id={w.Id} type={w.Type} title={w.Title} settings={{{settings}}}");
+        }
+
+        var marker = Environment.GetEnvironmentVariable("SMOKE_MARKER") ?? "";
+        var ghostId = Environment.GetEnvironmentVariable("SMOKE_GHOST");
+        if (string.IsNullOrEmpty(ghostId)) ghostId = "custom:r32lint-ghost";
+        var ph = TipCL.Core.Launcher.I18nCore.Tr("自建区块不可用"); // 占位标题按当前语言取(en 语言下是 Custom block unavailable)
+
+        if (!registered)
+        {
+            Console.WriteLine("WIDGET-BUILD 跳过(注册表没插电,见上面的 NOTE);本通道只作为「没有 lifetime 时部件层拿不到内容」的边界记录");
+        }
+        else
+        {
+            if (widgets.Count == 0) problems.Add("布局文档里一个部件定义都没有(种子没读进来?)");
+            foreach (var w in widgets)
+            {
+                var blockId = "custom:" + w.Id;
+                var built = TipCL.App.Pages.Layout.LayoutContentRegistry.Build(blockId, pageId);
+                var kind = (built == null) ? "null" : built.GetType().Name;
+                var texts = TextsOf(built);
+                Console.WriteLine($"WIDGET-BUILD block={blockId} hasProvider={TipCL.App.Pages.Layout.LayoutContentRegistry.HasProvider(blockId)} built={kind} size={EffectiveSize(doc, blockId)} texts=[{texts}]");
+                if (built == null) problems.Add($"{blockId} 造不出内容");
+                else if (texts.Contains(ph)) problems.Add($"{blockId} 落了占位,部件没进来");
+            }
+
+            // 对照组:文档里没定义的 custom:<ghost> 必须只拿占位(证明上面那条不是「什么都占位」)
+            var ghostBuilt = TipCL.App.Pages.Layout.LayoutContentRegistry.Build(ghostId, pageId);
+            var ghostTexts = TextsOf(ghostBuilt);
+            Console.WriteLine($"WIDGET-BUILD block={ghostId} defined=False hasProvider={TipCL.App.Pages.Layout.LayoutContentRegistry.HasProvider(ghostId)} built={(ghostBuilt == null ? "null" : ghostBuilt.GetType().Name)} size={EffectiveSize(doc, ghostId)} texts=[{ghostTexts}]");
+            if (ghostBuilt == null || !ghostTexts.Contains(ph))
+                problems.Add($"{ghostId} 没拿到「{ph}」占位 —— 对照组失效");
+        }
+
+        // 屏上实测:种子便签的标记文本必须出现在这一页的可视树里(部件真的画进来了)
+        if (window == null)
+        {
+            Console.WriteLine("WIDGETS 没有窗口(App 没建 / 没给 MainWindow),跳过屏上核对");
+            return;
+        }
+        var blocks = window.GetVisualDescendants().OfType<TextBlock>().ToList();
+        if (marker.Length > 0)
+        {
+            var hits = blocks.Count(t => (t.Text ?? "").Contains(marker, StringComparison.Ordinal));
+            var ghostHits = blocks.Count(t => (t.Text ?? "").Contains(ph, StringComparison.Ordinal));
+            Console.WriteLine($"WIDGETS VisualTextBlocks={blocks.Count} MarkerHits={hits} GhostPlaceholderHits={ghostHits} page={window.CurrentPageId}");
+            foreach (var t in blocks.Where(t => (t.Text ?? "").Contains(marker, StringComparison.Ordinal)))
+                Console.WriteLine($"WIDGETS 屏上命中: \"{t.Text}\" Bounds={t.Bounds.Width:F0}x{t.Bounds.Height:F0}");
+            if (hits == 0 && registered) problems.Add("可视树里找不到种子便签的标记文本 —— 部件没渲染进页面");
+            else if (hits == 0) Console.WriteLine("WIDGETS NOTE: marker 没上屏 —— 本通道注册表没插电,属预期");
+            else if (ghostHits == 0) problems.Add("对照组的「自建区块不可用」没上屏 —— 未定义块的占位通路失效");
+        }
+        else
+        {
+            Console.WriteLine($"WIDGETS 未给 SMOKE_MARKER,跳过屏上文本核对(当前页 {window.CurrentPageId},可视树 TextBlock {blocks.Count} 个)");
+        }
+    }
+
+    /// <summary>
+    /// 给部件探针存一张屏上截图(CWD 下的 SMOKE_PNG,缺省 smoke-widgets.png)。
+    /// 与主冒烟一致:捕获前推一次渲染 pass,并先弃一帧(R8:第一张常是尚未重合成的上一帧)。
+    /// </summary>
+    private static void SaveWidgetsFrame(Window window)
+    {
+        var png = Environment.GetEnvironmentVariable("SMOKE_PNG");
+        if (string.IsNullOrEmpty(png)) png = "smoke-widgets.png";
+        try
+        {
+            RenderPass();
+            DiscardFirstFrame(window);
+            using var frame = window.CaptureRenderedFrame();
+            if (frame is null)
+            {
+                Console.Error.WriteLine("WIDGETS: 未能捕获渲染帧");
+                return;
+            }
+            var full = Path.GetFullPath(png);
+            using var stream = File.Create(full);
+            frame.Save(stream);
+            Console.WriteLine($"WIDGETS 截图={full} bytes={new FileInfo(full).Length}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"WIDGETS: 截图失败 {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>两条通道共用的判定尾巴:0 = 本通道该成立的都成立;7 = 有任一条不成立。</summary>
+    private static int WidgetsVerdict(System.Collections.Generic.List<string> problems, string mode)
+    {
+        if (problems.Count == 0)
+        {
+            Console.WriteLine($"WIDGETS OK mode={mode}");
+            return 0;
+        }
+        foreach (var p in problems) Console.Error.WriteLine("WIDGETS FAIL: " + p);
+        return 7;
+    }
+
+    private static string TextsOf(object? content)
+    {
+        if (content is not Control root) return "-";
+        try
+        {
+            var texts = root.GetLogicalDescendants().OfType<TextBlock>()
+                .Select(t => t.Text ?? "").Where(t => t.Length > 0).ToList();
+            return string.Join(" | ", texts);
+        }
+        catch (Exception)
+        {
+            return "-";
+        }
+    }
+
+    /// <summary>该块在文档各页面里的生效尺寸(没写进任何页面时说明用的是 BlockLayout 默认 1.0 x 1.0)。</summary>
+    private static string EffectiveSize(TipCL.Core.Launcher.Layout.LayoutV2? doc, string blockId)
+    {
+        var parts = new System.Collections.Generic.List<string>();
+        if (doc?.Layout?.Pages != null)
+        {
+            foreach (var kv in doc.Layout.Pages)
+            {
+                if (kv.Value?.Blocks == null) continue;
+                foreach (var b in kv.Value.Blocks)
+                {
+                    if (b != null && string.Equals(b.Id, blockId, StringComparison.Ordinal))
+                        parts.Add($"{kv.Key}:{b.W:F2}x{b.H:F2}" + (b.Hidden ? "(hidden)" : ""));
+                }
+            }
+        }
+        if (parts.Count == 0) parts.Add("未入页面,默认 1.00x1.00");
+        return string.Join(",", parts);
     }
 
     /// <summary>探针里的同形控件组:裸 TextBox / 裸 ComboBox / 裸 Slider / 显式主题 Button / 裸 TextBlock。</summary>

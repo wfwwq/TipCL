@@ -24,6 +24,15 @@ public partial class App : Application
         // 放进 if 里就覆盖不到无头截图路径,本项修复也就无法自证)。
         TipCL.Core.Launcher.I18nCore.InitLanguage();
 
+        // R32-LINT:接线部件内容工厂(自建块 custom:<widgetId> / 插件块 plugin:...)。
+        // 对齐 Windows 真源 windos/src/TipCL/App.xaml.cs:94 —— 在 I18n.Init 之后、
+        // V1Bridge 注入口之前调用 WidgetRegistry.EnsureRegistered()。
+        // 与上面的 InitLanguage 同理,必须放在 lifetime 判断之外:--smoke 走
+        // SetupWithoutStarting(),此时没有 classic desktop lifetime,放进 if 里则
+        // 自建块/插件块在无头截图路径上挂不上去,本项接线也就无法自证。
+        // 在此之前 Linux 生产代码里没有任何调用点,工厂就绪但没插电(R32-LWD 报告 7.1)。
+        TipCL.App.Pages.Layout.WidgetRegistry.EnsureRegistered();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             TipCL.App.Pages.Layout.LayoutFx.Wire(); // M2-B4：布局 JSON 导出/导入与 Toast 接线
