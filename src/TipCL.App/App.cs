@@ -40,6 +40,13 @@ public sealed class App : Application
         // Palette -> Controls.axaml)一字未动。
         I18n.Init((ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Args);
 
+        // R32-MWG:v1 → v2 的注入缝接线(等价 Windows App.OnStartup 里的
+        // LayoutStoreV2.V1Bridge = new PagesLayoutV1Bridge())。
+        // 装配前 Core 走自带的 v1 文件读写(单测就是这条路);装配后 v2 文档的写通
+        // 落到 mac 自己的 ui_page_layouts.json,老 v1 代码(PageLayoutStore 的调用方)立刻看到新值。
+        // 幂等;必须在任何页面构造之前装配,否则首个 LayoutEditor 可能先读到未投影的 v1。
+        TipCL.Core.Launcher.Layout.LayoutStoreV2.V1Bridge = new TipCL.Pages.PagesLayoutV1Bridge();
+
         // R32-MWG:自建区块 / 插件区块的内容工厂接线(§4.F 的口子)。
         // 等价 Windows 版 App.OnStartup 里的 WidgetRegistry.EnsureRegistered():
         // LayoutEditor.ResolveContent 对 custom:/plugin: 块会查 LayoutContentRegistry.Build,

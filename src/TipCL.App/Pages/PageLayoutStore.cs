@@ -260,6 +260,16 @@ public static class PageLayoutStore
 	// ————— 测试用注入缝(C3a 新增,不影响上面任何语义) —————
 
 	/// <summary>
+	/// R32-MWG:对齐 Windows 的公开 <c>Reload()</c>(v2 写通 v1 之后,老 v1 路径要立刻看到新值)。
+	/// 语义 = 丢掉内存缓存、强制下一次访问重新读盘 —— 与下面的 <see cref="ResetCache"/> 同义,
+	/// 只是 Windows 侧这个名字是 public 且被 <see cref="PagesLayoutV1Bridge.RefreshV1Cache"/> 调用。
+	/// </summary>
+	public static void Reload()
+	{
+		ResetCache();
+	}
+
+	/// <summary>
 	/// 丢掉内存缓存,强制下一次访问重新读盘。生产代码不需要它(缓存跟着 <see cref="DirPath"/> 走);
 	/// 测试用它来模拟"换了一台机器 / 重启了应用"之后再读盘的能力。
 	/// </summary>

@@ -947,36 +947,7 @@ public static class LayoutEngine
 	/// </summary>
 	public static PageLayoutV2 MergeV1(PageLayoutV2? existing, PageLayoutDoc? v1)
 	{
-		return LayoutStoreV2.MergeV1Order(existing, ToCoreBlocks(v1));
-	}
-
-	/// <summary>
-	/// [移植差异] Windows 版这一句调的是 Pages 层 <c>LayoutV1Projection.ToCoreBlocks</c>
-	/// (windos/src/TipCL/Pages/Layout/LayoutV1BridgePages.cs);mac 树还没有那个生产文件(注入缝的生产接线
-	/// 留给后续视图/接线包,见 progress/R32-MC.md),故在此按**逐字等价**重写一份纯搬运
-	/// (过滤条件 / 顺序 / 目标结构完全一致)。
-	/// 将来本树落了 LayoutV1Projection 时,把上面一行换回 <c>LayoutV1Projection.ToCoreBlocks(v1)</c>
-	/// 并删掉本方法即可。
-	/// </summary>
-	private static List<LayoutV1Block> ToCoreBlocks(PageLayoutDoc? doc)
-	{
-		List<LayoutV1Block> blocks = new List<LayoutV1Block>();
-		if (doc == null || doc.Blocks == null)
-		{
-			return blocks;
-		}
-		foreach (BlockState block in doc.Blocks)
-		{
-			if (block != null && !string.IsNullOrEmpty(block.Id))
-			{
-				blocks.Add(new LayoutV1Block
-				{
-					Id = block.Id,
-					Hidden = block.Hidden
-				});
-			}
-		}
-		return blocks;
+		return LayoutStoreV2.MergeV1Order(existing, LayoutV1Projection.ToCoreBlocks(v1));
 	}
 }
 
