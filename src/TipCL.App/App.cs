@@ -40,6 +40,13 @@ public sealed class App : Application
         // Palette -> Controls.axaml)一字未动。
         I18n.Init((ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Args);
 
+        // R32-MWG:自建区块 / 插件区块的内容工厂接线(§4.F 的口子)。
+        // 等价 Windows 版 App.OnStartup 里的 WidgetRegistry.EnsureRegistered():
+        // LayoutEditor.ResolveContent 对 custom:/plugin: 块会查 LayoutContentRegistry.Build,
+        // 没有这一步,所有自建 / 插件区块都会退化成「区块不可用」占位。
+        // 幂等,重复调用无副作用;必须放在窗口构建之前(首页可能马上就带自建块)。
+        TipCL.Pages.WidgetRegistry.EnsureRegistered();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             MainWindow window = new MainWindow();
