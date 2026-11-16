@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using TipCL.Core.Launcher.Layout;
 using TipCL.Pages;
 using TipCL.Services;
 using Xunit;
@@ -355,7 +356,8 @@ public class C3cPageLayoutTests
     // ---------------------------------------------------------------- 区块 / 仪表盘集成
 
     /// <summary>【Windows 源】<c>LaunchPage.cs:476-483</c>:页面把 <c>pageId = "launch"</c> 交给 BlockHost,
-    /// 布局因此落在 <c>&lt;dir&gt;/launch.json</c>(注入目录里,不碰用户数据目录)。</summary>
+    /// 布局因此落在注入目录里(R32-MWG 起真源是 <c>ui_layout_v2.json</c>,v1 的
+    /// <c>ui_page_layouts.json</c> 由 v2 单向写通 —— 两份都不碰用户数据目录)。</summary>
     [Fact]
     public void Block_layout_persists_under_the_launch_page_id()
     {
@@ -367,19 +369,27 @@ public class C3cPageLayoutTests
             var page = new LaunchPage();
             BlockHost host = Assert.IsType<BlockHost>(page.BlocksNow);
 
-            // 编辑态是隐藏 / 重排的入口条件(BlockHost.HideBlock 等只在 _edit 下生效,Windows 亦然)
-            host.EnterEdit();
-            host.HideBlock(host.CardOf("news")!.Spec);
-            host.ExitEdit();
+            // 编辑态是隐藏 / 重排的入口条件(LayoutEditor.HideBlock 只在 _edit 下生效,Windows 亦然)
+            Assert.True(host.EnterEdit());
+            LayoutCard news = C3aTree.RenderedCards(host).Single(card => card.Spec.Id == "news");
+            host.Editor.HideBlock(news.Spec);
+            host.Editor.ExitEdit();
             C3cFiles.Settle();
 
             string[] files = System.IO.Directory.GetFiles(home.Dir, "*.json", System.IO.SearchOption.AllDirectories);
-            Assert.Single(files);
-            // PageLayoutStore 是所有页面共用一份文件(键是页面 id),不是"一页一个文件"
-            Assert.Equal("ui_page_layouts.json", System.IO.Path.GetFileName(files[0]), StringComparer.OrdinalIgnoreCase);
-            string json = System.IO.File.ReadAllText(files[0]);
-            Assert.Contains("\"launch\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"news\"", json, StringComparison.Ordinal);
+            Assert.Equal(2, files.Length);
+            // v2 真源 + v1 单向投影;PageLayoutStore 是所有页面共用一份文件(键是页面 id),不是"一页一个文件"
+            string[] names = files
+                .Select(file => System.IO.Path.GetFileName(file) ?? "")
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            Assert.Equal(new[] { "ui_layout_v2.json", "ui_page_layouts.json" }, names);
+            foreach (string file in files)
+            {
+                string json = System.IO.File.ReadAllText(file);
+                Assert.Contains("\"launch\"", json, StringComparison.Ordinal);
+                Assert.Contains("\"news\"", json, StringComparison.Ordinal);
+            }
         });
     }
 
@@ -394,10 +404,12 @@ public class C3cPageLayoutTests
             using var api = Api();
             var first = new LaunchPage();
             BlockHost host = Assert.IsType<BlockHost>(first.BlocksNow);
-            host.EnterEdit();
-            host.HideBlock(host.CardOf("news")!.Spec);
-            host.Restore(host.CardOf("tasks")!.Spec);
-            host.ExitEdit();
+            Assert.True(host.EnterEdit());
+            LayoutCard news = C3aTree.RenderedCards(host).Single(card => card.Spec.Id == "news");
+            host.Editor.HideBlock(news.Spec);
+            // tasks 出厂默认隐藏(LaunchPage 的 DefaultVisible = false);这里给它恢复显示
+            host.Editor.SetBlockHidden("tasks", false);
+            host.Editor.ExitEdit();
             C3cFiles.Settle();
             Assert.Equal(new[] { "tasks" }, C3aTree.RenderedIds(host).ToArray());
 
@@ -409,7 +421,9 @@ public class C3cPageLayoutTests
         });
     }
 
-    /// <summary>【Windows 源】<c>BlockHost</c> 的重排落盘:把 tasks 拖到 news 前面,重载后顺序保持。</summary>
+    /// <summary>【Windows 源】<c>BlockHost</c> 的重排落盘:把 tasks 拖到 news 前面,重载后顺序保持。
+    /// R32-MWG 后拖拽状态机在 <c>LayoutEditor</c>(C3a 的 40 条引擎用例覆盖),这里用页级改写入口
+    /// <c>Editor.MutatePage</c> 造出同一个 v2 顺序,验证宿主"落盘 → 重读"这一段。</summary>
     [Fact]
     public void Block_order_survives_a_reload()
     {
@@ -420,15 +434,21 @@ public class C3cPageLayoutTests
             using var api = Api();
             var page = new LaunchPage();
             BlockHost host = Assert.IsType<BlockHost>(page.BlocksNow);
-            host.EnterEdit();
-            host.Restore(host.CardOf("tasks")!.Spec);
+            Assert.True(host.EnterEdit());
+            host.Editor.SetBlockHidden("tasks", false);
 
-            // 用 C3a 的状态机拖:抓住 tasks 的卡,拖到 news 中点之上,松手
-            BlockHost.BlockCard card = host.CardOf("tasks")!;
-            host.BeginDragCore(card, card, null);
-            host.DragTo(0.0);
-            host.EndDrag(card);
-            host.ExitEdit();
+            // 把 tasks 挪到块表最前面(= 拖到 news 之上松手后的状态),MutatePage 顺带落盘 + 重排
+            host.Editor.MutatePage(delegate(PageLayoutV2 doc)
+            {
+                int index = doc.Blocks.FindIndex(block => block.Id == "tasks");
+                if (index > 0)
+                {
+                    BlockLayout block = doc.Blocks[index];
+                    doc.Blocks.RemoveAt(index);
+                    doc.Blocks.Insert(0, block);
+                }
+            });
+            host.Editor.ExitEdit();
             C3cFiles.Settle();
             Assert.Equal(new[] { "tasks", "news" }, C3aTree.RenderedIds(host).ToArray());
 
@@ -438,7 +458,7 @@ public class C3cPageLayoutTests
         });
     }
 
-    /// <summary>【Windows 源】<c>BlockHost.ResetPage</c>:「重置本页」回到页面给的默认文档(只有 news 可见)。</summary>
+    /// <summary>【Windows 源】<c>LayoutEditor.ResetPage</c>:「重置本页」回到页面给的默认文档(只有 news 可见)。</summary>
     [Fact]
     public void Reset_page_restores_the_default_layout()
     {
@@ -449,20 +469,26 @@ public class C3cPageLayoutTests
             using var api = Api();
             var page = new LaunchPage();
             BlockHost host = Assert.IsType<BlockHost>(page.BlocksNow);
-            host.EnterEdit();
-            host.HideBlock(host.CardOf("news")!.Spec);
-            host.Restore(host.CardOf("log")!.Spec);
-            host.ExitEdit();
+            Assert.True(host.EnterEdit());
+            LayoutCard news = C3aTree.RenderedCards(host).Single(card => card.Spec.Id == "news");
+            host.Editor.HideBlock(news.Spec);
+            host.Editor.SetBlockHidden("log", false);
+            host.Editor.ExitEdit();
             C3cFiles.Settle();
+            Assert.Equal(new[] { "log" }, C3aTree.RenderedIds(host).ToArray());
 
-            host.ResetPage();
+            host.Editor.ResetPage();
             C3cFiles.Settle();
             Assert.Equal(new[] { "news" }, C3aTree.RenderedIds(host).ToArray());
             Assert.Equal(
                 new[] { "tasks", "playtime", "notes", "log" },
                 C3cExpected.BlockIds.Where(id => host.HiddenNow.Contains(id)).ToArray());
-            // 重置是"保存默认文档"的路径,所以盘上那份也回到默认(不再有隐藏项)
-            Assert.False(string.IsNullOrEmpty(home.Dir));
+            // 重置是"保存默认文档"的路径,所以盘上那份也回到默认:换一个实例重读仍然是出厂布局
+            home.ForgetCache();
+            var reloaded = new LaunchPage();
+            Assert.Equal(
+                new[] { "news" },
+                C3aTree.RenderedIds(Assert.IsType<BlockHost>(reloaded.BlocksNow)).ToArray());
         });
     }
 

@@ -228,7 +228,7 @@ public class C3cPageStructureTests
             using var scope = C3cScope.Capture();
             var page = new LaunchPage();
             BlockHost host = Assert.IsType<BlockHost>(page.BlocksNow);
-            SPanel list = C3aTree.ListOf(host);
+            FillPanel list = C3aTree.ListOf(host);
             Assert.Equal(C3cExpected.BlocksMarginLeft, list.Margin.Left, 3);
             Assert.Equal(C3cExpected.BlocksMarginRight, list.Margin.Right, 3);
             Assert.Equal(C3cExpected.BlocksMarginBottom, list.Margin.Bottom, 3);
