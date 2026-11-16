@@ -17,6 +17,7 @@ using TipCL.App.Common;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher;
+using TipCL.Core.Launcher.Layout;
 // 命名空间 TipCL.App.Pages.* 下 `Ui` 会被解析成命名空间而非类，用别名指到类（B0 同款约定）
 using UiClass = TipCL.App.Ui.Ui;
 
@@ -105,8 +106,14 @@ public sealed class LibraryPage : PageBase
     // 页内切换前的原始内容（进入实例详情后返回时恢复）
     private Control? _shell;
 
-    private readonly Grid _body;
-    private readonly Border _leftCard;
+    // [layout-fix] 规格 §3-问题6:实例库改成区块宿主 BlockHost("library:main")(表 1 的页面 ID)。
+    // 两个区块 =「文件夹列表」与「版本选择」,默认 12 列网格里占 4 列 / 8 列(与原来 1:2 星号列的观感一致)。
+    /// <summary>「文件夹列表」区块 id(进布局文档)。</summary>
+    private const string FoldersBlockId = "folders";
+
+    /// <summary>「版本选择」区块 id。</summary>
+    private const string ListBlockId = "versions";
+
     private readonly StackPanel _rightCol;
 
     public LibraryPage() : base("library", "实例库")
@@ -120,7 +127,8 @@ public sealed class LibraryPage : PageBase
         var h = UiClass.Txt("文件夹列表", 18, bold: true);
         h.FontWeight = FontWeight.ExtraBold;
         var left = UiClass.Card(UiClass.V(10, h, _folderPath, _folders, UiClass.Sep(), UiClass.Txt("添加或导入", 13, bold: true), add, pack, create, migrate), 14);
-        left.MaxWidth = 380;
+        // [layout-fix] 规格 §3-问题1:去掉 MaxWidth,宽度完全由 4/12 列决定(对齐 Windows 冻结件的同款改动)
+        left.HorizontalAlignment = HorizontalAlignment.Stretch;
         left.VerticalAlignment = VerticalAlignment.Top;
 
         // —— 右栏头部：标题 + 计数 + 搜索 + 实例详情 + 刷新 ——
@@ -151,15 +159,59 @@ public sealed class LibraryPage : PageBase
 
         _rightCol = UiClass.V(12, head, _groupsHost, _empty);
         _rightCol.VerticalAlignment = VerticalAlignment.Top;
-        _leftCard = left;
-        _body = UiClass.G("Auto");
-        _body.Add(_leftCard, 0, 0);
-        _body.Add(_rightCol, 0, 2);
-        _body.ColumnDefinitions.Add(new ColumnDefinition(1, GridUnitType.Star) { MinWidth = 260 });
-        _body.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(18)));
-        _body.ColumnDefinitions.Add(new ColumnDefinition(2, GridUnitType.Star));
-        Content = PageBase.ScrollBody(_body);
-        _shell = (Control)Content;
+        // [layout-fix] 规格 §3-问题6:实例库整体改成区块宿主(两个区块 =「文件夹列表」「版本选择」)。
+        // 第 3 参边距不传(用布局文档的 pad,默认就是 PageBase.ScrollBody 的 18,14,18,16);
+        // 第 4 参 defaultPage = 出厂默认网格布局,布局文件里还没有 library:main 时用它兜底。
+        var host = new BlockHost("library:main", new List<BlockSpec>
+        {
+            new BlockSpec { Id = FoldersBlockId, Title = I18nCore.Tr("文件夹列表"), Content = left },
+            new BlockSpec { Id = ListBlockId, Title = I18nCore.Tr("版本选择"), Content = _rightCol },
+        }, null, LibraryDefaultPage());
+        Content = host;
+        _shell = host;
+    }
+
+    /// <summary>
+    /// [layout-fix] 规格 §4-能力2:实例库的出厂默认布局 —— 12 列网格,文件夹列表 4 列 / 版本选择 8 列
+    /// (与原 1:2 星号分栏的观感一致;间距取 18 = 原来那条分隔条的宽度)。布局文件里还没有
+    /// <c>library:main</c> 记录时用它(老用户升上来第一眼仍然是左右并排)。
+    /// </summary>
+    private static PageLayoutV2 LibraryDefaultPage()
+    {
+        var page = new PageLayoutV2
+        {
+            Mode = LayoutSchema.ModeGrid,
+            Cols = LayoutSchema.ColsDefault,
+            RowH = 0.0,
+            Gap = 18.0,
+            // [R32-LINMORE] 页边距用 **Linux 旧版 PageBase.ScrollBody 的 20,16,20,16**(不是 Windows 的
+            // 18,14,18,16:Windows 的 ScrollBody 就是 18,14)—— 这样"没写过布局文档"时页面文字基线
+            // 与改动前逐像素对齐,差异只剩下面 grid 列宽那一条(1:2 星号 vs 4/8 列)。
+            Pad = new double[] { 20.0, 16.0, 20.0, 16.0 },
+        };
+        page.Blocks.Add(new BlockLayout
+        {
+            Id = FoldersBlockId,
+            X = 0.0,
+            Y = 0.0,
+            W = 4.0,
+            H = 1.0,
+            Span = 4,
+            MinH = 1.0,
+            Z = 0,
+        });
+        page.Blocks.Add(new BlockLayout
+        {
+            Id = ListBlockId,
+            X = 4.0,
+            Y = 0.0,
+            W = 8.0,
+            H = 1.0,
+            Span = 8,
+            MinH = 1.0,
+            Z = 1,
+        });
+        return page;
     }
 
     // ———————————————— 数据 ————————————————

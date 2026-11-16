@@ -202,7 +202,8 @@ public sealed partial class SettingsPage : PageBase
     private bool _savePending;
 
     private readonly List<(Border Pill, TextBlock Text)> _nav = new();
-    private readonly Control?[] _views = new Control?[7];
+    // R32-LINMORE:7 → 8 —— 第 8 个内层视图「布局」对标 Windows SettingsPage.LayoutView(SettingsLayoutPage.cs)
+    private readonly Control?[] _views = new Control?[8];
     private readonly ContentControl _view = new() { Focusable = false };
     private PageBase? _sub;
 
@@ -358,11 +359,13 @@ public sealed partial class SettingsPage : PageBase
         // 提交反馈 / 我提交过的 / 常见问题 / 关于四块都在 FeedbackView 里,index 6 懒建)
         _views[0] = general;
         _views[3] = network;
+        // R32-LINMORE:「布局」是第 8 个视图(自带内容边距,见 SettingsPage.Layout.cs 的 BuildLayoutView)
+        _views[LayoutView] = BuildLayoutView();
 
-        // 左导航：0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于
+        // 左导航:0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于 / 7 布局
         var nav = UiClass.V(2,
             NavBtn(0, "通用"), NavBtn(1, "账号"), NavBtn(2, "Java"), NavBtn(3, "下载与网络"),
-            NavBtn(4, "服务器"), NavBtn(5, "游戏时长"), NavBtn(6, "反馈与关于"),
+            NavBtn(4, "服务器"), NavBtn(5, "游戏时长"), NavBtn(6, "反馈与关于"), NavBtn(LayoutView, "布局"),
             _saveState.M(12, 10, 0, 0));
         nav.Margin = new Thickness(12, 16, 0, 12);
 
@@ -445,6 +448,12 @@ public sealed partial class SettingsPage : PageBase
             _sub?.ShellDetach();
             _sub = sub;
             sub?.ShellAttach(null);
+        }
+        // R32-LINMORE:切到「布局」时重建视图(对齐 Windows SettingsPage.Select:`if (i == LayoutView) _views[LayoutView] = BuildLayoutView();`)
+        // —— 保证每次进来都读到最新的页签 / 区块 / 方案状态。
+        if (i == LayoutView)
+        {
+            _views[LayoutView] = BuildLayoutView();
         }
         _view.Content = _views[i];
     }

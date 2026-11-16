@@ -58,6 +58,13 @@ internal static class SmokeRunner
         // 无头单帧捕获跑不动过渡 → 内容整片不可见。冒烟一律关动画。
         Motion.Enabled = false;
 
+        // [R32-LINMORE] 无头路径的部件工厂插电:生产路径由 App.OnFrameworkInitializationCompleted()
+        // 调 WidgetRegistry.EnsureRegistered(),而 --smoke 走 SetupWithoutStarting 不会走进去
+        // (R32-LINT §5.1 实测)。这里补一次,让「隔离 TIPCL_HOME 预置 ui_layout_v2.json(含
+        // custom:<id> 块)→ --smoke 截该页」这条**无窗口**像素证据链能渲染出自建块。
+        // 对默认页面无影响(没有 custom:/plugin: 块时注册表不会被咨询)⇒ 默认 20 帧逐字节不变。
+        TipCL.App.Pages.Layout.WidgetRegistry.EnsureRegistered();
+
         // SMOKE_TASKS=1:塞两条假任务(进行中 + 失败),供任务页视觉回归(SMOKE_PAGE=tasks)
         if (Environment.GetEnvironmentVariable("SMOKE_TASKS") == "1")
         {

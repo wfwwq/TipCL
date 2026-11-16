@@ -14,8 +14,10 @@ using Avalonia.VisualTree;
 using TipCL.App.Common;
 using TipCL.Core;
 using TipCL.App.Pages.Install;
+using TipCL.App.Pages.Layout;
 using TipCL.App.Shell;
 using TipCL.App.Ui;
+using TipCL.Core.Launcher.Layout;
 using UiClass = TipCL.App.Ui.Ui; // 命名空间 TipCL.App.Pages.* 下 `Ui` 会被解析成命名空间而非类（B0/B2 同款约定）
 
 namespace TipCL.App.Pages.Download;
@@ -59,7 +61,8 @@ public sealed class DownloadPage : PageBase
 
     private readonly TextBlock _taskN;
 
-    private readonly StackPanel _vanillaView;
+    /// <summary>[R32-LINMORE] 原版分段的视图 = 区块宿主 BlockHost("download")(类型由 StackPanel 放宽到 Control)。</summary>
+    private readonly Control _vanillaView;
 
     private InstallPage? _install;
 
@@ -127,7 +130,15 @@ public sealed class DownloadPage : PageBase
         var card = UiClass.Card(_list, 0);
         card.Padding = new Thickness(0, 4, 0, 4);
         card.Margin = new Thickness(22, 0, 22, 16);
-        _vanillaView = UiClass.V(0, bar, card);
+        // [R32-LINMORE] 规格 §2.1-1:原版分段的「筛选行 + 列表卡」改成区块宿主 BlockHost("download")。
+        // contentMargin 传 0:bar.Margin=(22,0,22,2)、card.Margin=(22,0,22,16) 已自管页边距,
+        // 传默认 pad 会双倍留白(Windows DownloadPage:111/115 注释同一理由)。
+        // 区间距 = 默认档 10 ⇒ bar 的下外边距 2 + 10 = 12,正是旧版「旧筛选行下间距 12」的来历。
+        _vanillaView = new BlockHost("download", new List<BlockSpec>
+        {
+            new BlockSpec { Id = "filters", Title = "筛选", Content = bar },
+            new BlockSpec { Id = "list", Title = "版本列表", Content = card },
+        }, new Thickness(0), DownloadDefaultPage());
 
         _shell = UiClass.G("Auto,*");
         _shell.Add(top, 0);
@@ -144,6 +155,23 @@ public sealed class DownloadPage : PageBase
 
     /// <summary>切到某个分段(0 = 原版,1..6 = 六个目录分段);冒烟脚本按 SMOKE_SEG 调它。</summary>
     public void SelectSegment(int k) => ShowSeg(k);
+
+    /// <summary>
+    /// [R32-LINMORE] 规格 §2.1-1:原版分段的出厂默认布局 —— 单列 stack、页边距 0
+    /// (bar / card 自带 22px 左右外边距),区间距 10(默认档)⇒ 渲染与改动前一致。
+    /// </summary>
+    private static PageLayoutV2 DownloadDefaultPage()
+    {
+        var page = new PageLayoutV2
+        {
+            Mode = LayoutSchema.ModeStack,
+            Gap = LayoutSchema.GapDefault,
+            Pad = new double[] { 0.0, 0.0, 0.0, 0.0 },
+        };
+        page.Blocks.Add(new BlockLayout { Id = "filters", Span = 1, Z = 0 });
+        page.Blocks.Add(new BlockLayout { Id = "list", Span = 1, Z = 1 });
+        return page;
+    }
 
     // ───────────────────────────── 分段 ─────────────────────────────
 

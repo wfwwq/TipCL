@@ -18,11 +18,14 @@ using TipCL.App.Ui;
 using UiClass = TipCL.App.Ui.Ui;
 using TipCL.Core;
 using TipCL.Core.Launcher;
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.App.Pages.Settings;
 
 /// <summary>子视图公共骨架：标题 + 说明 + 滚动主体，数据装载走 LoadAsync。</summary>
-internal abstract class SettingsSubView : PageBase
+// [R32-LINMORE] 加 partial:区块宿主接线(UseBlockHost)单独放 SettingsSubView.Layout.cs,
+// 免得在这个 640 行文件里做大段插入。
+internal abstract partial class SettingsSubView : PageBase
 {
     protected SettingsSubView(string id, string title, string sub) : base(id, title)
     {
@@ -228,7 +231,8 @@ internal sealed class JavaView : SettingsSubView
         vendorLbl.Mk(0, 0, 8, 0).VCenter();
         vendorBar.Add(vendorLbl, 0, 1);
         vendorBar.Add(_vendor.VCenter(), 0, 2);
-        _stack.Children.Add(UiClass.Card(UiClass.V(10, vendorBar, cards), 13));
+        var installCard = UiClass.Card(UiClass.V(10, vendorBar, cards), 13);
+        _stack.Children.Add(installCard);
 
         // ── 实例默认 ──
         _inst.SelectionChanged += (_, _) => { if (!_sync) Run(ReloadJavaOptionsAsync, "读取失败"); };
@@ -239,14 +243,21 @@ internal sealed class JavaView : SettingsSubView
         var useManual = U.Btn("用这个路径", BtnKind.Chip, (_, _) => Run(ApplyManualAsync, "保存失败"), "Check");
         useManual.Mk(8, 0, 0, 0).VCenter();
         manualRow.Add(useManual, 0, 1);
-        _stack.Children.Add(UiClass.Card(UiClass.V(4,
+        var defaultsCard = UiClass.Card(UiClass.V(4,
             UiClass.Field("实例", _inst),
             UiClass.Field("默认 Java", _java, "「自动选择」由启动器按游戏版本匹配"),
             UiClass.Field("自定义路径", manualRow, "填绝对路径后点右边按钮,会先做一次规范化"),
-            UiClass.Field("", _instJava)), 13));
+            UiClass.Field("", _instJava)), 13);
+        _stack.Children.Add(defaultsCard);
 
         // ── 已检测列表 ──
         _stack.Children.Add(_list);
+        // [R32-LINMORE] 区块宿主(§2.1-5):intro(说明 = 标题行,Windows JavaPage 的首块就是它自己的
+        // Ui.Section 标题,不是另造的说明卡)/ install(安装方式)/ defaults(实例默认)/ list(已检测列表)。
+        UseBlockHost("java", "intro", "Java",
+            ("install", "安装方式", installCard),
+            ("defaults", "实例默认", defaultsCard),
+            ("list", "已检测列表", _list));
     }
 
     protected override async Task LoadCoreAsync()
@@ -446,9 +457,15 @@ internal sealed class ServersView : SettingsSubView
         var add = UiClass.Btn("添加服务器", BtnKind.Primary, (_, _) => Run(() => EditAsync(null, -1)));
         var import = UiClass.Btn("导入", BtnKind.Chip, (_, _) => Toast("导入", "servers.txt 导入后端 M3 接入", ToastKind.Warning));
         var export = UiClass.Btn("导出", BtnKind.Chip, (_, _) => Toast("导出", "servers.txt 导出后端 M3 接入", ToastKind.Warning));
-        _stack.Children.Add(UiClass.Card(RowsSub(UiClass.Field("实例", UiClass.H(8, _inst, _count.VCenter(), export, import, add)))));
+        var instCard = UiClass.Card(RowsSub(UiClass.Field("实例", UiClass.H(8, _inst, _count.VCenter(), export, import, add))));
+        _stack.Children.Add(instCard);
         _inst.SelectionChanged += (_, _) => { if (!_sync) Run(ReloadAsync); };
         _stack.Children.Add(_list);
+        // [R32-LINMORE] 区块宿主(§2.1-4):header(概览 = 标题行)/ instance(实例行)/ list(服务器列表),
+        // 顺序与 id 逐字对齐 Windows ServersPage 的 BlockHost("servers", ...)。
+        UseBlockHost("servers", "header", "服务器",
+            ("instance", "实例行", instCard),
+            ("list", "服务器列表", _list));
     }
 
     protected override async Task LoadCoreAsync()
@@ -557,12 +574,20 @@ internal sealed class PlaytimeView : SettingsSubView
             }
         }, "清空失败"));
         _total.Foreground = UiClass.Brush("B.AccentDeep") ?? Avalonia.Media.Brushes.Black;
-        _stack.Children.Add(UiClass.Card(UiClass.G(null, "*,Auto")
+        var totalCard = UiClass.Card(UiClass.G(null, "*,Auto")
             .Add(UiClass.V(4, UiClass.Muted("累计游玩"), _total, _sub), 0)
-            .Add(UiClass.Txt("⏱", 44, fg: "B.AccentSoft2").VCenter(), 0, 1), 20));
-        _stack.Children.Add(UiClass.Card(UiClass.H(10, UiClass.Txt("范围", 12, fg: "B.InkMuted").VCenter(), _inst.VCenter(), refresh.VCenter(), clearAll.VCenter()), 12));
+            .Add(UiClass.Txt("⏱", 44, fg: "B.AccentSoft2").VCenter(), 0, 1), 20);
+        _stack.Children.Add(totalCard);
+        var rangeCard = UiClass.Card(UiClass.H(10, UiClass.Txt("范围", 12, fg: "B.InkMuted").VCenter(), _inst.VCenter(), refresh.VCenter(), clearAll.VCenter()), 12);
+        _stack.Children.Add(rangeCard);
         _inst.SelectionChanged += (_, _) => { if (!_sync) Run(ReloadAsync); };
         _stack.Children.Add(_list);
+        // [R32-LINMORE] 区块宿主(§2.1-6):header(概览 = 标题行)/ total(累计卡)/ range(范围卡)/ list(明细列表),
+        // 顺序与 id 逐字对齐 Windows PlaytimePage 的 BlockHost("playtime", ...)。
+        UseBlockHost("playtime", "header", "游戏时长",
+            ("total", "累计卡", totalCard),
+            ("range", "范围卡", rangeCard),
+            ("list", "明细列表", _list));
     }
 
     protected override async Task LoadCoreAsync()
