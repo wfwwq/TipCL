@@ -665,6 +665,63 @@
   <!-- 滑块:滚动条里那个 Thumb 的观感由上面的隐式 Thumb 样式给(它的 Background 没有被
        Fluent 写成本地值,样式能生效;Slider 的 Thumb 不同,所以那边换了 Track 模板)。 -->
 
+  <!-- ==== 滚动条滑块几何:对齐 Windows 的 ScrollThumb 口径(R32-SCROLLBAR-FIX)==== -->
+  <!-- 背景(实测,勿删):Avalonia 11.3 的 Fluent 主题给滚动条 Thumb 的模板值是
+       Width=16 + RenderTransform=scale(0.125,1) + RenderTransformOrigin=100%,50%
+       —— 那是"16px 条里 2px 细滑块、贴右缘"的设计。本 App 把条压到 10px
+       (上面的 ScrollBar:vertical/:horizontal)以后,这 2px 只剩 1 列可见:
+       绘制框 x=[898,900)、条只到 899(不含)⇒ 用户几乎看不见、抓手只有 1px。
+       Windows 冻结件(windos/src/TipCL/Themes/Controls.xaml:85-99)的 ScrollThumb 是
+       "Thumb 占满 10px 轨道 + 模板里的 Border 写 Margin=3,2" ⇒ 可见 4px。
+       下面把这两条照搬过来。注意:普通 `ScrollBar /template/ Thumb` 选择器**压不住**
+       Fluent 的模板值(实测反例),必须带 :vertical / :horizontal 伪类(StyleTrigger 优先级);
+       Margin=3,2 也必须放进去模板里那个 Border(放 Thumb 上会被 Track 按 DesiredSize 吃掉,
+       实测滑块仍是 10 宽),且只作用于滚动条 —— 共享的 ScrollThumbTheme 不动(Slider 在用)。 -->
+  <Style Selector="ScrollBar:vertical /template/ Thumb">
+    <Setter Property="Width" Value="10" />
+    <Setter Property="MinWidth" Value="10" />
+    <Setter Property="MaxWidth" Value="10" />
+    <Setter Property="RenderTransform" Value="scale(1,1)" />
+    <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+  </Style>
+
+  <Style Selector="ScrollBar:horizontal /template/ Thumb">
+    <Setter Property="Height" Value="10" />
+    <Setter Property="MinHeight" Value="10" />
+    <Setter Property="MaxHeight" Value="10" />
+    <Setter Property="RenderTransform" Value="scale(1,1)" />
+    <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+  </Style>
+
+  <!-- 10px 条里可见 4px(= 10 - 3 - 3);纵向再各让 2,与 Windows 的 Margin="3,2" 同口径。
+       横向是同一口径按轴互换(10 高里可见 4),Windows 参考件只有纵向那一份。 -->
+  <Style Selector="ScrollBar:vertical /template/ Thumb /template/ Border">
+    <Setter Property="Margin" Value="3,2" />
+  </Style>
+
+  <Style Selector="ScrollBar:horizontal /template/ Thumb /template/ Border">
+    <Setter Property="Margin" Value="2,3" />
+  </Style>
+
+  <!-- 悬停/拖动配色:Windows 用 B.ScrollHover(#B0B0B0 / #555555)。
+       必须落在模板里那个 Border 上 —— Fluent 的悬停色是直接设在 Border 的 Background 上的
+       (实测 #66000000,混出 #939393),设在 Thumb 上会被它盖掉。 -->
+  <Style Selector="ScrollBar:vertical /template/ Thumb:pointerover /template/ Border">
+    <Setter Property="Background" Value="{DynamicResource B.ScrollHover}" />
+  </Style>
+
+  <Style Selector="ScrollBar:vertical /template/ Thumb:pressed /template/ Border">
+    <Setter Property="Background" Value="{DynamicResource B.ScrollHover}" />
+  </Style>
+
+  <Style Selector="ScrollBar:horizontal /template/ Thumb:pointerover /template/ Border">
+    <Setter Property="Background" Value="{DynamicResource B.ScrollHover}" />
+  </Style>
+
+  <Style Selector="ScrollBar:horizontal /template/ Thumb:pressed /template/ Border">
+    <Setter Property="Background" Value="{DynamicResource B.ScrollHover}" />
+  </Style>
+
   <!-- WPF 模板里那条灰色轨道与上下翻页按钮都是隐形的(0 透明度的空壳),这里同样压掉 -->
   <Style Selector="ScrollBar /template/ Rectangle#TrackRect">
     <Setter Property="Opacity" Value="0" />
