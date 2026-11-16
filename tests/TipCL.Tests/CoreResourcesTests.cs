@@ -85,7 +85,7 @@ public class CoreResourcesTests
 
         object parsed = PyJson.Loads(text);
         PyDict dict = Assert.IsType<PyDict>(parsed);
-        Assert.Equal(2773, dict.Count);                            // 平铺 2773 个键
+        Assert.Equal(3022, dict.Count);                            // 平铺 3022 个键(R32-I18NFIX 补了 249 键:布局 v2 面 112 + 与 lin/win 对齐 137;此前 2773)
         Assert.Contains(LocaleFixture.AttachmentKey, dict.Keys);
         Assert.Equal(LocaleFixture.AttachmentKey, dict[LocaleFixture.AttachmentKey]);
     }

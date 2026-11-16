@@ -12,12 +12,24 @@ namespace TipCL.Tests;
 /// A2 步骤 4-2:嵌入内容与 Windows 源文件逐字节一致。
 /// 期望哈希 = 对本机 Windows 源文件 <c>D:\项目\tipcl\windos\tipcl\src\TipCL\Resources\...</c>
 /// 执行 <c>Get-FileHash -Algorithm SHA256</c> 的结果(资源必须全部一致)。
+/// <para>
+/// **例外(2026-11-16,R32-I18NFIX)**:两份**词表**的哈希不再是 Windows 源文件的哈希。
+/// mac 的 <c>locales/*.json</c> 是 A2 时期从 Windows 快照整份拷过来的旧版子集
+/// (R32-I18N-ACCEPT 实测:mac 词表比 lin/win 少 222 键,`mac − lin = 0`),交付件里大量文案键
+/// 在 mac 表里根本没有 ⇒ 英文界面回显中文。本次按 lead 的扩范围决定**一次补齐**:
+/// 布局 v2 面 112 键 + 与 Linux/Windows 对齐的 137 键(共 249 键;含将 en 孤儿键
+/// <c>自定义布局</c> 补进 zh_CN),全部从 lin/win 词表原样拷贝(含 en 译文),不自译。
+/// 于是这两份资源**刻意**与 Windows 源文件不再逐字节相同 —— 其余 <c>plugin-host/**</c>、
+/// <c>ai/**</c> 资源的一致性不变。
+/// 下两行哈希 = 补键后**内嵌资源字节**的 SHA256(实测;同 D34:哈希必须连同构建路径一起引用,
+/// 本值来自 <c>D:\项目\TipCL\wt-mac-i18n</c> 的 <c>-t:Rebuild</c> 产物)。
+/// </para>
 /// </summary>
 public class EmbeddedResourceContentTests
 {
     [Theory]
-    [InlineData("TipCL.Core.locales.en.json", "EFD11008BF44BBE0D9D83A2BC617E678424B50FDAFFF8CC4ABE3D9BA43B64468")]
-    [InlineData("TipCL.Core.locales.zh_CN.json", "E00BFB8BA5D9D2E0B7EDA1D598BF54785BAD9B89AEC8639C3F7FFA986761FD53")]
+    [InlineData("TipCL.Core.locales.en.json", "2FDF42C4E513DBA2EF1B9905937B1751A799E912D83A211AC21F5E9C8DBBBFE6")]
+    [InlineData("TipCL.Core.locales.zh_CN.json", "4F155F368E686E6CEF2D6BB73FF928A672073F9679F2A864E4FDB527920D75FC")]
     [InlineData("TipCL.Core.ai.model_rules.json", "152B2780D4CD08ABCB0A903472F4E357080F61E6E8185BD776846B9D5BFBC4DC")]
     [InlineData("TipCL.Core.plugin-host.host.mjs", "978A08460765687C0984A87777A4F9B35188716649FBA7C2CC705F5D75A5F38D")]
     [InlineData("TipCL.Core.plugin-host.host-console.mjs", "D660FCC13DE5A86C7362F8BA55BB4E700C14CF88C793B51C1CB2B6C7CA07AA2E")]
