@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using TipCL.Core.Launcher;
 using TipCL.Core.Launcher.Ai;
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Core;
 
@@ -3366,57 +3367,46 @@ public partial class BackendApi
 
 	public PyDict get_layout()
 	{
-		(LayoutDoc doc, string profile, PyDict profiles) tuple = UiLayout.LayoutSnapshot();
-		LayoutDoc item = tuple.doc;
-		string item2 = tuple.profile;
-		PyDict item3 = tuple.profiles;
+		// [R32-MAC-SYS01 / SYS-01] 转调 v2 真源(实现与判据见 Core/Launcher/Layout/LayoutV1Rpc.cs):过去这里读的是
+		// config.json 的 ui_layout / ui_layouts / ui_layout_profile —— v2 落地后那三个键在界面侧 0 个消费者
+		// (旧画布 DashHost 不进可视树,见 Pages/LaunchPage.cs 的 DashHost 段),调用方拿到"成功"屏幕上却什么都不变
+		// (审计 SYS-01 / AP-01,与 Windows 0a304a7 的修法同一份)。
+		// min_sizes 是 v1 冻结的卡片最小尺寸表,原样保留(没有可搬的东西,也没有删的理由)。
 		PyDict pyDict = new PyDict();
-		foreach (KeyValuePair<string, (long, long)> item4 in UiLayout.CARD_MIN_SIZE)
+		foreach (KeyValuePair<string, (long, long)> item in UiLayout.CARD_MIN_SIZE)
 		{
-			pyDict[item4.Key] = Py.L(item4.Value.Item1, item4.Value.Item2);
+			pyDict[item.Key] = Py.L(item.Value.Item1, item.Value.Item2);
 		}
-		return PyDict.Of("doc", item.ToDict(), "profile", item2, "profiles", Py.Sorted(item3.Keys.Cast<object>()), "default", UiLayout.DefaultDoc().ToDict(), "min_sizes", pyDict);
+		PyDict pyDict2 = LayoutV1Rpc.Snapshot();
+		pyDict2["min_sizes"] = pyDict;
+		return pyDict2;
 	}
 
+	// [R32-MAC-SYS01 / SYS-01] saved 的含义以 v2 为准:真源 ui_layout_v2.json 是否真的写成功(v1 那个"没换方案名"的含义已经废掉)。
+	// 另外两个键 api / message 是给调用方看的:api = "v2" 标记,message = 这次到底做了什么 / 为什么没做。
 	public PyDict save_layout(object doc, object profile = null)
 	{
-		var (flag, text) = UiLayout.SaveCurrent(UiLayout.ParseDoc(doc) ?? throw new ValueError(I18nCore.Tr("不是有效的布局文档")), profile as string);
-		return PyDict.Of("profile", text, "saved", flag);
+		LayoutRpcResult layoutRpcResult = LayoutV1Rpc.SaveCanvas(doc, profile as string);
+		return PyDict.Of("profile", layoutRpcResult.Profile, "saved", layoutRpcResult.Saved, "api", LayoutV1Rpc.ApiVersion, "message", layoutRpcResult.Message);
 	}
 
 	public PyDict save_layout_profile(object name, object doc = null)
 	{
 		string text = Py.Strip(Py.AsStr(Py.Or(name, ""), "strip"));
-		if (text.Length == 0)
-		{
-			throw new ValueError(I18nCore.Tr("方案名称不能为空"));
-		}
-		LayoutDoc layoutDoc;
-		if (doc == null)
-		{
-			layoutDoc = UiLayout.LoadActiveDoc();
-		}
-		else
-		{
-			layoutDoc = UiLayout.ParseDoc(doc);
-			if (layoutDoc == null)
-			{
-				throw new ValueError(I18nCore.Tr("不是有效的布局文档"));
-			}
-		}
-		UiLayout.SaveProfile(text, layoutDoc);
+		LayoutV1Rpc.SaveProfile(text, doc);
 		return get_layout();
 	}
 
 	public PyDict activate_layout_profile([Def("")] object name = null)
 	{
-		UiLayout.ActivateProfile(Py.AsStr(Py.Or(name, ""), "strip"));
+		// 方案名不存在时抛 ValueError(过去是"静默清空布局",那种静默正是本包要消灭的)
+		LayoutV1Rpc.Activate(Py.AsStr(Py.Or(name, ""), "strip"));
 		return get_layout();
 	}
 
 	public PyDict delete_layout_profile(object name)
 	{
-		if (!UiLayout.DeleteProfile(Py.AsStr(Py.Or(name, ""), "strip")))
+		if (!LayoutV1Rpc.Delete(Py.AsStr(Py.Or(name, ""), "strip")))
 		{
 			throw new ValueError(Py.Fmt(I18nCore.Tr("布局方案「{0}」不存在"), name));
 		}
@@ -3425,13 +3415,13 @@ public partial class BackendApi
 
 	public PyDict reset_layout()
 	{
-		UiLayout.ResetToDefault();
+		LayoutV1Rpc.ResetToDefault();
 		return get_layout();
 	}
 
 	public PyDict import_layout(object doc)
 	{
-		UiLayout.SaveActiveDoc(UiLayout.ParseDoc(doc) ?? throw new ValueError(I18nCore.Tr("不是有效的布局文件")));
+		LayoutV1Rpc.Import(doc);
 		return get_layout();
 	}
 
