@@ -75,7 +75,12 @@ public sealed class PluginManifest
 
 	private static readonly HashSet<string> ConfigTypes = new HashSet<string> { "string", "boolean", "integer", "number" };
 
-	private static readonly HashSet<string> UiKinds = new HashSet<string> { "page", "aiView", "dashCard", "overlay", "settings", "action" };
+	// R32-DEGRADE-FIX:补回 "block" —— Windows 的同名白名单(0a304a7 PluginManifest.cs:77)是
+	// { page, aiView, dashCard, block, overlay, settings, action };Linux 移植时漏了一项,于是
+	// contributes.blocks 永远不产生 kind=block 的贡献,布局里的 plugin:<id>:<blockId> 块只能显示
+	// 「插件区块不可用」(PluginBlocks.Shell.Unavailable),UiDispatch.Placeholder 的区块分支不可达。
+	// WidgetRegistry.PluginKindBlock 与 PluginBlocks 都按 "block" 取贡献,补上即对齐。
+	private static readonly HashSet<string> UiKinds = new HashSet<string> { "page", "aiView", "dashCard", "block", "overlay", "settings", "action" };
 
 	public PyDict Raw { get; private set; }
 

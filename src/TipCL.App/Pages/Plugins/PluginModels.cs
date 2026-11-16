@@ -291,6 +291,13 @@ public static class UiDispatch
             "dashCard" => "该插件提供了首页卡片。插件运行时（M3）接通后显示。",
             "action" => "该插件注册了动作按钮。插件运行时（M3）接通后显示。",
             "overlay" => "主窗口浮层不再移植（Windows 专用的点击穿透层，R3 已标砍）。",
+            // R32-DEGRADE-FIX:插件区块(kind = "block";块 id = plugin:<plugin>:<blockId>,
+            // 消费方 = Pages/Layout/Widgets/PluginBlocks.cs:111 + WidgetRegistry 的内容工厂)。
+            // 与 Windows 的区块口径一致:块造不出内容就显示「区块不可用」(Windows
+            // LayoutEditor.cs:862「查不到内容工厂的块」用的就是这一句),不再落到兜底的「类型未知」。
+            // 措辞直接用词表里既有的一条(本仓 zh_CN.json:56 / en.json:55,Windows 同键),
+            // **不新造句子、不新造缺键**(R32-I18N-ACCEPT §2 的坑)。
+            "block" => TipCL.Core.Launcher.I18nCore.Tr("区块不可用"),
             _ => "该插件注册了一块自定义界面，类型未知。",
         };
         Control? open = null;
