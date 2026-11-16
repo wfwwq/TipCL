@@ -214,6 +214,11 @@ internal sealed partial class MainWindow : Window
 		AddHandler(DragDrop.DropEvent, OnDrop);
 		FileDrop.Attach(this, _dropVeil);
 
+		// ---- 布局全局钩子(R32-MWG:Windows 的 MainWindow 构造末尾 Attach LayoutShellHooks)----
+		// 右键「自定义布局...」/「完成编辑」/「重置本页布局」/「布局设置...」与统一滚轮路由都挂在这里;
+		// BlockHost 自己不再挂 ContextMenu(E-01)。必须在 _host / _dropVeil 都建好之后,关窗时对称 Detach。
+		LayoutShellHooks.Attach(this);
+
 		// ---- 背景管线(Windows 的 Wallpaper.Attach(WallHost, RootBorder, TopBar, null, PageWash))----
 		// mac 侧第四个参数给的是侧栏(Windows 没有侧栏);ChromeInvalidated 不接 —— Windows 接的是
 		// "最大化 / 还原字形"的同步,mac 用系统红绿灯,没有那个字形(见 C2b 的窗口差异表)。
@@ -267,6 +272,8 @@ internal sealed partial class MainWindow : Window
 			// 拖放浮层与静态引用一并收摊:关窗后不留可见状态、也不留活窗口(FileDrop 是静态类)。
 			_dropVeil.Reset();
 			FileDrop.Detach(this);
+			// 布局全局钩子摘钩(静态类,必须缓存同一批委托才能对称 RemoveHandler)
+			LayoutShellHooks.Detach();
 			// 背景管线收摊(Windows 的 Closed → Wallpaper.Shutdown;mac 多一步摘图层引用,
 			// 免得下一个外壳往新宿主里挂时那两个静态图层还挂在旧宿主上)。
 			Wallpaper.Shutdown();
