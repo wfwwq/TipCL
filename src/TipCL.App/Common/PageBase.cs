@@ -80,18 +80,16 @@ public abstract class PageBase : UserControl
     /// <summary>外壳事件流派发入口（页面内 OnEvent 为 protected，外壳经此转发）。</summary>
     internal void ShellEvent(ApiEvent ev) => OnEvent(ev);
 
-    // ───────────────────────────── 布局自定义钩子（B4 BlockHost 接） ─────────────────────────────
+    // ───────────────────────────── 页面内容出口（布局自定义钩子已删除） ─────────────────────────────
 
-    /// <summary>
-    /// 布局自定义钩子：B4 的 BlockHost 会设置它，把页面构建好的内容包一层
-    /// 可重排宿主。签名 (pageId, inner) → 包装后的控件；未设置时原样返回。
-    /// </summary>
-    public static Func<string, Control, Control>? LayoutWrapper { get; set; }
-
-    /// <summary>页面内容出口：子类构建 Body 后经此赋给 Content，自动过 LayoutWrapper。</summary>
+    /// <summary>页面内容出口:子类构建 Body 后经此赋给 Content。</summary>
+    // 契约变更(R32-LW):原 `public static Func<string, Control, Control>? LayoutWrapper` 钩子已删除 ——
+    // 它是 M2-B4 遗留的占位("B4 的 BlockHost 会设置它"),实际从未被任何页面/BlockHost 赋值或调用
+    // (grep 全树仅本文件 2 处引用),且 Windows 冻结件 windos/src/TipCL/Pages/PageBase.cs 无此成员。
+    // 页面托管区块改走显式 `BlockHost(pageId, specs, ...)` 并入页面自己的根布局,不再经此隐式包装。
     protected Control Body
     {
-        set => Content = LayoutWrapper?.Invoke(PageId, value) ?? value;
+        set => Content = value;
     }
 
     // ───────────────────────────── 构建小工具 ─────────────────────────────

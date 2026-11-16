@@ -27,6 +27,9 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             TipCL.App.Pages.Layout.LayoutFx.Wire(); // M2-B4：布局 JSON 导出/导入与 Toast 接线
+            // R32-LW:注入 v1 投影实现(对齐 windos App.xaml.cs:97 LayoutStoreV2.V1Bridge = new PagesLayoutV1Bridge())。
+            // 必须在建窗口之前装配:v2 首次加载/迁移时就要能读旧的 ui_page_layouts.json,并把 v2 写回 v1。
+            TipCL.Core.Launcher.Layout.LayoutStoreV2.V1Bridge = new TipCL.App.Pages.Layout.PagesLayoutV1Bridge();
             var win = new Shell.MainWindow();
             desktop.MainWindow = win;
             // M4-H P4:首启向导 + 反馈同意门(照 Windows 启动顺序);--smoke 时不打扰无头截图。

@@ -56,6 +56,12 @@ public partial class MainWindow : Window
         HookPlugins();
         // 窗口级兜底:拖到没有自己拖放处理的位置也认(M4-H P7 统一入口);页面自己的处理已 Handled,不会重复
         TipCL.App.Common.FileDrop.Attach(this);
+        // 主窗口级布局钩子(对齐 windos audit-fix §5.1:MainWindow.xaml.cs:177 LayoutShellHooks.Attach(this)):
+        // 全局右键「自定义布局...」+ 统一滚轮路由。BlockHost 自己不再挂 ContextMenu(E-01),
+        // 页面内容区任意处右键都由这一处弹菜单 —— 所以窗口一建好就挂。
+        TipCL.App.Pages.Layout.LayoutShellHooks.Attach(this);
+        // 窗口关闭时摘钩:静态钩子攥着窗口引用,不摘会拦着一整棵可视树不放(R32-D11 起测试也复用窗口)
+        Closed += (_, _) => TipCL.App.Pages.Layout.LayoutShellHooks.Detach();
     }
 
     // ───────── 插件外壳接线(M4-H P6/P8) ─────────
@@ -145,6 +151,9 @@ public partial class MainWindow : Window
 
     /// <summary>当前页 id。</summary>
     public string CurrentPageId => _currentId;
+
+    /// <summary>页面内容宿主(R32-LW:布局全局钩子要在它上面挂右键/滚轮路由;x:Name 字段本是 private 生成,这里显式开口)。</summary>
+    internal ContentControl PageHostControl => PageHost;
 
     /// <summary>
     /// 崩溃事件(M4-H P4):游戏异常退出时 Core 抛 GameCrashError,InProcessApi 记一份报告并发

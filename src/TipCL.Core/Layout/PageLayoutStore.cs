@@ -94,6 +94,18 @@ public static class PageLayoutStore
 		}
 	}
 
+	// 清进程内缓存,强制下次读取重读磁盘(R32-LW:迁自 Windows 版 PageLayoutStore.Reload)。
+	// 用途:v2 写通 v1 后,仍走 v1 读取路径的调用方(工具栏/导出等)要立刻看到新值;
+	// 缓存本来会跟着目录变,但"目录没变、文件被外部重写"这一种必须显式清。
+	public static void Reload()
+	{
+		lock (_gate)
+		{
+			_cache = null;
+			_cacheDir = null;
+		}
+	}
+
 	// 更新内存缓存 + 原子落盘（写临时文件再 File.Replace/Move，对齐 PluginStateStore 的写法）
 	public static void Save(string pageId, PageLayoutDoc doc)
 	{
