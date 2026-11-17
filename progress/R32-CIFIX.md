@@ -106,8 +106,11 @@ run 277(`main@8133d53`)**5 个 job 全 success**:`package (linux-x64 → AppImag
 | 本地 `main` | `b1359df` | `75ca3427094f1ae9e6067c9967567aeb35482688` |
 
 两笔提交的父子关系在同一位置分叉(`9f2ca01` ↔ `b98de43`,而两者 tree 亦相同),**仓库内容零差异**,
-只是提交对象不同。`github.com:443` 恢复后一条 `git fetch && git reset --hard origin/main` 即对齐;
-`reset --hard` 只丢弃这两笔等价的本地提交对象,不改变工作区任何文件字节。
+只是提交对象不同。
+
+**已收口**:`github.com:443` 恢复后执行 `git fetch origin main` + `git reset --hard origin/main`,
+本地 main 现为 `fdb7cbb`(与 `origin/main` 同一个提交);对齐前留保险分支
+`r32-cifix-local-commits @ 52b19bb`,三笔本地等价提交完好,`git diff 52b19bb HEAD` 为空。
 
 ## 7 独立验收
 
@@ -122,8 +125,11 @@ run 277(`main@8133d53`)**5 个 job 全 success**:`package (linux-x64 → AppImag
 
 ## 8 遗留 / 未做
 
-0. **本地 main 与 origin/main 的提交号尚未对齐**:内容等价(见 §6.2),`github.com:443` 恢复后
-   `git fetch && git reset --hard origin/main` 收口。这是本次唯一的未收口项。
+0. **本地 main 与 origin/main 的提交号已对齐(已收口)**:`github.com:443` 恢复后已
+   `git fetch origin main` + `git reset --hard origin/main` ⇒ 本地 main = `origin/main` = `fdb7cbb`;
+   对齐前先建了保险分支 `r32-cifix-local-commits @ 52b19bb`(等价的三笔本地提交,内容零差异,
+   留作可回溯),`git diff 52b19bb HEAD` 为空。
+   未收口项:**无**。下一项起为登记遗留。
 1. **`PluginInstaller.cs:291`**:`Safe()` 同样用 `Path.GetInvalidFileNameChars()`(删除式),
    用于插件下载临时 zip 名(`id-version.zip`)。若 version 含 `: * ?` 等,Windows 删 / Unix 留
    ⇒ 同类平台漂移的**潜在**隐患。**不在 Layout v2 导出/导入链路上**,本次未动。
