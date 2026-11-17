@@ -126,9 +126,10 @@ run 277(`main@8133d53`)**5 个 job 全 success**:`package (linux-x64 → AppImag
 ## 8 遗留 / 未做
 
 0. **本地 main 与 origin/main 的提交号已对齐(已收口)**:`github.com:443` 恢复后已
-   `git fetch origin main` + `git reset --hard origin/main` ⇒ 本地 main = `origin/main` = `fdb7cbb`;
-   对齐前先建了保险分支 `r32-cifix-local-commits @ 52b19bb`(等价的三笔本地提交,内容零差异,
-   留作可回溯),`git diff 52b19bb HEAD` 为空。
+   `git fetch origin main` + `git reset --hard origin/main`,本地 main 与远端指向**同一提交**
+   (收口时为 `fdb7cbb`;其后仅在 main 上追加了本条说明的提交)。对齐前先建了保险分支
+   `r32-cifix-local-commits @ 52b19bb`(等价的三笔本地提交,内容零差异,留作可回溯),
+   `git diff 52b19bb` 对工作区为空。
    未收口项:**无**。下一项起为登记遗留。
 1. **`PluginInstaller.cs:291`**:`Safe()` 同样用 `Path.GetInvalidFileNameChars()`(删除式),
    用于插件下载临时 zip 名(`id-version.zip`)。若 version 含 `: * ?` 等,Windows 删 / Unix 留
