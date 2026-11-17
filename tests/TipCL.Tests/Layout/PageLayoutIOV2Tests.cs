@@ -280,6 +280,37 @@ public class PageLayoutIOV2Tests
 		}
 	}
 
+	// 建议文件名必须两端逐字一致:固定用 Windows 非法字符集 ∪ POSIX 的 '/'。
+	// 反面就是 Path.GetInvalidFileNameChars() —— Unix 上只拦 '\0' 和 '/',所以 ":*?<>|\"
+	// 在 Linux 会原样留在建议文件名里(ubuntu CI 上就是这么红的)。这条用例在两端钉同一串。
+	[Fact]
+	public void ExportSuggestedFileName_IsPlatformIndependent()
+	{
+		UseDir();
+		try
+		{
+			LayoutV2 doc = RichDocument();
+			LayoutStoreV2.Save(doc);
+			string? suggested = null;
+			string exportPath = Path.Combine(_tmp, "sanitize.json");
+			PageLayoutIO.SaveFileDialog = (filter, name) =>
+			{
+				suggested = name;
+				return exportPath;
+			};
+			PageLayoutIO.Toast = (title, detail, kind) => { };
+
+			PageLayoutIO.ExportToFileDialog("a:b*c?d\"e<f>g|h\\i/j\u0001k");
+
+			Assert.Equal("a-b-c-d-e-f-g-h-i-j-k.json", suggested);
+			Assert.True(File.Exists(exportPath));
+		}
+		finally
+		{
+			Release();
+		}
+	}
+
 	// 导出读的是 v2 真源,两次导出必须都反映最新状态(「先导出→再改→再导出」不会拿到旧内容)。
 	[Fact]
 	public void ExportReflectsLatestV2StateOnEveryCall()

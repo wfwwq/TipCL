@@ -263,18 +263,47 @@ public static class PageLayoutIO
 		}
 	}
 
-	// pageId 里可能有冒号(如 library:main),不能原样当文件名
+	// pageId 里可能有冒号(如 library:main),不能原样当文件名。
+	//
+	// 这里**不能**用 Path.GetInvalidFileNameChars():它随 OS 变 ——
+	// Windows 上是 `" < > | : * ? \ /` 加 1..31 控制符,Unix 上只有 `\0` 和 `/`。
+	// 用它,同一个页面 id 在 Windows 上建议 `library-main.json`、在 Linux 上建议
+	// `library:main.json`,导出文件名随平台漂(ubuntu CI 就是这么红的:
+	// PageLayoutIOV2Tests.ExportWritesWholeV2DocumentWithEveryField 断言 `library-main.json`)。
+	// 按 Windows 真源对齐:固定用 Windows 非法字符集 ∪ POSIX 的 `/`,两端逐字一致。
+	private static bool IsInvalidFileNameChar(char c)
+	{
+		if (c < ' ')
+		{
+			return true; // 0x00–0x1F:Windows 非法;控制符进文件名两端都是坑
+		}
+		switch (c)
+		{
+			case '"':
+			case '<':
+			case '>':
+			case '|':
+			case ':':
+			case '*':
+			case '?':
+			case '\\':
+			case '/':
+				return true;
+			default:
+				return false;
+		}
+	}
+
 	private static string SafeFileName(string? name)
 	{
 		if (string.IsNullOrEmpty(name))
 		{
 			return "pages";
 		}
-		char[] invalid = Path.GetInvalidFileNameChars();
 		StringBuilder sb = new StringBuilder(name!.Length);
 		foreach (char c in name!)
 		{
-			sb.Append((Array.IndexOf(invalid, c) >= 0) ? '-' : c);
+			sb.Append(IsInvalidFileNameChar(c) ? '-' : c);
 		}
 		return sb.ToString();
 	}
