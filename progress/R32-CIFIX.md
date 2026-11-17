@@ -88,6 +88,27 @@ verify (linux-x64 装得上 + 起得来)     | success
 
 ubuntu test job 的批 1 / 批 2 / Release build 三步全 success。
 
+## 6.1 第二笔(报告 + 验收 + ci.yml 注释)也已落地并全绿
+
+本文件与 `R32-CIFIX-ACCEPT.md`、以及 `ci.yml` 那条过时注释的更正,作为第二笔提交同样经
+Git Data API 落到 main(**`8133d53`**,父 `9f2ca01`,3 文件),`tree = 75ca3427…` 与本地
+`b1359df` 的 tree **逐字相同**(3 个 blob sha 全等)。
+
+run 277(`main@8133d53`)**5 个 job 全 success**:`package (linux-x64 → AppImage + .deb)` /
+`test (ubuntu-latest)` / `package (win-x64 → zip)` / `test (windows-latest)` /
+`verify (linux-x64 装得上 + 起得来)`。
+
+## 6.2 本地 ↔ 远端:内容等价,提交号不同(待网络恢复收口)
+
+| | 提交 | tree |
+|---|---|---|
+| 远端 `origin/main` | `8133d53` | `75ca3427094f1ae9e6067c9967567aeb35482688` |
+| 本地 `main` | `b1359df` | `75ca3427094f1ae9e6067c9967567aeb35482688` |
+
+两笔提交的父子关系在同一位置分叉(`9f2ca01` ↔ `b98de43`,而两者 tree 亦相同),**仓库内容零差异**,
+只是提交对象不同。`github.com:443` 恢复后一条 `git fetch && git reset --hard origin/main` 即对齐;
+`reset --hard` 只丢弃这两笔等价的本地提交对象,不改变工作区任何文件字节。
+
 ## 7 独立验收
 
 `R32-CIFIX-ACCEPT.md`(只读子代理,一次跑完)。**verdict:PASS(带注记)**,核心主张全部成立。
@@ -101,6 +122,8 @@ ubuntu test job 的批 1 / 批 2 / Release build 三步全 success。
 
 ## 8 遗留 / 未做
 
+0. **本地 main 与 origin/main 的提交号尚未对齐**:内容等价(见 §6.2),`github.com:443` 恢复后
+   `git fetch && git reset --hard origin/main` 收口。这是本次唯一的未收口项。
 1. **`PluginInstaller.cs:291`**:`Safe()` 同样用 `Path.GetInvalidFileNameChars()`(删除式),
    用于插件下载临时 zip 名(`id-version.zip`)。若 version 含 `: * ?` 等,Windows 删 / Unix 留
    ⇒ 同类平台漂移的**潜在**隐患。**不在 Layout v2 导出/导入链路上**,本次未动。

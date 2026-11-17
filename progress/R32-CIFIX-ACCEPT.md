@@ -135,3 +135,14 @@ GitHub API commits/9f2ca01 -> tree.sha = ae8b798f6be7c08be0cca76cb5930b5e440ff36
 | CI 无 `-warnaserror`,绿推不出 0 警告 | **接受**;报告里 0 警告明确标为本机 `-t:Rebuild` 实测 |
 | `PluginInstaller.cs:291` 同类漂移 | **登记为遗留**,本次不动(不在 Layout v2 链路上) |
 | 9f2ca01 不在本地库 | 如实登记;待 `github.com:443` 恢复后 `fetch` + `reset --hard origin/main` 对齐 |
+
+---
+
+## 补记(验收之后的第二笔,lead 自记)
+
+验收回执之后又落了一笔:**`8133d53`**(父 `9f2ca01`),内容是 `R32-CIFIX.md` + 本文件 + `ci.yml` 那条
+过时注释的更正。该笔经同一 Git Data API 落地,`tree = 75ca3427…` 与本地 `b1359df` 相同。
+run 277(`8133d53`)**5 个 job 全 success**。
+
+本补记**未经独立验收**(它是验收后的增量,且只含文档与一行注释);下一次验收如需要,应按
+`b98de43..b1359df` 的差量单独核。
