@@ -1134,7 +1134,8 @@ public sealed class LayoutEditor
 		StartGesture("resize", card, e);
 		_gestureHandle = handle;
 		_pixelHeightGesture = false;
-		if (IsBoxMode && !_box.IsCanvas && handle == "s")
+		// 只有"行高跟随内容"的网格才用像素高度;固定行高的页面仍然按行缩放(规范:行步长用真实行高)
+		if (IsBoxMode && !_box.IsCanvas && handle == "s" && _state.Page.RowH <= 0.0)
 		{
 			_pixelHeightGesture = true;
 			LayoutRect? rect = _box.RectOf(card.Spec.Id);
