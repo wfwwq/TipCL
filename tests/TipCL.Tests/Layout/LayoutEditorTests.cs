@@ -1135,6 +1135,47 @@ public class LayoutEditorUiTests
 	}
 
 	[Fact]
+	public void ResetOnGridPageWithoutHostDefaultGoesBackToStackAndKeepsCustomBlockData()
+	{
+		// 第三批(对照 Windows 6c520ca):用户在网格页上拖过、拉过像素高,页上还有一个自建块。
+		// 「重置本页」必须真的回到出厂(白名单 stack,几何 / height_px 全清),而自建块的数据不能丢。
+		using Store store = new Store();
+		TestApp.Run(() =>
+		{
+			LayoutContentRegistry.Clear();
+			PageLayoutV2 saved = GridPage(12, ("a", 6, 2, 6, 1), ("b", 0, 0, 3, 1), ("custom:note-x", 0, 4, 5, 1));
+			LayoutCell.WriteHeightPx(saved.Blocks[0], 260.0);
+			saved.Blocks[2].Settings["text"] = "便签";
+			saved.Blocks[2].Style = LayoutSchema.StyleCard;
+			LayoutV2 doc = LayoutStoreV2.Load();
+			LayoutEngine.ApplyPage(doc, "led:reset3", saved);
+			LayoutStoreV2.Save(doc);
+			LayoutStoreV2.ResetCache();
+
+			using Host host = new Host("led:reset3", null, Spec("a", "块甲"), Spec("b", "块乙"));
+			Assert.Equal(LayoutSchema.ModeGrid, host.Editor.State.Page.Mode);
+			host.EnterEdit();
+
+			host.Editor.ResetPage();
+			// 仍在编辑态:出厂 stack 被重新折成可拖网格;不再改动就完成 = 落回出厂 stack
+			host.Editor.ExitEdit();
+
+			Assert.Equal(LayoutSchema.ModeStack, host.Editor.State.Page.Mode);
+			LayoutStoreV2.ResetCache();
+			PageLayoutV2 stored = LayoutStoreV2.Load().Layout.Pages["led:reset3"];
+			Assert.Equal(LayoutSchema.ModeStack, stored.Mode);
+			Assert.Equal(new[] { "a", "b", "custom:note-x" }, stored.Blocks.Select((BlockLayout b) => b.Id).ToArray());
+			BlockLayout a = stored.Blocks.First((BlockLayout b) => b.Id == "a");
+			Assert.Equal(0.0, a.X, 6);
+			Assert.Equal(0.0, LayoutCell.ReadHeightPx(a), 6);
+			BlockLayout note = stored.Blocks.First((BlockLayout b) => b.Id == "custom:note-x");
+			Assert.Equal("便签", note.Settings["text"]?.ToString());
+			Assert.Equal(LayoutSchema.StyleCard, note.Style);
+			Assert.Equal(0.0, note.X, 6);
+		});
+	}
+
+	[Fact]
 	public void SetBlockHiddenAndMutatePagePersistWithoutEnteringEditMode()
 	{
 		using Store store = new Store();

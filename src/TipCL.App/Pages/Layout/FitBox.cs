@@ -74,6 +74,10 @@ internal sealed class FitBox : Decorator
 		ClipToBounds = _scale < 0.999;
 		if (_scale < 0.999)
 		{
+			// [layout-fix 第三批](Linux 补修):Avalonia 的 RenderTransformOrigin 缺省是**中心**(50%,50%),
+			// WPF 缺省是左上角(0,0)。照搬 WPF 写法时,按 (0,0,W/s,H/s) 排布、再绕中心缩放,内容会整体向右下偏移
+			// (W/s−W)/2 —— 右半截照样被裁,左上角还空出一块。显式钉到左上角,与 Windows 行为一致。
+			child.RenderTransformOrigin = RelativePoint.TopLeft;
 			child.RenderTransform = new ScaleTransform(_scale, _scale);
 			child.Arrange(new Rect(0.0, 0.0, finalSize.Width / _scale, finalSize.Height / _scale));
 		}

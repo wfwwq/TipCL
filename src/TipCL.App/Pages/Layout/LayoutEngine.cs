@@ -426,8 +426,22 @@ public sealed class LayoutPageState
 				Order.Add(id2);
 			}
 		}
-		// 不沿用旧块:坐标 / 尺寸 / 外观 / 内边距 / 自定义设置一概丢掉(「重置」的本意)
-		Page.Blocks = new List<BlockLayout>();
+		// 白名单块不沿用旧块:坐标 / 尺寸 / 外观 / 内边距 / 自定义设置一概丢掉(「重置」的本意)。
+		// [layout-fix 第三批] 自建 / 插件块(custom: / plugin:)的**数据**属于用户(便签文字、插件设置等),
+		// 只清几何(x/y/w/h/height_px),其余字段原样保留 —— 对齐 Windows 6c520ca 的 LayoutPageState.Reset。
+		List<BlockLayout> kept = new List<BlockLayout>();
+		if (Page.Blocks != null)
+		{
+			foreach (BlockLayout old in Page.Blocks)
+			{
+				if (old == null || string.IsNullOrEmpty(old.Id) || !LayoutEngine.IsImplicitRef(old.Id))
+				{
+					continue;
+				}
+				kept.Add(LayoutEngine.ClearGeometry(old.Clone()));
+			}
+		}
+		Page.Blocks = kept;
 		RebuildPage();
 	}
 
@@ -740,6 +754,84 @@ public static class LayoutEngine
 			return page.Cols;
 		}
 		return 1;
+	}
+
+	/// <summary>
+	/// [layout-fix 第三批] 清掉一块的几何(x/y/w/h、span、固定像素高 height_px),其余字段(外观 / 标题 / 设置 / extra 的其它键)不动。
+	/// 清完之后 grid 的自动流会把它当成"没有位置"重新落格(见 <see cref="LayoutGrid.Pack"/> 的 hasPosition)。返回同一个对象。
+	/// </summary>
+	public static BlockLayout ClearGeometry(BlockLayout block)
+	{
+		block.X = 0.0;
+		block.Y = 0.0;
+		block.W = 1.0;
+		block.H = 1.0;
+		block.Span = 1;
+		LayoutCell.WriteHeightPx(block, 0.0);
+		return block;
+	}
+
+	/// <summary>
+	/// [layout-fix 第三批]「重置本页」的出厂页(纯函数):
+	///   1 页级参数与内置块 = <paramref name="defaultPage"/>(页面宿主给的出厂布局,如实例库的 12 列网格);
+	///     没有出厂布局 = 白名单默认(单列 stack + 默认间距 / 边距,内置块按白名单顺序、Hidden = !DefaultVisible);
+	///   2 出厂布局里没写到的白名单块按白名单顺序补在后面(与 <see cref="LayoutPageState.Load"/> 的补齐规则一致);
+	///   3 当前页里的自建 / 插件块(custom: / plugin:)**不丢**:接在最后,只清几何、恢复显示,
+	///     数据(settings / style / title / pad / extra)原样保留 —— 它们的定义和用户数据不属于"出厂布局"。
+	///     grid 出厂页里它们占满一整行(span = 列数),交给自动流落到内置块下方。
+	/// 旧几何一律不沿用:这正是 Windows 6c520ca 修的"网格页重置看起来没反应"。
+	/// </summary>
+	public static PageLayoutV2 FactoryPage(PageLayoutV2? current, PageLayoutV2? defaultPage, IReadOnlyList<LayoutBlockRef>? refs)
+	{
+		PageLayoutV2 page = ((defaultPage != null) ? defaultPage.Clone() : new PageLayoutV2());
+		if (page.Blocks == null)
+		{
+			page.Blocks = new List<BlockLayout>();
+		}
+		HashSet<string> have = new HashSet<string>(StringComparer.Ordinal);
+		List<BlockLayout> blocks = new List<BlockLayout>();
+		foreach (BlockLayout block in page.Blocks)
+		{
+			if (block != null && !string.IsNullOrEmpty(block.Id) && have.Add(block.Id))
+			{
+				blocks.Add(block);
+			}
+		}
+		if (refs != null)
+		{
+			foreach (LayoutBlockRef reference in refs)
+			{
+				if (reference != null && !string.IsNullOrEmpty(reference.Id) && have.Add(reference.Id))
+				{
+					blocks.Add(new BlockLayout
+					{
+						Id = reference.Id,
+						Hidden = !reference.DefaultVisible
+					});
+				}
+			}
+		}
+		int span = ((page.Mode == LayoutSchema.ModeGrid) ? LayoutGrid.Columns(page) : 1);
+		if (current?.Blocks != null)
+		{
+			foreach (BlockLayout old in current.Blocks)
+			{
+				if (old == null || string.IsNullOrEmpty(old.Id) || !IsImplicitRef(old.Id) || !have.Add(old.Id))
+				{
+					continue;
+				}
+				BlockLayout kept = ClearGeometry(old.Clone());
+				kept.Hidden = false;
+				kept.Span = span;
+				blocks.Add(kept);
+			}
+		}
+		for (int i = 0; i < blocks.Count; i++)
+		{
+			blocks[i].Z = i;
+		}
+		page.Blocks = blocks;
+		return page;
 	}
 
 	/// <summary>装载一页状态(v2 条目可能为 null = 用白名单默认布局)。</summary>

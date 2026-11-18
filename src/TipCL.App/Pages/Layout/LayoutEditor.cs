@@ -998,8 +998,13 @@ public sealed class LayoutEditor
 		}
 		_boxPointer?.Capture(null);
 		_boxPointer = null;
-		_session.PushUndo(_state.ToPage());
-		_state = LayoutEngine.LoadState(_pageId, ((_defaultPage != null) ? _defaultPage.Clone() : null), _refs, false);
+		PageLayoutV2 before = _state.ToPage();
+		_session.PushUndo(before);
+		// [layout-fix 第三批] 出厂页 = 宿主默认布局(没有就是白名单 stack)+ 当前页的自建 / 插件块(只清几何、数据保留)。
+		// 以前这里是 LoadState(pageId, defaultPage 或 null):出厂几何确实回来了,但 custom: / plugin: 块
+		// 不在白名单里也不在出厂页里 ⇒ 被整条丢掉,接着 Persist 把这一页整页覆盖 —— 自建块从页面上消失、
+		// 它在本页的外观 / 设置一并丢失。纯规则见 LayoutEngine.FactoryPage(有单测)。
+		_state = LayoutEngine.LoadState(_pageId, LayoutEngine.FactoryPage(before, _defaultPage, _refs), _refs, true);
 		_autoGrid = false;
 		_gridTouched = false;
 		_preEditPage = null;
@@ -2162,7 +2167,9 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 		// [Avalonia] Windows 用图标字体码位(Ico.Sort = ⇅,\ue70d/\ue70e = 折叠箭头);Linux 没有内置图标字体,
 		// 一律走矢量图标门面 IconLib(语义键 "Sort" / "ChevronDown" / "ChevronUp" / "Close" / "Add"),
 		// 不存在"码位缺字体显示成方块"的问题(对应 Windows 侧 §3-13 的 glyph 偏离)。
-		Control dragIcon = IconLib.Make("Sort", "B.InkMuted", 12);
+		// [layout-fix] 规格2-问题7 / 规格 §3-问题14(Linux 补修):原先这里仍是 "Sort"(⇅ 排序箭头),
+		// 让人以为要点它;换成拖动手柄 "Grip"(两道横杠,对应 Windows 的 \ue76f)。
+		Control dragIcon = IconLib.Make("Grip", "B.InkMuted", 12);
 		ToolTip.SetTip(dragIcon, I18nCore.Tr("按住区块拖动移动"));
 		dragIcon.IsHitTestVisible = false;
 		dragIcon.VerticalAlignment = VerticalAlignment.Center;
