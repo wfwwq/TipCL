@@ -441,8 +441,9 @@ public sealed class LayoutEditor
 		{
 			_state.Restore(id);
 		}
-		Render();
+		// 先落盘再重画:原生默认排版的页面一落盘就成了"自定义过",重画时才会切到区块形态
 		Persist();
+		Render();
 	}
 
 	/// <summary>就地改当前页(页级参数或某块的 x/y/w/h)并落盘;给页面做"铺满整行"这类调整用。</summary>
@@ -456,8 +457,8 @@ public sealed class LayoutEditor
 		_session.PushUndo(_state.ToPage());
 		mutate(_state.Page);
 		_state.RebuildPage();
-		Render();
 		Persist();
+		Render();
 	}
 
 	/// <summary>双击区块下边:取消固定高度,恢复跟随内容高度。</summary>

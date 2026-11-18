@@ -109,3 +109,43 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - 终验：build 0 错误 0 警告；test 157/158（唯一失败=基线 PhoneLink）；smoke 10/10 页 ok、17 点击、10 弹窗、0 异常；i18n missing=0；明暗 12 图视觉回归通过。
 - 产物：截图 `windos/_eval_shots/final/`；smoke 报告 `_eval_smoke_home/_wpf_smoke/run-20261108-153018/`；分析 `docs/security/imagesharp-audit.md`。
 - 遗留（记录不修，属另一轮）：① unwrapped 中文字面量 2897（Core 2555 / Pages 193，多为 AI 提示词与自检串，需逐条判断）；② 体积超 D-19 红线（镜像提交先超 ~370KB + 本轮词表 ~110KB），dist 重切与回收待排期；③ PhoneLink 基线失败（Core 业务，D-4 在案）。
+
+## 2026-11-18 第八轮(布局续修:四页拆区块 + 网格拖动丝滑化)
+环境:Linux 沙箱,只能编译与跑单测,**没有运行过 WPF 界面**,以下视觉/动画行为全部靠读代码保证,需真机验收。
+
+### 任务 A:四个页面拆成可拖区块(BlockHost)
+| 页面 | pageId | 区块 id(中文名) | 默认外观 |
+|---|---|---|---|
+| AI 页 | `ai` | history(历史会话,Fill)/ chat(对话区 = 顶部操作条 + 插件视图条 + 消息列表,Fill)/ input(输入栏) | 原生默认排版(原外框卡片 + 220px 历史栏分栏) |
+| 版本安装页 | `install` | name(实例名称)/ loaders(模组加载器)/ options(版本与附加选项) | 纵向流,宿主边距 22,0,22,16,块内上边距扣回 10 |
+| 版本管理页 | `version-manage` | folders(文件夹列表)/ versions(版本选择) | 原生默认排版(272 \| 18 \| * 分栏) |
+| 实例详情「设置」内嵌的版本管理 | `version-manage:embedded` | 同上(folders 默认隐藏) | 同上,左栏收起 |
+| 设置 →「布局」视图 | `settings:layout` | appearance(外观与密度,含页标题)/ shell(页签与标题栏)/ blocks(页面区块)/ splits(分栏比例)/ widgets(自建区块)/ profiles(布局方案)/ json(布局 JSON) | 纵向流 = 原 ScrollBody |
+- 设置页其余视图此前已是区块宿主(settings:general 9 块、settings:network、settings:about、java、servers、playtime、account、feedback),左侧导航不动。
+- 安装页头部(返回 + 标题)与底部「将安装 … · 开始安装」固定栏留在原位,不进可拖区域。
+- 新机制(b9eca2d):
+  - `BlockNativeLayout`(原生默认排版):布局文档里没有该页、且不在编辑态时,宿主直接显示页面原来的排版根(Attach/Detach 成对挂取内容)→ 默认外观逐像素不变;进编辑态按 defaultPage 网格摆开;整场没动就不落盘、退出回原排版;「重置本页」= 删掉该页条目回原排版。`BlockHost.IsNativeDefault`。
+  - `BlockSpec.Fill`:网格里按可视高度把余量分给只含 Fill 块的行(`LayoutGrid.FillRows`),卡片内容区不套滚动 → AI 对话区自己的滚动和吸底(ScrollToEnd)在自定义布局下也照常。
+- 新 pageId 全部登记进 `LayoutBlockEntryCatalog`(12 → 17 项);子视图(install / version-manage:embedded)带 Hint,找不到宿主时提示怎么打开。
+- 右键:四页内容都在 BlockHost 里(宿主自带「自定义布局...」菜单),宿主外的头部/底栏/设置左导航由 LayoutShellHooks 的全局右键兜底到页面里的宿主。
+
+### 任务 B:网格拖动 / 吸附丝滑化(2d6309a)
+- grid 拖动:被拖卡片浮起按像素跟手(TranslateTransform,不重新布局),原格子显示落点占位框(主题色描边 + 浅色填充);落点规则不变(LayoutMotion.GridDropTarget 与旧公式 2000 组随机输入逐一对照),落点变了才 Compact + 重排一次。
+- 让位:FLIP(记旧位置 → 重排 → 反向偏移 → 170ms ease-out 归零),偏移含旧动画当前值,新动画前先取消旧动画。
+- 松手:卡片 170ms 落入格子(终点等提交后的排布完成再定住),落定后去掉占位框。缩放同理(像素实时 + 占位框显示吸附尺寸,松手动画到吸附尺寸)。
+- canvas:磁性辅助线吸附保留,吸上/松开/换线改 90ms 短动画;拖动中不再每帧 Reflow。
+- 帧驱动 CompositionTarget.Rendering,进度按毫秒,不限帧率;动画期间只 InvalidateArrange。
+
+### 顺带修掉的既有问题
+常态下底部托盘行白占 24px;FitBox 不缩放时按 DesiredSize 排(卡片缩成内容宽)且会清掉内容自己的 RenderTransform;`LayoutGrid.Pack` 漏带 height_px(任一次提交把别的块固定高写回 0);从托盘恢复 / 撤销 / 粘贴等落盘未记"动过"(完成编辑时被还原);网格下贴边自动滚动从没生效(误用 stack 滚动区);只点一下也落盘;框选结束也提交一次;词表 HEAD 上已缺 16 个 key(已补,en/zh_CN 成对)。
+
+### 验证
+- `dotnet build TipCL.sln -c Release`:0 错误 0 警告。
+- `dotnet test tests/TipCL.Tests -c Release`:503 条,487 通过,16 失败全是 AiFileToolsTests(Linux 沙箱 Windows 路径语义,既有)。新增 LayoutPageSplitTests(11)、LayoutMotionTests(12)及入口表 / 默认布局表用例。
+- i18n:用 L() 包裹的 key 在 en / zh_CN 词表 missing = 0(沙箱里跑不了 exe 的 I18nCheck,用同口径脚本核对)。
+
+### 风险 / 待真机验收
+- 全部未在真窗运行:FLIP / 落位动画、Fill 行高、原生默认排版切换需要真机看一遍(重点:AI 页进出编辑、自定义后消息吸底;版本管理页实例详情内嵌;安装页首屏与改动前对照截图)。
+- `locales/*.json.gz` 是在沙箱里用 .NET 8 GZipStream 重新打的包:解压内容与源一致(CoreResourcesPackTests 通过),但字节可能与 Windows PowerShell 版不同,`tools/pack-core-resources.ps1 -Check` 若报 STALE,在 Windows 上重跑一次脚本即可。
+- 区块形态下 AI 页插件视图选中时输入栏区块会变成空卡片(原排版下与改动前一致);自定义成 stack 模式的 AI 页(只可能来自导入)不支持 Fill。
+- 拖动时测量:缩放预览 / 落位动画期间浮起的那一块会在 Arrange 里按新尺寸补量(其它块是空操作)。
