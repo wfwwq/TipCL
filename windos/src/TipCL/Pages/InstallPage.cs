@@ -15,6 +15,9 @@ namespace TipCL.Pages;
 // 业务全部复用既有后端：list_loader_versions / create_instance / install_game / install_mod。
 public sealed class InstallPage : UserControl
 {
+	/// <summary>布局文档里的页面 id(区块:name / loaders / options)。</summary>
+	public const string LayoutPageId = "install";
+
 	private static readonly string[] Names = new string[5] { I18n.L("不安装"), "Fabric", "Forge", "NeoForge", "Quilt" };
 
 	// 粗略体积估算（MB，不含首次下载的共享资源文件）
@@ -173,14 +176,39 @@ public sealed class InstallPage : UserControl
 		nm.Children.Add(_name);
 		nm.Children.Add(_nameHint.Right().VCenter().M(0.0, 0.0, 14.0, 0.0));
 		_nameHint.IsHitTestVisible = false;
+		// 布局自定义:滚动内容拆成三个区块(实例名称 / 模组加载器 / 版本与附加选项)。
+		// 原来是一条 0 间距的纵向流:块间距 10 由宿主给,块内把多出来的那 10 从上外边距里扣掉
+		// (加载器标题 14 → 4、选项卡片 10 → 0),宿主边距 = 原 body 的 22,0,22,16 —— 默认外观逐像素不变。
 #if PREMIUM
 		_pathHint.Margin = new Thickness(2.0, 6.0, 0.0, 0.0);
 		_pathHint.IsHitTestVisible = false;
-		SPanel body = Ui.V(0.0, Label(I18n.L("实例名称"), 8.0), nm, _pathHint, Label(I18n.L("模组加载器"), 14.0), lds, vbox);
+		SPanel nameBlock = Ui.V(0.0, Label(I18n.L("实例名称"), 8.0), nm, _pathHint);
 #else
-		SPanel body = Ui.V(0.0, Label(I18n.L("实例名称"), 8.0), nm, Label(I18n.L("模组加载器"), 14.0), lds, vbox);
+		SPanel nameBlock = Ui.V(0.0, Label(I18n.L("实例名称"), 8.0), nm);
 #endif
-		body.Margin = new Thickness(22.0, 0.0, 22.0, 16.0);
+		SPanel loaderBlock = Ui.V(0.0, Label(I18n.L("模组加载器"), 4.0), lds);
+		vbox.Margin = new Thickness(0.0);
+		BlockHost body = new BlockHost(LayoutPageId, new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "name",
+				Title = I18n.L("实例名称"),
+				Content = nameBlock
+			},
+			new BlockSpec
+			{
+				Id = "loaders",
+				Title = I18n.L("模组加载器"),
+				Content = loaderBlock
+			},
+			new BlockSpec
+			{
+				Id = "options",
+				Title = I18n.L("版本与附加选项"),
+				Content = vbox
+			}
+		}, new Thickness(22.0, 0.0, 22.0, 16.0));
 
 		_go = Ui.Btn(I18n.L("开始安装"), BtnKind.Primary, delegate
 		{
@@ -201,9 +229,10 @@ public sealed class InstallPage : UserControl
 		footBar.SetResourceReference(Border.BackgroundProperty, "B.GlassStrong");
 		footBar.SetResourceReference(Border.BorderBrushProperty, "B.RowLine");
 
+		// 头部(返回 + 标题)与底部「将安装 … · 开始安装」固定栏保持在原位,不进可拖区域
 		Grid root = Ui.G("Auto,*,Auto");
 		root.Add(head, 0);
-		root.Add(Ui.Scroll(body), 1);
+		root.Add(body, 1);
 		root.Add(footBar, 2);
 		Content = root;
 		Select(0);
