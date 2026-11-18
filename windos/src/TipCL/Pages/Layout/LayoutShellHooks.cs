@@ -111,6 +111,18 @@ public static class LayoutShellHooks
 				};
 				menu.Items.Add(done);
 			}
+			if (editing != null)
+			{
+				MenuItem reset = new MenuItem
+				{
+					Header = I18n.L("重置本页布局")
+				};
+				reset.Click += delegate
+				{
+					editing.ResetPage();
+				};
+				menu.Items.Add(reset);
+			}
 			MenuItem settings = new MenuItem
 			{
 				Header = I18n.L("布局设置...")

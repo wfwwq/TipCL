@@ -102,6 +102,12 @@ public sealed class GridCanvasPanel : Panel
 		}
 	}
 
+	/// <summary>手势开始时拍一份行高快照(拖动时按指针落在哪一行算行号)。</summary>
+	public double[] SnapshotRowHeights()
+	{
+		return (double[])_rowHeights.Clone();
+	}
+
 	/// <summary>是否 canvas 模式。</summary>
 	public bool IsCanvas
 	{
@@ -126,6 +132,20 @@ public sealed class GridCanvasPanel : Panel
 		_rows = LayoutGrid.RowCount(_cells);
 		InvalidateMeasure();
 		InvalidateVisual();
+	}
+
+	/// <summary>
+	/// 拖动/缩放过程中调用:先压紧(其余块重力上浮让位),再重排。
+	/// <paramref name="pinned"/> = 正被拖/正在缩的块 id(固定在当前位置);<paramref name="swapX"/> = 允许左右互换。
+	/// </summary>
+	public void CompactCells(ICollection<string>? pinned, bool swapX)
+	{
+		if (IsCanvas)
+		{
+			return; // 自由画布没有"格子"概念,不做压紧
+		}
+		LayoutGrid.Compact(_cells, Cols, pinned, swapX);
+		Reflow();
 	}
 
 	/// <summary>槽位被就地改过(拖拽/缩放)之后重新排布。</summary>
@@ -261,11 +281,13 @@ public sealed class GridCanvasPanel : Panel
 				continue;
 			}
 			double cellWidth = _columnWidth * cell.W + Gap * Math.Max(0, cell.W - 1);
-			child.Measure(new Size(Math.Max(1.0, cellWidth), double.PositiveInfinity));
-			desired[id] = child.DesiredSize.Height;
+			// height_px(拖下边设定的固定像素高)优先;没设才按内容需求高
+			double fixedH = cell.HeightPx;
+			child.Measure(new Size(Math.Max(1.0, cellWidth), (fixedH > 0.0) ? fixedH : double.PositiveInfinity));
+			desired[id] = ((fixedH > 0.0) ? fixedH : child.DesiredSize.Height);
 		}
 		_rows = LayoutGrid.RowCount(_cells);
-		_rowHeights = LayoutGrid.RowHeights(_cells, _rows, RowH, desired, LayoutCanvas.FallbackMinH);
+		_rowHeights = LayoutGrid.RowHeights(_cells, _rows, RowH, desired, Math.Min(LayoutCanvas.FallbackMinH, 40.0));
 		_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
 		double total = 0.0;
 		for (int i = 0; i < _rowHeights.Length; i++)

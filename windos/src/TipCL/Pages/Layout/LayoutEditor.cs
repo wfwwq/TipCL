@@ -105,6 +105,14 @@ public sealed class LayoutEditor
 
 	private LayoutRect _gestureAnchor;
 
+	// 手势开始时的全量槽位与行高快照:每次鼠标移动都从这里重算,避免累加误差让"越拖越乱"
+	private readonly Dictionary<string, LayoutCell> _gestureSnapshot = new Dictionary<string, LayoutCell>(StringComparer.Ordinal);
+	private double[] _gestureRows = Array.Empty<double>();
+
+	// 下边整条边拖动 = 改固定像素高度(height_px),不再改"占几行"
+	private bool _pixelHeightGesture;
+	private double _gestureStartHeight;
+
 	// 工具条上的撤销/重做按钮(按栈的可用性置灰)
 	private Button? _undoBtn;
 
@@ -170,6 +178,18 @@ public sealed class LayoutEditor
 		{
 			ExitEdit();
 		}));
+		Button foldAll = Ui.Btn(I18n.L("全部折叠"), BtnKind.Normal, null);
+		bool folded = false;
+		foldAll.Click += delegate
+		{
+			folded = !folded;
+			foreach (LayoutCard value in _cards.Values)
+			{
+				value.SetCollapsed(folded);
+			}
+			foldAll.Content = I18n.L(folded ? "全部展开" : "全部折叠");
+		};
+		barButtons.Children.Add(foldAll);
 		barButtons.Children.Add(Ui.Btn(I18n.L("重置本页"), BtnKind.Normal, delegate
 		{
 			ResetPage();
@@ -183,10 +203,17 @@ public sealed class LayoutEditor
 			ImportLayout();
 		}));
 		barButtons.HorizontalAlignment = HorizontalAlignment.Right;
-		// 一行操作提示(用户反馈"不知道能拖"):直接说清拖哪里、缩哪里。
-		TextBlock barHint = Ui.Txt(I18n.L("按住区块拖动移动 · 拖右/下边角缩放"), 11.5, bold: false, "B.InkMuted");
-		barHint.Margin = new Thickness(2.0, 4.0, 0.0, 0.0);
-		SPanel sPanel2 = Ui.V(0.0, barButtons, barHint);
+		// 两列:左列提示(宽度不够用省略号截断,悬停看全文),右列按钮靠右 ——
+		// 窄区域(设置页)里按钮不会被挤掉,提示也不会被裁一半。
+		string hintText = I18n.L("按住区块拖动移动 · 拖右/下边角缩放");
+		TextBlock barHint = Ui.Txt(hintText, 11.5, bold: false, "B.InkMuted");
+		barHint.TextTrimming = TextTrimming.CharacterEllipsis;
+		barHint.ToolTip = hintText;
+		barHint.Margin = new Thickness(2.0, 0.0, 8.0, 0.0);
+		Grid barGrid = Ui.G("*,Auto");
+		barGrid.Add(barHint.VCenter(), 0, 0);
+		barGrid.Add(barButtons.VCenter(), 0, 1);
+		SPanel sPanel2 = Ui.V(0.0, barGrid);
 		_barHost.CornerRadius = new CornerRadius(10.0);
 		_barHost.Padding = new Thickness(10.0, 8.0, 10.0, 8.0);
 		_barHost.Visibility = Visibility.Collapsed;
@@ -379,6 +406,25 @@ public sealed class LayoutEditor
 		Persist();
 	}
 
+	/// <summary>双击区块下边:取消固定高度,恢复跟随内容高度。</summary>
+	internal void ClearFixedHeight(BlockSpec spec)
+	{
+		if (!_edit || spec == null)
+		{
+			return;
+		}
+		MutatePage(delegate(PageLayoutV2 page)
+		{
+			foreach (BlockLayout block in page.Blocks)
+			{
+				if (block.Id == spec.Id)
+				{
+					block.HeightPx = 0.0;
+				}
+			}
+		});
+	}
+
 	/// <summary>
 	/// 宿主喂入"内容区可用宽"(px):窄窗/宽窗变体(§0.1 Q6)据此在 <c>variants.narrow</c>
 	/// 与主 body 之间切换。<paramref name="width"/> ≤ 0 = 未知宽 → 不做变体判定。
@@ -398,6 +444,7 @@ public sealed class LayoutEditor
 		}
 		_edit = true;
 		PrepareEditableGrid();
+		CompactState(null);
 		// 每次进编辑态都是一次新会话:多选与撤销栈清空(历史上的改动已经即时落盘,不需要跨会话撤销)
 		_session.ClearHistory();
 		_session.ClearSelection();
@@ -542,6 +589,7 @@ public sealed class LayoutEditor
 			card.SetBoxMode(page.Mode);
 			card.SetEdit(_edit);
 			card.SetSelected(_edit && _session.IsSelected(cell.Id));
+			card.SetFixedHeight(PageHeightOf(cell.Id));
 			ApplyLook(card);
 			_box.Children.Add(card);
 		}
@@ -549,6 +597,19 @@ public sealed class LayoutEditor
 	}
 
 	// 可视宿主二选一:stack = SPanel 纵向流(与 L1 逐像素一致),grid/canvas = 画布 Panel
+	// 某块的固定像素高度(0 = 跟随内容)
+	private double PageHeightOf(string id)
+	{
+		foreach (BlockLayout block in _state.Page.Blocks)
+		{
+			if (block.Id == id)
+			{
+				return block.HeightPx;
+			}
+		}
+		return 0.0;
+	}
+
 	private void ShowStackHost()
 	{
 		if (_root.Children.Count != 0 && ReferenceEquals(_root.Children[0], _scroll))
@@ -781,11 +842,39 @@ public sealed class LayoutEditor
 	// 重置本页 = 回到白名单默认布局(等价 PageLayoutDoc.Default)并落盘
 	private void ResetPage()
 	{
-		_session.PushUndo(_state.ToPage());
-		_state.Reset(_refs);
-		Persist();
-		Render();
-		AppServices.Window?.Toast(I18n.L("布局已重置"), "", ToastKind.Success);
+		try
+		{
+			// 先结束可能还没收尾的拖动手势并释放鼠标捕获:
+			// 如果上一次拖动没收尾、鼠标还被区块抓着,工具条按钮根本收不到点击(录屏里"点了没反应")
+			if (_gesture.Length != 0)
+			{
+				EndBoxGesture(false, false);
+			}
+			if (_box.IsMouseCaptured)
+			{
+				_box.ReleaseMouseCapture();
+			}
+			_session.PushUndo(_state.ToPage());
+			_state.Reset(_refs);
+			Persist();
+			Render();
+			// 重置后把所有折叠的区块展开(否则看起来像"没反应")
+			foreach (LayoutCard card in _cards.Values)
+			{
+				card.SetCollapsed(false);
+			}
+			AppServices.Window?.Toast(I18n.L("布局已重置"), I18n.L("本页已恢复默认布局"), ToastKind.Success);
+		}
+		catch (Exception ex)
+		{
+			AppServices.Window?.Toast(I18n.L("重置失败"), ex.Message, ToastKind.Error);
+		}
+	}
+
+	/// <summary>给右键菜单用的重置入口(编辑态)。</summary>
+	public void ResetPageFromMenu()
+	{
+		ResetPage();
 	}
 
 	// 导入:PageLayoutIO 仍按 v1 语义写盘(整机 v2 方案导入由 L5 做);这里把 v1 的顺序/显隐并进 v2,
@@ -996,6 +1085,15 @@ public sealed class LayoutEditor
 			}
 		}
 		_gestureAnchor = (_box.RectOf(card.Spec.Id) ?? default(LayoutRect));
+		_gestureSnapshot.Clear();
+		foreach (LayoutCell c in _box.Cells)
+		{
+			if (c != null)
+			{
+				_gestureSnapshot[c.Id] = c.Clone();
+			}
+		}
+		_gestureRows = _box.SnapshotRowHeights();
 		_box.CaptureMouse();
 		_box.MouseMove += OnBoxDragMove;
 		_box.MouseLeftButtonUp += OnBoxGestureEnd;
@@ -1035,6 +1133,13 @@ public sealed class LayoutEditor
 		_session.Select(card.Spec.Id, false);
 		StartGesture("resize", card, e);
 		_gestureHandle = handle;
+		_pixelHeightGesture = false;
+		if (IsBoxMode && !_box.IsCanvas && handle == "s")
+		{
+			_pixelHeightGesture = true;
+			LayoutRect? rect = _box.RectOf(card.Spec.Id);
+			_gestureStartHeight = (rect.HasValue ? rect.Value.H : (card.ActualHeight > 0.0 ? card.ActualHeight : 120.0));
+		}
 		UpdateSelectionVisual();
 		e.Handled = true;
 	}
@@ -1083,6 +1188,7 @@ public sealed class LayoutEditor
 		Point point = e.GetPosition(_box);
 		double dx = point.X - _gestureStart.X;
 		double dy = point.Y - _gestureStart.Y;
+		AutoScrollNearEdge(point);
 		if (_box.IsCanvas)
 		{
 			ApplyCanvasGesture(dx, dy);
@@ -1104,6 +1210,39 @@ public sealed class LayoutEditor
 		EndBoxGesture(false, false);
 	}
 
+	// 拖动/缩放时鼠标靠近可视区上下边缘 → 自动滚动(方便把很高的块拖短或拖远)
+	private void AutoScrollNearEdge(Point pointInBox)
+	{
+		if (!IsBoxMode || _scroll == null)
+		{
+			return;
+		}
+		double height = _scroll.ViewportHeight;
+		if (height <= 0.0)
+		{
+			return;
+		}
+		double y = pointInBox.Y - _scroll.VerticalOffset;
+		double step = 0.0;
+		if (y < 36.0)
+		{
+			step = -18.0;
+		}
+		else if (y > height - 36.0)
+		{
+			step = 18.0;
+		}
+		if (step == 0.0)
+		{
+			return;
+		}
+		double to = Math.Max(0.0, Math.Min(_scroll.ScrollableHeight, _scroll.VerticalOffset + step));
+		if (Math.Abs(to - _scroll.VerticalOffset) > 0.01)
+		{
+			_scroll.ScrollToVerticalOffset(to);
+		}
+	}
+
 	// 手势收尾:解绑事件 → (取消?回滚:落盘)→ 重画
 	private void EndBoxGesture(bool persist, bool rollback)
 	{
@@ -1111,6 +1250,9 @@ public sealed class LayoutEditor
 		_gesture = "";
 		_gestureHandle = "";
 		_gestureCells.Clear();
+		_gestureSnapshot.Clear();
+		_gestureRows = Array.Empty<double>();
+		_pixelHeightGesture = false;
 		_box.MouseMove -= OnBoxDragMove;
 		_box.MouseMove -= OnBoxMarqueeMove;
 		_box.MouseLeftButtonUp -= OnBoxGestureEnd;
@@ -1146,9 +1288,30 @@ public sealed class LayoutEditor
 	}
 
 	// 画布槽位 → 页面块 → v2(唯一入口 LayoutStoreV2)并落盘
+	// 进编辑 / 每次提交后压紧一次:旧存档里被放到很靠下、看起来"消失"的区块会浮回能看到的位置。
+	// 只在编辑过程中生效 —— 不进编辑就不动用户原有布局(比如启动页刻意留出的空白)。
+	private void CompactState(ICollection<string>? pinned)
+	{
+		if (!IsBoxMode || !_edit)
+		{
+			return;
+		}
+		_box.CompactCells(pinned, false);
+		int cols = LayoutGrid.Columns(_state.Page);
+		foreach (LayoutCell cell in _box.Cells)
+		{
+			if (cell != null && cell.W < 2)
+			{
+				ClampMinWidth(cell, cols);
+			}
+		}
+		_box.Reflow();
+	}
+
 	private void CommitBox()
 	{
 		_layoutTouched = true;
+		CompactState(null);
 		PageLayoutV2 page = _state.ToPage();
 		_box.ApplyTo(page);
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
@@ -1210,61 +1373,146 @@ public sealed class LayoutEditor
 	}
 
 	// grid:按网格单位整体拖拽 / 缩放(位移折成格数);对齐线按像素算完再折回格数,线仍画在真正对齐的位置
+	// grid:被拖块左上角跟随鼠标 → 取最近的列;行数按指针落在哪一行(用手势开始时的行高快照算);
+	// 每次移动都先从快照恢复,再把被拖块固定住做一次压紧 —— 其余块实时让位,不留空洞也不互相覆盖。
+	// grid 下不再显示对齐辅助线(格子吸附已足够,辅助线吸附会和让位逻辑互相干扰)。
 	private void ApplyGridGesture(double dx, double dy)
 	{
 		int cols = LayoutGrid.Columns(_state.Page);
 		double columnStep = Math.Max(1.0, _box.ColumnWidthValue + _box.Gap);
 		string? primary = PrimaryId();
-		LayoutRect? anchorRect = _box.RectOf(primary);
-		double rowStep = Math.Max(1.0, ((anchorRect.HasValue ? anchorRect.Value.H : LayoutCanvas.FallbackMinH) + _box.Gap));
-		int stepX = (int)Math.Round(dx / columnStep);
-		int stepY = (int)Math.Round(dy / rowStep);
-		foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
+		if (primary == null)
+		{
+			return;
+		}
+		bool multi = _gestureCells.Count > 1;
+		foreach (KeyValuePair<string, LayoutCell> kv in _gestureSnapshot)
 		{
 			LayoutCell? cell = _box.CellOf(kv.Key);
-			if (cell == null)
+			if (cell != null)
 			{
-				continue;
-			}
-			LayoutCell start = kv.Value;
-			cell.X = start.X;
-			cell.Y = start.Y;
-			cell.W = start.W;
-			cell.H = start.H;
-			if (_gesture == "resize")
-			{
-				LayoutGrid.ResizeCell(cell, _gestureHandle, stepX, stepY, cols);
-			}
-			else
-			{
-				LayoutGrid.MoveCell(cell, stepX, stepY, cols, 0);
+				LayoutCell from = kv.Value;
+				cell.X = from.X;
+				cell.Y = from.Y;
+				cell.W = from.W;
+				cell.H = from.H;
 			}
 		}
-		LayoutRect? rect = GridRectOf(_box.CellOf(primary));
-		if (primary != null && rect.HasValue)
+		LayoutCell? lead = _box.CellOf(primary);
+		if (lead == null)
 		{
-			LayoutGuideResult guides = LayoutGuides.Align(rect.Value, OtherRects(primary, false), LayoutGuides.Threshold);
-			if (_gesture == "move" && guides.HasSnap)
+			return;
+		}
+		if (_gesture == "resize")
+		{
+			if (_pixelHeightGesture)
 			{
-				int fixX = (int)Math.Round(guides.Dx / columnStep);
-				int fixY = (int)Math.Round(guides.Dy / rowStep);
-				if (fixX != 0 || fixY != 0)
+				// 下边整条边:直接记像素高度(4px 吸附,最小 56),内容在块内滚动
+				double height = Math.Max(56.0, Math.Round((_gestureStartHeight + dy) / 4.0) * 4.0);
+				lead.HeightPx = height;
+				HashSet<string> only = new HashSet<string>(StringComparer.Ordinal);
+				only.Add(primary);
+				_box.CompactCells(only, false);
+				_guide.Clear();
+				return;
+			}
+			// 缩放:列按列宽折,行按真实行高折(以前用被拖卡片自身高度,高卡片几乎拖不动)
+			double rowStep = RowStepFor(lead.Y + Math.Max(0, lead.H - 1));
+			int stepX = (int)Math.Round(dx / columnStep);
+			int stepY = (int)Math.Round(dy / Math.Max(1.0, rowStep));
+			LayoutGrid.ResizeCell(lead, _gestureHandle, stepX, stepY, cols);
+			ClampMinWidth(lead, cols);
+		}
+		else
+		{
+			LayoutRect anchor = _gestureAnchor;
+			double left = anchor.X + dx;
+			double top = anchor.Y + dy;
+			int targetX = LayoutSchema.ClampInt((int)Math.Round(left / columnStep), 0, Math.Max(0, cols - lead.W));
+			int targetY = Math.Max(0, RowAtY(top));
+			int stepX = targetX - lead.X;
+			int stepY = targetY - lead.Y;
+			if (stepX != 0 || stepY != 0)
+			{
+				if (multi)
 				{
 					foreach (KeyValuePair<string, LayoutCell> kv2 in _gestureCells)
 					{
 						LayoutCell? cell2 = _box.CellOf(kv2.Key);
 						if (cell2 != null)
 						{
-							LayoutGrid.MoveCell(cell2, fixX, fixY, cols, 0);
+							LayoutGrid.MoveCell(cell2, stepX, stepY, cols, 0);
 						}
 					}
 				}
+				else
+				{
+					LayoutGrid.MoveCell(lead, stepX, stepY, cols, 0);
+				}
 			}
-			_guide.ShowLines(guides.Lines);
+		}
+		HashSet<string> pinned = new HashSet<string>(StringComparer.Ordinal);
+		if (multi)
+		{
+			foreach (string id in _gestureCells.Keys)
+			{
+				pinned.Add(id);
+			}
 		}
 		else
 		{
-			_guide.Clear();
+			pinned.Add(primary);
+		}
+		_box.CompactCells(pinned, !multi);
+		_guide.Clear();
+	}
+
+	// 第 index 行的行高(手势开始时的快照);越界用末行兜底。
+	private double RowStepFor(int index)
+	{
+		double[] rows = _gestureRows;
+		if (rows == null || rows.Length == 0)
+		{
+			return Math.Max(1.0, LayoutCanvas.FallbackMinH);
+		}
+		int k = LayoutSchema.ClampInt(index, 0, rows.Length - 1);
+		return Math.Max(1.0, rows[k] + _box.Gap);
+	}
+
+	// 像素 y → 行号(按快照行高累加;超过末行返回 末行+1)
+	private int RowAtY(double y)
+	{
+		double[] rows = _gestureRows;
+		if (rows == null || rows.Length == 0)
+		{
+			return 0;
+		}
+		double acc = 0.0;
+		for (int k = 0; k < rows.Length; k++)
+		{
+			acc += rows[k] + _box.Gap;
+			if (y < acc)
+			{
+				return k;
+			}
+		}
+		return rows.Length;
+	}
+
+	// 最小宽度:12 列网格下不小于 2 列(1 列宽会把标题挤成竖排)
+	private static void ClampMinWidth(LayoutCell cell, int cols)
+	{
+		if (cols < 2 || cell == null)
+		{
+			return;
+		}
+		if (cell.W < 2)
+		{
+			cell.W = 2;
+		}
+		if (cell.X + cell.W > cols)
+		{
+			cell.X = Math.Max(0, cols - cell.W);
 		}
 	}
 
@@ -1542,7 +1790,14 @@ internal sealed class LayoutCard : Border
 
 	private readonly Border _bodyWrap;
 
+	private readonly ScrollViewer _bodyScroll;
 	private readonly Grid _handleLayer;
+
+	private readonly Border _edgeE;
+	private readonly Border _edgeS;
+	private readonly Button _collapseBtn;
+	private readonly FitBox _fit = new FitBox();
+	private bool _collapsed;
 
 	private readonly Dictionary<string, Border> _handles = new Dictionary<string, Border>(StringComparer.Ordinal);
 
@@ -1577,6 +1832,11 @@ internal sealed class LayoutCard : Border
 		Button uIElement = Ui.IconBtn(Ico.Sort, I18n.L("按住拖动"), null, 12.0);
 		uIElement.IsHitTestVisible = false;
 		uIElement.Focusable = false;
+		// 折叠按钮(只在编辑态出现):把区块收成一行标题栏,方便腾地方挪别的块;不写进布局。
+		_collapseBtn = Ui.IconBtn(Ico.ChevronUp, I18n.L("折叠"), delegate
+		{
+			SetCollapsed(!_collapsed);
+		}, 12.0);
 		Button button = Ui.IconBtn(Ico.Close, I18n.L("隐藏"), delegate
 		{
 			_host.HideBlock(Spec);
@@ -1584,7 +1844,7 @@ internal sealed class LayoutCard : Border
 		TextBlock textBlock = Ui.Txt(spec.Title, 12.5, bold: true);
 		textBlock.VerticalAlignment = VerticalAlignment.Center;
 		textBlock.TextTrimming = TextTrimming.CharacterEllipsis;
-		_bar = Ui.H(8.0, uIElement, textBlock, Ui.Spring(), button);
+		_bar = Ui.H(8.0, uIElement, textBlock, Ui.Spring(), _collapseBtn, button);
 		_bar.Margin = new Thickness(6.0, 6.0, 6.0, 2.0);
 		// 常态块标题(§4.B 的 title;缺省 false → 整行折叠,与改动前一致)
 		TextBlock titleText = Ui.Txt(spec.Title, 12.5, bold: true);
@@ -1593,10 +1853,18 @@ internal sealed class LayoutCard : Border
 		_titleRow.Margin = new Thickness(0.0, 0.0, 0.0, 6.0);
 		_titleRow.Visibility = Visibility.Collapsed;
 		// 内容体外壳:常态零边距(逐像素等价旧版),编辑态留一点呼吸边距
+		// 内容体:FitBox(窄了等比缩小,不裁切)+ ScrollViewer(设了 height_px 时内容在块内滚动)
+		_fit.Child = _body;
+		_bodyScroll = new ScrollViewer
+		{
+			VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+			HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+			Content = _fit
+		};
 		_bodyWrap = new Border
 		{
 			Padding = new Thickness(0.0),
-			Child = _body
+			Child = _bodyScroll
 		};
 		Grid grid = Ui.G("Auto,Auto,*");
 		grid.Add(_bar, 0);
@@ -1611,6 +1879,19 @@ internal sealed class LayoutCard : Border
 		{
 			AddHandle(name);
 		}
+		// 整条边也能拖(不再要求对准小方块):右边 → 改宽,下边 → 改高(双击 = 取消固定高度)
+		_edgeE = EdgeStrip("e", Cursors.SizeWE);
+		_handleLayer.Children.Add(_edgeE);
+		_edgeS = EdgeStrip("s", Cursors.SizeNS);
+		_edgeS.PreviewMouseLeftButtonDown += delegate(object _, MouseButtonEventArgs e)
+		{
+			if (e.ClickCount >= 2)
+			{
+				_host.ClearFixedHeight(Spec);
+				e.Handled = true;
+			}
+		};
+		_handleLayer.Children.Add(_edgeS);
 		grid.Add(_handleLayer, 0, 0, 3, 1);
 		Child = grid;
 		_bar.Visibility = Visibility.Collapsed;
@@ -1624,10 +1905,67 @@ internal sealed class LayoutCard : Border
 		_body.Content = content;
 	}
 
+	/// <summary>折叠/展开(只在编辑态用;不写进布局)。</summary>
+	public void SetCollapsed(bool collapsed)
+	{
+		_collapsed = collapsed;
+		_bodyWrap.Visibility = (collapsed ? Visibility.Collapsed : Visibility.Visible);
+		_collapseBtn.Content = Ui.Glyph(Ico.ChevronDown, 12.0);
+		if (!collapsed)
+		{
+			_collapseBtn.Content = Ui.Glyph(Ico.ChevronUp, 12.0);
+		}
+	}
+
+	public bool IsCollapsed => _collapsed;
+
+	/// <summary>整条边的拖拽条(透明;光标在边上就变成双向箭头)。</summary>
+	private Border EdgeStrip(string name, Cursor cursor)
+	{
+		Border strip = new Border
+		{
+			Background = Brushes.Transparent,
+			Tag = name,
+			Cursor = cursor,
+			HorizontalAlignment = (name == "e" ? HorizontalAlignment.Right : HorizontalAlignment.Stretch),
+			VerticalAlignment = (name == "s" ? VerticalAlignment.Bottom : VerticalAlignment.Stretch)
+		};
+		if (name == "e")
+		{
+			strip.Width = 7.0;
+		}
+		else
+		{
+			strip.Height = 7.0;
+		}
+		string captured = name;
+		strip.PreviewMouseLeftButtonDown += delegate(object obj, MouseButtonEventArgs e)
+		{
+			_host.BeginBoxResize(this, captured, e);
+		};
+		return strip;
+	}
+
+	/// <summary>固定像素高度(0 = 跟随内容):内容超出时在块内滚动。</summary>
+	public void SetFixedHeight(double px)
+	{
+		if (px > 0.0)
+		{
+			_bodyScroll.MaxHeight = px;
+			_bodyScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+		}
+		else
+		{
+			_bodyScroll.MaxHeight = double.PositiveInfinity;
+		}
+	}
+
 	/// <summary>切画布模式(grid / canvas;stack = 缺省,手柄层折叠)。</summary>
 	public void SetBoxMode(string mode)
 	{
 		_boxMode = ((mode == LayoutSchema.ModeGrid || mode == LayoutSchema.ModeCanvas) ? mode : LayoutSchema.ModeStack);
+		// 窄宽等比缩放只在网格/自由画布里生效(常态纵向流按原样排版,逐像素等价旧版)
+		_fit.MaxNaturalHeight = ((_boxMode == LayoutSchema.ModeStack) ? 0.0 : 170.0);
 		if (!_edit)
 		{
 			_handleLayer.Visibility = Visibility.Collapsed;
@@ -1642,7 +1980,12 @@ internal sealed class LayoutCard : Border
 	{
 		_edit = edit;
 		_bar.Show(edit);
+		_collapseBtn.Visibility = (edit ? Visibility.Visible : Visibility.Collapsed);
 		_body.IsHitTestVisible = !edit;
+		if (!edit)
+		{
+			SetCollapsed(false); // 退出编辑自动展开
+		}
 		// 编辑态整卡可拖:光标给十字移动箭头,提示"按住就能拖"
 		Cursor = (edit ? Cursors.SizeAll : null);
 		UpdateHandles();
@@ -1691,6 +2034,14 @@ internal sealed class LayoutCard : Border
 		{
 			bool show = (_boxMode == LayoutSchema.ModeCanvas) || kv.Key == "e" || kv.Key == "s" || kv.Key == "se";
 			kv.Value.Visibility = (show ? Visibility.Visible : Visibility.Collapsed);
+		}
+		if (_edgeE != null)
+		{
+			_edgeE.Visibility = Visibility.Visible;
+		}
+		if (_edgeS != null)
+		{
+			_edgeS.Visibility = Visibility.Visible;
 		}
 	}
 

@@ -137,6 +137,12 @@ public sealed class BlockHost : UserControl
 		_editor.SetBlockHidden(id, hidden);
 	}
 
+	/// <summary>重置本页为出厂布局(右键菜单第二入口)。</summary>
+	public void ResetPage()
+	{
+		_editor.ResetPageFromMenu();
+	}
+
 	/// <summary>就地改当前页布局并落盘(铺满整行这类调整)。</summary>
 	public void MutatePage(Action<PageLayoutV2> mutate)
 	{

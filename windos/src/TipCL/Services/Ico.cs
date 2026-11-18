@@ -108,6 +108,15 @@ public static class Ico
 
 	public const string Sort = "\ue8cb";
 
+	/// <summary>折叠态箭头(区块折叠按钮用)。</summary>
+	public const string ChevronUp = "\ue70e";
+
+	public const string ChevronDown = "\ue70d";
+
+	/// <summary>拖动手柄图标:编辑态整卡可拖,这里只作提示(不再用 ⇅ 排序图标,免得让人以为要点它)。</summary>
+	/// <remarks>用 E8AB(arrow_swap):内置图标字体里没有 E76F,见 tools/iconfont/map.py 与 IconFontTests。</remarks>
+	public const string DragHandle = "\ue8ab";
+
 	public const string Filter = "\ue71c";
 
 	public const string Shield = "\uea18";

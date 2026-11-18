@@ -916,6 +916,9 @@ public sealed class LayoutCell
 	/// <summary>叠放序(canvas 用;顺序索引)。</summary>
 	public int Z { get; set; }
 
+	/// <summary>固定像素高度(grid/canvas;0 = 跟随内容)。</summary>
+	public double HeightPx { get; set; }
+
 	/// <summary>深拷贝。</summary>
 	public LayoutCell Clone()
 	{
@@ -932,6 +935,7 @@ public sealed class LayoutCell
 			NH = NH,
 			MinW = MinW,
 			MinH = MinH,
+			HeightPx = HeightPx,
 			Z = Z
 		};
 	}
@@ -955,6 +959,7 @@ public sealed class LayoutCell
 		cell.NH = block.H;
 		cell.MinW = LayoutCanvas.FallbackMinW;
 		cell.MinH = ((block.MinH > 0.0) ? block.MinH : LayoutCanvas.FallbackMinH);
+		cell.HeightPx = block.HeightPx;
 		cell.Z = block.Z;
 		return cell;
 	}
@@ -968,6 +973,7 @@ public sealed class LayoutCell
 			block.Y = Y;
 			block.W = W;
 			block.H = H;
+			block.HeightPx = HeightPx;
 		}
 	}
 
@@ -1065,6 +1071,105 @@ public static class LayoutGrid
 			});
 		}
 		return cells;
+	}
+
+	/// <summary>
+	/// 网格压紧(重力上浮):pinned 里的块(正在拖/正在缩的块)固定在当前位置先占格子,
+	/// 其余块按 (Y, X) 排序后逐个放到"本列能放下的最高一行" —— 于是拖走留下的空洞会被下面的块填上,
+	/// 不会出现互相覆盖或空洞。
+	/// <paramref name="swapX"/> = true 时,若某块与被拖块冲突,再试一次"换到被拖块原来那一列",
+	/// 哪边能放得更高就用哪边 —— 这就是左右互换(文件夹栏拖到右边,版本选择自动换到左边)。
+	/// 只向上浮,不向左浮:同一行左侧刻意留空是允许的(方便左右排布)。
+	/// </summary>
+	public static void Compact(List<LayoutCell> cells, int cols, ICollection<string>? pinned, bool swapX)
+	{
+		if (cells == null || cells.Count == 0)
+		{
+			return;
+		}
+		int n = Math.Max(1, cols);
+		Occupancy occupancy = new Occupancy(n);
+		HashSet<string> pin = new HashSet<string>(StringComparer.Ordinal);
+		if (pinned != null)
+		{
+			foreach (string id in pinned)
+			{
+				if (!string.IsNullOrEmpty(id))
+				{
+					pin.Add(id);
+				}
+			}
+		}
+		// 1) 先给固定的块占位(保持它们自己的位置,放不下才在同列往下找)
+		List<LayoutCell> pinnedCells = new List<LayoutCell>();
+		foreach (LayoutCell cell in cells)
+		{
+			if (cell == null || !pin.Contains(cell.Id))
+			{
+				continue;
+			}
+			cell.W = LayoutSchema.ClampInt(cell.W, 1, n);
+			cell.X = LayoutSchema.ClampInt(cell.X, 0, Math.Max(0, n - cell.W));
+			cell.Y = Math.Max(0, cell.Y);
+			cell.H = Math.Max(1, cell.H);
+			if (!occupancy.IsFree(cell.X, cell.Y, cell.W, cell.H))
+			{
+				occupancy.FirstFreeInColumnH(cell.X, cell.W, cell.H, cell.Y, out int y);
+				cell.Y = y;
+			}
+			occupancy.Fill(cell.X, cell.Y, cell.W, cell.H);
+			pinnedCells.Add(cell);
+		}
+		// 2) 其余块:按 (Y, X) 顺序重力上浮
+		List<LayoutCell> rest = new List<LayoutCell>();
+		foreach (LayoutCell cell in cells)
+		{
+			if (cell != null && !pin.Contains(cell.Id))
+			{
+				rest.Add(cell);
+			}
+		}
+		rest.Sort(delegate(LayoutCell a, LayoutCell b)
+		{
+			if (a.Y != b.Y)
+			{
+				return a.Y.CompareTo(b.Y);
+			}
+			return a.X.CompareTo(b.X);
+		});
+		foreach (LayoutCell cell in rest)
+		{
+			cell.W = LayoutSchema.ClampInt(cell.W, 1, n);
+			cell.X = LayoutSchema.ClampInt(cell.X, 0, Math.Max(0, n - cell.W));
+			cell.H = Math.Max(1, cell.H);
+			occupancy.FirstFreeInColumnH(cell.X, cell.W, cell.H, 0, out int y);
+			int bestX = cell.X;
+			int bestY = y;
+			if (swapX && pinnedCells.Count > 0)
+			{
+				// 与被拖块冲突时,试试换到被拖块所在的那一列,能放得更高就换过去
+				foreach (LayoutCell fixedCell in pinnedCells)
+				{
+					int altX = LayoutSchema.ClampInt(fixedCell.X, 0, Math.Max(0, n - cell.W));
+					if (altX == cell.X)
+					{
+						continue;
+					}
+					if (!occupancy.IsFree(altX, 0, cell.W, cell.H))
+					{
+						occupancy.FirstFreeInColumnH(altX, cell.W, cell.H, 0, out int altY);
+						if (altY < bestY)
+						{
+							bestX = altX;
+							bestY = altY;
+						}
+					}
+				}
+			}
+			cell.X = bestX;
+			cell.Y = bestY;
+			occupancy.Fill(cell.X, cell.Y, cell.W, cell.H);
+		}
 	}
 
 	/// <summary>行数(含跨行块占到的行;空表为 0)。</summary>
@@ -1406,6 +1511,22 @@ public static class LayoutGrid
 				}
 			}
 			x = 0;
+			y = limit;
+		}
+
+		/// <summary>按块的高(h 行)找同列第一个空位(压紧/让位用;原版只按 1 行判,会压在跨行块上)。</summary>
+		public void FirstFreeInColumnH(int x, int w, int h, int startRow, out int y)
+		{
+			int from = Math.Max(0, startRow);
+			int limit = _rows.Count + h + 2;
+			for (int r = from; r <= limit; r++)
+			{
+				if (IsFree(x, r, w, h))
+				{
+					y = r;
+					return;
+				}
+			}
 			y = limit;
 		}
 

@@ -974,6 +974,9 @@ public sealed class BlockLayout
 	/// <summary>块最小高度(拖拽缩放下限;0 = 用类型默认)。</summary>
 	public double MinH { get; set; }
 
+	/// <summary>固定像素高度(拖下边整条边设置;0 = 跟随内容高度)。写进 height_px。</summary>
+	public double HeightPx { get; set; }
+
 	/// <summary>叠放序(canvas 用);-1 = 未设置,Normalize 时填顺序索引。</summary>
 	public int Z { get; set; } = -1;
 
@@ -999,6 +1002,7 @@ public sealed class BlockLayout
 			Title = Title,
 			Pad = ((Pad != null) ? LayoutSchema.PadCopy(Pad) : null),
 			MinH = MinH,
+			HeightPx = HeightPx,
 			Z = Z,
 			Settings = LayoutJson.CloneMap(Settings),
 			Extra = LayoutJson.CloneMap(Extra)
@@ -1023,6 +1027,10 @@ public sealed class BlockLayout
 			dict["pad"] = LayoutJson.PadList(Pad);
 		}
 		dict["min_h"] = LayoutJson.Num(MinH);
+		if (HeightPx > 0.0)
+		{
+			dict["height_px"] = LayoutJson.Num(HeightPx);
+		}
 		dict["z"] = Z;
 		dict["settings"] = LayoutJson.CloneMap(Settings);
 		LayoutJson.MergeExtra(dict, Extra);
@@ -1077,6 +1085,10 @@ public sealed class BlockLayout
 		{
 			block.Pad = LayoutJson.Pad(pad, LayoutSchema.PadDefaultCopy());
 		}
+		if (e.TryGetProperty("height_px", out JsonElement heightPx))
+		{
+			block.HeightPx = LayoutJson.Number(heightPx, block.HeightPx);
+		}
 		if (e.TryGetProperty("min_h", out JsonElement minH))
 		{
 			block.MinH = LayoutJson.Number(minH, block.MinH);
@@ -1101,6 +1113,7 @@ public sealed class BlockLayout
 		block.Extra.Remove("title");
 		block.Extra.Remove("pad");
 		block.Extra.Remove("min_h");
+		block.Extra.Remove("height_px");
 		block.Extra.Remove("z");
 		block.Extra.Remove("settings");
 		return block;
