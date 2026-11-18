@@ -414,6 +414,28 @@ public sealed class LayoutPageState
 				Order.Add(id2);
 			}
 		}
+		// RebuildPage 现在按 id 保留旧块(几何/外观/height_px)。重置必须先把旧几何清掉,
+		// 否则"重置本页"在网格页上什么都不变(录屏二条目 22 的又一个成因)。
+		// 白名单块整块丢弃 → 回到出厂;自建/插件块只清几何,数据(Settings 等)保留。
+		List<BlockLayout> kept = new List<BlockLayout>();
+		if (Page.Blocks != null)
+		{
+			foreach (BlockLayout old in Page.Blocks)
+			{
+				if (old == null || string.IsNullOrEmpty(old.Id) || !LayoutEngine.IsImplicitRef(old.Id))
+				{
+					continue;
+				}
+				BlockLayout c = old.Clone();
+				c.X = 0.0;
+				c.Y = 0.0;
+				c.W = 1.0;
+				c.H = 1.0;
+				c.HeightPx = 0.0;
+				kept.Add(c);
+			}
+		}
+		Page.Blocks = kept;
 		RebuildPage();
 	}
 

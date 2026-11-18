@@ -335,6 +335,31 @@ public class LayoutEngineTests
 		Assert.Empty(state.Hidden);
 	}
 
+	[Fact]
+	public void ResetClearsGeometryButKeepsCustomBlockData()
+	{
+		PageLayoutV2 page = Page("a", "b", "custom:w-9");
+		page.Mode = LayoutSchema.ModeGrid;
+		page.Blocks[0].X = 6.0;
+		page.Blocks[0].Y = 3.0;
+		page.Blocks[0].W = 4.0;
+		page.Blocks[0].HeightPx = 300.0;
+		page.Blocks[2].X = 2.0;
+		page.Blocks[2].HeightPx = 120.0;
+		page.Blocks[2].Settings["text"] = "keep";
+		LayoutPageState state = LayoutEngine.LoadState("p", page, Refs("a", "b"));
+		state.Reset(Refs("a", "b"));
+		PageLayoutV2 after = state.ToPage();
+		BlockLayout a = after.Blocks.First((BlockLayout b) => b.Id == "a");
+		Assert.Equal(0.0, a.X);
+		Assert.Equal(0.0, a.Y);
+		Assert.Equal(0.0, a.HeightPx);
+		BlockLayout custom = after.Blocks.First((BlockLayout b) => b.Id == "custom:w-9");
+		Assert.Equal(0.0, custom.X);
+		Assert.Equal(0.0, custom.HeightPx);
+		Assert.Equal("keep", custom.Settings["text"]?.ToString());
+	}
+
 	// ————— 内容工厂钩子(§4.F:custom: / plugin: + 「不可用」) —————
 
 	private sealed class FakeProvider : ILayoutContentProvider

@@ -855,8 +855,31 @@ public sealed class LayoutEditor
 				_box.ReleaseMouseCapture();
 			}
 			_session.PushUndo(_state.ToPage());
-			_state.Reset(_refs);
+			// 重置 = 回到本页出厂布局(含页模式),不能只重排顺序 —— 网格页的几何原样留着,看起来就是"点了没反应"。
+			if (_defaultPage != null)
+			{
+				// 有「页面默认布局」的页(实例库)回到宿主给的那一份
+				_state = LayoutEngine.LoadState(_pageId, _defaultPage.Clone(), _refs);
+			}
+			else
+			{
+				// 白名单默认 = 纵向 stack;Reset 清几何,自建/插件块的数据保留
+				_state.Reset(_refs);
+				PageLayoutV2 fresh = new PageLayoutV2();
+				_state.Page.Mode = fresh.Mode;
+				_state.Page.Cols = fresh.Cols;
+				_state.Page.RowH = fresh.RowH;
+				_state.Page.Gap = fresh.Gap;
+				_state.Page.Pad = fresh.Pad;
+			}
+			_stackConverted = false;
+			_stackBackup = null;
 			Persist();
+			if (_edit)
+			{
+				// 仍在编辑态:stack 默认页重新折成可拖网格;之后不再改动就完成编辑 = 落回默认 stack
+				PrepareEditableGrid();
+			}
 			Render();
 			// 重置后把所有折叠的区块展开(否则看起来像"没反应")
 			foreach (LayoutCard card in _cards.Values)
