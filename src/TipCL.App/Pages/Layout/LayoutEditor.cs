@@ -90,6 +90,14 @@ public sealed class LayoutEditor
 
 	private readonly Grid _root;
 
+	// [layout-fix 第三批] 底部托盘 + 工具条的外壳。它常驻时(子元素都隐藏)仍占 8 + 下边距的一条空带(约 24px):
+	// 既有区块页的默认外观就是带着这条空带对齐过的(启动页的英雄区按剩余高度居中,去掉会整体下移),所以照旧;
+	// 「吃满视口」的页(AI 页输入区要贴底,对齐拆块前的 Grid)自动在非编辑态把它收起;其它新拆块的页
+	// (版本安装 / 版本管理 / 设置 → 布局)经 CollapseIdleBottom 显式要求收起,滚动视口才与拆块前同一条下沿。
+	private readonly StackPanel _bottom;
+
+	private bool _collapseIdleBottom;
+
 	private bool _edit;
 
 	private LayoutCard? _dragCard;
@@ -161,6 +169,20 @@ public sealed class LayoutEditor
 	// 被拖块**原来的**列(左右互换的候选落点;见 LayoutGrid.Compact 的 swapX)
 	private LayoutRect _gestureAnchor;
 
+	// [layout-fix 第三批·任务 B] 丝滑拖动的手势状态:
+	//   _gestureRects   = 起手时每个手势块的像素矩形(浮起的起点 / 改大小的基准)
+	//   _gestureTarget  = 上一次算出的落点 / 吸附尺寸的指纹 —— 只有它变了才重新让位 + 排布(其余帧只改平移)
+	//   _snapHad/Dx/Dy  = canvas 上一帧的磁性吸附状态(吸住 / 松开那一下用短动画过渡)
+	private readonly Dictionary<string, LayoutRect> _gestureRects = new Dictionary<string, LayoutRect>(StringComparer.Ordinal);
+
+	private string _gestureTarget = "";
+
+	private bool _snapHad;
+
+	private double _snapDx;
+
+	private double _snapDy;
+
 	// 工具条上的撤销/重做按钮(按栈的可用性置灰)
 	private Button? _undoBtn;
 
@@ -214,6 +236,13 @@ public sealed class LayoutEditor
 			}
 		}
 		_list.Margin = (_marginOverride ?? new Thickness(18.0, 14.0, 18.0, 16.0));
+		foreach (BlockSpec spec in _specs)
+		{
+			if (LayoutFill.GetFillsViewport(spec.Content))
+			{
+				_collapseIdleBottom = true;
+			}
+		}
 		// 底部托盘(编辑态):已隐藏区块以「+ 标题」chip 呈现,点击恢复
 		StackPanel trayPanel = U.V(6.0, U.Muted(I18nCore.Tr("已隐藏的区块")), _tray);
 		_trayHost.CornerRadius = new CornerRadius(8.0);
@@ -303,6 +332,8 @@ public sealed class LayoutEditor
 		// 根结构:上滚动内容区,下托盘/工具条(仅编辑态占位出现,不悬浮遮挡内容)
 		StackPanel bottom = U.V(8.0, _trayHost, _barHost);
 		bottom.Margin = new Thickness(_list.Margin.Left, 8.0, _list.Margin.Right, _list.Margin.Bottom);
+		_bottom = bottom;
+		_bottom.IsVisible = !_collapseIdleBottom;
 		_root = U.G("*,Auto");
 		// [Avalonia] Windows 的 SmoothScroll 在 Linux 树没有等价物 ⇒ 用原生 ScrollViewer(像素滚动,无平滑动画)。
 		_scroll = new ScrollViewer
@@ -350,6 +381,26 @@ public sealed class LayoutEditor
 
 	/// <summary>布局发生变更(保存后)时触发;BlockHost 转发成自己的 Changed。</summary>
 	public event Action? Changed;
+
+	/// <summary>
+	/// [layout-fix 第三批] 非编辑态是否收起底部托盘 / 工具条外壳(收起 = 不占那条约 24px 的空带)。
+	/// 缺省 false(既有区块页照旧);页面里有「吃满视口」块时自动为 true。
+	/// </summary>
+	public bool CollapseIdleBottom
+	{
+		get
+		{
+			return _collapseIdleBottom;
+		}
+		set
+		{
+			_collapseIdleBottom = value;
+			if (!_edit)
+			{
+				_bottom.IsVisible = !value;
+			}
+		}
+	}
 
 	/// <summary>是否处于编辑态。</summary>
 	public bool IsEditing
@@ -440,6 +491,7 @@ public sealed class LayoutEditor
 		CompactState();
 		Render();
 		_barHost.IsVisible = true;
+		_bottom.IsVisible = true;
 		// 键盘(§4.G)需要根元素拿到焦点;拿不到也不影响鼠标交互
 		try
 		{
@@ -540,6 +592,7 @@ public sealed class LayoutEditor
 		_session.ClearHistory();
 		_trayHost.IsVisible = false;
 		_barHost.IsVisible = false;
+		_bottom.IsVisible = !_collapseIdleBottom;
 		if (untouched == null)
 		{
 			LayoutFx.ShowToast(I18nCore.Tr("布局已保存"), "", ToastKind.Success);
@@ -667,11 +720,26 @@ public sealed class LayoutEditor
 			// 修复"插件页空状态占位不再垂直居中"(改版前主体在页面根 Grid 的 * 行里,天然占满剩下的高度)。
 			// 只认"它正好是最后一块"这一种情况;没挂标记的页面 FillChild = null ⇒ 渲染与改动前一模一样。
 			_list.FillChild = ((_edit || lastCard == null) ? null : MarkedFill(lastId, lastCard));
+			// [layout-fix 第三批]「吃满视口」块(AI 对话区):关掉外层纵向滚动,让纵向流拿到有限高度,
+			// 该块按 Auto,*,Auto 的 * 行拿剩余高度 —— 它自己的滚动条与吸底才保得住。没有这种块的页一切照旧。
+			string? viewportFill = ViewportFillId(plan.VisibleIds);
+			if (viewportFill != null && _cards.TryGetValue(viewportFill, out LayoutCard? fillCard))
+			{
+				_list.FillChild = fillCard;
+				_list.BoundFill = true;
+			}
+			else
+			{
+				_list.BoundFill = false;
+			}
+			_scroll.VerticalScrollBarVisibility = (_list.BoundFill ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
 		}
 		else
 		{
 			// 多列行不参与:行内 Grid 的高度由该行最高的一块决定,旧版也没有对应的"吃剩余高度"结构
 			_list.FillChild = null;
+			_list.BoundFill = false;
+			_scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
 			foreach (LayoutRow row in plan.Rows)
 			{
 				_list.Children.Add(BuildRow(row, plan));
@@ -693,6 +761,10 @@ public sealed class LayoutEditor
 		_box.SetLayout(page.Mode, LayoutGrid.Columns(page), page.RowH, gap, page);
 		_box.SnapStep = _snapStep;
 		_box.EditMode = _edit;
+		// [layout-fix 第三批] grid 自动行高下的「吃满视口」块:外层纵向滚动关掉,画布拿到有限高度,该块所在行吃剩余高度
+		string? boxFill = ((page.Mode == LayoutSchema.ModeGrid && page.RowH <= 0.0) ? ViewportFillId(_state.VisibleIds()) : null);
+		_box.FillId = boxFill;
+		_boxScroll.VerticalScrollBarVisibility = ((boxFill != null) ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
 		_box.Margin = (_marginOverride ?? PadOf(_state.Plan()));
 		_box.Children.Clear();
 		foreach (LayoutCell cell in LayoutCanvas.StackedOrder(_box.Cells))
@@ -743,6 +815,19 @@ public sealed class LayoutEditor
 		if (_byId.TryGetValue(blockId, out BlockSpec? spec) && spec.Content != null && LayoutFill.GetFillsBody(spec.Content))
 		{
 			return card;
+		}
+		return null;
+	}
+
+	// [layout-fix 第三批] 可见块里第一个「吃满视口」的块(内容挂了 LayoutFill.FillsViewport);没有返回 null
+	private string? ViewportFillId(IEnumerable<string> visibleIds)
+	{
+		foreach (string id in visibleIds)
+		{
+			if (_byId.TryGetValue(id, out BlockSpec? spec) && LayoutFill.GetFillsViewport(spec.Content))
+			{
+				return id;
+			}
 		}
 		return null;
 	}
@@ -998,8 +1083,13 @@ public sealed class LayoutEditor
 		}
 		_boxPointer?.Capture(null);
 		_boxPointer = null;
-		_session.PushUndo(_state.ToPage());
-		_state = LayoutEngine.LoadState(_pageId, ((_defaultPage != null) ? _defaultPage.Clone() : null), _refs, false);
+		PageLayoutV2 before = _state.ToPage();
+		_session.PushUndo(before);
+		// [layout-fix 第三批] 出厂页 = 宿主默认布局(没有就是白名单 stack)+ 当前页的自建 / 插件块(只清几何、数据保留)。
+		// 以前这里是 LoadState(pageId, defaultPage 或 null):出厂几何确实回来了,但 custom: / plugin: 块
+		// 不在白名单里也不在出厂页里 ⇒ 被整条丢掉,接着 Persist 把这一页整页覆盖 —— 自建块从页面上消失、
+		// 它在本页的外观 / 设置一并丢失。纯规则见 LayoutEngine.FactoryPage(有单测)。
+		_state = LayoutEngine.LoadState(_pageId, LayoutEngine.FactoryPage(before, _defaultPage, _refs), _refs, true);
 		_autoGrid = false;
 		_gridTouched = false;
 		_preEditPage = null;
@@ -1281,6 +1371,12 @@ public sealed class LayoutEditor
 	// 起手:记下手势前的页面(真拖起来才压进撤销栈)+ 所有选中块的起始槽位(用绝对值算位移,避免逐帧累积误差)
 	private void StartGesture(string kind, LayoutCard card, PointerPressedEventArgs e)
 	{
+		// [任务 B] 上一段动画还没放完就开始新手势:先推到终点,保证起手矩形 / 命中与看到的一致
+		_box.FinishAnimations();
+		_gestureTarget = "";
+		_snapHad = false;
+		_snapDx = 0.0;
+		_snapDy = 0.0;
 		// [layout-fix] 规格2-问题2.2:先留"全部槽位 + 行高"的快照 ——
 		// 之后每一帧都从这份快照重算,让位不累积;行高快照用来把指针位置折算成行号。
 		_gestureAll.Clear();
@@ -1318,6 +1414,15 @@ public sealed class LayoutEditor
 			}
 		}
 		_gestureAnchor = (_box.RectOf(card.Spec.Id) ?? default(LayoutRect));
+		_gestureRects.Clear();
+		foreach (string id in _gestureCells.Keys)
+		{
+			LayoutRect? rect = _box.RectOf(id);
+			if (rect.HasValue)
+			{
+				_gestureRects[id] = rect.Value;
+			}
+		}
 		// [Avalonia] CaptureMouse → e.Pointer.Capture(_box)
 		_boxPointer = e.Pointer;
 		e.Pointer.Capture(_box);
@@ -1441,12 +1546,13 @@ public sealed class LayoutEditor
 		if (_box.IsCanvas)
 		{
 			ApplyCanvasGesture(dx, dy);
+			_box.Reflow();
 		}
 		else
 		{
+			// [任务 B] grid:每帧只改被拖块的平移 / 像素尺寸;落点变了才在里面重新让位 + 排布
 			ApplyGridGesture(dx, dy);
 		}
-		_box.Reflow();
 	}
 
 	private void OnBoxGestureEnd(object? sender, PointerReleasedEventArgs e)
@@ -1467,6 +1573,13 @@ public sealed class LayoutEditor
 		// 框选、没越过拖动距离的单击只改了选择:布局没动,撤销栈里也没压东西,不提交也不重画。
 		bool movedSomething = _gestureMoved && (_gesture == "move" || _gesture == "resize");
 		List<string> touchedIds = new List<string>(_gestureCells.Keys);
+		// [任务 B] 收尾前记下浮起状态:改大小的块要从"手里的像素矩形"落位到吸附尺寸
+		bool wasResize = _gesture == "resize";
+		Dictionary<string, LayoutRect> floats = new Dictionary<string, LayoutRect>(_box.Floating, StringComparer.Ordinal);
+		_box.ShowPlaceholder = false;
+		_box.ClearFloating();
+		_gestureRects.Clear();
+		_gestureTarget = "";
 		_autoScroll?.Stop();
 		_gesture = "";
 		_gestureHandle = "";
@@ -1485,7 +1598,20 @@ public sealed class LayoutEditor
 		_guide.Clear();
 		if (!movedSomething)
 		{
+			foreach (string id in touchedIds)
+			{
+				if (_cards.TryGetValue(id, out LayoutCard? idle))
+				{
+					LayoutMotion.SetOffset(idle, 0.0, 0.0);
+				}
+			}
 			return;
+		}
+		// [任务 B] 取消 / 松手都从"现在看起来的位置"滑到最终位置:被拖块带着手里的平移做 FLIP,
+		// 让过位的块同样 FLIP;改大小的块另走落位(像素矩形 → 吸附后的槽位矩形)
+		if (!_box.IsCanvas)
+		{
+			_box.ArmFlip();
 		}
 		if (rollback || !persist)
 		{
@@ -1496,9 +1622,26 @@ public sealed class LayoutEditor
 				_session.Retain(_state.Order);
 			}
 			Render();
+			if (wasResize)
+			{
+				BeginLandings(floats);
+			}
 			return;
 		}
 		CommitBox(touchedIds);
+		if (wasResize)
+		{
+			BeginLandings(floats);
+		}
+	}
+
+	// [任务 B] 改大小松手:每块从手里的像素矩形补间到吸附后的槽位矩形
+	private void BeginLandings(Dictionary<string, LayoutRect> floats)
+	{
+		foreach (KeyValuePair<string, LayoutRect> kv in floats)
+		{
+			_box.BeginLanding(kv.Key, kv.Value);
+		}
 	}
 
 	// 画布槽位 → 页面块 → v2(唯一入口 LayoutStoreV2)并落盘
@@ -1553,6 +1696,15 @@ public sealed class LayoutEditor
 		if (primary != null && rect.HasValue)
 		{
 			LayoutGuideResult guides = LayoutGuides.Align(rect.Value, OtherRects(primary, true), LayoutGuides.Threshold);
+			// [任务 B] 磁性吸附"吸住 / 松开 / 换吸附位"的那一帧:用短动画过渡这一下跳变,而不是瞬移
+			bool snapping = _gesture == "move" && guides.HasSnap;
+			if (LayoutMotion.SnapChanged(_snapHad, _snapDx, _snapDy, snapping, guides.Dx, guides.Dy))
+			{
+				_box.ArmFlip(LayoutMotion.SnapMs);
+			}
+			_snapHad = snapping;
+			_snapDx = (snapping ? guides.Dx : 0.0);
+			_snapDy = (snapping ? guides.Dy : 0.0);
 			if (_gesture == "move" && guides.HasSnap)
 			{
 				// 磁性吸附:整组跟着一起吸(差量对所有选中块相同)
@@ -1588,19 +1740,18 @@ public sealed class LayoutEditor
 		{
 			return;
 		}
-		// 1 全部槽位回到起手时的样子(让位不累积)
-		foreach (KeyValuePair<string, LayoutCell> kv in _gestureAll)
+		// [任务 B] 第一次真拖起来:手势块浮起(排在起手的像素矩形上),画布开始画落点占位框
+		if (_box.Floating.Count == 0)
 		{
-			LayoutCell? cell = _box.CellOf(kv.Key);
-			if (cell != null)
+			foreach (KeyValuePair<string, LayoutRect> kv in _gestureRects)
 			{
-				cell.X = kv.Value.X;
-				cell.Y = kv.Value.Y;
-				cell.W = kv.Value.W;
-				cell.H = kv.Value.H;
+				_box.SetFloating(kv.Key, kv.Value);
 			}
+			_box.ShowPlaceholder = true;
+			_box.InvalidateVisual();
 		}
 		Dictionary<string, int>? swap = null;
+		string target;
 		if (_gesture == "resize")
 		{
 			// [layout-fix] 规格2-问题2.2 + 参考件v2-对齐:宽度按列改;高度在**自动行高**的页面(由 stack 转来的都是)
@@ -1610,6 +1761,40 @@ public sealed class LayoutEditor
 			int dr = (autoRows ? 0 : (int)Math.Round(dy / Math.Max(1.0, _state.Page.RowH + _box.Gap)));
 			int dc = (int)Math.Round(dx / columnStep);
 			int minCols = Math.Min(cols, MinCols(cols));
+			// [任务 B] 卡片按**像素**跟手改大小(只重排这一张);占位框 = 吸附后的槽位尺寸
+			double minW = _box.ColumnWidthValue * minCols + _box.Gap * Math.Max(0, minCols - 1);
+			double full = _box.ColumnWidthValue * cols + _box.Gap * Math.Max(0, cols - 1);
+			double minH = (autoRows ? MinBlockPx : Math.Max(1.0, _state.Page.RowH));
+			foreach (KeyValuePair<string, LayoutRect> kv in _gestureRects)
+			{
+				_box.SetFloating(kv.Key, LayoutMotion.ResizePixels(kv.Value, _gestureHandle, dx, dy, minW, minH, full - kv.Value.X));
+			}
+			if (_box.Floating.TryGetValue(primary, out LayoutRect live))
+			{
+				Point corner = _box.TranslatePoint(new Point(live.X + live.W, live.Y + live.H), _guide) ?? new Point(live.X + live.W, live.Y + live.H);
+				_guide.ShowSize(corner, LayoutMotion.SizeLabel(live.W, live.H));
+			}
+			// 吸附后的目标(列数 / 行数 / 像素高)指纹:没变就不重新让位
+			System.Text.StringBuilder key = new System.Text.StringBuilder("r");
+			Dictionary<string, double> heights = new Dictionary<string, double>(StringComparer.Ordinal);
+			foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
+			{
+				key.Append('|').Append(kv.Key);
+				if (autoRows && _gestureHandle.IndexOf('s') >= 0)
+				{
+					double startH = (_gestureRects.TryGetValue(kv.Key, out LayoutRect r0) ? r0.H : _gestureAnchor.H);
+					double px = LayoutMotion.SnapHeightPx(startH, dy, _snapStep, MinBlockPx);
+					heights[kv.Key] = px;
+					key.Append(':').Append(px.ToString("0"));
+				}
+			}
+			key.Append('|').Append(dc).Append(',').Append(dr);
+			target = key.ToString();
+			if (target == _gestureTarget)
+			{
+				return;
+			}
+			RestoreGestureSnapshot();
 			foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
 			{
 				LayoutCell? cell = _box.CellOf(kv.Key);
@@ -1631,23 +1816,31 @@ public sealed class LayoutEditor
 						cell.X = Math.Max(0, cols - cell.W);
 					}
 				}
-				if (autoRows && _gestureHandle.IndexOf('s') >= 0)
+				if (heights.TryGetValue(kv.Key, out double fixedPx))
 				{
-					double startH = (string.Equals(kv.Key, primary, StringComparison.Ordinal) ? _gestureAnchor.H : (_box.RectOf(kv.Key)?.H ?? _gestureAnchor.H));
-					double step = Math.Max(1.0, _snapStep);
-					double px = Math.Round(Math.Max(MinBlockPx, startH + dy) / step) * step;
-					cell.HeightPx = Math.Max(MinBlockPx, px);
+					cell.HeightPx = fixedPx;
 					CardFor(kv.Key).SetFixedHeight(true);
 				}
 			}
 		}
 		else
 		{
-			// 列:卡片左上角跟随指针 → 最近的列
-			int nx = (int)Math.Round((_gestureAnchor.X + dx) / columnStep);
-			nx = Math.Max(0, Math.Min(cols - start.W, nx));
-			// 行:指针落在第几行(带半个间距的容差)
-			int ny = LayoutGrid.RowAt(_gestureRows, _gestureStart.Y + dy, _box.Gap);
+			// [任务 B] 被拖块按像素跟手:只改平移,不重新布局(浮起矩形 = 起手矩形,平移 = 指针位移)
+			foreach (string id in _gestureCells.Keys)
+			{
+				if (_cards.TryGetValue(id, out LayoutCard? moving))
+				{
+					LayoutMotion.SetOffset(moving, dx, dy);
+				}
+			}
+			// 落点规则不变(纯函数):列 = 卡片左上角跟随指针后的最近列;行 = 指针所在的行(手势开始时的行高快照)
+			(int nx, int ny) = LayoutMotion.GridDropTarget(_gestureAnchor.X, dx, columnStep, cols, start.W, _gestureRows, _gestureStart.Y + dy, _box.Gap);
+			target = "m|" + nx + "," + ny;
+			if (target == _gestureTarget)
+			{
+				return;
+			}
+			RestoreGestureSnapshot();
 			int dcol = nx - start.X;
 			int drow = ny - start.Y;
 			foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
@@ -1668,10 +1861,29 @@ public sealed class LayoutEditor
 					swap[kv.Key] = start.X;
 				}
 			}
+			_guide.Clear();
 		}
-		// 2 钉住被拖 / 缩放中的块,其余块实时让位(重力上浮 + 左右互换)
+		_gestureTarget = target;
+		// 钉住被拖 / 缩放中的块,其余块实时让位(重力上浮 + 左右互换);让位的块走 FLIP 滑过去
+		_box.ArmFlip();
 		_box.CompactCells(new HashSet<string>(_gestureCells.Keys, StringComparer.Ordinal), swap);
-		_guide.Clear();
+	}
+
+	// 全部槽位回到起手时的样子(让位不累积;每次落点变了都从这份快照重算)
+	private void RestoreGestureSnapshot()
+	{
+		foreach (KeyValuePair<string, LayoutCell> kv in _gestureAll)
+		{
+			LayoutCell? cell = _box.CellOf(kv.Key);
+			if (cell != null)
+			{
+				cell.X = kv.Value.X;
+				cell.Y = kv.Value.Y;
+				cell.W = kv.Value.W;
+				cell.H = kv.Value.H;
+				cell.HeightPx = kv.Value.HeightPx;
+			}
+		}
 	}
 
 	// 手势主角:多选时取选择里的第一块(它带动整组)
@@ -1978,6 +2190,7 @@ public sealed class LayoutEditor
 			return;
 		}
 		_session.PushUndo(_state.ToPage());
+		_box.ArmFlip();
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
 		_session.Retain(_state.Order);
 		Persist();
@@ -2018,6 +2231,8 @@ public sealed class LayoutEditor
 
 	private void ApplySnapshot(PageLayoutV2 page, string message, ToastKind kind)
 	{
+		// [任务 B] 撤销 / 重做也让块滑回去,而不是瞬移
+		_box.ArmFlip();
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
 		_session.Retain(_state.Order);
 		Persist();
@@ -2162,7 +2377,9 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 		// [Avalonia] Windows 用图标字体码位(Ico.Sort = ⇅,\ue70d/\ue70e = 折叠箭头);Linux 没有内置图标字体,
 		// 一律走矢量图标门面 IconLib(语义键 "Sort" / "ChevronDown" / "ChevronUp" / "Close" / "Add"),
 		// 不存在"码位缺字体显示成方块"的问题(对应 Windows 侧 §3-13 的 glyph 偏离)。
-		Control dragIcon = IconLib.Make("Sort", "B.InkMuted", 12);
+		// [layout-fix] 规格2-问题7 / 规格 §3-问题14(Linux 补修):原先这里仍是 "Sort"(⇅ 排序箭头),
+		// 让人以为要点它;换成拖动手柄 "Grip"(两道横杠,对应 Windows 的 \ue76f)。
+		Control dragIcon = IconLib.Make("Grip", "B.InkMuted", 12);
 		ToolTip.SetTip(dragIcon, I18nCore.Tr("按住区块拖动移动"));
 		dragIcon.IsHitTestVisible = false;
 		dragIcon.VerticalAlignment = VerticalAlignment.Center;
@@ -2235,7 +2452,9 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 	{
 		_boxMode = ((mode == LayoutSchema.ModeGrid || mode == LayoutSchema.ModeCanvas) ? mode : LayoutSchema.ModeStack);
 		// [layout-fix] 参考件v2-对齐:窄宽自适应只在画布模式开(stack 的默认渲染一个像素都不经过它)
-		_fit.Enabled = _boxMode != LayoutSchema.ModeStack;
+		// [layout-fix 第三批]「吃满视口」的内容(自带滚动条)不参与等比缩放:FitBox 会用无限高去量它的"自然尺寸",
+		// 对话区一旦被判成"矮内容"就会被整体缩小
+		_fit.Enabled = _boxMode != LayoutSchema.ModeStack && !LayoutFill.GetFillsViewport(_body.Content as Control);
 		if (!_edit)
 		{
 			_handleLayer.IsVisible = false;

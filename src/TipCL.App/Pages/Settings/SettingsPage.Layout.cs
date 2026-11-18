@@ -45,6 +45,9 @@ public sealed partial class SettingsPage
     /// <summary>「布局」视图在视图表/左导航里的下标(第 8 个)。</summary>
     internal const int LayoutView = 7;
 
+    /// <summary>[layout-fix 第三批]「设置 → 布局」这一视图自己的区块页 id。</summary>
+    internal const string LayoutViewPageId = "settings:layout";
+
     private bool _layoutRebuilding;
 
     // JSON 编辑器的草稿:重建视图时保留用户还没应用的文本
@@ -60,19 +63,41 @@ public sealed partial class SettingsPage
         _layoutRebuilding = true;
         try
         {
-            StackPanel panel = UiClass.V(10);
-            panel.Children.Add(PTitle("布局"));
-            panel.Children.Add(UiClass.Muted("默认布局 = 各页现状;这里的改动即时写进 ui_layout_v2.json,老版本程序照旧读得懂").M(0, 0, 0, 4));
-            panel.Children.Add(LayoutSection("外观与密度", LayoutAppearanceRows()));
-            panel.Children.Add(LayoutSection("页签与标题栏", LayoutShellRows()));
-            panel.Children.Add(LayoutSection("页面区块", LayoutBlockRows()));
-            panel.Children.Add(LayoutSection("分栏比例", LayoutSplitRows()));
-            panel.Children.Add(LayoutSection("自建区块", LayoutWidgetRows()));
-            panel.Children.Add(LayoutSection("布局方案", LayoutProfileRows()));
-            panel.Children.Add(LayoutJsonCard());
+            // [layout-fix 第三批] 右侧的分组卡片拆成可拖动的区块 BlockHost("settings:layout")(左侧导航不动)。
+            // 原来是 ScrollBody(V(10, 标题, 说明, 6 个小节, JSON 卡)):滚动区自身外边距 20,16,20,16、内容间距 10。
+            // 现在宿主自身带同样的外边距、内容边距 0、区块间距 10(标准密度),标题 + 说明合成「标题」块
+            // ⇒ 没有存档时逐行位置不变。
+            var specs = new List<BlockSpec>
+            {
+                new BlockSpec { Id = "header", Title = I18nCore.Tr("标题"), Content = UiClass.V(10, PTitle("布局"),
+                    UiClass.Muted("默认布局 = 各页现状;这里的改动即时写进 ui_layout_v2.json,老版本程序照旧读得懂").M(0, 0, 0, 4)) },
+                new BlockSpec { Id = "appearance", Title = I18nCore.Tr("外观与密度"), Content = LayoutSection("外观与密度", LayoutAppearanceRows()) },
+                new BlockSpec { Id = "shell", Title = I18nCore.Tr("页签与标题栏"), Content = LayoutSection("页签与标题栏", LayoutShellRows()) },
+                new BlockSpec { Id = "blocks", Title = I18nCore.Tr("页面区块"), Content = LayoutSection("页面区块", LayoutBlockRows()) },
+                new BlockSpec { Id = "splits", Title = I18nCore.Tr("分栏比例"), Content = LayoutSection("分栏比例", LayoutSplitRows()) },
+                new BlockSpec { Id = "widgets", Title = I18nCore.Tr("自建区块"), Content = LayoutSection("自建区块", LayoutWidgetRows()) },
+                new BlockSpec { Id = "profiles", Title = I18nCore.Tr("布局方案"), Content = LayoutSection("布局方案", LayoutProfileRows()) },
+                new BlockSpec { Id = "json", Title = I18nCore.Tr("布局 JSON"), Content = LayoutJsonCard() },
+            };
+            PageLayoutV2 page = new()
+            {
+                Mode = LayoutSchema.ModeStack,
+                Gap = LayoutSchema.GapDefault,
+                Pad = new double[] { 0.0, 0.0, 0.0, 0.0 },
+            };
+            for (int i = 0; i < specs.Count; i++)
+            {
+                page.Blocks.Add(new BlockLayout { Id = specs[i].Id, Span = 1, Z = i });
+            }
+            var host = new BlockHost(LayoutViewPageId, specs, new Thickness(0), page)
+            {
+                Margin = new Thickness(BodyMargin, 16, BodyMargin, 16),
+                // 非编辑态收起底部托盘外壳 ⇒ 滚动视口的下沿与原 ScrollBody 同一行像素
+                CollapseIdleBottom = true,
+            };
             // 视图一重建就顺手把标题栏对齐一次(构造期还没有 TopLevel ⇒ 空操作)
             RefreshShell();
-            return ScrollBody(panel);
+            return host;
         }
         finally
         {
@@ -302,11 +327,11 @@ public sealed partial class SettingsPage
         // 等页面挂进可视树再找宿主(Avalonia:Loaded 优先级 = 布局完成之后)
         Dispatcher.UIThread.Post(delegate
         {
-            EnterBlockEdit(win, entry.PageId);
+            EnterBlockEdit(win, entry.PageId, entry.NeedsContext);
         }, DispatcherPriority.Loaded);
     }
 
-    private void EnterBlockEdit(TipCL.App.Shell.MainWindow win, string pageId)
+    private void EnterBlockEdit(TipCL.App.Shell.MainWindow win, string pageId, string needsContext = "")
     {
         BlockHost? host = FindBlockHost(win, pageId);
         if (host != null && host.Editor.CanEdit)
@@ -315,7 +340,8 @@ public sealed partial class SettingsPage
             PageBase.Toast("已进入自定义布局", "完成编辑后自动保存", ToastKind.Success);
             return;
         }
-        PageBase.Toast("没找到可编辑的区块", "可以在页面上右键「自定义布局...」", ToastKind.Warning);
+        // [layout-fix 第三批] 要先打开具体对象才有的页(版本安装):告诉用户先去哪儿,而不是笼统的"没找到"
+        PageBase.Toast("没找到可编辑的区块", needsContext.Length > 0 ? needsContext : "可以在页面上右键「自定义布局...」", ToastKind.Warning);
     }
 
     // 视觉树里按 pageId 找区块宿主(页面已渲染的常见路径)

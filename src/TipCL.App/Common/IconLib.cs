@@ -36,6 +36,9 @@ public static class IconLib
     public const string MoreData = "M2.4,8 A0.7,0.7 0 1 1 3.8,8 A0.7,0.7 0 1 1 2.4,8 Z M7.3,8 A0.7,0.7 0 1 1 8.7,8 A0.7,0.7 0 1 1 7.3,8 Z M12.2,8 A0.7,0.7 0 1 1 13.6,8 A0.7,0.7 0 1 1 12.2,8 Z";
     public const string OpenExternalData = "M6,3.5 H2.5 V13.5 H12.5 V10 M9,2.5 H13.5 V7 M13.5,2.5 L7.5,8.5";
     public const string SortData = "M5,3 V13 M5,13 L3,10.8 M5,13 L7,10.8 M11,13 V3 M11,3 L9,5.2 M11,3 L13,5.2";
+    // [layout-fix] 拖动手柄(两道横杠,对齐 Windows Ico 的 \ue76f GripperBarHorizontal):编辑态卡片标题栏的
+    // 不可点提示图标,替掉容易被当成「点我排序」的 ⇅(规格 §3-问题7 / 录屏一第 7 条)。
+    public const string GripData = "M3.5,6 H12.5 M3.5,10 H12.5";
     public const string FilterData = "M2.5,3.5 H13.5 L9.5,8.5 V12.5 L6.5,14 V8.5 Z";
 
     // ── 实例库 ──
@@ -102,6 +105,7 @@ public static class IconLib
         ["More"] = MoreData,
         ["Open"] = OpenExternalData,
         ["Sort"] = SortData,
+        ["Grip"] = GripData,
         ["Filter"] = FilterData,
         ["Folder"] = FolderData,
         ["Box"] = BoxData,

@@ -42,8 +42,25 @@ public sealed class FillPanel : Panel
 	/// </summary>
 	public Control? FillChild { get; set; }
 
+	/// <summary>
+	/// [layout-fix 第三批] 有界填充:为 true 且纵向可用高度有限时,<see cref="FillChild"/> 可以在**任意位置**,
+	/// 先量其它子元素(无限高),它拿"可用高 − 其它子元素 − 间距"(≥0)并且**按这个有限高度测量** ——
+	/// 语义等价 Grid 的 <c>Auto,*,Auto</c>。自带滚动条的内容(AI 对话区)靠它保住自身滚动与吸底。
+	/// 默认 false = 原有行为(FillChild 只按 max(期望, 剩余) 排,且必须是最后一块)。
+	/// </summary>
+	public bool BoundFill { get; set; }
+
+	// 有界填充这一趟算出来的填充高度(Measure 写、Arrange 读)
+	private double _boundFillHeight = -1.0;
+
 	protected override Size MeasureOverride(Size available)
 	{
+		_boundFillHeight = -1.0;
+		if (BoundFill && Orientation == Orientation.Vertical && FillChild != null && FillChild.IsVisible
+			&& Children.Contains(FillChild) && !double.IsInfinity(available.Height))
+		{
+			return MeasureBoundFill(available);
+		}
 		double num = 0.0;
 		double num2 = 0.0;
 		int num3 = 0;
@@ -80,8 +97,51 @@ public sealed class FillPanel : Panel
 		return new Size(double.IsInfinity(available.Width) ? num : Math.Min(num, Math.Max(num, available.Width)), double.IsInfinity(available.Height) ? num2 : num2);
 	}
 
+	// [layout-fix 第三批] 有界填充的测量:其它子元素按无限高量,填充块拿剩余高度并按它测量
+	private Size MeasureBoundFill(Size available)
+	{
+		double width = 0.0;
+		double used = 0.0;
+		int visible = 0;
+		Size open = new Size(available.Width, double.PositiveInfinity);
+		foreach (Control child in Children)
+		{
+			if (ReferenceEquals(child, FillChild))
+			{
+				continue;
+			}
+			child.Measure(open);
+			if (child.IsVisible)
+			{
+				visible++;
+				width = Math.Max(width, child.DesiredSize.Width);
+				used += child.DesiredSize.Height;
+			}
+		}
+		used += visible * Spacing;
+		_boundFillHeight = Math.Max(0.0, available.Height - used);
+		FillChild!.Measure(new Size(available.Width, _boundFillHeight));
+		width = Math.Max(width, FillChild.DesiredSize.Width);
+		return new Size(double.IsInfinity(available.Width) ? width : Math.Min(width, Math.Max(width, available.Width)), used + _boundFillHeight);
+	}
+
 	protected override Size ArrangeOverride(Size final)
 	{
+		if (_boundFillHeight >= 0.0 && FillChild != null && Orientation == Orientation.Vertical)
+		{
+			double y = 0.0;
+			foreach (Control child in Children)
+			{
+				if (!child.IsVisible)
+				{
+					continue;
+				}
+				double h = (ReferenceEquals(child, FillChild) ? _boundFillHeight : child.DesiredSize.Height);
+				child.Arrange(new Rect(0.0, y, final.Width, h));
+				y += h + Spacing;
+			}
+			return final;
+		}
 		double num = 0.0;
 		foreach (Control child in Children)
 		{

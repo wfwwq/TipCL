@@ -164,6 +164,16 @@ public sealed class BlockHost : UserControl
         return true;
     }
 
+    /// <summary>
+    /// [layout-fix 第三批] 非编辑态收起底部托盘 / 工具条外壳(见 LayoutEditor.CollapseIdleBottom)。
+    /// 新拆成区块的页用它让滚动视口的下沿与拆块前一致;既有页面不设,外观不变。
+    /// </summary>
+    public bool CollapseIdleBottom
+    {
+        get => _editor.CollapseIdleBottom;
+        set => _editor.CollapseIdleBottom = value;
+    }
+
     public event Action? Changed;
 
     /// <summary>内部编辑器(调试与宿主内测试用)。</summary>

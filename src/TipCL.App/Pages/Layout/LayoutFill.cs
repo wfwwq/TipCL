@@ -46,4 +46,25 @@ public static class LayoutFill
 	{
 		return element != null && element.GetValue(FillsBodyProperty);
 	}
+
+	/// <summary>
+	/// [layout-fix 第三批] 「吃满视口」的区块(挂在区块的**内容元素**上):带自己滚动条的内容(AI 页的对话区)
+	/// 必须拿到**有限高度**,否则外层滚动区给它无限高,它自己的滚动和吸底都会失效。
+	/// 带这个标记且可见的区块:stack 模式下外层滚动关闭、该块按 <c>Auto,*,Auto</c> 的 * 行拿剩余高度(可在任意位置,
+	/// 不要求是最后一块);grid 模式下(没拖过固定像素高时)它所在的行吃掉视口剩下的高度。
+	/// 默认 false = 与改动前完全一致。
+	/// </summary>
+	public static readonly AttachedProperty<bool> FillsViewportProperty = AvaloniaProperty.RegisterAttached<Control, bool>(
+		"FillsViewport", typeof(LayoutFill), false);
+
+	public static void SetFillsViewport(Control element, bool value)
+	{
+		element.SetValue(FillsViewportProperty, value);
+	}
+
+	/// <summary>取值;元素为 null 时返回 false(不抛)。</summary>
+	public static bool GetFillsViewport(Control? element)
+	{
+		return element != null && element.GetValue(FillsViewportProperty);
+	}
 }

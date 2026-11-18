@@ -31,6 +31,11 @@ public sealed class GuideLayer : Control
 
 	private LayoutRect _marquee;
 
+	// [layout-fix 第三批·任务 B] 改大小时跟在卡片右下角的像素尺寸提示("640 × 220")
+	private string _sizeText = "";
+
+	private Point _sizeAnchor;
+
 	/// <summary>构造:不吃指针事件(拖动期间指针必须留在被拖块上)。</summary>
 	public GuideLayer()
 	{
@@ -43,7 +48,7 @@ public sealed class GuideLayer : Control
 	{
 		get
 		{
-			return _lines.Count > 0 || _hasMarquee;
+			return _lines.Count > 0 || _hasMarquee || _sizeText.Length > 0;
 		}
 	}
 
@@ -72,15 +77,33 @@ public sealed class GuideLayer : Control
 		InvalidateVisual();
 	}
 
+	/// <summary>[任务 B] 在 <paramref name="bottomRight"/>(本层坐标,卡片右下角)旁画像素尺寸提示;空串 = 不画。</summary>
+	public void ShowSize(Point bottomRight, string text)
+	{
+		_sizeAnchor = bottomRight;
+		_sizeText = text ?? "";
+		InvalidateVisual();
+	}
+
+	/// <summary>当前的尺寸提示文本(测试 / 调试用;没有 = 空串)。</summary>
+	public string SizeText
+	{
+		get
+		{
+			return _sizeText;
+		}
+	}
+
 	/// <summary>全清(退出拖拽/框选时调)。</summary>
 	public void Clear()
 	{
-		if (_lines.Count == 0 && !_hasMarquee)
+		if (_lines.Count == 0 && !_hasMarquee && _sizeText.Length == 0)
 		{
 			return;
 		}
 		_lines.Clear();
 		_hasMarquee = false;
+		_sizeText = "";
 		InvalidateVisual();
 	}
 
@@ -90,11 +113,22 @@ public sealed class GuideLayer : Control
 	/// </summary>
 	public override void Render(DrawingContext context)
 	{
-		if (_lines.Count == 0 && !_hasMarquee)
+		if (_lines.Count == 0 && !_hasMarquee && _sizeText.Length == 0)
 		{
 			return;
 		}
 		Color accent = LayoutVisualTokens.AccentColor();
+		if (_sizeText.Length != 0)
+		{
+			// 主题色小胶囊 + 白字,贴在卡片右下角内侧(放不下就往里收,不出画布)
+			FormattedText text = new FormattedText(_sizeText, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 11.0, Brushes.White);
+			double w = text.Width + 12.0;
+			double h = text.Height + 6.0;
+			double x = Clamp(_sizeAnchor.X - w - 6.0, 0.0, Math.Max(0.0, Bounds.Width - w));
+			double y = Clamp(_sizeAnchor.Y - h - 6.0, 0.0, Math.Max(0.0, Bounds.Height - h));
+			context.DrawRectangle(new SolidColorBrush(Color.FromArgb(230, accent.R, accent.G, accent.B)), null, new RoundedRect(new Rect(x, y, w, h), h / 2.0));
+			context.DrawText(text, new Point(x + 6.0, y + 3.0));
+		}
 		if (_lines.Count != 0)
 		{
 			Pen pen = new Pen(new SolidColorBrush(Color.FromArgb(150, accent.R, accent.G, accent.B)), 1.0);

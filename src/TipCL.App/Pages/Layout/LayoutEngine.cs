@@ -426,8 +426,22 @@ public sealed class LayoutPageState
 				Order.Add(id2);
 			}
 		}
-		// 不沿用旧块:坐标 / 尺寸 / 外观 / 内边距 / 自定义设置一概丢掉(「重置」的本意)
-		Page.Blocks = new List<BlockLayout>();
+		// 白名单块不沿用旧块:坐标 / 尺寸 / 外观 / 内边距 / 自定义设置一概丢掉(「重置」的本意)。
+		// [layout-fix 第三批] 自建 / 插件块(custom: / plugin:)的**数据**属于用户(便签文字、插件设置等),
+		// 只清几何(x/y/w/h/height_px),其余字段原样保留 —— 对齐 Windows 6c520ca 的 LayoutPageState.Reset。
+		List<BlockLayout> kept = new List<BlockLayout>();
+		if (Page.Blocks != null)
+		{
+			foreach (BlockLayout old in Page.Blocks)
+			{
+				if (old == null || string.IsNullOrEmpty(old.Id) || !LayoutEngine.IsImplicitRef(old.Id))
+				{
+					continue;
+				}
+				kept.Add(LayoutEngine.ClearGeometry(old.Clone()));
+			}
+		}
+		Page.Blocks = kept;
 		RebuildPage();
 	}
 
@@ -740,6 +754,84 @@ public static class LayoutEngine
 			return page.Cols;
 		}
 		return 1;
+	}
+
+	/// <summary>
+	/// [layout-fix 第三批] 清掉一块的几何(x/y/w/h、span、固定像素高 height_px),其余字段(外观 / 标题 / 设置 / extra 的其它键)不动。
+	/// 清完之后 grid 的自动流会把它当成"没有位置"重新落格(见 <see cref="LayoutGrid.Pack"/> 的 hasPosition)。返回同一个对象。
+	/// </summary>
+	public static BlockLayout ClearGeometry(BlockLayout block)
+	{
+		block.X = 0.0;
+		block.Y = 0.0;
+		block.W = 1.0;
+		block.H = 1.0;
+		block.Span = 1;
+		LayoutCell.WriteHeightPx(block, 0.0);
+		return block;
+	}
+
+	/// <summary>
+	/// [layout-fix 第三批]「重置本页」的出厂页(纯函数):
+	///   1 页级参数与内置块 = <paramref name="defaultPage"/>(页面宿主给的出厂布局,如实例库的 12 列网格);
+	///     没有出厂布局 = 白名单默认(单列 stack + 默认间距 / 边距,内置块按白名单顺序、Hidden = !DefaultVisible);
+	///   2 出厂布局里没写到的白名单块按白名单顺序补在后面(与 <see cref="LayoutPageState.Load"/> 的补齐规则一致);
+	///   3 当前页里的自建 / 插件块(custom: / plugin:)**不丢**:接在最后,只清几何、恢复显示,
+	///     数据(settings / style / title / pad / extra)原样保留 —— 它们的定义和用户数据不属于"出厂布局"。
+	///     grid 出厂页里它们占满一整行(span = 列数),交给自动流落到内置块下方。
+	/// 旧几何一律不沿用:这正是 Windows 6c520ca 修的"网格页重置看起来没反应"。
+	/// </summary>
+	public static PageLayoutV2 FactoryPage(PageLayoutV2? current, PageLayoutV2? defaultPage, IReadOnlyList<LayoutBlockRef>? refs)
+	{
+		PageLayoutV2 page = ((defaultPage != null) ? defaultPage.Clone() : new PageLayoutV2());
+		if (page.Blocks == null)
+		{
+			page.Blocks = new List<BlockLayout>();
+		}
+		HashSet<string> have = new HashSet<string>(StringComparer.Ordinal);
+		List<BlockLayout> blocks = new List<BlockLayout>();
+		foreach (BlockLayout block in page.Blocks)
+		{
+			if (block != null && !string.IsNullOrEmpty(block.Id) && have.Add(block.Id))
+			{
+				blocks.Add(block);
+			}
+		}
+		if (refs != null)
+		{
+			foreach (LayoutBlockRef reference in refs)
+			{
+				if (reference != null && !string.IsNullOrEmpty(reference.Id) && have.Add(reference.Id))
+				{
+					blocks.Add(new BlockLayout
+					{
+						Id = reference.Id,
+						Hidden = !reference.DefaultVisible
+					});
+				}
+			}
+		}
+		int span = ((page.Mode == LayoutSchema.ModeGrid) ? LayoutGrid.Columns(page) : 1);
+		if (current?.Blocks != null)
+		{
+			foreach (BlockLayout old in current.Blocks)
+			{
+				if (old == null || string.IsNullOrEmpty(old.Id) || !IsImplicitRef(old.Id) || !have.Add(old.Id))
+				{
+					continue;
+				}
+				BlockLayout kept = ClearGeometry(old.Clone());
+				kept.Hidden = false;
+				kept.Span = span;
+				blocks.Add(kept);
+			}
+		}
+		for (int i = 0; i < blocks.Count; i++)
+		{
+			blocks[i].Z = i;
+		}
+		page.Blocks = blocks;
+		return page;
 	}
 
 	/// <summary>装载一页状态(v2 条目可能为 null = 用白名单默认布局)。</summary>
@@ -1385,6 +1477,33 @@ public static class LayoutGrid
 			}
 		}
 		return heights;
+	}
+
+	/// <summary>
+	/// [layout-fix 第三批]「吃满视口」块(见 LayoutFill.FillsViewport)在 grid 自动行高下该拿多高(纯函数):
+	/// = 可用高 − (除它所占各行之外的行高之和 + 全部行间距),不低于 <paramref name="minHeight"/>。
+	/// <paramref name="rowHeights"/> 是**不计这块**时量出的行高;它占 [<paramref name="fillY"/>, fillY+fillH) 这几行。
+	/// 可用高无限 / 非法时返回 0(= 不启用,调用方照常按内容测量)。
+	/// </summary>
+	public static double FillHeight(IReadOnlyList<double>? rowHeights, int fillY, int fillH, double gap, double available, double minHeight)
+	{
+		if (double.IsInfinity(available) || double.IsNaN(available) || available <= 0.0)
+		{
+			return 0.0;
+		}
+		double others = 0.0;
+		int rows = rowHeights?.Count ?? 0;
+		for (int i = 0; i < rows; i++)
+		{
+			if (i < fillY || i >= fillY + Math.Max(1, fillH))
+			{
+				others += rowHeights![i];
+			}
+		}
+		// 行间距按"实际行数"算:填充块的行至少算 1 行(行表里可能还没有它)
+		int total = Math.Max(rows, fillY + Math.Max(1, fillH));
+		others += Math.Max(0.0, gap) * Math.Max(0, total - 1);
+		return Math.Max(Math.Max(0.0, minHeight), available - others);
 	}
 
 	/// <summary>列宽(可用宽扣掉列间 gap 后平分;窄到负数时兜底 1px)。</summary>

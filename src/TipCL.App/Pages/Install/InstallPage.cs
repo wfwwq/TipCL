@@ -104,7 +104,8 @@ public sealed class InstallPage : UserControl
         title.FontWeight = FontWeight.ExtraBold;
         var head = UiClass.H(10, bk, title, UiClass.Tag(typeLabel, "B.Ok", "B.AccentSoft"));
         title.VerticalAlignment = VerticalAlignment.Center;
-        head.Margin = new Thickness(22, 14, 22, 10);
+        // [layout-fix 第三批] 标题行成了「标题」区块:左右 22 改由宿主边距给,块内只留上下 14 / 10
+        head.Margin = new Thickness(0, 14, 0, 10);
 
         // ── 加载器 5 卡 ──
         var lds = UiClass.G(null, "*,*,*,*,*");
@@ -172,8 +173,10 @@ public sealed class InstallPage : UserControl
         hint.IsHitTestVisible = false;
         nm.Children.Add(hint);
 
-        var body = UiClass.V(0, Label("实例名称", 8), nm, Label("模组加载器", 14), lds, vbox);
-        body.Margin = new Thickness(22, 0, 22, 16);
+        // [layout-fix 第三批] 原来的 body = V(0, 实例名称标签, 名称框, 模组加载器标签, 5 卡, 开关卡),外边距 22,0,22,16。
+        // 现在按小节拆成区块(间距 0,边距同值),小节内部原样 ⇒ 没有存档时逐行位置不变。
+        var nameBlock = UiClass.V(0, Label("实例名称", 8), nm);
+        var loaderBlock = UiClass.V(0, Label("模组加载器", 14), lds);
 
         // ── 底部固定栏 ──
         _go = UiClass.Btn("", BtnKind.Primary, (_, _) => _ = InstallAsync());
@@ -193,17 +196,44 @@ public sealed class InstallPage : UserControl
         }.Dyn(Border.BackgroundProperty, "B.GlassStrong")
          .Dyn(Border.BorderBrushProperty, "B.RowLine");
 
-        var root = UiClass.G("Auto,*,Auto");
-        root.Add(head, 0);
-        root.Add(new ScrollViewer
+        // [layout-fix 第三批] 可拖区域 = 区块宿主 BlockHost("install"):标题 / 实例名称 / 模组加载器 / 安装选项;
+        // 底部「将安装 … / 开始安装」栏**固定在页面底部**,不进可拖区域(宿主外的第二行)。
+        // 宿主自带纵向滚动(原来 head 之下那块 ScrollViewer 的角色);标题行现在跟着内容一起滚,静止时位置不变。
+        var blocks = new TipCL.App.Pages.Layout.BlockHost(LayoutPageId, new List<TipCL.App.Pages.Layout.BlockSpec>
         {
-            Content = body,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        }, 1);
-        root.Add(footBar, 2);
+            new() { Id = "header", Title = I18nCore.Tr("标题"), Content = head },
+            new() { Id = "name", Title = I18nCore.Tr("实例名称"), Content = nameBlock },
+            new() { Id = "loaders", Title = I18nCore.Tr("模组加载器"), Content = loaderBlock },
+            new() { Id = "options", Title = I18nCore.Tr("安装选项"), Content = vbox },
+        }, new Thickness(22, 0, 22, 16), DefaultLayout())
+        {
+            // 非编辑态收起宿主底部托盘外壳 ⇒ 滚动视口一直到安装栏上沿,与拆块前一致
+            CollapseIdleBottom = true,
+        };
+        var root = UiClass.G("*,Auto");
+        root.Add(blocks, 0);
+        root.Add(footBar, 1);
         Content = root;
         Select(0);
         _ = LoadAsync();
+    }
+
+    /// <summary>布局文档里的页面 id(设置 → 布局 → 页面区块里的「版本安装」)。</summary>
+    public const string LayoutPageId = "install";
+
+    /// <summary>[layout-fix 第三批] 出厂布局:单列纵向、间距 0、边距 22,0,22,16(= 原 body 外边距)。</summary>
+    internal static TipCL.Core.Launcher.Layout.PageLayoutV2 DefaultLayout()
+    {
+        var page = new TipCL.Core.Launcher.Layout.PageLayoutV2
+        {
+            Mode = TipCL.Core.Launcher.Layout.LayoutSchema.ModeStack,
+            Gap = 0.0,
+            Pad = new double[] { 22.0, 0.0, 22.0, 16.0 },
+        };
+        string[] ids = { "header", "name", "loaders", "options" };
+        for (int i = 0; i < ids.Length; i++)
+            page.Blocks.Add(new TipCL.Core.Launcher.Layout.BlockLayout { Id = ids[i], Span = 1, Z = i });
+        return page;
     }
 
     // ───────────────────────────── 构建小工具 ─────────────────────────────
