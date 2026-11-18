@@ -124,10 +124,34 @@ public sealed class VersionManagePage : PageBase
 	public override string Title => I18n.L("版本管理");
 
 	// 实例详情页「设置」分段内嵌本页时预选该实例；预选即视为嵌入态
+	// 嵌入态换用另一个布局 pageId(version-manage:embedded),与顶级「版本管理」页的布局互不覆盖
 	public string Folder
 	{
-		set { _folder = value; _folderPreset = true; }
+		set
+		{
+			_folder = value;
+			_folderPreset = true;
+			BuildHost(embedded: true);
+		}
 	}
+
+	/// <summary>顶级「版本管理」页的布局 pageId(区块:folders / versions)。</summary>
+	public const string LayoutPageId = "version-manage";
+
+	/// <summary>实例详情「设置」分段内嵌时的布局 pageId(与顶级页分开存,两处布局互不覆盖)。</summary>
+	public const string EmbeddedLayoutPageId = "version-manage:embedded";
+
+	// 区块宿主 + 两块内容 + 原生默认排版(滚动区里的 272 | 18 | * 分栏)
+	private BlockHost? _host;
+
+	private FrameworkElement? _leftCard;
+
+	private FrameworkElement? _rightCol;
+
+	private FrameworkElement? _scrollRoot;
+
+	// 原排版里左栏是否展开(嵌入态收起);挂回原排版时按它还原
+	private bool _leftShown = true;
 
 	public VersionManagePage()
 	{
@@ -175,15 +199,84 @@ public sealed class VersionManagePage : PageBase
 		((FrameworkElement)el2).VerticalAlignment = VerticalAlignment.Top;
 		// L4 分栏(§4.E 第 6 处):顶级 = 272px + 18px 留白 + 右栏;分隔条复用现状那 18px 空白列,内嵌态收起
 		PageLayoutHost val7 = new PageLayoutHost("version-manage", "nav", new GridLength(272.0), new GridLength(1.0, GridUnitType.Star));
-		val7.SetLeft((UIElement)(object)el);
-		val7.SetRight((UIElement)(object)el2);
 		_split = val7;
-		((ContentControl)this).Content = PageBase.ScrollBody((UIElement)val7);
+		_leftCard = el;
+		_rightCol = el2;
+		_scrollRoot = PageBase.ScrollBody((UIElement)val7);
+		// 布局自定义:两个区块(文件夹列表 / 版本选择)。没自定义过时显示上面的原分栏(默认外观逐像素不变),
+		// 进编辑态按 12 列网格(3 | 9,观感同 272 | *)摆开。
+		BuildHost(embedded: false);
 		EnableDrop(() => new FileDrop.DropContext
 		{
 			Instance = _folder,
 			PreferKind = "modpack"
 		});
+	}
+
+	// 建区块宿主;嵌入态(实例详情「设置」分段)换 pageId 重建一次 —— Folder 是在构造之后才赋值的
+	private void BuildHost(bool embedded)
+	{
+		string pageId = (embedded ? EmbeddedLayoutPageId : LayoutPageId);
+		if (_host != null && _host.PageId == pageId)
+		{
+			return;
+		}
+		PageLayoutHost? split = _split;
+		FrameworkElement? left = _leftCard;
+		FrameworkElement? right = _rightCol;
+		if (split == null || left == null || right == null || _scrollRoot == null)
+		{
+			return;
+		}
+		BlockNativeLayout native = new BlockNativeLayout
+		{
+			Root = _scrollRoot,
+			Attach = delegate
+			{
+				split.SetLeft(left);
+				split.SetRight(right);
+				split.SetLeftVisible(_leftShown);
+			},
+			Detach = delegate
+			{
+				split.SetLeft(null);
+				split.SetRight(null);
+				// 区块形态下显隐交给区块状态(嵌入态默认隐藏文件夹列表)
+				left.Visibility = Visibility.Visible;
+			}
+		};
+		_host = new BlockHost(pageId, new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "folders",
+				Title = I18n.L("文件夹列表"),
+				Content = left,
+				DefaultVisible = !embedded
+			},
+			new BlockSpec
+			{
+				Id = "versions",
+				Title = I18n.L("版本选择"),
+				Content = right
+			}
+		}, null, DefaultVersionManagePage(embedded), native);
+		((ContentControl)this).Content = _host;
+	}
+
+	// 编辑态 / 自定义布局的默认网格:文件夹 3 列 + 版本 9 列(≈ 原来的 272px | *);嵌入态文件夹默认隐藏、版本铺满
+	private static PageLayoutV2 DefaultVersionManagePage(bool embedded)
+	{
+		return new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeGrid,
+			Cols = 12,
+			Blocks = new List<BlockLayout>
+			{
+				new BlockLayout { Id = "folders", X = 0.0, Y = 0.0, W = 3.0, H = 1.0, Span = 3, Hidden = embedded },
+				new BlockLayout { Id = "versions", X = embedded ? 0.0 : 3.0, Y = 0.0, W = embedded ? 12.0 : 9.0, H = 1.0, Span = embedded ? 12 : 9 }
+			}
+		};
 	}
 
 	protected override async Task LoadAsync()
@@ -203,7 +296,8 @@ public sealed class VersionManagePage : PageBase
 		// 若预选实例失效被回落，说明不是有效嵌入，恢复双栏
 		bool embedded = _folderPreset && _instances.Any((InstanceInfo i) => i.Name == _folder);
 		// L4:内嵌态左栏与分隔条一起收起(等价于原列宽置 0 + 卡片 Collapsed);该形态不读写比例
-		if (_split != null)
+		_leftShown = !embedded;
+		if (_split != null && _host != null && _host.IsNativeDefault)
 		{
 			_split.SetLeftVisible(!embedded);
 		}
