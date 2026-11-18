@@ -1089,6 +1089,8 @@ public static class LayoutGrid
 				NH = block.H,
 				MinW = LayoutCanvas.FallbackMinW,
 				MinH = ((block.MinH > 0.0) ? block.MinH : LayoutCanvas.FallbackMinH),
+				// 固定像素高度要带进槽位:原来这里漏了,任何一次提交(ApplyTo)都会把别的块的 height_px 写回 0
+				HeightPx = block.HeightPx,
 				Z = block.Z
 			});
 		}
@@ -1270,6 +1272,85 @@ public static class LayoutGrid
 			}
 		}
 		return heights;
+	}
+
+	/// <summary>
+	/// 「占满剩余高度」的行高分配(纯函数):行高合计(含行间 gap)小于 <paramref name="targetHeight"/> 时,
+	/// 把余量平均分给"只含 Fill 块的行"(例如 AI 页:对话区所在行变高,输入栏所在行保持内容高);
+	/// 没有这样的行就退到"含 Fill 块的行";没有 Fill 块、或已经够高,原样返回(返回的是新数组)。
+	/// </summary>
+	public static double[] FillRows(IReadOnlyList<LayoutCell>? cells, double[]? rowHeights, ICollection<string>? fillIds, double gap, double targetHeight)
+	{
+		double[] result = ((rowHeights != null) ? (double[])rowHeights.Clone() : new double[0]);
+		int count = result.Length;
+		if (count == 0 || cells == null || fillIds == null || fillIds.Count == 0 || targetHeight <= 0.0 || double.IsInfinity(targetHeight) || double.IsNaN(targetHeight))
+		{
+			return result;
+		}
+		double total = 0.0;
+		for (int i = 0; i < count; i++)
+		{
+			total += result[i] + ((i < count - 1) ? Math.Max(0.0, gap) : 0.0);
+		}
+		double extra = targetHeight - total;
+		if (extra <= 0.5)
+		{
+			return result;
+		}
+		bool[] hasFill = new bool[count];
+		bool[] hasOther = new bool[count];
+		foreach (LayoutCell cell in cells)
+		{
+			if (cell == null)
+			{
+				continue;
+			}
+			bool fill = fillIds.Contains(cell.Id);
+			for (int k = 0; k < Math.Max(1, cell.H); k++)
+			{
+				int row = cell.Y + k;
+				if (row < 0 || row >= count)
+				{
+					continue;
+				}
+				if (fill)
+				{
+					hasFill[row] = true;
+				}
+				else
+				{
+					hasOther[row] = true;
+				}
+			}
+		}
+		List<int> rows = new List<int>();
+		for (int j = 0; j < count; j++)
+		{
+			if (hasFill[j] && !hasOther[j])
+			{
+				rows.Add(j);
+			}
+		}
+		if (rows.Count == 0)
+		{
+			for (int j = 0; j < count; j++)
+			{
+				if (hasFill[j])
+				{
+					rows.Add(j);
+				}
+			}
+		}
+		if (rows.Count == 0)
+		{
+			return result;
+		}
+		double share = extra / rows.Count;
+		foreach (int row in rows)
+		{
+			result[row] += share;
+		}
+		return result;
 	}
 
 	/// <summary>列宽(可用宽扣掉列间 gap 后平分;窄到负数时兜底 1px)。</summary>

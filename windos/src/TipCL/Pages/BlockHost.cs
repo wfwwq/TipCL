@@ -21,6 +21,33 @@ public sealed class BlockSpec
 	public UIElement? Content { get; set; }
 
 	public bool DefaultVisible { get; set; } = true;
+
+	/// <summary>
+	/// 占满剩余高度(网格 / 画布里):内容自带滚动(AI 对话区、历史列表这类)时置 true ——
+	/// 区块不再套外层滚动、也不按内容需求高无限撑开,而是拿到一个有限高度,内容自己的滚动与吸底照常工作。
+	/// 缺省 false = 现状(跟随内容高度)。
+	/// </summary>
+	public bool Fill { get; set; }
+}
+
+/// <summary>
+/// 页面的「原生默认排版」:有些页面的默认外观不是纵向流(左右分栏、上中下三段且中间那段要占满高度),
+/// 用 stack / grid 都没法做到与改动前逐像素一致。这类页面把自己原来的排版根交给宿主:
+///   布局文档里还没有这一页(从没自定义过)且不在编辑态时,宿主直接显示 <see cref="Root"/>
+///   (先调 <see cref="Attach"/> 把各块内容挂回原来的位置)—— 默认外观与改动前完全相同;
+///   进编辑态 / 已有自定义布局时,先调 <see cref="Detach"/> 把内容从原排版里摘下来,再由区块卡片承载。
+/// Attach / Detach 必须成对、可重复调用(宿主会在两种形态之间来回切换)。
+/// </summary>
+public sealed class BlockNativeLayout
+{
+	/// <summary>原排版的根元素(宿主把它放在内容区,占满整页高度)。</summary>
+	public FrameworkElement? Root { get; set; }
+
+	/// <summary>把各块内容挂回原排版(此时内容已经不在任何区块卡片里)。</summary>
+	public Action? Attach { get; set; }
+
+	/// <summary>把各块内容从原排版里摘下来(之后交给区块卡片)。</summary>
+	public Action? Detach { get; set; }
 }
 
 // 页面区块宿主(WP-U1 冻结契约,公共 API 一字不改):
@@ -40,9 +67,19 @@ public sealed class BlockHost : UserControl
 	private readonly Action _storeRefresh;
 
 	public BlockHost(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null, PageLayoutV2? defaultPage = null)
+		: this(pageId, specs, contentMargin, defaultPage, null)
+	{
+	}
+
+	/// <summary>
+	/// 带「原生默认排版」的构造(AI 页 / 版本管理页这类默认不是纵向流的页面用):
+	/// 没有自定义过布局时显示 <paramref name="native"/> 的原排版(默认外观逐像素不变),
+	/// 进编辑态时按 <paramref name="defaultPage"/>(网格)把各块摆出来供拖动。
+	/// </summary>
+	public BlockHost(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin, PageLayoutV2? defaultPage, BlockNativeLayout? native)
 	{
 		PageId = pageId ?? "";
-		_editor = new LayoutEditor(pageId, specs, contentMargin, defaultPage);
+		_editor = new LayoutEditor(pageId, specs, contentMargin, defaultPage, native);
 		_themeRefresh = _editor.RefreshThemeVisuals;
 		_storeRefresh = OnLayoutStoreChanged;
 		_editor.Changed += delegate
@@ -135,6 +172,15 @@ public sealed class BlockHost : UserControl
 	public void SetBlockHidden(string id, bool hidden)
 	{
 		_editor.SetBlockHidden(id, hidden);
+	}
+
+	/// <summary>当前是否正显示页面的原生默认排版(没自定义过布局、也不在编辑态)。</summary>
+	public bool IsNativeDefault
+	{
+		get
+		{
+			return _editor.IsNativeDefault;
+		}
 	}
 
 	/// <summary>重置本页为出厂布局(右键菜单第二入口)。</summary>

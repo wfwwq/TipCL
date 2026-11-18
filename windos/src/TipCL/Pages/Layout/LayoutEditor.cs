@@ -121,13 +121,30 @@ public sealed class LayoutEditor
 	// 吸附档按钮(只在 grid/canvas 编辑态可用)
 	private Button? _snapBtn;
 
+	// 底部托盘 + 工具条的外壳:只在编辑态占位(常态整行折叠,内容区高度与改动前一致)
+	private readonly SPanel _bottom;
+
+	// 「原生默认排版」(AI 页 / 版本管理页):没自定义过布局且不在编辑态时直接显示页面原来的排版根
+	private readonly BlockNativeLayout? _native;
+
+	// 布局文档里还没有这一页(= 应当显示原生默认排版);只有给了 _native 的页面才可能为 true
+	private bool _nativeActive;
+
+	// 原生排版当前是否挂在内容区(各块内容此时在原排版里,不在卡片里)
+	private bool _nativeShown;
+
+	// 占满剩余高度的区块(BlockSpec.Fill):内容自带滚动,网格里按可视高度分配余量
+	private readonly HashSet<string> _fillIds = new HashSet<string>(StringComparer.Ordinal);
+
 	/// <summary>构造:pageId + 页面块描述 + 可选的页级边距覆盖(null = 用文档 pad,一般是 18,14,18,16)。</summary>
 	/// <param name="defaultPage">「页面默认布局」:v2 文档里还没有这一页时用它(实例库靠它默认左右排布)。</param>
-	public LayoutEditor(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null, PageLayoutV2? defaultPage = null)
+	/// <param name="native">「原生默认排版」(可空):没自定义过布局时显示页面原来的排版根(默认外观逐像素不变)。</param>
+	public LayoutEditor(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null, PageLayoutV2? defaultPage = null, BlockNativeLayout? native = null)
 	{
 		_pageId = pageId ?? "";
 		_marginOverride = contentMargin;
 		_defaultPage = defaultPage;
+		_native = ((native != null && native.Root != null) ? native : null);
 		if (specs != null)
 		{
 			foreach (BlockSpec spec in specs)
@@ -137,6 +154,10 @@ public sealed class LayoutEditor
 					_specs.Add(spec);
 					_byId[spec.Id] = spec;
 					_refs.Add(new LayoutBlockRef(spec.Id, spec.DefaultVisible));
+					if (spec.Fill)
+					{
+						_fillIds.Add(spec.Id);
+					}
 				}
 			}
 		}
@@ -223,8 +244,12 @@ public sealed class LayoutEditor
 		_barHost.Child = sPanel2;
 		Motion.Shadow(_barHost, 16.0, 0.07, 3.0);
 		// 根结构:上滚动内容区,下托盘/工具条(仅编辑态占位出现,不悬浮遮挡内容)
+		// 常态整行折叠:原来这一行即使托盘和工具条都折叠了也占着 8 + 16 = 24px 的外边距,
+		// 内容区因此比改动前矮 24px(铺满整页的页面,例如 AI 对话区,会被看出来)。
 		SPanel bottom = Ui.V(8.0, _trayHost, _barHost);
 		bottom.Margin = new Thickness(_list.Margin.Left, 8.0, _list.Margin.Right, _list.Margin.Bottom);
+		bottom.Visibility = Visibility.Collapsed;
+		_bottom = bottom;
 		_root = Ui.G("*,Auto");
 		_scroll = Ui.Scroll(_list);
 		_root.Add(_scroll, 0);
@@ -234,6 +259,12 @@ public sealed class LayoutEditor
 		_stage.Children.Add(_box);
 		_stage.Children.Add(_guide);
 		_boxScroll = Ui.Scroll(_stage);
+		// 占满剩余高度的区块(AI 对话区等):画布按可视高度把余量分给这些块所在的行
+		_box.FillIds = _fillIds;
+		_boxScroll.SizeChanged += delegate
+		{
+			UpdateFillHeight();
+		};
 		// 键盘(§4.G):整个编辑器根元素接管按键 —— Esc / Delete / 方向键 / Ctrl+Z/Y/C/V
 		_root.Focusable = true;
 		_root.PreviewKeyDown += OnEditorKeyDown;
@@ -284,6 +315,15 @@ public sealed class LayoutEditor
 		get
 		{
 			return _specs.Count >= 1;
+		}
+	}
+
+	/// <summary>当前是否正显示页面的原生默认排版(没自定义过布局、也不在编辑态)。</summary>
+	public bool IsNativeDefault
+	{
+		get
+		{
+			return _nativeActive && !_edit;
 		}
 	}
 
@@ -448,6 +488,7 @@ public sealed class LayoutEditor
 		// 每次进编辑态都是一次新会话:多选与撤销栈清空(历史上的改动已经即时落盘,不需要跨会话撤销)
 		_session.ClearHistory();
 		_session.ClearSelection();
+		_bottom.Visibility = Visibility.Visible;
 		Render();
 		_barHost.Visibility = Visibility.Visible;
 		// 键盘(§4.G)需要根元素拿到焦点;拿不到也不影响鼠标交互
@@ -468,6 +509,13 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = false;
+		if (_gesture.Length != 0)
+		{
+			EndBoxGesture(false, false);
+		}
+		_box.ClearDragVisuals();
+		// 原生默认排版的页面:整场什么都没动 → 不落盘,直接回到原排版(默认外观逐像素不变)
+		bool backToNative = _nativeActive && !_layoutTouched;
 		// 进编辑时把 stack 折成了网格:整场什么都没动就还原成原来的 stack,
 		// 不因为"点进来看看"就把用户的纵向页面悄悄改成网格。
 		if (_stackConverted && !_layoutTouched)
@@ -476,12 +524,20 @@ public sealed class LayoutEditor
 		}
 		_stackConverted = false;
 		_stackBackup = null;
-		Persist();
+		if (backToNative)
+		{
+			LoadFromStore();
+		}
+		else
+		{
+			Persist();
+		}
+		_trayHost.Visibility = Visibility.Collapsed;
+		_barHost.Visibility = Visibility.Collapsed;
+		_bottom.Visibility = Visibility.Collapsed;
 		Render();
 		_session.ClearSelection();
 		_session.ClearHistory();
-		_trayHost.Visibility = Visibility.Collapsed;
-		_barHost.Visibility = Visibility.Collapsed;
 		AppServices.Window?.Toast(I18n.L("布局已保存"), "", ToastKind.Success);
 	}
 
@@ -505,6 +561,8 @@ public sealed class LayoutEditor
 		// 所以"没接线 / 首帧"的渲染与改动前完全一致。
 		double width = ((_widthHint > 0.0) ? _widthHint : LayoutVariantHost.Width);
 		PageLayoutV2? page = LayoutVariants.PageOf(doc.Layout, _pageId, width, LayoutVariantHost.Threshold);
+		// 原生默认排版:文档里没有这一页 = 从没自定义过 → 常态直接显示页面原来的排版根
+		_nativeActive = page == null && _native != null;
 		// 「页面默认布局」(D-new):文档里还没有这一页时用宿主给的默认布局。
 		// 实例库就是这样默认左右排布的;用户在编辑态拖过之后才写进 v2 文档。
 		if (page == null && _defaultPage != null)
@@ -528,6 +586,14 @@ public sealed class LayoutEditor
 	// 单列走与旧版完全相同的纵向流(每块一张卡直接挂 SPanel);多列才用行内 Grid
 	private void Render()
 	{
+		// 原生默认排版(没自定义过、也不在编辑态):内容挂回页面原来的排版,区块卡片一律不出场
+		if (_nativeActive && !_edit)
+		{
+			ShowNativeHost();
+			RefreshToolbar();
+			return;
+		}
+		LeaveNativeHost();
 		_list.Children.Clear();
 		LayoutPlan plan = _state.Plan();
 		if (IsBoxMode)
@@ -551,6 +617,7 @@ public sealed class LayoutEditor
 				if (row.Slots.Count != 0)
 				{
 					LayoutCard card = CardFor(row.Slots[0].Id);
+					card.EnsureContent();
 					card.SetBoxMode(LayoutSchema.ModeStack);
 					card.SetEdit(_edit);
 					ApplyLook(card);
@@ -582,10 +649,12 @@ public sealed class LayoutEditor
 		_box.SnapStep = _snapStep;
 		_box.EditMode = _edit;
 		_box.Margin = (_marginOverride ?? PadOf(_state.Plan()));
+		UpdateFillHeight();
 		_box.Children.Clear();
 		foreach (LayoutCell cell in LayoutCanvas.StackedOrder(_box.Cells))
 		{
 			LayoutCard card = CardFor(cell.Id);
+			card.EnsureContent();
 			card.SetBoxMode(page.Mode);
 			card.SetEdit(_edit);
 			card.SetSelected(_edit && _session.IsSelected(cell.Id));
@@ -593,7 +662,100 @@ public sealed class LayoutEditor
 			ApplyLook(card);
 			_box.Children.Add(card);
 		}
+		_box.ReattachOverlays();
 		_box.Reflow();
+	}
+
+	// 占满剩余高度:画布可视高(滚动区高 - 画布上下边距)喂给画布,余量分给 Fill 块所在的行
+	private void UpdateFillHeight()
+	{
+		if (_fillIds.Count == 0)
+		{
+			return;
+		}
+		double height = _boxScroll.ActualHeight - _box.Margin.Top - _box.Margin.Bottom;
+		_box.FillHeight = ((height > 1.0) ? height : 0.0);
+	}
+
+	// ————— 原生默认排版 —————
+
+	// 显示原生排版:先把内容从区块卡片里摘下来(同一个元素不能有两个父级),再交给页面挂回原位
+	private void ShowNativeHost()
+	{
+		BlockNativeLayout? native = _native;
+		if (native == null || native.Root == null)
+		{
+			return;
+		}
+		if (!_nativeShown)
+		{
+			_list.Children.Clear();
+			_box.Children.Clear();
+			_guide.Clear();
+			foreach (LayoutCard card in _cards.Values)
+			{
+				card.ReleaseContent();
+			}
+			foreach (BlockSpec spec in _specs)
+			{
+				DetachFromParent(spec.Content);
+			}
+			native.Attach?.Invoke();
+			_nativeShown = true;
+		}
+		if (_root.Children.Count != 0 && ReferenceEquals(_root.Children[0], native.Root))
+		{
+			return;
+		}
+		DetachFromParent(native.Root);
+		if (_root.Children.Count != 0)
+		{
+			_root.Children.RemoveAt(0);
+		}
+		Grid.SetRow(native.Root, 0);
+		_root.Children.Insert(0, native.Root);
+	}
+
+	// 离开原生排版:页面先把内容从原排版里摘下来,之后由区块卡片承载(Show*Host 会把根换成滚动宿主)
+	private void LeaveNativeHost()
+	{
+		if (!_nativeShown)
+		{
+			return;
+		}
+		_nativeShown = false;
+		_native?.Detach?.Invoke();
+		foreach (BlockSpec spec in _specs)
+		{
+			DetachFromParent(spec.Content);
+		}
+	}
+
+	/// <summary>把元素从它现在的父级上摘下来(ContentControl / Decorator / Panel 三种常见父级)。</summary>
+	internal static void DetachFromParent(UIElement? element)
+	{
+		if (!(element is FrameworkElement framework) || framework.Parent == null)
+		{
+			return;
+		}
+		switch (framework.Parent)
+		{
+		case ContentControl contentControl:
+			if (ReferenceEquals(contentControl.Content, element))
+			{
+				contentControl.Content = null;
+			}
+			break;
+		case Decorator decorator:
+			if (ReferenceEquals(decorator.Child, element))
+			{
+				decorator.Child = null;
+			}
+			break;
+		case Panel panel:
+			panel.Children.Remove(element);
+			break;
+		}
 	}
 
 	// 可视宿主二选一:stack = SPanel 纵向流(与 L1 逐像素一致),grid/canvas = 画布 Panel
@@ -710,6 +872,7 @@ public sealed class LayoutEditor
 		{
 			LayoutSlot slot = row.Slots[k];
 			LayoutCard card = CardFor(slot.Id);
+			card.EnsureContent();
 			card.SetBoxMode(LayoutSchema.ModeStack);
 			card.SetEdit(_edit);
 			ApplyLook(card);
@@ -737,6 +900,7 @@ public sealed class LayoutEditor
 		}
 		BlockSpec spec = SpecOf(id);
 		card = new LayoutCard(this, spec, ResolveContent(spec));
+		card.SetFill(_fillIds.Contains(id));
 		_cards[id] = card;
 		return card;
 	}
@@ -833,6 +997,7 @@ public sealed class LayoutEditor
 		{
 			return;
 		}
+		_layoutTouched = true;
 		_session.PushUndo(_state.ToPage());
 		_state.Restore(spec.Id);
 		Render();
@@ -855,6 +1020,13 @@ public sealed class LayoutEditor
 				_box.ReleaseMouseCapture();
 			}
 			_session.PushUndo(_state.ToPage());
+			_box.ClearDragVisuals();
+			// 原生默认排版的页面:重置 = 把本页从布局文档里删掉,常态回到页面原来的排版(逐像素等价改动前)
+			if (_native != null)
+			{
+				ResetToNative();
+				return;
+			}
 			// 重置 = 回到本页出厂布局(含页模式),不能只重排顺序 —— 网格页的几何原样留着,看起来就是"点了没反应"。
 			if (_defaultPage != null)
 			{
@@ -892,6 +1064,42 @@ public sealed class LayoutEditor
 		{
 			AppServices.Window?.Toast(I18n.L("重置失败"), ex.Message, ToastKind.Error);
 		}
+	}
+
+	// 原生默认排版页的重置:删掉文档里的本页条目并落盘;仍在编辑态就按默认网格继续编辑,
+	// 之后不再改动就完成编辑 = 回到原排版
+	private void ResetToNative()
+	{
+		_saving = true;
+		try
+		{
+			LayoutV2 doc = LayoutStoreV2.Load();
+			if (doc.Layout != null && doc.Layout.Pages.Remove(_pageId))
+			{
+				LayoutStoreV2.Save(doc);
+				PageLayoutStore.Reload();
+			}
+		}
+		finally
+		{
+			_saving = false;
+		}
+		LoadFromStore();
+		_stackConverted = false;
+		_stackBackup = null;
+		if (_edit)
+		{
+			PrepareEditableGrid();
+			CompactState(null);
+		}
+		_layoutTouched = false;
+		Render();
+		foreach (LayoutCard card in _cards.Values)
+		{
+			card.SetCollapsed(false);
+		}
+		this.Changed?.Invoke();
+		AppServices.Window?.Toast(I18n.L("布局已重置"), I18n.L("本页已恢复默认布局"), ToastKind.Success);
 	}
 
 	/// <summary>给右键菜单用的重置入口(编辑态)。</summary>
@@ -944,6 +1152,10 @@ public sealed class LayoutEditor
 			LayoutEngine.ApplyPage(doc, _pageId, _state.ToPage());
 			LayoutStoreV2.Save(doc);
 			PageLayoutStore.Reload();
+			// 写进文档之后本页就是"自定义过"的了:常态不再显示原生默认排版
+			_nativeActive = false;
+			// 任何落盘都算"动过"(撤销/重做/粘贴/微调/删块以前没置位,完成编辑时会被当成没动过而还原)
+			_layoutTouched = true;
 		}
 		finally
 		{
@@ -1834,6 +2046,12 @@ internal sealed class LayoutCard : Border
 
 	private bool _selected;
 
+	// 卡片承载的内容(原生默认排版显示时会被临时摘走,回到区块形态时再挂回来)
+	private readonly UIElement? _content;
+
+	// 占满剩余高度的块:不套外层滚动、不做窄宽缩放,内容拿到有限高度后自己滚动
+	private bool _fill;
+
 	private string _boxMode = LayoutSchema.ModeStack;
 
 	private string _lookStyle = LayoutSchema.StylePlain;
@@ -1921,12 +2139,38 @@ internal sealed class LayoutCard : Border
 		_bar.Visibility = Visibility.Collapsed;
 		// 画布模式:块身按下 = 整体拖拽(用冒泡事件而不是 Preview —— 操作条/手柄自己的处理器先跑并置 Handled)
 		base.MouseLeftButtonDown += OnCardMouseDown;
-		// 内容已挂在别的 ContentControl 上时先摘下来(对齐 DashHost.SetContent)
-		if (content is FrameworkElement { Parent: ContentControl parent } && parent != _body)
-		{
-			parent.Content = null;
-		}
+		// 内容已挂在别的父级上时先摘下来(对齐 DashHost.SetContent;原生默认排版里的父级可能是 Panel / Decorator)
+		_content = content;
+		LayoutEditor.DetachFromParent(content);
 		_body.Content = content;
+	}
+
+	/// <summary>把内容还给页面(原生默认排版要把它挂回原位)。</summary>
+	public void ReleaseContent()
+	{
+		if (_body.Content != null)
+		{
+			_body.Content = null;
+		}
+	}
+
+	/// <summary>确保内容挂在本卡上(从原生默认排版回到区块形态时调用)。</summary>
+	public void EnsureContent()
+	{
+		if (_content == null || ReferenceEquals(_body.Content, _content))
+		{
+			return;
+		}
+		LayoutEditor.DetachFromParent(_content);
+		_body.Content = _content;
+	}
+
+	/// <summary>占满剩余高度(BlockSpec.Fill):内容区不再套滚动,内容自己的滚动 / 吸底照常工作。</summary>
+	public void SetFill(bool fill)
+	{
+		_fill = fill;
+		_bodyScroll.VerticalScrollBarVisibility = (fill ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
+		_fit.MaxNaturalHeight = ((fill || _boxMode == LayoutSchema.ModeStack) ? 0.0 : 170.0);
 	}
 
 	/// <summary>折叠/展开(只在编辑态用;不写进布局)。</summary>
@@ -1976,7 +2220,7 @@ internal sealed class LayoutCard : Border
 		if (px > 0.0)
 		{
 			_bodyScroll.MaxHeight = px;
-			_bodyScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+			_bodyScroll.VerticalScrollBarVisibility = (_fill ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
 		}
 		else
 		{
@@ -1989,7 +2233,7 @@ internal sealed class LayoutCard : Border
 	{
 		_boxMode = ((mode == LayoutSchema.ModeGrid || mode == LayoutSchema.ModeCanvas) ? mode : LayoutSchema.ModeStack);
 		// 窄宽等比缩放只在网格/自由画布里生效(常态纵向流按原样排版,逐像素等价旧版)
-		_fit.MaxNaturalHeight = ((_boxMode == LayoutSchema.ModeStack) ? 0.0 : 170.0);
+		_fit.MaxNaturalHeight = ((_fill || _boxMode == LayoutSchema.ModeStack) ? 0.0 : 170.0);
 		if (!_edit)
 		{
 			_handleLayer.Visibility = Visibility.Collapsed;

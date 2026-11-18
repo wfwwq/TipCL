@@ -55,6 +55,62 @@ public sealed class GridCanvasPanel : Panel
 	/// <summary>是否在编辑态(只有编辑态画底纹)。</summary>
 	public bool EditMode { get; set; }
 
+	/// <summary>Fill 块测量时的需求高(它们按可视高度分余量,不按内容需求高撑开)。</summary>
+	public const double FillMinHeight = 160.0;
+
+	private ICollection<string>? _fillIds;
+
+	private double _fillHeight;
+
+	/// <summary>「占满剩余高度」的块 id(BlockSpec.Fill;空 = 没有)。</summary>
+	public ICollection<string>? FillIds
+	{
+		get
+		{
+			return _fillIds;
+		}
+		set
+		{
+			_fillIds = value;
+			InvalidateMeasure();
+		}
+	}
+
+	/// <summary>可视高度(滚动区高扣掉画布上下边距;0 = 未知):grid 行高合计不足时,余量分给 Fill 块所在的行。</summary>
+	public double FillHeight
+	{
+		get
+		{
+			return _fillHeight;
+		}
+		set
+		{
+			double v = ((value > 0.0 && !double.IsInfinity(value) && !double.IsNaN(value)) ? value : 0.0);
+			if (Math.Abs(v - _fillHeight) < 0.5)
+			{
+				return;
+			}
+			_fillHeight = v;
+			if (HasFill)
+			{
+				InvalidateMeasure();
+			}
+		}
+	}
+
+	private bool HasFill
+	{
+		get
+		{
+			return _fillIds != null && _fillIds.Count > 0;
+		}
+	}
+
+	private bool IsFill(string id)
+	{
+		return _fillIds != null && !string.IsNullOrEmpty(id) && _fillIds.Contains(id);
+	}
+
 	// ————— 排布结果(宿主与测试只读) —————
 
 	/// <summary>可见块槽位(与页面里的可见顺序一致;canvas 已按 z 序叠放交付)。</summary>
@@ -283,12 +339,36 @@ public sealed class GridCanvasPanel : Panel
 			double cellWidth = _columnWidth * cell.W + Gap * Math.Max(0, cell.W - 1);
 			// height_px(拖下边设定的固定像素高)优先;没设才按内容需求高
 			double fixedH = cell.HeightPx;
+			if (fixedH <= 0.0 && IsFill(id) && RowH <= 0.0)
+			{
+				// 占满高度的块(内容自带滚动):按一个有限的最小高量,行高的余量后面再按可视高度分
+				child.Measure(new Size(Math.Max(1.0, cellWidth), FillMinHeight));
+				desired[id] = FillMinHeight;
+				continue;
+			}
 			child.Measure(new Size(Math.Max(1.0, cellWidth), (fixedH > 0.0) ? fixedH : double.PositiveInfinity));
 			desired[id] = ((fixedH > 0.0) ? fixedH : child.DesiredSize.Height);
 		}
 		_rows = LayoutGrid.RowCount(_cells);
 		_rowHeights = LayoutGrid.RowHeights(_cells, _rows, RowH, desired, Math.Min(LayoutCanvas.FallbackMinH, 40.0));
+		if (HasFill && RowH <= 0.0 && _fillHeight > 0.0)
+		{
+			_rowHeights = LayoutGrid.FillRows(_cells, _rowHeights, _fillIds, Gap, _fillHeight);
+		}
 		_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
+		if (HasFill)
+		{
+			// Fill 块按最终格子尺寸再量一次:内容(对话区的滚动)拿到的是真实可视高,滚动与吸底照常
+			foreach (UIElement child in base.InternalChildren)
+			{
+				string id = IdOf(child);
+				LayoutRect? rect = RectOf(id);
+				if (rect.HasValue && IsFill(id))
+				{
+					child.Measure(new Size(rect.Value.W, rect.Value.H));
+				}
+			}
+		}
 		double total = 0.0;
 		for (int i = 0; i < _rowHeights.Length; i++)
 		{
@@ -401,6 +481,16 @@ public sealed class GridCanvasPanel : Panel
 			return Math.Max(ratio, availableHeight);
 		}
 		return ((CanvasHeight > 0.0) ? CanvasHeight : LayoutCanvas.RefHeight);
+	}
+
+	/// <summary>RenderBox 清空 Children 后把拖动覆盖层(落点占位框)挂回来。</summary>
+	public void ReattachOverlays()
+	{
+	}
+
+	/// <summary>收掉所有拖动视觉(浮起的卡片、落点占位框、进行中的动画)。</summary>
+	public void ClearDragVisuals()
+	{
 	}
 
 	// 子元素的块 id:优先 LayoutCard 的 Spec.Id,退到 Tag(测试宿主里的假元素用 Tag)
