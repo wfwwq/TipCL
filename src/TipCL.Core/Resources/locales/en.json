@@ -3009,5 +3009,11 @@
  "重置本页布局": "Reset this page's layout",
  "布局设置...": "Layout settings...",
  "这个页面没有可拖动的区块": "This page has no draggable blocks",
- "页签、密度、分栏比例可以在「设置 → 布局」里调整": "Tabs, density and split ratios can be adjusted in Settings → Layout"
+ "页签、密度、分栏比例可以在「设置 → 布局」里调整": "Tabs, density and split ratios can be adjusted in Settings → Layout",
+ "标题栏": "Title bar",
+ "输入区": "Input area",
+ "安装选项": "Install options",
+ "版本安装": "Version install",
+ "设置 · 布局": "Settings · Layout",
+ "先在「下载 → 原版」里点一个版本进入安装页,再在页面上右键「自定义布局...」": "First open a version from Downloads → Vanilla to reach the install page, then right-click the page and choose \"Customize layout...\""
 }

@@ -127,17 +127,42 @@ public sealed class AiPage : PageBase
         _dock.IsVisible = false;
         var bottom = UiClass.V(6, _dock, _slash, imgRow, _input);
 
-        var root = UiClass.G("Auto,*,Auto");
-        root.Add(head, 0, 0);
-        root.Add(_scroll, 1, 0);
-        root.Add(bottom, 2, 0);
-        root.Margin = new Thickness(22, 18, 22, 16);
-        Content = root;
+        // [layout-fix 第三批] 拆成可拖动的区块(写法同 CatalogPage / PluginsPage / LibraryPage):
+        //   header =「标题栏」(标题 + 模型 / 权限 / 用量 / 按钮)、chat =「对话」(消息滚动区)、input =「输入区」
+        //   (确认卡停靠区 + 斜杠菜单 + 附图行 + 输入框)。
+        // 对话区挂 LayoutFill.FillsViewport:宿主关掉外层纵向滚动、它按原来 Auto,*,Auto 的 * 行拿剩余高度
+        // ⇒ 自身滚动与吸底(ScrollToEnd)照旧;grid 布局下它所在的行吃掉视口剩下的高度。
+        // 出厂布局 = 单列 stack、间距 0、边距 22,18,22,16(= 原根 Grid 的边距)⇒ 没有存档时与改动前一致。
+        LayoutFill.SetFillsViewport(_scroll, true);
+        Content = new BlockHost(LayoutPageId, new List<BlockSpec>
+        {
+            new BlockSpec { Id = "header", Title = TipCL.Core.Launcher.I18nCore.Tr("标题栏"), Content = head },
+            new BlockSpec { Id = "chat", Title = TipCL.Core.Launcher.I18nCore.Tr("对话"), Content = _scroll },
+            new BlockSpec { Id = "input", Title = TipCL.Core.Launcher.I18nCore.Tr("输入区"), Content = bottom },
+        }, new Thickness(22, 18, 22, 16), DefaultLayout());
 
         RefreshModelLabel();
         RefreshPermissionLabel();
         RefreshInputState();
         RefreshUsage(null, _history);
+    }
+
+    /// <summary>布局文档里的页面 id(设置 → 布局 → 页面区块里的「AI 助手」)。</summary>
+    public const string LayoutPageId = "ai";
+
+    /// <summary>[layout-fix 第三批] 出厂布局:单列纵向、区块间距 0、边距同原根 Grid ⇒ 默认外观与拆块前一致。</summary>
+    internal static TipCL.Core.Launcher.Layout.PageLayoutV2 DefaultLayout()
+    {
+        var page = new TipCL.Core.Launcher.Layout.PageLayoutV2
+        {
+            Mode = TipCL.Core.Launcher.Layout.LayoutSchema.ModeStack,
+            Gap = 0.0,
+            Pad = new double[] { 22.0, 18.0, 22.0, 16.0 },
+        };
+        page.Blocks.Add(new TipCL.Core.Launcher.Layout.BlockLayout { Id = "header", Span = 1, Z = 0 });
+        page.Blocks.Add(new TipCL.Core.Launcher.Layout.BlockLayout { Id = "chat", Span = 1, Z = 1 });
+        page.Blocks.Add(new TipCL.Core.Launcher.Layout.BlockLayout { Id = "input", Span = 1, Z = 2 });
+        return page;
     }
 
     /// <summary>把 IApi 收成 ToolRunner 要的最小门面(只用到 CallAsync)。</summary>

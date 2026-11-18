@@ -1479,6 +1479,33 @@ public static class LayoutGrid
 		return heights;
 	}
 
+	/// <summary>
+	/// [layout-fix 第三批]「吃满视口」块(见 LayoutFill.FillsViewport)在 grid 自动行高下该拿多高(纯函数):
+	/// = 可用高 − (除它所占各行之外的行高之和 + 全部行间距),不低于 <paramref name="minHeight"/>。
+	/// <paramref name="rowHeights"/> 是**不计这块**时量出的行高;它占 [<paramref name="fillY"/>, fillY+fillH) 这几行。
+	/// 可用高无限 / 非法时返回 0(= 不启用,调用方照常按内容测量)。
+	/// </summary>
+	public static double FillHeight(IReadOnlyList<double>? rowHeights, int fillY, int fillH, double gap, double available, double minHeight)
+	{
+		if (double.IsInfinity(available) || double.IsNaN(available) || available <= 0.0)
+		{
+			return 0.0;
+		}
+		double others = 0.0;
+		int rows = rowHeights?.Count ?? 0;
+		for (int i = 0; i < rows; i++)
+		{
+			if (i < fillY || i >= fillY + Math.Max(1, fillH))
+			{
+				others += rowHeights![i];
+			}
+		}
+		// 行间距按"实际行数"算:填充块的行至少算 1 行(行表里可能还没有它)
+		int total = Math.Max(rows, fillY + Math.Max(1, fillH));
+		others += Math.Max(0.0, gap) * Math.Max(0, total - 1);
+		return Math.Max(Math.Max(0.0, minHeight), available - others);
+	}
+
 	/// <summary>列宽(可用宽扣掉列间 gap 后平分;窄到负数时兜底 1px)。</summary>
 	public static double ColumnWidth(double availableWidth, int cols, double gap)
 	{

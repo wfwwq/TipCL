@@ -131,6 +131,16 @@ public sealed class GridCanvasPanel : Decorator
 	/// <summary>是否在编辑态(只有编辑态画底纹)。</summary>
 	public bool EditMode { get; set; }
 
+	/// <summary>
+	/// [layout-fix 第三批]「吃满视口」的块 id(null = 没有)。grid 自动行高、可用高有限(宿主关掉了外层纵向滚动)、
+	/// 该块没折叠也没拖过固定像素高时,它按 <see cref="LayoutGrid.FillHeight"/> 拿视口剩下的高度并按它测量 ——
+	/// 自带滚动条的内容(AI 对话区)因此保住自身滚动与吸底。
+	/// </summary>
+	public string? FillId { get; set; }
+
+	/// <summary>[layout-fix 第三批] 吃满视口块的最小高度(视口太矮时宁可整体被裁,也不把对话区压没)。</summary>
+	public const double MinFillHeight = 120.0;
+
 	// ————— 排布结果(宿主与测试只读) —————
 
 	/// <summary>可见块槽位(与页面里的可见顺序一致;canvas 已按 z 序叠放交付)。</summary>
@@ -349,6 +359,11 @@ public sealed class GridCanvasPanel : Decorator
 		_columnWidth = LayoutGrid.ColumnWidth(width, Cols, Gap);
 		Dictionary<string, double> desired = new Dictionary<string, double>(StringComparer.Ordinal);
 		HashSet<string> noMin = new HashSet<string>(StringComparer.Ordinal);
+		// [layout-fix 第三批] 吃满视口块:先跳过,等其它块量完、行高算出来再按剩余高度量它
+		bool fillOpen = RowH <= 0.0 && !string.IsNullOrEmpty(FillId) && !double.IsInfinity(available.Height) && available.Height > 0.0;
+		Control? fillChild = null;
+		LayoutCell? fillCell = null;
+		double fillWidth = 0.0;
 		foreach (Control child in Children)
 		{
 			string id = IdOf(child);
@@ -359,6 +374,15 @@ public sealed class GridCanvasPanel : Decorator
 				continue;
 			}
 			double cellWidth = _columnWidth * cell.W + Gap * Math.Max(0, cell.W - 1);
+			if (fillOpen && fillChild == null && string.Equals(id, FillId, StringComparison.Ordinal) && !FoldedOf(child) && cell.HeightPx <= 0.0)
+			{
+				fillChild = child;
+				fillCell = cell;
+				fillWidth = cellWidth;
+				desired[id] = 0.0;
+				noMin.Add(cell.Id);
+				continue;
+			}
 			// [layout-fix] 参考件v2-对齐:编辑态折叠的区块只占标题栏高度;拖出了固定高度(HeightPx)的区块
 			// 按固定高度量(内容改在块内滚动),这两种都不参与行高下限(MinH),否则行高会被内容顶回去。
 			bool folded = FoldedOf(child);
@@ -398,6 +422,15 @@ public sealed class GridCanvasPanel : Decorator
 			}
 		}
 		_rowHeights = LayoutGrid.RowHeights(rowCells, _rows, RowH, desired, RowFallback);
+		if (fillChild != null && fillCell != null)
+		{
+			// 不计填充块时的行高 → 它该拿的高度 → 按这个有限高度量它(它自带的滚动条因此有界)→ 重算行高
+			double[] without = LayoutGrid.RowHeights(WithoutCell(rowCells, fillCell.Id), _rows, RowH, desired, RowFallback);
+			double fillHeight = LayoutGrid.FillHeight(without, fillCell.Y, fillCell.H, Gap, available.Height, MinFillHeight);
+			fillChild.Measure(new Size(Math.Max(1.0, fillWidth), fillHeight));
+			desired[fillCell.Id] = fillHeight;
+			_rowHeights = LayoutGrid.RowHeights(rowCells, _rows, RowH, desired, RowFallback);
+		}
 		_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
 		double total = 0.0;
 		for (int i = 0; i < _rowHeights.Length; i++)
@@ -501,6 +534,20 @@ public sealed class GridCanvasPanel : Decorator
 				context.DrawLine(pen, new Point(0.0, y2 - Gap / 2.0), new Point(width, y2 - Gap / 2.0));
 			}
 		}
+	}
+
+	// [layout-fix 第三批] 行高输入表去掉某一块(填充块"不计它"的那一遍)
+	private static List<LayoutCell> WithoutCell(List<LayoutCell> cells, string id)
+	{
+		List<LayoutCell> list = new List<LayoutCell>(cells.Count);
+		foreach (LayoutCell cell in cells)
+		{
+			if (cell != null && !string.Equals(cell.Id, id, StringComparison.Ordinal))
+			{
+				list.Add(cell);
+			}
+		}
+		return list;
 	}
 
 	// canvas 画布高:优先宿主给的有限高,否则用参考高(滚动区里量到的高是 Infinity)

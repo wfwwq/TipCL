@@ -90,6 +90,14 @@ public sealed class LayoutEditor
 
 	private readonly Grid _root;
 
+	// [layout-fix 第三批] 底部托盘 + 工具条的外壳。它常驻时(子元素都隐藏)仍占 8 + 下边距的一条空带(约 24px):
+	// 既有区块页的默认外观就是带着这条空带对齐过的(启动页的英雄区按剩余高度居中,去掉会整体下移),所以照旧;
+	// 「吃满视口」的页(AI 页输入区要贴底,对齐拆块前的 Grid)自动在非编辑态把它收起;其它新拆块的页
+	// (版本安装 / 版本管理 / 设置 → 布局)经 CollapseIdleBottom 显式要求收起,滚动视口才与拆块前同一条下沿。
+	private readonly StackPanel _bottom;
+
+	private bool _collapseIdleBottom;
+
 	private bool _edit;
 
 	private LayoutCard? _dragCard;
@@ -214,6 +222,13 @@ public sealed class LayoutEditor
 			}
 		}
 		_list.Margin = (_marginOverride ?? new Thickness(18.0, 14.0, 18.0, 16.0));
+		foreach (BlockSpec spec in _specs)
+		{
+			if (LayoutFill.GetFillsViewport(spec.Content))
+			{
+				_collapseIdleBottom = true;
+			}
+		}
 		// 底部托盘(编辑态):已隐藏区块以「+ 标题」chip 呈现,点击恢复
 		StackPanel trayPanel = U.V(6.0, U.Muted(I18nCore.Tr("已隐藏的区块")), _tray);
 		_trayHost.CornerRadius = new CornerRadius(8.0);
@@ -303,6 +318,8 @@ public sealed class LayoutEditor
 		// 根结构:上滚动内容区,下托盘/工具条(仅编辑态占位出现,不悬浮遮挡内容)
 		StackPanel bottom = U.V(8.0, _trayHost, _barHost);
 		bottom.Margin = new Thickness(_list.Margin.Left, 8.0, _list.Margin.Right, _list.Margin.Bottom);
+		_bottom = bottom;
+		_bottom.IsVisible = !_collapseIdleBottom;
 		_root = U.G("*,Auto");
 		// [Avalonia] Windows 的 SmoothScroll 在 Linux 树没有等价物 ⇒ 用原生 ScrollViewer(像素滚动,无平滑动画)。
 		_scroll = new ScrollViewer
@@ -350,6 +367,26 @@ public sealed class LayoutEditor
 
 	/// <summary>布局发生变更(保存后)时触发;BlockHost 转发成自己的 Changed。</summary>
 	public event Action? Changed;
+
+	/// <summary>
+	/// [layout-fix 第三批] 非编辑态是否收起底部托盘 / 工具条外壳(收起 = 不占那条约 24px 的空带)。
+	/// 缺省 false(既有区块页照旧);页面里有「吃满视口」块时自动为 true。
+	/// </summary>
+	public bool CollapseIdleBottom
+	{
+		get
+		{
+			return _collapseIdleBottom;
+		}
+		set
+		{
+			_collapseIdleBottom = value;
+			if (!_edit)
+			{
+				_bottom.IsVisible = !value;
+			}
+		}
+	}
 
 	/// <summary>是否处于编辑态。</summary>
 	public bool IsEditing
@@ -440,6 +477,7 @@ public sealed class LayoutEditor
 		CompactState();
 		Render();
 		_barHost.IsVisible = true;
+		_bottom.IsVisible = true;
 		// 键盘(§4.G)需要根元素拿到焦点;拿不到也不影响鼠标交互
 		try
 		{
@@ -540,6 +578,7 @@ public sealed class LayoutEditor
 		_session.ClearHistory();
 		_trayHost.IsVisible = false;
 		_barHost.IsVisible = false;
+		_bottom.IsVisible = !_collapseIdleBottom;
 		if (untouched == null)
 		{
 			LayoutFx.ShowToast(I18nCore.Tr("布局已保存"), "", ToastKind.Success);
@@ -667,11 +706,26 @@ public sealed class LayoutEditor
 			// 修复"插件页空状态占位不再垂直居中"(改版前主体在页面根 Grid 的 * 行里,天然占满剩下的高度)。
 			// 只认"它正好是最后一块"这一种情况;没挂标记的页面 FillChild = null ⇒ 渲染与改动前一模一样。
 			_list.FillChild = ((_edit || lastCard == null) ? null : MarkedFill(lastId, lastCard));
+			// [layout-fix 第三批]「吃满视口」块(AI 对话区):关掉外层纵向滚动,让纵向流拿到有限高度,
+			// 该块按 Auto,*,Auto 的 * 行拿剩余高度 —— 它自己的滚动条与吸底才保得住。没有这种块的页一切照旧。
+			string? viewportFill = ViewportFillId(plan.VisibleIds);
+			if (viewportFill != null && _cards.TryGetValue(viewportFill, out LayoutCard? fillCard))
+			{
+				_list.FillChild = fillCard;
+				_list.BoundFill = true;
+			}
+			else
+			{
+				_list.BoundFill = false;
+			}
+			_scroll.VerticalScrollBarVisibility = (_list.BoundFill ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
 		}
 		else
 		{
 			// 多列行不参与:行内 Grid 的高度由该行最高的一块决定,旧版也没有对应的"吃剩余高度"结构
 			_list.FillChild = null;
+			_list.BoundFill = false;
+			_scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
 			foreach (LayoutRow row in plan.Rows)
 			{
 				_list.Children.Add(BuildRow(row, plan));
@@ -693,6 +747,10 @@ public sealed class LayoutEditor
 		_box.SetLayout(page.Mode, LayoutGrid.Columns(page), page.RowH, gap, page);
 		_box.SnapStep = _snapStep;
 		_box.EditMode = _edit;
+		// [layout-fix 第三批] grid 自动行高下的「吃满视口」块:外层纵向滚动关掉,画布拿到有限高度,该块所在行吃剩余高度
+		string? boxFill = ((page.Mode == LayoutSchema.ModeGrid && page.RowH <= 0.0) ? ViewportFillId(_state.VisibleIds()) : null);
+		_box.FillId = boxFill;
+		_boxScroll.VerticalScrollBarVisibility = ((boxFill != null) ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
 		_box.Margin = (_marginOverride ?? PadOf(_state.Plan()));
 		_box.Children.Clear();
 		foreach (LayoutCell cell in LayoutCanvas.StackedOrder(_box.Cells))
@@ -743,6 +801,19 @@ public sealed class LayoutEditor
 		if (_byId.TryGetValue(blockId, out BlockSpec? spec) && spec.Content != null && LayoutFill.GetFillsBody(spec.Content))
 		{
 			return card;
+		}
+		return null;
+	}
+
+	// [layout-fix 第三批] 可见块里第一个「吃满视口」的块(内容挂了 LayoutFill.FillsViewport);没有返回 null
+	private string? ViewportFillId(IEnumerable<string> visibleIds)
+	{
+		foreach (string id in visibleIds)
+		{
+			if (_byId.TryGetValue(id, out BlockSpec? spec) && LayoutFill.GetFillsViewport(spec.Content))
+			{
+				return id;
+			}
 		}
 		return null;
 	}
@@ -2242,7 +2313,9 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 	{
 		_boxMode = ((mode == LayoutSchema.ModeGrid || mode == LayoutSchema.ModeCanvas) ? mode : LayoutSchema.ModeStack);
 		// [layout-fix] 参考件v2-对齐:窄宽自适应只在画布模式开(stack 的默认渲染一个像素都不经过它)
-		_fit.Enabled = _boxMode != LayoutSchema.ModeStack;
+		// [layout-fix 第三批]「吃满视口」的内容(自带滚动条)不参与等比缩放:FitBox 会用无限高去量它的"自然尺寸",
+		// 对话区一旦被判成"矮内容"就会被整体缩小
+		_fit.Enabled = _boxMode != LayoutSchema.ModeStack && !LayoutFill.GetFillsViewport(_body.Content as Control);
 		if (!_edit)
 		{
 			_handleLayer.IsVisible = false;

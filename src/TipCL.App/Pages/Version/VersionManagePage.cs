@@ -107,8 +107,22 @@ public sealed class VersionManagePage : PageBase
     private string _rootPath = "";
     private Control? _shell;
 
-    public VersionManagePage() : base("instance", "版本管理")
+    /// <summary>独立页(顶栏「版本管理」)在布局文档里的页面 id(设置 → 布局 → 页面区块里的「版本管理」)。</summary>
+    public const string LayoutPageId = "version-manage";
+
+    /// <summary>
+    /// 嵌在「实例详情」里时用的页面 id —— 与独立页**分开存**:同一个页面类在两处的版面需求不同
+    /// (嵌入时外面已经有实例详情的标题与分段栏),共用一份布局会互相覆盖。
+    /// </summary>
+    public const string EmbeddedLayoutPageId = "instance:versions";
+
+    /// <summary>本实例实际使用的布局页面 id(<see cref="LayoutPageId"/> 或 <see cref="EmbeddedLayoutPageId"/>)。</summary>
+    public string LayoutId { get; }
+
+    /// <param name="embedded">true = 嵌在实例详情里(布局用 <see cref="EmbeddedLayoutPageId"/> 单独存)。</param>
+    public VersionManagePage(bool embedded = false) : base("instance", "版本管理")
     {
+        LayoutId = embedded ? EmbeddedLayoutPageId : LayoutPageId;
         // ── 左栏:文件夹列表卡 ──
         var add = U.Btn("添加已有文件夹", BtnKind.Soft, (_, _) => Run(AddFolderAsync, "导入失败"), "Folder");
         var pack = U.Btn("导入整合包", BtnKind.Soft, (_, _) => Run(ImportPackAsync), "Box");
@@ -127,20 +141,53 @@ public sealed class VersionManagePage : PageBase
         _search.TextChanged += (_, _) => RenderGroups();
         var head = UiClass.Section("版本选择", "双击版本直接启动;卡片右侧:收藏 / 卸载 / 设置",
             UiClass.H(8, _count.VCenter(), _search.VCenter(), refresh));
-        var right = UiClass.V(12, head, _groupsHost, _empty);
-        right.VerticalAlignment = VerticalAlignment.Top;
+        var list = UiClass.V(12, _groupsHost, _empty);
+        list.VerticalAlignment = VerticalAlignment.Top;
         _empty.IsVisible = false;
+
+        // [layout-fix 第三批] 右栏拆成可拖动的区块 BlockHost(LayoutId):header =「版本选择」标题行(计数 / 过滤 / 刷新)、
+        // versions =「版本列表」(分组 + 空状态)。原来右栏是 V(12, head, groups, empty) ⇒ 区块间距 12、块内 V(12) 原样,
+        // 没有存档时逐行位置不变。
+        // 左栏「文件夹列表」**留在分栏里、不做成区块**:它是 272px 定宽列(R32-LINSPLIT 的可拖分隔条 + 比例存储),
+        // 区块网格只有按列等分的宽度,做成区块就回不到 272px —— 违背「没有存档时外观不变」。
+        var blocks = new BlockHost(LayoutId, new List<BlockSpec>
+        {
+            new BlockSpec { Id = "header", Title = I18nCore.Tr("版本选择"), Content = head },
+            new BlockSpec { Id = "versions", Title = I18nCore.Tr("版本列表"), Content = list },
+        }, new Thickness(0, 20, 22, 20), DefaultLayout())
+        {
+            // 非编辑态收起宿主底部托盘外壳 ⇒ 滚动视口铺到页面底边,与拆块前的外层 ScrollViewer 一致
+            CollapseIdleBottom = true,
+        };
 
         // R32-LINSPLIT:分栏(设计 §4.E 第 6 处)= 272px + 18px 留白 + 右栏。
         // 分隔条直接复用现状那 18px 空白列 ⇒ 与改动前的 `G(null,"272,18,*")` 逐像素等价;
         // 比例存 v2 splits["version-manage"]["nav"],双击分隔条复位(见 Controls/PageLayoutHost.cs)。
+        // [layout-fix 第三批] 原来整张分栏套在一个外层 ScrollViewer 里(边距 22,20,22,20);现在右栏的区块宿主自带滚动,
+        // 左栏卡片放进自己的 ScrollViewer。上 / 下 / 右的 20/20/22 移进两侧滚动区的内容边距(滚动区仍铺满到页边),
+        // 静止时每个元素的位置与改动前一致;区别是两栏各自滚动(编辑态的工具条因此贴在视口底部,不会滚出屏幕)。
+        folderCard.Margin = new Thickness(0, 20, 0, 20);
+        var left = new ScrollViewer { Content = folderCard, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var grid = new PageLayoutHost("version-manage", "nav", new GridLength(272.0), new GridLength(1.0, GridUnitType.Star));
-        grid.SetLeft(folderCard);
-        grid.SetRight(right);
-        grid.Margin = new Thickness(22, 20, 22, 20);
-        var scroll = new ScrollViewer { Content = grid, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
-        _shell = scroll;
-        Body = scroll;
+        grid.SetLeft(left);
+        grid.SetRight(blocks);
+        grid.Margin = new Thickness(22, 0, 0, 0);
+        _shell = grid;
+        Body = grid;
+    }
+
+    /// <summary>[layout-fix 第三批] 右栏出厂布局:单列纵向、间距 12(= 原右栏 V(12) 的间距)。</summary>
+    internal static TipCL.Core.Launcher.Layout.PageLayoutV2 DefaultLayout()
+    {
+        var page = new TipCL.Core.Launcher.Layout.PageLayoutV2
+        {
+            Mode = TipCL.Core.Launcher.Layout.LayoutSchema.ModeStack,
+            Gap = 12.0,
+            Pad = new double[] { 0.0, 20.0, 22.0, 20.0 },
+        };
+        page.Blocks.Add(new TipCL.Core.Launcher.Layout.BlockLayout { Id = "header", Span = 1, Z = 0 });
+        page.Blocks.Add(new TipCL.Core.Launcher.Layout.BlockLayout { Id = "versions", Span = 1, Z = 1 });
+        return page;
     }
 
     // ───────────────────────────── 生命周期 ─────────────────────────────

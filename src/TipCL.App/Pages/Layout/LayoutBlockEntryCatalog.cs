@@ -31,6 +31,12 @@ public static class LayoutBlockEntryCatalog
 		public string Label { get; init; } = "";
 
 		public bool SingleBlock { get; init; }
+
+		/// <summary>
+		/// [layout-fix 第三批] 这一页要先由用户打开到具体对象才会出现(例:版本安装页要先点一个版本)。
+		/// 非空 = 跳过去之后找不到宿主时给的提示正文(已经过文案门面前的中文原文)。
+		/// </summary>
+		public string NeedsContext { get; init; } = "";
 	}
 
 	// [移植差异] Windows 的 14 条(stable @ 0a304a7)按 Windows 宿主编目:
@@ -67,6 +73,11 @@ public static class LayoutBlockEntryCatalog
 		new Entry { PageId = "catalog:resourcepack", NavId = "download", Segment = 4, Label = "资源目录 · 资源包" },
 		new Entry { PageId = "catalog:shader", NavId = "download", Segment = 5, Label = "资源目录 · 光影包" },
 		new Entry { PageId = "catalog:world", NavId = "download", Segment = 6, Label = "资源目录 · 世界" },
+		// [layout-fix 第三批] 新拆成区块的四页:AI 助手 / 版本安装 / 版本管理 / 设置 → 布局
+		new Entry { PageId = "ai", NavId = "ai", Label = "AI 助手" },
+		new Entry { PageId = "install", NavId = "download", Segment = 0, Label = "版本安装", NeedsContext = "先在「下载 → 原版」里点一个版本进入安装页,再在页面上右键「自定义布局...」" },
+		new Entry { PageId = "version-manage", NavId = "instance", Label = "版本管理" },
+		new Entry { PageId = "settings:layout", NavId = "settings", SettingsView = 7, Label = "设置 · 布局" },
 	};
 
 	/// <summary>只有单个区块的页面 id 集合(照 Windows:界面拿它换提示文案)。</summary>
