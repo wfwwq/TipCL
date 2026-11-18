@@ -169,6 +169,20 @@ public sealed class LayoutEditor
 	// 被拖块**原来的**列(左右互换的候选落点;见 LayoutGrid.Compact 的 swapX)
 	private LayoutRect _gestureAnchor;
 
+	// [layout-fix 第三批·任务 B] 丝滑拖动的手势状态:
+	//   _gestureRects   = 起手时每个手势块的像素矩形(浮起的起点 / 改大小的基准)
+	//   _gestureTarget  = 上一次算出的落点 / 吸附尺寸的指纹 —— 只有它变了才重新让位 + 排布(其余帧只改平移)
+	//   _snapHad/Dx/Dy  = canvas 上一帧的磁性吸附状态(吸住 / 松开那一下用短动画过渡)
+	private readonly Dictionary<string, LayoutRect> _gestureRects = new Dictionary<string, LayoutRect>(StringComparer.Ordinal);
+
+	private string _gestureTarget = "";
+
+	private bool _snapHad;
+
+	private double _snapDx;
+
+	private double _snapDy;
+
 	// 工具条上的撤销/重做按钮(按栈的可用性置灰)
 	private Button? _undoBtn;
 
@@ -1357,6 +1371,12 @@ public sealed class LayoutEditor
 	// 起手:记下手势前的页面(真拖起来才压进撤销栈)+ 所有选中块的起始槽位(用绝对值算位移,避免逐帧累积误差)
 	private void StartGesture(string kind, LayoutCard card, PointerPressedEventArgs e)
 	{
+		// [任务 B] 上一段动画还没放完就开始新手势:先推到终点,保证起手矩形 / 命中与看到的一致
+		_box.FinishAnimations();
+		_gestureTarget = "";
+		_snapHad = false;
+		_snapDx = 0.0;
+		_snapDy = 0.0;
 		// [layout-fix] 规格2-问题2.2:先留"全部槽位 + 行高"的快照 ——
 		// 之后每一帧都从这份快照重算,让位不累积;行高快照用来把指针位置折算成行号。
 		_gestureAll.Clear();
@@ -1394,6 +1414,15 @@ public sealed class LayoutEditor
 			}
 		}
 		_gestureAnchor = (_box.RectOf(card.Spec.Id) ?? default(LayoutRect));
+		_gestureRects.Clear();
+		foreach (string id in _gestureCells.Keys)
+		{
+			LayoutRect? rect = _box.RectOf(id);
+			if (rect.HasValue)
+			{
+				_gestureRects[id] = rect.Value;
+			}
+		}
 		// [Avalonia] CaptureMouse → e.Pointer.Capture(_box)
 		_boxPointer = e.Pointer;
 		e.Pointer.Capture(_box);
@@ -1517,12 +1546,13 @@ public sealed class LayoutEditor
 		if (_box.IsCanvas)
 		{
 			ApplyCanvasGesture(dx, dy);
+			_box.Reflow();
 		}
 		else
 		{
+			// [任务 B] grid:每帧只改被拖块的平移 / 像素尺寸;落点变了才在里面重新让位 + 排布
 			ApplyGridGesture(dx, dy);
 		}
-		_box.Reflow();
 	}
 
 	private void OnBoxGestureEnd(object? sender, PointerReleasedEventArgs e)
@@ -1543,6 +1573,13 @@ public sealed class LayoutEditor
 		// 框选、没越过拖动距离的单击只改了选择:布局没动,撤销栈里也没压东西,不提交也不重画。
 		bool movedSomething = _gestureMoved && (_gesture == "move" || _gesture == "resize");
 		List<string> touchedIds = new List<string>(_gestureCells.Keys);
+		// [任务 B] 收尾前记下浮起状态:改大小的块要从"手里的像素矩形"落位到吸附尺寸
+		bool wasResize = _gesture == "resize";
+		Dictionary<string, LayoutRect> floats = new Dictionary<string, LayoutRect>(_box.Floating, StringComparer.Ordinal);
+		_box.ShowPlaceholder = false;
+		_box.ClearFloating();
+		_gestureRects.Clear();
+		_gestureTarget = "";
 		_autoScroll?.Stop();
 		_gesture = "";
 		_gestureHandle = "";
@@ -1561,7 +1598,20 @@ public sealed class LayoutEditor
 		_guide.Clear();
 		if (!movedSomething)
 		{
+			foreach (string id in touchedIds)
+			{
+				if (_cards.TryGetValue(id, out LayoutCard? idle))
+				{
+					LayoutMotion.SetOffset(idle, 0.0, 0.0);
+				}
+			}
 			return;
+		}
+		// [任务 B] 取消 / 松手都从"现在看起来的位置"滑到最终位置:被拖块带着手里的平移做 FLIP,
+		// 让过位的块同样 FLIP;改大小的块另走落位(像素矩形 → 吸附后的槽位矩形)
+		if (!_box.IsCanvas)
+		{
+			_box.ArmFlip();
 		}
 		if (rollback || !persist)
 		{
@@ -1572,9 +1622,26 @@ public sealed class LayoutEditor
 				_session.Retain(_state.Order);
 			}
 			Render();
+			if (wasResize)
+			{
+				BeginLandings(floats);
+			}
 			return;
 		}
 		CommitBox(touchedIds);
+		if (wasResize)
+		{
+			BeginLandings(floats);
+		}
+	}
+
+	// [任务 B] 改大小松手:每块从手里的像素矩形补间到吸附后的槽位矩形
+	private void BeginLandings(Dictionary<string, LayoutRect> floats)
+	{
+		foreach (KeyValuePair<string, LayoutRect> kv in floats)
+		{
+			_box.BeginLanding(kv.Key, kv.Value);
+		}
 	}
 
 	// 画布槽位 → 页面块 → v2(唯一入口 LayoutStoreV2)并落盘
@@ -1629,6 +1696,15 @@ public sealed class LayoutEditor
 		if (primary != null && rect.HasValue)
 		{
 			LayoutGuideResult guides = LayoutGuides.Align(rect.Value, OtherRects(primary, true), LayoutGuides.Threshold);
+			// [任务 B] 磁性吸附"吸住 / 松开 / 换吸附位"的那一帧:用短动画过渡这一下跳变,而不是瞬移
+			bool snapping = _gesture == "move" && guides.HasSnap;
+			if (LayoutMotion.SnapChanged(_snapHad, _snapDx, _snapDy, snapping, guides.Dx, guides.Dy))
+			{
+				_box.ArmFlip(LayoutMotion.SnapMs);
+			}
+			_snapHad = snapping;
+			_snapDx = (snapping ? guides.Dx : 0.0);
+			_snapDy = (snapping ? guides.Dy : 0.0);
 			if (_gesture == "move" && guides.HasSnap)
 			{
 				// 磁性吸附:整组跟着一起吸(差量对所有选中块相同)
@@ -1664,19 +1740,18 @@ public sealed class LayoutEditor
 		{
 			return;
 		}
-		// 1 全部槽位回到起手时的样子(让位不累积)
-		foreach (KeyValuePair<string, LayoutCell> kv in _gestureAll)
+		// [任务 B] 第一次真拖起来:手势块浮起(排在起手的像素矩形上),画布开始画落点占位框
+		if (_box.Floating.Count == 0)
 		{
-			LayoutCell? cell = _box.CellOf(kv.Key);
-			if (cell != null)
+			foreach (KeyValuePair<string, LayoutRect> kv in _gestureRects)
 			{
-				cell.X = kv.Value.X;
-				cell.Y = kv.Value.Y;
-				cell.W = kv.Value.W;
-				cell.H = kv.Value.H;
+				_box.SetFloating(kv.Key, kv.Value);
 			}
+			_box.ShowPlaceholder = true;
+			_box.InvalidateVisual();
 		}
 		Dictionary<string, int>? swap = null;
+		string target;
 		if (_gesture == "resize")
 		{
 			// [layout-fix] 规格2-问题2.2 + 参考件v2-对齐:宽度按列改;高度在**自动行高**的页面(由 stack 转来的都是)
@@ -1686,6 +1761,40 @@ public sealed class LayoutEditor
 			int dr = (autoRows ? 0 : (int)Math.Round(dy / Math.Max(1.0, _state.Page.RowH + _box.Gap)));
 			int dc = (int)Math.Round(dx / columnStep);
 			int minCols = Math.Min(cols, MinCols(cols));
+			// [任务 B] 卡片按**像素**跟手改大小(只重排这一张);占位框 = 吸附后的槽位尺寸
+			double minW = _box.ColumnWidthValue * minCols + _box.Gap * Math.Max(0, minCols - 1);
+			double full = _box.ColumnWidthValue * cols + _box.Gap * Math.Max(0, cols - 1);
+			double minH = (autoRows ? MinBlockPx : Math.Max(1.0, _state.Page.RowH));
+			foreach (KeyValuePair<string, LayoutRect> kv in _gestureRects)
+			{
+				_box.SetFloating(kv.Key, LayoutMotion.ResizePixels(kv.Value, _gestureHandle, dx, dy, minW, minH, full - kv.Value.X));
+			}
+			if (_box.Floating.TryGetValue(primary, out LayoutRect live))
+			{
+				Point corner = _box.TranslatePoint(new Point(live.X + live.W, live.Y + live.H), _guide) ?? new Point(live.X + live.W, live.Y + live.H);
+				_guide.ShowSize(corner, LayoutMotion.SizeLabel(live.W, live.H));
+			}
+			// 吸附后的目标(列数 / 行数 / 像素高)指纹:没变就不重新让位
+			System.Text.StringBuilder key = new System.Text.StringBuilder("r");
+			Dictionary<string, double> heights = new Dictionary<string, double>(StringComparer.Ordinal);
+			foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
+			{
+				key.Append('|').Append(kv.Key);
+				if (autoRows && _gestureHandle.IndexOf('s') >= 0)
+				{
+					double startH = (_gestureRects.TryGetValue(kv.Key, out LayoutRect r0) ? r0.H : _gestureAnchor.H);
+					double px = LayoutMotion.SnapHeightPx(startH, dy, _snapStep, MinBlockPx);
+					heights[kv.Key] = px;
+					key.Append(':').Append(px.ToString("0"));
+				}
+			}
+			key.Append('|').Append(dc).Append(',').Append(dr);
+			target = key.ToString();
+			if (target == _gestureTarget)
+			{
+				return;
+			}
+			RestoreGestureSnapshot();
 			foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
 			{
 				LayoutCell? cell = _box.CellOf(kv.Key);
@@ -1707,23 +1816,31 @@ public sealed class LayoutEditor
 						cell.X = Math.Max(0, cols - cell.W);
 					}
 				}
-				if (autoRows && _gestureHandle.IndexOf('s') >= 0)
+				if (heights.TryGetValue(kv.Key, out double fixedPx))
 				{
-					double startH = (string.Equals(kv.Key, primary, StringComparison.Ordinal) ? _gestureAnchor.H : (_box.RectOf(kv.Key)?.H ?? _gestureAnchor.H));
-					double step = Math.Max(1.0, _snapStep);
-					double px = Math.Round(Math.Max(MinBlockPx, startH + dy) / step) * step;
-					cell.HeightPx = Math.Max(MinBlockPx, px);
+					cell.HeightPx = fixedPx;
 					CardFor(kv.Key).SetFixedHeight(true);
 				}
 			}
 		}
 		else
 		{
-			// 列:卡片左上角跟随指针 → 最近的列
-			int nx = (int)Math.Round((_gestureAnchor.X + dx) / columnStep);
-			nx = Math.Max(0, Math.Min(cols - start.W, nx));
-			// 行:指针落在第几行(带半个间距的容差)
-			int ny = LayoutGrid.RowAt(_gestureRows, _gestureStart.Y + dy, _box.Gap);
+			// [任务 B] 被拖块按像素跟手:只改平移,不重新布局(浮起矩形 = 起手矩形,平移 = 指针位移)
+			foreach (string id in _gestureCells.Keys)
+			{
+				if (_cards.TryGetValue(id, out LayoutCard? moving))
+				{
+					LayoutMotion.SetOffset(moving, dx, dy);
+				}
+			}
+			// 落点规则不变(纯函数):列 = 卡片左上角跟随指针后的最近列;行 = 指针所在的行(手势开始时的行高快照)
+			(int nx, int ny) = LayoutMotion.GridDropTarget(_gestureAnchor.X, dx, columnStep, cols, start.W, _gestureRows, _gestureStart.Y + dy, _box.Gap);
+			target = "m|" + nx + "," + ny;
+			if (target == _gestureTarget)
+			{
+				return;
+			}
+			RestoreGestureSnapshot();
 			int dcol = nx - start.X;
 			int drow = ny - start.Y;
 			foreach (KeyValuePair<string, LayoutCell> kv in _gestureCells)
@@ -1744,10 +1861,29 @@ public sealed class LayoutEditor
 					swap[kv.Key] = start.X;
 				}
 			}
+			_guide.Clear();
 		}
-		// 2 钉住被拖 / 缩放中的块,其余块实时让位(重力上浮 + 左右互换)
+		_gestureTarget = target;
+		// 钉住被拖 / 缩放中的块,其余块实时让位(重力上浮 + 左右互换);让位的块走 FLIP 滑过去
+		_box.ArmFlip();
 		_box.CompactCells(new HashSet<string>(_gestureCells.Keys, StringComparer.Ordinal), swap);
-		_guide.Clear();
+	}
+
+	// 全部槽位回到起手时的样子(让位不累积;每次落点变了都从这份快照重算)
+	private void RestoreGestureSnapshot()
+	{
+		foreach (KeyValuePair<string, LayoutCell> kv in _gestureAll)
+		{
+			LayoutCell? cell = _box.CellOf(kv.Key);
+			if (cell != null)
+			{
+				cell.X = kv.Value.X;
+				cell.Y = kv.Value.Y;
+				cell.W = kv.Value.W;
+				cell.H = kv.Value.H;
+				cell.HeightPx = kv.Value.HeightPx;
+			}
+		}
 	}
 
 	// 手势主角:多选时取选择里的第一块(它带动整组)
@@ -2054,6 +2190,7 @@ public sealed class LayoutEditor
 			return;
 		}
 		_session.PushUndo(_state.ToPage());
+		_box.ArmFlip();
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
 		_session.Retain(_state.Order);
 		Persist();
@@ -2094,6 +2231,8 @@ public sealed class LayoutEditor
 
 	private void ApplySnapshot(PageLayoutV2 page, string message, ToastKind kind)
 	{
+		// [任务 B] 撤销 / 重做也让块滑回去,而不是瞬移
+		_box.ArmFlip();
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
 		_session.Retain(_state.Order);
 		Persist();

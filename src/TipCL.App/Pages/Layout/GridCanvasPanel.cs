@@ -141,6 +141,135 @@ public sealed class GridCanvasPanel : Decorator
 	/// <summary>[layout-fix 第三批] 吃满视口块的最小高度(视口太矮时宁可整体被裁,也不把对话区压没)。</summary>
 	public const double MinFillHeight = 120.0;
 
+	// ————— [layout-fix 第三批·任务 B] 丝滑拖动:浮起 / 占位框 / FLIP / 落位 —————
+	//
+	// 浮起(floating):手势中的块不再按槽位排,而是排在宿主给的**像素矩形**上(拖动 = 起手时的矩形,
+	//   再由宿主改 RenderTransform 平移跟手;改大小 = 跟手的像素矩形)。它的槽位照常参与让位与行高,
+	//   槽位算出来的矩形就是**落点占位框**(半透明 + 主题色描边,画在所有卡片之下)。
+	// FLIP:宿主在"槽位要变"之前 ArmFlip();下一次排布里位置变了的块先用平移放回原来看起来的位置,再补间收回 0。
+	// 落位(landing):改大小松手后,卡片从像素矩形补间到吸附后的槽位矩形(位置 + 尺寸一起插值)。
+	private readonly Dictionary<string, LayoutRect> _floating = new Dictionary<string, LayoutRect>(StringComparer.Ordinal);
+
+	private readonly Dictionary<string, (LayoutRect From, double P)> _landing = new Dictionary<string, (LayoutRect From, double P)>(StringComparer.Ordinal);
+
+	private readonly Dictionary<string, Rect> _lastArranged = new Dictionary<string, Rect>(StringComparer.Ordinal);
+
+	private bool _flipArmed;
+
+	/// <summary>是否画落点占位框(拖动 / 改大小期间为 true)。</summary>
+	public bool ShowPlaceholder { get; set; }
+
+	/// <summary>当前浮起的块(id → 像素矩形)。</summary>
+	public IReadOnlyDictionary<string, LayoutRect> Floating
+	{
+		get
+		{
+			return _floating;
+		}
+	}
+
+	/// <summary>让某块浮起在像素矩形上(只触发重排,不重新测量)。</summary>
+	public void SetFloating(string id, LayoutRect rect)
+	{
+		if (string.IsNullOrEmpty(id))
+		{
+			return;
+		}
+		_floating[id] = rect;
+		InvalidateArrange();
+	}
+
+	/// <summary>收起全部浮起(不做动画;落位动画由宿主另行 ArmFlip / BeginLanding)。</summary>
+	public void ClearFloating()
+	{
+		if (_floating.Count == 0)
+		{
+			return;
+		}
+		_floating.Clear();
+		InvalidateArrange();
+		InvalidateVisual();
+	}
+
+	private double _flipMs = LayoutMotion.FlipMs;
+
+	/// <summary>下一次排布里位置变了的块做 FLIP 让位动画(一次性;<paramref name="durationMs"/> 缺省 160ms)。</summary>
+	public void ArmFlip(double durationMs = LayoutMotion.FlipMs)
+	{
+		_flipArmed = true;
+		_flipMs = durationMs;
+	}
+
+	/// <summary>改大小松手:该块从像素矩形 <paramref name="from"/> 补间到它的槽位矩形(位置 + 尺寸)。</summary>
+	public void BeginLanding(string id, LayoutRect from)
+	{
+		Control? child = ChildOf(id);
+		if (child == null)
+		{
+			return;
+		}
+		_landing[id] = (from, 0.0);
+		LayoutTween.Start(this, ("land", id), LayoutMotion.DropMs, delegate(double p)
+		{
+			if (_landing.ContainsKey(id))
+			{
+				_landing[id] = (from, p);
+				InvalidateArrange();
+			}
+		}, delegate
+		{
+			_landing.Remove(id);
+			InvalidateArrange();
+		});
+	}
+
+	/// <summary>把所有在途动画推到终点(新手势开始 / 重置 / 退出编辑时调,保证命中测试与视觉一致)。</summary>
+	public void FinishAnimations()
+	{
+		foreach (Control child in Children)
+		{
+			LayoutTween.Cancel(child, false);
+			LayoutMotion.SetOffset(child, 0.0, 0.0);
+		}
+		foreach (string id in new List<string>(_landing.Keys))
+		{
+			LayoutTween.Cancel(("land", id), false);
+		}
+		_landing.Clear();
+		_flipArmed = false;
+		InvalidateArrange();
+	}
+
+	/// <summary>离开可视树(切页 / 关窗)时把在途动画推到终点:不留半截平移,也不让补间驱动继续引用这些控件。</summary>
+	protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+	{
+		FinishAnimations();
+		base.OnDetachedFromVisualTree(e);
+	}
+
+	private Control? ChildOf(string id)
+	{
+		foreach (Control child in Children)
+		{
+			if (string.Equals(IdOf(child), id, StringComparison.Ordinal))
+			{
+				return child;
+			}
+		}
+		return null;
+	}
+
+	// FLIP:从"看起来的位置"(上次排布 + 残留平移)补间回新位置;同一块上的旧动画先取消(Start 内部)
+	private void StartFlip(Control child, Vector from)
+	{
+		LayoutMotion.SetOffset(child, from.X, from.Y);
+		LayoutTween.Start(this, child, _flipMs, delegate(double p)
+		{
+			Vector left = LayoutMotion.FlipRemaining(from, p);
+			LayoutMotion.SetOffset(child, left.X, left.Y);
+		});
+	}
+
 	// ————— 排布结果(宿主与测试只读) —————
 
 	/// <summary>可见块槽位(与页面里的可见顺序一致;canvas 已按 z 序叠放交付)。</summary>
@@ -214,9 +343,13 @@ public sealed class GridCanvasPanel : Decorator
 		InvalidateVisual();
 	}
 
+	/// <summary>[任务 B] Reflow 被调用的次数(测试用:落点没变的指针移动不该触发重新排布)。</summary>
+	internal int ReflowCount { get; private set; }
+
 	/// <summary>槽位被就地改过(拖拽/缩放)之后重新排布。</summary>
 	public void Reflow()
 	{
+		ReflowCount++;
 		_rows = LayoutGrid.RowCount(_cells);
 		InvalidateMeasure();
 		InvalidateArrange();
@@ -459,16 +592,53 @@ public sealed class GridCanvasPanel : Decorator
 			_columnWidth = LayoutGrid.ColumnWidth(width, Cols, Gap);
 			_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
 		}
+		bool flip = _flipArmed;
+		_flipArmed = false;
 		foreach (Control child in Children)
 		{
-			LayoutRect? rect = RectOf(IdOf(child));
+			string id = IdOf(child);
+			LayoutRect? rect = RectOf(id);
 			if (!rect.HasValue)
 			{
 				child.Arrange(new Rect(0.0, 0.0, 0.0, 0.0));
 				continue;
 			}
 			LayoutRect value = rect.Value;
-			child.Arrange(new Rect(value.X, value.Y, value.W, value.H));
+			Rect target;
+			if (_floating.TryGetValue(id, out LayoutRect floatRect))
+			{
+				// [任务 B] 手势中的块:排在像素矩形上(跟手),不参与 FLIP
+				target = new Rect(floatRect.X, floatRect.Y, Math.Max(0.0, floatRect.W), Math.Max(0.0, floatRect.H));
+			}
+			else if (_landing.TryGetValue(id, out (LayoutRect From, double P) land))
+			{
+				// [任务 B] 改大小松手后的落位:像素矩形 → 槽位矩形,ease-out 插值
+				LayoutRect r = LayoutMotion.LerpRect(land.From, value, LayoutMotion.EaseOutCubic(land.P));
+				target = new Rect(r.X, r.Y, Math.Max(0.0, r.W), Math.Max(0.0, r.H));
+			}
+			else
+			{
+				target = new Rect(value.X, value.Y, value.W, value.H);
+				if (flip && _lastArranged.TryGetValue(id, out Rect prev))
+				{
+					Vector now = LayoutMotion.GetOffset(child);
+					Vector from = LayoutMotion.FlipOffset(prev.X + now.X, prev.Y + now.Y, target.X, target.Y);
+					if (from != default(Vector))
+					{
+						StartFlip(child, from);
+					}
+					else if (now != default(Vector))
+					{
+						// 起终点几乎重合(差 <0.5px)时不做动画,但手里残留的平移必须清掉,否则卡片会停在"槽位 + 拖动位移"处
+						LayoutTween.Cancel(child, false);
+						LayoutMotion.SetOffset(child, 0.0, 0.0);
+					}
+				}
+			}
+			child.Arrange(target);
+			_lastArranged[id] = target;
+			// 浮起的块盖在其它块上面
+			child.ZIndex = (_floating.ContainsKey(id) ? 1000 : 0);
 		}
 		return final;
 	}
@@ -517,6 +687,7 @@ public sealed class GridCanvasPanel : Decorator
 		{
 			return;
 		}
+		DrawPlaceholders(context, accent);
 		for (int k = 1; k < Cols; k++)
 		{
 			double x = k * (_columnWidth + Gap) - Gap / 2.0;
@@ -532,6 +703,30 @@ public sealed class GridCanvasPanel : Decorator
 			if (y2 > 0.0 && y2 < height)
 			{
 				context.DrawLine(pen, new Point(0.0, y2 - Gap / 2.0), new Point(width, y2 - Gap / 2.0));
+			}
+		}
+	}
+
+	// [任务 B] 落点占位框:每个浮起块的**槽位矩形**(= 松手后会落进去的位置 / 吸附后的尺寸),
+	// 半透明主题色底 + 主题色描边,画在所有卡片之下
+	private void DrawPlaceholders(DrawingContext context, Color accent)
+	{
+		if (!ShowPlaceholder || _floating.Count == 0)
+		{
+			return;
+		}
+		SolidColorBrush fill = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
+		Pen stroke = new Pen(new SolidColorBrush(Color.FromArgb(200, accent.R, accent.G, accent.B)), 1.5)
+		{
+			DashStyle = new DashStyle(new double[2] { 4.0, 3.0 }, 0.0)
+		};
+		foreach (string id in _floating.Keys)
+		{
+			LayoutRect? rect = RectOf(id);
+			if (rect.HasValue && rect.Value.W > 1.0 && rect.Value.H > 1.0)
+			{
+				LayoutRect r = rect.Value;
+				context.DrawRectangle(fill, stroke, new RoundedRect(new Rect(r.X + 0.75, r.Y + 0.75, r.W - 1.5, r.H - 1.5), 10.0));
 			}
 		}
 	}

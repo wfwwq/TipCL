@@ -1509,3 +1509,9 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - **本轮返工波次提交(全部子代理,产品代码零功能改动)**:`36d98d1` `f8af08f` `4171011` `506efe7` `aa1864f` `3fdee8a` `e8342b3` `09ea6eb` `9ac7621` `f1f5a94`。
 - **发布说明诚信口径(D-78)落地**:草案 §4 按 `veri-notes` 的 9+1 条逐条复核后重写 —— 删掉「设置里显式开启并二次确认」「13 处分栏全部可拖」「可编辑窄窗变体」这类查不到依据的断言,补上三条**真实的**自建区块创建路径与两条新的已知问题(入口未启用、`variants` 无编辑入口),体积口径改成带出处的自洽写法,`PASS 10/0` 更正为 **13/0**,Linux 自更新降级为代码级口径。
 - **红线(截至收尾)**:本地 main 领先 `origin/main`(`25c4e64`)**20+ 笔**且**从未 push**;tag 仍 16 个(最新 `v1.1.0`);`update.json`/`update-linux.json`/`LICENSE` 内容与位置**零变化**;两仓库工作区干净。
+
+## 2026-11-18 布局第三批（Linux，platform-linux）
+- 33c9cb5 任务0：22 条逐条核对。补修 14（拖动手柄换 Grip 图标）、20（FitBox 缩放原点固定左上，Avalonia 默认居中）、22（重置本页：新增纯函数 LayoutEngine.FactoryPage，内置块回出厂，custom:/plugin: 只清几何保留数据；LayoutPageState.Reset 与 Windows 6c520ca 同构）。15 不适用。
+- feb7426 任务A：ai / install / version-manage（嵌入 instance:versions）/ settings:layout 拆成区块；LayoutFill.FillsViewport 保 AI 对话吸底；新增 CollapseIdleBottom（新页去掉 24px 空托盘条）。
+- 任务B：网格拖动像素跟手 + 落点占位框 + FLIP 让位（160ms）+ 松手落位（180ms）+ 改大小像素跟随与尺寸标签；canvas 磁吸 110ms。修复：起终点差 <0.5px 时不做 FLIP 却残留拖动平移（卡片停在槽位+位移处）。
+- 测试：App 355（6 条 Feedback/SelfUpdate 基线失败），其余 423（6 条 AiRetry 基线失败），无新增失败。未真窗运行。
