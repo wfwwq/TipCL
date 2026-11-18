@@ -41,6 +41,9 @@ public sealed class LayoutEditor
 
 	private LayoutPageState _state;
 
+	// 「页面默认布局」:v2 文档里还没有这一页时的兜底(实例库的左右排布靠它)
+	private readonly PageLayoutV2? _defaultPage;
+
 	private readonly Border _trayHost = new Border();
 
 	private readonly WrapPanel _tray = new WrapPanel();
@@ -52,6 +55,11 @@ public sealed class LayoutEditor
 	private bool _edit;
 
 	private LayoutCard? _dragCard;
+
+	// 进编辑态时把 stack 临时折成 12 列网格(这样才能自由拖);没动过就在退出时还原
+	private bool _stackConverted;
+	private bool _layoutTouched;
+	private PageLayoutV2? _stackBackup;
 
 	// 拖拽手势状态:手柄捕获鼠标期间按缓存高度计算相邻块中点
 	private readonly Dictionary<string, double> _dragHeights = new Dictionary<string, double>();
@@ -106,10 +114,12 @@ public sealed class LayoutEditor
 	private Button? _snapBtn;
 
 	/// <summary>构造:pageId + 页面块描述 + 可选的页级边距覆盖(null = 用文档 pad,一般是 18,14,18,16)。</summary>
-	public LayoutEditor(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null)
+	/// <param name="defaultPage">「页面默认布局」:v2 文档里还没有这一页时用它(实例库靠它默认左右排布)。</param>
+	public LayoutEditor(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null, PageLayoutV2? defaultPage = null)
 	{
 		_pageId = pageId ?? "";
 		_marginOverride = contentMargin;
+		_defaultPage = defaultPage;
 		if (specs != null)
 		{
 			foreach (BlockSpec spec in specs)
@@ -148,20 +158,35 @@ public sealed class LayoutEditor
 			CycleSnapStep();
 		});
 		_snapBtn.ToolTip = I18n.L("吸附到栅格");
-		SPanel sPanel2 = Ui.H(8.0, _undoBtn, _redoBtn, _snapBtn, Ui.Btn(I18n.L("完成编辑"), BtnKind.Primary, delegate
+		// 按钮放进 WrapPanel:窄窗/高分屏下换行,不再像原来那样横向排一排被右侧裁掉半截。
+		WrapPanel barButtons = new WrapPanel
+		{
+			Orientation = Orientation.Horizontal
+		};
+		barButtons.Children.Add(_undoBtn);
+		barButtons.Children.Add(_redoBtn);
+		barButtons.Children.Add(_snapBtn);
+		barButtons.Children.Add(Ui.Btn(I18n.L("完成编辑"), BtnKind.Primary, delegate
 		{
 			ExitEdit();
-		}), Ui.Btn(I18n.L("重置本页"), BtnKind.Normal, delegate
+		}));
+		barButtons.Children.Add(Ui.Btn(I18n.L("重置本页"), BtnKind.Normal, delegate
 		{
 			ResetPage();
-		}), Ui.Btn(I18n.L("导出布局"), BtnKind.Normal, delegate
+		}));
+		barButtons.Children.Add(Ui.Btn(I18n.L("导出布局"), BtnKind.Normal, delegate
 		{
 			PageLayoutIO.ExportToFileDialog(_pageId);
-		}), Ui.Btn(I18n.L("导入布局"), BtnKind.Normal, delegate
+		}));
+		barButtons.Children.Add(Ui.Btn(I18n.L("导入布局"), BtnKind.Normal, delegate
 		{
 			ImportLayout();
 		}));
-		sPanel2.HorizontalAlignment = HorizontalAlignment.Right;
+		barButtons.HorizontalAlignment = HorizontalAlignment.Right;
+		// 一行操作提示(用户反馈"不知道能拖"):直接说清拖哪里、缩哪里。
+		TextBlock barHint = Ui.Txt(I18n.L("按住区块拖动移动 · 拖右/下边角缩放"), 11.5, bold: false, "B.InkMuted");
+		barHint.Margin = new Thickness(2.0, 4.0, 0.0, 0.0);
+		SPanel sPanel2 = Ui.V(0.0, barButtons, barHint);
 		_barHost.CornerRadius = new CornerRadius(10.0);
 		_barHost.Padding = new Thickness(10.0, 8.0, 10.0, 8.0);
 		_barHost.Visibility = Visibility.Collapsed;
@@ -254,6 +279,106 @@ public sealed class LayoutEditor
 		Render();
 	}
 
+	// stack → 12 列网格:按当前顺序逐行折算(每块占满一行),画面看起来不变,
+	// 但块从此可以上下左右拖、拖边角改尺寸。
+	private void PrepareEditableGrid()
+	{
+		_stackConverted = false;
+		_layoutTouched = false;
+		_stackBackup = null;
+		PageLayoutV2 page = _state.Page;
+		if (page == null || !string.Equals(page.Mode, LayoutSchema.ModeStack, StringComparison.Ordinal))
+		{
+			return;
+		}
+		_stackBackup = page.Clone();
+		_stackConverted = true;
+		page.Mode = LayoutSchema.ModeGrid;
+		page.Cols = 12;
+		page.RowH = 0.0;
+		_state.RebuildPage();
+		int row = 0;
+		foreach (BlockLayout block in page.Blocks)
+		{
+			block.X = 0.0;
+			block.Y = row;
+			block.W = 12.0;
+			block.H = 1.0;
+			block.Span = 12;
+			row++;
+		}
+	}
+
+	// 整场没动过:把页模式、列数与各块几何还原成进编辑前那一份。
+	private void RestoreStackAfterEdit()
+	{
+		PageLayoutV2? back = _stackBackup;
+		if (back == null)
+		{
+			return;
+		}
+		PageLayoutV2 page = _state.Page;
+		page.Mode = back.Mode;
+		page.Cols = back.Cols;
+		page.RowH = back.RowH;
+		List<BlockLayout> blocks = new List<BlockLayout>();
+		foreach (BlockLayout block in back.Blocks)
+		{
+			blocks.Add(block.Clone());
+		}
+		page.Blocks = blocks;
+	}
+
+	/// <summary>某块当前是否隐藏(页面自己读状态用,例如实例库的「显示文件夹栏」菜单)。</summary>
+	public bool IsBlockHidden(string id)
+	{
+		return !string.IsNullOrEmpty(id) && _state.Hidden.Contains(id);
+	}
+
+	/// <summary>
+	/// 直接显隐某块并落盘(不需要先进编辑态)。实例库的右键「显示/隐藏文件夹栏」走这里 ——
+	/// 以前它写的是 v1 文件,v2 单向写通时会被覆盖,所以勾了也像没反应。
+	/// </summary>
+	public void SetBlockHidden(string id, bool hidden)
+	{
+		_layoutTouched = true;
+		if (string.IsNullOrEmpty(id))
+		{
+			return;
+		}
+		bool isHidden = _state.Hidden.Contains(id);
+		if (isHidden == hidden)
+		{
+			return;
+		}
+		_session.PushUndo(_state.ToPage());
+		if (hidden)
+		{
+			_state.Hide(id);
+		}
+		else
+		{
+			_state.Restore(id);
+		}
+		Render();
+		Persist();
+	}
+
+	/// <summary>就地改当前页(页级参数或某块的 x/y/w/h)并落盘;给页面做"铺满整行"这类调整用。</summary>
+	public void MutatePage(Action<PageLayoutV2> mutate)
+	{
+		_layoutTouched = true;
+		if (mutate == null)
+		{
+			return;
+		}
+		_session.PushUndo(_state.ToPage());
+		mutate(_state.Page);
+		_state.RebuildPage();
+		Render();
+		Persist();
+	}
+
 	/// <summary>
 	/// 宿主喂入"内容区可用宽"(px):窄窗/宽窗变体(§0.1 Q6)据此在 <c>variants.narrow</c>
 	/// 与主 body 之间切换。<paramref name="width"/> ≤ 0 = 未知宽 → 不做变体判定。
@@ -272,6 +397,7 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = true;
+		PrepareEditableGrid();
 		// 每次进编辑态都是一次新会话:多选与撤销栈清空(历史上的改动已经即时落盘,不需要跨会话撤销)
 		_session.ClearHistory();
 		_session.ClearSelection();
@@ -295,6 +421,14 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = false;
+		// 进编辑时把 stack 折成了网格:整场什么都没动就还原成原来的 stack,
+		// 不因为"点进来看看"就把用户的纵向页面悄悄改成网格。
+		if (_stackConverted && !_layoutTouched)
+		{
+			RestoreStackAfterEdit();
+		}
+		_stackConverted = false;
+		_stackBackup = null;
 		Persist();
 		Render();
 		_session.ClearSelection();
@@ -324,6 +458,12 @@ public sealed class LayoutEditor
 		// 所以"没接线 / 首帧"的渲染与改动前完全一致。
 		double width = ((_widthHint > 0.0) ? _widthHint : LayoutVariantHost.Width);
 		PageLayoutV2? page = LayoutVariants.PageOf(doc.Layout, _pageId, width, LayoutVariantHost.Threshold);
+		// 「页面默认布局」(D-new):文档里还没有这一页时用宿主给的默认布局。
+		// 实例库就是这样默认左右排布的;用户在编辑态拖过之后才写进 v2 文档。
+		if (page == null && _defaultPage != null)
+		{
+			page = _defaultPage.Clone();
+		}
 		// 全局密度也来自 v2(缺省 standard → 间距档 10 = 现状)
 		_density = ((doc.Layout?.Shell != null && LayoutSchema.IsKnownDensity(doc.Layout.Shell.Density)) ? doc.Layout.Shell.Density : LayoutSchema.DensityStandard);
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
@@ -614,6 +754,7 @@ public sealed class LayoutEditor
 
 	internal void HideBlock(BlockSpec spec)
 	{
+		_layoutTouched = true;
 		if (!_edit || spec == null || _state.Hidden.Contains(spec.Id))
 		{
 			return;
@@ -1007,6 +1148,7 @@ public sealed class LayoutEditor
 	// 画布槽位 → 页面块 → v2(唯一入口 LayoutStoreV2)并落盘
 	private void CommitBox()
 	{
+		_layoutTouched = true;
 		PageLayoutV2 page = _state.ToPage();
 		_box.ApplyTo(page);
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
@@ -1429,13 +1571,12 @@ internal sealed class LayoutCard : Border
 		Spec = spec;
 		CornerRadius = new CornerRadius(10.0);
 		SetResourceReference(Border.BorderBrushProperty, "B.Accent");
-		// 操作条:拖拽手柄(Ico.Sort)+ 块标题 + 显隐按钮
-		Button uIElement = Ui.IconBtn(Ico.Sort, I18n.L("拖拽排序"), null, 12.0);
-		uIElement.Cursor = Cursors.SizeAll;
-		uIElement.PreviewMouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
-		{
-			_host.BeginHandleDrag(this, (UIElement)s, e);
-		};
+		// 操作条:拖动图标(不可点,纯提示)+ 块标题 + 显隐按钮。
+		// ⇅ 原来是个按钮,让人以为"必须点它才能拖";现在编辑态下整张卡任意位置都能按住拖
+		// (见 OnCardMouseDown),图标只留作提示。
+		Button uIElement = Ui.IconBtn(Ico.Sort, I18n.L("按住拖动"), null, 12.0);
+		uIElement.IsHitTestVisible = false;
+		uIElement.Focusable = false;
 		Button button = Ui.IconBtn(Ico.Close, I18n.L("隐藏"), delegate
 		{
 			_host.HideBlock(Spec);
@@ -1502,6 +1643,8 @@ internal sealed class LayoutCard : Border
 		_edit = edit;
 		_bar.Show(edit);
 		_body.IsHitTestVisible = !edit;
+		// 编辑态整卡可拖:光标给十字移动箭头,提示"按住就能拖"
+		Cursor = (edit ? Cursors.SizeAll : null);
 		UpdateHandles();
 		ApplyLook();
 	}
@@ -1595,8 +1738,15 @@ internal sealed class LayoutCard : Border
 
 	private void OnCardMouseDown(object sender, MouseButtonEventArgs e)
 	{
-		if (!_edit || _boxMode == LayoutSchema.ModeStack)
+		if (!_edit)
 		{
+			return;
+		}
+		// 编辑态:整张卡任意位置都能按住拖 —— stack 走一维换序(旧行为),grid/canvas 走画布整体拖拽。
+		// 显隐按钮是 ButtonBase,自己会把 MouseLeftButtonDown 标 Handled,所以不会误触发拖动。
+		if (_boxMode == LayoutSchema.ModeStack)
+		{
+			_host.BeginHandleDrag(this, this, e);
 			return;
 		}
 		_host.BeginBoxDrag(this, e);

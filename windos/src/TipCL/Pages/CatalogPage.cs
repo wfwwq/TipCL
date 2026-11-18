@@ -283,12 +283,30 @@ public sealed class CatalogPage : PageBase
 		_results = Ui.VirtualList<object>(BuildRow);
 		_listHost.Children.Add(_results);
 		_listHost.Children.Add(Ui.Scroll(_placeholder));
-		Grid grid2 = Ui.G("Auto,Auto,*");
-		grid2.Add(el3, 0);
-		grid2.Add(el2.M(0.0, 14.0, 0.0, 14.0), 1);
-		grid2.Add(_listHost, 2);
-		grid2.Margin = new Thickness(26.0, 20.0, 26.0, 20.0);
-		base.Content = grid2;
+		// 原来这里是写死的三行 Grid:除「原版」外,其余分段(MoD/整合包/数据包/资源包/光影/世界)
+		// 都因为"没有区块宿主"而右键进不了自定义布局。改成区块宿主后,三段可拖、可改大小。
+		BlockHost host = new BlockHost(LayoutPageId, new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "head",
+				Title = I18n.L("标题"),
+				Content = el3
+			},
+			new BlockSpec
+			{
+				Id = "filters",
+				Title = I18n.L("筛选"),
+				Content = el2.M(0.0, 14.0, 0.0, 14.0)
+			},
+			new BlockSpec
+			{
+				Id = "results",
+				Title = I18n.L("结果列表"),
+				Content = _listHost
+			}
+		}, new Thickness(26.0, 20.0, 26.0, 20.0));
+		base.Content = host;
 		EnableDrop(() => new FileDrop.DropContext
 		{
 			Instance = CurrentInstance(),

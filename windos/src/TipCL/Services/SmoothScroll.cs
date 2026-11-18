@@ -54,7 +54,25 @@ public sealed class SmoothScroll : ScrollViewer
 			return;
 		}
 		e.Handled = true;
-		double toValue = (_target = Clamp.Of(((_target < 0.0) ? base.VerticalOffset : _target) - (double)e.Delta * 0.95, 0.0, base.ScrollableHeight));
+		WheelBy(e.Delta);
+	}
+
+	/// <summary>
+	/// 按滚轮增量滚(带平滑动画)。公开给 LayoutShellHooks:外层容器被"转交"滚轮时
+	/// 也走同一条平滑路径,而不是直接跳 ScrollToVerticalOffset。
+	/// </summary>
+	public void WheelBy(double delta)
+	{
+		if (base.ScrollableHeight <= 0.0)
+		{
+			return;
+		}
+		if (!Motion.Enabled)
+		{
+			ScrollToVerticalOffset(Clamp.Of(VerticalOffset - delta * 0.95, 0.0, base.ScrollableHeight));
+			return;
+		}
+		double toValue = (_target = Clamp.Of(((_target < 0.0) ? base.VerticalOffset : _target) - delta * 0.95, 0.0, base.ScrollableHeight));
 		DoubleAnimation doubleAnimation = new DoubleAnimation(base.VerticalOffset, toValue, TimeSpan.FromMilliseconds(230.0))
 		{
 			EasingFunction = new CubicEase

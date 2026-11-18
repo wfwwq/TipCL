@@ -514,20 +514,41 @@ public sealed class LayoutPageState
 		return y;
 	}
 
-	/// <summary>把 Order/Hidden/Spans 同步进 Page.Blocks(顺序即顺序,隐藏项也占位)。</summary>
+	/// <summary>
+	/// 把 Order/Hidden/Spans 同步进 Page.Blocks(顺序即顺序,隐藏项也占位)。
+	/// **就地更新**:按 id 取旧块并 Clone,只改 hidden/span/z —— 坐标 X/Y/W/H、外观 style、
+	/// 标题 title、内边距 pad、最小高 min_h、自定义 settings 全部原样保留。
+	/// 原实现每次都 new BlockLayout,于是 grid/canvas 下拖完一提交坐标就被清空("弹回原位")
+	/// 、叠加序被重排("区块叠在一起")、筛选块被清成默认("消失")。
+	/// 要清空这些字段的只有 <see cref="Reset"/>(重置本页)。
+	/// </summary>
 	public void RebuildPage()
 	{
-		List<BlockLayout> blocks = new List<BlockLayout>();
+		Dictionary<string, BlockLayout> previous = new Dictionary<string, BlockLayout>(StringComparer.Ordinal);
+		if (Page.Blocks != null)
+		{
+			foreach (BlockLayout old in Page.Blocks)
+			{
+				if (old != null && !string.IsNullOrEmpty(old.Id) && !previous.ContainsKey(old.Id))
+				{
+					previous[old.Id] = old;
+				}
+			}
+		}
+		List<BlockLayout> blocks = new List<BlockLayout>(Order.Count);
 		for (int i = 0; i < Order.Count; i++)
 		{
 			string id = Order[i];
-			blocks.Add(new BlockLayout
+			BlockLayout block = (previous.TryGetValue(id, out BlockLayout kept) ? kept.Clone() : new BlockLayout
 			{
 				Id = id,
-				Hidden = Hidden.Contains(id),
-				Span = (Spans.TryGetValue(id, out int span) ? span : 1),
-				Z = i
+				Style = LayoutSchema.StylePlain
 			});
+			block.Id = id;
+			block.Hidden = Hidden.Contains(id);
+			block.Span = (Spans.TryGetValue(id, out int span) ? span : 1);
+			block.Z = i;
+			blocks.Add(block);
 		}
 		Page.Blocks = blocks;
 	}

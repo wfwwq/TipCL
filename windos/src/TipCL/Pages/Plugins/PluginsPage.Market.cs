@@ -54,7 +54,29 @@ public sealed partial class PluginsPage
 		top.Add(Ui.H(6.0, Ui.Glyph("\ue721", 13.0, "B.InkMuted"), _search).VCenter(), 0);
 		top.Add(_marketInfo.VCenter().M(12.0, 0.0, 0.0, 0.0), 0, 1);
 		top.Add(Ui.H(6.0, sources, refresh).VCenter(), 0, 2);
-		_marketView = PageBase.ScrollBody(top, _tagBar, _marketHost);
+		// 市场原来是 ScrollBody(没有区块宿主,右键进不了编辑);
+		// 现在拆成三块:搜索栏 / 标签 / 插件列表。市场区域右键编市场,页签栏右键编外层。
+		_marketView = new BlockHost("plugins:market", new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "search",
+				Title = I18n.L("搜索栏"),
+				Content = top
+			},
+			new BlockSpec
+			{
+				Id = "tags",
+				Title = I18n.L("标签"),
+				Content = _tagBar
+			},
+			new BlockSpec
+			{
+				Id = "list",
+				Title = I18n.L("插件列表"),
+				Content = _marketHost
+			}
+		});
 	}
 
 	private async Task LoadSettingsAsync()

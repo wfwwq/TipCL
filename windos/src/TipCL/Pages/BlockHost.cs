@@ -39,9 +39,10 @@ public sealed class BlockHost : UserControl
 	// 布局文档变更的稳定委托引用(LayoutStoreV2.LayoutChanged 是静态事件,同样必须对称 -=)
 	private readonly Action _storeRefresh;
 
-	public BlockHost(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null)
+	public BlockHost(string pageId, IReadOnlyList<BlockSpec> specs, Thickness? contentMargin = null, PageLayoutV2? defaultPage = null)
 	{
-		_editor = new LayoutEditor(pageId, specs, contentMargin);
+		PageId = pageId ?? "";
+		_editor = new LayoutEditor(pageId, specs, contentMargin, defaultPage);
 		_themeRefresh = _editor.RefreshThemeVisuals;
 		_storeRefresh = OnLayoutStoreChanged;
 		_editor.Changed += delegate
@@ -50,10 +51,10 @@ public sealed class BlockHost : UserControl
 		};
 		base.Focusable = false;
 		base.Content = _editor.Root;
-		// 入口:右键菜单(specs.Count >= 2 才有「自定义布局...」;页面内容自带 ContextMenu 时天然对方优先)。
-		// 注意:门槛与 _editor.CanEdit 解耦 —— 单块页**能编辑**(设置页的入口按钮用 CanEdit),但右键菜单
-		// 在单块页上会是个没用的项(连"顺序"都没有),所以这里仍按 >= 2 出现。
-		if (specs != null && specs.Count >= 2)
+		// 入口:右键菜单(≥1 个块就有「自定义布局...」——单块页也能右键进编辑;
+// 页面内容自带 ContextMenu 时天然对方优先)。
+		// 曾按 specs.Count >= 2 挂:于是启动页这类"只有一块落在宿主里"的页面右键完全没反应。
+		if (specs != null && specs.Count >= 1)
 		{
 			ContextMenu contextMenu = new ContextMenu();
 			MenuItem menuItem = new MenuItem
@@ -84,7 +85,62 @@ public sealed class BlockHost : UserControl
 		{
 			App.ThemeVisualsChanged -= _themeRefresh;
 			LayoutStoreV2.LayoutChanged -= _storeRefresh;
+			// 切页面/关窗口时若还在编辑态就退出(落盘 + 收掉工具条)。
+			// 原来不退:切走再切回来,编辑态和工具条还残留着(录屏一里的"编辑态残留")。
+			try
+			{
+				if (_editor.IsEditing)
+				{
+					_editor.ExitEdit();
+				}
+			}
+			catch
+			{
+				// 页面正在销毁,不能因为收尾抛异常崩窗口
+			}
 		};
+	}
+
+	/// <summary>本宿主的页面 id(v2 文档里的键,例如 <c>launch</c> / <c>library:main</c>)。</summary>
+	public string PageId { get; }
+
+	/// <summary>是否处于编辑态。</summary>
+	public bool IsEditing
+	{
+		get
+		{
+			return _editor.IsEditing;
+		}
+	}
+
+	/// <summary>进入编辑态(右键菜单、设置页入口、全局右键都走这里)。</summary>
+	public void EnterEdit()
+	{
+		_editor.EnterEdit();
+	}
+
+	/// <summary>退出编辑态(落盘 + 收工具条)。</summary>
+	public void ExitEdit()
+	{
+		_editor.ExitEdit();
+	}
+
+	/// <summary>某块当前是否隐藏。</summary>
+	public bool IsBlockHidden(string id)
+	{
+		return _editor.IsBlockHidden(id);
+	}
+
+	/// <summary>直接显隐某块并落盘(不必先进编辑态)。</summary>
+	public void SetBlockHidden(string id, bool hidden)
+	{
+		_editor.SetBlockHidden(id, hidden);
+	}
+
+	/// <summary>就地改当前页布局并落盘(铺满整行这类调整)。</summary>
+	public void MutatePage(Action<PageLayoutV2> mutate)
+	{
+		_editor.MutatePage(mutate);
 	}
 
 	// LayoutChanged 是静态事件,可能从任意线程来 → 统一回到 UI 线程重排;

@@ -28,6 +28,19 @@ public sealed partial class SettingsPage
 	/// <summary>「布局」视图在视图表/左导航里的下标(第 8 个)。</summary>
 	internal const int LayoutView = 7;
 
+	/// <summary>跳到「设置 → 布局」视图(全局右键菜单的「布局设置...」用)。</summary>
+	public void OpenLayoutView()
+	{
+		try
+		{
+			Select(LayoutView);
+		}
+		catch
+		{
+			// 页面还没构建完(极早期右键):忽略,不抛
+		}
+	}
+
 	// 页面区块入口表在 LayoutBlockEntryCatalog(纯数据、零 WPF 依赖,测试直接断言)。
 	// L5b:D1 把 LayoutEditor.CanEdit 从 specs ≥ 2 放宽到 ≥ 1,单块页(settings:network / settings:about)
 	// 也能进编辑态,所以表里现在就列全 12 个 BlockHost 宿主(按钮仍以 host.Editor.CanEdit 为最终门槛)。

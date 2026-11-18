@@ -293,66 +293,51 @@ public static class Motion
 		}
 	}
 
+	/// <summary>
+	/// 悬停上浮。**不再缩放**:WPF 在缩放动画里会逐帧重新栅格化文字,文字轻微抖动/发虚,
+	/// 卡片多时扫过去直接掉帧 —— 只保留 1~2px 位移(纯合成,不触发重新栅格化)。
+	/// 阴影仍是 DropShadowEffect,但只挂在**当前悬停的那一张**上;挂上时给元素加 BitmapCache,
+	/// 于是文字只栅格化一次,逐帧变的只有阴影透明度和位移。
+	/// <paramref name="scale"/> 保留只为不改动调用点,已忽略。
+	/// </summary>
 	public static void HoverLift(FrameworkElement el, double scale = 1.012, double lift = 2.0, double blur = 22.0)
 	{
-		bool flag = scale >= 1.01;
-		ScaleTransform sc = (flag ? EnsureScale(el) : null);
 		TranslateTransform tt = EnsureTranslate(el);
-		DropShadowEffect shadow = null;
+		DropShadowEffect? shadow = null;
 		bool hovering = false;
 		el.MouseEnter += delegate
 		{
-			if (Enabled)
+			if (!Enabled)
 			{
-				hovering = true;
-				if (el.Effect == null || el.Effect == shadow)
-				{
-					if (shadow == null)
-					{
-						shadow = new DropShadowEffect
-						{
-							BlurRadius = blur,
-							ShadowDepth = 3.0,
-							Direction = 270.0,
-							Opacity = 0.0,
-							Color = Color.FromRgb(24, 24, 24),
-							RenderingBias = RenderingBias.Performance
-						};
-					}
-					el.Effect = shadow;
-					Take(shadow, DropShadowEffect.OpacityProperty, new DoubleAnimation(0.16, D(170.0)));
-				}
-				if (sc != null)
-				{
-					Take(sc, ScaleTransform.ScaleXProperty, new DoubleAnimation(scale, D(170.0))
-					{
-						EasingFunction = EaseOut
-					});
-					Take(sc, ScaleTransform.ScaleYProperty, new DoubleAnimation(scale, D(170.0))
-					{
-						EasingFunction = EaseOut
-					});
-				}
-				Take(tt, TranslateTransform.YProperty, new DoubleAnimation(0.0 - lift, D(170.0))
-				{
-					EasingFunction = EaseOut
-				});
+				return;
 			}
+			hovering = true;
+			if (el.Effect == null || el.Effect == shadow)
+			{
+				if (shadow == null)
+				{
+					shadow = new DropShadowEffect
+					{
+						BlurRadius = blur,
+						ShadowDepth = 3.0,
+						Direction = 270.0,
+						Opacity = 0.0,
+						Color = Color.FromRgb(24, 24, 24),
+						RenderingBias = RenderingBias.Performance
+					};
+					el.Effect = shadow;
+					CacheOn(el);
+				}
+				Take(shadow, DropShadowEffect.OpacityProperty, new DoubleAnimation(0.16, D(170.0)));
+			}
+			Take(tt, TranslateTransform.YProperty, new DoubleAnimation(0.0 - lift, D(170.0))
+			{
+				EasingFunction = EaseOut
+			});
 		};
 		el.MouseLeave += delegate
 		{
 			hovering = false;
-			if (sc != null)
-			{
-				Play(sc, ScaleTransform.ScaleXProperty, new DoubleAnimation(1.0, D(190.0))
-				{
-					EasingFunction = EaseOut
-				}, 1.0);
-				Play(sc, ScaleTransform.ScaleYProperty, new DoubleAnimation(1.0, D(190.0))
-				{
-					EasingFunction = EaseOut
-				}, 1.0);
-			}
 			Play(tt, TranslateTransform.YProperty, new DoubleAnimation(0.0, D(190.0))
 			{
 				EasingFunction = EaseOut
@@ -364,10 +349,35 @@ public static class Motion
 					if (!hovering && el.Effect == shadow)
 					{
 						el.Effect = null;
+						CacheOff(el);
 					}
 				});
 			}
 		};
+	}
+
+	// 悬停期间把元素栅格化成位图:文字不再逐帧重排/重新栅格化,只是位图被合成器平移。
+	// RenderAtScale 跟随 DPI(125%/150% 缩放下不糊)。
+	private static void CacheOn(FrameworkElement el)
+	{
+		if (el.CacheMode != null)
+		{
+			return;
+		}
+		double ratio = 1.0;
+		try
+		{
+			ratio = VisualTreeHelper.GetDpi(el).DpiScaleX;
+		}
+		catch
+		{
+		}
+		el.CacheMode = new BitmapCache((ratio <= 0.0) ? 1.0 : ratio);
+	}
+
+	private static void CacheOff(FrameworkElement el)
+	{
+		el.CacheMode = null;
 	}
 
 	public static T Shadow<T>(T el, double blur = 18.0, double opacity = 0.08, double depth = 2.0) where T : UIElement

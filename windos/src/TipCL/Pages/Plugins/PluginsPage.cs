@@ -84,10 +84,23 @@ public sealed partial class PluginsPage : PageBase
 				PageBase.Run(() => InstallLocalAsync(path, dev: false, null), I18n.L("安装失败"));
 			}
 		}), more).VCenter(), 0, 1);
-		Grid root = Ui.G("Auto,*");
-		root.Add(head, 0);
-		root.Add(_body, 1);
-		base.Content = root;
+		// 插件页整体改区块宿主:页签栏 / 内容两块,右键即可拖。
+		BlockHost host = new BlockHost("plugins", new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "tabs",
+				Title = I18n.L("页签"),
+				Content = head
+			},
+			new BlockSpec
+			{
+				Id = "content",
+				Title = I18n.L("内容"),
+				Content = _body
+			}
+		});
+		base.Content = host;
 		_installedHost = new UniformGrid
 		{
 			Columns = 3,

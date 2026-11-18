@@ -169,6 +169,9 @@ public partial class MainWindow : Window
 		DropVeilTitle.Text = I18n.L("松手就装");
 		DropVeilHint.Text = I18n.L("整合包、模组、资源包、光影、数据包、存档、皮肤、壁纸都认；认不准会问你一句。");
 		AppServices.Window = this;
+		// 壳级交互兜底:全局右键「自定义布局...」+ 滚轮转交(内层滚不动交给外层;
+		// 鼠标在页头/工具条这类不在滚动容器里的位置时,滚当前页最大的可滚区域)。
+		LayoutShellHooks.Install(this);
 		Dlg.Host = DialogHost;
 		Dlg.BlurTarget = ContentLayer;
 		base.SourceInitialized += delegate
@@ -1490,6 +1493,16 @@ public partial class MainWindow : Window
 	public void ApplyNavSettings(JsonElement settings)
 	{
 		_navCfg = TipCL.NavConfig.FromJson(settings);
+	}
+
+	/// <summary>按导航 id 取已创建的页面实例(null = 还没建)。全局右键跳「设置 → 布局」用。</summary>
+	public PageBase? PageInstance(string id)
+	{
+		if (!string.IsNullOrEmpty(id) && _pages.TryGetValue(id, out PageBase value))
+		{
+			return value;
+		}
+		return null;
 	}
 
 	private static string? PageOf(string navKey)

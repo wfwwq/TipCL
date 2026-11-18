@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 
 namespace TipCL.Services;
 
@@ -35,6 +36,15 @@ public static class SideFrost
 	};
 
 	private static VisualBrush? _brush;
+
+	// 缩放窗口期间先把模糊摘掉(只留 tint),停手 120ms 再挂回来。
+	// 原来的写法是每次 SizeChanged 都整块重算高斯模糊:大窗口/高分屏下拖边框会明显发滞。
+	private static readonly DispatcherTimer _settle = new DispatcherTimer
+	{
+		Interval = TimeSpan.FromMilliseconds(120)
+	};
+
+	private static bool _settled = true;
 
 	public static bool Enabled { get; private set; } = true;
 
@@ -69,18 +79,52 @@ public static class SideFrost
 		_frost.Fill = _brush;
 		_frost.Effect = _blur;
 		RenderOptions.SetCachingHint(_brush, CachingHint.Unspecified);
+		_settle.Tick += delegate
+		{
+			_settle.Stop();
+			Settle();
+		};
 		side.SizeChanged += delegate
 		{
+			BeginResize();
 			SyncViewbox();
 		};
 		wallHost.SizeChanged += delegate
 		{
+			BeginResize();
 			SyncViewbox();
 		};
 		App.ThemeVisualsChanged -= Refresh;
 		App.ThemeVisualsChanged += Refresh;
 		SideFrostEx.Install(_wallHost, _side, _layer, _tint);
 		Refresh();
+	}
+
+	// 缩放中:摘掉模糊(合成器只需平移 tint),避免每一帧都重算 Gaussian。
+	private static void BeginResize()
+	{
+		if (!Enabled)
+		{
+			return;
+		}
+		if (_settled)
+		{
+			_settled = false;
+			_frost.Effect = null;
+		}
+		_settle.Stop();
+		_settle.Start();
+	}
+
+	// 停手:把模糊挂回来并重算一次 viewbox。
+	private static void Settle()
+	{
+		_settled = true;
+		if (Enabled)
+		{
+			_frost.Effect = _blur;
+		}
+		SyncViewbox();
 	}
 
 	public static void SetEnabled(bool on)
@@ -114,6 +158,8 @@ public static class SideFrost
 			bool flag = true;
 			_frost.Visibility = ((!flag) ? Visibility.Collapsed : Visibility.Visible);
 			_blur.Radius = Radius;
+			// 从未挂着模糊(或刚被缩放摘掉)时补挂;缩放中保持 null,由 Settle() 收尾
+			_frost.Effect = (_settled ? ((Effect)_blur) : null);
 			_tint.Fill = TintBrush(flag);
 			SyncViewbox();
 			SideFrostEx.Update();
