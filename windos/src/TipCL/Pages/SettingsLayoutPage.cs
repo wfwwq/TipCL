@@ -28,6 +28,9 @@ public sealed partial class SettingsPage
 	/// <summary>「布局」视图在视图表/左导航里的下标(第 8 个)。</summary>
 	internal const int LayoutView = 7;
 
+	/// <summary>「布局」视图的区块宿主 pageId(区块:appearance / shell / blocks / splits / widgets / profiles / json)。</summary>
+	internal const string LayoutViewPageId = "settings:layout";
+
 	/// <summary>跳到「设置 → 布局」视图(全局右键菜单的「布局设置...」用)。</summary>
 	public void OpenLayoutView()
 	{
@@ -60,17 +63,20 @@ public sealed partial class SettingsPage
 		_layoutRebuilding = true;
 		try
 		{
-			SPanel panel = Ui.V(10.0);
-			panel.Children.Add(PTitle(I18n.L("布局")));
-			panel.Children.Add(Ui.Muted(I18n.L("默认布局 = 各页现状;这里的改动即时写进 ui_layout_v2.json,老版本程序照旧读得懂")).M(0.0, 0.0, 0.0, 4.0));
-			panel.Children.Add(LayoutSection(I18n.L("外观与密度"), LayoutAppearanceRows()));
-			panel.Children.Add(LayoutSection(I18n.L("页签与标题栏"), LayoutShellRows()));
-			panel.Children.Add(LayoutSection(I18n.L("页面区块"), LayoutBlockRows()));
-			panel.Children.Add(LayoutSection(I18n.L("分栏比例"), LayoutSplitRows()));
-			panel.Children.Add(LayoutSection(I18n.L("自建区块"), LayoutWidgetRows()));
-			panel.Children.Add(LayoutSection(I18n.L("布局方案"), LayoutProfileRows()));
-			panel.Children.Add(LayoutJsonCard());
-			return ScrollBody(panel);
+			// 布局自定义:每个小节(分组标题 + 卡片)一个区块,页标题与说明跟着第一块走;
+			// 宿主默认边距 18,14,18,16 + 块间距 10 = 原 ScrollBody 的 SPanel(间距 10),默认外观逐像素不变。
+			// 本视图每次切进来都重建,宿主也跟着重建(布局从 v2 文档读,不丢)。
+			SPanel first = Ui.V(10.0, PTitle(I18n.L("布局")), Ui.Muted(I18n.L("默认布局 = 各页现状;这里的改动即时写进 ui_layout_v2.json,老版本程序照旧读得懂")).M(0.0, 0.0, 0.0, 4.0), LayoutSection(I18n.L("外观与密度"), LayoutAppearanceRows()));
+			return new BlockHost(LayoutViewPageId, new List<BlockSpec>
+			{
+				new BlockSpec { Id = "appearance", Title = I18n.L("外观与密度"), Content = first },
+				new BlockSpec { Id = "shell", Title = I18n.L("页签与标题栏"), Content = LayoutSection(I18n.L("页签与标题栏"), LayoutShellRows()) },
+				new BlockSpec { Id = "blocks", Title = I18n.L("页面区块"), Content = LayoutSection(I18n.L("页面区块"), LayoutBlockRows()) },
+				new BlockSpec { Id = "splits", Title = I18n.L("分栏比例"), Content = LayoutSection(I18n.L("分栏比例"), LayoutSplitRows()) },
+				new BlockSpec { Id = "widgets", Title = I18n.L("自建区块"), Content = LayoutSection(I18n.L("自建区块"), LayoutWidgetRows()) },
+				new BlockSpec { Id = "profiles", Title = I18n.L("布局方案"), Content = LayoutSection(I18n.L("布局方案"), LayoutProfileRows()) },
+				new BlockSpec { Id = "json", Title = I18n.L("布局 JSON"), Content = LayoutJsonCard() }
+			}).Root;
 		}
 		finally
 		{
@@ -247,9 +253,10 @@ public sealed partial class SettingsPage
 			string pageId = entry.PageId;
 			string navId = entry.NavId;
 			int view = entry.SettingsView;
+			string hint = entry.Hint;
 			Button open = Ui.Btn(I18n.L("自定义布局..."), BtnKind.Chip, delegate
 			{
-				OpenBlockEditor(pageId, navId, view);
+				OpenBlockEditor(pageId, navId, view, hint);
 			});
 			rows.Add(Ui.Field(I18n.L(entry.Label), open, I18n.L("跳到该页并进入区块编辑(完成编辑后自动保存)")));
 		}
@@ -258,7 +265,7 @@ public sealed partial class SettingsPage
 	}
 
 	// 跳到目标页 → 找到那一页的 BlockHost → EnterEdit(等价于点右键菜单里的「自定义布局...」)
-	private void OpenBlockEditor(string pageId, string navId, int settingsView)
+	private void OpenBlockEditor(string pageId, string navId, int settingsView, string hint)
 	{
 		MainWindow? win = PageBase.Win;
 		if (win == null)
@@ -276,11 +283,11 @@ public sealed partial class SettingsPage
 		// 等页面挂进可视树再找宿主(BlockHost 在页面构造时就已建好,这里只是等一次布局)
 		base.Dispatcher.InvokeAsync((Action)delegate
 		{
-			EnterBlockEdit(pageId);
+			EnterBlockEdit(pageId, hint);
 		}, System.Windows.Threading.DispatcherPriority.Loaded);
 	}
 
-	private void EnterBlockEdit(string pageId)
+	private void EnterBlockEdit(string pageId, string hint)
 	{
 		MainWindow? win = PageBase.Win;
 		BlockHost? host = ((win != null) ? FindBlockHost(win, pageId) : null);
@@ -290,7 +297,7 @@ public sealed partial class SettingsPage
 			PageBase.Toast(I18n.L("已进入自定义布局"), I18n.L("完成编辑后自动保存"), ToastKind.Success);
 			return;
 		}
-		PageBase.Toast(I18n.L("没找到可编辑的区块"), I18n.L("可以在页面上右键「自定义布局...」"), ToastKind.Warning);
+		PageBase.Toast(I18n.L("没找到可编辑的区块"), (hint.Length > 0) ? I18n.L(hint) : I18n.L("可以在页面上右键「自定义布局...」"), ToastKind.Warning);
 	}
 
 	// 视觉树优先(页面已渲染),找不到再退回逻辑树(ElementName/Content 挂载的场合)
@@ -814,10 +821,16 @@ public static class LayoutBlockEntryCatalog
 
 		/// <summary>是否单块页(只有一个块:能调外观 / 标题 / 隐藏,不能重排)。</summary>
 		public bool SingleBlock { get; set; }
+
+		/// <summary>
+		/// 找不到宿主时的提示文案 key(空 = 通用提示)。安装页 / 实例详情里的版本管理这类"子视图"
+		/// 不能直接跳过去,只能先把它打开再右键,提示就写清楚怎么打开。
+		/// </summary>
+		public string Hint { get; set; } = "";
 	}
 
-	/// <summary>12 个宿主:设置页内 7 个 + 顶栏导航 5 个。</summary>
-	public static readonly Entry[] All = new Entry[12]
+	/// <summary>17 个宿主:设置页内 8 个 + 顶栏导航 7 个 + 子视图 2 个(安装页、实例详情里内嵌的版本管理)。</summary>
+	public static readonly Entry[] All = new Entry[17]
 	{
 		new Entry
 		{
@@ -899,6 +912,39 @@ public static class LayoutBlockEntryCatalog
 			PageId = "multiplayer",
 			NavId = "multiplayer",
 			Label = "联机"
+		},
+		new Entry
+		{
+			PageId = "settings:layout",
+			NavId = "settings",
+			SettingsView = SettingsPage.LayoutView,
+			Label = "布局"
+		},
+		new Entry
+		{
+			PageId = "ai",
+			NavId = "ai",
+			Label = "AI 助手"
+		},
+		new Entry
+		{
+			PageId = "version-manage",
+			NavId = "instance",
+			Label = "版本管理"
+		},
+		new Entry
+		{
+			PageId = "install",
+			NavId = "download",
+			Label = "版本安装",
+			Hint = "先在「下载」页点某个版本的「安装」打开安装页,再在页面上右键「自定义布局...」"
+		},
+		new Entry
+		{
+			PageId = "version-manage:embedded",
+			NavId = "library",
+			Label = "实例详情 · 设置",
+			Hint = "先在「实例库」打开实例详情并切到「设置」分段,再在页面上右键「自定义布局...」"
 		}
 	};
 

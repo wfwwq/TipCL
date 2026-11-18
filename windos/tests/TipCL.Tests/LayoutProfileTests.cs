@@ -447,8 +447,8 @@ public class LayoutProfileTests
 	{
 		// D1 把 LayoutEditor.CanEdit 放宽到 specs ≥ 1 之后,单块页也要有入口:
 		// 设置页「布局」→「页面区块」小节必须能进 settings:network / settings:about 的编辑态
-		Assert.Equal(12, LayoutBlockEntryCatalog.All.Length);
-		Assert.Equal(12, LayoutBlockEntryCatalog.All.Select((LayoutBlockEntryCatalog.Entry e) => e.PageId).Distinct().Count());
+		Assert.Equal(17, LayoutBlockEntryCatalog.All.Length);
+		Assert.Equal(17, LayoutBlockEntryCatalog.All.Select((LayoutBlockEntryCatalog.Entry e) => e.PageId).Distinct().Count());
 		Assert.Equal(new string[2] { "settings:network", "settings:about" }, LayoutBlockEntryCatalog.SingleBlockPageIds().ToArray());
 
 		LayoutBlockEntryCatalog.Entry? network = LayoutBlockEntryCatalog.Find("settings:network");
@@ -466,7 +466,8 @@ public class LayoutProfileTests
 		// 每一行都要能真的找到页面:导航 id 必须是已知 key;文案与 pageId 都不能空
 		foreach (LayoutBlockEntryCatalog.Entry entry in LayoutBlockEntryCatalog.All)
 		{
-			Assert.True(LayoutSchema.IsKnownNavKey(entry.NavId), entry.PageId + " 的导航 id 不合法:" + entry.NavId);
+			// 导航 id:已知导航 key,或默认页签里的页面(实例库 library 是页签不是导航 key)
+			Assert.True(LayoutSchema.IsKnownNavKey(entry.NavId) || LayoutSchema.DefaultTabs.Contains(entry.NavId), entry.PageId + " 的导航 id 不合法:" + entry.NavId);
 			Assert.False(string.IsNullOrWhiteSpace(entry.Label));
 			Assert.False(string.IsNullOrWhiteSpace(entry.PageId));
 			Assert.True(entry.SettingsView >= -1);
@@ -475,6 +476,26 @@ public class LayoutProfileTests
 		}
 		Assert.Null(LayoutBlockEntryCatalog.Find("settings:nope"));
 		Assert.Null(LayoutBlockEntryCatalog.Find(null));
+	}
+
+	// ————— 本轮新拆的四页:pageId 必须登记进「设置 → 布局 → 页面区块」 —————
+
+	[Theory]
+	[InlineData("ai", "ai", -1)]
+	[InlineData("version-manage", "instance", -1)]
+	[InlineData("version-manage:embedded", "library", -1)]
+	[InlineData("install", "download", -1)]
+	[InlineData("settings:layout", "settings", 7)]
+	public void BlockEntryCatalogRegistersNewlySplitPages(string pageId, string navId, int settingsView)
+	{
+		LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(pageId);
+		Assert.NotNull(entry);
+		Assert.Equal(navId, entry!.NavId);
+		Assert.Equal(settingsView, entry.SettingsView);
+		Assert.False(entry.SingleBlock);
+		// 子视图(安装页 / 实例详情里的版本管理)不能直接跳过去:必须带上"怎么打开"的提示
+		bool subView = pageId == "install" || pageId == "version-manage:embedded";
+		Assert.Equal(subView, entry.Hint.Length > 0);
 	}
 
 	[Fact]
