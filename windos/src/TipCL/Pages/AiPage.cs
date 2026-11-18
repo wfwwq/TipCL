@@ -344,6 +344,14 @@ public sealed partial class AiPage : PageBase
 		_hist.SetResourceReference(Border.BackgroundProperty, "B.Paper2");
 		Button el = AiIcons.Flat("M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M9 3v18", null, I18n.L("显示 / 隐藏对话列表"), delegate
 		{
+			// 自定义过布局(区块形态):显隐「历史会话」区块并落盘;原生默认排版下仍走分栏外壳
+			if (_host != null && !_host.IsNativeDefault)
+			{
+				bool hidden = _host.IsBlockHidden("history");
+				_host.SetBlockHidden("history", !hidden);
+				_histOpen = hidden;
+				return;
+			}
 			_histOpen = !_histOpen;
 			// L4:收起历史栏 = 左栏与分隔条一起占 0 宽(该形态不写比例),由分栏外壳统一接管
 			_histSplit.SetLeftVisible(_histOpen);
@@ -494,25 +502,31 @@ public sealed partial class AiPage : PageBase
 		SPanel sPanel = Ui.V(8.0, _dock, _instPill, aiActions, _composer, grid5.M(4.0, 0.0, 4.0));
 		sPanel.MaxWidth = 760.0;
 		sPanel.Margin = new Thickness(28.0, 4.0, 28.0, 14.0);
-		Grid grid6 = Ui.G("Auto,Auto,*,Auto");
-		grid6.Add(border, 0);
-		grid6.Add(_pluginViews.Bar, 1);
-		grid6.Add(_scroll, 2);
-		grid6.Add(sPanel, 3);
-		// 插件视图选中时盖住消息列表和输入框（视图自己带终端 / 输入 / 停止）
-		grid6.Add(_pluginViews.Host, 2, 0, 2);
+		// 对话区 = 顶部操作条 + 插件视图条 + 消息列表;插件视图选中时盖住消息列表(视图自己带终端 / 输入 / 停止)
+		Grid chat = Ui.G("Auto,Auto,*");
+		chat.Add(border, 0);
+		chat.Add(_pluginViews.Bar, 1);
+		chat.Add(_scroll, 2);
+		chat.Add(_pluginViews.Host, 2);
 		_pluginViews.ModeChanged += delegate(bool on)
 		{
 			_scroll.Visibility = ((!on) ? Visibility.Visible : Visibility.Collapsed);
 			sPanel.Visibility = ((!on) ? Visibility.Visible : Visibility.Collapsed);
 		};
 		_pluginViews.PresetsChanged += RenderChats;
+		// 原生默认排版(= 改动前的结构):右栏两行「对话区(*) / 输入栏(Auto)」——
+		// 原来是一张 4 行网格(操作条 / 插件条 / 消息 / 输入,插件视图跨消息+输入两行);拆成两块后
+		// 插件视图选中时输入栏折叠成 0 高,对话区那一行自然占满原来两行的位置,几何完全等价。
+		Border chatSlot = new Border();
+		Border inputSlot = new Border();
+		Grid grid6 = Ui.G("*,Auto");
+		grid6.Add(chatSlot, 0);
+		grid6.Add(inputSlot, 1);
 		// L4 分栏(设计 §4.E 第 7 处):历史栏(现状固定 220)+ 10px 分隔条 + 对话区。
 		// 分隔条占住对话区顶部操作条本来就有的 10px 左内边距(grid6 左移 10px 回到原位),首屏逐像素不变;
 		// 比例存 v2 splits["ai"]["history"];历史栏收起时左栏与分隔条一起收起(见下面的开关)
 		PageLayoutHost grid7 = new PageLayoutHost("ai", "history", GridLength.Auto, new GridLength(1.0, GridUnitType.Star));
 		grid6.Margin = new Thickness(-10.0, 0.0, 0.0, 0.0);
-		grid7.SetLeft(_hist);
 		grid7.SetRight(grid6);
 		_histSplit = grid7;
 		Border border2 = new Border
@@ -525,11 +539,85 @@ public sealed partial class AiPage : PageBase
 		};
 		border2.SetResourceReference(Border.BackgroundProperty, "B.Paper");
 		border2.SetResourceReference(Border.BorderBrushProperty, "B.Line");
-		base.Content = border2;
+		// 布局自定义:三个区块(历史会话 / 对话区 / 输入栏)。没自定义过时显示上面的原排版(默认外观逐像素不变);
+		// 进编辑态按 DefaultAiPage 的网格摆开。历史与对话区是 Fill 块:在网格里占满剩余高度、不套外层滚动,
+		// 消息列表自己的滚动和吸底(ScrollDown → ScrollToEnd)照常工作。
+		BlockNativeLayout native = new BlockNativeLayout
+		{
+			Root = border2,
+			Attach = delegate
+			{
+				// 分栏外壳在 SetLeft 时记下"现状宽 220",比例模式 / 折叠都按它还原
+				_hist.Width = 220.0;
+				_hist.MinWidth = 0.0;
+				_hist.MaxWidth = double.PositiveInfinity;
+				grid7.SetLeft(_hist);
+				grid7.SetLeftVisible(_histOpen);
+				chatSlot.Child = chat;
+				inputSlot.Child = sPanel;
+			},
+			Detach = delegate
+			{
+				grid7.SetLeft(null);
+				chatSlot.Child = null;
+				inputSlot.Child = null;
+				// 区块形态下历史栏跟着格子宽走;显隐交给区块状态
+				_hist.Width = double.NaN;
+				_hist.MinWidth = 0.0;
+				_hist.MaxWidth = double.PositiveInfinity;
+				_hist.Visibility = Visibility.Visible;
+			}
+		};
+		_host = new BlockHost(LayoutPageId, new List<BlockSpec>
+		{
+			new BlockSpec
+			{
+				Id = "history",
+				Title = I18n.L("历史会话"),
+				Content = _hist,
+				Fill = true
+			},
+			new BlockSpec
+			{
+				Id = "chat",
+				Title = I18n.L("对话区"),
+				Content = chat,
+				Fill = true
+			},
+			new BlockSpec
+			{
+				Id = "input",
+				Title = I18n.L("输入栏"),
+				Content = sPanel
+			}
+		}, null, DefaultAiPage(), native);
+		base.Content = _host;
 		SyncPlaceholder();
 		SyncPermTip();
 		SyncInstChip();
 		SyncMcp();
+	}
+
+	/// <summary>布局文档里的页面 id(区块:history / chat / input)。</summary>
+	public const string LayoutPageId = "ai";
+
+	// 区块宿主(构造末尾建好;历史栏开关在区块形态下改的是区块显隐)
+	private BlockHost? _host;
+
+	// 编辑态 / 自定义布局的默认网格:历史 3 列 × 2 行,右侧 9 列「对话区 / 输入栏」上下排;卡片外观替代原来的外框
+	private static PageLayoutV2 DefaultAiPage()
+	{
+		return new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeGrid,
+			Cols = 12,
+			Blocks = new List<BlockLayout>
+			{
+				new BlockLayout { Id = "history", X = 0.0, Y = 0.0, W = 3.0, H = 2.0, Span = 3, Style = LayoutSchema.StyleCard },
+				new BlockLayout { Id = "chat", X = 3.0, Y = 0.0, W = 9.0, H = 1.0, Span = 9, Style = LayoutSchema.StyleCard },
+				new BlockLayout { Id = "input", X = 3.0, Y = 1.0, W = 9.0, H = 1.0, Span = 9 }
+			}
+		};
 	}
 
 	private void SyncInstChip()
