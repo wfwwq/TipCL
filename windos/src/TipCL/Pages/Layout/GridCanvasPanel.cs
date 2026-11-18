@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using TipCL.Services;
 
 using TipCL.Core.Launcher.Layout;
 
@@ -320,6 +322,11 @@ public sealed class GridCanvasPanel : Panel
 			_rects = LayoutCanvas.Rects(_cells, width, height);
 			foreach (UIElement child in base.InternalChildren)
 			{
+				if (child is DropPlaceholder)
+				{
+					child.Measure(default(Size));
+					continue;
+				}
 				LayoutRect? rect = RectOf(IdOf(child));
 				child.Measure((rect.HasValue ? new Size(rect.Value.W, rect.Value.H) : new Size(width, LayoutCanvas.RefHeight)));
 			}
@@ -329,6 +336,11 @@ public sealed class GridCanvasPanel : Panel
 		Dictionary<string, double> desired = new Dictionary<string, double>(StringComparer.Ordinal);
 		foreach (UIElement child in base.InternalChildren)
 		{
+			if (child is DropPlaceholder)
+			{
+				child.Measure(default(Size));
+				continue;
+			}
 			string id = IdOf(child);
 			LayoutCell? cell = CellOf(id);
 			if (cell == null)
@@ -394,17 +406,51 @@ public sealed class GridCanvasPanel : Panel
 			_columnWidth = LayoutGrid.ColumnWidth(width, Cols, Gap);
 			_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
 		}
+		bool flip = _flipPending && Motion.Enabled;
 		foreach (UIElement child in base.InternalChildren)
 		{
-			LayoutRect? rect = RectOf(IdOf(child));
+			string id = IdOf(child);
+			LayoutRect? rect;
+			bool floating = false;
+			if (child is DropPlaceholder placeholder)
+			{
+				// 落点占位框:优先用宿主给的预览矩形(像素高度缩放),否则就是被拖块在新排版里的格子
+				rect = ((_placeholderRects.TryGetValue(placeholder.BlockId, out LayoutRect over)) ? over : RectOf(placeholder.BlockId));
+				id = DropPlaceholder.Prefix + placeholder.BlockId;
+			}
+			else if (_float.TryGetValue(id, out LayoutRect floatRect))
+			{
+				// 浮起的卡片(正被拖 / 正落位):按像素矩形排,不跟格子走
+				rect = floatRect;
+				floating = true;
+			}
+			else
+			{
+				rect = RectOf(id);
+			}
 			if (!rect.HasValue)
 			{
 				child.Arrange(new Rect(0.0, 0.0, 0.0, 0.0));
+				_arranged.Remove(child);
 				continue;
 			}
 			LayoutRect value = rect.Value;
-			child.Arrange(new Rect(value.X, value.Y, value.W, value.H));
+			Rect target = new Rect(value.X, value.Y, Math.Max(0.0, value.W), Math.Max(0.0, value.H));
+			if (floating || IsCanvas)
+			{
+				// 尺寸可能在两次测量之间变了(缩放预览 / 落位动画 / canvas 拖边):按新尺寸补量这一块。
+				// 尺寸没变时 Measure 是空操作 —— 动画期间不会每帧让整个画布重新测量。
+				child.Measure(new Size(target.Width, MeasureHeightFor(id, target.Height)));
+			}
+			if (flip && !floating && (_flipOnly == null || _flipOnly.Contains(id)) && _arranged.TryGetValue(child, out Rect old))
+			{
+				StartFlip(child, old, target, _flipMs);
+			}
+			_arranged[child] = target;
+			child.Arrange(target);
 		}
+		_flipPending = false;
+		_flipOnly = null;
 		return final;
 	}
 
@@ -483,14 +529,396 @@ public sealed class GridCanvasPanel : Panel
 		return ((CanvasHeight > 0.0) ? CanvasHeight : LayoutCanvas.RefHeight);
 	}
 
-	/// <summary>RenderBox 清空 Children 后把拖动覆盖层(落点占位框)挂回来。</summary>
-	public void ReattachOverlays()
+	// ————————————— 拖动视觉:浮起跟手 / 落点占位框 / FLIP 让位动画 / 松手落位 —————————————
+	//
+	// 全部只动 RenderTransform 或单块的排布矩形:
+	//   - 拖动中被拖卡片按像素跟随指针 = 改它的 TranslateTransform,不触发任何布局;
+	//   - 落点格子变了才重排一次(宿主压紧后 RequestFlip + Reflow),其它块从旧位置平滑动画到新位置(FLIP);
+	//   - 缩放预览 / 松手落位只改那一块的排布矩形 + InvalidateArrange(画布不重新测量,其它块的 Arrange 是空操作);
+	//   - 帧驱动用 CompositionTarget.Rendering(跟显示器刷新走,不限帧率),进度按经过的毫秒算。
+
+	// 上一次排布到的位置(FLIP 的"旧位置")
+	private readonly Dictionary<UIElement, Rect> _arranged = new Dictionary<UIElement, Rect>();
+
+	private bool _flipPending;
+
+	private double _flipMs = LayoutMotion.FlipMs;
+
+	private HashSet<string>? _flipOnly;
+
+	// 浮起的卡片:id → 像素矩形(拖动起手矩形 / 缩放预览 / 落位动画的当前帧)
+	private readonly Dictionary<string, LayoutRect> _float = new Dictionary<string, LayoutRect>(StringComparer.Ordinal);
+
+	// 落点占位框(每个被拖块一个)与预览矩形覆盖
+	private readonly Dictionary<string, DropPlaceholder> _placeholders = new Dictionary<string, DropPlaceholder>(StringComparer.Ordinal);
+
+	private readonly Dictionary<string, LayoutRect> _placeholderRects = new Dictionary<string, LayoutRect>(StringComparer.Ordinal);
+
+	// 松手落位动画
+	private readonly Dictionary<string, LayoutRect> _settleFrom = new Dictionary<string, LayoutRect>(StringComparer.Ordinal);
+
+	// 落位终点:等宿主提交后的那次排布完成再取一次并定住(提交时的压紧可能把格子再往上挪)
+	private readonly Dictionary<string, LayoutRect> _settleTo = new Dictionary<string, LayoutRect>(StringComparer.Ordinal);
+
+	private readonly System.Diagnostics.Stopwatch _settleClock = new System.Diagnostics.Stopwatch();
+
+	private bool _settling;
+
+	private Action? _settleDone;
+
+	/// <summary>是否有浮起的卡片(正被拖或正在落位)。</summary>
+	public bool HasFloating
 	{
+		get
+		{
+			return _float.Count > 0;
+		}
 	}
 
-	/// <summary>收掉所有拖动视觉(浮起的卡片、落点占位框、进行中的动画)。</summary>
+	/// <summary>
+	/// 下一次排布时,位置变了的块从旧位置动画到新位置(FLIP)。
+	/// <paramref name="only"/> = 只动这些块(canvas 吸附那一下只动被拖块;null = 除浮起卡片外全部);
+	/// <paramref name="ms"/> = 动画时长(≤0 用默认 170ms)。
+	/// </summary>
+	public void RequestFlip(ICollection<string>? only = null, double ms = 0.0)
+	{
+		_flipPending = true;
+		_flipMs = ((ms > 0.0) ? ms : LayoutMotion.FlipMs);
+		_flipOnly = ((only != null) ? new HashSet<string>(only, StringComparer.Ordinal) : null);
+	}
+
+	/// <summary>让这些块浮起来(按当前排布矩形钉住,之后用 <see cref="MoveFloat"/> 跟手),并在原格子上显示落点占位框。</summary>
+	public void BeginFloat(IEnumerable<string> ids, bool placeholder)
+	{
+		// 上一次松手的落位动画还没走完就又抓起一块:先让它直接落定,再开始新的
+		StopSettle(true);
+		foreach (string id in ids)
+		{
+			LayoutRect? rect = RectOf(id);
+			UIElement? child = ChildOf(id);
+			if (!rect.HasValue || child == null)
+			{
+				continue;
+			}
+			// 起手时如果还挂着上一次的让位动画,从"眼睛看到的位置"接着走
+			TranslateTransform tt = TranslateOf(child);
+			LayoutRect start = LayoutMotion.Offset(rect.Value, tt.X, tt.Y);
+			StopAnimation(tt);
+			tt.X = 0.0;
+			tt.Y = 0.0;
+			_float[id] = start;
+			Panel.SetZIndex(child, 1000);
+			if (placeholder)
+			{
+				ShowPlaceholder(id);
+			}
+		}
+		InvalidateArrange();
+	}
+
+	/// <summary>拖动中:所有浮起卡片按像素平移(只改 RenderTransform,不触发布局)。</summary>
+	public void MoveFloat(double dx, double dy)
+	{
+		foreach (string id in _float.Keys)
+		{
+			UIElement? child = ChildOf(id);
+			if (child == null)
+			{
+				continue;
+			}
+			TranslateTransform tt = TranslateOf(child);
+			StopAnimation(tt);
+			tt.X = dx;
+			tt.Y = dy;
+		}
+	}
+
+	/// <summary>缩放中:浮起卡片按像素实时改矩形(只重新排这一块)。</summary>
+	public void ResizeFloat(string id, LayoutRect rect)
+	{
+		if (!_float.ContainsKey(id))
+		{
+			return;
+		}
+		_float[id] = rect;
+		// 缩小预览时内容可能比卡片高:先裁在卡片里,落定后恢复
+		UIElement? child = ChildOf(id);
+		if (child != null)
+		{
+			child.ClipToBounds = true;
+		}
+		InvalidateArrange();
+	}
+
+	/// <summary>占位框改用给定的预览矩形(像素高度缩放:格子不动,只预览吸附后的尺寸);null = 回到格子矩形。</summary>
+	public void SetPlaceholderRect(string id, LayoutRect? rect)
+	{
+		if (rect.HasValue)
+		{
+			_placeholderRects[id] = rect.Value;
+		}
+		else
+		{
+			_placeholderRects.Remove(id);
+		}
+		InvalidateArrange();
+	}
+
+	/// <summary>
+	/// 松手落位:浮起卡片把身上的平移折进矩形(视觉不动),然后在 170ms 里 ease-out 动画到它的格子矩形
+	/// (格子在宿主提交 / 重排之后才确定,所以每帧现取),落定后去掉占位框、清掉浮起状态,再回调 <paramref name="done"/>。
+	/// </summary>
+	public void Settle(Action? done)
+	{
+		StopSettle(false);
+		_settleFrom.Clear();
+		_settleTo.Clear();
+		List<string> ids = new List<string>(_float.Keys);
+		foreach (string id in ids)
+		{
+			UIElement? child = ChildOf(id);
+			LayoutRect from = _float[id];
+			if (child != null)
+			{
+				TranslateTransform tt = TranslateOf(child);
+				from = LayoutMotion.Offset(from, tt.X, tt.Y);
+				StopAnimation(tt);
+				tt.X = 0.0;
+				tt.Y = 0.0;
+			}
+			_float[id] = from;
+			_settleFrom[id] = from;
+		}
+		_settleDone = done;
+		if (_settleFrom.Count == 0 || !Motion.Enabled)
+		{
+			FinishSettle();
+			return;
+		}
+		_settling = true;
+		_settleClock.Restart();
+		CompositionTarget.Rendering -= OnSettleFrame;
+		CompositionTarget.Rendering += OnSettleFrame;
+		InvalidateArrange();
+	}
+
+	/// <summary>RenderBox 清空 Children 后把拖动覆盖层(落点占位框)挂回来(放在最底层,卡片盖在它上面)。</summary>
+	public void ReattachOverlays()
+	{
+		foreach (DropPlaceholder placeholder in _placeholders.Values)
+		{
+			if (!base.Children.Contains(placeholder))
+			{
+				base.Children.Insert(0, placeholder);
+			}
+		}
+	}
+
+	/// <summary>收掉所有拖动视觉(浮起的卡片、落点占位框、进行中的动画),立即回到格子位置。</summary>
 	public void ClearDragVisuals()
 	{
+		StopSettle(false);
+		_settleDone = null;
+		foreach (string id in new List<string>(_float.Keys))
+		{
+			UIElement? child = ChildOf(id);
+			if (child != null)
+			{
+				TranslateTransform tt = TranslateOf(child);
+				StopAnimation(tt);
+				tt.X = 0.0;
+				tt.Y = 0.0;
+				Panel.SetZIndex(child, 0);
+				child.ClipToBounds = false;
+			}
+		}
+		_float.Clear();
+		RemovePlaceholders();
+		_flipPending = false;
+		_flipOnly = null;
+		InvalidateArrange();
+	}
+
+	private void OnSettleFrame(object? sender, EventArgs e)
+	{
+		if (!_settling)
+		{
+			CompositionTarget.Rendering -= OnSettleFrame;
+			return;
+		}
+		if (_settleTo.Count == 0)
+		{
+			// 第一帧:宿主的提交 / 重排还没排完就先等一帧(最多等 100ms),然后把终点定住、从这一刻开始计时
+			if ((!IsMeasureValid || !IsArrangeValid) && _settleClock.Elapsed.TotalMilliseconds < 100.0)
+			{
+				return;
+			}
+			foreach (KeyValuePair<string, LayoutRect> kv in _settleFrom)
+			{
+				_settleTo[kv.Key] = RectOf(kv.Key) ?? kv.Value;
+			}
+			_settleClock.Restart();
+		}
+		double t = LayoutMotion.Progress(_settleClock.Elapsed.TotalMilliseconds, LayoutMotion.SettleMs);
+		double k = LayoutMotion.EaseOutCubic(t);
+		foreach (KeyValuePair<string, LayoutRect> kv in _settleFrom)
+		{
+			LayoutRect to = (_settleTo.TryGetValue(kv.Key, out LayoutRect fixedTo) ? fixedTo : kv.Value);
+			_float[kv.Key] = LayoutMotion.LerpRect(kv.Value, to, k);
+		}
+		InvalidateArrange();
+		if (t >= 1.0)
+		{
+			FinishSettle();
+		}
+	}
+
+	private void FinishSettle()
+	{
+		StopSettle(false);
+		foreach (string id in new List<string>(_float.Keys))
+		{
+			UIElement? child = ChildOf(id);
+			if (child != null)
+			{
+				Panel.SetZIndex(child, 0);
+				child.ClipToBounds = false;
+				// 落定后它的"旧位置"就是格子位置,下一次 FLIP 从这里算
+				LayoutRect? slot = RectOf(id);
+				if (slot.HasValue)
+				{
+					_arranged[child] = new Rect(slot.Value.X, slot.Value.Y, slot.Value.W, slot.Value.H);
+				}
+			}
+		}
+		_float.Clear();
+		_settleFrom.Clear();
+		_settleTo.Clear();
+		RemovePlaceholders();
+		InvalidateArrange();
+		Action? done = _settleDone;
+		_settleDone = null;
+		done?.Invoke();
+	}
+
+	private void StopSettle(bool finish)
+	{
+		if (_settling)
+		{
+			_settling = false;
+			_settleClock.Stop();
+			CompositionTarget.Rendering -= OnSettleFrame;
+			if (finish)
+			{
+				FinishSettle();
+			}
+		}
+	}
+
+	private void ShowPlaceholder(string id)
+	{
+		if (_placeholders.ContainsKey(id))
+		{
+			return;
+		}
+		DropPlaceholder placeholder = new DropPlaceholder(id);
+		Panel.SetZIndex(placeholder, -1);
+		_placeholders[id] = placeholder;
+		base.Children.Insert(0, placeholder);
+	}
+
+	private void RemovePlaceholders()
+	{
+		foreach (DropPlaceholder placeholder in _placeholders.Values)
+		{
+			StopAnimation(TranslateOf(placeholder));
+			_arranged.Remove(placeholder);
+			base.Children.Remove(placeholder);
+		}
+		_placeholders.Clear();
+		_placeholderRects.Clear();
+	}
+
+	// FLIP:先算"眼睛看到的旧位置 - 新位置"的反向偏移挂上去,再动画归零;先取消同一块的旧动画
+	private static void StartFlip(UIElement child, Rect old, Rect target, double ms)
+	{
+		TranslateTransform tt = TranslateOf(child);
+		double offX = LayoutMotion.FlipOffset(old.X, tt.X, target.X);
+		double offY = LayoutMotion.FlipOffset(old.Y, tt.Y, target.Y);
+		StopAnimation(tt);
+		tt.X = 0.0;
+		tt.Y = 0.0;
+		if (!LayoutMotion.NeedsAnimation(offX, offY))
+		{
+			return;
+		}
+		Duration duration = new Duration(TimeSpan.FromMilliseconds(ms));
+		CubicEase ease = new CubicEase
+		{
+			EasingMode = EasingMode.EaseOut
+		};
+		if (Math.Abs(offX) >= LayoutMotion.MinOffset)
+		{
+			tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(offX, 0.0, duration)
+			{
+				EasingFunction = ease,
+				FillBehavior = FillBehavior.Stop
+			});
+		}
+		if (Math.Abs(offY) >= LayoutMotion.MinOffset)
+		{
+			tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(offY, 0.0, duration)
+			{
+				EasingFunction = ease,
+				FillBehavior = FillBehavior.Stop
+			});
+		}
+	}
+
+	// 取消动画:先读出当前动画值(调用方已经用过),再撤掉动画时钟,让基值接管
+	private static void StopAnimation(TranslateTransform tt)
+	{
+		tt.BeginAnimation(TranslateTransform.XProperty, null);
+		tt.BeginAnimation(TranslateTransform.YProperty, null);
+	}
+
+	// 卡片的平移变换(只有本画布给区块卡片挂 RenderTransform;别人挂的不是 TranslateTransform 时换成我们的)
+	private static TranslateTransform TranslateOf(UIElement child)
+	{
+		if (child.RenderTransform is TranslateTransform tt && !tt.IsFrozen)
+		{
+			return tt;
+		}
+		TranslateTransform fresh = new TranslateTransform();
+		child.RenderTransform = fresh;
+		return fresh;
+	}
+
+	// 与 MeasureOverride 同一套高度约束(否则测量与排布两趟约束不同,这一块每次布局都要重量)
+	private double MeasureHeightFor(string id, double rectHeight)
+	{
+		if (IsCanvas || (IsFill(id) && RowH <= 0.0))
+		{
+			return rectHeight;
+		}
+		LayoutCell? cell = CellOf(id);
+		if (cell != null && cell.HeightPx > 0.0)
+		{
+			return cell.HeightPx;
+		}
+		return double.PositiveInfinity;
+	}
+
+	private UIElement? ChildOf(string id)
+	{
+		foreach (UIElement child in base.InternalChildren)
+		{
+			if (!(child is DropPlaceholder) && string.Equals(IdOf(child), id, StringComparison.Ordinal))
+			{
+				return child;
+			}
+		}
+		return null;
 	}
 
 	// 子元素的块 id:优先 LayoutCard 的 Spec.Id,退到 Tag(测试宿主里的假元素用 Tag)
@@ -501,5 +929,33 @@ public sealed class GridCanvasPanel : Panel
 			return card.Spec?.Id ?? "";
 		}
 		return ((element is FrameworkElement frameworkElement) ? (frameworkElement.Tag as string ?? "") : "");
+	}
+}
+
+/// <summary>
+/// 落点占位框:被拖块将要落下的格子上显示一个半透明框(主题色描边 + 浅色填充),不吃鼠标。
+/// 由 <see cref="GridCanvasPanel"/> 自己管理(加在最底层,卡片盖在它上面)。
+/// </summary>
+internal sealed class DropPlaceholder : Border
+{
+	public const string Prefix = "__drop__:";
+
+	public string BlockId { get; }
+
+	public DropPlaceholder(string blockId)
+	{
+		BlockId = blockId ?? "";
+		IsHitTestVisible = false;
+		Focusable = false;
+		CornerRadius = new CornerRadius(10.0);
+		BorderThickness = new Thickness(1.5);
+		Color accent = LayoutEditor.AccentColor();
+		SolidColorBrush fill = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
+		fill.Freeze();
+		SolidColorBrush stroke = new SolidColorBrush(Color.FromArgb(200, accent.R, accent.G, accent.B));
+		stroke.Freeze();
+		Background = fill;
+		BorderBrush = stroke;
+		Tag = Prefix + BlockId;
 	}
 }
