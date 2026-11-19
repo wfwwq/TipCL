@@ -709,6 +709,49 @@ public static class LayoutEngine
 	}
 
 	/// <summary>
+	/// 把刚追加到页面的块放到末尾的合理槽位:
+	///   grid → 新起一行、占满全宽(编辑态 stack 会先折成 12 列网格,追加后视觉上才能真正落在页尾);
+	///   canvas → 左上角 0.4×0.25 的小卡片,避免默认 1×1 铺满整块画布。
+	/// 只动坐标,不动 id / 内容。
+	/// </summary>
+	public static void PlaceAppendedBlock(PageLayoutV2? page, BlockLayout? block)
+	{
+		if (page == null || block == null)
+		{
+			return;
+		}
+		if (string.Equals(page.Mode, LayoutSchema.ModeGrid, StringComparison.Ordinal))
+		{
+			int cols = Math.Max(1, page.Cols);
+			double bottom = 0.0;
+			if (page.Blocks != null)
+			{
+				foreach (BlockLayout other in page.Blocks)
+				{
+					if (other == null || ReferenceEquals(other, block))
+					{
+						continue;
+					}
+					bottom = Math.Max(bottom, other.Y + Math.Max(1.0, other.H));
+				}
+			}
+			block.X = 0.0;
+			block.Y = bottom;
+			block.W = cols;
+			block.H = 1.0;
+			block.Span = cols;
+			return;
+		}
+		if (string.Equals(page.Mode, LayoutSchema.ModeCanvas, StringComparison.Ordinal))
+		{
+			block.X = 0.0;
+			block.Y = 0.0;
+			block.W = 0.4;
+			block.H = 0.25;
+		}
+	}
+
+	/// <summary>
 	/// stack 模式的有效列数:只有显式声明 cols ∈ {2,3} 时才多列,其余(含默认 cols=12)一律单列。
 	/// 这条规则保证"默认文档 → 单列纵向流 → 与改动前逐像素等价";grid/canvas 由 L2 接引擎的另外两个模式,
 	/// L1 先按单列兜底渲染(不丢字段:mode/cols 原样保留在文档里)。
@@ -2933,6 +2976,35 @@ public sealed class LayoutEditSession
 			count++;
 		}
 		return count;
+	}
+
+	/// <summary>
+	/// 追加一个布局文档自己的块(custom: / plugin:)到页面末尾:L6 的「+ 自建区块」走这里,
+	/// 规则完全复用 <see cref="PasteInto"/>(不受页面白名单限制 + 按 id 去重),只是临时借用剪贴板并原样还回去。
+	/// 返回实际追加的块数(已有同 id 块 / 不是 custom:/plugin: → 0)。
+	/// </summary>
+	public int AppendImplicit(PageLayoutV2? page, string blockId, IReadOnlyList<LayoutBlockRef>? refs)
+	{
+		if (page == null || string.IsNullOrEmpty(blockId) || !LayoutEngine.IsImplicitRef(blockId))
+		{
+			return 0;
+		}
+		List<BlockLayout> savedClipboard = new List<BlockLayout>(_clipboard);
+		try
+		{
+			_clipboard.Clear();
+			_clipboard.Add(new BlockLayout
+			{
+				Id = blockId,
+				Style = LayoutSchema.StylePlain
+			});
+			return PasteInto(page, refs);
+		}
+		finally
+		{
+			_clipboard.Clear();
+			_clipboard.AddRange(savedClipboard);
+		}
 	}
 
 	// ————— 键盘 —————
