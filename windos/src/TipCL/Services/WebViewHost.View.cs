@@ -129,6 +129,10 @@ public sealed class PluginWebView : Grid, IDisposable
 		await web.EnsureCoreWebView2Async(env);
 		if (_disposed)
 		{
+			// 初始化期间视图被 Dispose(切页关插件页 / 插件被卸载):此时 Dispose() 早跑过,
+			// 它看到的是 _web == null,不会管这个刚落地的 WebView2。这里必须自己收掉,
+			// 否则浏览器进程 + HwndHost 就永久泄漏了(DisposeWeb 会把它从 Children 摘掉再 Dispose)。
+			DisposeWeb();
 			return;
 		}
 		base.Children.Remove(bar);
@@ -269,6 +273,12 @@ public sealed class PluginWebView : Grid, IDisposable
 
 	public void Reload()
 	{
+		if (_disposed)
+		{
+			// 已销毁的视图不能再拉起浏览器:PageStart 是 async void,在没有可视树的情况下
+			// 只会在后台把 WebView2 建起来又没人管(白起一个浏览器进程)。
+			return;
+		}
 		DisposeWeb();
 		_started = true;
 		PageStart();

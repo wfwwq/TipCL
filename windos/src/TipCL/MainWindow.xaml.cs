@@ -1463,15 +1463,39 @@ public partial class MainWindow : Window
 		_prefs.Dark = App.IsDark;
 		_prefs.Anim = Motion.UserEnabled;
 		_prefs.AnimScale = Motion.Scale;
+		string path = PrefsPath;
+		string tmp = path + ".tmp";
 		try
 		{
-			File.WriteAllText(PrefsPath, JsonSerializer.Serialize(_prefs, new JsonSerializerOptions
+			// 原子写(先落 .tmp 再替换),对齐 PageLayoutStore / Utils.WriteJson 的写法。
+			// 原来直接 WriteAllText 覆盖正式文件:写到一半被结束(更新器重启 / Win7 关机)
+			// 就会留下截断的 json,下次 LoadUiPrefs 解析失败 → 主题、动画、随手记全部回默认。
+			File.WriteAllText(tmp, JsonSerializer.Serialize(_prefs, new JsonSerializerOptions
 			{
 				WriteIndented = true
 			}));
+			if (File.Exists(path))
+			{
+				File.Replace(tmp, path, null);
+			}
+			else
+			{
+				File.Move(tmp, path);
+			}
 		}
 		catch
 		{
+			// 偏好写不进去不能崩 UI(原来是整体吞掉,这里保持同样语义,只多清掉半成品 tmp)
+			try
+			{
+				if (File.Exists(tmp))
+				{
+					File.Delete(tmp);
+				}
+			}
+			catch
+			{
+			}
 		}
 	}
 

@@ -3027,5 +3027,6 @@
  "已添加到本页": "Added to this page",
  "+ 自建区块": "+ Custom widget",
  "添加自建区块到本页": "Add a custom widget to this page",
- "删除定义(不可撤销)": "Delete the definition (cannot be undone)"
+ "删除定义(不可撤销)": "Delete the definition (cannot be undone)",
+ "上一次布局": "Previous layout"
 }

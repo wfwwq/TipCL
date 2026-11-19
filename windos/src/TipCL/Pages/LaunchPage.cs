@@ -88,6 +88,11 @@ public sealed partial class LaunchPage : PageBase
 
 	private string? _taskId;
 
+	// 「启动」正在走预检 / 登录闸门 / 多开询问的那一段(此时按钮还没禁用)。
+	// 没有这个标记时,双击「启动」会并发跑两次 LaunchAsync,后端起两个 launch_game 任务,
+	// 而 _taskId 只记得后一个 —— 前一个既停不掉也不会回填状态,表现为「点停止没反应 / 起了两个游戏」。
+	private bool _launching;
+
 	private string? _loginTask;
 
 	private bool _syncing;
@@ -1339,6 +1344,25 @@ public sealed partial class LaunchPage : PageBase
 	}
 
 	private async Task LaunchAsync()
+	{
+		// 重入守卫:见字段 _launching 的注释。真正的启动流程在 LaunchCoreAsync,
+		// 这样任何早退(缺版本 / 预检取消 / 未登录)都会经过 finally 把标记清掉。
+		if (_launching)
+		{
+			return;
+		}
+		_launching = true;
+		try
+		{
+			await LaunchCoreAsync();
+		}
+		finally
+		{
+			_launching = false;
+		}
+	}
+
+	private async Task LaunchCoreAsync()
 	{
 		string version = _ver.Str();
 		if (string.IsNullOrEmpty(version))
