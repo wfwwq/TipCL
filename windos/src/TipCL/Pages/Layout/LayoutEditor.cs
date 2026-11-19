@@ -41,6 +41,10 @@ public sealed class LayoutEditor
 
 	private LayoutPageState _state;
 
+	// 当前显示的是哪一份布局(空串 = 主 body;LayoutVariants.Narrow = variants.narrow)。
+	// 窄窗下读到的是变体,落盘也只能写变体,否则会把窄版盖到宽版上(P1)。
+	private string _variant = "";
+
 	// 「页面默认布局」:v2 文档里还没有这一页时的兜底(实例库的左右排布靠它)
 	private readonly PageLayoutV2? _defaultPage;
 
@@ -55,6 +59,12 @@ public sealed class LayoutEditor
 	private bool _edit;
 
 	private LayoutCard? _dragCard;
+
+	// stack 拖拽的鼠标捕获源(退出编辑时要解绑,否则残留的 MouseMove 还会改序)
+	private UIElement? _dragSrc;
+
+	// 本次 stack 拖拽是否真的换过序(只点一下手柄不该落盘)
+	private bool _dragChanged;
 
 	// 进编辑态时把 stack 临时折成 12 列网格(这样才能自由拖);没动过就在退出时还原
 	private bool _stackConverted;
@@ -116,6 +126,8 @@ public sealed class LayoutEditor
 	// 丝滑拖动(grid):上一次算出的落点 / 吸附后尺寸 —— 只有它变了才重排一次(其余帧只动 RenderTransform)
 	private int _lastDropX = int.MinValue;
 	private int _lastDropY = int.MinValue;
+	// 并排落位的宽度单独比较(不再把 fitW 编进 _lastDropX:targetX=0,fitW=2 会与普通 targetX=2 撞键)
+	private int _lastFitW = int.MinValue;
 	private int _lastSnapW = int.MinValue;
 	private int _lastSnapH = int.MinValue;
 	private double _lastSnapPx = double.NaN;
@@ -137,6 +149,9 @@ public sealed class LayoutEditor
 
 	// 「自动靠拢」开关按钮(grid 压紧上浮 / 左右互换 / canvas 磁性吸附;偏好存 UiPrefs.LayoutAutoPack)
 	private Button? _autoPackBtn;
+
+	// 「全部折叠」按钮:文案跟着卡片的实际折叠状态走(退出编辑自动展开后不再停在"全部展开")
+	private Button? _foldAllBtn;
 
 	// 底部托盘 + 工具条的外壳:只在编辑态占位(常态整行折叠,内容区高度与改动前一致)
 	private readonly SPanel _bottom;
@@ -223,15 +238,16 @@ public sealed class LayoutEditor
 			ExitEdit();
 		}));
 		Button foldAll = Ui.Btn(I18n.L("全部折叠"), BtnKind.Normal, null);
-		bool folded = false;
+		_foldAllBtn = foldAll;
 		foldAll.Click += delegate
 		{
-			folded = !folded;
-			foreach (LayoutCard value in _cards.Values)
+			// 状态从卡片读(不再靠按钮局部 bool):有任意一块折叠着 = 这一步"全部展开",否则"全部折叠"。
+			bool fold = !IsAnyCardCollapsed();
+			foreach (LayoutCard value2 in _cards.Values)
 			{
-				value.SetCollapsed(folded);
+				value2.SetCollapsed(fold);
 			}
-			foldAll.Content = I18n.L(folded ? "全部展开" : "全部折叠");
+			RefreshFoldAllBtn();
 		};
 		barButtons.Children.Add(foldAll);
 		barButtons.Children.Add(Ui.Btn(I18n.L("重置本页"), BtnKind.Normal, delegate
@@ -536,6 +552,9 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = false;
+		// stack 拖拽可能还没收尾(比如被快捷键/外部调用结束编辑):必须解绑并释放捕获,
+		// 否则之后鼠标一动还会改序、EndDrag 还会无条件落盘(P1)
+		CancelDrag(_dragCard, _dragSrc);
 		if (_gesture.Length != 0)
 		{
 			EndBoxGesture(false, false);
@@ -588,6 +607,8 @@ public sealed class LayoutEditor
 		// 所以"没接线 / 首帧"的渲染与改动前完全一致。
 		double width = ((_widthHint > 0.0) ? _widthHint : LayoutVariantHost.Width);
 		PageLayoutV2? page = LayoutVariants.PageOf(doc.Layout, _pageId, width, LayoutVariantHost.Threshold);
+		// 显示的是哪一份,之后 Persist 就只能覆盖哪一份(P1:窄窗编辑原来会写穿到主 body)
+		_variant = LayoutVariantWrite.SourceOf(doc.Layout, _pageId, width, LayoutVariantHost.Threshold);
 		// 原生默认排版:文档里没有这一页 = 从没自定义过 → 常态直接显示页面原来的排版根
 		_nativeActive = page == null && _native != null;
 		// 「页面默认布局」(D-new):文档里还没有这一页时用宿主给的默认布局。
@@ -683,6 +704,9 @@ public sealed class LayoutEditor
 		_box.SnapStep = _snapStep;
 		_box.EditMode = _edit;
 		_box.Margin = (_marginOverride ?? PadOf(_state.Plan()));
+		// 覆盖层与画布同坐标系:鼠标坐标取自 e.GetPosition(_box)(已扣掉 Margin),
+		// 辅助线/框选层若不带同一个 Margin,整体会偏移 (padLeft, padTop),默认 (18,14)px(P2)
+		_guide.Margin = _box.Margin;
 		UpdateFillHeight();
 		_box.Children.Clear();
 		foreach (LayoutCell cell in LayoutCanvas.StackedOrder(_box.Cells))
@@ -948,6 +972,29 @@ public sealed class LayoutEditor
 			_autoPackBtn.IsEnabled = IsBoxMode;
 			_autoPackBtn.Content = I18n.L("自动靠拢") + " " + (LayoutEditPrefs.AutoPack ? I18n.L("开") : I18n.L("关"));
 		}
+		RefreshFoldAllBtn();
+	}
+
+	// 「全部折叠/全部展开」文案 = 卡片的实际折叠状态(退出编辑会把卡片强制展开,文案必须跟着回去)
+	internal void RefreshFoldAllBtn()
+	{
+		if (_foldAllBtn == null)
+		{
+			return;
+		}
+		_foldAllBtn.Content = I18n.L(IsAnyCardCollapsed() ? "全部展开" : "全部折叠");
+	}
+
+	private bool IsAnyCardCollapsed()
+	{
+		foreach (LayoutCard card in _cards.Values)
+		{
+			if (card.IsCollapsed)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	// 吸附档循环:0 → 4 → 8 → 16 → 24 → 0(与旧 DashLayout.Grid 的档位表一致)
@@ -1218,7 +1265,8 @@ public sealed class LayoutEditor
 		try
 		{
 			LayoutV2 doc = LayoutStoreV2.Load();
-			if (doc.Layout != null && doc.Layout.Pages.Remove(_pageId))
+			// 窄窗下显示的是变体:重置也只删变体那一份(否则主 body 被删、窄版仍在,看起来"没重置")
+			if (LayoutVariantWrite.Remove(doc, _pageId, _variant))
 			{
 				LayoutStoreV2.Save(doc);
 				PageLayoutStore.Reload();
@@ -1261,6 +1309,9 @@ public sealed class LayoutEditor
 		{
 			return;
 		}
+		// 导入前的本页状态:导入后压进撤销栈,并且必须算"动过",否则完成编辑会走 RestoreStackAfterEdit
+		// 把进编辑时的备份盖回来 —— 导入的内容看起来"回滚"了(P1)
+		PageLayoutV2 before = _state.ToPage();
 		PageLayoutStore.Reload();
 		LayoutV2 doc = LayoutStoreV2.Load();
 		foreach (KeyValuePair<string, PageLayoutDoc> kv in PageLayoutStore.LoadAll())
@@ -1274,11 +1325,26 @@ public sealed class LayoutEditor
 			{
 				existing = stored;
 			}
-			LayoutEngine.ApplyPage(doc, kv.Key, LayoutEngine.MergeV1(existing, kv.Value));
+			PageLayoutV2 merged = LayoutEngine.MergeV1(existing, kv.Value);
+			LayoutEngine.ApplyPage(doc, kv.Key, merged);
+			// 窄窗变体里已有这一页:导入也要并进那一份,否则窄窗下看到的仍是旧变体(导入像"没生效")
+			if (doc.Layout.Variants != null)
+			{
+				foreach (LayoutBody variantBody in doc.Layout.Variants.Values)
+				{
+					if (variantBody?.Pages != null && variantBody.Pages.TryGetValue(kv.Key, out PageLayoutV2? variantPage))
+					{
+						variantBody.Pages[kv.Key] = LayoutEngine.MergeV1(variantPage, kv.Value);
+					}
+				}
+			}
 		}
 		LayoutStoreV2.Save(doc);
 		PageLayoutStore.Reload();
 		LoadFromStore();
+		_layoutTouched = true;
+		_session.PushUndo(before);
+		_session.ClearSelection();
 		Render();
 		this.Changed?.Invoke();
 	}
@@ -1293,7 +1359,7 @@ public sealed class LayoutEditor
 		try
 		{
 			LayoutV2 doc = LayoutStoreV2.Load();
-			LayoutEngine.ApplyPage(doc, _pageId, _state.ToPage());
+			LayoutVariantWrite.Apply(doc, _pageId, _state.ToPage(), _variant);
 			LayoutStoreV2.Save(doc);
 			PageLayoutStore.Reload();
 			// 写进文档之后本页就是"自定义过"的了:常态不再显示原生默认排版
@@ -1330,6 +1396,8 @@ public sealed class LayoutEditor
 			return;
 		}
 		_dragCard = card;
+		_dragSrc = src;
+		_dragChanged = false;
 		_dragHeights.Clear();
 		foreach (UIElement child in _list.Children)
 		{
@@ -1349,7 +1417,7 @@ public sealed class LayoutEditor
 	private void OnDragMove(object sender, MouseEventArgs e)
 	{
 		LayoutCard card = _dragCard;
-		if (card == null || e.LeftButton != MouseButtonState.Pressed)
+		if (!_edit || card == null || e.LeftButton != MouseButtonState.Pressed)
 		{
 			return;
 		}
@@ -1365,6 +1433,7 @@ public sealed class LayoutEditor
 		if (_state.VisibleIndexOf(id) != before)
 		{
 			InsertVisual(id);
+			_dragChanged = true;
 		}
 	}
 
@@ -1380,21 +1449,40 @@ public sealed class LayoutEditor
 
 	private void EndDrag(UIElement src)
 	{
-		LayoutCard card = _dragCard;
-		_dragCard = null;
-		src.MouseMove -= OnDragMove;
-		src.MouseLeftButtonUp -= OnDragEnd;
-		src.LostMouseCapture -= OnDragLost;
-		if (src.IsMouseCaptured)
-		{
-			src.ReleaseMouseCapture();
-		}
+		LayoutCard? card = _dragCard;
+		bool changed = _dragChanged;
+		CancelDrag(card, src);
 		if (card == null)
 		{
 			return;
 		}
-		card.Opacity = 1.0;
-		Persist();
+		// 只点了一下手柄 / 已经退出编辑:没有换序就别落盘
+		if (changed && _edit)
+		{
+			Persist();
+		}
+	}
+
+	// 收掉 stack 拖拽的捕获与视觉(不落盘)。退出编辑 / 捕获丢失 / 正常松手都走这里。
+	private void CancelDrag(LayoutCard? card, UIElement? src)
+	{
+		_dragCard = null;
+		_dragSrc = null;
+		_dragChanged = false;
+		if (src != null)
+		{
+			src.MouseMove -= OnDragMove;
+			src.MouseLeftButtonUp -= OnDragEnd;
+			src.LostMouseCapture -= OnDragLost;
+		}
+		if (card != null)
+		{
+			card.Opacity = 1.0;
+		}
+		if (src != null && src.IsMouseCaptured)
+		{
+			src.ReleaseMouseCapture();
+		}
 	}
 
 	// 把某块插回可视列表的正确位置(单列时的增量搬家;多列直接整体重排)
@@ -1478,6 +1566,7 @@ public sealed class LayoutEditor
 		_gestureMoved = false;
 		_lastDropX = int.MinValue;
 		_lastDropY = int.MinValue;
+		_lastFitW = int.MinValue;
 		_lastSnapW = int.MinValue;
 		_lastSnapH = int.MinValue;
 		_lastSnapPx = double.NaN;
@@ -1721,6 +1810,14 @@ public sealed class LayoutEditor
 		}
 		else
 		{
+			// 捕获丢失(切换窗口 / 外部抢焦点)不是"正常松手":回滚到起手快照并丢掉那份额外的撤销,
+			// 否则撤销栈里会留下"等于当前状态"的空快照(P2)
+			PageLayoutV2? back = _session.DiscardUndo();
+			if (back != null)
+			{
+				_state = LayoutEngine.LoadState(_pageId, back, _refs);
+				_session.Retain(_state.Order);
+			}
 			Render();
 		}
 	}
@@ -1899,15 +1996,30 @@ public sealed class LayoutEditor
 			(fitX, fitW) = SideBySideSlot(primary, rawX, targetY, from.W, from.H, cols);
 			if (fitX >= 0)
 			{
-				targetX = fitX;
+				// 并排宽度不得低于这块的 MinCols:否则下次渲染 SanitizeCellWidths 会把它撑宽挪位 = "并排弹回"(P2)
+				int minW = LayoutGestureRules.SideBySideMinWidth(MinColsOf(primary, cols), cols);
+				if (fitW < minW)
+				{
+					fitX = -1;
+					fitW = 0;
+				}
+				else
+				{
+					targetX = fitX;
+				}
 			}
 		}
-		int dropKey = ((fitX >= 0) ? (targetX * 100 + fitW) : targetX);
-		if (dropKey == _lastDropX && targetY == _lastDropY)
+		// 落点键:并排用正数(targetX + 1),普通落位用负数,再单独比较 fitW ——
+		// 原来 targetX*100 + fitW 会让 (targetX=0, fitW=2) 与普通 targetX=2 撞键(P2)
+		bool fitting = fitX >= 0;
+		int dropKey = (fitting ? (targetX + 1) : -(targetX + 1));
+		int fitWKey = (fitting ? fitW : 0);
+		if (LayoutGestureRules.SameDrop(dropKey, fitWKey, targetY, _lastDropX, _lastFitW, _lastDropY))
 		{
 			return; // 落点没变:这一帧只有被拖卡片在动
 		}
 		_lastDropX = dropKey;
+		_lastFitW = fitWKey;
 		_lastDropY = targetY;
 		RestoreGestureSnapshot();
 		if (fitX >= 0)
@@ -2182,6 +2294,16 @@ public sealed class LayoutEditor
 		bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
 		bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
 		LayoutKey key = LayoutEditSession.KeyOf(e.Key.ToString(), ctrl, shift);
+		if (key == LayoutKey.None)
+		{
+			return; // 不抢页面自己的快捷键
+		}
+		// 手势进行中只放行 Esc(取消);Delete / 方向键 / Ctrl+Z/Y/C/V 一律等松手再响应
+		if (!LayoutGestureRules.ShouldHandleKey(key, _gesture.Length != 0))
+		{
+			e.Handled = true;
+			return;
+		}
 		switch (key)
 		{
 		case LayoutKey.Escape:
@@ -2267,13 +2389,13 @@ public sealed class LayoutEditor
 		}
 		int dx = ((key == LayoutKey.Left) ? -1 : ((key == LayoutKey.Right) ? 1 : 0));
 		int dy = ((key == LayoutKey.Up) ? -1 : ((key == LayoutKey.Down) ? 1 : 0));
-		PageLayoutV2 page = _state.ToPage();
-		int moved = LayoutEditSession.Nudge(page, _session.Selection, dx, dy, shift, AxisWidth(), AxisHeight(), _snapStep);
-		if (moved == 0)
+		// 先深拷贝再改,改成功才压撤销:原来先就地改 _state.Page(与 ToPage().Blocks 共享实例)再 PushUndo,
+		// 撤销回去的是"改过之后"的状态,等于撤销错一格(P1)
+		PageLayoutV2? page = LayoutNudge.Apply(_state.ToPage(), _session, _session.Selection, dx, dy, shift, AxisWidth(), AxisHeight(), _snapStep);
+		if (page == null)
 		{
 			return;
 		}
-		_session.PushUndo(_state.ToPage());
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
 		_session.Retain(_state.Order);
 		Persist();
@@ -2431,6 +2553,7 @@ internal sealed class LayoutCard : Border
 		_collapseBtn = Ui.IconBtn(Ico.ChevronUp, I18n.L("折叠"), delegate
 		{
 			SetCollapsed(!_collapsed);
+			_host.RefreshFoldAllBtn();
 		}, 12.0);
 		Button button = Ui.IconBtn(Ico.Close, I18n.L("隐藏"), delegate
 		{
@@ -2773,5 +2896,124 @@ internal sealed class LayoutCard : Border
 			return new Thickness(0.0);
 		}
 		return new Thickness(pad[0], pad[1], pad[2], pad[3]);
+	}
+}
+
+// ————— 编辑交互的纯规则(零 WPF;net8 测试宿主可直接断言) —————
+// 为什么不放进 LayoutEngine.cs:那一份由并行的布局引擎 lane 负责,这里只放 LayoutEditor 自己的交互语义,
+// 用独立的小类型收口,便于单测钉住规则而不需要实例化 WPF 控件。
+
+/// <summary>手势 / 落点 / 键盘的纯规则。</summary>
+public static class LayoutGestureRules
+{
+	/// <summary>手势进行中只放行 Esc(取消),其它布局快捷键(Delete / 方向键 / Ctrl+Z/Y/C/V)一律不响应。</summary>
+	public static bool ShouldHandleKey(LayoutKey key, bool gestureActive)
+	{
+		return !gestureActive || key == LayoutKey.Escape;
+	}
+
+	/// <summary>
+	/// 并排落位的最小宽度:<paramref name="scaledMinCols"/>(块自己的 MinCols 换算到本页列数)与全局 2 列取大。
+	/// 空列 span 小于这个宽度就不并排 —— 否则下次渲染被 SanitizeCellWidths 按 MinCols 撑宽挪位("并排弹回")。
+	/// </summary>
+	public static int SideBySideMinWidth(int scaledMinCols, int cols)
+	{
+		return Math.Min(Math.Max(1, cols), Math.Max(2, scaledMinCols));
+	}
+
+	/// <summary>
+	/// 这一帧的落点是否与上一帧相同。并排列(正数 targetX+1)与普通落位(负数 targetX+1)分开编码,
+	/// fitW 单独比较 —— 原来的 targetX*100+fitW 会让 (targetX=0, fitW=2) 与普通 targetX=2 同键。
+	/// </summary>
+	public static bool SameDrop(int dropKey, int fitW, int targetY, int lastDropKey, int lastFitW, int lastTargetY)
+	{
+		return dropKey == lastDropKey && fitW == lastFitW && targetY == lastTargetY;
+	}
+}
+
+/// <summary>
+/// 窄窗变体的读写(纯规则):显示哪一份(主 body / variants.narrow)就只写哪一份,
+/// 否则窄窗下的编辑会用窄版覆盖宽版。
+/// </summary>
+public static class LayoutVariantWrite
+{
+	/// <summary>这一页当前显示自哪一份布局:变体键名;空串 = 主 body(与 Linux 侧 LayoutVariants.SourceOf 同语义)。</summary>
+	public static string SourceOf(LayoutBody? body, string pageId, double availableWidth, double threshold)
+	{
+		if (body == null || string.IsNullOrEmpty(pageId))
+		{
+			return "";
+		}
+		LayoutBody? variant = LayoutVariants.BodyOf(body, availableWidth, threshold);
+		if (variant != null && variant.Pages != null && variant.Pages.TryGetValue(pageId, out PageLayoutV2? fromVariant) && fromVariant != null)
+		{
+			return LayoutVariants.NameOf(availableWidth, threshold);
+		}
+		return "";
+	}
+
+	/// <summary>把一页写回对应的 body(<paramref name="variant"/> 为空 = 主 body)。</summary>
+	public static void Apply(LayoutV2 doc, string pageId, PageLayoutV2 page, string? variant)
+	{
+		if (!string.IsNullOrEmpty(variant) && doc != null && !string.IsNullOrEmpty(pageId) && page != null)
+		{
+			if (doc.Layout == null)
+			{
+				doc.Layout = new LayoutBody();
+			}
+			if (doc.Layout.Variants == null)
+			{
+				doc.Layout.Variants = new Dictionary<string, LayoutBody>(StringComparer.Ordinal);
+			}
+			if (!doc.Layout.Variants.TryGetValue(variant, out LayoutBody? body) || body == null)
+			{
+				body = new LayoutBody();
+				doc.Layout.Variants[variant] = body;
+			}
+			if (body.Pages == null)
+			{
+				body.Pages = new Dictionary<string, PageLayoutV2>(StringComparer.Ordinal);
+			}
+			body.Pages[pageId] = page;
+			return;
+		}
+		LayoutEngine.ApplyPage(doc, pageId, page);
+	}
+
+	/// <summary>从对应的 body 删掉一页;返回是否真的删了。窄窗重置 = 只删变体那份。</summary>
+	public static bool Remove(LayoutV2 doc, string pageId, string? variant)
+	{
+		if (doc == null || doc.Layout == null || string.IsNullOrEmpty(pageId))
+		{
+			return false;
+		}
+		LayoutBody body = doc.Layout;
+		if (!string.IsNullOrEmpty(variant) && doc.Layout.Variants != null && doc.Layout.Variants.TryGetValue(variant, out LayoutBody? variantBody) && variantBody != null)
+		{
+			body = variantBody;
+		}
+		return body.Pages != null && body.Pages.Remove(pageId);
+	}
+}
+
+/// <summary>方向键微调的事务语义:先深拷贝、改动成功才压撤销(失败不留空快照,成功可精确退一格)。</summary>
+public static class LayoutNudge
+{
+	/// <summary>
+	/// 返回改好的页面;没有块真的移动时返回 null(不压撤销)。<paramref name="current"/> 不会被改动。
+	/// </summary>
+	public static PageLayoutV2? Apply(PageLayoutV2? current, LayoutEditSession? session, IEnumerable<string>? selection, int dx, int dy, bool shift, double canvasWidth, double canvasHeight, double snapStep)
+	{
+		if (current == null || session == null)
+		{
+			return null;
+		}
+		PageLayoutV2 work = current.Clone();
+		if (LayoutEditSession.Nudge(work, selection, dx, dy, shift, canvasWidth, canvasHeight, snapStep) == 0)
+		{
+			return null;
+		}
+		session.PushUndo(current);
+		return work;
 	}
 }
