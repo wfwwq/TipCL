@@ -103,15 +103,17 @@ public sealed class GameProcess
 					{
 						lines.RemoveFirst();
 					}
-					if (on_line != null)
+				}
+				// 回调放到锁外面调:on_line 可能一路走到 UI 线程(RaiseEvent / Dispatcher),
+				// 那时若另一路正好在 LastLines() 里等 _lk,就是「读日志线程持锁等 UI、UI 等锁」的死锁。
+				if (on_line != null)
+				{
+					try
 					{
-						try
-						{
-							on_line(text);
-						}
-						catch (Exception)
-						{
-						}
+						on_line(text);
+					}
+					catch (Exception)
+					{
 					}
 				}
 			}

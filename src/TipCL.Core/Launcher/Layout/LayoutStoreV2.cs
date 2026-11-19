@@ -25,6 +25,18 @@ public static class LayoutStoreV2
 	/// <summary>上次装载来源:见 <see cref="LastLoadSource"/>。</summary>
 	private static string _lastSource = "";
 
+	/// <summary>上次装载时 v2 文件是否损坏(解析失败/不可读);此时 <see cref="LastLoadSource"/> 为 v1-fallback/default。</summary>
+	private static bool _lastV2Corrupt;
+
+	/// <summary>上次发现损坏 v2 后真的改名备份成功时的备份路径(空串 = 还没备份/没有)。</summary>
+	private static string _lastCorruptBackup = "";
+
+	/// <summary>
+	/// 读到损坏 v2 但**读路径故意不改名**(见 <see cref="Load"/>:读不写盘,损坏文件不顺手清掉)时记下的原路径:
+	/// 下一次写 v2 前必须先把它改名备份,备份不了就拒绝写,绝不覆盖原件。
+	/// </summary>
+	private static string _pendingCorruptBackup = "";
+
 	private static readonly object _gate = new object();
 
 	private static LayoutV2? _cache;
@@ -44,6 +56,12 @@ public static class LayoutStoreV2
 
 	/// <summary>上次装载的来源:见 <see cref="LastLoadSource"/>。</summary>
 	public static string LastLoadSource { get { return _lastSource; } }
+
+	/// <summary>上次装载时 v2 文件是否损坏(解析失败/不可读)。损坏原件会在下一次写 v2 前先改名备份。</summary>
+	public static bool LastLoadV2Corrupt { get { return _lastV2Corrupt; } }
+
+	/// <summary>损坏 v2 的备份文件路径(空串 = 没有/尚未备份成功)。</summary>
+	public static string LastCorruptBackup { get { return _lastCorruptBackup; } }
 
 	/// <summary>布局发生变更(保存后)时触发;设计 §3.1 D5 的 LayoutChanged。</summary>
 	public static event Action? LayoutChanged;
@@ -91,14 +109,24 @@ public static class LayoutStoreV2
 			string dir = DirPath;
 			if (_cache == null || _cacheDir != dir)
 			{
-				LayoutV2? doc = ReadV2File(Path.Combine(dir, FileName));
+				string v2Path = Path.Combine(dir, FileName);
+				LayoutV2? doc = ReadV2File(v2Path, out bool corrupt);
 				if (doc != null)
 				{
 					_cache = doc;
 					_lastSource = "v2";
+					_lastCorruptBackup = "";
+					_pendingCorruptBackup = "";
 				}
 				else
 				{
+					if (corrupt)
+					{
+						// [移植差异] Windows 版在 Load 里直接改名备份;Linux 侧用例冻结了"读路径不写盘"
+						// (LayoutV2CompatTests.CorruptV2FallsBackToV1SubsetWithoutThrowing 断言读完之后
+						// 损坏文件内容原样还在),所以这里只记待办,改名备份推迟到下一次写 v2 之前做。
+						_pendingCorruptBackup = v2Path;
+					}
 					IReadOnlyDictionary<string, IReadOnlyList<LayoutV1Block>>? v1 = SafeLoadAllV1(dir);
 					if (v1 != null && v1.Count != 0)
 					{
@@ -111,6 +139,7 @@ public static class LayoutStoreV2
 						_lastSource = "default";
 					}
 				}
+				_lastV2Corrupt = (doc == null && corrupt);
 				_cacheDir = dir;
 			}
 			return _cache.Clone();
@@ -126,14 +155,24 @@ public static class LayoutStoreV2
 		lock (_gate)
 		{
 			string dir = DirPath;
-			LayoutV2? onDisk = ReadV2File(Path.Combine(dir, FileName));
+			string v2Path = Path.Combine(dir, FileName);
+			LayoutV2? onDisk = ReadV2File(v2Path, out bool corrupt);
 			if (onDisk != null)
 			{
 				_cache = onDisk;
 				_cacheDir = dir;
 				_lastSource = "v2";
+				_lastV2Corrupt = false;
+				_lastCorruptBackup = "";
+				_pendingCorruptBackup = "";
 				return onDisk.Clone();
 			}
+			if (corrupt)
+			{
+				// 同 Load:读路径不改名,交给下一次写 v2 前的备份关卡
+				_pendingCorruptBackup = v2Path;
+			}
+			_lastV2Corrupt = corrupt;
 			IReadOnlyDictionary<string, IReadOnlyList<LayoutV1Block>>? v1 = SafeLoadAllV1(dir);
 			bool hasV1 = v1 != null && v1.Count != 0;
 			LayoutV2 migrated = (hasV1 ? FromV1(v1) : LayoutV2.CreateDefault());
@@ -206,6 +245,9 @@ public static class LayoutStoreV2
 			_cache = null;
 			_cacheDir = null;
 			_lastSource = "";
+			_lastV2Corrupt = false;
+			_lastCorruptBackup = "";
+			_pendingCorruptBackup = "";
 		}
 	}
 
@@ -416,27 +458,103 @@ public static class LayoutStoreV2
 
 	// ————— 内部实现 —————
 
-	private static LayoutV2? ReadV2File(string path)
+	private static LayoutV2? ReadV2File(string path, out bool corrupt)
 	{
+		corrupt = false;
 		try
 		{
 			if (!File.Exists(path))
 			{
 				return null;
 			}
-			return LayoutV2.FromJsonText(File.ReadAllText(path));
+			string text = File.ReadAllText(path);
+			LayoutV2? doc = LayoutV2.FromJsonText(text);
+			if (doc == null)
+			{
+				// 只有"连 JSON 对象都不是 / 文本读坏"才算损坏;合法 JSON 只是 kind/version 门禁不过
+				// (例如未来版本写的文件)不算损坏 —— 那种情况既不备份也不覆盖,免得毁掉别的版本的数据
+				corrupt = IsDamagedJson(text);
+			}
+			return doc;
 		}
 		catch
 		{
-			// 被独占 / 编码坏了 / 没有权限:一律当作"读不到",由 Load 回落
+			// 被独占 / 编码坏了 / 没有权限:一律当作"读不到",由 Load 回落(但要按损坏备份)
+			corrupt = true;
 			return null;
 		}
+	}
+
+	// 能否解析成一个 JSON 对象:能 = 只是门禁不过(不备份);不能 = 文本/结构损坏(要备份)
+	private static bool IsDamagedJson(string? text)
+	{
+		try
+		{
+			// Core 的 JSON 一律走自研 PyJson(见 csproj 注释:不引第三方 JSON 包)
+			return !(PyJson.Loads(text ?? "") is PyDict);
+		}
+		catch
+		{
+			return true;
+		}
+	}
+
+	/// <summary>把损坏的 v2 原文件改名备份成 <c>ui_layout_v2.json.corrupt-&lt;时间戳&gt;</c>(同名再追加序号)。</summary>
+	private static void BackupCorruptV2(string path, out string backup)
+	{
+		backup = "";
+		if (!File.Exists(path))
+		{
+			// 原件已经不在了(用户自己删了/别的进程搬走了):待办作废,别把后续保存永久卡死
+			_pendingCorruptBackup = "";
+			return;
+		}
+		string stamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss");
+		string candidate = path + ".corrupt-" + stamp;
+		for (int i = 1; i < 1000 && File.Exists(candidate); i++)
+		{
+			candidate = path + ".corrupt-" + stamp + "-" + i;
+		}
+		try
+		{
+			File.Move(path, candidate);
+			backup = candidate;
+			_pendingCorruptBackup = "";
+		}
+		catch
+		{
+			// 改不了名(被独占等):留着待办,下次写 v2 前必须再试,备份不了就不写(绝不覆盖原件)
+			_pendingCorruptBackup = path;
+		}
+	}
+
+	/// <summary>写 v2 前确保"读失败留下的损坏原件"已经备份;返回 false = 备份不了,此时拒绝写入以免覆盖原件。</summary>
+	private static bool EnsureCorruptBackedUp()
+	{
+		string pending = _pendingCorruptBackup;
+		if (pending.Length == 0)
+		{
+			return true;
+		}
+		BackupCorruptV2(pending, out string backup);
+		if (backup.Length != 0)
+		{
+			_lastCorruptBackup = backup;
+			return true;
+		}
+		// 原件已经不存在 → BackupCorruptV2 已清掉待办,可以照常写
+		return _pendingCorruptBackup.Length == 0;
 	}
 
 	private static bool WriteV2File(string dir, LayoutV2 doc)
 	{
 		try
 		{
+			if (!EnsureCorruptBackedUp())
+			{
+				// 上一次读到的损坏 v2 还没备份成功:宁可这次不写,也不能把它覆盖掉
+				return false;
+			}
 			Utils.WriteJson(Path.Combine(dir, FileName), doc.ToDict());
 			return true;
 		}

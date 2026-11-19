@@ -11,7 +11,14 @@ public static class PyJson
 {
 	private sealed class Parser
 	{
+		// 嵌套深度上限:对象/数组每进一层 +1。Python 侧靠解释器递归上限抛 RecursionError;
+		// C# 这里没有可捕获的对应物,纯递归解析深度过大会直接 StackOverflowException 把进程整死
+		// (catch 都抓不住)。畸形/恶意 JSON(几百 KB 的 "[[[[..." )就能触发,故显式设限。
+		private const int MaxDepth = 512;
+
 		private readonly string _s;
+
+		private int _depth;
 
 		public Parser(string s)
 		{
@@ -254,6 +261,23 @@ public static class PyJson
 
 		private (object, int) Obj(int i)
 		{
+			if (++_depth > MaxDepth)
+			{
+				_depth--;
+				throw new JSONDecodeError("Maximum nesting depth exceeded", _s, i);
+			}
+			try
+			{
+				return ObjInner(i);
+			}
+			finally
+			{
+				_depth--;
+			}
+		}
+
+		private (object, int) ObjInner(int i)
+		{
 			PyDict pyDict = new PyDict();
 			i = SkipWs(i);
 			if (i < _s.Length && _s[i] == '}')
@@ -295,6 +319,23 @@ public static class PyJson
 		}
 
 		private (object, int) Arr(int i)
+		{
+			if (++_depth > MaxDepth)
+			{
+				_depth--;
+				throw new JSONDecodeError("Maximum nesting depth exceeded", _s, i);
+			}
+			try
+			{
+				return ArrInner(i);
+			}
+			finally
+			{
+				_depth--;
+			}
+		}
+
+		private (object, int) ArrInner(int i)
 		{
 			List<object> list = new List<object>();
 			i = SkipWs(i);
