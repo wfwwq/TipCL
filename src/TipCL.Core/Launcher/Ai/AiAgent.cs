@@ -534,6 +534,10 @@ public sealed class AiAgent
         int retries = 0;
         while (true)
         {
+            // 这一轮尝试开始时的已生成文本长度:流断在半途、稍后整轮重试时,必须回到这个位置再重写,
+            // 否则「前半段 + 重试后的完整回答」会一起进 state.Text —— 既污染落盘消息,也污染下一轮上下文
+            // (界面上已吐出的增量收不回来,那部分属于 UI 侧,见报告跨域表)。
+            int textBase = state.Text.Length;
             StreamAttempt attempt = await StreamAttemptAsync(messages, state, tools, cancel, linked).ConfigureAwait(false);
 
             if (linked.IsCancellationRequested)
@@ -565,6 +569,8 @@ public sealed class AiAgent
                         "attempt", (long)retries, "wait", Math.Round(wait, 1));
                     // 退避 + 尊重取消:取消时 Task.Delay 直接抛 OperationCanceledException,不会睡满
                     await Task.Delay(TimeSpan.FromSeconds(wait), ct).ConfigureAwait(false);
+                    // 重试前把本轮已经吐进 state.Text 的半截文本丢掉,避免重复
+                    state.Text.Length = textBase;
                     continue;
                 }
                 state.Failed = true;
