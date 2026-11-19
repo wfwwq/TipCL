@@ -211,7 +211,13 @@ internal static class LayoutTween
 		public Action? Done;
 	}
 
-	private static readonly Dictionary<object, Entry> Active = new Dictionary<object, Entry>(ReferenceEqualityComparer.Instance);
+	// [audit/B] 键比较必须按「值」而不是按「引用」:落位动画的键是 ("land", id) 这种装箱的 ValueTuple,
+	// 每次 Start / Cancel 都是**新的装箱实例** —— 用 ReferenceEqualityComparer 时
+	// `Cancel(("land", id), …)` 与 `Start(anchor, ("land", id), …)` 互相看不见,
+	// 于是"同一块再开一段落位会先取消旧的""FinishAnimations 把落位推到终点"这两条语义都不成立
+	// (旧的 180ms 补间继续跑,它的 Done 会把新动画的 _landing 记录删掉 ⇒ 卡片停在半路)。
+	// 默认比较器对 Control(没重写 Equals)仍是引用相等,对 ValueTuple 是值相等 —— 两种键都对。
+	private static readonly Dictionary<object, Entry> Active = new Dictionary<object, Entry>();
 
 	private static Avalonia.Threading.DispatcherTimer? _timer;
 
