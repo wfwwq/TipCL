@@ -313,14 +313,35 @@ void SetStatus(string text)
         public long Bytes { get; set; }
     }
 
+    /// <summary>
+    /// 智能推荐返回模型。
+    /// <para>[audit/B] 这里必须显式写 JsonPropertyName:Core 的 <c>Sysinfo.GetSmartRecommendation()</c> 返回的是
+    /// <b>snake_case</b> 键(memory_mb / java_major / window_width / window_height / gc_preset / cpu_count /
+    /// total_ram_gb),而 <c>Coerce</c> 用的 JsonSerializer 只做「忽略大小写」,不会把下划线吃掉 ——
+    /// 不写注解时这些字段一个都映射不上、全是 0:对话框显示「0 GB 内存 / 0 核 CPU」,
+    /// 用户一点「应用推荐」内存就被钳到下限 512 MB,而界面还报「已应用」。</para>
+    /// </summary>
     private sealed class SmartRecStub
     {
+        [System.Text.Json.Serialization.JsonPropertyName("total_ram_gb")]
         public double TotalRamGb { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("cpu_count")]
         public int CpuCount { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("memory_mb")]
         public int MemoryMb { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("java_major")]
         public int JavaMajor { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("window_width")]
         public int WindowWidth { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("window_height")]
         public int WindowHeight { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("gc_preset")]
         public string GcPreset { get; set; } = "auto";
     }
 }

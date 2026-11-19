@@ -301,9 +301,11 @@ public sealed partial class LaunchPage : PageBase
         var net = GlassButton("Wifi", "联机", () =>
         {
             // Linux 版暂无联机页（Windows 版 Navigate("multiplayer")）
+            // [audit/B] 联机页已经落地:原来这里跟着弹「联机功能将在后续里程碑提供」,文案与真实行为不符。
             if (TopLevel.GetTopLevel(this) is MainWindow win)
                 win.Navigate("multiplayer");
-            Toast("联机", "联机功能将在后续里程碑提供", ToastKind.Info);
+            else
+                Toast("联机", "联机页在主窗口的导航里", ToastKind.Info);
         });
         var launchRow = UiClass.H(10, _launchShell, _stopShell, _configPill, net);
 

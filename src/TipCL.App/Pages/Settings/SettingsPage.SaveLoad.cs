@@ -553,7 +553,9 @@ public sealed partial class SettingsPage
         };
         string? text = await Api.TryCallAsync<string>("test_ai_connection", null, new { settings });
         if (text == null)
-            Toast("AI 连接失败", "后端 AI 网关 M3 接入，暂无法测试", ToastKind.Warning);
+            // [audit/B] test_ai_connection 是**已实现**的(Client.TestConnection):失败说明地址 / 密钥 /
+            // 网络有问题,不是"后端还没接"。原来那句「后端 AI 网关 M3 接入」把可诊断的失败说成了不可用。
+            Toast("AI 连接失败", "没有拿到回复:请检查接入地址 / 密钥 / 网络后重试", ToastKind.Warning);
         else
             Toast("AI 连接成功", text, ToastKind.Success);
     }
@@ -565,6 +567,25 @@ public sealed partial class SettingsPage
         {
             name = await Dlg.Prompt("保存为主题包", "主题包名称", $"我的主题 {_themePack.Items.Count + 1}");
             if (string.IsNullOrWhiteSpace(name)) return;
+        }
+        // [audit/B] 导入 / 导出要的是**文件路径**(IApi: import_theme(path) / export_theme(name, dest)),
+        // 原来一律只传 { name } ⇒ 后端必然失败,失败又被翻译成「后端 M3 接入」,看起来像功能没做。
+        if (op == "import_theme" || op == "export_theme")
+        {
+            if (op == "import_theme")
+            {
+                string? from = await Dlg.PickFile("导入主题包", "*.json");
+                if (from == null) return;
+                string imported = await Api.CallAsync<string>("import_theme", new { path = from }) ?? "";
+                Toast("已导入主题包", imported, ToastKind.Success);
+                await ReloadThemePacksAsync();
+                return;
+            }
+            string? to = await Dlg.SaveFile("导出主题包", (name.Length > 0 ? name : "theme") + ".json");
+            if (to == null) return;
+            string written = await Api.CallAsync<string>("export_theme", new { name, dest = to }) ?? "";
+            Toast("已导出主题包", written, ToastKind.Success);
+            return;
         }
         else if (string.IsNullOrEmpty(name))
         {
@@ -582,7 +603,9 @@ public sealed partial class SettingsPage
         object? result = await Api.TryCallAsync<object?>(op, null, new { name });
         if (result == null && op != "save_theme")
         {
-            Toast("操作失败", $"主题包 {op} 后端 M3 接入，暂不可用", ToastKind.Warning);
+            // [audit/B] 主题包这几个操作(save/load/delete)后端都是**已实现**的;走到这里说明真的失败了
+            // (文件坏了 / 目录不可写),如实说失败,不再谎报"后端还没接"。
+            Toast("操作失败", $"主题包{op}没能完成,看日志里的原因", ToastKind.Warning);
             return;
         }
         Toast("主题包已保存", name, ToastKind.Success);

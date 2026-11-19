@@ -92,10 +92,26 @@ internal sealed class AccountView : SettingsSubView
     public AccountView() : base("settings:account", "账号", "启动游戏时使用标记为「当前」的账号")
     {
         var addOffline = UiClass.Btn("添加离线账号", BtnKind.Primary, (_, _) => Run(AddOfflineAsync, "添加失败"));
-        var addMs = UiClass.Btn("微软登录", BtnKind.Soft, (_, _) => Toast("微软登录", "登录后端 M3 接入，暂不可用", ToastKind.Warning));
-        var addAuthlib = UiClass.Btn("皮肤站登录", BtnKind.Chip, (_, _) => Toast("皮肤站登录", "登录后端 M3 接入，暂不可用", ToastKind.Warning));
+        // [audit/B] 这两个入口原来是假按钮(只弹「登录后端 M3 接入，暂不可用」),而能力其实已经有了:
+        // IApi 的 start_microsoft_login / start_authlib_login / start_nide8_login 齐全,「账号」页也把
+        // 设备码弹窗、皮肤站表单、统一通行证表单全实现了。这里不重复实现一遍,直接把用户送到那个真入口。
+        var addMs = UiClass.Btn("微软登录", BtnKind.Soft, (_, _) => OpenAccountPage());
+        ToolTip.SetTip(addMs, "在「账号」页用微软账号登录(设备码)");
+        var addAuthlib = UiClass.Btn("皮肤站登录", BtnKind.Chip, (_, _) => OpenAccountPage());
+        ToolTip.SetTip(addAuthlib, "在「账号」页用皮肤站(Yggdrasil)登录");
         _stack.Children.Add(UiClass.Card(RowsSub(UiClass.Field("", UiClass.H(8, _count.VCenter(), addAuthlib, addMs, addOffline)))));
         _stack.Children.Add(_list);
+    }
+
+    /// <summary>跳到「账号」页 —— 登录流程(设备码弹窗 / 皮肤站 / 统一通行证)的唯一实现处。</summary>
+    private void OpenAccountPage()
+    {
+        if (TopLevel.GetTopLevel(this) is MainWindow win)
+        {
+            win.Navigate("account");
+            return;
+        }
+        Toast("账号", "在「账号」页用微软 / 皮肤站登录", ToastKind.Info);
     }
 
     protected override async Task LoadCoreAsync()
@@ -116,7 +132,7 @@ internal sealed class AccountView : SettingsSubView
         _count.Text = $"共 {accounts.Count} 个";
         if (accounts.Count == 0)
         {
-            _list.Children.Add(UiClass.Card(UiClass.Empty("?", "还没有账号", "添加离线账号先玩起来；微软 / 皮肤站登录 M3 接入"), 18));
+            _list.Children.Add(UiClass.Card(UiClass.Empty("?", "还没有账号", "添加离线账号先玩起来；微软 / 皮肤站登录在「账号」页"), 18));
             return;
         }
         foreach (var acc in accounts)
@@ -455,8 +471,10 @@ internal sealed class ServersView : SettingsSubView
     public ServersView() : base("settings:servers", "服务器", "直接写进实例的 servers.dat，进游戏就能看到")
     {
         var add = UiClass.Btn("添加服务器", BtnKind.Primary, (_, _) => Run(() => EditAsync(null, -1)));
-        var import = UiClass.Btn("导入", BtnKind.Chip, (_, _) => Toast("导入", "servers.txt 导入后端 M3 接入", ToastKind.Warning));
-        var export = UiClass.Btn("导出", BtnKind.Chip, (_, _) => Toast("导出", "servers.txt 导出后端 M3 接入", ToastKind.Warning));
+        // [audit/B] 导入 / 导出原来只弹「后端 M3 接入」的假提示,而 IApi 的 import_servers / export_servers
+        // 早就接上了(Core 的 Servers.ImportServersTxt / ExportServersTxt)—— 这里把入口真正接上。
+        var import = UiClass.Btn("导入", BtnKind.Chip, (_, _) => Run(ImportServersAsync, "导入失败"));
+        var export = UiClass.Btn("导出", BtnKind.Chip, (_, _) => Run(ExportServersAsync, "导出失败"));
         var instCard = UiClass.Card(RowsSub(UiClass.Field("实例", UiClass.H(8, _inst, _count.VCenter(), export, import, add))));
         _stack.Children.Add(instCard);
         _inst.SelectionChanged += (_, _) => { if (!_sync) Run(ReloadAsync); };
@@ -502,7 +520,7 @@ internal sealed class ServersView : SettingsSubView
         _list.Children.Clear();
         _count.Text = $"{servers.Count} 个";
         if (rows == null)
-            _list.Children.Add(UiClass.Pane(UiClass.Small("服务器列表读写后端 M3 接入（list_servers / add_server），当前为空态展示"), "B.Paper2", 8, 10));
+            _list.Children.Add(UiClass.Pane(UiClass.Small("服务器列表读不出来(servers.dat 可能损坏或还没生成)，当前为空态展示"), "B.Paper2", 8, 10));
         if (servers.Count == 0 && rows != null)
         {
             _list.Children.Add(UiClass.Empty("S", "还没有服务器", "点右上角添加，或从 servers.txt 导入"));
@@ -529,6 +547,69 @@ internal sealed class ServersView : SettingsSubView
                 })));
             row.Add(ops.VCenter(), 0, 2);
             _list.Children.Add(UiClass.Card(row, 13));
+        }
+    }
+
+    /// <summary>
+    /// [audit/B] 导入 servers.txt:IApi 的 import_servers 早就实现了(Core Servers.ImportServersTxt),
+    /// 原来这里只弹一句「导入后端 M3 接入」。选文件 → 读文本 → 调 API → 刷新列表。
+    /// </summary>
+    private async Task ImportServersAsync()
+    {
+        string inst = KeyOf();
+        if (inst.Length == 0)
+        {
+            Toast("先选实例", "服务器列表是按实例存的", ToastKind.Warning);
+            return;
+        }
+        string? path = await Dlg.PickFile("导入服务器列表", "*.txt");
+        if (path == null)
+        {
+            return;
+        }
+        string text;
+        try
+        {
+            text = File.ReadAllText(path);
+        }
+        catch (Exception ex)
+        {
+            Toast("读取失败", ex.Message, ToastKind.Error);
+            return;
+        }
+        long added = await Api.CallAsync<long>("import_servers", new { instance = inst, text });
+        Toast("已导入", $"新增 {added} 个服务器", ToastKind.Success);
+        await ReloadAsync();
+    }
+
+    /// <summary>[audit/B] 导出 servers.txt(export_servers 已实现):先取文本再选保存位置。</summary>
+    private async Task ExportServersAsync()
+    {
+        string inst = KeyOf();
+        if (inst.Length == 0)
+        {
+            Toast("先选实例", "服务器列表是按实例存的", ToastKind.Warning);
+            return;
+        }
+        string text = await Api.CallAsync<string>("export_servers", new { instance = inst }) ?? "";
+        if (text.Length == 0)
+        {
+            Toast("没有可导出的服务器", "", ToastKind.Warning);
+            return;
+        }
+        string? path = await Dlg.SaveFile("导出服务器列表", "servers.txt");
+        if (path == null)
+        {
+            return;
+        }
+        try
+        {
+            File.WriteAllText(path, text);
+            Toast("已导出", path, ToastKind.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("写入失败", ex.Message, ToastKind.Error);
         }
     }
 
@@ -612,7 +693,7 @@ internal sealed class PlaytimeView : SettingsSubView
         if (inst is null or AllInstances)
         {
             var all = await Api.TryCallAsync<Dictionary<string, object>>("get_all_playtime");
-            _sub.Text = all == null ? "时长统计后端 M3 接入，暂无数据" : $"{all.Count} 个实例有记录";
+            _sub.Text = all == null ? "读不到时长统计(playtime.json 可能损坏)，暂无数据" : $"{all.Count} 个实例有记录";
             _list.Children.Clear();
             if (all == null || all.Count == 0)
             {
