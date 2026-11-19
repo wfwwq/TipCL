@@ -105,3 +105,154 @@
 2. `90111cf` audit/C: 桌面快捷方式 -i launch 参数落地 + --design-sheet 免提权 + LayoutStoreV2 过期注释(C-02/C-03/C-10)
 
 未提交任何临时/环境文件(`_tmp/` 保持忽略,不进 git)。未 `git push`。
+---
+
+# 第二轮 — 布局自定义"丝滑度" + 假按钮/断线入口盘点
+
+- 分支:`audit/C`(已 rebase 到最新 main),第二轮提交见 §R2.6
+- 基线复核:`dotnet build windos/src/TipCL/TipCL.csproj -c Release` = 0 警告 0 错误;`dotnet test windos/tests/TipCL.Tests` = 547/547
+- 范围纪律:`src/**`(Linux 侧)只读不改;`windos/tests/**` 只跑不改
+
+## R2.0 结论摘要
+
+| 级别 | 发现 | 已修 | 只记录 |
+|---|---|---|---|
+| P1 | 2 | 2 | 0 |
+| P2 | 5 | 5 | 0 |
+| 核查无问题 | 7 类 | — | — |
+
+两件用户点名的东西都落到了实处:①**边缘自动滚动**原来在指针停住时完全不滚(见 R2.1-1);②**「新对话」预设下拉在 Windows 上是死的**——客户端一直在调一个后端根本不存在的 RPC(见 R2.2-1)。
+
+## R2.1 布局自定义"丝滑度"专项
+
+### R2.1-1【P1 已修】拖到底部/顶部拖不动:边缘自动滚动只在鼠标移动时发生
+
+- `文件:行`:`windos/src/TipCL/Pages/Layout/LayoutEditor.cs:1922`(`AutoScrollNearEdge`,改前体在 `1863` 一带被 `OnBoxDragMove` 调用)
+- 根因:`AutoScrollNearEdge` 只从 `OnBoxDragMove` / `OnBoxMarqueeMove` 里调用,而它做的是"一次滚动一个固定 18px"。于是:
+  1. **指针停在边缘不动 → 不再产生 MouseMove → 完全不滚**(高页面上根本拖不到底部,只能反复搓鼠标);
+  2. 滚动速度 = 18px × 鼠标事件率 —— 1000Hz 游戏鼠标上快到飞起,慢机器/远程桌面上又一顿一顿;
+  3. 滚动后指针在 `_box` 坐标里的位置变了,但落点/框选没有跟着重算(下一帧才补)。
+- 修复:改成 **16ms DispatcherTimer 驱动、按经过时间算速度**(贴边 300px/s → 最深 1500px/s),滚动后把"内容滚了多少"折回指针的 `_box` 坐标,立刻重算落点/框选。新增 `_autoScroll` / `_autoScrollPointer` / `_autoScrollDir` / `_autoScrollDepth`(`:161`)、`OnAutoScrollTick`(`:1972`)、`StopAutoScroll`(`:2030`),把框选重绘抽成 `ShowMarqueeAt`(`:1875`)供鼠标与计时器共用;手势结束(`EndBoxGesture`)与退出编辑(`ExitEdit`)都会 `StopAutoScroll()`,不会留下空转计时器。
+- 验证:build 0 错误、547/547。**手感需实机确认**(无交互桌面跑不了 WPF)。
+
+### R2.1-2【核查无问题】拖动跟手方式:不是每帧改 Grid 行列,而是 RenderTransform
+
+一次 grid 拖动的完整帧内调用链(证据,按代码顺序):
+
+```
+MouseMove
+ └ OnBoxDragMove (LayoutEditor:1872)
+    ├ AutoScrollNearEdge(point)          → 只在边缘区做滚动(见 R2.1-1)
+    └ ApplyGridGesture(dx,dy) (2107)
+       ├ SideBySideSlot(...)             → 纯格子运算(每帧一次 bool[cols] 分配,cols=12)
+       ├ _box.MoveFloat(dx,dy)           → 只写被拖卡片的 TranslateTransform.X/Y，不触发布局
+       └ 落点没变 → return                ← 绝大多数帧走这里：一帧只有两次 DP 写入
+落点变了才:
+       RestoreGestureSnapshot → MoveCell → CompactAroundGesture
+       └ _box.RequestFlip() + _box.CompactCells(pinned,swapX,autoPack)
+          └ LayoutGrid.Compact + Reflow → InvalidateMeasure + InvalidateArrange + InvalidateVisual
+下一次布局趟:
+       MeasureGridChildren(width)        → 每块 Measure( 列宽, ∞ )；约束没变时 WPF 直接命中缓存
+       ArrangeOverride                   → 按矩形 Arrange；浮起块走 _float 像素矩形
+       StartFlip(child, old, target, ms) → TranslateTransform 上做 170ms ease-out 反向偏移归零
+```
+
+结论:**跟手路径上没有布局、没有读盘、没有 Save**(`Persist` 只在手势结束时调一次,`LayoutEditor:1987`/`EndDrag:1640`),没有 `LayoutChanged → 重排 → 再 Save` 的回路(`Persist` 内 `_saving` 守卫 + `BlockHost.OnLayoutStoreChanged` 的 `editor.IsSaving` 早退)。落点每变一次才付一整趟 measure/arrange,这是"行高按内容自适应"的必要成本,不是每帧成本。
+
+### R2.1-3【核查无问题】落位预览/占位框
+
+`DropPlaceholder` 走的是"每个被拖块一个 Border,插在 Children[0],ZIndex=-1",拖动中不重建;`SetPlaceholderRect` 只在像素高度吸附值真的变了才调(`LayoutEditor:2132` 附近)。grid 模式**不画**对齐辅助线(`_guide.Clear()` 每帧一次,`GuideLayer.Clear` 在空的时候直接 return,零成本)。
+
+### R2.1-4【核查无问题】尺寸拖拽:预览与钳制
+
+- 下边整条边 = 像素高度:`SnapPixelHeight(start+dy)` 4px 吸附、最小 56px(`LayoutMotion:197`);拖动中只更新占位框,松手才写 `lead.HeightPx`(`EndBoxGesture:1961`),其它块松手后统一压紧。
+- 按格缩放:列按列宽折、行按**真实行高**折(`LayoutMotion.RowStep`),不是按被拖卡片自身高度(老 bug 已修)。
+- 连续拖拽无浮点漂移:每次重算都从 `_gestureSnapshot` 全量快照出发(`RestoreGestureSnapshot:2347`),不在当前值上累加。
+
+### R2.1-5【核查无问题】动画竞态
+
+- FLIP 反向偏移算上了"还没走完的旧动画当前值"(`LayoutMotion.FlipOffset(old, currentOffset, new)`),同一块连续被让位时从眼睛看到的位置接着走。
+- 松手落位在**第一帧**等 `IsMeasureValid && IsArrangeValid`(最多 100ms)才定终点,避免"终点取到提交前的旧格子"。
+- `BeginFloat` 先 `StopSettle(finish:true)` 再起新手势:上一次落位动画没走完就被抓起时不跳。
+- 浮起卡片不会被别的块的 FLIP 影响(Arrange 里 `floating` 时跳过 StartFlip)。
+
+### R2.1-6【核查无问题】切页/进退编辑态的滚动位置
+
+`BlockHost.Unloaded` 里只退订静态事件 + 必要时 `ExitEdit`,不销毁卡片缓存;`Loaded` 里 `ReloadFromStore()` 的 `Children.Clear()` 与重挂是同一方法内同步完成的,中间不会插布局趟,`ScrollViewer` 的 extent 不会塌陷,`VerticalOffset` 因此保留。**这一条建议实机再目视一次**(静态推理能排除"渲染两遍",但排除不了"卡片内容高度异步变化导致 offset 被夹")。
+
+### R2.1-7【只记录,未改】stack(纵向流)模式拖拽不跟手
+
+`LayoutEditor.OnDragMove:1615`(stack 换序)只做"跨过相邻块中点就交换",被拖卡片**不跟随指针**(只把 `Opacity` 降到 0.75),靠 `InsertVisual` 把卡片搬到新位置。设计上明确写了"不做动画插值,交换即落位"(`:1569`),Motion 关闭时行为也一致,所以没当作 bug 改;但这确实是"看起来不跟手"的第一现场。若要做成丝滑版,需要把 stack 也切到"浮起 + FLIP"那套(改动面等同新增一种手势,风险不小),建议单开一轮。
+
+## R2.2 假按钮 / 没接功能的入口盘点
+
+方法:①全仓 `Click +=` / `MenuItem` 共 **141 处**逐个看过 handler 体(脚本 dump:`_tmp/clickdump.txt`);②机械比对**客户端用到的 199 个 RPC 名 vs 后端 239 个可导出方法**(`RpcDispatcher.IsExposedName` 规则);③再比对"客户端关键字实参名 ⊆ 后端形参名"。
+
+### R2.2-1【P1 已修】「新对话」预设下拉在 Windows 上完全没用:后端没有 `ai_presets`
+
+- `文件:行`:客户端 `windos/src/TipCL/Pages/Plugins/AiViewStrip.cs:368`;后端缺口 `windos/src/TipCL/Core/BackendApi.cs`(新增 `:480`)
+- 根因:`AiViewStrip.LoadAsync` 调 `TryCallAsync<JsonElement>("ai_presets")`,而 `BackendApi` 里**从来没有这个方法**。`BridgeClient.TryCallAsync` 把所有异常都吞掉(`BridgeClient.cs:129-140`),于是 `_items` 恒为空:
+  - 「新对话」旁边那个下拉开出来永远是「普通对话 + 还没有插件提供预设」;
+  - `AiViewStrip.Name(presetId)` 只能把 `plugin:xx/yy` 截成 `yy`,对话列表上的预设名永远是原始 id。
+  数据其实一直在:`TipCL.Core.Plugins.AgentPresets.All()` + `AgentPreset.ToInfo()` 早就给了 `{id, plugin, name, description, order, view}` 这个刚好对得上的形状。
+- 处置:**接上已有能力** —— 新增 `public object ai_presets()` 返回 `AgentPresets.All().Select(p => p.ToInfo())`。
+- 验证:build 0 错误;RPC 名/参数比对脚本复跑后 `MISSING_RPC=0`(本轮之前唯一一条就是它)。
+
+### R2.2-2【P2 已修】写操作用 TryCallAsync = 失败静默 = "点了毫无反应"
+
+`TryCallAsync` 的设计目的是"读不到就用默认值",但被大量用在**写操作**上:后端回 `TypeError` / 写盘失败 / 方法不存在时,用户看到的只有"什么都没发生"。这一类是用户说的"坏了但看不出坏"的主因。
+
+处置:新增 `BridgeClient.MutateAsync(method, args, failTitle)`(`BridgeClient.cs:148`)——失败弹错误提示并返回 false;把 13 个写操作调用点换过去:
+
+| 文件:行 | 用户动作 | 失败时的旧表现 | 现在 |
+|---|---|---|---|
+| `Pages/GlobalModsDialog.cs:43/51` | 全局模组开关 | 开关跳回去,无提示 | 弹「开关全局模组失败」 |
+| `Pages/ModsDialog.cs:118/127` | 实例模组启用/停用 | 同上 | 弹「启用/停用模组失败」 |
+| `Pages/CatalogPage.cs:1105/1114` | Mod 页列表里的启用/停用开关 | 同上 | 同上 |
+| `Pages/InstanceDetailPage.cs:217/221` | 实例详情里的启用/停用 | 同上 | 同上 |
+| `Pages/SettingsPage.cs:1670` | 切换语言 | 选了语言界面不变 | 弹「切换语言失败」 |
+| `Pages/LaunchPage.cs:1029` | 启动页选 Java | 下次启动还是旧 Java | 弹「保存 Java 选择失败」 |
+| `Pages/LaunchPage.cs:1039` | 改内存/分辨率 | 静默不存 | 弹「操作失败」 |
+| `Pages/LaunchPage.cs:1540` | 「停止」游戏 | 点了没反应、游戏继续跑 | 弹「停止失败」并恢复按钮 |
+| `Pages/TasksPage.cs:186` | 任务卡的「取消」 | 按钮一直灰着(代码里先禁用了) | 弹「取消失败」并恢复按钮 |
+| `Pages/AccountPage.cs:451` | 关闭登录浮层时取消登录任务 | 登录任务继续在后台 | 弹「取消登录失败」 |
+| `Pages/FirstRunWizard.cs:161` | 向导「跳过」 | 下次开还弹(以为没生效) | 弹「保存失败」 |
+
+**只记录未改**:`Pages/FeedbackConsent.cs:96`(首次启动的诊断数据同意写入)仍是 `TryCallAsync` —— 隐私同意写失败会下次再问一次,不构成"假按钮",且加错误弹窗反而打扰,故保留。
+
+### R2.2-3【核查无问题】没有真空实现 / NotImplemented / 占位死入口
+
+- 全仓 `NotImplementedException` = 0(只有两处 `catch (e is NotImplementedException)` 的类型判断);`暂未支持` 只出现在陶瓦联机的**架构判定**里(`Terracotta.cs:139/458/727`),是真的"这个 CPU 架构没有官方内核",属于正确拒绝而不是空实现。
+- 141 个 handler 里没有一个是空 lambda:`Click += delegate { }` 0 处。
+- 所有 `MenuItem` 都有实际动作或 `IsEnabled=false` 的说明项(如「还没有实例」「还没有插件提供预设」)。
+- 「死入口」检查:导航项 10 个全部对应真实页面;`design-sheet` 是 dev-only 样张页(不进导航),符合 `docs/design-spec.md:110`。
+
+### R2.2-4【核查无问题】RPC 参数名对齐
+
+机械比对"客户端 `new { ... }` 里的关键字 vs 后端形参名":唯一命中是 `ServersPage.cs:175 update_server`,而后端该方法是 `update_server(object instance, object index, [VarKw] PyDict kwargs = null)` —— kw 吸收任意键,属正常用法。**结论:不存在"客户端传了后端不认的参数导致静默失效"的入口**(参数名不匹配时 `RpcDispatcher` 只 `Warn` 到控制台,是排查这类问题的关键线索,已确认没有)。
+
+## R2.3 词表补齐(一致性线路交叉核对)
+
+按 lead 转来的缺口核实并补齐(WPF 侧只有 `I18n.L` 的字面量我上一轮扫过 1985 条;`I18nCore.Tr` 走的是 Core 侧调用,所以漏了):
+
+| key | 位置 | 上一轮 | 本轮 |
+|---|---|---|---|
+| `上一次布局` | `Pages/SettingsLayoutPage.cs:1396` | 已补(C-07) | — |
+| `已随装前置:` | `Core/BackendApi.cs:1662` | 缺 | 已补(文案照抄 Linux 侧 `Bundled prerequisites:`) |
+| `更新包已下载,重启启动器即可完成更新` | `Core/BackendApi.cs:3858` | 缺 | 已补(`Update downloaded; restart the launcher to finish updating`) |
+
+`zh_CN.json:3034-3035` / `en.json:3032-3033`,已重跑 `windos/tools/pack-core-resources.ps1`(源 555,894 B → 压缩后 160,868 B),`CoreResourcesPackTests` 绿。
+另:README v1.2.0 的 exe sha256 由一致性线路修正,本报告不复述任何 sha256,避免写回旧值。
+
+## R2.4 第二轮提交
+
+`audit/C` 上的 R2 提交(标题):「边缘自动滚动改计时器驱动(指针停住也滚/速度与事件率无关)+ 补 ai_presets RPC(预设下拉原本是死的)+ 写操作改 MutateAsync 失败可见 + 补两条词表」。
+精确哈希看 `git log -1 --format=%h`——报告里不写死,避免后续 amend 后对不上。
+
+## R2.5 仍需实机确认(无交互桌面,无法自动验证)
+
+1. 拖块到可视区上下边缘**停住不动**:应持续滚动,速度随"贴边深度"变化;滚到底自动停。
+2. 拖块时**在边缘绕圈**:不应出现滚动与落点打架(落点跟着内容走,不跳格)。
+3. 装一个带 `agentPresets` 的插件后打开 AI 页「新对话」下拉:应列出预设,新建对话后消息列表应显示预设名。
+4. 任意模组开关在"实例被占用/文件只读"时:应弹出错误提示而不是静默。
+5. 启动页滚到中间 → 切到别的页 → 切回来:滚动位置应保持(R2.1-6)。

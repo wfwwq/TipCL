@@ -139,6 +139,26 @@ public sealed class BridgeClient : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// 用户点按钮触发的"写"操作:失败必须让用户看到。
+	/// <see cref="TryCallAsync"/> 会把所有异常(含 RPC "unknown method" / 参数 TypeError / 写盘失败)
+	/// 静默吞掉,界面上就表现成「点了毫无反应」—— 这是本仓库最常见的"伪死按钮"成因;
+	/// 写操作一律走这里:成功返回 true,失败弹错误提示并返回 false。
+	/// </summary>
+	public async Task<bool> MutateAsync(string method, object? args = null, string? failTitle = null)
+	{
+		try
+		{
+			await CallAsync<object>(method, args).ConfigureAwait(continueOnCapturedContext: false);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			AppServices.Toast(failTitle ?? I18n.L("操作失败"), ex.Message, ToastKind.Error);
+			return false;
+		}
+	}
+
 	public async Task<string> StartTaskAsync(string method, object? args = null, CancellationToken ct = default(CancellationToken))
 	{
 		JsonElement jsonElement = await CallAsync(method, args, ct).ConfigureAwait(continueOnCapturedContext: false);

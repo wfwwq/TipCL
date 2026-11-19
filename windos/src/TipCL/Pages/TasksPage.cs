@@ -182,10 +182,14 @@ public sealed class TasksPage : PageBase
 				else
 				{
 					cancel.IsEnabled = false;
-					await PageBase.Api.TryCallAsync<object>("cancel_task", new
+					// 取消失败要把按钮恢复并提示(TryCallAsync 静默吞错 → 取消按钮"点了没反应")
+					if (!await PageBase.Api.MutateAsync("cancel_task", new
 					{
 						task_id = row.Id
-					});
+					}, I18n.L("取消失败")))
+					{
+						cancel.IsEnabled = true;
+					}
 				}
 			});
 		};

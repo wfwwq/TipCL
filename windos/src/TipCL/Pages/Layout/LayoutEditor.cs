@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using TipCL.Services;
 
 using TipCL.Core.Launcher.Layout;
@@ -151,6 +152,29 @@ public sealed class LayoutEditor
 	// canvas 磁性吸附上一帧的吸附位移(变了才给那一下短动画)
 	private double _snapDx;
 	private double _snapDy;
+
+	// ——— 拖动/框选时的边缘自动滚动(计时器驱动)———
+	// 原来只在 MouseMove 里按事件推固定 18px:指针在边缘停住就不再有 MouseMove → 完全不滚(高页面上
+	// 根本拖不到底部),而且速度随鼠标事件率变(高刷鼠标快得离谱、慢机器一顿一顿)。
+	// 现在改成 16ms 计时器 + 按时间算速度,并把"内容滚了多少"折回指针的 _box 坐标,
+	// 让落点 / 框选跟着内容一起走(物理指针没动,但它在内容上的位置变了)。
+	private readonly DispatcherTimer _autoScroll = new DispatcherTimer
+	{
+		Interval = TimeSpan.FromMilliseconds(16.0)
+	};
+
+	private readonly System.Diagnostics.Stopwatch _autoClock = new System.Diagnostics.Stopwatch();
+
+	// 最近一次指针位置(_box 坐标)
+	private Point _autoScrollPointer;
+
+	// -1 向上 / +1 向下 / 0 = 不在边缘
+	private int _autoScrollDir;
+
+	// 0..1:离边缘的深度(越深滚得越快)
+	private double _autoScrollDepth;
+
+	private long _autoScrollLastMs;
 
 	// 工具条上的撤销/重做按钮(按栈的可用性置灰)
 	private Button? _undoBtn;
@@ -327,6 +351,7 @@ public sealed class LayoutEditor
 		_root.Focusable = true;
 		_root.PreviewKeyDown += OnEditorKeyDown;
 		_box.MouseLeftButtonDown += OnBoxMouseDown;
+		_autoScroll.Tick += OnAutoScrollTick;
 		LoadFromStore();
 		Render();
 		// dev-only:让 --shot 能拍到编辑态(右键菜单是独立 HWND,DevShot 点不到;仓库既有 dev 钩子同风格)。
@@ -570,6 +595,8 @@ public sealed class LayoutEditor
 		}
 		_edit = false;
 		_trayAddOpen = false;
+		// 退出编辑时把边缘自动滚动的计时器一起收掉(手势可能还没正常松手)
+		StopAutoScroll();
 		// stack 拖拽可能还没收尾(比如被快捷键/外部调用结束编辑):必须解绑并释放捕获,
 		// 否则之后鼠标一动还会改序、EndDrag 还会无条件落盘(P1)
 		CancelDrag(_dragCard, _dragSrc);
@@ -1840,6 +1867,13 @@ public sealed class LayoutEditor
 			return;
 		}
 		Point point = e.GetPosition(_box);
+		AutoScrollNearEdge(point);
+		ShowMarqueeAt(point);
+	}
+
+	// 框选矩形按"内容坐标里的当前指针点"画并更新选中(自动滚动时也会被计时器复用)
+	private void ShowMarqueeAt(Point point)
+	{
 		LayoutRect marquee = new LayoutRect(Math.Min(_gestureStart.X, point.X), Math.Min(_gestureStart.Y, point.Y), Math.Abs(point.X - _gestureStart.X), Math.Abs(point.Y - _gestureStart.Y));
 		_guide.ShowMarquee(marquee);
 		_session.SelectMany(_box.IdsIn(marquee));
@@ -1891,32 +1925,117 @@ public sealed class LayoutEditor
 		SmoothScroll scroll = _boxScroll;
 		if (!IsBoxMode || scroll == null)
 		{
+			StopAutoScroll();
 			return;
 		}
 		double height = scroll.ViewportHeight;
 		if (height <= 0.0)
 		{
+			StopAutoScroll();
 			return;
 		}
+		_autoScrollPointer = pointInBox;
 		double y = pointInBox.Y + _box.Margin.Top - scroll.VerticalOffset;
-		double step = 0.0;
+		int dir = 0;
+		double depth = 0.0;
 		if (y < 36.0)
 		{
-			step = -18.0;
+			dir = -1;
+			depth = (36.0 - Math.Max(0.0, y)) / 36.0;
 		}
 		else if (y > height - 36.0)
 		{
-			step = 18.0;
+			dir = 1;
+			depth = (Math.Min(height, y) - (height - 36.0)) / 36.0;
 		}
-		if (step == 0.0)
+		if (dir == 0 || scroll.ScrollableHeight <= 0.5)
 		{
+			// 指针离开边缘区 / 内容本来就不需要滚:停(原来这里 return,指针停住后计时器还在跑才需要显式停)
+			StopAutoScroll();
 			return;
 		}
-		double to = Math.Max(0.0, Math.Min(scroll.ScrollableHeight, scroll.VerticalOffset + step));
-		if (Math.Abs(to - scroll.VerticalOffset) > 0.01)
+		_autoScrollDir = dir;
+		_autoScrollDepth = Math.Max(0.0, Math.Min(1.0, depth));
+		// 只启一次:每次 MouseMove 都 Start 会让计时器不断重置
+		if (!_autoScroll.IsEnabled)
 		{
-			scroll.ScrollToVerticalOffset(to);
+			_autoClock.Restart();
+			_autoScrollLastMs = 0L;
+			_autoScroll.Start();
 		}
+	}
+
+	/// <summary>
+	/// 边缘自动滚动的一帧:按经过的时间滚(与鼠标事件率无关),再把"内容滚了多少"折回指针的
+	/// _box 坐标重新算手势 —— 物理指针没动,但它在内容上的位置跟着滚走了,落点 / 框选因此继续推进。
+	/// </summary>
+	private void OnAutoScrollTick(object? sender, EventArgs e)
+	{
+		SmoothScroll scroll = _boxScroll;
+		if (_gesture.Length == 0 || _autoScrollDir == 0 || !IsBoxMode || scroll == null)
+		{
+			StopAutoScroll();
+			return;
+		}
+		long now = _autoClock.ElapsedMilliseconds;
+		double dt = (double)(now - _autoScrollLastMs) / 1000.0;
+		_autoScrollLastMs = now;
+		if (dt <= 0.0 || dt > 0.25)
+		{
+			return; // 第一帧 / 界面卡了一下:不算速度,避免一次跳一大段
+		}
+		double max = scroll.ScrollableHeight;
+		if (max <= 0.5)
+		{
+			StopAutoScroll();
+			return;
+		}
+		// 贴边 300px/s,越往里越快,最深 1500px/s
+		double speed = 300.0 + 1200.0 * _autoScrollDepth;
+		double before = scroll.VerticalOffset;
+		double to = before + (double)_autoScrollDir * speed * dt;
+		if (to < 0.0)
+		{
+			to = 0.0;
+		}
+		else if (to > max)
+		{
+			to = max;
+		}
+		double moved = to - before;
+		if (Math.Abs(moved) < 0.01)
+		{
+			StopAutoScroll();
+			return; // 已经到头
+		}
+		scroll.ScrollToVerticalOffset(to);
+		// 内容向下滚 moved:同一个物理点对应的 _box 坐标就 +moved
+		_autoScrollPointer = new Point(_autoScrollPointer.X, _autoScrollPointer.Y + moved);
+		double dx = _autoScrollPointer.X - _gestureStart.X;
+		double dy = _autoScrollPointer.Y - _gestureStart.Y;
+		if (_gesture == "marquee")
+		{
+			ShowMarqueeAt(_autoScrollPointer);
+			return;
+		}
+		if (_box.IsCanvas)
+		{
+			ApplyCanvasGesture(dx, dy);
+			_box.InvalidateArrange();
+			return;
+		}
+		ApplyGridGesture(dx, dy);
+	}
+
+	private void StopAutoScroll()
+	{
+		_autoScrollDir = 0;
+		_autoScrollDepth = 0.0;
+		if (_autoScroll.IsEnabled)
+		{
+			_autoScroll.Stop();
+		}
+		_autoClock.Stop();
 	}
 
 	// 手势收尾:解绑事件 → (取消?回滚:落盘)→ 重画
@@ -1937,6 +2056,8 @@ public sealed class LayoutEditor
 			}
 		}
 		_gesture = "";
+		// 手势结束:停掉边缘自动滚动(否则计时器还会按上一次指针位置继续滚)
+		StopAutoScroll();
 		_gestureHandle = "";
 		_gestureCells.Clear();
 		_gestureSnapshot.Clear();

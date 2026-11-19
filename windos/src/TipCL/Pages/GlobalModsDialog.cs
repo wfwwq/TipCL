@@ -39,19 +39,20 @@ public static class GlobalModsDialog
 				CheckBox checkBox = Ui.Switch(item.Enabled);
 				checkBox.Checked += delegate
 				{
-					PageBase.Run(() => api.TryCallAsync<object>("set_global_mod_enabled", new
+					// 写操作走 MutateAsync:原来 TryCallAsync 会把后端失败静默吞掉,开关看起来"点了没反应"
+					PageBase.Run(() => api.MutateAsync("set_global_mod_enabled", new
 					{
 						filename = file,
 						enabled = true
-					}));
+					}, I18n.L("开关全局模组失败")));
 				};
 				checkBox.Unchecked += delegate
 				{
-					PageBase.Run(() => api.TryCallAsync<object>("set_global_mod_enabled", new
+					PageBase.Run(() => api.MutateAsync("set_global_mod_enabled", new
 					{
 						filename = file,
 						enabled = false
-					}));
+					}, I18n.L("开关全局模组失败")));
 				};
 				Grid grid = Ui.G(null, "Auto,*,Auto");
 				grid.Add(checkBox.M(0.0, 0.0, 12.0).VCenter(), 0);

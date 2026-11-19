@@ -157,13 +157,14 @@ public static class FirstRunWizard
 		Show(0);
 		if (!(await tcs.Task))
 		{
-			await api.TryCallAsync<object>("save_settings", new
+			// 向导"跳过"要记住别再问:写失败必须提示,否则下次开还会弹(用户会以为按钮没生效)
+			await api.MutateAsync("save_settings", new
 			{
 				data = new
 				{
 					first_run = false
 				}
-			});
+			}, I18n.L("保存失败"));
 			return;
 		}
 		string typed = gameDir.Text?.Trim() ?? "";

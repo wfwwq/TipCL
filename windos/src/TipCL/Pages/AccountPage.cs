@@ -448,10 +448,10 @@ public sealed class AccountPage : PageBase
 			_loginLayer = null;
 			if (_loginTask != null)
 			{
-				_ = PageBase.Api.TryCallAsync<object>("cancel_task", new
+				_ = PageBase.Api.MutateAsync("cancel_task", new
 				{
 					task_id = _loginTask
-				});
+				}, I18n.L("取消登录失败"));
 			}
 		}, dismissable: false);
 		_loginTask = await PageBase.Api.StartTaskAsync("start_microsoft_login");

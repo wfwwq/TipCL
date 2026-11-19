@@ -473,6 +473,20 @@ public partial class BackendApi
 		return _localize_chats(data);
 	}
 
+	// AI 预设清单(插件通过 contributes.agentPresets / presets.register 注册,DESIGN §2)。
+	// WPF 侧 AiViewStrip 一直调这个 RPC,但 Windows 后端从来没有实现它 —— TryCallAsync 把
+	// 「unknown method: ai_presets」静默吞掉,于是「新对话」下拉永远只剩「还没有插件提供预设」,
+	// 预设名/预设标记也解析不出来(Windows 上整条预设链路是死的)。这里把已有能力接上。
+	public object ai_presets()
+	{
+		List<object> list = new List<object>();
+		foreach (TipCL.Core.Plugins.AgentPreset item in TipCL.Core.Plugins.AgentPresets.All())
+		{
+			list.Add(item.ToInfo());
+		}
+		return list;
+	}
+
 	public object ai_delete_chat(object chat_id)
 	{
 		PyDict data = Store.Load();

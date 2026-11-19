@@ -1102,21 +1102,22 @@ public sealed class CatalogPage : PageBase
 		CheckBox checkBox = Ui.Switch(m.Enabled);
 		checkBox.Checked += delegate
 		{
-			PageBase.Run(() => PageBase.Api.TryCallAsync<object>("enable_mod", new
+			// 写操作走 MutateAsync(失败弹提示):TryCallAsync 会把后端异常吞掉 → 开关"点了没反应"
+			PageBase.Run(() => PageBase.Api.MutateAsync("enable_mod", new
 			{
 				instance = inst,
 				filename = file,
 				version = ver
-			}));
+			}, I18n.L("启用模组失败")));
 		};
 		checkBox.Unchecked += delegate
 		{
-			PageBase.Run(() => PageBase.Api.TryCallAsync<object>("disable_mod", new
+			PageBase.Run(() => PageBase.Api.MutateAsync("disable_mod", new
 			{
 				instance = inst,
 				filename = file,
 				version = ver
-			}));
+			}, I18n.L("停用模组失败")));
 		};
 		Button el = Ui.Btn(I18n.L("删除"), BtnKind.Ghost, delegate
 		{
