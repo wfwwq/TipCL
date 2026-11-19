@@ -530,3 +530,106 @@ public class LayoutEditorTests
 		}
 	}
 }
+
+/// <summary>
+/// 2026-11-19 审计修复的回归(纯规则层):窄窗变体只写当前显示的那一份、
+/// 落点键不再与并排宽度撞键、并排宽度下限取 MinCols、手势期间屏蔽快捷键、微调先快照后改。
+/// 手势本身仍是 WPF 事件,只能真机验(见交付报告)。
+/// </summary>
+public class LayoutEditorFixTests
+{
+	private static PageLayoutV2 GridPage(int cols, params string[] ids)
+	{
+		PageLayoutV2 page = new PageLayoutV2();
+		page.Mode = LayoutSchema.ModeGrid;
+		page.Cols = cols;
+		foreach (string id in ids)
+		{
+			page.Blocks.Add(new BlockLayout { Id = id, Z = page.Blocks.Count });
+		}
+		return page;
+	}
+
+	[Fact]
+	public void VariantWriteOnlyTouchesTheBodyBeingShown()
+	{
+		LayoutV2 doc = new LayoutV2();
+		PageLayoutV2 mainPage = GridPage(12, "a");
+		PageLayoutV2 narrowPage = GridPage(12, "a");
+		doc.Layout.Pages["p"] = mainPage;
+		LayoutBody narrow = new LayoutBody();
+		narrow.Pages["p"] = narrowPage;
+		doc.Layout.Variants[LayoutVariants.Narrow] = narrow;
+
+		double threshold = LayoutVariants.NarrowWidthThreshold;
+		Assert.Equal(LayoutVariants.Narrow, LayoutVariantWrite.SourceOf(doc.Layout, "p", 500.0, threshold));
+		Assert.Equal("", LayoutVariantWrite.SourceOf(doc.Layout, "p", 1200.0, threshold));
+
+		PageLayoutV2 edited = GridPage(6, "a");
+		LayoutVariantWrite.Apply(doc, "p", edited, LayoutVariants.Narrow);
+		Assert.Same(edited, doc.Layout.Variants[LayoutVariants.Narrow].Pages["p"]);
+		Assert.Equal(12, doc.Layout.Pages["p"].Cols); // 宽版没有被窄窗编辑覆盖
+
+		// 窄窗重置只删变体那份,主 body 保留
+		Assert.True(LayoutVariantWrite.Remove(doc, "p", LayoutVariants.Narrow));
+		Assert.False(doc.Layout.Variants[LayoutVariants.Narrow].Pages.ContainsKey("p"));
+		Assert.True(doc.Layout.Pages.ContainsKey("p"));
+
+		// 空变体 = 主 body
+		LayoutVariantWrite.Apply(doc, "p", edited, "");
+		Assert.Same(edited, doc.Layout.Pages["p"]);
+	}
+
+	[Fact]
+	public void DropKeyDoesNotCollideBetweenSideBySideAndPlainTarget()
+	{
+		// 普通落位 targetX=2 → -(2+1) = -3;并排 (targetX=0, fitW=2) → 1 + 单独 fitW=2
+		Assert.False(LayoutGestureRules.SameDrop(1, 2, 0, -3, 0, 0));
+		Assert.True(LayoutGestureRules.SameDrop(1, 2, 0, 1, 2, 0));
+		Assert.False(LayoutGestureRules.SameDrop(1, 3, 0, 1, 2, 0)); // 并排宽度变了要重排
+		Assert.False(LayoutGestureRules.SameDrop(-3, 0, 0, -3, 0, 1)); // 行变了
+		Assert.True(LayoutGestureRules.SameDrop(-3, 0, 1, -3, 0, 1));
+	}
+
+	[Fact]
+	public void SideBySideMinWidthHonoursBlockMinCols()
+	{
+		Assert.Equal(6, LayoutGestureRules.SideBySideMinWidth(6, 12)); // 插件块 MinCols=6(已按页列数折算)
+		Assert.Equal(4, LayoutGestureRules.SideBySideMinWidth(6, 4));  // 画布列数不足时钳到列数
+		Assert.Equal(2, LayoutGestureRules.SideBySideMinWidth(0, 12)); // 没声明 MinCols → 全局下限 2
+		Assert.Equal(2, LayoutGestureRules.SideBySideMinWidth(2, 12));
+		Assert.Equal(1, LayoutGestureRules.SideBySideMinWidth(6, 1));  // 画布只有 1 列时钳到 1
+	}
+
+	[Fact]
+	public void GestureBlocksAllKeysExceptEscape()
+	{
+		Assert.True(LayoutGestureRules.ShouldHandleKey(LayoutKey.Escape, true));
+		Assert.False(LayoutGestureRules.ShouldHandleKey(LayoutKey.Delete, true));
+		Assert.False(LayoutGestureRules.ShouldHandleKey(LayoutKey.Undo, true));
+		Assert.False(LayoutGestureRules.ShouldHandleKey(LayoutKey.Left, true));
+		Assert.True(LayoutGestureRules.ShouldHandleKey(LayoutKey.Delete, false));
+		Assert.True(LayoutGestureRules.ShouldHandleKey(LayoutKey.Undo, false));
+	}
+
+	[Fact]
+	public void NudgeSnapshotsBeforeMutatingSoUndoGoesBackOneCell()
+	{
+		PageLayoutV2 page = GridPage(4, "a");
+		LayoutEditSession session = new LayoutEditSession();
+		PageLayoutV2? moved = LayoutNudge.Apply(page, session, new string[1] { "a" }, 1, 0, false, 600.0, 400.0, 8.0);
+		Assert.NotNull(moved);
+		Assert.Equal(1.0, moved!.Blocks[0].X, 6);
+		Assert.Equal(0.0, page.Blocks[0].X, 6); // 原页面没有被子就地改掉
+		Assert.True(session.CanUndo);
+		PageLayoutV2? back = session.TakeUndo(moved);
+		Assert.NotNull(back);
+		Assert.Equal(0.0, back!.Blocks[0].X, 6); // 撤销精确回到移动前一格
+
+		// 已经贴边:没有真的移动 → 不压撤销(不在栈里留空快照)
+		LayoutEditSession idle = new LayoutEditSession();
+		PageLayoutV2 edge = GridPage(2, "a");
+		Assert.Null(LayoutNudge.Apply(edge, idle, new string[1] { "a" }, -1, 0, false, 600.0, 400.0, 8.0));
+		Assert.False(idle.CanUndo);
+	}
+}
