@@ -161,3 +161,61 @@ $env:TEMP="D:\项目\TipCL\_tools\tmp-A"; $env:TMP=$env:TEMP
 2. `Launcher/Ai/*`（`Client.cs`/`AiAgent.cs`/`ToolRunner.cs`/`Compact.cs`/`Checkpoint.cs`）—— 流式解析、工具循环超时与取消、上下文压缩边界。
 3. `Launcher/Crash.cs`（62KB）、`Updater.cs`、`Worlds.cs`、`Sync/PhoneLink.cs`、`Plugins/PluginMarket.cs`、`Plugins/PluginHost.cs`。
 4. `Launcher/Optifine.cs` / `Liteloader.cs` 本体（`Installer.InstallOptifine/InstallLiteloader` 只是转发）。
+---
+
+# 第四轮（最后一轮 Core：Catalog.cs + Ai/* + 快速筛查 + 收尾）
+
+基线：rebase 到第三轮合并后的 main。本轮**没有发现新的 Core bug**（下面是逐项核查结论与判据），因此零代码改动，只补报告。
+
+## 14. Catalog.cs（607 行，已通读）
+
+| 位置 | 结论 |
+|------|------|
+| `_MOD_ALIASES_LOWER`(311 条) / `_MODPACK_ALIASES_LOWER`(29 条) / `Index()` / `LookupModAlias` / `LookupModpackAlias` | 查表键必须全小写（`Index` 用默认的 ordinal 敏感比较，查表前统一 `Py.Lower`）。**机器核对过 340 条键：含大写字母 0 条**，表内重复键仅「机械动力」1 处，且分属 mod 表（→ create）与整合包表（→ CBC），是**有意**区分。无 bug。 |
+| `FuzzyMatchMod` | `key.Contains(text) || text.Contains(key)`：空查询会命中全部 311 条。**观察**：App 侧只在用户输入非空时调用，暂无影响；若将来做「搜索建议」，建议先判 `text.Length>0`。 |
+| `ModDescCn` / `POPULAR_MODS` / `POPULAR_MODPACKS` | 纯静态文案与推荐位，回退链（slug → title → fallback）正确，无异常路径。 |
+
+## 15. Ai/*（按 lead 点名的五处重点读，其余标「未审完」）
+
+| 文件 | 已读部分与结论 |
+|------|----------------|
+| `AiResponse.cs`（全 155 行） | SSE 行切分：`\r\n`/`\n`/`\r` 三种行尾与**跨 chunk 的 CR+LF** 都正确（`lastCr` 活到下一块）；读超时→`AiStreamBroken`、IO/已释放→`AiStreamBroken`；`CopyTimed` 超时抛中文「Read timed out. (上游长时间没有返回数据)」。**无 bug**。 |
+| `Compact.cs`（全 246 行） | 微压缩只换「旧工具结果」且 `keep_recent` 保底；`AlignKeepBoundary` 把切点从 `tool` 消息往前挪（避免「工具结果与它的 tool_calls 被拆开」被接口拒）；摘要为空**拒绝替换**（宁可不换也不丢历史）；`CheckRapidRefill` 熔断带中文原因。**无 bug**。 |
+| `ToolRunner.cs`（权限/执行/异常收口，240-350 行） | 取消 → `cancelled`「用户停止了这次操作」并给步骤行打 `已停止`；异常 → `Tools.ClassifyException` 分类 + 中文文案 + 步骤行日志；预览算不出来只降级不影响执行。**无 bug**。 |
+| `Client.cs` `AssembleStream`（467-584 行） | 流断在工具参数中间时**不吐出半截 tool_calls**，改发 `error`「接口超时,正在换一次非流式」；`[DONE]`、`usage`、`error` 三个收尾分支齐备；坏 JSON 行跳过。**无 bug**。 |
+| **未审完（重要声明）** | `Client.cs:585-921`（tool_calls 增量拼接后半段）、`AiAgent.cs`（回合循环/重试/`StreamAttemptAsync`）、`McpClient.cs`、`Checkpoint.cs`/`Store.cs` 的落盘细节，本轮只做了 grep 级扫描（`catch` 多为「落盘/预览失败不影响主流程」的性质）。**AI 层不能算审完**，见 §17 结论。 |
+
+## 16. 快速筛查（grep 高危模式 + 关键路径读一遍）
+
+| 文件 | 结论 |
+|------|------|
+| `Optifine.cs`（331 行，已通读） | 列表→选择→下载→`_has_tweaker` 判定→Patcher 路径（180s 超时、失败带 stderr 尾巴）→`_extract_launchwrapper` 提取内嵌 launchwrapper 并落到 maven 路径→tweaker 版本 json 的 1.13+ `arguments` / 老 `minecraftArguments` 分支，都正确。**观察**：`HasVersion(id)` 只看版本 json 存在就提前返回，若用户删过 `versions/<id>/<id>.jar` 会得到「已安装」但启动报「客户端 jar 缺失」——属既有语义，未改。 |
+| `Liteloader.cs`（111 行，已通读） | 版本 id `<mc>-LiteLoader<mc>`、JAR 预下载到 maven 路径后由 `LooksComplete` 判定跳过重复下载、launchwrapper 大小校验，均正确。 |
+| `Worlds.cs`（grep + 关键路径） | 全部错误都是中文 `WorldError`（含「世界压缩包损坏 / 含非法路径 / 空的世界压缩包」），zip 逐条做路径越界校验。**无问题**。 |
+| `Cleaner.cs` / `Crash.cs` / `Updater.cs` / `Sync/PhoneLink.cs` | `Cleaner` 已在第三轮修（A-09）；`Crash.cs`(62KB) 与 `Updater.cs`、`PhoneLink.cs` 本轮只做 grep 级筛查（`PhoneLink` 的异常文案全是中文；`Updater` 的 Linux 分支用 `File.GetUnixFileMode` 保留权限）。**未通读，见 §17**。 |
+
+## 17. X-04 / X-05 归属判定（lead 问的两条）
+
+- **X-04（Cleaner 返回值语义）→ 归 App，Core 不动。** Core 侧已经做到它能做的：`Apply` 现在回 `removed`/`bytes`/`failed`/`error` 四个键，并逐条落 Warning 日志；「要不要把 `failed>0` 显示成 Warning 而不是绿字成功」是纯展示决策，改在 `SettingsPage.Cards.cs:274`。Core 若替它抛异常，App 现有 `TryCallAsync` 会退化成「清理后端 M3 接入」这种更糟的提示，所以**不该在 Core 抛**。
+- **X-05（Modrinth 返回值被丢）→ 归 App，Core 不动。** `InstallModrinthMod` 的返回值已含 `slug`/`version`/`files`，第三轮 A-07 又保证前置失败会通过任务卡日志可见；「像 CF 那样显示已随装前置」需要 App 接住返回值。Core 侧唯一可做的增强（把 dependencies 塞进返回值）对 App 目前无效，属无收益改动，不做。
+
+## 18. 四轮汇总
+
+| 轮次 | 修复 | 其中 P0 | P1 | P2 |
+|------|------|---------|----|----|
+| 第一轮 | A-01 布局 v2 损坏备份链路缺失（数据丢失）、A-02 PyJson 深嵌套栈溢出（进程崩溃）、A-03 GameProcess 持锁调回调（潜在死锁） | 0 | 2 | 1 |
+| 第二轮 | A-04 Linux 装出的 Java 无执行位（Chmod755 空实现 + tar/zip 权限位丢失）、A-05 Zulu/Microsoft 压缩包后缀与实际格式不符、A-06 词表补「结果列表」 | 0 | 2 | 1 |
+| 第三轮 | A-07 前置依赖失败静默、A-08 隔离实例 Modrinth 内容包装错目录、A-09 Cleaner 删除失败全吞+假成功 | 0 | 2 | 1 |
+| 第四轮 | 无（Catalog/Ai/快速筛查逐项核查未发现新 bug） | 0 | 0 | 0 |
+| **合计** | **9 项** | **0** | **6** | **3** |
+
+质量门槛：每轮结束都跑 `dotnet build -c Release`（0 错误 0 警告）+ 全量 `dotnet test`；最后一轮基线 **906 通过 / 0 失败 / 1 跳过**。所有修复都有 harness 断言或测试佐证（临时探针工程 `_tools/tmp-A/audit-harness`，24 项断言）。
+
+### 结论：**Minecraft 主流程（下载/安装/启动/布局/配置/词表/插件状态/存档同步核心/模组与整合包安装）可以判定为「Core 层审计完毕」。**
+
+### 但建议再来一轮（范围收窄，不是重头再来），理由三条：
+1. **AI 子系统没审完**：`AiAgent.cs` 的回合循环/重试、`Client.cs:585-921` 的 tool_calls 增量拼接、`McpClient.cs`、`Checkpoint/Store` 的落盘细节都只做了 grep 级扫描。AI 助手是 Linux 侧的主打功能之一，且「流式丢 token / 工具循环不退出」正是用户能立刻感知的故障，值得单独半轮。
+2. **`Crash.cs`(62KB) 没通读**：它决定「游戏崩了之后提示准不准」，其中 `AnalyzeLaunch` 会被启动流程直接调用。
+3. `Updater.cs`/`PhoneLink.cs`/`PluginMarket.cs`/`PluginHost.cs` 只到 grep 级；这几块失败时的用户提示质量（尤其「自更新失败」）没被逐句核过。
+
+其余（Catalog 别名表、OptiFine/LiteLoader 本体、Worlds、Cleaner、SemVer、Java 探测、下载/安装/布局/配置/词表）已逐行或逐函数核过，可以关闭。
