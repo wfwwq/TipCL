@@ -40,6 +40,9 @@ public sealed class UiPrefs
 
 	private const string CATALOG_INSTANCE_KEY = "catalog_instance";
 
+	/// <summary>布局编辑「自动靠拢」开关(对齐 Windows UiPrefs.LayoutAutoPack;缺省开 = 旧行为)。</summary>
+	private const string LAYOUT_AUTO_PACK_KEY = "layout_auto_pack";
+
 	private readonly LauncherConfig _config;
 
 	private readonly PyDict _node;
@@ -86,6 +89,24 @@ public sealed class UiPrefs
 		{
 			Utils.log.Warning("界面偏好写入失败(已忽略): %s", Py.ExcStr(ex));
 		}
+	}
+
+	// ———————————————————————— 布局编辑偏好 ————————————————————————
+
+	/// <summary>
+	/// 「自动靠拢」开关(对齐 Windows UiPrefs.LayoutAutoPack;2026-11-19 录屏反馈):
+	/// 开 = 松手后区块压紧上浮 / 与相邻块左右互换 / 靠近时磁性吸附(旧行为);缺键或类型不符 → dflt。
+	/// </summary>
+	public bool GetLayoutAutoPack(bool dflt)
+	{
+		object raw = _node.Get(LAYOUT_AUTO_PACK_KEY);
+		return raw is bool on ? on : dflt;
+	}
+
+	/// <summary>记「自动靠拢」开关(只改内存,落盘请调 <see cref="Save"/>)。</summary>
+	public void SetLayoutAutoPack(bool on)
+	{
+		_node[LAYOUT_AUTO_PACK_KEY] = on;
 	}
 
 	// ———————————————————————— 分组折叠态 ————————————————————————

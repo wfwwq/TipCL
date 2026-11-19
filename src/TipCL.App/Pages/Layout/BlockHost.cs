@@ -35,6 +35,13 @@ public sealed class BlockSpec
     public Control? Content { get; set; }
 
     public bool DefaultVisible { get; set; } = true;
+
+    /// <summary>
+    /// 网格模式下的最小列宽(12 列制;0 = 只用全局下限 2 列)。
+    /// 内容本身需要一定宽度才看得见的块(插件列表这类)设一下:旧存档里被缩成 1 列的块渲染时自动撑回来,
+    /// 不再出现「内容区块被压成一条细线、插件全看不见」(对齐 Windows 2026-11-19 修复 #7)。只影响渲染,不改写存档。
+    /// </summary>
+    public int MinCols { get; set; }
 }
 
 /// <summary>
@@ -173,6 +180,10 @@ public sealed class BlockHost : UserControl
         get => _editor.CollapseIdleBottom;
         set => _editor.CollapseIdleBottom = value;
     }
+
+    /// <summary>按滚轮增量滚动区块内容区(能滚才滚;返回是否滚了)。鼠标在宿主之外(启动页英雄区 / 背景图)时,
+    /// 页面可以把滚轮转交过来 —— 对齐 Windows 2026-11-19 修复 #2。</summary>
+    public bool ScrollBy(int delta) => _editor.ScrollBy(delta);
 
     public event Action? Changed;
 

@@ -1723,6 +1723,16 @@ public static class LayoutGrid
 	/// </summary>
 	public static void Compact(List<LayoutCell>? cells, int cols, ICollection<string>? pinned, IReadOnlyDictionary<string, int>? swapX)
 	{
+		Compact(cells, cols, pinned, swapX, gravity: true);
+	}
+
+	/// <summary>
+	/// 同上;<paramref name="gravity"/> = false 时关闭「自动靠拢」:其余块**不上浮**、也不左右互换,
+	/// 只在与固定块 / 已放好的块冲突时才在本列往下让位 —— 用户拖出来的空隙原样保留
+	/// (对齐 Windows 2026-11-19 录屏反馈:「自动靠到和它近的窗口上的功能应该做个开关」)。
+	/// </summary>
+	public static void Compact(List<LayoutCell>? cells, int cols, ICollection<string>? pinned, IReadOnlyDictionary<string, int>? swapX, bool gravity)
+	{
 		if (cells == null || cells.Count == 0)
 		{
 			return;
@@ -1756,6 +1766,18 @@ public static class LayoutGrid
 		});
 		foreach (LayoutCell cell2 in rest)
 		{
+			if (!gravity)
+			{
+				// 不上浮:原位能放就原位,放不下才在本列往下找第一个空位
+				cell2.Y = Math.Max(0, cell2.Y);
+				if (!occupancy.IsFree(cell2.X, cell2.Y, cell2.W, cell2.H))
+				{
+					occupancy.FirstFreeInColumnH(cell2.X, cell2.W, cell2.H, cell2.Y, out int pushed);
+					cell2.Y = pushed;
+				}
+				occupancy.Fill(cell2.X, cell2.Y, cell2.W, cell2.H);
+				continue;
+			}
 			occupancy.FirstFreeInColumnH(cell2.X, cell2.W, cell2.H, 0, out int y);
 			if (swapX != null && swapX.TryGetValue(cell2.Id, out int swapColumn))
 			{

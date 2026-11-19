@@ -762,3 +762,19 @@ $env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
 > ⚠️ **踩过的坑(记下来省得再踩)**:第一次对比用的是两个**名字不同**的输出目录(`lang-en` / `lang-zh_CN`),结果 `library` / `library-dark` 稳定差约 70 像素。原因**不是语言**,而是**库页会把数据目录路径画在界面上**,而那条路径里带着我自己的输出目录名。把两次运行的 home 路径做成完全一致后差异归零。**做逐像素 A/B 时,隔离目录的名字本身就是一个变量。**
 
 **结论**:语言设置**接线已通**(机制层已验证),但「中英双语界面」在 8 个静态页面上**仍然看不出来**。要让界面整体切换,需要先把那 **1071 处「已有译文、只是没接线」的字面量**接上(见 R30-WP3 报告 §5.2 的 P4)(分母口径说明:R30-WP3 §5.2 当时用的是那一轮扫描器的口径,不是本文这个口径。)
+
+### 9.18 2026-11-19 录屏修复的 Linux 侧移植(2026-11-19)
+
+**背景**:`windos/` 侧按录屏反馈打了 7 条修复(`25503bd`,只动 WPF 树)。本节记录 Linux/Avalonia 树对同样 7 条的落地情况 —— 两棵树的布局层同名但**不同源**(Linux 的 `LayoutGrid.Compact` 换位参数是「每块备选列」的映射、滚动用原生 `ScrollViewer` 没有 `SmoothScroll`、卡片每次挂载前都 `Detach`),所以不是逐行照抄。
+
+| # | Windows 做法 | Linux 落地 | 状态 |
+|---|---|---|---|
+| 5 | 新增 `AttachCard()`,换父级前先摘 | Linux 侧结构上**不存在该缺陷**:`Render`/`RenderBox`/`BuildRow` 每次挂载前都走 `Detach(card)`,旧父级是 Panel 时一律先移除 | 无需移植 |
+| 6 | 新闻卡 `VerticalAlignment` Bottom → Top | `Launch/LaunchPage.cs` 同上改 Top(默认纵向流观感不变) | ✅ |
+| 2 | 滚动区透明底 + `BlockHost.ScrollBy` + 页面转交滚轮 | `_scroll`/`_boxScroll` 加 `Brushes.Transparent`;`BlockHost.ScrollBy(int)` → `LayoutEditor.ScrollBy`;**无 SmoothScroll**,直接改原生 `ScrollViewer.Offset`;`LaunchPage` 在根 Grid 上转交(指针不在区块宿主内才接管) | ✅ |
+| 1 | 并排落位 `SideBySideSlot` | `LayoutEditor.ApplyGridGesture` 移植同一套纯格子判定;落点 key 里带 `|w<宽>`,收窄后按「不互换」压紧 | ✅ |
+| 3 | 工具条「自动靠拢 开/关」+ `LayoutAutoPack` | 新增 `Pages/Layout/LayoutEditPrefs.cs`;偏好落 `config.json` 的 `ui_prefs.layout_auto_pack`(Linux 没有 `wpf-ui.json`,见 UiPrefs 文件头三条硬约束);`LayoutGrid.Compact` / `GridCanvasPanel.CompactCells` 加 `gravity` 重载;磁性吸附按开关门控 | ✅ |
+| 7 | `BlockSpec.MinCols` + 渲染前撑宽 | `BlockSpec.MinCols` + `LayoutEditor.SanitizeCellWidths()`(只改画布格子、不写存档,冲突用 `gravity:false` 解);插件页 `页签 4 / 内容 6` | ✅(Windows 那版还设了 `Fill=true`,Linux 用既有的 `LayoutFill.FillsBody` 机制,未改) |
+| 4 | 实例库新增「实例状态」区块 | **未移植**:Linux 的 `InstRow` 只有 `Name/Path/Versions`,`Ver` 只有 `Id/Loader/Type/Mods` —— 「游戏版本 / 整合包 / Java / 最近游玩」**没有数据源**。要补得先接 `get_instance_info` 契约并把 `LastPlayed` 补进 `Ver`,属数据层改动,不在本轮 | ❌ 待定 |
+
+**验证口径**(本机 Windows,`dotnet build TipCL.Linux.sln -c Release` + `dotnet test tests/TipCL.Tests`):构建 0 警告 0 错误;用例 **781 条 / 775 过 / 5 败 / 1 跳**,5 条失败与改动前**同一组**(写 `%TEMP%` 被拒的 `NewsTests` ×3 + `PhoneLinkProtocolTests` ×2,环境性);新增 `LayoutAutoPackTests` 3 条全过。**界面未在真窗跑过** —— 动画 / 滚轮转交 / 并排落位的手感仍需 Linux 真机验收。

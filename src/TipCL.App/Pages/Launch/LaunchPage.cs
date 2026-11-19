@@ -15,6 +15,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using TipCL.App.Common;
 using TipCL.App.Shell;
 using TipCL.App.Ui;
@@ -337,7 +338,9 @@ public sealed partial class LaunchPage : PageBase
             BorderThickness = new Thickness(1),
             Padding = new Thickness(8, 8, 14, 8),
             HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Bottom,
+            // Top:进了网格 / 画布区块后格子往往比新闻卡高,Bottom 会让新闻卡沉到格子底部、
+            // 看起来像「跑出了区块」(对齐 Windows 2026-11-19 修复 #6)。默认纵向流里格子高 = 内容高,Top / Bottom 观感相同。
+            VerticalAlignment = VerticalAlignment.Top,
             Cursor = new Cursor(StandardCursorType.Hand),
             Child = UiClass.H(10, tag, _newsTicker, arrow),
         };
@@ -381,8 +384,43 @@ public sealed partial class LaunchPage : PageBase
         root.Add(_hero, 0);
         root.Add(_blocks, 1);
         Content = root;
+        // [2026-11-19 修复 #2] 非编辑态滚轮:指针在英雄区 / 背景图上(不在区块宿主里)时,把滚轮转交给
+        // 自定义布局区 —— 块多了被限高(62% 页高)之后,原来只有指针正好压在块上才滑得动。
+        root.Background = Brushes.Transparent; // 没截图时英雄区空白处也要能接到滚轮
+        root.PointerWheelChanged += (_, e) =>
+        {
+            if (e.Handled || _blocks == null)
+            {
+                return;
+            }
+            if ((e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift)) != KeyModifiers.None)
+            {
+                return;
+            }
+            if (e.Source is Visual src && IsInside(src, _blocks))
+            {
+                return; // 区块里面:交给区块自己的滚动
+            }
+            if (_blocks.ScrollBy((int)e.Delta.Y))
+            {
+                e.Handled = true;
+            }
+        };
         ApplyHeroTone(onImage: false);
         SyncHero();
+    }
+
+    // 指针源是否落在某个祖先里(Avalonia 没有 WPF 的 VisualTreeHelper.GetParent 统一入口)
+    private static bool IsInside(Visual? node, Visual ancestor)
+    {
+        for (Visual? cur = node; cur != null; cur = cur.GetVisualParent())
+        {
+            if (ReferenceEquals(cur, ancestor))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Control? _statusRow;

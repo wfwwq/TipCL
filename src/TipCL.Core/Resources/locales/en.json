@@ -3014,6 +3014,17 @@
  "输入区": "Input area",
  "安装选项": "Install options",
  "版本安装": "Version install",
+ "自动靠拢": "Auto-pack",
+ "开:松手后区块自动向上靠拢、与相邻区块互换位置、靠近时磁性吸附;关:区块停在你放下的位置": "On: blocks pack upward, swap with neighbours and snap magnetically when released; Off: blocks stay where you drop them",
+ "开": "On",
+ "关": "Off",
+ "自动靠拢已开启": "Auto-pack on",
+ "自动靠拢已关闭": "Auto-pack off",
+ "区块松手后会自动靠拢相邻区块": "Blocks will pack against their neighbours when released",
+ "区块会停在你放下的位置": "Blocks will stay where you drop them",
+ "实例状态": "Instance status",
+ "还没有选中实例": "No instance selected",
+ "最近游玩": "Last played",
  "设置 · 布局": "Settings · Layout",
  "先在「下载 → 原版」里点一个版本进入安装页,再在页面上右键「自定义布局...」": "First open a version from Downloads → Vanilla to reach the install page, then right-click the page and choose \"Customize layout...\""
 }

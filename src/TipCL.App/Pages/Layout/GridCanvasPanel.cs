@@ -364,11 +364,17 @@ public sealed class GridCanvasPanel : Decorator
 	/// </summary>
 	public void CompactCells(ICollection<string>? pinned, IReadOnlyDictionary<string, int>? swapX)
 	{
+		CompactCells(pinned, swapX, gravity: true);
+	}
+
+	/// <summary>同上;<paramref name="gravity"/> = false = 「自动靠拢」关:只解冲突,不上浮、不左右互换。</summary>
+	public void CompactCells(ICollection<string>? pinned, IReadOnlyDictionary<string, int>? swapX, bool gravity)
+	{
 		if (IsCanvas || _cells.Count == 0)
 		{
 			return;
 		}
-		LayoutGrid.Compact(_cells, Cols, pinned, swapX);
+		LayoutGrid.Compact(_cells, Cols, pinned, (gravity ? swapX : null), gravity);
 		Reflow();
 	}
 

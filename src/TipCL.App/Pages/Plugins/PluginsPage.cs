@@ -112,8 +112,10 @@ public sealed partial class PluginsPage : PageBase
         LayoutFill.SetFillsBody(_body, true);
         Content = new BlockHost("plugins", new List<BlockSpec>
         {
-            new BlockSpec { Id = "tabs", Title = "页签", Content = head },
-            new BlockSpec { Id = "body", Title = "内容", Content = _body },
+            // [2026-11-19 修复 #7] 网格模式下的最小列宽:旧存档里被缩成 1 列的块渲染时撑回来,
+            // 否则插件卡片网格「被压成一条细线、插件全看不见」(录屏 1:06–1:16)。只影响渲染,不改写存档。
+            new BlockSpec { Id = "tabs", Title = "页签", Content = head, MinCols = 4 },
+            new BlockSpec { Id = "body", Title = "内容", Content = _body, MinCols = 6 },
         }, new Thickness(0), PluginsDefaultPage());
         BuildMarketChrome();
         BuildDev();
