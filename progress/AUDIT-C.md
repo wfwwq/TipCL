@@ -256,3 +256,105 @@ MouseMove
 3. 装一个带 `agentPresets` 的插件后打开 AI 页「新对话」下拉:应列出预设,新建对话后消息列表应显示预设名。
 4. 任意模组开关在"实例被占用/文件只读"时:应弹出错误提示而不是静默。
 5. 启动页滚到中间 → 切到别的页 → 切回来:滚动位置应保持(R2.1-6)。
+
+---
+
+# 第三轮 — stack 纵向流拖拽丝滑化 + 三轮汇总
+
+基线:`audit/C`(rebase 到最新 main);验证:`dotnet build windos/src/TipCL/TipCL.csproj -c Release` **0 警告 0 错误**、`dotnet test windos/tests/TipCL.Tests` **559/559**(547 + 本轮新增 12)。
+
+## R3.1【P1 已修】stack 纵向流拖拽不跟手(第二轮 R2.1-7 的兑现)
+
+### 改前的观感
+`LayoutEditor.OnDragMove`(stack 分支)只做"跨过相邻块中点就交换顺序",被拖卡片**完全不跟随指针**,只把 `Opacity` 降到 0.75;换位是 `InsertVisual` 把元素搬到新位置,其余块瞬间跳一格。更糟的是判定直接和**裸中点**比较,指针停在中点附近时 ±1px 手抖会让块来回翻(用户说的"不丝滑"第一现场)。
+
+### 改后的手感
+每帧只写一次 `RenderTransform`;换位才动模型 + 补 FLIP;松手滑回格子。调用链:
+
+```
+MouseMove
+ └ OnDragMove (LayoutEditor:1603 附近)
+    ├ _stackPointerYLive = y; MoveStackFloat()      → TranslateTransform.Y = 基准 + (y - 起手y)
+    ├ AutoScrollNearEdgeStack(y)                    → 靠近上下边缘才起计时器(见 R3.2)
+    └ StackDragPlan.TargetIndex(...) 变了才 ApplyStackReorder(id, target)
+         ├ CaptureStackTops()                       → 换位前各卡片 top(FLIP 的"旧位置")
+         ├ _state.MoveVisibleTo(id, target)         → 只改 Order/Page.Blocks 先后(span/坐标/外观不动)
+         ├ InsertVisual(id)                         → 元素搬到新下标(单列增量搬家)
+         └ FlipStackCards()
+              ├ 其余块:StackFlipOnce → 170ms ease-out 从"旧位置偏移"滑到 0
+              └ 被拖块:_stackFloatBase += 格子跳变量;MoveStackFloat() 重新贴回手指下
+松手
+ └ EndDrag: StopStackFloat() 拿起点 → CancelDrag() 收尾 → StartStackSettle() 170ms 滑回格子
+```
+
+关键点:
+- **跟手不花布局钱**:浮起期间只有 `TranslateTransform.Y` 一次写入;`_list` 的 SPanel 不做任何 measure/arrange 失效。
+- **换位不闪**:被拖卡片的"格子位置"每被搬走一格都会瞬移,所以把跳变量累进 `_stackFloatBase` 抵消掉 —— 视觉上它一直停在手指下面(与 `GridCanvasPanel` 的 FLIP 同一套补偿思路)。
+- **滞回防抖**:`StackDragPlan.Hysteresis = 6px`,必须越过相邻块中点再多 6px 才换位(第二轮那套"每帧判定"换成带余量的纯函数,可断言)。
+- **松手收敛**:落位动画在 `CancelDrag` **之后**才挂(`LayoutEditor:1900-1919` 的注释写了为什么:顺序反了会被收尾逻辑立刻清掉,变成"啪"一下归位)。
+- **可回退**:`Motion.Enabled == false` 或页面不是单列时 `BeginStackFloat` 直接返回(`:1691`),走**原来那套"交换即落位"**,行为与改动前一致;模型语义(stack = span + 顺序)一个字没动。
+
+### 新增/改动文件
+- 新增 `windos/src/TipCL/Pages/Layout/StackDragPlan.cs`(纯逻辑,零 WPF):`TargetIndex`(`:31`)、`IndexSeries`(`:57`)、`EdgeScrollStep`(`:77`)。
+- 新增 `LayoutPageState.MoveVisibleTo`(`LayoutEngine.cs:536`):复用既有的相邻交换原语,只动顺序,`span/坐标/外观` 不碰。
+- `LayoutEditor.cs`:浮起/跟手/FLIP/落位/自动滚动接 stack(`_stackFloat` `:1671`、`BeginStackFloat:1691`、`MoveStackFloat:1709`、`ApplyStackReorder:1720`、`FlipStackCards:1753`、`StackFlipOnce:1786`、`StopStackFloat:1809`、`StartStackSettle:1831`、`AutoScrollNearEdgeStack:1858`、`TickStackAutoScroll:2312`)。
+
+### 新增单测(`windos/tests/TipCL.Tests/StackDragPlanTests.cs`,12 例,不改工程文件)
+`TargetIndexNeedsToCrossMidpointPlusHysteresis`(165 不换 / 167 换)、`JitterAroundAMidpointNeverFlipsBack`(8 帧抖动序列恒为 1)、`DownwardSweepIsMonotoneAndReachesTheEnd` / `UpwardSweepIsMonotoneAndReachesTheTop`(位移序列 → 下标序列单调,不可能来回跳)、`UnevenHeightsUseTheCachedHeightOfEachBlock`、`TargetIndexClampsToTheListBounds`、`ZeroHysteresisMatchesTheLegacyMidpointRule`(等价性),以及模型层 `MoveVisibleToReordersWithoutTouchingGeometry` / `IsIdempotentAtTheSameIndex` / `KeepsHiddenBlocksInPlace` / `RepeatedSwapsMatchTheModelDragReorderSemantics`。
+
+## R3.2【P2 已修】stack 拖到列表两端不会滚
+
+R2 里的边缘自动滚动只覆盖 grid/canvas(`_boxScroll`)。stack 长列表里把块拖到底部边缘时同样需要滚,否则根本拖不过一屏。现在同一套 16ms 计时器 + `StackDragPlan.EdgeScrollStep`(贴边 25%→100% 速度,最深 18px/帧≈1100px/s)驱动 `_scroll`,滚动量折回指针内容坐标后立刻重跑换位判定(`TickStackAutoScroll:2312`)。
+
+## R3.3 未审区域快速筛查结论(本轮只做机械/结构性检查,有真 bug 才修)
+
+| 检查 | 范围 | 结论 |
+|---|---|---|
+| 静态可变集合 vs 锁 | `Core/Launcher/Ai/**`、`Core/Plugins/**` 共 20 个 `static readonly Dictionary/List/HashSet` | 运行期会变的那几个都有锁(`Agent._COMPACT_STATES`、`AgentPresets.Presets`、`ChatEventLog.Logs`、`PluginHooks.Entries`、`PluginTools.Tools/Index`、`Usage._data`、`Hooks._hooks`、`ModelCaps._cache`);`Tools.cs` 的 10 个全是只读查找表 + 一次性惰性 `_schemas`(引用赋值,重复构建只是浪费一次) → **无竞态 bug** |
+| RPC 名/参数覆盖 | 全客户端 199 个调用点 | R2 已清零(`ai_presets` 补齐后 `MISSING_RPC=0`;参数名唯一命中是 `[VarKw]` 正常用法) |
+| 空 catch / async void / `.Result` | 全仓 | 空 catch 4 处(正当)、async void 6 处(都有收口)、`.Result`/`.Wait()` 17 处全在后台线程(网络/进程 IO),未见 UI 线程阻塞 |
+| Timer / 静态事件退订 | 全仓 | 页面级 `DispatcherTimer` 都在 `OnHidden` 停;`BlockHost`/`GridCanvasPanel`/`MainWindow` 静态事件均对称退订 |
+
+**仍未逐行深审**(诚实清单,不阻塞发布):`Ai/Agent.cs`(63KB 工具循环)、`Ai/Tools.cs`(53KB)、`Ai/ExtraTools.cs`(38KB)、`Core/Plugins/**`(19 文件 ~250KB)、`Core/Launcher/Crash.cs`(63KB)、`Terracotta.cs`(46KB)、`Mods.cs`/`Modpack.cs`(55/59KB)、`Catalog.cs`(43KB)、`BackendApi.cs` 的 AI 段(150KB 里读过的部分见 §3)。
+
+---
+
+# 三轮汇总
+
+## 累计战果
+
+| 级别 | 发现 | 已修 | 只记录 |
+|---|---|---|---|
+| P0 | 0 | 0 | 0 |
+| P1 | 6 | 6 | 0 |
+| P2 | 12 | 11 | 1 |
+| 合计 | 18 | 17 | 1 |
+
+**P1(全部已修)**
+1. 启动按钮在预检/登录/多开弹窗期间可重复点 → 并发两个 `launch_game`(R1 C-01)
+2. 「创建桌面快捷方式」的 `-i … launch …` 参数在 Windows 侧没人消费 → 双击只开启动器(R1 C-02)
+3. `--design-sheet` 漏在免提权白名单外 → 截图工具链被 UAC 重启截断(R1 C-03)
+4. 拖动到列表/画布边缘后指针停住就不滚(自动滚动依赖 MouseMove)(R2 R2.1-1)
+5. 「新对话」预设下拉调了后端不存在的 `ai_presets` → Windows 上预设功能整条是死的(R2 R2.2-1)
+6. stack 纵向流拖拽不跟手(裸中点判定 + 块不跟指针)(R3 R3.1)
+
+**P2(11 修 / 1 记录)**:WebView2 初始化期销毁泄漏、`Reload()` 无销毁守卫、`wpf-ui.json` 非原子写、缺 3 条 i18n 键、写操作静默失败 13 处改 `MutateAsync`、stack 拖拽两端不滚、LayoutStoreV2 过期注释;只记录:`FeedbackConsent` 的同意写入仍静默(隐私同意,加弹窗反而打扰)。另有 R1 记录未修:`TarReader` 无上限分配、`ZipFolder` mtime 上界。
+
+## 我建议你实机点的清单(按性价比排序)
+
+1. **stack 拖拽手感**(本轮重点):按住区块手柄上下拖 → 卡片应贴在指针下;跨过相邻块中点后,相邻块滑让一格(170ms),被拖块不跳;松手滑回格子;`Motion` 关掉(设置→动画)时退回"交换即落位"。
+2. **拖到列表两端**:停住不动也应持续滚,到底自停。
+3. **AI 页「新对话」下拉**:装一个带 `agentPresets` 的插件后应列出预设;新建对话后消息列表显示预设名(不再是 `yy` 这种裸 id)。
+4. **启动页双击「启动游戏」**:只产生一个任务;启动中再点不应起第二个进程。
+5. **桌面快捷方式**:版本管理里创建 → 关掉启动器 → 双击 `.lnk` 应直接启动该实例/版本。
+6. **模组开关失败路径**:实例被占用或 jar 只读时切换开关,应弹错误提示而不是静默。
+7. **窄窗/宽窗、切页来回、编辑态进出一轮**:不应出现区块错位、滚动跳顶、编辑态残留。
+8. **插件 web 页快速切页**(含切走时插件被卸载):任务管理器里 `msedgewebview2.exe` 不应残留。
+9. **非管理员 shell** 跑 `TipCL.exe --design-sheet`:不应弹 UAC。
+10. **英文界面**看「设置 → 布局」方案列表的自动留底项、以及更新完成提示:应为英文。
+
+## 结论
+
+**WPF 层可判定审计完毕。** 依据:三轮里所有能机械化的判据都已清零或量化 —— RPC 名/参数覆盖(199/199)、i18n 键(1985 条字面量 + Core 侧 `I18nCore.Tr` 抽查)、XAML 资源键(125 定义 vs 全部引用)、`async void`/空 catch/`.Result`/Timer/静态事件退订/静态集合加锁、net48 API 垫片;编译 0 警告、559 测试全绿。
+
+若还要继续,建议下一轮不是"审计"而是"逐行深审"这几个具体模块(Ai 工具循环的取消/超时、Plugins 宿主生命周期、Crash/Modpack 的解析健壮性)——它们体量大但**没有已知可疑点**,属于覆盖率补完而不是救火。
