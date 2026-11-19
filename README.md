@@ -84,12 +84,12 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 
 1.2.0 起窗口长什么样可以自己做主(**布局 v2**):页签顺序、每个页面的区块顺序 / 显隐 / 跨列 / 位置、左右分栏比例、自建区块,全都是一份可读可写的 JSON 文档(`%TIPCL_HOME%\ui_layout_v2.json`),改一下即时保存、没有「保存」按钮 —— 在页面空白处**右键 →「自定义布局...」**即可进入编辑态,拖拽换序、按格缩放;页面支持 **stack / grid / canvas** 三种模式(grid 最高 12 列网格),整机布局可以导出成方案、再导入回来,也可以让 AI 直接排版(每次应用前先存一份「AI 备份 <时间>」方案)。
 
-> **平台口径(2026-11-16 实测,Linux 树代码尖 `1823c3c`)**:上面这段描述的是 **Windows 桌面版**(功能全量)。**Linux 移植版**自 R32 起已落地布局 v2 的**核心**——v2 文档 + 引擎 + 编辑器 + 右键「自定义布局...」入口 + 自建区块渲染;**尚未落地**的是设置页整页「布局」视图、分栏比例的界面、整机方案管理、布局 JSON 卡片与 AI 排版工具。逐条清单见 [`docs/README.md`](docs/README.md)「布局 v2:Linux 移植版的真实进度」。本节后面链接的两份手册写的是 **Windows 版**行为。
+> **平台口径(2026-11-20 复核,Linux 树代码尖 `b86afe3`)**:上面这段描述的是 **Windows 桌面版**(功能全量)。**Linux 移植版**已落地布局 v2 的文档 + 引擎 + 编辑器 + 右键「自定义布局...」入口 + 自建区块渲染,设置页「布局」视图的 7 个小节(外观与密度 / 页签与标题栏 / 页面区块 / 分栏比例 / 自建区块 / 布局方案 / 布局 JSON)也已在 Linux 树(`src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs`,分栏引擎在 `src/TipCL.App/Controls/PageLayoutHost.cs`);**仍缺**的是 AI 排版工具(`layout_apply` 与「AI 备份 <时间>」方案,只在 `windos/` 里)。逐条清单见 [`docs/README.md`](docs/README.md)「布局 v2:Linux 移植版的真实进度」。本节后面链接的两份手册写的是 **Windows 版**行为。
 
 - 📖 [布局使用指南](docs/布局使用指南.md)—— 完整手册:三个入口、编辑手势、三种模式、分栏比例、整机方案导入导出、自建区块、AI 排版与回退、本版的坑
 - ⚡ [布局快速上手](docs/布局快速上手.md)—— 30 秒版 + 手势速查表 + 9 条 FAQ
 
-> **已知限制**(如实说明):设置页里的「添加自建区块」按钮**本版未启用**,自建区块只能走 **布局 JSON 卡片 / 导入整机方案 / AI 排版**三条路径;窄窗 / 宽窗两套布局由运行时按窗口宽度自动切换,编辑器对它是只读的,不能手动编辑。
+> **自建区块入口**:设置 →「布局」→「自建区块」里的**「添加自建区块」按钮已启用**(2026-11-19 的 L6 起:内联管理面板可新建 / 改名 / 删除,页面的编辑态里也能用「+ 自建区块」把块加到本页;`windos/src/TipCL/Pages/SettingsLayoutPage.cs` 的 `LayoutWidgetRows()` / `WidgetCreateForm()`)。**布局 JSON 卡片 / 导入整机方案 / AI 排版**三条路径仍然有效,适合批量改或分享。窄窗 / 宽窗两套布局由运行时按窗口宽度自动切换,编辑器对它是只读的,不能手动编辑。
 
 ## 📦 下载与构建
 
@@ -219,7 +219,7 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 
 exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，点「更多信息 → 仍要运行」即可。个别杀软会对未签名的单文件程序报启发式误报，源码完全公开，也可以自己编译。
 
-- v1.2.0 SHA-256:`fcc10d90cda88f404047172ed147a9848ebac06739554237e4f913ec00f78857`(Windows 的 `TipCL.exe` 每个 Release 都带同名 `.sha256` 附件，可自行校验或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
+- v1.2.0 SHA-256:`a7dba497ed1729cbc63aad5c0a784f2707b42426910dda6741eab8e42b1c5ac6`(Windows 的 `TipCL.exe` 每个 Release 都带同名 `.sha256` 附件，可自行校验(2026-11-19 替换后的 v1.2.0 附件,与仓库根 [`update.json`](update.json) 的 `sha256` 逐字一致)或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
 - Linux 的 AppImage 与 `.deb` **不带** `.sha256` 附件：AppImage 的 SHA-256 会在发版时打印进 CI 的 Actions 日志（`.github/workflows/release.yml`），也可以自己 `sha256sum TipCL-linux-x64.AppImage` 比对。
 
 ## 💬 社区建议

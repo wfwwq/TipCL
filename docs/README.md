@@ -78,7 +78,7 @@ dotnet run --project src/TipCL.App -c Release -- --smoke  # 无头冒烟，写 s
 
 打包入口：Linux 上 `tools/package.sh`，Windows 上 `tools/package.ps1`（可双端），`.deb` 另由 `tools/deb.sh` 打。
 产物：`dist/TipCL-linux-x64/TipCL.App`（Linux x64 单文件）、`dist/TipCL-linux-x64.AppImage`(AppImage)、
-`dist/tipcl_0.1.0-m3_amd64.deb`（Debian 包）、`dist/TipCL-win-x64/TipCL.App.exe`（Windows x64 单文件）。
+`dist/tipcl_1.2.0_amd64.deb`（Debian 包）、`dist/TipCL-win-x64/TipCL.App.exe`（Windows x64 单文件）。
 发布参数：`--self-contained true`、`-p:PublishSingleFile=true`、`-p:IncludeNativeLibrariesForSelfExtract=true`、`-p:EnableCompressionInSingleFile=true`（约 72 MB → 43 MB）；**不开 `PublishTrimmed`**(Core 的 `System.Text.Json` 反射路径会被剪掉，取舍见 [docs/DELIVERY.md](DELIVERY.md))。
 CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu + windows 各跑一遍）、
 `package-linux`（单文件 → AppImage + `.deb`，并用 xvfb 跑一次 `--smoke`）、`package-win`（单文件 → zip）；只动 `windos/**` 的提交不触发它。
@@ -97,7 +97,7 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 布局 v2 的 **Windows 版**手册(1.2.0):[docs/布局使用指南.md](布局使用指南.md) 完整手册(三个入口 / 手势 / 三种模式 / 分栏 / 整机方案导入导出 / 自建区块 / AI 排版回退 / 本版的坑)·
 [docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 9 条 FAQ。**这两份写的是 Windows 桌面版行为;Linux 树当前只落地了核心,见下一节。**
 
-### 布局 v2:Linux 移植版的真实进度(截至 `1823c3c`,2026-11-16 实测)
+### 布局 v2:Linux 移植版的真实进度(截至 `b86afe3`,2026-11-20 复核)
 
 已落地(都能在本树 `src/` 里指到文件):
 
@@ -108,8 +108,13 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 | 编辑器 + 区块宿主 + 右键「自定义布局...」全局钩子 | `Pages/Layout/LayoutEditor.cs`、`BlockHost.cs`、`LayoutShellHooks.cs` |
 | 自建区块内容工厂(5 个安全类型 + 2 个危险类型) | `Pages/Layout/WidgetRegistry.cs`、`Pages/Layout/Widgets/` |
 | 启动时注册部件(R32-LINT 实测真窗口上屏 5 个部件) | `App.axaml.cs` |
+| 设置页整页「布局」视图(7 小节:外观与密度 / 页签与标题栏 / 页面区块 / 分栏比例 / 自建区块 / 布局方案 / 布局 JSON) | `Pages/Settings/SettingsPage.Layout.cs`(`OpenLayoutView()`) |
+| 分栏比例(`SplitCatalog` / `SplitRatioStore` / `PageLayoutHost`,13 条站点表) | `src/TipCL.App/Controls/PageLayoutHost.cs` |
+| 整机方案(增删改查 / 导入导出;v2 真源 + v1 兼容导出) | `Pages/Layout/LayoutProfiles.cs` |
+| 布局 JSON 卡片(校验 / 应用 / 刷新) | `Pages/Layout/LayoutJsonEditor.cs` |
+| 页签与标题栏编辑 | `Pages/Layout/ShellTabs.cs` |
 
-**尚未落地**(别再按 Windows 手册去找这些入口):设置页整页「布局」视图(`SettingsLayoutPage`)、分栏比例 UI(`PageLayoutHost` / `SplitRatioStore`)、整机方案与「AI 备份」(profiles / `LayoutTools`)、布局 JSON 卡片(`LayoutJsonEditor`)、页签编辑(`ShellTabs`)。对应能力由 R32 的 LIN-MORE 工作包在途,截至上表那个代码尖**未进入本树**。
+**尚未落地**(别再按 Windows 手册去找这些入口):**AI 排版工具** —— `layout_apply` / `layout_get` 工具与「AI 备份 <时间>」方案的实现在 `windos/src/TipCL/Core/Launcher/Ai/LayoutTools.cs`,Linux 树 `src/` 里 `LayoutTools` 与字符串「AI 备份」**零命中**(`grep -r "LayoutTools\|AI 备份" src/` 无结果)。故 Windows 手册里「让 AI 改布局」「AI 改坏了用 AI 备份回退」两节对 Linux 版不适用。
 
 ## 与 Windows 版的关系
 

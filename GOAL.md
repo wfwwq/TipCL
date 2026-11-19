@@ -1,5 +1,11 @@
 # GOAL — TipCL Linux 版立项（自主执行任务书）
 
+> **口径注记（2026-11-20，一致性审计 AUDIT-E）**：本文是 **M1 立项当时的任务书**，保留原样作为历史记录。其中几处已与当前树不符，读的时候请按下面换算，别当成现状：
+> - **路径**：`D:\项目\tipcl\linux\` → 现在的仓库根 `D:\项目\TipCL\TipCL\`；`D:\项目\tipcl\windos\tipcl\` → `D:\项目\TipCL\TipCL\windos\`。
+> - **版本号**：§2 的「冻结 `0.1.0-m1`」与 §8.1 的 `0.1.0-m3` 都是里程碑当时的号；当前生效值是 **`1.2.0`**（`AppInfo.APP_VERSION` / `CoreInfo.Version` / 三个 `<Version>` 同号，见 [docs/README.md](docs/README.md)）。
+> - **构建环境**：§2 写的 `dotnet SDK 10.0.403` → 当前用 **.NET SDK 8.0.428**（工程 TFM 为 `net8.0`，CI 用 `8.0.x`）。
+> - **§4 验收标准**的 7 条仍成立；其中「`dotnet build TipCL.Linux.sln`」在多项目并发还原的机器上会撞 NuGet 锁，脚本与 [docs/README.md](docs/README.md) 的推荐写法是加 `-p:UseSharedCompilation=false -m:1`。
+>
 > 本文档自包含，供 agent 团队执行。所有路径相对本文件所在目录 `D:\项目\tipcl\linux\`。
 > Windows 版参考仓库（只读参照，不许改动）：`D:\项目\tipcl\windos\tipcl\`。
 
