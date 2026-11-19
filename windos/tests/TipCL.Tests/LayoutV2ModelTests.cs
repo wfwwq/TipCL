@@ -239,7 +239,7 @@ public class LayoutV2ModelTests
 		""");
 		BlockLayout block = Assert.Single(doc.Layout.Pages["p"].Blocks);
 		Assert.Equal(5.0, block.X); // 0..cols-1
-		Assert.Equal(5.0, block.Y);
+		Assert.Equal(9.0, block.Y); // 行数无上限,不按 cols 钳(存盘不得把网格压回 cols 行)
 		Assert.Equal(6.0, block.W); // 1..cols
 		Assert.Equal(1.0, block.H); // 0 → 1
 		Assert.Equal(6, block.Span); // 1..cols
@@ -269,10 +269,11 @@ public class LayoutV2ModelTests
 		}
 		""");
 		BlockLayout block = Assert.Single(doc.Layout.Pages["p"].Blocks);
-		Assert.Equal(1.0, block.X);
+		Assert.Equal(0.96, block.X, 9); // 1 - CanvasMinSize:给宽度留下最小空间
 		Assert.Equal(0.0, block.Y);
 		Assert.Equal(0.04, block.W);
 		Assert.Equal(1.0, block.H);
+		Assert.True(block.X + block.W <= 1.0 + 1e-9);
 		Assert.Equal(80.0, doc.Layout.Pages["p"].RowH);
 	}
 

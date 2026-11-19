@@ -145,6 +145,12 @@ public static class LayoutSchema
 	/// <summary>canvas 坐标上限(归一化)。</summary>
 	public const double CanvasMaxPos = 1.0;
 
+	/// <summary>
+	/// 网格行号 / 行跨度的防御上限:只挡手改 JSON 写进来的离谱数值(如 "y": 1e9),不是语义上限。
+	/// 网格的行数随内容增长、与列数无关,所以 Y/H 不能拿 cols 做上限(否则存盘一次就被压回 cols 行)。
+	/// </summary>
+	public const int RowMax = 4096;
+
 	/// <summary>页数上限(防御性上限:挡住恶意/损坏文档把界面撑爆)。</summary>
 	public const int MaxPages = 256;
 
@@ -561,18 +567,21 @@ public static class LayoutSchema
 		int colMax = Math.Max(1, cols);
 		if (mode == ModeCanvas)
 		{
-			block.X = Clamp(block.X, 0.0, CanvasMaxPos, 0.0);
-			block.Y = Clamp(block.Y, 0.0, CanvasMaxPos, 0.0);
-			block.W = Clamp(block.W, CanvasMinSize, CanvasMaxSize, 1.0);
-			block.H = Clamp(block.H, CanvasMinSize, CanvasMaxSize, 1.0);
+			// 不变量:x+w<=1 且 y+h<=1。左/上先留出最小尺寸,再按剩余空间钳宽/高,
+			// 否则 x=1 单独钳位会让 x+w 恒 >1(旧实现把宽高各自钳到 1.0)。
+			block.X = Clamp(block.X, 0.0, CanvasMaxPos - CanvasMinSize, 0.0);
+			block.Y = Clamp(block.Y, 0.0, CanvasMaxPos - CanvasMinSize, 0.0);
+			block.W = Clamp(block.W, CanvasMinSize, Math.Min(CanvasMaxSize, CanvasMaxPos - block.X), 1.0);
+			block.H = Clamp(block.H, CanvasMinSize, Math.Min(CanvasMaxSize, CanvasMaxPos - block.Y), 1.0);
 		}
 		else
 		{
 			// stack 与 grid 共用栅格档位:stack 只认 span,x/y/w/h 保持默认(0,0,1,1)时不受影响
+			// 列向(X/W)受列数约束;行向(Y/H)与列数无关,只钳下限和防御上限 RowMax。
 			block.X = Clamp(block.X, 0.0, colMax - 1, 0.0);
-			block.Y = Clamp(block.Y, 0.0, colMax - 1, 0.0);
+			block.Y = Clamp(block.Y, 0.0, RowMax, 0.0);
 			block.W = Clamp(block.W, 1.0, colMax, 1.0);
-			block.H = Clamp(block.H, 1.0, colMax, 1.0);
+			block.H = Clamp(block.H, 1.0, RowMax, 1.0);
 		}
 		block.Span = ClampInt(block.Span, 1, colMax);
 		if (!IsKnownStyle(block.Style))

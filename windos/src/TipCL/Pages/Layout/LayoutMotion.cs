@@ -132,9 +132,18 @@ public static class LayoutMotion
 
 	/// <summary>
 	/// 缩放时卡片的实时像素矩形:'e' 改宽、's' 改高('se' 两个都改);'w' / 'n' 同时移动左 / 上边。
-	/// 宽高夹到下限,左 / 上边不越过对边。
+	/// 宽高夹到下限,左 / 上边不越过对边。无画布边界时只保证不出现负坐标(像素坐标系)。
 	/// </summary>
 	public static LayoutRect ResizePreview(LayoutRect anchor, string? handle, double dx, double dy, double minW, double minH)
+	{
+		return ResizePreview(anchor, handle, dx, dy, minW, minH, double.PositiveInfinity, double.PositiveInfinity);
+	}
+
+	/// <summary>
+	/// 同上,并把预览夹在画布 [0, canvasW] × [0, canvasH] 内(归一化画布传 1, 1 即为 0..1)。
+	/// 西 / 北手柄拖过左上角时收敛到 0 并保持对边不动;东 / 南手柄拖出画布时收到边界。
+	/// </summary>
+	public static LayoutRect ResizePreview(LayoutRect anchor, string? handle, double dx, double dy, double minW, double minH, double canvasW, double canvasH)
 	{
 		string h = handle ?? "";
 		double x = anchor.X;
@@ -163,6 +172,24 @@ public static class LayoutMotion
 			ht = Math.Max(lowH, anchor.H - dy);
 			y = bottom - ht;
 		}
+		// 预览是纯视觉瞬态,但也不该出现负坐标或越出画布:先把左/上边收到 0(对边保持),
+		// 再把宽高收到画布剩余空间。
+		if (x < 0.0)
+		{
+			w += x;
+			x = 0.0;
+		}
+		if (y < 0.0)
+		{
+			ht += y;
+			y = 0.0;
+		}
+		double maxW = ((Finite(canvasW) && canvasW > 0.0) ? canvasW : double.PositiveInfinity);
+		double maxH = ((Finite(canvasH) && canvasH > 0.0) ? canvasH : double.PositiveInfinity);
+		x = Math.Max(0.0, Math.Min(x, maxW));
+		y = Math.Max(0.0, Math.Min(y, maxH));
+		w = Math.Max(0.0, Math.Min(w, maxW - x));
+		ht = Math.Max(0.0, Math.Min(ht, maxH - y));
 		return new LayoutRect(x, y, w, ht);
 	}
 
@@ -176,6 +203,12 @@ public static class LayoutMotion
 	public static bool SnapChanged(double prevDx, double prevDy, double dx, double dy)
 	{
 		return Math.Abs(prevDx - dx) >= MinOffset || Math.Abs(prevDy - dy) >= MinOffset;
+	}
+
+	// net48 没有 double.IsFinite
+	private static bool Finite(double value)
+	{
+		return !double.IsNaN(value) && !double.IsInfinity(value);
 	}
 
 	private static double Clamp01(double v)

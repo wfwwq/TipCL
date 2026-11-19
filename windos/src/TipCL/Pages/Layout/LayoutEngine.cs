@@ -1053,7 +1053,9 @@ public static class LayoutGrid
 				w = block.Span;
 			}
 			w = LayoutSchema.ClampInt(w, 1, cols);
-			int h = LayoutSchema.ClampInt(Math.Max(1, (int)Math.Round(block.H)), 1, Math.Max(1, cols));
+			// 行跨度与列数无关:只钳下限 1 + 防御上限(与 Sanitize / 'n' / 's' 同一口径),
+			// 否则 2/3/4 列网格里的块最多只能有 2/3/4 行高,存盘时又被压回去。
+			int h = LayoutSchema.ClampInt(Math.Max(1, (int)Math.Round(block.H)), 1, LayoutSchema.RowMax);
 			bool hasPosition = !(block.X <= 0.0 && block.Y <= 0.0 && block.W <= 1.0 && block.H <= 1.0);
 			int x;
 			int y;
@@ -1121,8 +1123,109 @@ public static class LayoutGrid
 		{
 			return;
 		}
+		// 压紧本身是一个"重力 + 左右互换"的迭代过程:一遍过后块的行位置变了,
+		// 同一输入再压一遍可能得出不同结果(跨列块会让排序顺序变化)。宿主每一帧都从快照重算,
+		// 若算法不幂等,"拖回原位"就会还原不了。这里迭代到不动点,保证 Compact(x) == Compact(Compact(x))。
+		List<int[]> history = new List<int[]>();
+		Dictionary<string, int> seen = new Dictionary<string, int>(StringComparer.Ordinal);
+		int[] first = Snapshot(cells);
+		string prevKey = KeyOf(first);
+		history.Add(first);
+		seen[prevKey] = 0;
+		for (int pass = 0; pass < 64; pass++)
+		{
+			CompactCore(cells, cols, pinned, swapX, gravity);
+			int[] snap = Snapshot(cells);
+			string key = KeyOf(snap);
+			if (string.Equals(key, prevKey, StringComparison.Ordinal))
+			{
+				return; // 已到不动点
+			}
+			if (seen.TryGetValue(key, out int start))
+			{
+				// 出现环:取环上字典序最小的状态作为规范结果,保证再次调用仍返回同一结果
+				int best = start;
+				string bestKey = KeyOf(history[start]);
+				for (int i = start + 1; i < history.Count; i++)
+				{
+					string candidate = KeyOf(history[i]);
+					if (string.CompareOrdinal(candidate, bestKey) < 0)
+					{
+						best = i;
+						bestKey = candidate;
+					}
+				}
+				Restore(cells, history[best]);
+				return;
+			}
+			seen[key] = history.Count;
+			history.Add(snap);
+			prevKey = key;
+		}
+	}
+
+	// 记录/恢复 Compact 会改动的四个整型字段(快照只用于幂等收敛,不参与业务语义)
+	private static int[] Snapshot(List<LayoutCell> cells)
+	{
+		int[] snap = new int[cells.Count * 4];
+		for (int i = 0; i < cells.Count; i++)
+		{
+			LayoutCell cell = cells[i];
+			if (cell == null)
+			{
+				continue;
+			}
+			snap[i * 4] = cell.X;
+			snap[i * 4 + 1] = cell.Y;
+			snap[i * 4 + 2] = cell.W;
+			snap[i * 4 + 3] = cell.H;
+		}
+		return snap;
+	}
+
+	private static void Restore(List<LayoutCell> cells, int[] snap)
+	{
+		for (int i = 0; i < cells.Count && i * 4 + 3 < snap.Length; i++)
+		{
+			LayoutCell cell = cells[i];
+			if (cell == null)
+			{
+				continue;
+			}
+			cell.X = snap[i * 4];
+			cell.Y = snap[i * 4 + 1];
+			cell.W = snap[i * 4 + 2];
+			cell.H = snap[i * 4 + 3];
+		}
+	}
+
+	// net48 没有 double.IsFinite
+	private static bool Finite(double value)
+	{
+		return !double.IsNaN(value) && !double.IsInfinity(value);
+	}
+
+	private static string KeyOf(int[] snap)
+	{
+		System.Text.StringBuilder sb = new System.Text.StringBuilder(snap.Length * 6);
+		for (int i = 0; i < snap.Length; i++)
+		{
+			if (i > 0)
+			{
+				sb.Append(',');
+			}
+			sb.Append(snap[i]);
+		}
+		return sb.ToString();
+	}
+
+	private static void CompactCore(List<LayoutCell> cells, int cols, ICollection<string>? pinned, bool swapX, bool gravity)
+	{
 		int n = Math.Max(1, cols);
 		Occupancy occupancy = new Occupancy(n);
+		// 只含固定块的占用表:swapX 判断"备选列能否放得更高"时必须只看固定块。
+		// 混入其它未固定块时,第二次压紧输入里的这些块已经变过位置,同一输入会算出不同结果(不幂等)。
+		Occupancy pinnedOccupancy = new Occupancy(n);
 		HashSet<string> pin = new HashSet<string>(StringComparer.Ordinal);
 		if (pinned != null)
 		{
@@ -1152,6 +1255,7 @@ public static class LayoutGrid
 				cell.Y = y;
 			}
 			occupancy.Fill(cell.X, cell.Y, cell.W, cell.H);
+			pinnedOccupancy.Fill(cell.X, cell.Y, cell.W, cell.H);
 			pinnedCells.Add(cell);
 		}
 		// 2) 其余块:按 (Y, X) 顺序重力上浮
@@ -1201,9 +1305,9 @@ public static class LayoutGrid
 					{
 						continue;
 					}
-					if (!occupancy.IsFree(altX, 0, cell.W, cell.H))
+					if (!pinnedOccupancy.IsFree(altX, 0, cell.W, cell.H))
 					{
-						occupancy.FirstFreeInColumnH(altX, cell.W, cell.H, 0, out int altY);
+						pinnedOccupancy.FirstFreeInColumnH(altX, cell.W, cell.H, 0, out int altY);
 						if (altY < bestY)
 						{
 							bestX = altX;
@@ -1246,12 +1350,14 @@ public static class LayoutGrid
 	{
 		int count = Math.Max(0, rows);
 		double[] heights = new double[count];
-		double floor = ((fallback > 0.0) ? fallback : LayoutCanvas.FallbackMinH);
-		if (fixedRowH > 0.0)
+		// 非有限数值一律回落默认,避免 NaN/Infinity 顺着"取较大值"写进每一行
+		double floor = ((Finite(fallback) && fallback > 0.0) ? fallback : LayoutCanvas.FallbackMinH);
+		double fixedH = ((Finite(fixedRowH) && fixedRowH > 0.0) ? fixedRowH : 0.0);
+		if (fixedH > 0.0)
 		{
 			for (int i = 0; i < count; i++)
 			{
-				heights[i] = fixedRowH;
+				heights[i] = fixedH;
 			}
 		}
 		else
@@ -1269,12 +1375,19 @@ public static class LayoutGrid
 						continue;
 					}
 					double desired = floor;
-					if (desiredHeights != null && desiredHeights.TryGetValue(cell.Id, out double measured) && measured > 0.0)
+					if (desiredHeights != null && desiredHeights.TryGetValue(cell.Id, out double measured) && Finite(measured) && measured > 0.0)
 					{
 						desired = measured;
 					}
-					desired = Math.Max(desired, cell.MinH);
+					if (Finite(cell.MinH))
+					{
+						desired = Math.Max(desired, cell.MinH);
+					}
 					double perRow = desired / Math.Max(1, cell.H);
+					if (!Finite(perRow))
+					{
+						continue;
+					}
 					for (int k = 0; k < cell.H; k++)
 					{
 						int row = cell.Y + k;
@@ -1309,10 +1422,19 @@ public static class LayoutGrid
 		{
 			return result;
 		}
+		// 入参里的 NaN/Infinity 先回落,否则会通过 total / share 污染每一个行高
+		for (int i = 0; i < count; i++)
+		{
+			if (!Finite(result[i]) || result[i] < 0.0)
+			{
+				result[i] = 0.0;
+			}
+		}
+		double g = (Finite(gap) ? Math.Max(0.0, gap) : 0.0);
 		double total = 0.0;
 		for (int i = 0; i < count; i++)
 		{
-			total += result[i] + ((i < count - 1) ? Math.Max(0.0, gap) : 0.0);
+			total += result[i] + ((i < count - 1) ? g : 0.0);
 		}
 		double extra = targetHeight - total;
 		if (extra <= 0.5)
@@ -1321,6 +1443,7 @@ public static class LayoutGrid
 		}
 		bool[] hasFill = new bool[count];
 		bool[] hasOther = new bool[count];
+		bool[] fixedRow = new bool[count];
 		foreach (LayoutCell cell in cells)
 		{
 			if (cell == null)
@@ -1328,12 +1451,17 @@ public static class LayoutGrid
 				continue;
 			}
 			bool fill = fillIds.Contains(cell.Id);
+			bool fixedHeight = Finite(cell.HeightPx) && cell.HeightPx > 0.0;
 			for (int k = 0; k < Math.Max(1, cell.H); k++)
 			{
 				int row = cell.Y + k;
 				if (row < 0 || row >= count)
 				{
 					continue;
+				}
+				if (fixedHeight)
+				{
+					fixedRow[row] = true;
 				}
 				if (fill)
 				{
@@ -1348,7 +1476,8 @@ public static class LayoutGrid
 		List<int> rows = new List<int>();
 		for (int j = 0; j < count; j++)
 		{
-			if (hasFill[j] && !hasOther[j])
+			// height_px > 0 的行高是固定契约值,不能再分视口余量(否则行高于 height_px,卡片下方留白)
+			if (hasFill[j] && !hasOther[j] && !fixedRow[j])
 			{
 				rows.Add(j);
 			}
@@ -1357,7 +1486,7 @@ public static class LayoutGrid
 		{
 			for (int j = 0; j < count; j++)
 			{
-				if (hasFill[j])
+				if (hasFill[j] && !fixedRow[j])
 				{
 					rows.Add(j);
 				}
@@ -1379,8 +1508,12 @@ public static class LayoutGrid
 	public static double ColumnWidth(double availableWidth, int cols, double gap)
 	{
 		int count = Math.Max(1, cols);
-		double usable = availableWidth - Math.Max(0.0, gap) * (count - 1);
-		return Math.Max(1.0, usable / count);
+		// Math.Max(1.0, NaN) 返回 NaN,所以先校验有限性再算
+		double available = (Finite(availableWidth) ? availableWidth : 0.0);
+		double g = (Finite(gap) ? Math.Max(0.0, gap) : 0.0);
+		double usable = available - g * (count - 1);
+		double width = usable / count;
+		return (Finite(width) ? Math.Max(1.0, width) : 1.0);
 	}
 
 	/// <summary>把槽位换成像素矩形(含列/行间 gap,不含页边距)。</summary>
@@ -1522,12 +1655,14 @@ public static class LayoutGrid
 			// 北边界不能越过南边界(否则行跨度会算成 0/负数):夹在 [0, y+h-1]
 			int bottom = y + h;
 			int top = LayoutSchema.ClampInt(y + dh, 0, Math.Max(0, bottom - 1));
-			h = bottom - top;
-			y = top;
+			// 行跨度与列数无关:只钳下限 1 + 防御上限 RowMax(下边界钉住不动)
+			h = Math.Max(1, Math.Min(bottom - top, LayoutSchema.RowMax));
+			y = bottom - h;
 		}
 		if (handle.IndexOf('s') >= 0)
 		{
-			h = LayoutSchema.ClampInt(h + dh, 1, count);
+			// 行跨度与列数无关:只钳下限 1 + 防御上限(与 'n' 手柄、Sanitize、Pack 同一口径)
+			h = LayoutSchema.ClampInt(h + dh, 1, LayoutSchema.RowMax);
 		}
 		w = Math.Max(1, w);
 		h = Math.Max(1, h);
@@ -1786,7 +1921,16 @@ public static class LayoutCanvas
 		}
 		double w = Math.Max(1.0, width);
 		double h = Math.Max(1.0, height);
-		return new LayoutRect(cell.NX * w, cell.NY * h, Math.Max(1.0, cell.NW * w), Math.Max(1.0, cell.NH * h));
+		// 归一化坐标先保证 x+w<=1 / y+h<=1(手改 JSON 或旧文档可能越界)
+		double nx = LayoutSchema.Clamp(cell.NX, 0.0, LayoutSchema.CanvasMaxPos - LayoutSchema.CanvasMinSize, 0.0);
+		double ny = LayoutSchema.Clamp(cell.NY, 0.0, LayoutSchema.CanvasMaxPos - LayoutSchema.CanvasMinSize, 0.0);
+		double nw = LayoutSchema.Clamp(cell.NW, LayoutSchema.CanvasMinSize, LayoutSchema.CanvasMaxPos - nx, LayoutSchema.CanvasMinSize);
+		double nh = LayoutSchema.Clamp(cell.NH, LayoutSchema.CanvasMinSize, LayoutSchema.CanvasMaxPos - ny, LayoutSchema.CanvasMinSize);
+		double px = nx * w;
+		double py = ny * h;
+		double pw = Math.Min(w - px, Math.Max(1.0, nw * w));
+		double ph = Math.Min(h - py, Math.Max(1.0, nh * h));
+		return new LayoutRect(px, py, pw, ph);
 	}
 
 	/// <summary>整表排布结果(与 cells 一一对应)。</summary>
@@ -1904,8 +2048,15 @@ public static class LayoutCanvas
 		{
 			rh = LayoutSchema.Clamp(Snap(cell.NY + cell.NH + dyPx / h, h, stepPx) - cell.NY, minH, 1.0 - cell.NY, minH);
 		}
-		rw = Math.Min(1.0 - x, Math.Max(minW, rw));
-		rh = Math.Min(1.0 - y, Math.Max(minH, rh));
+		// 末尾统一夹:x+w<=1 / y+h<=1,且宽高不低于契约下限。
+		// 西/北手柄的 Snap 会把对边推出画布最多半档(4px),而 x 接近 1 时下限也可能高于剩余空间,
+		// 所以起点与尺寸必须在最后一起钳,不能各自钳。
+		x = LayoutSchema.Clamp(x, 0.0, Math.Max(0.0, 1.0 - LayoutSchema.CanvasMinSize), 0.0);
+		y = LayoutSchema.Clamp(y, 0.0, Math.Max(0.0, 1.0 - LayoutSchema.CanvasMinSize), 0.0);
+		double lowW = Math.Min(Math.Max(LayoutSchema.CanvasMinSize, minW), 1.0 - x);
+		double lowH = Math.Min(Math.Max(LayoutSchema.CanvasMinSize, minH), 1.0 - y);
+		rw = LayoutSchema.Clamp(rw, lowW, 1.0 - x, lowW);
+		rh = LayoutSchema.Clamp(rh, lowH, 1.0 - y, lowH);
 		if (x == cell.NX && y == cell.NY && rw == cell.NW && rh == cell.NH)
 		{
 			return false;
