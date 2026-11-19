@@ -80,8 +80,22 @@ public static class Store
     /// <summary>读存档（缺失/坏掉就重建一份并落盘，照参考版）。</summary>
     public static PyDict Load()
     {
-        if (Utils.ReadJson(StoreFile) is not PyDict root || root.Get("chats") is not List<object> chats || chats.Count == 0)
+        object? parsed = Utils.ReadJson(StoreFile);
+        if (parsed is not PyDict root || root.Get("chats") is not List<object> chats || chats.Count == 0)
         {
+            // 文件在、但读不出来 = 存档坏了(截断 / 手改 / 磁盘问题)。先留一份 .corrupt 再重建,
+            // 否则下面这次 Save 会静默覆盖掉玩家全部 AI 对话(PluginStateStore 早就这么兜了)。
+            string abs = Utils.AbsPath(StoreFile);
+            if (parsed == null && File.Exists(abs))
+            {
+                try
+                {
+                    File.Copy(abs, abs + ".corrupt", overwrite: true);
+                }
+                catch (Exception)
+                {
+                }
+            }
             PyDict fresh = Empty();
             Save(fresh);
             return fresh;
@@ -104,7 +118,7 @@ public static class Store
             var row = PyDict.Of(
                 "id", Py.Str(chat["id"]),
                 "title", Py.Slice(Py.Str(Py.Or(chat.Get("title"), "对话")), null, 40),
-                "updated", Py.Int(Py.Or(chat.Get("updated"), 0L)),
+                "updated", Py.IntOr(Py.Or(chat.Get("updated"), 0L), 0),
                 "messages", Tail(msgs, MaxMessages));
             if (chat.Get("plan") is PyDict)
             {

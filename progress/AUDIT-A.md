@@ -276,3 +276,59 @@ $env:TEMP="D:\项目\TipCL\_tools\tmp-A"; $env:TMP=$env:TEMP
 1. 五轮下来 Minecraft 主流程（下载/安装/启动/崩溃提示/布局/配置/词表/插件状态/存档同步/模组与整合包）**P0 = 0、P1 = 0**（6 条已修），P2 里只剩「展示层取舍」这类需要 App 配合的项（X-04/X-05/X-06）。
 2. 剩下没逐行读的只有三块，性质都是**规则/策略表**而非控制流：`Crash.cs` 的 200+ 条崩溃特征规则、`AiAgent` 的子代理与 checkpoint 交互、`Checkpoint/Store` 的落盘细节。它们出问题的表现是「提示不够准」或「恢复点不全」，不会造成数据丢失或启动失败，边际收益明显低于前五轮。
 3. 若后续有真实用户反馈（例如「某个崩溃提示不对」「AI 长会话还是卡」），带着那条反馈做**定向**回归比再铺一轮全面审计更划算。
+---
+
+# 第六轮（Core 深水区：AI 落盘/MCP 生命周期/Crash 提示/Modpack 临时文件/插件市场）
+
+基线：main 880deff（五路合并后）。本轮 4 处修复，全部 P2。
+
+## 25. 第六轮已修问题
+
+| ID | 级别 | 文件:行 | 根因 | 修复 | 验证证据 | 状态 |
+|----|------|---------|------|------|----------|------|
+| A-12 | P2（对话历史丢失 / AI 页读不出来） | `Ai/Store.cs` `Load`（首行判空 + `updated` 取值） | 两处：①`ai_chats.json` 存在但解析失败（截断/手改/磁盘问题）时，`Load` 直接建空库并 `Save` → **把玩家全部 AI 对话静默覆盖**，且不留备份（`PluginStateStore` 对同样的场景早就会留 `.corrupt`）；②`Py.Int(Py.Or(chat.Get("updated"), 0L))` 对脏字段（老版本/手改成字符串）会抛 `ValueError`，一路冒出 `Load` → 整份历史读不出来 | ①解析失败且文件确实存在时先 `File.Copy` 成 `.corrupt` 再重建；②`updated` 改 `Py.IntOr(..., 0)`（有兜底，不再炸整份存档） | Core Release 0 错误 0 警告；全量 `dotnet test` **913 通过 / 0 失败 / 1 跳过** | 已修 |
+| A-13 | **P2（AI 越用越卡：孤儿进程 + 句柄泄漏）** | `Ai/McpClient.cs` `Close`（原 `_proc.Kill()`）、`Recv` 超时看门狗 | ①只 `Kill` **直接子进程**：MCP server 的命令几乎都是 wrapper（`npx xxx` / `uvx xxx` / `cmd /c`），真正的 node/python 孙进程活下来变孤儿；而 `Mcp.CloseAll` 是**每轮对话结束都关一次** → 越聊孤儿越多、内存越高，用户感知就是「AI 用久了变卡」；②`Process` 从不 `Dispose`，每轮重连漏一个进程句柄 + 三根管道 | `Close` 与超时看门狗都改 `Kill(entireProcessTree: true)`（`Kill(bool)` 在已退出/无权限时抛，catch 里再兜一次普通 `Kill`，不比原来弱）；`Close` 末尾补 `_proc.Dispose()` | Core Release 0 错误 0 警告；全量测试绿；行为差异仅在「关闭时更彻底」，正常退出路径要先 `WaitForExit(2000)` 才动手，未改变原语义 | 已修 |
+| A-14 | P2（偶发「不是有效的整合包 zip」） | `Modpack.cs` 三处临时包名（`_fetch_mrpack` / `InstallCfZip` / `InstallCfModpack`） | 前两处用 `"tipcl_(mr|cf)pack_" + url.GetHashCode()`、第三处干脆是 `"tipcl_cfpack_<addon_id>_<file_id>"` —— **完全确定的名字**。同一整合包被装两次（两个启动器进程，或两个实例先后点安装）就下到**同一个临时文件**：先完成的 `CleanupTemp(downloaded=true)` 把它删掉，另一个正在解压 → 报「不是有效的整合包 zip / 找不到整合包文件」，**重试一次就好** —— 典型偶发、典型用户体感「点了没反应/莫名失败」 | 三处临时名都追加 `Guid.NewGuid().ToString("N").Substring(0, 12)`（每个调用唯一，跨进程也不撞） | Core Release 0 错误 0 警告；全量测试绿；只改临时文件名，不碰落盘目标 | 已修 |
+| A-15 | P2（崩溃提示误导） | `Crash.cs` `ExitHint` | Linux/macOS 上被信号杀掉时 .NET 给的退出码是 `128+signum`，原实现只对 Windows NTSTATUS（`_NT` 表）有解释，Linux 上直接吐「退出码 139」/「退出码 137」—— 玩家完全不知道 139 = 段错误、137 = 被 OOM 强杀（Linux 上最常见的两种崩溃） | 非 Windows 且 `value>128` 时补信号映射：SIGHUP/SIGINT/SIGILL/SIGABRT/SIGFPE/**SIGKILL(常见于内存不足被 OOM Killer 杀掉)**/**SIGSEGV(段错误,多与 JVM/显卡驱动/本地库有关)**/SIGPIPE/SIGTERM，未知信号仍走原来的兜底 | Core Release 0 错误 0 警告；全量测试绿；Windows 分支字节不变（`_NT` 表与 `value==0/1` 逻辑未动） | 已修 |
+
+## 26. 第六轮：已核查无问题
+
+| 位置 | 结论 |
+|------|------|
+| `Ai/Checkpoint.cs`（536 行通读） | 恢复点完整：快照按「受影响路径」内容寻址存块（同内容只存一份、临时文件+原子替换）；`Snapshot` 对**当时不存在**的路径记 `sha256=""`（回滚时删掉 = 覆盖「这轮新增」）；`Rollback` 按 seq **逆序**重放、`SweepNewEntries` 先删深再删浅、失败条数如实进 `failures`（不静默当成功）、成功的 op 从流水摘掉、失败的原样留着；`GcBlobs` 清未被引用的块；上限（单轮 512MB / 单会话 1GB / 单目录 20000 文件）超了**整轮拒绝**而不是半个快照。 |
+| `Ai/Store.cs` 事件日志 | `LogEvent` 加锁 append + 首轮裁剪（7 天/超大即删），`ReadEvents` 坏行跳过；`Save` 有 40 对话上限并修正 `active_id`。 |
+| `Ai/McpClient.cs` 除生命周期外的部分 | `Request` 持 `_lock` 串行化（stdio 单管道，正确）；`Recv` 跳过通知、只认 `id` 匹配；超时/子进程退出都转 `McpError`（调用方当「工具失败」，不炸整轮）；`CallTool` 无 text 块时把原始 JSON 回给模型（不丢结果）。 |
+| `Crash.cs` 框架 | `AnalyzeLaunch`/`_run` 按版本隔离切分析根目录、`LooksLikeCrash` 判据（取消→否 / 非 0 退出码→是 / `Game crashed!`/`---- Minecraft Crash Report ----`→是 / 有 hs_err→是）、`_title_of` 未知 code 回落中文、`ExportReport` 去重+`FilterSecrets`+临时目录必删、`ReadText` 多编码兜底（UTF-8→GB18030→GBK）、`NormalizeExit` 对 >int.Max 的 32 位码转有符号。 |
+| `Plugins/PluginMarket.cs` | `ReadZipManifest` 根目录/唯一子目录定位、`ExtractWithPrefix` 逐条做越界校验 + 跳过符号链接（`0xA000`）+ 前缀剥离、`Sha256Matches` 大小写不敏感、`CheckDependencies` 用 `SemVer` 且错误文案中文具体。 |
+| `Plugins/PluginHost.cs` | **没有子进程**：插件在宿主进程内加载（.NET）/ 由 Node 侧另起，故不存在「宿主进程退出清理」问题；失效路径全是中文 `PyException("PluginError", "插件不存在:…")`。 |
+| `Mods.cs` / `Catalog.cs` 剩余分支 | 版本匹配（`_pick_version`/`_pick_cf_file` 的 MC+loader 过滤与降级）、`ListVersions` 排序、`RankHits` 加权、别名表（340 条键全小写、无表内重复）—— 前几轮已逐段核过，本轮抽查无新增问题。 |
+
+## 27. 第六轮：仍未逐条验证（如实声明）
+
+- **`Crash.cs` 的 200+ 条崩溃特征规则**：本轮只验证了「框架与提示口径」，规则本身的**准确率没有逐条验证**。原因：这属于「数据/文案」问题——规则误报只会让提示偏一点，漏报会退回「游戏已退出」，都不会造成崩溃或数据丢失；要真正验证需要**真实崩溃日志样本库**（每个规则至少一正一反样本），成本远高于收益。
+- `AiAgent.cs` 的子代理/checkpoint 交互路径、`Rewind.cs`/`Compact` 与 `Checkpoint` 的联动细节。
+- `AiSelfTest`/`VisionCaps` 等辅助模块（只做过 grep 级筛查）。
+
+## 28. 六轮累计
+
+| 轮次 | 修复 | P0 | P1 | P2 |
+|------|------|----|----|----|
+| 一 | A-01 布局 v2 损坏备份链 · A-02 PyJson 深嵌套栈溢出 · A-03 GameProcess 持锁回调 | 0 | 2 | 1 |
+| 二 | A-04 Linux Java 执行位 · A-05 压缩包后缀 · A-06 词表补 key | 0 | 2 | 1 |
+| 三 | A-07 前置依赖静默失败 · A-08 隔离实例内容目录 · A-09 Cleaner 假成功 | 0 | 2 | 1 |
+| 四 | 无（抽读/筛查未见新 bug） | 0 | 0 | 0 |
+| 五 | A-10 AI 会话/响应泄漏 · A-11 重试文本重复 | 0 | 0 | 2 |
+| 六 | A-12 AI 存档覆盖/读不出 · A-13 MCP 孤儿进程与句柄 · A-14 整合包临时名撞名 · A-15 Linux 信号退出码无解释 | 0 | 0 | 4 |
+| **合计** | **15 项** | **0** | **6** | **9** |
+
+门槛：Core Release **0 错误 0 警告**；全量 `dotnet test` **913 通过 / 0 失败 / 1 跳过**。
+
+## 29. 结论：还能再挖吗
+
+**不建议再开第七轮做「全面审计」，建议转为「带真实样本的定向回归」。** 依据：
+
+1. 六轮下来 **P0 = 0、P1 = 6（全在前三轮修完），第四~六轮的发现全是 P2**，且第五/六轮的 P2 集中在「资源/临时文件/提示文案」这类**不会损坏数据、不会让游戏启动不了**的问题上——严重度曲线已经明显走平。
+2. 剩下唯一「有量」的未验证面是 `Crash.cs` 的 200+ 条特征规则，而它必须用**真实崩溃日志正反样本**才能判准（不是读代码能解决的）；把它当代码审计目标，投入产出比最差。
+3. 真正还可能藏 P1 的地方已经不在 Core，而在**跨域配合**：X-04（清理结果的失败提示）、X-05（Modrinth 返回值展示）、X-06（重试时 UI 半截文本）。这三条都是 App 侧一行到十几行的接线，用户可见收益比继续挖 Core 大得多。
+
+**判定：Core 层审计完毕。** 建议把资源转向：①App 侧 X-04/X-05/X-06 接线；②攒一批真实崩溃日志做 `Crash` 规则回归；③真机冒烟矩阵复核（尤其容器/无 GUI/权限受限场景）。

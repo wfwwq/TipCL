@@ -73,7 +73,8 @@ public sealed class McpClient
             {
                 if (!proc.HasExited)
                 {
-                    proc.Kill();
+                    // 超时也要连孙子进程一起收掉,否则 wrapper 崩了留下真身继续占着
+                    proc.Kill(entireProcessTree: true);
                 }
             }
             catch (Exception)
@@ -229,8 +230,30 @@ public sealed class McpClient
                 {
                     if (!_proc.HasExited && !_proc.WaitForExit(2000))
                     {
-                        _proc.Kill();
+                        // entireProcessTree:MCP server 的命令常常是 wrapper(npx/uvx/cmd /c),
+                        // 只杀直接子进程会把真正的 node/python 孙进程留成孤儿 —— Mcp.CloseAll 每轮都关,
+                        // 越聊孤儿越多、内存越高(用户感知是「AI 用久了变卡」)。
+                        // Kill(bool) 在已退出/无权限时会抛,交给下面的 catch(随后再兜一次普通 Kill)。
+                        _proc.Kill(entireProcessTree: true);
                     }
+                }
+                catch (Exception)
+                {
+                    try
+                    {
+                        if (!_proc.HasExited)
+                        {
+                            _proc.Kill();
+                        }
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+                // 不 Dispose 会一直占着进程句柄与管道:每轮重连一次,长会话能攒出几十个
+                try
+                {
+                    _proc.Dispose();
                 }
                 catch (Exception)
                 {

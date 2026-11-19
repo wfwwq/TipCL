@@ -310,7 +310,7 @@ public static class Modpack
 		string text = Py.Str(source);
 		if (HttpRe.IsMatch(text))
 		{
-			string text2 = Path.Combine(Path.GetTempPath(), "tipcl_mrpack_" + Math.Abs((long)text.GetHashCode()) + ".mrpack");
+			string text2 = Path.Combine(Path.GetTempPath(), "tipcl_mrpack_" + Guid.NewGuid().ToString("N").Substring(0, 12) + ".mrpack");
 			dm.Download(text, text2, null, null, force: false, 900L);
 			return text2;
 		}
@@ -840,7 +840,7 @@ public static class Modpack
 		string text2;
 		if (HttpRe.IsMatch(text))
 		{
-			text2 = Path.Combine(Path.GetTempPath(), "tipcl_cfpack_" + Math.Abs((long)text.GetHashCode()) + ".zip");
+			text2 = Path.Combine(Path.GetTempPath(), "tipcl_cfpack_" + Guid.NewGuid().ToString("N").Substring(0, 12) + ".zip");
 			dm.Download(text, text2, null, null, force: false, 900L);
 			downloaded = true;
 		}
@@ -1348,7 +1348,10 @@ public static class Modpack
 		object obj3 = pyDict["downloadUrl"];
 		string text = Py.Str(Py.Or(pyDict["name"], "curseforge:" + Py.Str(addon_id)));
 		Exception ex = null;
-		string text2 = Path.Combine(Path.GetTempPath(), "tipcl_cfpack_" + Py.Str(addon_id) + "_" + Py.Str(file_id) + ".zip");
+		// 临时包名必须每次唯一:原来用「addon_id_file_id」拼死名字,同一整合包被装两次
+		// (两个启动器进程 / 两个实例先后点安装)会下到同一个文件、先完成的那个把它删掉,
+		// 另一个就报「不是有效的整合包 zip」——重试一次又好了,典型的偶发失败。
+		string text2 = Path.Combine(Path.GetTempPath(), "tipcl_cfpack_" + Py.Str(addon_id) + "_" + Py.Str(file_id) + "_" + Guid.NewGuid().ToString("N").Substring(0, 12) + ".zip");
 		List<object> list = new List<object>();
 		if (Py.Truthy(obj3))
 		{
