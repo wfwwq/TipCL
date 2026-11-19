@@ -417,3 +417,52 @@ R2 里的边缘自动滚动只覆盖 grid/canvas(`_boxScroll`)。stack 长列表
 
 - 本轮未发现新增分叉。已知两条仍有效:①`--ai-ui-selftest` 不在 Windows 免提权白名单(§X-02);②桌面快捷方式参数形状两边必须同步(§X-03)。
 - aud-core 若在 Linux `Crash.cs` 里动了"崩溃结论字段名",注意 Windows 侧 `GameCrashError`(`BackendApi.cs:3227`)与 WPF `CrashUi`/`CrashReport` 都按 `summary/headline/detail/exit_hint/files` 取值,字段名要一起改。
+
+---
+
+# 第五轮(R6)— grep 级模块补审 + 两条跨域定论
+
+基线:`audit/C` 已 rebase 到 main `880deff`;验证:`dotnet build … -c Release` **0 警告 0 错误**、`dotnet test windos/tests/TipCL.Tests` **573/573**。
+
+## R6.1 `--ai-ui-selftest` 进 Windows 免提权白名单(定论 + 依据)
+
+**决定:进**(与 `--design-sheet` 同口径)。改动:`App.xaml.cs:38` 的 `SelfCheckArgs` 7 → 8 项。
+
+依据(全是仓库现有决定/代码,不是我的偏好):
+1. `windos/DECISIONS.md:44`(及根 `DECISIONS.md:790`)已裁定"`--shot`/`--design-sheet` 加入 `SelfCheckArgs`(免提权,与 `--smoke` 同类)" —— 免提权的口径是**"跑完靠输出/退出码交差的自检类参数"**,不是按参数名逐个开恩;
+2. `--ai-ui-selftest` 完全符合这个口径:`Pages/Ai/AiSelfTest.cs:29` 解析它 → `App.OnStartup:123` 跑完把结果写 `Environment.ExitCode` 并 `Shutdown`;被 UAC 重启成**分离进程**后,stdout/退出码一样丢失(与 `--design-sheet` 完全同一个故障模式);
+3. `DECISIONS.md:412/498/506` 记录 CI/验收是**直接调 CLI** 看退出码(`--ai-selftest 54 项 exit 0`)—— 提权弹窗会把这个口径打断;
+4. 它只用 `%LOCALAPPDATA%` 下的数据目录,不需要管理员权限;`app.manifest` 是 `asInvoker`,免提权不会降低任何权限前提;
+5. 反向风险:正常人不会手输这个参数,加进白名单不会让"双击启动器"绕过提权。
+
+## R6.2 `LayoutEngine` 与 Linux 侧 semantics 比对(只报告,不改)
+
+| 项 | Windows(`windos/src/TipCL/Pages/Layout/LayoutEngine.cs`) | Linux(`src/TipCL.App/Pages/Layout/LayoutEngine.cs`) | 结论 |
+|---|---|---|---|
+| `DragReorder` | `:509-528`,逐格与相邻可见块**裸中点**比较,`MoveVisible` 交换 + `RebuildPage` 收尾 | `:535-554`,**逐行同源**(同一套 `MidpointY`/`MoveVisible`/`RebuildPage`) | **完全一致**,无分叉 |
+| `MidpointY` | `:531` | `:557` | 一致(高度缓存,缺省 120) |
+| `MoveVisibleTo`(R3 新增) | `:536`,目标下标版换位,复用同一 `MoveVisible` 原语 | **不存在** | 有意分叉:它是 Windows stack 浮起拖拽的"逐格落位"入口;Linux 侧仍是"跨中点即交换"。语义不冲突(同一个交换原语),但**功能面分叉**:Linux 的 stack 拖拽仍是老的不跟手行为 |
+| 阈值 | `StackDragPlan.Hysteresis = 6px`(UI 层,非模型) | 无 | 模型层不吃滞回,只有 Windows 的手势层吃 → 若 Linux 将来接浮起拖拽,直接复用 `StackDragPlan` 的阈值口径即可 |
+
+一句话:**模型语义一致(同为 span + 顺序 + 同一交换原语),分叉只在"手势层是否浮起跟手"**;要收敛的话 Linux 侧照 Windows 的 `StackDragPlan` + `MoveVisibleTo` 抄即可,不需要动 Windows。
+
+## R6.3 本轮补审结论(逐模块)
+
+| 模块 | 级别 | 结论 / 证据 |
+|---|---|---|
+| `Terracotta.cs`(1833 行) | 通读关键段 + grep 全量 | **进程生命周期完整**:`Start` 等端口 `/state` 就绪(20s 超时后报"端口已写出但接口没响应",`:1266-1268`),端口超时先 `Kill` 再 `throw`/重试(`:1245-1258`);版本不符走 `_peaceful_stop` + 3s 等 + 重来(`:1271-1277`);`_proc = Exited(process) ? null : process` 避免拿已死句柄(`:1279`);`Stop()` 先 HTTP 优雅停 → `Kill` + `WaitForExit(3000)` → 清 `_port`/`_proc`/runtime 文件(`:1288-1314`)。房间号:`ParseRoom` 按定宽 `XXXX-XXXX-XXXX-XXXX` 滑窗匹配 + `_lookup_room_char` 白名单(`去掉了易混字符`,基 32),`RoomError` 对 legacy/PCL2CE 房间给专门的拒绝文案(`:387-398`)→ 校验是"白名单 + 定宽 + 明确报错",不是"截一个长度就算"。端口探测 `_http_ok` 全在 try/catch(`:810-824`) |
+| `Mods.cs` / `Modpack.cs` / `Catalog.cs` | grep 全量 + 关键路径通读 | 导入路径安全:`_extract_embedded_pack`(`:516`)解内嵌包到 `%TEMP%/<stem>_inner_<guid8><ext>`,**stem 取自 `new PPath(text).Stem`(文件主名)** —— Windows 文件名不允许 `\`/`:`,构造不出目录穿越;候选条目有 300MB 上限(`:529`)、按"包内评分"排序取第一个带包标记的(`:540-551`),失败即删临时文件;`overwrite: true` 只作用于**这个 guid 临时文件**,不覆盖用户文件。版本匹配沿用已核的 `Versions.MatchGameVersion` 一类纯函数 + `ModUpdate` 的规则表 |
+| `Sysinfo.cs` | grep 全量 | 只读采集(`RtlGetVersion`/WMI 文本解析),`long.Parse` 都在解析固定格式输出的位置且有兜底;无进程/句柄 |
+| `JsonRpcPeer.cs` | 通读挂起表 | **无 TCS 泄漏**:响应、错误、超时、取消、发送失败五条路径都 `_pending.TryRemove` + `TrySet*`(`:267-279`、`:373-398`、`:417-419`);`RequestAsync` 用 `RunContinuationsAsynchronously` 避免在 IO 线程上跑续体 |
+| `NodeRuntime.cs` / `NodeHostProcess.cs` | grep 全量 | 宿主进程由 `NodeHostProcess` 统一 `Dispose`(kill + 等退出);`NodeRuntime` 只管下载/校验/解压运行时(sha256 校验 + 临时目录 + `.gz` 解压),不长期持有进程 |
+| `PluginLlm.cs` | grep 全量 | HttpCancel 走 `_active` 字典 `TryAdd`(`:107`),中断/完成后移除,无泄漏 |
+| `Ai/Compact|Checkpoint|Rewind|Permission|Conflict|Preview|Mcp*` | grep + 关键函数 | `Compact` 只在 token 超阈值时触发,失败 `NoteCompactFailure` 后不重试死循环;`Checkpoint`/`Rewind` 的文件遍历有 `_iter_dirs` 限制与 UTF-8 兜底解码;`Permission` 规则集是**白名单字段 + `_BEHAVIOR_KEYS` 映射**;`Preview`/`Conflict` 是纯函数(行匹配/依赖图),不碰 IO;`McpServer` 的 `CloseAll` 在 `Agent` 的 `finally` 里无条件调(`Agent.cs:1454`)—— 每轮结束都会关 MCP 客户端 |
+
+**本轮未发现真 bug,未改业务代码**(唯一改动是 R6.1 的白名单一行 + 注释)。特别记录一处"看着像、判定不是":`Crash.AnalyzeLaunch` 未包 try/catch(第四轮 §R4.5 已说明为什么不动)。
+
+## R6.4 覆盖率现状(更新第四轮的表)
+
+- **通读 + 单测**:`Pages/Layout/**` 全部、`BlockHost`、`LayoutStoreV2`、`PageLayoutStore`、`LayoutShellHooks`
+- **通读**:`Pages/**` 事件与持久化面、`Services/**`、`MainWindow/App/Shortcut/Utils/DownloadManager/Manifest/McLauncher/Java/Installer(natives)/Saves/BridgeServer/RpcDispatcher`、`Ai/Agent|Tools|ExtraTools|Client|Artifacts|AiResponse`、`Plugins` 加载/隔离/卸载/权限、`Crash.cs` 的 IO 与报告出口、**本轮:`Terracotta` 进程与房间号、`JsonRpcPeer` 挂起表、`Modpack` 内嵌包解出**
+- **grep 级(结构性检查通过)**:`Mods`/`Modpack` 除上述路径以外的业务分支、`Catalog`、`Sysinfo`、`NodeRuntime`/`NodeHostProcess`/`PluginLlm`、`Ai/Compact|Checkpoint|Rewind|Permission|Conflict|Preview|Mcp*`、`Crash.cs` 的规则匹配表、`BackendApi` 的 AI 段以外
+- 再往下就是"逐行读 200KB 业务分支"的量,已无已知可疑点可追。
