@@ -532,15 +532,16 @@ public sealed partial class SettingsPage
 		RefreshLayoutView();
 	}
 
-	private void ApplyProfile(string name)
+private void ApplyProfile(string name)
 	{
-		string error = LayoutProfiles.Apply(name);
+		string error = LayoutProfiles.Apply(name, out string kept);
 		if (error.Length > 0)
 		{
 			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
 			return;
 		}
-		PageBase.Toast(I18n.L("布局已应用，可直接「另存为方案」保留"), name, ToastKind.Success);
+		// 应用前旧布局已自动留底成「上一次布局」:换错了能用同名方案切回
+		PageBase.Toast(I18n.L("布局已应用,可直接「另存为方案」保留"), (kept.Length > 0) ? I18n.L("原布局已留底为「{0}」", kept) : name, ToastKind.Success);
 		RefreshLayoutView();
 	}
 
@@ -651,13 +652,13 @@ public sealed partial class SettingsPage
 			}, 560.0);
 			if (choice == 1)
 			{
-				string error = LayoutProfiles.ApplySnapshot(whole.Layout);
+				string error = LayoutProfiles.ApplySnapshot(whole.Layout, out string kept);
 				if (error.Length > 0)
 				{
 					PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
 					return;
 				}
-				PageBase.Toast(I18n.L("布局已应用，可直接「另存为方案」保留"), System.IO.Path.GetFileName(path), ToastKind.Success);
+				PageBase.Toast(I18n.L("布局已应用,可直接「另存为方案」保留"), (kept.Length > 0) ? I18n.L("原布局已留底为「{0}」", kept) : System.IO.Path.GetFileName(path), ToastKind.Success);
 				RefreshLayoutView();
 			}
 			else if (choice == 2)
@@ -684,7 +685,11 @@ public sealed partial class SettingsPage
 			IReadOnlyDictionary<string, PageLayoutDoc> pages = PageLayoutStore.ParseImport(text);
 			LayoutV2 doc = LayoutStoreV2.Load();
 			int num = LayoutProfiles.MergeV1Pages(doc, pages);
-			LayoutStoreV2.Save(doc);
+			if (!LayoutStoreV2.Save(doc))
+			{
+				PageBase.Toast(I18n.L("布局未能保存"), I18n.L("改动只保留在本次运行"), ToastKind.Warning);
+				return;
+			}
 			PageBase.Toast(I18n.L("已导入 {0} 个页面的布局（下次打开对应页面生效）", num), System.IO.Path.GetFileName(path), ToastKind.Success);
 			RefreshLayoutView();
 		}
@@ -786,7 +791,12 @@ public sealed partial class SettingsPage
 		{
 			LayoutV2 doc = LayoutStoreV2.Load();
 			edit(doc);
-			LayoutStoreV2.Save(doc);
+			if (!LayoutStoreV2.Save(doc))
+			{
+				// 写盘失败(被独占/没有权限):内存里已是最新值,但不能说"已保存"
+				PageBase.Toast(I18n.L("布局未能保存"), I18n.L("改动只保留在本次运行"), ToastKind.Warning);
+				return;
+			}
 			PageBase.Toast(toast, "", ToastKind.Success);
 		}
 		catch (Exception ex)
@@ -1071,8 +1081,7 @@ public static class LayoutProfiles
 			string trimmed = name!.Trim();
 			doc.Profiles[trimmed] = (fromCurrent ? doc.Layout.Clone() : new LayoutBody());
 			doc.ActiveProfile = trimmed;
-			LayoutStoreV2.Save(doc);
-			return "";
+			return LayoutStoreV2.Save(doc) ? "" : I18n.L("布局未能保存");
 		}
 		catch (Exception ex)
 		{
@@ -1094,8 +1103,7 @@ public static class LayoutProfiles
 			string trimmed = name!.Trim();
 			doc.Profiles[trimmed] = ((body != null) ? body.Clone() : new LayoutBody());
 			doc.ActiveProfile = trimmed;
-			LayoutStoreV2.Save(doc);
-			return "";
+			return LayoutStoreV2.Save(doc) ? "" : I18n.L("布局未能保存");
 		}
 		catch (Exception ex)
 		{
@@ -1103,9 +1111,28 @@ public static class LayoutProfiles
 		}
 	}
 
+	/// <summary>
+	/// 应用方案 / 导入整机方案前自动留底的方案名(同名覆盖,只留一份):当前布局没原样存在激活方案里
+	/// (手调过,或本来就是直接编辑态)时,换掉之前先存到这里,换错了可以在方案列表里切回。
+	/// </summary>
+	public static string PreviousName
+	{
+		get
+		{
+			return I18n.L("上一次布局");
+		}
+	}
+
 	/// <summary>应用方案:原子替换 layout(整块换掉)并把 active_profile 记成它。</summary>
 	public static string Apply(string? name)
 	{
+		return Apply(name, out _);
+	}
+
+	/// <summary>同上;<paramref name="kept"/> = 替换前把当前布局留底成的方案名(不必留底时为 "")。</summary>
+	public static string Apply(string? name, out string kept)
+	{
+		kept = "";
 		try
 		{
 			LayoutV2 doc = LayoutStoreV2.Load();
@@ -1114,13 +1141,17 @@ public static class LayoutProfiles
 			{
 				return I18n.L("布局方案「{0}」不存在", name ?? "");
 			}
-			doc.Layout = body.Clone();
-			doc.ActiveProfile = name!.Trim();
-			LayoutStoreV2.Save(doc);
-			return "";
+			string target = name!.Trim();
+			LayoutBody next = body.Clone();
+			kept = KeepPrevious(doc);
+			doc.Layout = next;
+			// 应用的正是「上一次布局」= 和当前布局对调:这个名字里现在存的是刚换下来的那份,不再是正在用的
+			doc.ActiveProfile = ((kept.Length > 0 && string.Equals(kept, target, StringComparison.Ordinal)) ? "" : target);
+			return LayoutStoreV2.Save(doc) ? "" : I18n.L("布局未能保存");
 		}
 		catch (Exception ex)
 		{
+			kept = "";
 			return ex.Message;
 		}
 	}
@@ -1128,18 +1159,44 @@ public static class LayoutProfiles
 	/// <summary>直接替换当前布局(导入整机方案):原子替换 + 回到直接编辑态(active_profile 清空)。</summary>
 	public static string ApplySnapshot(LayoutBody? body)
 	{
+		return ApplySnapshot(body, out _);
+	}
+
+	/// <summary>同上;<paramref name="kept"/> 含义同 <see cref="Apply(string, out string)"/>。</summary>
+	public static string ApplySnapshot(LayoutBody? body, out string kept)
+	{
+		kept = "";
 		try
 		{
 			LayoutV2 doc = LayoutStoreV2.Load();
+			kept = KeepPrevious(doc);
 			doc.Layout = ((body != null) ? body.Clone() : new LayoutBody());
 			doc.ActiveProfile = "";
-			LayoutStoreV2.Save(doc);
-			return "";
+			return LayoutStoreV2.Save(doc) ? "" : I18n.L("布局未能保存");
 		}
 		catch (Exception ex)
 		{
+			kept = "";
 			return ex.Message;
 		}
+	}
+
+	// 当前布局已经原样存在激活方案里就不必留底;否则存成「上一次布局」(覆盖上一份),返回留底的方案名
+	private static string KeepPrevious(LayoutV2 doc)
+	{
+		LayoutBody? active = doc.GetProfile(doc.ActiveProfile ?? "");
+		if (active != null && SameBody(active, doc.Layout))
+		{
+			return "";
+		}
+		string name = PreviousName;
+		doc.Profiles[name] = doc.Layout.Clone();
+		return name;
+	}
+
+	private static bool SameBody(LayoutBody a, LayoutBody b)
+	{
+		return string.Equals(JsonSerializer.Serialize(a.ToDict()), JsonSerializer.Serialize(b.ToDict()), StringComparison.Ordinal);
 	}
 
 	/// <summary>重命名方案(被激活的方案跟着改 active_profile)。</summary>
@@ -1173,8 +1230,7 @@ public static class LayoutProfiles
 			{
 				doc.ActiveProfile = trimmed;
 			}
-			LayoutStoreV2.Save(doc);
-			return "";
+			return LayoutStoreV2.Save(doc) ? "" : I18n.L("布局未能保存");
 		}
 		catch (Exception ex)
 		{
@@ -1199,8 +1255,7 @@ public static class LayoutProfiles
 				return error;
 			}
 			doc.Profiles[newName!.Trim()] = body.Clone();
-			LayoutStoreV2.Save(doc);
-			return "";
+			return LayoutStoreV2.Save(doc) ? "" : I18n.L("布局未能保存");
 		}
 		catch (Exception ex)
 		{
@@ -1222,8 +1277,7 @@ public static class LayoutProfiles
 			{
 				doc.ActiveProfile = "";
 			}
-			LayoutStoreV2.Save(doc);
-			return "";
+			return LayoutStoreV2.Save(doc) ? "" : I18n.L("布局未能保存");
 		}
 		catch (Exception ex)
 		{
@@ -1232,8 +1286,8 @@ public static class LayoutProfiles
 	}
 
 	/// <summary>
-	/// 把 v1 页面布局(冻结格式,只有 {id,hidden} 与顺序)并进当前文档的 pages:按 pageId 覆盖,
-	/// 其余页不动;不落盘(调用方决定)。返回并入的页数。
+	/// 把 v1 页面布局(冻结格式,只有 {id,hidden} 与顺序)并进当前文档的 pages:按 pageId 并顺序/显隐,
+	/// v2 已有的页级参数与块几何原样保留;其余页不动;不落盘(调用方决定)。返回并入的页数。
 	/// </summary>
 	public static int MergeV1Pages(LayoutV2? doc, IReadOnlyDictionary<string, PageLayoutDoc>? pages)
 	{
@@ -1248,16 +1302,13 @@ public static class LayoutProfiles
 			{
 				continue;
 			}
-			// 单页 v1 文档 → Core 的朴素块列表 → FromV1(顺序与显隐逐项保留)
-			LayoutV2 migrated = LayoutStoreV2.FromV1(new Dictionary<string, IReadOnlyList<LayoutV1Block>>(StringComparer.Ordinal)
-			{
-				[kv.Key] = LayoutV1Projection.ToCoreBlocks(kv.Value)
-			});
-			if (migrated.Layout.Pages.TryGetValue(kv.Key, out PageLayoutV2? page) && page != null)
-			{
-				doc.Layout.Pages[kv.Key] = page;
-				num++;
-			}
+			// 单页 v1 文档 → Core 的朴素块列表 → MergeV1Order:只并顺序与显隐,
+		// v2 里已有的页级参数(mode/cols/gap)与每块几何/外观按 id 原样保留
+		// (不能像以前那样用 FromV1 新建整页 —— 那会把网格页整页降级回 stack、几何全丢)。
+		doc.Layout.Pages.TryGetValue(kv.Key, out PageLayoutV2? existing);
+		PageLayoutV2 merged = LayoutStoreV2.MergeV1Order(existing, LayoutV1Projection.ToCoreBlocks(kv.Value));
+		doc.Layout.Pages[kv.Key] = merged;
+		num++;
 		}
 		return num;
 	}
@@ -1414,7 +1465,10 @@ public static class LayoutJsonEditor
 		}
 		try
 		{
-			LayoutStoreV2.Save(((doc != null) ? doc : LayoutStoreV2.Load()));
+			if (!LayoutStoreV2.Save(((doc != null) ? doc : LayoutStoreV2.Load())))
+			{
+				issues.Add(Error("", I18n.L("布局未能保存")));
+			}
 		}
 		catch (Exception ex)
 		{

@@ -116,10 +116,10 @@ public class LayoutEngineTests
 		Assert.Equal(-1, plan.Slot("news")!.VisualIndex);
 	}
 
-	// ————— 未知块过滤 / 缺失块补尾(Normalize 语义) —————
+	// ————— 未知块保留 / 缺失块补尾(Normalize 语义) —————
 
 	[Fact]
-	public void UnknownBuiltinIdsAreDroppedAndMissingRefsAppendedHiddenPerDefaultVisible()
+	public void UnknownBuiltinIdsArePreservedButNotRenderedAndMissingRefsAppendedHiddenPerDefaultVisible()
 	{
 		// 文档里有白名单内的 hero / quick(quick 被用户隐藏),还有两个白名单外的内置 id(ghost / news)
 		PageLayoutV2 page = Page("hero", "ghost", "quick", "news");
@@ -131,13 +131,19 @@ public class LayoutEngineTests
 			new LayoutBlockRef("quick", true)
 		};
 		LayoutPageState state = LayoutEngine.LoadState("p", page, refs);
-		// 白名单外的内置 id 丢弃;缺失的 banner 按 DefaultVisible 补到末尾
+		// 白名单外的内置 id 不进渲染顺序(画不出来),但原样保留在块表里,保存时不能丢
 		Assert.Equal(new[] { "hero", "quick", "banner" }, state.Order.ToArray());
 		Assert.DoesNotContain("ghost", state.Order);
 		Assert.DoesNotContain("news", state.Order);
 		Assert.Contains("quick", state.Hidden); // 文档里的 hidden 保留
 		Assert.Contains("banner", state.Hidden); // 缺失项 Hidden = !DefaultVisible(与 PageLayoutDoc.Normalize 一致)
 		Assert.DoesNotContain("hero", state.Hidden);
+		Assert.Equal(new[] { "ghost", "news" }, state.Preserved.ConvertAll((BlockLayout b) => b.Id).ToArray());
+		// 提交(ToPage)时未知块必须还在块表里(下一次保存不会把它们删掉)
+		Assert.Contains("ghost", Ids(state.ToPage().Blocks));
+		Assert.Contains("news", Ids(state.ToPage().Blocks));
+		// 但渲染计划里看不见它们
+		Assert.DoesNotContain("ghost", state.Plan().Slots.ConvertAll((LayoutSlot s) => s.Id));
 	}
 
 	[Fact]

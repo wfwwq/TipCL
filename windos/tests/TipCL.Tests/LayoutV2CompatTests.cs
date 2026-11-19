@@ -400,27 +400,78 @@ public class LayoutV2CompatTests
 			"""));
 			string good = File.ReadAllText(V2Path(_tmp));
 
-			string[] damaged = new[]
+			string[] corrupt = new[]
 			{
 				good.Substring(0, Math.Max(1, good.Length / 2)), // 截断
 				"not json at all {{{",
 				"",
-				"{\"version\":2,\"kind\":\"something-else\",\"layout\":{}}", // kind 不对
-				"{\"version\":1,\"kind\":\"tipcl-layout\",\"layout\":{}}", // version 不对
-				"{\"version\":3,\"kind\":\"tipcl-layout\",\"layout\":{}}",
 				"[1,2,3]",
 				"{\"version\":2,\"kind\":\"tipcl-layout\",\"layout\":{\"pages\":" // 半截对象
 			};
-			foreach (string text in damaged)
+			foreach (string text in corrupt)
 			{
 				File.WriteAllText(V2Path(_tmp), text); // 外部损坏模拟:直接写坏文件
 				LayoutStoreV2.ResetCache();
 				LayoutV2 doc = LayoutStoreV2.Load(); // 绝不能抛
 				Assert.Equal("v1-fallback", LayoutStoreV2.LastLoadSource);
+				Assert.True(LayoutStoreV2.LastLoadV2Corrupt);
 				AssertV1Equals(legacy, doc.Layout.Pages["pages:launch"]);
-				Assert.Equal(text, File.ReadAllText(V2Path(_tmp))); // 读路径不写盘,损坏文件不被"顺手清掉"
+				// 读失败不再静默盖掉原文件:原 v2 路径已被改名备份,内容逐字保留
+				Assert.False(File.Exists(V2Path(_tmp)));
+				Assert.NotEmpty(LayoutStoreV2.LastCorruptBackup);
+				Assert.Equal(text, File.ReadAllText(LayoutStoreV2.LastCorruptBackup));
 				Assert.Equal(legacy.Blocks.Count, doc.Layout.Pages["pages:launch"].Blocks.Count);
 			}
+
+			// 合法 JSON 只是 kind/version 门禁不过(例如未来版本写的):不算损坏,既不改名也不覆盖
+			string[] gateFail = new[]
+			{
+				"{\"version\":2,\"kind\":\"something-else\",\"layout\":{}}", // kind 不对
+				"{\"version\":1,\"kind\":\"tipcl-layout\",\"layout\":{}}", // version 不对
+				"{\"version\":3,\"kind\":\"tipcl-layout\",\"layout\":{}}"
+			};
+			foreach (string text2 in gateFail)
+			{
+				File.WriteAllText(V2Path(_tmp), text2);
+				LayoutStoreV2.ResetCache();
+				LayoutV2 doc2 = LayoutStoreV2.Load();
+				Assert.Equal("v1-fallback", LayoutStoreV2.LastLoadSource);
+				Assert.False(LayoutStoreV2.LastLoadV2Corrupt);
+				AssertV1Equals(legacy, doc2.Layout.Pages["pages:launch"]);
+				Assert.Equal(text2, File.ReadAllText(V2Path(_tmp))); // 读路径不写盘,门禁不过的文件不被顺手清掉
+			}
+		}
+		finally
+		{
+			Release();
+		}
+	}
+
+	// ————— Save 报告写盘结果 + 损坏文件备份后不被下一次保存覆盖 —————
+	[Fact]
+	public void SaveReportsWriteResultAndCorruptBackupSurvivesNextSave()
+	{
+		UseDir(_tmp);
+		try
+		{
+			LayoutV2? none = null;
+			Assert.False(LayoutStoreV2.Save(none!));
+			Assert.True(LayoutStoreV2.Save(LayoutV2.CreateDefault()));
+
+			// 损坏 → 先改名备份;随后一次正常保存写的是新 v2,旧损坏内容只存在于备份里
+			const string damaged = "{ half";
+			File.WriteAllText(V2Path(_tmp), damaged);
+			LayoutStoreV2.ResetCache();
+			LayoutStoreV2.Load();
+			string backup = LayoutStoreV2.LastCorruptBackup;
+			Assert.NotEmpty(backup);
+			Assert.True(File.Exists(backup));
+			Assert.False(File.Exists(V2Path(_tmp)));
+
+			Assert.True(LayoutStoreV2.Save(LayoutV2.CreateDefault()));
+			Assert.True(File.Exists(V2Path(_tmp)));
+			Assert.Equal(damaged, File.ReadAllText(backup));
+			Assert.Equal("v2", LayoutStoreV2.LastLoadSource);
 		}
 		finally
 		{
