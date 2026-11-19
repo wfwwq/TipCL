@@ -1,4 +1,4 @@
-# tools/build.ps1 — TipCL Linux 版一键构建（M1-A5 充实）
+﻿# tools/build.ps1 — TipCL Linux 版一键构建（M1-A5 充实）
 # 用法:
 #   powershell -ExecutionPolicy Bypass -File tools/build.ps1                    # 只构建
 #   powershell -ExecutionPolicy Bypass -File tools/build.ps1 -Test              # 构建 + 测试

@@ -247,3 +247,234 @@ python tools/i18n-audit.py --selfcheck                                          
 # 5) exe-only 交付验证(net48)
 Copy-Item windos/src/TipCL/bin/Release/net48/TipCL.exe <空目录>\; & <空目录>\TipCL.exe --smoke   # exit 0,10 页 ok,issues []
 ```
+
+---
+
+# 第二轮(用户诉求:UI 自定义"丝滑一点" + "坏的按钮,背后根本没接功能")
+
+本轮目标只有一件事:**把"每页能不能开、按钮能不能点"从人工印象变成可重跑的命令与判据**。
+不碰 `src/**`、`windos/src/**`(发现的源码问题写在 R6 跨域表,交 A/B/C)。
+
+## R1 逐页无头冒烟矩阵(直接命中"某页点进去就炸")
+
+新增两个同源实现(Windows 本机 / Linux CI):
+
+| 文件 | 用途 |
+| --- | --- |
+| `tools/smoke-matrix.ps1` | Windows 本机:对 10 个页面 id 各起一次独立进程 + 隔离 `TIPCL_HOME` |
+| `tools/smoke-matrix.sh` | Linux/CI 等价实现(`ci.yml` 的 `test (ubuntu)` 已接入) |
+
+判据(四条,全过才 exit 0;任意一页不过就红并打印该页现场):
+`进程 exit 0` + `smoke.png > 10 KB` + `日志 0 个 [WARN]` + `日志 0 个 [ERROR]`。
+页面清单来源:`src/TipCL.App/Shell/MainWindow.axaml.cs` 的 `GetPage(id)` switch
+(launch / download / library / plugins / settings / instance=版本管理 / account / multiplayer / tasks / ai)。
+
+### 实测结果(Linux 侧,Release 构建,10 页全绿)
+
+| 页面 | 结论 | exit | smoke.png (B) | [WARN] | [ERROR] | 耗时 (ms) |
+| --- | --- | --- | --- | --- | --- | --- |
+| launch | OK | 0 | 569,905 | 0 | 0 | 1285 |
+| download | OK | 0 | 23,643 | 0 | 0 | 1123 |
+| library | OK | 0 | 44,675 | 0 | 0 | 1170 |
+| plugins | OK | 0 | 34,969 | 0 | 0 | 1142 |
+| settings | OK | 0 | 38,071 | 0 | 0 | 1407 |
+| instance(版本管理) | OK | 0 | 41,685 | 0 | 0 | 1142 |
+| account | OK | 0 | 34,345 | 0 | 0 | 1098 |
+| multiplayer | OK | 0 | 46,005 | 0 | 0 | 1116 |
+| tasks | OK | 0 | 23,954 | 0 | 0 | 1103 |
+| ai | OK | 0 | 37,542 | 0 | 0 | 1139 |
+
+- **没有任何一页炸**:10/10 通过,总耗时约 12 s(每页 ~1.1–1.4 s)。
+- `bash tools/smoke-matrix.sh --pages launch,settings,ai` 也单跑过一遍(570,013 / 38,071 / 37,542 B)
+  ⇒ 两份实现同口径(页面清单与 10 KB 阈值由 `RepoConsistencyTests.SmokeMatrixScriptsAgreeOnThePageList` 守着)。
+- **CI 接线**:`ci.yml` 的 `test` job 在 Linux 上跑矩阵,结果写 `$GITHUB_STEP_SUMMARY`,
+  每页截图 + `matrix.csv` 作为 `tipcl-smoke-matrix` artifact 上传(失败也能拿到现场)。
+- 边界(如实说明):`--smoke` 走 Avalonia headless + Skia,不需要 X server;但它**只证明"这一页能构造、能渲染一帧、无异常日志"**,
+  不证明交互正确(交互靠 R3 的点击遍历与 R2 的 WPF 侧矩阵)。
+
+## R2 WPF 侧冒烟矩阵固化(真窗口 / 真点击 / 真对话框)
+
+net48 版 `--smoke` 本来就比 Linux 侧强:真开窗口、遍历 10 页、点 15 个按钮、开 8 个对话框,
+把结果写进 `<TIPCL_HOME>/_wpf_smoke/run-<ts>/report.json` + 每页截图。问题一直是**只有人工记得跑**。
+本轮固化成两件东西:
+
+| 新增 | 作用 |
+| --- | --- |
+| `windos/tools/smoke-matrix.ps1` | 隔离 `TIPCL_HOME` 跑一次 `TipCL.exe --smoke`,读 `report.json`,按 **9 条判据**判红绿,打印每页/每次点击表格,`-Markdown` 落盘 |
+| `windos/tests/TipCL.Tests/SmokeReportCriteriaTests.cs` | 把 9 条判据做成**可测的纯函数**,用合成 report 覆盖每一类失败;设 `TIPCL_WPF_SMOKE_REPORT=<report.json>` 时对**真报告**再跑一遍 |
+
+9 条判据:`C1 退出码 0` / `C2 state=finished` / `C3 issues 为空` / `C4 ≥10 页且每页 ok` /
+`C5 点击数 ≥ required_clicks 且每次 ok` / `C6 对话框数 ≥ required_dialogs` / `C7 每页截图存在且 >10 KB` /
+`C8 i18n_missing 为空` / `C9 不是 watchdog 超时`。
+
+### 实测(本机 WPF,net48 Release)
+
+```
+state=finished exit=0 pages=10 clicks=15/>=9 dialogs=8/>=5 elapsed=10962ms bridge=已连上
+launch/library/instance/account/ai/multiplayer/settings/tasks/download/plugins  全 ok
+截图 34,045 – 57,616 B(10 张);每次点击 ok;issues: []
+=> WPF 冒烟矩阵全部通过(9 条判据),总耗时 12.9 s
+```
+
+真报告门槛也验过:`TIPCL_WPF_SMOKE_REPORT=<run-.../report.json> dotnet test --filter RealReportFromSmokeMatrixScriptPasses` → 绿。
+判据测试 14 条(合成失败用例 13 条 + 脚本 BOM/判据标签一致性 1 条)**14/14 通过**。
+
+## R3 按钮点击遍历(Linux 侧,"点了没反应"的可自动化部分)
+
+`tests/TipCL.Tests/App/ClickSweepTests.cs`:10 页逐一枚举**可见且可用**的 `Button`/`MenuItem`
+(每页最多 80 个),用 headless 指针输入点击(回落:直接 raise `Click`),比较点击前后的
+**指纹** = 页 id | 顶层窗口数 | 任务条数 | 可视节点数 | 全部文本 + 控件状态
+(`ToggleButton.IsChecked` / `TextBox.Text` / `ComboBox.SelectedIndex` / `Slider` / `ProgressBar`)。
+
+### 实测(一次遍历 208 个可交互控件)
+
+| 结果 | 数量 | 说明 |
+| --- | --- | --- |
+| 有可见变化 | 50 | 换页 / 弹层 / 文本变化 / 开关状态变化 |
+| 点了没反应 | 94 | 见下方分类,**只统计不判定** |
+| 因副作用跳过 | 63 | 启动游戏 / 安装 / 下载 / 删除 / 退出 / 打开文件夹 / 选择文件 / 导入导出 + 窗口标题栏按钮 |
+| 抛异常 | 1(已知跨域) | 插件页「⋯」按钮,见 R6 |
+
+94 个"没反应"的构成(**别把它当成 94 个坏按钮**):
+
+| 类别 | 数量 | 为什么不能算"坏" |
+| --- | --- | --- |
+| 勾选/开关/滚动条类(`ToggleButton`/`CheckBox`/`RepeatButton`) | 41 | headless 注入的指针事件**没有触发** `ToggleButton.OnClick` 的状态切换 ⇒ 机制未覆盖,不是产品无反应 |
+| 页标题图标 `Button[titleIcon]` | 10 | 设计上就不是可点入口 |
+| 普通 `Button`(有文案) | 43 | **大部分在真机上是有反应的**:它们的效果是弹一个 `Dlg` 对话框,而 headless 会话里 `Dlg.Resolve()` 拿不到 owner(`TestWriteGuard.cs:14-16` 已实测记录:`Dlg.Owner ?? desktop.MainWindow` 都是 null ⇒ 直接返回 false)⇒ 弹窗根本没出现,于是被判成"无变化" |
+
+> 结论(交 lead / aud-app 判断):**Linux 侧 headless 点击遍历无法区分"死按钮"和"只会弹对话框的按钮"** ——
+> 它拿不到对话框宿主。真正能判死按钮的是 R2 的 WPF 侧矩阵(真窗口、真 `Dlg`、15 次点击 + 8 个对话框,
+> 每次点击都断言有反应)。所以 headless 遍历本轮只作**"点击不抛异常"的回归**,清单仅供参考。
+> 43 个普通 Button 里值得人工确认的候选(去掉明显"只弹窗"的):
+> `download | 正式版 / 快照 / 远古`、`settings | 检查更新 / 测试 AI 连接 / 连接 / 断开 / USB 自动连接 / 同步面板 / 扫描并清理 / 查看推荐`、
+> `multiplayer | 允许访问 / 打开设置 / 关闭内核 / Terracotta 项目主页`、`tasks | 清除已完成`、`ai | 记忆 / 权限 / 清空 / 发送`。
+> 完整清单:`TIPCL_CLICKSWEEP_OUT=<path.tsv> dotnet test --filter ClickSweepTests`。
+
+## R4 i18n 接线覆盖率守卫(英文界面显示中文)
+
+### 工具增强
+
+`tools/i18n-audit.py` 新增 `--baseline <path>`:输出**未接线的用户可见 CJK 字面量**清单 ——
+总览 + 按文件聚合(未接线条数、其中已有 en 译文的数量)+ 明细(`文件:行 文案`,带 `[已有译文]` 标记)+
+`I18N-GUARD` 机读块(unwrapped_total / per_file)。
+生成:`python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md`(本轮已生成入库)。
+
+### 基线数字(Linux/Avalonia 侧,2026-11-20)
+
+| 指标 | 数值 |
+| --- | --- |
+| CJK 字面量(分母) | **5,217**(rebase 到最新 main 后;`2094a3e` 上是 5,198) |
+| 已接线(`I18nCore.Tr(...)`) | **299(5.73%)** |
+| 未接线(切语言改不动) | **4,918** |
+| 其中词表里**已有 en 译文**(只差接线) | **2,090 条**(去重后 1,140+ 个不同文案) |
+| 涉及 .cs 文件 | 174 |
+
+> 与一致性线路实测的 5,194 / 299 / 1,140 对齐:分母差 4 条是词表增补后的漂移;
+> 1,140 是**去重后**的文案数,本基线另外给出**出现次数** 2,086(接线工作量按出现次数算更实在)。
+
+### 未接线最多的文件(接线优先级)
+
+| 未接线 | 其中已有 en 译文 | 文件 |
+| --- | --- | --- |
+| 330 | 8 | `src/TipCL.Core/Launcher/Catalog.cs` |
+| 193 | 183 | `src/TipCL.App/Pages/Settings/SettingsPage.cs` |
+| 187 | 126 | `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs` |
+| 153 | 15 | `src/TipCL.Core/Launcher/Crash.cs` |
+| 153 | 9 | `src/TipCL.Core/Launcher/Modpack.cs` |
+| 144 | 22 | `src/TipCL.App/Pages/Settings/SettingsSubs.cs` |
+| 143 | 31 | `src/TipCL.App/Pages/Version/VersionManagePage.cs` |
+| 141 | 18 | `src/TipCL.App/Pages/Download/CatalogPage.cs` |
+| 122 | 6 | `src/TipCL.Core/Launcher/Installer.cs` |
+| 110 | 12 | `src/TipCL.Core/Launcher/Ai/AiSelfTest.cs` |
+
+> **给 aud-app 的分派建议**:先做「已有 en 译文」比例高的文件 —— `SettingsPage.cs`(183/193)、
+> `SettingsPage.Layout.cs`(126/187)、`SettingsSubs.cs`(22/144):接线即生效,不用补词表,单位工作量收益最高。
+> `Catalog.cs`(330 条只有 8 条有译文)属于"要先补词表"的另一类工作。
+
+### 守卫测试
+
+`tests/TipCL.Tests/Repo/I18nBaselineTests.cs`(4 条):
+1. 基线文件存在且 `I18N-GUARD` 块结构完整(unwrapped_total / per_file / cjk_literals);
+2. **重新跑一遍审计**,断言 `unwrapped` **不增加**、`wrapped` **不减少**;
+3. 基线必须带 `unwrapped_with_en_key`(分派接线工作的分母);
+4. `per_file` 表非空且条目都是 `.cs`。
+
+守卫**真的会红**:把基线人为改小到 4000 后跑测试 →
+`未接线的 CJK 字面量从基线的 4000 涨到了 4899`,失败;还原后复绿(实测)。
+依赖 python:`python3`/`python` 都找不到时安静返回;想强制要求可设 `I18N_GUARD_REQUIRE_PYTHON=1`。
+
+#### 守卫上线当天就抓到一次真实回退(+19,已归因)
+
+本轮的基线先在 `2094a3e` 上取(4,899),随后 main 又进了 A/B/C 的 15 个提交;
+rebase 到新 main 再跑,守卫立刻红:
+
+```
+未接线的 CJK 字面量从基线的 4899 涨到了 4918
+```
+
+逐文件归因(全部来自二/三轮新增功能,**新增文案没有接线进 `Tr(...)`**):
+
+| 文件 | 未接线 | 增量 | 谁引入的(按提交归属) |
+| --- | --- | --- | --- |
+| `src/TipCL.Core/Launcher/Mods.cs` | 76 → 80 | **+4** | audit/A 第二轮(Mods) |
+| `src/TipCL.App/Pages/Settings/SettingsSubs.cs` | 144 → 154 | **+10** | audit/B 第二轮(服务器导入导出 / 登录入口等接线) |
+| `src/TipCL.App/Pages/Settings/SettingsPage.SaveLoad.cs` | 41 → 45 | **+4** | audit/B 第二轮(主题包保存/加载) |
+| `src/TipCL.Core/Launcher/Cleaner.cs` | 0 → 1 | **+1** | audit/A 第二轮(Cleaner) |
+| 合计 | 4,899 → **4,918** | **+19** | — |
+
+`wrapped` 没变(299 → 299):**新增的中文一条都没走词表**,所以"英文界面显示中文"的比例又退了一点
+(覆盖率 5.75% → 5.73%)。基线已刷新到 4,918(记录当前实情),这 19 条列入交 aud-app 的接线清单;
+**从现在起再有新增就是守卫挡**。刷新命令:
+`python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md`。
+
+> 这条正是"用户说英文界面还是中文"的机制性根因:**光做功能不做接线,数字就往上走,而且没人会注意到** —— 现在有人了。
+
+## R5 本轮问题表
+
+| ID | 级别 | 文件:行 | 根因 | 修复 | 验证证据 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| D2-01 | **P1** | `tools/build.ps1` / `tools/package.ps1` | 含中文 + **UTF-8 无 BOM** ⇒ 本机默认的 Windows PowerShell 5.1 按 ANSI 解码,乱码字节吃掉引号 ⇒ **整个文件解析失败**(实测 build.ps1 8 处 parse error、package.ps1 19 处)。「一键构建/一键打包」在这台机器的默认 shell 里根本跑不起来 | 给 `build.ps1` / `package.ps1` / 新 `smoke-matrix.ps1` 加 UTF-8 BOM(仅 +3 字节,内容字节不变);新增守卫 `RepoConsistencyTests.PowerShellScriptsWithNonAsciiTextCarryAUtf8Bom` | 修复后全仓 16 个 `.ps1` 在 PS 5.1 下 **0 parse error** | ✅ 已修 |
+| D2-02 | **P1** | `tools/smoke-matrix.ps1`(新增) | 第一版用 `$home` 当变量名 —— PowerShell 里 `$HOME` 是**只读自动变量**(不区分大小写),脚本一跑就 `Cannot overwrite variable HOME`(与 `verify-smoke.ps1` 注释里记的 D-43 同一个坑) | 改名 `$homeDir` | 脚本实跑 10 页全绿 | ✅ 已修 |
+| D2-03 | **P2** | `tools/smoke-matrix.ps1`(新增) | 第一版用 `Start-Process -PassThru` 读 `ExitCode`,PS 5.1 下拿到 `$null` ⇒ 10 页全部误判 FAIL(exit= 空) | 改用 `System.Diagnostics.Process` + `WaitForExit(ms)` + `ExitCode` | 修后 10/10 OK | ✅ 已修 |
+| D2-04 | **P2** | `.github/workflows/ci.yml` | 只有"默认帧"一条冒烟,「某一页点进去就白屏/报错」在 CI 里完全不可见 | `test` job 接入 `tools/smoke-matrix.sh`(10 页 × 4 判据)+ 结果进 job summary + 截图 artifact | 本机同口径脚本 10/10 | ✅ 已修 |
+| D2-05 | **P2** | `tools/i18n-audit.py` | 只能报聚合数字,没有"按文件、带是否已有译文"的清单,也没有基线可比 | 新增 `--baseline`,落 `progress/I18N-BASELINE.md`(含机读守卫块) | `--selfcheck` PASS;基线生成成功 | ✅ 已修 |
+| D2-06 | **P2** | 测试覆盖 | "未接线中文继续增加"没有任何守卫 | `I18nBaselineTests`(4 条)+ 基线快照 | 人为改小基线 → 红;还原 → 绿 | ✅ 已修 |
+| D2-07 | **P2** | 测试覆盖 | WPF 冒烟的 9 条判据只活在人的记忆里 | `windos/tools/smoke-matrix.ps1` + `SmokeReportCriteriaTests`(14 条) | WPF 实跑 10 页/15 点击/8 对话框通过;真报告门槛通过 | ✅ 已修 |
+
+## R6 跨域问题(源码,**只报告不改**)
+
+| 文件:行 | 现象 | 触发条件 | 建议 |
+| --- | --- | --- | --- |
+| `src/TipCL.App/Shell/TitleBar.axaml.cs:51` 与 `:53` | 点「最小化 / 关闭」抛 `NullReferenceException` | `(TopLevel.GetTopLevel(this) as Window)!` 强制解包一个**可能为 null** 的值;headless 会话里 `GetTopLevel` 返回 null ⇒ 100% NRE(9 页 × 2 个按钮) | 改空安全:`if (TopLevel.GetTopLevel(this) is Window w) w.WindowState = ...;` / `w.Close();` |
+| `src/TipCL.App/Pages/Plugins/PluginsPage.cs:88-92` | 点插件页「⋯」抛 `ArgumentException: Cannot show ContentMenu on a different control to the one it is attached to.` | 先 `more.ContextMenu = menu`(框架已挂载),再在 Click 里 `menu.PlacementTarget = more; menu.Open(menu.PlacementTarget)`;headless 稳定复现 | 二选一:去掉 `more.ContextMenu = menu` 只走显式 `Open(more)`,或只依赖框架自动弹 |
+| `src/TipCL.App/Common/Dlg.cs`(可测性) | headless 会话里 `Dlg.Resolve()` 恒为 null ⇒ 所有"只会弹对话框"的按钮在无头环境**永远没反应** | 无头环境固有限制,不是产品缺陷 | 若要自动化判"死按钮",给 `Dlg` 加可注入 owner(headless 下用虚拟 owner),否则这类按钮只能靠 WPF 真窗口矩阵覆盖 |
+
+## R7 本轮新增/修改清单
+
+| 类型 | 路径 |
+| --- | --- |
+| 新增脚本 | `tools/smoke-matrix.ps1`、`tools/smoke-matrix.sh`、`windos/tools/smoke-matrix.ps1` |
+| 新增测试 | `tests/TipCL.Tests/App/ClickSweepTests.cs`、`tests/TipCL.Tests/Repo/I18nBaselineTests.cs`、`windos/tests/TipCL.Tests/SmokeReportCriteriaTests.cs` |
+| 守卫增强 | `RepoConsistencyTests`:+`SmokeMatrixScriptsAgreeOnThePageList`、+`PowerShellScriptsWithNonAsciiTextCarryAUtf8Bom` |
+| 新增基线 | `progress/I18N-BASELINE.md`(由 `--baseline` 生成,勿手改) |
+| 修改 | `tools/i18n-audit.py`(`--baseline`)、`tools/build.ps1` + `tools/package.ps1`(BOM)、`.github/workflows/ci.yml`(矩阵) |
+
+### 第二轮测试计数(全绿)
+
+| 批次 | 第一轮收工 | 第二轮收工 | 增量 |
+| --- | --- | --- | --- |
+| Linux 批次 1(App) | 358 | **359** | +1(`ClickSweepTests`) |
+| Linux 批次 2(其余) | 549(548 + 1 跳过) | **555**(554 + 1 跳过) | +6(`I18nBaselineTests` 4 + `RepoConsistencyTests` 2) |
+| Windows 侧 | 547 | **561** | +14(`SmokeReportCriteriaTests`) |
+| 合计 | 907 / 0 失败 | **914**(913 通过 + 1 跳过)/ **0 失败** | +21 |
+
+### 第二轮复跑命令
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\smoke-matrix.ps1            # 10 页 × 4 判据
+powershell -NoProfile -ExecutionPolicy Bypass -File windos\tools\smoke-matrix.ps1     # WPF 9 条判据
+python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md                        # 刷新 i18n 基线
+$env:TIPCL_CLICKSWEEP_OUT="<path>\sweep.tsv"; dotnet test tests\TipCL.Tests\TipCL.Tests.csproj --filter "FullyQualifiedName~ClickSweepTests"
+$env:TIPCL_WPF_SMOKE_REPORT="<run>\report.json"; dotnet test windos\tests\TipCL.Tests\TipCL.Tests.csproj --filter "FullyQualifiedName~SmokeReportCriteria"
+```

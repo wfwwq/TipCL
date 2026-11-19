@@ -74,12 +74,14 @@ Usage:
   python tools/i18n-audit.py --help          # criterion + denominator/口径
   python tools/i18n-audit.py --json          # machine-readable
   python tools/i18n-audit.py --list-unwrapped --top-files 25
+  python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md   # 基线快照(带 I18N-GUARD 机读块)
 """
 
 import json
 import os
 import re
 import sys
+import datetime
 from collections import Counter
 
 # Callee names that count as a localisation wrapper on the Linux/Avalonia side.
@@ -139,6 +141,10 @@ Options
   --out PATH         write the report to PATH instead of stdout
   --list-unwrapped   also list every unwrapped literal with file:line
   --top-files N      how many files to list in the "unwrapped by file" table (default 20)
+  --baseline PATH    write a Markdown baseline snapshot to PATH: per-file unwired list + a
+                     machine-readable I18N-GUARD block (unwrapped_total / per_file).
+                     Guard test tests/TipCL.Tests/Repo/I18nBaselineTests.cs reads that block
+                     and fails if the unwired count grows.
   --selfcheck        assert the lexer invariants over every scanned file (exit 1 on
                      failure). Run this after touching Lexer: a scanner that silently
                      stops half-way through a file is exactly what R-WP5-01 was.
@@ -522,6 +528,93 @@ def selfcheck_tree(root, src_dirs, show=10):
                " no desync." % checked)
     return out, []
 
+def write_baseline(path, root, result, unwrapped, tables, detail_files=25, detail_per_file=40):
+    """把「未接线的用户可见 CJK 字面量」落成一份基线快照(progress/I18N-BASELINE.md)。
+
+    为什么要这份文件:未接线数量只靠"这次比上次少"是管不住的 —— 没人记得上次是多少。
+    这里同时产出**人看的按文件清单**和**机读的 I18N-GUARD 块**;守卫测试
+    (tests/TipCL.Tests/Repo/I18nBaselineTests.cs) 读机读块,断言未接线总数不增加。
+
+    口径与 --json 一致:一条"未接线字面量"= 一次出现(不是去重后的值);文件路径相对仓库根。
+    """
+    en = tables["en"]
+    zh = tables["zh_CN"]
+    per_file = Counter(r["file"] for r in unwrapped)
+    per_file_with_en = Counter(r["file"] for r in unwrapped if r["text"] in en)
+    have_en_total = sum(1 for r in unwrapped if r["text"] in en)
+
+    L = []
+    L.append("# i18n 接线基线(未接线的用户可见 CJK 字面量)")
+    L.append("")
+    L.append("> 自动生成,**不要手改**:`python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md`")
+    L.append("> 生成时间:%s" % datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    L.append(">")
+    L.append("> 判据(与 `tools/i18n-audit.py --help` 顶部同一份口径):")
+    L.append(">   * **已接线(wrapped)** = 字面量是 `I18nCore.Tr(...)` 的实参 —— 切语言**能**改变它;")
+    L.append(">   * **未接线(unwrapped)** = 其余全部 —— 切语言**改不了**它(用户看到的\"英文界面里的中文\")。")
+    L.append(">   * 覆盖率 = 已接线 / 全部 CJK 字面量。**它不是\"界面翻译了多少\"**,别倒着读。")
+    L.append("")
+    L.append("## 总览")
+    L.append("")
+    L.append("| 指标 | 数值 |")
+    L.append("| --- | --- |")
+    L.append("| CJK 字面量(分母) | %d |" % result["cjk_literals"])
+    L.append("| 已接线(wrapped) | %d(%.2f%%) |" % (result["wrapped"], 100.0 * result["coverage"]))
+    L.append("| 未接线(unwrapped) | %d |" % result["unwrapped"])
+    L.append("| 其中**词表里已有 en 译文**(只差接线) | %d |" % have_en_total)
+    L.append("| 涉及的 .cs 文件 | %d |" % len(per_file))
+    L.append("| 词表条目(en / zh_CN) | %d / %d |" % (len(en), len(zh)))
+    L.append("")
+    L.append("## 按文件聚合(未接线条数降序)")
+    L.append("")
+    L.append("| 未接线 | 其中已有 en 译文 | 文件 |")
+    L.append("| --- | --- | --- |")
+    for f, n in per_file.most_common():
+        L.append("| %d | %d | `%s` |" % (n, per_file_with_en.get(f, 0), f))
+    L.append("")
+    L.append("## 明细(未接线条数最多的 %d 个文件,每个最多 %d 条)" % (detail_files, detail_per_file))
+    L.append("")
+    L.append("`[已有译文]` = 这条文案在 `locales/en.json` 里已经是一个 key,接线(套 `Tr(...)`)就能立刻生效;")
+    L.append("没有这个标记的,要先补词表。")
+    L.append("")
+    by_file = {}
+    for r in unwrapped:
+        by_file.setdefault(r["file"], []).append(r)
+    for f, _ in per_file.most_common(detail_files):
+        rows = sorted(by_file.get(f, []), key=lambda r: r["line"])
+        L.append("### `%s`(%d 条)" % (f, len(rows)))
+        L.append("")
+        for r in rows[:detail_per_file]:
+            mark = " `[已有译文]`" if r["text"] in en else ""
+            L.append("- `%s:%d` %s%s" % (f, r["line"], r["text"].replace("|", "\\|")[:160], mark))
+        if len(rows) > detail_per_file:
+            L.append("- …… 另有 %d 条(见 `--list-unwrapped` 全量输出)" % (len(rows) - detail_per_file))
+        L.append("")
+    L.append("## 机读守卫块(守卫测试读这里,勿改格式)")
+    L.append("")
+    L.append("<!-- I18N-GUARD-BEGIN -->")
+    guard = {
+        "generated": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "cjk_literals": result["cjk_literals"],
+        "wrapped": result["wrapped"],
+        "unwrapped_total": result["unwrapped"],
+        "unwrapped_with_en_key": have_en_total,
+        "files": len(per_file),
+        "per_file": dict(per_file.most_common()),
+    }
+    L.append("```json")
+    L.append(json.dumps(guard, ensure_ascii=False, sort_keys=True))
+    L.append("```")
+    L.append("<!-- I18N-GUARD-END -->")
+    L.append("")
+
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n".join(L))
+    print("wrote " + path)
+    print("  unwrapped_total=%d (含已有译文 %d)  wrapped=%d/%d"
+          % (result["unwrapped"], have_en_total, result["wrapped"], result["cjk_literals"]))
+
+
 def main(argv):
     if "--help" in argv or "-h" in argv:
         print(HELP)
@@ -535,6 +628,9 @@ def main(argv):
 
     as_json = "--json" in argv
     show_unwrapped = "--list-unwrapped" in argv
+    baseline_path = None
+    if "--baseline" in argv:
+        baseline_path = argv[argv.index("--baseline") + 1]
     out_path = None
     if "--out" in argv:
         out_path = argv[argv.index("--out") + 1]
@@ -623,6 +719,10 @@ def main(argv):
         "callee_histogram": dict(Counter(
             (r["callee"] or "(none)") for r in all_rows).most_common(40)),
     }
+
+    if baseline_path:
+        write_baseline(baseline_path, root, result, unwrapped, tables)
+        return 0
 
     if as_json:
         text = json.dumps(result, ensure_ascii=False, indent=2)

@@ -76,6 +76,35 @@ jobs:
       - name: Release build (warnings are the signal)
         run: dotnet build src/TipCL.App/TipCL.App.csproj -c Release --nologo
 
+      # 逐页冒烟矩阵(audit/D 第二轮):默认帧只拍启动页,「某一页点进去就白屏/报错」在默认帧里看不见。
+      # tools/smoke-matrix.sh 对每个页面 id 各起一次独立进程 + 隔离 TIPCL_HOME,判据四条:
+      # 退出码 0 / smoke.png > 10 KB / 0 个 [WARN] / 0 个 [ERROR]。任意一页不达标就红。
+      # --smoke 走 Avalonia headless + Skia,不需要 X server(与 verify-linux.sh 同一条路)。
+      - name: 逐页冒烟矩阵(10 页,每页 exit 0 + png > 10 KB + 0 WARN / 0 ERROR)
+        if: runner.os == 'Linux'
+        run: |
+          bash ./tools/smoke-matrix.sh \
+            --bin src/TipCL.App/bin/Release/net8.0/TipCL.App.dll \
+            --out dist/smoke-matrix \
+            --markdown dist/smoke-matrix.md
+
+      - name: 冒烟矩阵结果写进 job summary
+        if: runner.os == 'Linux' && always()
+        run: |
+          if [ -f dist/smoke-matrix.md ]; then
+            { echo "## 逐页冒烟矩阵"; echo ""; cat dist/smoke-matrix.md; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning title=冒烟矩阵没有产出 dist/smoke-matrix.md::矩阵在产出结论前就中断了,详见上一步日志"
+          fi
+
+      - name: 冒烟矩阵产物(每页截图 + csv)
+        if: runner.os == 'Linux' && always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tipcl-smoke-matrix
+          path: dist/smoke-matrix
+          if-no-files-found: warn
+
   package-linux:
     name: package (linux-x64 → AppImage + .deb)
     runs-on: ubuntu-latest
