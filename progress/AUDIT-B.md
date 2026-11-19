@@ -78,6 +78,15 @@ dotnet build src/TipCL.App/TipCL.App.csproj -c Release   → 已成功生成,0 �
 dotnet test tests/TipCL.Tests --filter "~TipCL.Tests.App" → 已通过:355,失败:0,跳过:0
 ```
 
+### 4-D 无头启动冒烟(修复后)
+```
+TIPCL_HOME=D:\项目\TipCL\_tools\tmp-B\tipcl-smoke
+dotnet src/TipCL.App/bin/Release/net8.0/TipCL.App.dll --smoke
+→ [INFO] === TipCL 1.2.0 启动 pid=... ===
+→ --smoke:已输出 smoke.png        (退出码 0)
+```
+说明:整窗装配(标题栏 + 布局钩子 + 首个页面 launch)在 Release 下仍能起来;`smoke.png` 被 `.gitignore` 覆盖,工作树保持干净(`git status --porcelain` 为空)。
+
 ## 5. 未修 / 剩余未审
 
 - **未修(报告不修的理由)**:无 P0/P1 遗留。上面 4 条全部落地。
