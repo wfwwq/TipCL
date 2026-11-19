@@ -9,6 +9,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.App.Common;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -52,7 +53,7 @@ internal sealed class TaskCard : Border
 
         _title = UiClass.Txt(title ?? "", 13, true, "B.Ink");
         _title.TextTrimming = TextTrimming.CharacterEllipsis;
-        _status = UiClass.Txt("后台进行中", 11.5, false, "B.InkMuted");
+        _status = UiClass.Txt(I18nCore.Tr("后台进行中"), 11.5, false, "B.InkMuted");
         _status.TextTrimming = TextTrimming.CharacterEllipsis;
         _percent = UiClass.Txt("", 11.5, true, "B.AccentText");
         _speed = UiClass.Txt("", 11.5, false, "B.InkFaint");
@@ -132,14 +133,14 @@ internal sealed class TaskCard : Border
             _bar.Value = 100;
             _percent.Text = "100%";
             _bar.IsVisible = false;
-            _status.Text = string.IsNullOrWhiteSpace(message) ? "完成" : message;
+            _status.Text = string.IsNullOrWhiteSpace(message) ? I18nCore.Tr("完成") : message;
             _status[!TextBlock.ForegroundProperty] = Res.Bind("B.InkMuted");
         }
         else
         {
-            _percent.Text = "失败";
+            _percent.Text = I18nCore.Tr("失败");
             _percent[!TextBlock.ForegroundProperty] = Res.Bind("B.Danger");
-            _status.Text = "原因:" + (string.IsNullOrWhiteSpace(message) ? "未知错误" : message);
+            _status.Text = "原因:" + (string.IsNullOrWhiteSpace(message) ? I18nCore.Tr("未知错误") : message);
             _status.TextWrapping = TextWrapping.Wrap;
             _status[!TextBlock.ForegroundProperty] = Res.Bind("B.Danger");
             this[!Border.BorderBrushProperty] = Res.Bind("B.Danger");
@@ -152,23 +153,24 @@ internal sealed class TaskCard : Border
         {
             if (Launch != null)
             {
-                _buttons.Children.Add(U.Btn("启动游戏", BtnKind.Primary, (_, _) => Launch(), "Play"));
+                _buttons.Children.Add(U.Btn(I18nCore.Tr("启动游戏"), BtnKind.Primary, (_, _) => Launch(), "Play"));
             }
             if (OpenFolder != null)
             {
-                _buttons.Children.Add(U.Btn("打开文件夹", BtnKind.Chip, (_, _) => OpenFolder(), "Folder"));
+                _buttons.Children.Add(U.Btn(I18nCore.Tr("打开文件夹"), BtnKind.Chip, (_, _) => OpenFolder(), "Folder"));
             }
         }
-        else if (Retry != null && FinishMessage != "已取消")
+        // [audit/B i18n] 这里的 "已取消" 是 Core(BackendWorker/DownloadManager)给的原文,比较用原文
+            else if (Retry != null && FinishMessage != I18nCore.Tr("已取消"))
         {
-            var button = U.Btn("重试", BtnKind.Chip, (_, _) =>
+            var button = U.Btn(I18nCore.Tr("重试"), BtnKind.Chip, (_, _) =>
             {
                 // 只让点一次:重试是「让助手重发这一步」,连点会重发多次
                 var b = (Button)((Avalonia.Controls.StackPanel)_buttons).Children[0];
                 b.IsEnabled = false;
                 Retry(FinishMessage);
             }, "Refresh");
-            ToolTip.SetTip(button, "让助手重新执行这一步");
+            ToolTip.SetTip(button, I18nCore.Tr("让助手重新执行这一步"));
             _buttons.Children.Add(button);
         }
         _buttons.IsVisible = _buttons.Children.Count > 0;

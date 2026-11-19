@@ -279,10 +279,23 @@ void SetStatus(string text)
         {
             var result = await Api.TryCallAsync<CleanerResultStub>("cleaner_apply", null, new { kinds = Py.L("unused_libraries", "parts", "cache") });
             // [audit/B] cleaner_apply 是已实现的(IApi -> Core Cleaner.Apply),失败如实说失败
-            _cleanInfo.Text = result == null
-                ? I18nCore.Tr("清理没有完成:看看日志里的原因")
-                : $"已清理 {result.Removed} 个文件";
-            Toast(I18nCore.Tr("清理完成"), _cleanInfo.Text, result == null ? ToastKind.Warning : ToastKind.Success);
+            if (result == null)
+            {
+                _cleanInfo.Text = I18nCore.Tr("清理没有完成:看看日志里的原因");
+                Toast(I18nCore.Tr("清理完成"), _cleanInfo.Text, ToastKind.Warning);
+            }
+            else if (result.Failed > 0)
+            {
+                // [audit/B X-04] 有文件删不掉:不能报"清理完成"(绿字),换成 Warning + 首个原因
+                string why = string.IsNullOrWhiteSpace(result.Error) ? "" : " · " + result.Error;
+                _cleanInfo.Text = $"已清理 {result.Removed} 个,{result.Failed} 个没能删掉{why}";
+                Toast(I18nCore.Tr("部分没能清理"), _cleanInfo.Text, ToastKind.Warning);
+            }
+            else
+            {
+                _cleanInfo.Text = $"已清理 {result.Removed} 个文件";
+                Toast(I18nCore.Tr("清理完成"), _cleanInfo.Text, ToastKind.Success);
+            }
         }
     }
 
@@ -321,6 +334,11 @@ void SetStatus(string text)
     {
         public int Removed { get; set; }
         public long Bytes { get; set; }
+
+        /// <summary>[audit/B X-04] Core 的 Cleaner.Apply 会回报删不掉的文件数与首个原因。</summary>
+        public int Failed { get; set; }
+
+        public string Error { get; set; } = "";
     }
 
     /// <summary>
