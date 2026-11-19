@@ -119,6 +119,8 @@ dotnet build src/TipCL.App/TipCL.App.csproj -c Release   → 0 错误 0 警告
 dotnet test  tests/TipCL.Tests (全量)                     → 906 通过 / 1 跳过 / 0 失败
 python tools/i18n-audit.py                                → wrapped 1623 (31.04%) / missing en=0 zh=0
 python tools/i18n-audit.py --list-unwrapped               → 剩余清单(见 §二.还剩什么)
+TIPCL_HOME=… dotnet src/TipCL.App/bin/Release/net8.0/TipCL.App.dll --smoke
+                                                          → 启动成功 + 输出 smoke.png,退出码 0(i18n 接线后复跑)
 ```
 
 ## 三轮 commit(audit/B,未 push)
