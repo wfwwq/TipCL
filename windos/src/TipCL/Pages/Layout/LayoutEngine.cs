@@ -305,12 +305,19 @@ public sealed class LayoutPageState
 	/// <summary>每块 span(1..列数)。</summary>
 	public Dictionary<string, int> Spans { get; private set; } = new Dictionary<string, int>(StringComparer.Ordinal);
 
+	/// <summary>
+	/// 本页 BlockSpec 白名单之外的内置块(例如别的端新增的 <c>ai:header</c>):**原样保留**在块表里,
+	/// 但不进 <see cref="Order"/>、不参与渲染 —— 保存时随本页写回,数据不会因为本端不认识就被删掉。
+	/// custom: / plugin: 块不进这里(它们在 Order 里,按「不可用」占位显示)。
+	/// </summary>
+	public List<BlockLayout> Preserved { get; private set; } = new List<BlockLayout>();
+
 	/// <summary>v2 文档里是否本来就有这一页(false = 用页面白名单生成的默认布局)。</summary>
 	public bool ExistedInDoc { get; private set; }
 
 	/// <summary>
-	/// 装载一页:v2 里有这一页就按它(未知 id 丢弃、缺失 id 按 DefaultVisible 补到末尾,语义等价
-	/// PageLayoutDoc.Normalize);没有就用页面白名单生成默认布局(语义等价 PageLayoutDoc.Default)。
+	/// 装载一页:v2 里有这一页就按它(白名单外缺失的内置块原样保留但不渲染、缺失 id 按 DefaultVisible
+	/// 补到末尾,语义等价 PageLayoutDoc.Normalize);没有就用页面白名单生成默认布局(语义等价 PageLayoutDoc.Default)。
 	/// </summary>
 	public static LayoutPageState Load(string pageId, PageLayoutV2? page, IReadOnlyList<LayoutBlockRef> refs)
 	{
@@ -340,10 +347,12 @@ public sealed class LayoutPageState
 				{
 					continue;
 				}
-				// 内置块必须落在页面白名单里(未知内置 id 丢弃);
+				// 内置块必须落在页面白名单里才参与渲染;白名单外的内置 id(别的端新增的块)**不丢弃**,
+				// 原样放进 Preserved 随页保存,渲染层看不见它。
 				// custom: / plugin: 是布局文档自己的块(§4.F),页面 spec 里可能没有 —— 保留,交给内容工厂或「不可用」占位
 				if (!known.ContainsKey(block.Id) && !LayoutEngine.IsImplicitRef(block.Id))
 				{
+					state.Preserved.Add(block.Clone());
 					continue;
 				}
 				state.Order.Add(block.Id);
@@ -392,6 +401,8 @@ public sealed class LayoutPageState
 		Order = new List<string>();
 		Hidden = new HashSet<string>(StringComparer.Ordinal);
 		Spans = new Dictionary<string, int>(StringComparer.Ordinal);
+		// 重置本页 = 回到出厂:白名单外的内置块也一并丢弃(它们是"别的端的块",不属于本页出厂布局)
+		Preserved.Clear();
 		if (refs != null)
 		{
 			foreach (LayoutBlockRef reference in refs)
@@ -580,7 +591,21 @@ public sealed class LayoutPageState
 	{
 		PageLayoutV2 page = Page.Clone();
 		RebuildPage();
-		page.Blocks = new List<BlockLayout>(Page.Blocks);
+		List<BlockLayout> blocks = new List<BlockLayout>(Page.Blocks);
+		// 白名单外的内置块不进渲染(不在 Page.Blocks 里),但写回文档时必须带上,否则会被下一次保存删掉
+		HashSet<string> present = new HashSet<string>(StringComparer.Ordinal);
+		foreach (BlockLayout built in blocks)
+		{
+			present.Add(built.Id);
+		}
+		foreach (BlockLayout kept in Preserved)
+		{
+			if (kept != null && !string.IsNullOrEmpty(kept.Id) && present.Add(kept.Id))
+			{
+				blocks.Add(kept.Clone());
+			}
+		}
+		page.Blocks = blocks;
 		return page;
 	}
 

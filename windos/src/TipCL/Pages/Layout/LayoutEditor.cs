@@ -120,6 +120,10 @@ public sealed class LayoutEditor
 	private int _lastSnapH = int.MinValue;
 	private double _lastSnapPx = double.NaN;
 
+	// P1:渲染期 MinCols 撑宽的原始几何(id → 存档原 W/X + 撑宽后 W/X)。
+	// 撑宽只影响渲染,不写回存档:CommitBox 提交前若用户没再动过这块,就把 W(以及被挪动的 X)还原成原值。
+	private readonly Dictionary<string, (int OriginalX, int OriginalW, int WidenedX, int WidenedW)> _renderWidened = new Dictionary<string, (int, int, int, int)>(StringComparer.Ordinal);
+
 	// 本次手势里指针是否真的动过(只点一下不算改布局,不落盘)
 	private bool _gestureMoved;
 
@@ -551,13 +555,14 @@ public sealed class LayoutEditor
 		}
 		_stackConverted = false;
 		_stackBackup = null;
+		bool saved = true;
 		if (backToNative)
 		{
 			LoadFromStore();
 		}
 		else
 		{
-			Persist();
+			saved = Persist();
 		}
 		_trayHost.Visibility = Visibility.Collapsed;
 		_barHost.Visibility = Visibility.Collapsed;
@@ -565,7 +570,15 @@ public sealed class LayoutEditor
 		Render();
 		_session.ClearSelection();
 		_session.ClearHistory();
-		AppServices.Window?.Toast(I18n.L("布局已保存"), "", ToastKind.Success);
+		if (saved)
+		{
+			AppServices.Window?.Toast(I18n.L("布局已保存"), "", ToastKind.Success);
+		}
+		else
+		{
+			// 写盘失败(被独占/没有权限):内存里仍是新布局,但不能骗用户说"已保存"
+			AppServices.Window?.Toast(I18n.L("布局未能保存"), I18n.L("改动只保留在本次运行"), ToastKind.Warning);
+		}
 	}
 
 	/// <summary>按主题刷新编辑态蒙版。</summary>
@@ -720,12 +733,32 @@ public sealed class LayoutEditor
 			int min = Math.Min(cols, Math.Max(2, MinColsOf(cell.Id, cols)));
 			if (cell.W < min)
 			{
-				cell.W = min;
-				if (cell.X + cell.W > cols)
+				// 记下"存档里的原始 W/X":撑宽只是渲染兜底,提交时不能把它写回 block.Span
+				if (!_renderWidened.ContainsKey(cell.Id))
 				{
-					cell.X = Math.Max(0, cols - cell.W);
+					int originalX = cell.X;
+					int originalW = cell.W;
+					cell.W = min;
+					if (cell.X + cell.W > cols)
+					{
+						cell.X = Math.Max(0, cols - cell.W);
+					}
+					_renderWidened[cell.Id] = (originalX, originalW, cell.X, cell.W);
+				}
+				else
+				{
+					cell.W = min;
+					if (cell.X + cell.W > cols)
+					{
+						cell.X = Math.Max(0, cols - cell.W);
+					}
 				}
 				changed = true;
+			}
+			else if (_renderWidened.TryGetValue(cell.Id, out (int OriginalX, int OriginalW, int WidenedX, int WidenedW) rec) && cell.W != rec.WidenedW)
+			{
+				// 用户在撑宽之后自己拖过/缩过这块:以用户的新宽度为准,不再还原
+				_renderWidened.Remove(cell.Id);
 			}
 		}
 		if (changed)
@@ -733,6 +766,26 @@ public sealed class LayoutEditor
 			// 撑宽后可能与同行的块重叠:只解冲突(不上浮),尽量保持用户原来的摆放
 			_box.CompactCells(null, false, false);
 		}
+	}
+
+	// 提交前把"渲染期撑宽"的宽度还原成存档原值(用户之后自己改过宽度的块除外)。
+	// 这样 ApplyTo → ApplyGrid 写回 block.W / block.Span 的就是未撑宽的值,存档不会被渲染兜底污染。
+	private void RestoreRenderWidenedWidths()
+	{
+		foreach (KeyValuePair<string, (int OriginalX, int OriginalW, int WidenedX, int WidenedW)> kv in _renderWidened)
+		{
+			LayoutCell? cell = _box.CellOf(kv.Key);
+			if (cell == null || cell.W != kv.Value.WidenedW)
+			{
+				continue;
+			}
+			cell.W = kv.Value.OriginalW;
+			if (cell.X == kv.Value.WidenedX)
+			{
+				cell.X = kv.Value.OriginalX;
+			}
+		}
+		_renderWidened.Clear();
 	}
 
 	// BlockSpec.MinCols 按 12 列制给出,换算到本页列数
@@ -1287,14 +1340,16 @@ public sealed class LayoutEditor
 
 	// 任何变更 → 取整份 v2 文档 → 覆盖本页 → Save(v2 + 写通 v1)→ 清 v1 缓存 → Changed
 	// _saving 守卫:Save 会同步触发 LayoutChanged,自己不用被自己触发的那一次再重排一遍
-	private void Persist()
+	// 返回 v2 是否真的落盘:完成编辑时据此决定提示"已保存"还是"未能保存"(写盘失败不能报成功)。
+	private bool Persist()
 	{
+		bool saved = false;
 		_saving = true;
 		try
 		{
 			LayoutV2 doc = LayoutStoreV2.Load();
 			LayoutEngine.ApplyPage(doc, _pageId, _state.ToPage());
-			LayoutStoreV2.Save(doc);
+			saved = LayoutStoreV2.Save(doc);
 			PageLayoutStore.Reload();
 			// 写进文档之后本页就是"自定义过"的了:常态不再显示原生默认排版
 			_nativeActive = false;
@@ -1306,6 +1361,7 @@ public sealed class LayoutEditor
 			_saving = false;
 		}
 		this.Changed?.Invoke();
+		return saved;
 	}
 
 	// 操作条上的拖拽手柄:stack 模式 = 一维换序(旧行为),grid/canvas = 画布整体拖拽
@@ -1751,6 +1807,8 @@ public sealed class LayoutEditor
 		_layoutTouched = true;
 		CompactState(null);
 		PageLayoutV2 page = _state.ToPage();
+		// P1:渲染期按 MinCols 撑宽的格子只影响显示,提交前还原成存档原值,不能借 ApplyTo 写回 span/W
+		RestoreRenderWidenedWidths();
 		_box.ApplyTo(page);
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
 		_session.Retain(_state.Order);

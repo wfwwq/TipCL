@@ -95,6 +95,16 @@ public partial class App : Application
 		// P1:把 v1 写通(<数据目录>/ui_page_layouts.json)的注入缝装配给 Core 的 LayoutStoreV2 ——
 		// Core 不再认识 Pages 的 v1 类型(PageLayoutDoc / PageLayoutStore),装配后行为与重构前一致
 		TipCL.Core.Launcher.Layout.LayoutStoreV2.V1Bridge = new TipCL.Pages.Layout.PagesLayoutV1Bridge();
+		// 升级首跑的一次性迁移:此时 v1 注入缝已装配(数据目录/语义与旧版一致)、任何页面/编辑器
+		// 都还没读过布局 —— 只有 v1 时在这里把结果落成 v2,之后所有读取走 v2 真源;已有 v2 时等价于 Load。
+		try
+		{
+			TipCL.Core.Launcher.Layout.LayoutStoreV2.LoadMigrating();
+		}
+		catch
+		{
+			// 迁移失败不能挡住启动:LayoutStoreV2 的读路径本身有 v1 回落,下次保存时还会再走迁移入口
+		}
 		// 动画帧率上限:默认**不设**(WPF 不覆写 DesiredFrameRate 时,动画跟随合成器/显示器刷新率,
 		// 120/144/165Hz 屏上才可能真的顺)。此前这里硬写 60,等于给所有 WPF 动画(页面切换、
 		// 悬停、进度条)装了个 60fps 天花板 —— 在高刷屏上和系统、浏览器一对比就是"说不上哪里不顺"。

@@ -196,6 +196,125 @@ public class LayoutProfileTests
 	}
 
 	[Fact]
+	public void ApplyKeepsPreviousLayoutBeforeReplacing()
+	{
+		UseDir();
+		try
+		{
+			SeedCurrentLayout(0.4);
+			Assert.Equal("", LayoutProfiles.Create("基线", fromCurrent: true));
+
+			// 手调当前布局(删掉 download 页)→ 应用方案前必须把这份"手调结果"留底
+			LayoutV2 doc = LayoutStoreV2.Load();
+			doc.Layout.Pages.Remove("download");
+			LayoutStoreV2.Save(doc);
+
+			Assert.Equal("", LayoutProfiles.Apply("基线", out string kept));
+			Assert.Equal(LayoutProfiles.PreviousName, kept);
+
+			LayoutV2 after = LayoutStoreV2.Load();
+			Assert.Contains(LayoutProfiles.PreviousName, after.Profiles.Keys);
+			LayoutBody previous = after.Profiles[LayoutProfiles.PreviousName];
+			Assert.False(previous.Pages.ContainsKey("download")); // 留底的是刚被换下来的那份
+			Assert.True(after.Layout.Pages.ContainsKey("download")); // 当前布局 = 方案快照
+			Assert.Equal("基线", after.ActiveProfile);
+
+			// 当前布局已经原样等于激活方案:再应用不必重复留底
+			Assert.Equal("", LayoutProfiles.Apply("基线", out string kept2));
+			Assert.Equal("", kept2);
+			Assert.Contains(LayoutProfiles.PreviousName, LayoutStoreV2.Load().Profiles.Keys);
+		}
+		finally
+		{
+			Release();
+		}
+	}
+
+	[Fact]
+	public void ApplySnapshotKeepsPreviousLayoutBeforeReplacing()
+	{
+		UseDir();
+		try
+		{
+			SeedCurrentLayout(0.4);
+			LayoutBody body = new LayoutBody();
+			body.Pages["plugins"] = new PageLayoutV2();
+
+			Assert.Equal("", LayoutProfiles.ApplySnapshot(body, out string kept));
+			Assert.Equal(LayoutProfiles.PreviousName, kept);
+
+			LayoutV2 after = LayoutStoreV2.Load();
+			Assert.Equal("", after.ActiveProfile);
+			Assert.True(after.Profiles.ContainsKey(LayoutProfiles.PreviousName));
+			Assert.True(after.Profiles[LayoutProfiles.PreviousName].Pages.ContainsKey("download"));
+			Assert.False(after.Layout.Pages.ContainsKey("download"));
+			Assert.True(after.Layout.Pages.ContainsKey("plugins"));
+		}
+		finally
+		{
+			Release();
+		}
+	}
+
+	[Fact]
+	public void MergeV1PagesKeepsV2PageGeometryAndMode()
+	{
+		UseDir();
+		try
+		{
+			// v2 里已有一页:网格 6 列,a 块有明确几何
+			LayoutV2 doc = LayoutStoreV2.Load();
+			PageLayoutV2 page = new PageLayoutV2
+			{
+				Mode = LayoutSchema.ModeGrid,
+				Cols = 6
+			};
+			page.Blocks.Add(new BlockLayout
+			{
+				Id = "a",
+				X = 2,
+				Y = 3,
+				W = 4,
+				H = 2
+			});
+			page.Blocks.Add(new BlockLayout
+			{
+				Id = "b",
+				Hidden = true
+			});
+			doc.Layout.Pages["library"] = page;
+
+			// v1 文件:顺序 b,a(与 v2 相反),b 可见
+			PageLayoutDoc v1 = PageLayoutDoc.Default(new[] { "b", "a" }, new[] { "a", "b" });
+
+			int count = LayoutProfiles.MergeV1Pages(doc, new Dictionary<string, PageLayoutDoc>(StringComparer.Ordinal)
+			{
+				["library"] = v1
+			});
+			Assert.Equal(1, count);
+
+			PageLayoutV2 merged = doc.Layout.Pages["library"];
+			// 页级参数不因 v1(只有 id/hidden)降级回 stack
+			Assert.Equal(LayoutSchema.ModeGrid, merged.Mode);
+			Assert.Equal(6, merged.Cols);
+			// 顺序与显隐按 v1 并进来
+			Assert.Equal(new[] { "b", "a" }, merged.Blocks.Select((BlockLayout b) => b.Id).ToArray());
+			Assert.False(merged.Blocks[0].Hidden);
+			Assert.False(merged.Blocks[1].Hidden);
+			// v2 里已有的块几何按 id 原样保留
+			BlockLayout a = merged.Blocks[1];
+			Assert.Equal(2.0, a.X);
+			Assert.Equal(3.0, a.Y);
+			Assert.Equal(4.0, a.W);
+			Assert.Equal(2.0, a.H);
+		}
+		finally
+		{
+			Release();
+		}
+	}
+
+	[Fact]
 	public void ApplyMissingProfileReportsChinese()
 	{
 		UseDir();
