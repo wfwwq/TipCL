@@ -575,6 +575,9 @@ public sealed class LayoutEditor
 		{
 			value.RefreshTint();
 		}
+		// 画布自己的栅格底纹 / 占位框配色、辅助线/框选也是按主题色画的 —— 一起重画(颜色都在 OnRender 里现取)
+		_box.RefreshThemeVisuals();
+		_guide.InvalidateVisual();
 	}
 
 	// ————— 装载 / 渲染 —————
@@ -697,7 +700,7 @@ public sealed class LayoutEditor
 			AttachCard(_box, card);
 		}
 		_box.ReattachOverlays();
-		_box.Reflow();
+		// SetLayout / Children 增删 / SanitizeCellWidths→CompactCells (已各自失效测量+排布) —— 这里再 Reflow 一轮是多余的
 	}
 
 	// 渲染前的宽度兜底(只改画布里的格子,不写回存档):
@@ -2736,6 +2739,8 @@ internal sealed class LayoutCard : Border
 			_bodyWrap.Padding = new Thickness(6.0, 0.0, 6.0, 8.0);
 			BorderThickness = new Thickness(_selected ? 2.0 : 1.4);
 			CornerRadius = new CornerRadius(10.0);
+			// 编辑态一律主题色描边:否则 block style=card/divider 的 B.Line / B.LineSoft 会残留下来
+			SetResourceReference(Border.BorderBrushProperty, "B.Accent");
 			Color color = LayoutEditor.AccentColor();
 			Background = new SolidColorBrush(Color.FromArgb((byte)(_selected ? 26 : 10), color.R, color.G, color.B));
 			return;
