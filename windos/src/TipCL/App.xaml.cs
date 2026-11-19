@@ -31,11 +31,46 @@ public partial class App : Application
 		Declined
 	}
 
-	private static readonly string[] SelfCheckArgs = new string[6] { "--nav-dump", "--ime-check", "--i18n-check", "--consent-check", "--smoke", "--shot" };
+	// 自检/截图类参数一律免提权(app.manifest 是 asInvoker,提权全靠 RequestElevation):
+	// 少了 --design-sheet 时,windows/DECISIONS.md:44「--shot/--design-sheet 加入 SelfCheckArgs」的
+	// 决定在代码里是断的 —— 非管理员 shell 跑 `TipCL.exe --design-sheet` 会弹 UAC 并重启一个分离进程,
+	// DevShot 的 stdout / 退出码全部丢给那个新进程,截图工具直接失效。
+	private static readonly string[] SelfCheckArgs = new string[7] { "--nav-dump", "--ime-check", "--i18n-check", "--consent-check", "--smoke", "--shot", "--design-sheet" };
 
 	private const int DeclineExitCode = 1223;
 
 	public static bool IsDark { get; private set; }
+
+	// 桌面快捷方式带过来的「直接启动」参数(-i <实例> launch <版本>,形状由 Core/Launcher/Shortcut.LaunchArgs
+	// 产出;Linux 侧由 src/TipCL.App/Session/CommandLine.cs 消费,Windows 侧以前没人读 —— 双击 .lnk 只是
+	// 把启动器打开。这里只把实例/版本记下来,等后端连上、启动页就绪后由 MainWindow 真正拉起。
+	// 见 PROGRESS.md 记录「Windows 的创建桌面快捷方式本身就是坏的」。
+	private static string? _startInstance;
+
+	private static string? _startVersion;
+
+	/// <summary>取走(并清空)快捷方式带来的启动参数;没有就返回 false。</summary>
+	internal static bool TakeStartArgs(out string? instance, out string? version)
+	{
+		instance = _startInstance;
+		version = _startVersion;
+		_startInstance = null;
+		_startVersion = null;
+		return !string.IsNullOrEmpty(instance);
+	}
+
+	private static void ParseStartArgs(string[] args)
+	{
+		for (int i = 0; i + 3 < args.Length; i++)
+		{
+			if (args[i] == "-i" && args[i + 2] == "launch" && args[i + 1].Length > 0)
+			{
+				_startInstance = args[i + 1];
+				_startVersion = args[i + 3];
+				return;
+			}
+		}
+	}
 
 	internal static ResourceDictionary? PaletteDictionary
 	{
@@ -136,6 +171,8 @@ public partial class App : Application
 		}
 		else
 		{
+			// 桌面快捷方式 / 命令行直接启动:参数在开窗之前解析好,连上后端后由 MainWindow 消费
+			ParseStartArgs(e.Args);
 			new MainWindow().Show();
 		}
 	}
