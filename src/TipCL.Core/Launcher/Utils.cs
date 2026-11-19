@@ -1111,6 +1111,36 @@ public static class Utils
 		return true;
 	}
 
+	/// <summary>
+	/// 把压缩包里记录的权限位落到解出来的文件上(只搬 rwx 三段,不搬 setuid/setgid/sticky)。
+	/// 为什么必须有:tar/zip 里 <c>bin/java</c> 的 0755 一旦丢掉,落盘就是 0644 ——
+	/// <see cref="FindExecutable"/> 只判存在,照样返回它,但 <c>Process.Start</c> 会
+	/// permission denied,用户看到的是「Java 装好了却启不来 / 点了启动没反应」。
+	/// Windows 没有这套权限位,直接跳过;文件系统不支持(挂载的 FAT/exFAT)时也静默跳过。
+	/// </summary>
+	private static void ApplyUnixMode(string path, int mode)
+	{
+		// 用 OperatingSystem.IsWindows() 而不是 Utils.IS_WINDOWS:平台分析器(CA1416)只认前者,
+		// 才会知道下面这行不会在 Windows 上被调用。
+		if (OperatingSystem.IsWindows())
+		{
+			return;
+		}
+		mode &= 0x1FF;
+		if ((mode & 0x49) == 0)
+		{
+			// 一个执行位都没有(普通数据文件):保持进程默认权限即可
+			return;
+		}
+		try
+		{
+			File.SetUnixFileMode(AbsPath(path), (UnixFileMode)mode);
+		}
+		catch (Exception)
+		{
+		}
+	}
+
 	public static void SafeExtractZip(string zipPath, string dest)
 	{
 		EnsureDir(dest);
@@ -1135,9 +1165,13 @@ public static class Utils
 				continue;
 			}
 			Directory.CreateDirectory(Path.GetDirectoryName(text3));
-			using Stream stream = entry.Open();
-			using FileStream destination = new FileStream(text3, FileMode.Create, FileAccess.Write);
-			stream.CopyTo(destination);
+			using (Stream stream = entry.Open())
+			{
+				using FileStream destination = new FileStream(text3, FileMode.Create, FileAccess.Write);
+				stream.CopyTo(destination);
+			}
+			// zip 的 Unix 权限位在 ExternalAttributes 的高 16 位(见上面符号链接判定同一处)
+			ApplyUnixMode(text3, (entry.ExternalAttributes >> 16) & 0x1FF);
 		}
 	}
 
@@ -1174,6 +1208,8 @@ public static class Utils
 			{
 				Directory.CreateDirectory(Path.GetDirectoryName(item2.Target));
 				File.WriteAllBytes(item2.Target, item2.Data ?? new byte[0]);
+				// tar 头里的 0755 等权限位必须落到文件上,否则解出来的 bin/java 不可执行
+				ApplyUnixMode(item2.Target, item2.Mode);
 				try
 				{
 					File.SetLastWriteTimeUtc(item2.Target, new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(item2.MTime));

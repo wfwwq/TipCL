@@ -1126,8 +1126,34 @@ public static class Java
 		}
 	}
 
+	/// <summary>
+	/// 给解压/下载出来的文件补执行位。
+	/// 参考版(Windows 桌面版)这里是空方法——Windows 没有权限位,空着也能跑;Linux/macOS 上
+	/// 少了它,<c>bin/java</c> 落盘就是 0644:找得到、判得了存在,一 <c>Process.Start</c> 就是
+	/// permission denied,症状是「Java 装好了但启动游戏没反应 / Java ? 无法启动此版本」。
+	/// 非 Unix 平台直接返回;文件系统不支持权限位(如挂载的 FAT/exFAT)时静默跳过。
+	/// </summary>
 	private static void Chmod755(string p)
 	{
+		if (OperatingSystem.IsWindows())
+		{
+			return;
+		}
+		if (string.IsNullOrEmpty(p))
+		{
+			return;
+		}
+		try
+		{
+			File.SetUnixFileMode(Utils.AbsPath(p), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+				| UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+				| UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+		}
+		catch (Exception)
+		{
+			// 权限位写不进去就当没这回事:后面 GetJavaMajor 会把「不可执行」判成 Unusable,
+			// 走「换一个/自动下载」的回退链,不会静默拿坏的 exe 去启动
+		}
 	}
 
 	public static string InstallMojangRuntime(DownloadManager dm, string component, Action<string, long, long> on_progress = null, bool force = false)
@@ -1241,6 +1267,37 @@ public static class Java
 			return ".tar.gz";
 		}
 		return ".zip";
+	}
+
+	/// <summary>
+	/// 按**下载地址的真实后缀**决定本地压缩包名(认不出来才用 <paramref name="fallback"/>)。
+	/// 不能一律套 <see cref="ArchiveSuffix"/>:Zulu 接口固定返回 zip(<c>archive_type=zip</c>)、
+	/// aka.ms 的 Microsoft JDK 链接也固定是 <c>.zip</c>,而 Linux 上 <see cref="ArchiveSuffix"/>
+	/// 是 <c>.tar.gz</c>。名字和真实格式不符时 <see cref="DownloadManager.ExtractArchive"/> 会按
+	/// 名字派发到 gzip 解压,必然抛「不是一个 gzip 流」——Zulu / Microsoft 两个发行版在 Linux 上
+	/// 就永远装不上(下载、校验都成功,最后一步解压炸,用户只看到一句底层异常)。
+	/// </summary>
+	private static string ArchiveSuffixForUrl(object url, string fallback)
+	{
+		string text = Py.Lower(Py.Strip(Py.S(url)));
+		int cut = text.IndexOf('?');
+		if (cut >= 0)
+		{
+			text = text.Substring(0, cut);
+		}
+		if (text.EndsWith(".zip", StringComparison.Ordinal))
+		{
+			return ".zip";
+		}
+		if (text.EndsWith(".tar.gz", StringComparison.Ordinal))
+		{
+			return ".tar.gz";
+		}
+		if (text.EndsWith(".tgz", StringComparison.Ordinal))
+		{
+			return ".tgz";
+		}
+		return fallback;
 	}
 
 	public static string InstallAdoptium(DownloadManager dm, long major, Action<string, long, long> on_progress = null, bool force = false, string arch = null)
@@ -1415,7 +1472,7 @@ public static class Java
 		{
 			throw new DownloadError("Azul 返回的数据缺少下载地址");
 		}
-		string text5 = ArchiveSuffix();
+		string text5 = ArchiveSuffixForUrl(obj2, ArchiveSuffix());
 		string text6 = PPath.Join(java_dir, "zulu-" + major + "-" + arch + text5);
 		try
 		{
@@ -1460,7 +1517,7 @@ public static class Java
 		string text4 = Pick(Utils.OS_NAME, "windows", "windows", "osx", "mac", "linux", "linux");
 		string url = "https://aka.ms/download-jdk/microsoft-jdk-" + major + "-" + text4 + "-" + text3 + ".zip";
 		Utils.EnsureDir(java_dir);
-		string text5 = ArchiveSuffix();
+		string text5 = ArchiveSuffixForUrl(url, ArchiveSuffix());
 		string text6 = PPath.Join(java_dir, "microsoft-" + major + "-" + arch + text5);
 		on_progress?.Invoke("下载 Microsoft Java " + major + " (" + arch + ") 运行时", 0L, 1L);
 		try
