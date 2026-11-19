@@ -1,9 +1,10 @@
 # R33 全面审计报告（5 路并行 · P0~P2 · 安全不在范围）
 
 > 基线 `b86afe3`（审计期间外部又提交了一个功能 `4df692b feat(设置): 帧率角标`，已一并纳入）。
-> 收工时 `main` = 五路审计合并结果，共 **44 个提交 / 109 个文件 / +9274 −1145**。
+> 收工时 `main` = 五路审计合并结果，共 **58 个提交 / 157 个文件 / +11801 −1587**（另有 Android 仓 2 个提交）。
 > 审计方式：5 个独立 worktree 分支并行（A=Core、B=Linux UI、C=WPF、D=测试与构建、E=一致性与文档），
-> 各路只在自己范围改代码，跨域问题只报告；由 lead 逐路 rebase + 合并 + 全量回归，**跑了 4 个轮次直到收敛**。
+> 各路只在自己范围改代码，跨域问题只报告；由 lead 逐路 rebase + 合并 + 全量回归，**跑了 6 个轮次直到收敛**
+> （第 5、6 轮严重度曲线已走平，最后一轮只出 P2，随后各路给出"可判定收工"结论）。
 
 ---
 
@@ -13,11 +14,11 @@
 |---|---|
 | P0（崩溃/启动失败/数据丢失） | **清零**（修 1 条：AI 页点「清空」必崩，Linux 侧） |
 | P1（功能错误/静默失败/主流程中断） | **清零**（修 25 条） |
-| P2（边界/健壮性/资源泄漏/文案） | **清零可修项**（修 ~45 条，剩余均为需要产品决策或纯英译工作量） |
+| P2（边界/健壮性/资源泄漏/文案） | **清零可修项**（修 60+ 条，剩余均为需要产品决策或纯英译工作量） |
 | 构建 | Linux `0 警告 0 错误`；Windows(net48) `0 警告 0 错误` |
-| 测试 | Linux **913 通过 / 0 失败 / 1 跳过**（基线 781）；Windows **573 通过 / 0 失败**（基线 547） |
+| 测试 | Linux **936 通过 / 0 失败 / 1 跳过**（基线 781）；Windows **576 通过 / 0 失败**（基线 547） |
 | 冒烟 | 10 个页面逐个无头渲染 **10/10 全绿**（exit 0 / png>10KB / 0 WARN / 0 ERROR） |
-| 新增回归测试 | **+158 条**（123 测试线 + 12 stack 拖拽 + 14 WPF 冒烟判据 + 9 其余） |
+| 新增回归测试 | **+184 条**（123 测试线 + 17 新逻辑断言 + 24 stack 拖拽双侧 + 14 WPF 冒烟判据 + 其余） |
 
 ---
 
@@ -35,6 +36,7 @@
 | **抓起来那一下卡片先跳一下** | 起手先 `FinishAnimations()` 清零，再用槽位矩形当起点 ⇒ 眼睛位置 ≠ 起手位置 | Linux | 清零前记下残留平移，起手矩形 = 槽位 + 残留，从看到的位置接着走 |
 | 缩小时**内容糊出卡片边界** | 预览期没裁剪 | Linux | 预览期间 `ClipToBounds=true`，松手/取消统一恢复 |
 | stack 纵向流**拖拽完全不跟手**（卡片只降透明度，换位靠瞬移；手抖 ±1px 来回翻） | 设计上"不做插值" + 裸中点判定 | Windows | 卡片浮起跟手（每帧只写一次 `TranslateTransform.Y`，零布局）+ 邻块 FLIP 让位 170ms + **6px 滞回**防抖 + 落位动画收敛；`Motion.Enabled=false` 时逐像素回退旧行为 |
+| **Linux 侧同一处同样不跟手** | 移植时没搬 Windows 的浮起手势（两边 `DragReorder/MidpointY/MoveVisible/RebuildPage` 逐行同源，差的只是手势层） | Linux | 照 Windows 补齐：`StackDragPlan`（93 行纯函数逐行同源）+ `LayoutPageState.MoveVisibleTo` + 浮起/FLIP/落位/边缘滚动约 230 行；三处 WPF→Avalonia 等价替换（`DoubleAnimation`→`LayoutTween`、`SetZIndex`→`ZIndex`、`SmoothScroll`→`Offset`）；同样支持关动画回退 |
 | 拖动时每次重排都新分配 rects List | — | Linux | 复用同一张表 |
 
 **代码级结论（Linux，一次拖动的帧内）**：`PointerMoved → ApplyGridGesture` 每帧只有 1 次 `SetOffset`（纯 RenderTransform）+ 纯数学落点计算；落点没变就 `return` ⇒ **零布局**；变了才 `Snapshot + CompactCells + 一次 Reflow`。已 grep 确认：**没有**每帧读盘、**没有** Render→Save 回路（`_saving` 双守卫）、**没有**每帧重建视觉树、**没有** `MeasureOverride` setter 自激。
@@ -110,14 +112,29 @@
 
 ---
 
+### 第 5–6 轮追加（收敛轮：只出 P2，但都是用户会遇到的）
+
+| ID | 问题 | 用户感知 |
+|---|---|---|
+| A-12 | `ai_chats.json` 解析失败时直接建空库并 `Save` | **静默覆盖玩家全部 AI 对话**、不留备份（已改：`.corrupt` 备份 + 脏字段兜底） |
+| A-13 | MCP server 杀进程只杀直接子进程（`npx/uvx` wrapper 下的 node/python 变孤儿），且 `Process` 从不 `Dispose` | 每轮对话漏一批孤儿进程与句柄 ⇒「AI 用久了变卡」（已改 `Kill(entireProcessTree:true)` + `Dispose`） |
+| A-14 | 整合包临时包名是"完全确定的死名字" | 同一包装两次/重试时撞名，先完成的清理删掉后一个 ⇒「不是有效的整合包 zip」，重试就好（典型偶发，已加 `Guid`） |
+| A-15 | Linux/macOS 信号退出码（`128+signum`）没有任何解释 | 玩家只看到「退出码 139/137」，而 139=段错误、137=OOM 强杀恰是 Linux 最常见两种（已补中文映射） |
+| A-10 / A-11 | AI `AiSession`（HttpClient+Handler）从不释放；流中断重试前没回滚 `state.Text` | 「AI 越用越慢、突然连不上」/ 历史里出现重复段落 |
+| C-07 | `--ai-ui-selftest` 不在免提权白名单 | 非管理员跑自检会 UAC + 分离进程，stdout/退出码全丢（与 `--design-sheet` 同口径） |
+| D-06 | `tools/build.ps1` / `package.ps1` 含中文但无 UTF-8 BOM | **PowerShell 5.1 下解析失败**，"一键构建/打包"实际跑不起来 |
+| D-07 | — | 新增**静态守卫** `SilentMutationGuardTests`：写类 RPC 不许走 `TryCallAsync`（防"点了没反应"复发），只白名单 1 处 |
+| B-08 | Linux stack 拖拽不跟手 | 见 §1.1，已照 Windows 补齐 |
+| E-03 | README「功能」表平台口径 | 补正：MCP Server 与插件网页界面**仅 Windows**；手机同步**两端都只有桌面半边**（Android 侧无 `X-PyMCL-Token`/`/api/ping` 实现） |
+
 ## 3 验证证据
 
 ```
 dotnet build src/TipCL.App -c Release           → 0 警告 0 错误
-dotnet test  (App 批次)                          → 359 通过 / 0 失败
-dotnet test  (Core 及其余批次)                    → 554 通过 / 1 跳过 / 0 失败
+dotnet test  (App 批次)                          → 371 通过 / 0 失败
+dotnet test  (Core 及其余批次)                    → 565 通过 / 1 跳过 / 0 失败
 dotnet build windos/src/TipCL -c Release        → 0 警告 0 错误
-dotnet test  windos/tests/TipCL.Tests           → 573 通过 / 0 失败
+dotnet test  windos/tests/TipCL.Tests           → 576 通过 / 0 失败
 tools/smoke-matrix.ps1（10 页逐页无头渲染）        → 10/10 通过（exit 0 / png>10KB / 0 WARN / 0 ERROR）
 ```
 
@@ -129,10 +146,11 @@ tools/smoke-matrix.ps1（10 页逐页无头渲染）        → 10/10 通过（e
 ## 4 已知未修 / 需要你决策
 
 1. **版本号必须抬（P1，未擅自改）**：v1.2.0 在 11-19 被**替换过** Windows 附件、`main` 已领先 tag 67 个提交，但版本号仍是 `1.2.0`。`Updater.Newer("1.2.0","1.2.0")=false` ⇒ **已经装了 1.2.0 的用户拿不到这批修复**。建议发 `1.2.1`（Linux 的 AppImage/.deb 也还是 11-15 的构建）。要不要我抬版本号 + 重算清单，你说一声。
-2. **i18n 覆盖率 5.73% → 31.04%**，`missing en=0 / missing zh=0`。剩下约 3400 条里，绝大部分是**词表里就没有英文**（`LaunchPage` 57、`SettingsPage.Layout` 61…），要接就得先翻——纯工作量，不是 bug。
-3. **两侧都有未逐行读的"策略表"**（`Crash.cs` 200+ 条崩溃特征规则、`Ai` 的子代理/checkpoint 落盘细节）：性质是"提示准不准/恢复点全不全"，不是"会不会崩"。建议按真实用户反馈做定向回归，比再铺一轮全面审计划算。
-4. **可选加固 1 处**：`BackendApi.cs:3222` 的 `Crash.AnalyzeLaunch(...)` 没 try/catch（真抛异常会连带吞掉 `game.exit` 钩子与"游戏已退出"返回值）。审下来构造不出让它抛的输入，按"不加防御冗余"的纪律只记录。
-5. **需要实机点一遍的清单**（自动化覆盖不到的手感/交互）：
+2. **i18n 覆盖率 5.73% → 31.04% → 40.67%**（2128/5233），`missing en=0 / missing zh=0`。"词表里已有英文却没接线"的已基本清零（只剩 27 条各有硬约束：Core 事件原文比较、传给 Core 的数据、常量模式、形参默认值）。剩下 2900+ 条要么是插值串、要么**词表里根本没有英文**（`LaunchPage` 57、`SettingsPage.Layout` 61…），要接得先翻——纯工作量，不是 bug。
+3. **两侧都有未逐行读的"策略表"**（`Crash.cs` 200+ 条崩溃特征规则）：性质是"提示准不准"，不是"会不会崩"。要验必须攒真实崩溃日志正反样本，读代码解决不了；建议按真实用户反馈做定向回归。
+4. **发版准备已就绪**：`docs/RELEASE-CHECKLIST.md` 已写好——6 个文件 / 9 个版本值、4 处 sha256（**必须先上传再算**）、两份清单四字段逐字校验、发完 4 条复核；两条硬约束：新号必须 > 1.2.0、**同号不许换资产**（1.2.0 的教训）。
+5. **可选加固 1 处**：`BackendApi.cs:3222` 的 `Crash.AnalyzeLaunch(...)` 没 try/catch（真抛异常会连带吞掉 `game.exit` 钩子与"游戏已退出"返回值）。审下来构造不出让它抛的输入，按"不加防御冗余"的纪律只记录。
+6. **需要实机点一遍的清单**（自动化覆盖不到的手感/交互）：
    - stack 拖拽：卡片贴指针、跨中点邻块 170ms 滑让、被拖块不跳、松手滑回；关动画后应退回"交换即落位"
    - 拖到列表上下端**停住不动**应持续滚、到底自停；边缘绕圈不跳格
    - 启动页**双击启动** → 只一个任务；启动中再点不起第二个进程
@@ -147,11 +165,11 @@ tools/smoke-matrix.ps1（10 页逐页无头渲染）        → 10/10 通过（e
 ## 5 合并记录
 
 ```
-main  ← audit/A (5 轮)  Core 业务层          11 项修复（P1×6 P2×5）
-      ← audit/B (3 轮)  Linux UI 层          25 项修复（P0×1 P1×9 P2×15）
-      ← audit/C (4 轮)  Windows WPF 层       17 项修复（P1×6 P2×11）+ 12 条单测
-      ← audit/D (2 轮)  测试与构建          15 项修复（P1×3 P2×12）+ 144 条测试
-      ← audit/E        一致性与文档          文档 11 文件 + Android 5 文件
+main  ← audit/A (6 轮)  Core 业务层          15 项修复（P1×6 P2×5）
+      ← audit/B (6 轮)  Linux UI 层          25+ 项修复（P0×1 P1×9 P2×15）
+      ← audit/C (6 轮)  Windows WPF 层       18 项修复（P1×6 P2×11）+ 12 条单测
+      ← audit/D (6 轮)  测试与构建          15 项修复（P1×3 P2×12）+ 144 条测试
+      ← audit/E (6 轮)        一致性与文档          文档 11 文件 + Android 5 文件
 ```
 各路报告全文：`progress/AUDIT-A.md` / `AUDIT-B*.md` / `AUDIT-C.md` / `AUDIT-D.md` / `AUDIT-E.md`（含每条的文件:行、触发路径、验证证据、"已核查无问题"清单，避免下轮重复挖）。
 
@@ -163,4 +181,4 @@ main  ← audit/A (5 轮)  Core 业务层          11 项修复（P1×6 P2×5）
 - 跑测试必须设 `DOTNET_ROOT=D:\项目\TipCL\_tools\dotnet`，否则 testhost 报 `hostfxr.dll could not be found`。
 - 并发 restore 会撞 `NuGetScratch\lock`（报"无法获取锁定文件访问权限"）；等 1~2 分钟重试，或给每条线独立 `TEMP`/`DOTNET_CLI_HOME` + 共享 `NUGET_PACKAGES`。
 - 偶发 `warning NU1900 ... v3-cache ... denied` 是本机缓存目录权限问题，把 `NUGET_HTTP_CACHE_PATH` 指到可写目录即回到 0 警告；**不是代码警告**。
-- 边界：本机是 Windows，Linux 侧只做了 net8 构建 + 无头渲染验证，**Linux 真机（AppImage/deb）与 WPF 实机交互未验证**，那部分靠 `ci.yml` 的 ubuntu job 与上面第 4.5 节的人工清单。
+- 边界：本机是 Windows，Linux 侧只做了 net8 构建 + 无头渲染验证，**Linux 真机（AppImage/deb）与 WPF 实机交互未验证**，那部分靠 `ci.yml` 的 ubuntu job 与上面第 4 节最后一项的人工清单。
