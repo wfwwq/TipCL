@@ -1515,3 +1515,9 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - feb7426 任务A：ai / install / version-manage（嵌入 instance:versions）/ settings:layout 拆成区块；LayoutFill.FillsViewport 保 AI 对话吸底；新增 CollapseIdleBottom（新页去掉 24px 空托盘条）。
 - 任务B：网格拖动像素跟手 + 落点占位框 + FLIP 让位（160ms）+ 松手落位（180ms）+ 改大小像素跟随与尺寸标签；canvas 磁吸 110ms。修复：起终点差 <0.5px 时不做 FLIP 却残留拖动平移（卡片停在槽位+位移处）。
 - 测试：App 355（6 条 Feedback/SelfUpdate 基线失败），其余 423（6 条 AiRetry 基线失败），无新增失败。未真窗运行。
+
+## 2026-11-20 界面帧率角标(FPS,用户需求:默认关 + 埋进设置角落)
+- 需求原话「加个功能,显示当前帧率,默认关闭,埋到设置的角落里面」。落地:`src/TipCL.App/Common/FpsOverlay.cs`(新)+ `Config.BuildDefaults()` 的 `ui_show_fps = false` + MainWindow 一行 Attach + 设置页左导航栏最底部一行小开关(不进 BlockHost 区块、不进布局方案/主题包)。
+- 计帧走 `TopLevel.RequestAnimationFrame`(每帧一回调,与合成器同节拍),500ms 采样出 `NN FPS`;不用 DispatcherTimer 数自己跳了几次(界面卡死时定时器照样准点跳,读数恒为名义值)。角标 `IsHitTestVisible=false`,不吃窗口右下角命中。详见 `progress/R33-FPS.md` 与 `DECISIONS.md` D-80。
+- 自证:build 0 警告 0 错误;`--filter TipCL.Tests.App` **358 通过 / 0 失败 / 0 跳过**(新增 `App/FpsOverlayTests.cs` 3 条:出厂默认关 / 默认不可见且钉右下角且跟着开关走 / 开关真落盘);`--smoke` 三张真渲染图逐张核过 —— 关:左栏底部开关为关、右下角无角标;开:开关变绿 + 右下角出现 `5 FPS`;深色照片壁纸下白字深底仍可读。
+- 遗留:界面完全静止时 Avalonia 不出帧,读数会偏低/停住(恒定刷新要每帧 `InvalidateVisual`,代价是常态 CPU,不做);该行文案未走词表(英文界面下仍中文,与本页既有写法一致);只挂主窗口,对话框不显示。

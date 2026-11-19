@@ -184,6 +184,9 @@ public sealed partial class SettingsPage : PageBase
     private readonly Button _aiKeyReset;
     private readonly List<Control> _aiCustomRows = new();
 
+    // ── 角落:排障小开关(埋在左导航栏最底部,不占任何设置区块、不进布局方案) ──
+    private readonly CheckBox _fps = UiClass.Switch();
+
     // ── 状态 ──
     private string _lang0 = "";
     private string _gameDir0 = "";
@@ -234,6 +237,14 @@ public sealed partial class SettingsPage : PageBase
         _dark.IsCheckedChanged += (_, _) => { if (!_sync) ApplyDark(_dark.IsChecked == true); };
         _bg.SelectionChanged += (_, _) => { if (!_sync) ApplyVisuals(); };
         _motion.IsCheckedChanged += (_, _) => Motion.Enabled = _motion.IsChecked == true;
+
+        // 帧率角标:立即生效 + 立即落盘(不走 500ms 防抖 —— 用户点完就关窗口也不该丢)。
+        // 装载回填发生在 _sync=true 的窗口里,那种改动不写盘(见 SettingsPage.SaveLoad.LoadAsync)。
+        _fps.IsCheckedChanged += (_, _) =>
+        {
+            if (_sync) return;
+            FpsOverlay.SetEnabled(_fps.IsChecked == true);
+        };
 
         // 主题色联动（B0 ThemeService 派生 24+3 键）
         ThemeService.VisualsChanged += SyncAppearanceControls;
@@ -370,6 +381,15 @@ public sealed partial class SettingsPage : PageBase
             _saveState.M(12, 10, 0, 0));
         nav.Margin = new Thickness(12, 16, 0, 12);
 
+        // 「显示帧率」埋在左下角(默认关):排障用,刻意不做成设置区块 —— 不占 BlockHost 布局、
+        // 不进主题包 / 布局方案,也不在任何页签的正文里,只有往左栏底下看一眼才发现。
+        var fpsRow = UiClass.H(6, _fps, UiClass.Small("显示帧率").VCenter());
+        fpsRow.Margin = new Thickness(12, 4, 8, 4);
+        ToolTip.SetTip(_fps, "在窗口右下角显示界面帧率(排障用)");
+        var navColumn = UiClass.G("Auto,*,Auto");
+        navColumn.Add(nav, 0, 0);
+        navColumn.Add(fpsRow, 2, 0);
+
         // R32-LINSPLIT:左导航 168px(现状值)+ 18px 分隔条 + 视图。
         // 分隔条占住视图本来就有的 18px 左留白(_view 左移 18px 回到原位)⇒ 首屏逐像素不变。
         // **[Linux 与 Windows 的唯一差别】Windows 的 `_views[]` 顶层没有外边距(18px 在 SettingsPage
@@ -382,7 +402,7 @@ public sealed partial class SettingsPage : PageBase
         // 比例存 v2 splits["settings"]["nav"];双击分隔条复位。
         var root = new PageLayoutHost("settings", "nav", new GridLength(168.0), new GridLength(1.0, GridUnitType.Star));
         _view.Margin = new Thickness(-18.0, 0.0, 0.0, 0.0);
-        root.SetLeft(nav);
+        root.SetLeft(navColumn);
         root.SetRight(_view);
         Body = root;
 

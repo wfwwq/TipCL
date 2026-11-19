@@ -152,6 +152,10 @@ public sealed partial class SettingsPage
             _multi.IsChecked = await Api.TryCallAsync("allow_multi_instance", false);
             await ReloadLanguagesAsync();
             _motion.IsChecked = Motion.Enabled;
+            // 帧率角标(默认关):回填开关 + 让角标按配置跟上(这里只改运行态不写盘)
+            bool fpsOn = FpsOverlay.ReadConfig();
+            _fps.IsChecked = fpsOn;
+            FpsOverlay.Apply(fpsOn);
             _fly.IsChecked = _extras.FlyAnimation;
             _flyDur.Value = Math.Clamp(_extras.FlyDurationMs, 200, 1200);
             _flyDurLbl.Text = $"{(int)_flyDur.Value} ms";
@@ -219,7 +223,7 @@ public sealed partial class SettingsPage
 
     private void WireAutoSave()
     {
-        foreach (var c in new[] { _dark, _motion, _fly, _proxy, _shareLib, _shareAssets, _multi, _autoUpdate, _bgShuffle })
+        foreach (var c in new[] { _dark, _motion, _fly, _proxy, _shareLib, _shareAssets, _multi, _autoUpdate, _bgShuffle, _fps })
             c.IsCheckedChanged += (_, _) => QueueSave();
         foreach (var c in new[] { _bg, _src, _comm, _inst, _iso, _gc, _win, _vis, _home, _lang, _aiMode, _aiModel })
             c.SelectionChanged += (_, _) => QueueSave();
@@ -350,6 +354,7 @@ public sealed partial class SettingsPage
             ["theme_color"] = _color,
             ["ui_bg_preset"] = KeyOf(_bg),
             ["ui_motion"] = Py.Box(_motion.IsChecked == true),
+            ["ui_show_fps"] = Py.Box(_fps.IsChecked == true),
             ["ui_fly_animation"] = Py.Box(_fly.IsChecked == true),
             ["ui_fly_duration_ms"] = Py.Box((int)_flyDur.Value),
             ["game_dir"] = _gameDir0,

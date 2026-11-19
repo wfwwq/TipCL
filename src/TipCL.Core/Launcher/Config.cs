@@ -148,6 +148,8 @@ public static class Config
 		pyDict["ui_fly_animation"] = true;
 		pyDict["ui_fly_duration_ms"] = 620L;
 		pyDict["ui_motion"] = true;
+		// 界面帧率角标(排障用):默认关。开关在设置页左导航栏底部,见 App/Common/FpsOverlay.cs
+		pyDict["ui_show_fps"] = false;
 		pyDict["ui_layout"] = null;
 		pyDict["ui_layouts"] = new PyDict();
 		pyDict["ui_layout_profile"] = "";

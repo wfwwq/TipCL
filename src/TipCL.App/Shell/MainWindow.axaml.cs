@@ -41,6 +41,9 @@ public partial class MainWindow : Window
         catch { }
         SetDark(savedDark);
         Navigate("launch", instant: true);
+        // 帧率角标(FPS,默认关):配置里 ui_show_fps 开着才可见;开关埋在设置页左导航栏底部。
+        // 关着的时候只塞一个 IsVisible=false 的小 Border,不注册渲染回调、不参与布局 ⇒ 零开销。
+        TipCL.App.Common.FpsOverlay.Attach(this);
         // 标题栏账号钮跟随当前账号(账号增删/切换由 ui_changed 事件驱动);
         // crash = 游戏异常退出,弹崩溃界面(M4-H P4)
         TipCL.App.Common.InProcessApi.Instance.BridgeEvent += ev =>
