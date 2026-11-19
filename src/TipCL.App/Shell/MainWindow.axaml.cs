@@ -8,6 +8,7 @@ using Avalonia.Styling;
 using TipCL.App.Pages;
 using TipCL.App.Pages.Launch;
 using TipCL.App.Pages.Download;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Shell;
 
@@ -247,7 +248,7 @@ public partial class MainWindow : Window
                 return;
             }
             string body = ("TipCL " + TipCL.Core.Py.S(info["latest"]) + " 已发布。\n" + TipCL.Core.Py.S(info["notes"])).Trim();
-            if (await TipCL.App.Common.Dlg.Confirm("发现新版本", body + "\n\n现在下载更新?下载完会提示你重启。", "下载更新", "以后再说"))
+            if (await TipCL.App.Common.Dlg.Confirm(I18nCore.Tr("发现新版本"), body + "\n\n现在下载更新?下载完会提示你重启。", I18nCore.Tr("下载更新"), I18nCore.Tr("以后再说")))
                 await TipCL.App.Common.SelfUpdate.StartAsync(TipCL.App.Common.InProcessApi.Instance,
                     (t, b, k) => TipCL.App.Common.ToastHost.Show(t, b, k));
         }
@@ -268,7 +269,7 @@ public partial class MainWindow : Window
     private async Task OfferRestartForUpdateAsync(string package, string version)
     {
         if (string.IsNullOrWhiteSpace(package)) return;
-        bool now = await TipCL.App.Common.Dlg.Confirm("更新已下载", "重启 TipCL 即可更新到 " + (version.Length > 0 ? version : "新版本") + "。", "立即重启", "稍后重启");
+        bool now = await TipCL.App.Common.Dlg.Confirm(I18nCore.Tr("更新已下载"), "重启 TipCL 即可更新到 " + (version.Length > 0 ? version : "新版本") + "。", I18nCore.Tr("立即重启"), "稍后重启");
         try
         {
             TipCL.Core.PyDict? res = await TipCL.App.Common.InProcessApi.Instance.TryCallAsync<TipCL.Core.PyDict>("apply_update",
@@ -288,12 +289,12 @@ public partial class MainWindow : Window
             }
             else
             {
-                TipCL.App.Common.ToastHost.Show("更新已就绪", mode == "appimage" ? "下次打开就是新版" : "重启启动器即可生效", TipCL.App.Common.ToastKind.Success);
+                TipCL.App.Common.ToastHost.Show(I18nCore.Tr("更新已就绪"), mode == "appimage" ? "下次打开就是新版" : "重启启动器即可生效", TipCL.App.Common.ToastKind.Success);
             }
         }
         catch (Exception ex)
         {
-            TipCL.App.Common.ToastHost.Show("更新失败", ex.Message, TipCL.App.Common.ToastKind.Error);
+            TipCL.App.Common.ToastHost.Show(I18nCore.Tr("更新失败"), ex.Message, TipCL.App.Common.ToastKind.Error);
         }
     }
 

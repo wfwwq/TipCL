@@ -24,31 +24,31 @@ namespace TipCL.App.Pages.Feedback;
 /// <summary>反馈与帮助子页。</summary>
 internal sealed class FeedbackView : SettingsSubView
 {
-    private static readonly string[] Categories = { "问题反馈", "功能建议", "崩溃报告", "其它" };
+    private static readonly string[] Categories = { "问题反馈", "功能建议", "崩溃报告", I18nCore.Tr("其它") };
 
     private readonly ComboBox _cat = UiClass.Combo(Categories, "问题反馈", 160);
-    private readonly TextBox _title = UiClass.Input("一句话说清问题");
+    private readonly TextBox _title = UiClass.Input(I18nCore.Tr("一句话说清问题"));
     private readonly TextBox _body = UiClass.Multi("详细描述:怎么触发的、期望是什么", "", 130);
     private readonly TextBox _contact = UiClass.Input("联系方式(可空)");
     private readonly CheckBox _sys = UiClass.Check("附带系统信息(显卡 / 内存 / Java)", true);
     private readonly StackPanel _attachList = UiClass.V(4);
     private readonly StackPanel _history = UiClass.V(6);
     private readonly StackPanel _articles = UiClass.V(6);
-    private readonly TextBox _search = UiClass.Input("搜索帮助文章");
+    private readonly TextBox _search = UiClass.Input(I18nCore.Tr("搜索帮助文章"));
     private readonly List<string> _attachments = new();
 
-    public FeedbackView() : base("settings:feedback", "反馈与帮助", "遇到问题先看帮助,解决不了再提反馈")
+    public FeedbackView() : base("settings:feedback", I18nCore.Tr("反馈与帮助"), "遇到问题先看帮助,解决不了再提反馈")
     {
         // ── 提交反馈 ──
-        var submit = U.Btn("提交反馈", BtnKind.Primary, (_, _) => Run(SubmitAsync, "提交失败"), "Send");
-        var sysInfo = U.Btn("查看系统信息", BtnKind.Chip, (_, _) => Run(SysInfoAsync, "读取失败"), "Info");
-        var attach = U.Btn("添加附件", BtnKind.Chip, (_, _) => Run(async () => { await AttachAsync(); }, "附件没能上传"), "Import");
+        var submit = U.Btn(I18nCore.Tr("提交反馈"), BtnKind.Primary, (_, _) => Run(SubmitAsync, I18nCore.Tr("提交失败")), "Send");
+        var sysInfo = U.Btn(I18nCore.Tr("查看系统信息"), BtnKind.Chip, (_, _) => Run(SysInfoAsync, I18nCore.Tr("读取失败")), "Info");
+        var attach = U.Btn(I18nCore.Tr("添加附件"), BtnKind.Chip, (_, _) => Run(async () => { await AttachAsync(); }, I18nCore.Tr("附件没能上传")), "Import");
         var form = UiClass.V(10,
-            UiClass.Section("提交反馈", "会发到开发者的反馈服务,不含账号密码"),
-            UiClass.Field("类型", _cat, null, 74),
-            UiClass.Field("标题", _title, null, 74),
+            UiClass.Section(I18nCore.Tr("提交反馈"), "会发到开发者的反馈服务,不含账号密码"),
+            UiClass.Field(I18nCore.Tr("类型"), _cat, null, 74),
+            UiClass.Field(I18nCore.Tr("标题"), _title, null, 74),
             _body,
-            UiClass.Field("联系方式", _contact, null, 74),
+            UiClass.Field(I18nCore.Tr("联系方式"), _contact, null, 74),
             _sys,
             _attachList,
             UiClass.H(8, submit, attach, sysInfo));
@@ -57,20 +57,20 @@ internal sealed class FeedbackView : SettingsSubView
         var formCard = UiClass.Card(form, 14);
 
         // ── 我提交过的 ──
-        var historyCard = UiClass.Card(UiClass.V(10, UiClass.Section("我提交过的"), _history), 14);
+        var historyCard = UiClass.Card(UiClass.V(10, UiClass.Section(I18nCore.Tr("我提交过的")), _history), 14);
 
         // ── 常见问题 ──
-        _search.TextChanged += (_, _) => Run(() => LoadArticlesAsync(_search.Text), "读取失败");
+        _search.TextChanged += (_, _) => Run(() => LoadArticlesAsync(_search.Text), I18nCore.Tr("读取失败"));
         var searchRow = UiClass.G(null, "*,Auto");
         searchRow.Add(_search, 0, 0);
         var runWizard = U.Btn("重新运行向导", BtnKind.Chip, (_, _) => Run(FirstRunWizard.ShowAsync), "Rocket");
         runWizard.M(8, 0, 0, 0).VCenter();
         searchRow.Add(runWizard, 0, 1);
         var faqCard = UiClass.Card(UiClass.V(10,
-            UiClass.Section("常见问题", "启动、Java、模组、账号、联机的快速说明(点标题展开)"),
+            UiClass.Section(I18nCore.Tr("常见问题"), "启动、Java、模组、账号、联机的快速说明(点标题展开)"),
             searchRow, _articles), 14);
         var aboutCard = UiClass.Card(UiClass.V(10,
-            UiClass.Section("关于", "TipCL · AI 原生 Minecraft 启动器"),
+            UiClass.Section(I18nCore.Tr("关于"), "TipCL · AI 原生 Minecraft 启动器"),
             UiClass.Small($"启动器版本 {TipCL.Core.Launcher.AppInfo.APP_VERSION}"),
             UiClass.Small($"数据目录 {Utils.ROOT}").Wrap()), 14);
 
@@ -80,8 +80,8 @@ internal sealed class FeedbackView : SettingsSubView
         //      Linux 这页历史上就是单列,本树也没有 PageLayoutHost ⇒ 单列;
         //   2) 「关于」卡留在 content 里,不另建 settings:about 宿主(§2.1-10 的方案 B)——
         //      这样设置内层 #6 的首屏顺序与改动前完全一致(方案 A 会把标题行挤到「关于」下面)。
-        UseBlockHost("feedback", "header", "反馈与帮助",
-            ("content", "内容", UiClass.V(10, formCard, historyCard, faqCard, aboutCard)));
+        UseBlockHost("feedback", "header", I18nCore.Tr("反馈与帮助"),
+            ("content", I18nCore.Tr("内容"), UiClass.V(10, formCard, historyCard, faqCard, aboutCard)));
     }
 
     protected override async Task LoadCoreAsync()
@@ -98,7 +98,7 @@ internal sealed class FeedbackView : SettingsSubView
         var rows = await Api.TryCallAsync<List<object?>>("feedback_history", null) ?? new();
         if (rows.Count == 0)
         {
-            _history.Children.Add(UiClass.Muted("还没有提交记录"));
+            _history.Children.Add(UiClass.Muted(I18nCore.Tr("还没有提交记录")));
             return;
         }
         foreach (var item in rows.Take(20))
@@ -111,7 +111,7 @@ internal sealed class FeedbackView : SettingsSubView
             col.VCenter();
             grid.Add(col, 0, 0);
             bool ok = Py.Truthy(d.Get("ok", true));
-            grid.Add(UiClass.Tag(ok ? "已提交" : "提交失败").VCenter(), 0, 1);
+            grid.Add(UiClass.Tag(ok ? I18nCore.Tr("已提交") : I18nCore.Tr("提交失败")).VCenter(), 0, 1);
             _history.Children.Add(grid);
         }
     }
@@ -124,7 +124,7 @@ internal sealed class FeedbackView : SettingsSubView
         var rows = await Api.TryCallAsync<List<object?>>("help_articles", null, new { query = query ?? "" }) ?? new();
         if (rows.Count == 0)
         {
-            _articles.Children.Add(UiClass.Muted("没有匹配的文章"));
+            _articles.Children.Add(UiClass.Muted(I18nCore.Tr("没有匹配的文章")));
             return;
         }
         foreach (var item in rows.Take(30))
@@ -140,7 +140,7 @@ internal sealed class FeedbackView : SettingsSubView
             btn.HorizontalContentAlignment = HorizontalAlignment.Left;
             btn.Padding = new Avalonia.Thickness(8, 6, 8, 7);
             btn.HorizontalAlignment = HorizontalAlignment.Stretch;
-            btn.Click += (_, _) => Run(() => ToggleArticleAsync(id, text), "读取失败");
+            btn.Click += (_, _) => Run(() => ToggleArticleAsync(id, text), I18nCore.Tr("读取失败"));
             _articles.Children.Add(UiClass.V(2, btn, text));
         }
     }
@@ -157,7 +157,7 @@ internal sealed class FeedbackView : SettingsSubView
             var art = await Api.TryCallAsync<PyDict>("help_article", null, new { article_id = id });
             body.Text = art == null ? "" : Py.S(art.Get("body"));
         }
-        body.Text = string.IsNullOrEmpty(body.Text) ? "暂无内容" : body.Text;
+        body.Text = string.IsNullOrEmpty(body.Text) ? I18nCore.Tr("暂无内容") : body.Text;
         body.IsVisible = true;
     }
 
@@ -167,16 +167,16 @@ internal sealed class FeedbackView : SettingsSubView
     {
         if (string.IsNullOrWhiteSpace(_title.Text))
         {
-            Toast("标题不能为空", "", ToastKind.Warning);
+            Toast(I18nCore.Tr("标题不能为空"), "", ToastKind.Warning);
             return;
         }
         // 同意门(照 D-14):没同意过就先问,否则 Core 会直接抛「需要先同意上传诊断数据」
         bool consent = await Api.TryCallAsync<bool>("feedback_has_consent", false);
         if (!consent)
         {
-            bool allow = await Dlg.Confirm("是否上传诊断数据",
+            bool allow = await Dlg.Confirm(I18nCore.Tr("是否上传诊断数据"),
                 "同意后才会向开发者上传:\n· 你提交的反馈内容\n· 本机配置(CPU / 内存 / 显卡 / Java / 已装版本)\n\n暂不同意则不会上传。",
-                "同意", "暂不同意");
+                I18nCore.Tr("同意"), I18nCore.Tr("暂不同意"));
             await Api.CallAsync<PyDict>("feedback_consent", new { allow });
             if (!allow)
             {
@@ -193,14 +193,14 @@ internal sealed class FeedbackView : SettingsSubView
         {
             var res = await Api.CallAsync<PyDict>("submit_feedback", new
             {
-                category = MapCategory(_cat.SelectedItem as string ?? "其它"),
+                category = MapCategory(_cat.SelectedItem as string ?? I18nCore.Tr("其它")),
                 title = _title.Text.Trim(),
                 body,
                 contact = _contact.Text?.Trim() ?? "",
                 include_sysinfo = _sys.IsChecked == true,
             });
             string message = res == null ? "" : Py.S(res.Get("message"));
-            Toast("已提交", message, ToastKind.Success);
+            Toast(I18nCore.Tr("已提交"), message, ToastKind.Success);
             _title.Text = "";
             _body.Text = "";
             _attachments.Clear();
@@ -210,7 +210,7 @@ internal sealed class FeedbackView : SettingsSubView
         catch (Exception ex)
         {
             // 把服务器原话显示出来(403/400 要看得见,不能伪装成「后端没做」)
-            Toast("提交失败", ex.Message, ToastKind.Error);
+            Toast(I18nCore.Tr("提交失败"), ex.Message, ToastKind.Error);
         }
     }
 
@@ -227,7 +227,7 @@ internal sealed class FeedbackView : SettingsSubView
     {
         var info = await Api.TryCallAsync<PyDict>("collect_sysinfo", null, new { force = true, scan_system_java = true });
         string text = await Api.TryCallAsync<string>("sysinfo_text", "", new { info }) ?? "";
-        await Dlg.Alert("系统信息", text);
+        await Dlg.Alert(I18nCore.Tr("系统信息"), text);
     }
 
     /// <summary>
@@ -236,7 +236,7 @@ internal sealed class FeedbackView : SettingsSubView
     /// </summary>
     public async Task AttachAsync()
     {
-        var files = await Dlg.PickFiles("添加附件", "*.png", "*.jpg", "*.log", "*.txt");
+        var files = await Dlg.PickFiles(I18nCore.Tr("添加附件"), "*.png", "*.jpg", "*.log", "*.txt");
         await AttachFilesAsync(files);
     }
 
@@ -260,7 +260,7 @@ internal sealed class FeedbackView : SettingsSubView
                     // 单个文件:与改动前逐字一致(「读不了这个文件」+ 文件名:原因),且不重画附件列表
                     if (batch.Total == 1)
                     {
-                        Toast("读不了这个文件", $"{name}:{ex.Message}", ToastKind.Warning);
+                        Toast(I18nCore.Tr("读不了这个文件"), $"{name}:{ex.Message}", ToastKind.Warning);
                         return batch;
                     }
                     batch.Failure(name, ex.Message);
@@ -270,7 +270,7 @@ internal sealed class FeedbackView : SettingsSubView
                 {
                     if (batch.Total == 1)
                     {
-                        Toast("跳过空文件", name, ToastKind.Warning);
+                        Toast(I18nCore.Tr("跳过空文件"), name, ToastKind.Warning);
                         return batch;
                     }
                     batch.Failure(name, "空文件");
@@ -310,7 +310,7 @@ internal sealed class FeedbackView : SettingsSubView
             string path = stored;
             var grid = UiClass.G(null, "*,Auto");
             grid.Add(UiClass.Small(Path.GetFileName(path)).Ellipsis().VCenter(), 0, 0);
-            var rm = UiClass.Btn("移除", BtnKind.Ghost);
+            var rm = UiClass.Btn(I18nCore.Tr("移除"), BtnKind.Ghost);
             rm.Click += (_, _) =>
             {
                 _attachments.Remove(path);

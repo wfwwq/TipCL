@@ -15,6 +15,7 @@ using TipCL.App.Ui;
 using TipCL.App.Common;
 using TipCL.Core.Launcher.Ai;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -39,7 +40,7 @@ internal sealed class StepGroup : Border
 
     public StepGroup()
     {
-        _title = UiClass.Txt("正在执行", 12.5, true, "B.Ink");
+        _title = UiClass.Txt(I18nCore.Tr("正在执行"), 12.5, true, "B.Ink");
         _title.TextTrimming = TextTrimming.CharacterEllipsis;
         _count = UiClass.Txt("", 12, false, "B.InkFaint");
         _chev = AiIcons.Icon(AiIcons.ChevDown, 14, "B.InkFaint");

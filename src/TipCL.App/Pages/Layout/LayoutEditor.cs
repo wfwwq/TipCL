@@ -940,8 +940,8 @@ public sealed class LayoutEditor
 		LayoutEditPrefs.AutoPack = !LayoutEditPrefs.AutoPack;
 		RefreshToolbar();
 		LayoutFx.ShowToast(
-			I18nCore.Tr(LayoutEditPrefs.AutoPack ? "自动靠拢已开启" : "自动靠拢已关闭"),
-			I18nCore.Tr(LayoutEditPrefs.AutoPack ? "区块松手后会自动靠拢相邻区块" : "区块会停在你放下的位置"),
+			I18nCore.Tr(LayoutEditPrefs.AutoPack ? I18nCore.Tr("自动靠拢已开启") : I18nCore.Tr("自动靠拢已关闭")),
+			I18nCore.Tr(LayoutEditPrefs.AutoPack ? I18nCore.Tr("区块松手后会自动靠拢相邻区块") : I18nCore.Tr("区块会停在你放下的位置")),
 			ToastKind.Success);
 	}
 
@@ -1334,6 +1334,8 @@ public sealed class LayoutEditor
 			}
 		}
 		card.Opacity = 0.75;
+		// [audit/B] stack 丝滑:起手先浮起(按像素跟手;关了动画或非单列时是空操作)
+		BeginStackFloat(card, e);
 		// [Avalonia] CaptureMouse/LostMouseCapture → e.Pointer.Capture(src) + PointerCaptureLost
 		// (仓库既有先例:Pages/Layout/BlockHost.cs:333-392)
 		src.PointerMoved += OnDragMove;
@@ -1362,6 +1364,21 @@ public sealed class LayoutEditor
 			return;
 		}
 		double y = e.GetPosition(_list).Y;
+		if (_stackFloat)
+		{
+			// [audit/B] 丝滑版:每帧只动被拖卡片的 RenderTransform(零布局);换位判定带 6px 滞回,
+			// 只有"确实越过相邻块中点 ±H"才动模型 + 搬元素 + 给其余块补 FLIP(与 Windows 同序)。
+			_stackPointerYLive = y;
+			MoveStackFloat();
+			AutoScrollNearEdgeStack(y);
+			int target = StackDragPlan.TargetIndex(_state.VisibleIds(), _dragHeights, _state.Page.Gap, y, before);
+			if (target != before)
+			{
+				ApplyStackReorder(id, target);
+			}
+			return;
+		}
+		// 浮起关闭(Motion 关 / 非单列):保持原来的"交换即落位"
 		// 一次移动可能跨多格:纯模型层按"相邻块中点"逐格比较(算法移植自旧 BlockHost.OnDragMove)
 		_state.DragReorder(id, y, _dragHeights);
 		if (_state.VisibleIndexOf(id) != before)
@@ -1384,6 +1401,9 @@ public sealed class LayoutEditor
 	{
 		LayoutCard? card = _dragCard;
 		PageLayoutV2? before = _dragBefore;
+		// [audit/B] 先收浮起拿到"松手那一刻的位移",再走统一收尾,最后补落位动画
+		// (顺序反了的话落位动画会被收尾逻辑立刻清掉 —— 松手"啪"一下归位,没有收敛感)
+		double settleFrom = StopStackFloat();
 		_dragCard = null;
 		_dragBefore = null;
 		if (sender is InputElement src)
@@ -1400,6 +1420,7 @@ public sealed class LayoutEditor
 			return;
 		}
 		card.Opacity = 1.0;
+		StartStackSettle(card, settleFrom);
 		if (SameOrder(_dragOrder, _state.Order))
 		{
 			return;
@@ -1423,6 +1444,254 @@ public sealed class LayoutEditor
 			}
 		}
 		return true;
+	}
+
+	// ————————————— stack 浮起跟手(丝滑版,对齐 Windows LayoutEditor.BeginStackFloat 等) —————————————
+	//
+	// 拖动时被拖卡片按像素跟手(RenderTransform 位移,零布局),跨中点(带 6px 滞回)才换位;
+	// 换位时其余块用 160ms 的 FLIP 从旧位置滑到新位置,松手后落位动画收敛。
+	// 记账:换位会把被拖卡片的"格子位置"搬走一格(元素被 Insert 到新下标),视觉上会瞬移,
+	// 所以每次换位后把"格子位置的变化量"累进 _stackFloatBase 并加到它的 translate 上,
+	// 让它停在你手指下面不动 —— 与 GridCanvasPanel 的 FLIP 是同一套补偿思路。
+
+	/// <summary>是否处于 stack 浮起拖拽(仅单列 + 动画开启)。</summary>
+	private bool _stackFloat;
+
+	/// <summary>被拖卡片身上那个专用的平移(只由本文件创建/销毁)。</summary>
+	private TranslateTransform? _stackFloatTt;
+
+	/// <summary>起手时指针在 _list 内的 y。</summary>
+	private double _stackPointerY;
+
+	/// <summary>当前指针在 _list 内的 y(指针事件与自动滚动都会更新它)。</summary>
+	private double _stackPointerYLive;
+
+	/// <summary>换位补偿累加到被拖卡片上的基准位移。</summary>
+	private double _stackFloatBase;
+
+	/// <summary>换位前各卡片在 _list 内的 top(FLIP 用)。</summary>
+	private readonly Dictionary<string, double> _stackTopsBefore = new Dictionary<string, double>(StringComparer.Ordinal);
+
+	/// <summary>stack 拖拽的边缘自动滚动计时器(只在浮起时运行)。</summary>
+	private DispatcherTimer? _stackScroll;
+
+	private int _stackAutoDir;
+
+	private double _stackAutoStep;
+
+	private void BeginStackFloat(LayoutCard card, PointerPressedEventArgs e)
+	{
+		_stackFloat = false;
+		if (!Motion.Enabled || !_state.Plan().IsSingleColumn)
+		{
+			return; // 多列 / 关了动画:走原来的"交换即落位",行为逐像素不变
+		}
+		_stackFloat = true;
+		_stackPointerY = e.GetPosition(_list).Y;
+		_stackPointerYLive = _stackPointerY;
+		_stackFloatBase = 0.0;
+		TranslateTransform tt = new TranslateTransform();
+		card.RenderTransform = tt;
+		_stackFloatTt = tt;
+		card.ZIndex = 1000;
+	}
+
+	// 指针 → 卡片位移(只写 RenderTransform,不触发布局)
+	private void MoveStackFloat()
+	{
+		TranslateTransform? tt = _stackFloatTt;
+		if (tt == null)
+		{
+			return;
+		}
+		tt.Y = _stackFloatBase + (_stackPointerYLive - _stackPointerY);
+	}
+
+	// 换位:模型动一格 → 元素搬到新下标 → 其余块 FLIP;被拖块用基准位移抵消格子移动
+	private void ApplyStackReorder(string id, int target)
+	{
+		CaptureStackTops();
+		if (!_state.MoveVisibleTo(id, target))
+		{
+			return;
+		}
+		InsertVisual(id);
+		FlipStackCards();
+	}
+
+	private void CaptureStackTops()
+	{
+		_stackTopsBefore.Clear();
+		foreach (Control child in _list.Children)
+		{
+			if (child is not LayoutCard card || string.IsNullOrEmpty(card.Spec?.Id))
+			{
+				continue;
+			}
+			Point? top = card.TranslatePoint(new Point(0.0, 0.0), _list);
+			if (top.HasValue)
+			{
+				_stackTopsBefore[card.Spec.Id] = top.Value.Y;
+			}
+		}
+	}
+
+	private void FlipStackCards()
+	{
+		foreach (KeyValuePair<string, double> item in _stackTopsBefore)
+		{
+			if (!_cards.TryGetValue(item.Key, out LayoutCard? card) || card == null)
+			{
+				continue;
+			}
+			Point? now = card.TranslatePoint(new Point(0.0, 0.0), _list);
+			if (!now.HasValue)
+			{
+				continue;
+			}
+			double delta = item.Value - now.Value.Y;
+			if (Math.Abs(delta) < 1.0)
+			{
+				continue;
+			}
+			if (ReferenceEquals(card, _dragCard))
+			{
+				// 被拖卡片:把格子位置的跳变折进基准位移,视觉上纹丝不动
+				_stackFloatBase += delta;
+				MoveStackFloat();
+				continue;
+			}
+			StackFlipOnce(card, delta);
+		}
+	}
+
+	// 让位动画:先挂上"看起来还在旧位置"的偏移,再 ease-out 归零(补间驱动复用 LayoutTween)
+	private void StackFlipOnce(LayoutCard card, double delta)
+	{
+		LayoutTween.Start(_list, card, LayoutMotion.FlipMs, delegate(double p)
+		{
+			LayoutMotion.SetOffset(card, 0.0, delta * (1.0 - LayoutMotion.EaseOutCubic(p)));
+		});
+	}
+
+	// 收掉浮起状态,返回"松手那一刻的 translate.Y"(给落位动画当起点);不动画、不落盘。
+	private double StopStackFloat()
+	{
+		StopStackAutoScroll();
+		if (!_stackFloat)
+		{
+			return 0.0;
+		}
+		_stackFloat = false;
+		TranslateTransform? tt = _stackFloatTt;
+		_stackFloatTt = null;
+		LayoutCard? card = _dragCard;
+		if (card == null || tt == null)
+		{
+			return 0.0;
+		}
+		double from = tt.Y;
+		card.ZIndex = 0;
+		card.RenderTransform = null;
+		return from;
+	}
+
+	// 落位动画:从"手指位置"滑回它自己的格子(在收尾之后调,避免被收尾逻辑清掉)
+	private void StartStackSettle(LayoutCard card, double from)
+	{
+		if (!Motion.Enabled || Math.Abs(from) < 1.0)
+		{
+			return;
+		}
+		LayoutTween.Start(_list, card, LayoutMotion.DropMs, delegate(double p)
+		{
+			LayoutMotion.SetOffset(card, 0.0, from * (1.0 - LayoutMotion.EaseOutCubic(p)));
+		});
+	}
+
+	// stack 拖拽的边缘自动滚动:靠近可视区上下边缘就把 _scroll 推一点,并把"滚了多少"折回指针内容坐标
+	private void AutoScrollNearEdgeStack(double pointerY)
+	{
+		if (!_stackFloat)
+		{
+			return;
+		}
+		double height = _scroll.Bounds.Height;
+		if (height <= 1.0 || _scroll.ScrollBarMaximum.Y <= 0.5)
+		{
+			StopStackAutoScroll();
+			return;
+		}
+		double inViewport = pointerY + _list.Margin.Top - _scroll.Offset.Y;
+		double step = StackDragPlan.EdgeScrollStep(height, inViewport, 36.0, 18.0);
+		if (step <= 0.0)
+		{
+			StopStackAutoScroll();
+			return;
+		}
+		_stackAutoDir = (inViewport < height / 2.0) ? -1 : 1;
+		_stackAutoStep = step;
+		if (_stackScroll == null)
+		{
+			_stackScroll = new DispatcherTimer(DispatcherPriority.Input)
+			{
+				Interval = TimeSpan.FromMilliseconds(30.0)
+			};
+			_stackScroll.Tick += OnStackAutoScrollTick;
+		}
+		if (!_stackScroll.IsEnabled)
+		{
+			_stackScroll.Start();
+		}
+	}
+
+	private void StopStackAutoScroll()
+	{
+		_stackAutoDir = 0;
+		_stackAutoStep = 0.0;
+		if (_stackScroll != null && _stackScroll.IsEnabled)
+		{
+			_stackScroll.Stop();
+		}
+	}
+
+	private void OnStackAutoScrollTick(object? sender, EventArgs e)
+	{
+		LayoutCard? card = _dragCard;
+		if (!_stackFloat || card == null || _stackAutoDir == 0)
+		{
+			StopStackAutoScroll();
+			return;
+		}
+		double max = _scroll.ScrollBarMaximum.Y;
+		if (max <= 0.5)
+		{
+			StopStackAutoScroll();
+			return;
+		}
+		double before = _scroll.Offset.Y;
+		double to = Math.Max(0.0, Math.Min(max, before + _stackAutoDir * _stackAutoStep));
+		double moved = to - before;
+		if (Math.Abs(moved) < 0.01)
+		{
+			return;
+		}
+		_scroll.Offset = new Vector(_scroll.Offset.X, to);
+		// 物理指针没动,但它在列表里的位置跟着滚走了
+		_stackPointerYLive += moved;
+		MoveStackFloat();
+		string id = card.Spec.Id;
+		int index = _state.VisibleIndexOf(id);
+		if (index < 0)
+		{
+			StopStackAutoScroll();
+			return;
+		}
+		int target = StackDragPlan.TargetIndex(_state.VisibleIds(), _dragHeights, _state.Page.Gap, _stackPointerYLive, index);
+		if (target != index)
+		{
+			ApplyStackReorder(id, target);
+		}
 	}
 
 	// 把某块插回可视列表的正确位置(单列时的增量搬家;多列直接整体重排)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Common;
 
@@ -27,7 +28,7 @@ public sealed class TaskRow
 
     public string Title { get; set; } = "";
 
-    public string Status { get; set; } = "排队中…";
+    public string Status { get; set; } = I18nCore.Tr("排队中…");
 
     public string Speed { get; set; } = "";
 
@@ -220,7 +221,7 @@ public static class TaskStore
         row.Success = success;
         row.Indeterminate = false;
         row.Progress = success ? 100.0 : row.Progress;
-        row.Status = !string.IsNullOrEmpty(message) ? message : (success ? "已完成" : "失败");
+        row.Status = !string.IsNullOrEmpty(message) ? message : (success ? I18nCore.Tr("已完成") : I18nCore.Tr("失败"));
         row.Speed = "";
         Emit(() => { Updated?.Invoke(row); Changed?.Invoke(); });
     }

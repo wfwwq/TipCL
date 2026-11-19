@@ -12,6 +12,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher.Ai;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -20,21 +21,21 @@ internal sealed class AiMemoryPanel : Border
 {
     private readonly StackPanel _list = UiClass.V(4);
     private readonly TextBlock _count = UiClass.Muted("");
-    private readonly Button _clear = UiClass.Btn("清空全部", BtnKind.Danger);
+    private readonly Button _clear = UiClass.Btn(I18nCore.Tr("清空全部"), BtnKind.Danger);
 
     public AiMemoryPanel()
     {
         _clear.Click += async (_, _) =>
         {
-            if (await Dlg.Confirm("清空全部记忆?", "助手记下的偏好、配置和修好过的问题都会删除,无法恢复。", "清空", null, danger: true))
+            if (await Dlg.Confirm("清空全部记忆?", "助手记下的偏好、配置和修好过的问题都会删除,无法恢复。", I18nCore.Tr("清空"), null, danger: true))
             {
                 int n = FileMemory.Clear();
-                ToastHost.Show("已清空记忆", "删除了 " + n + " 条", ToastKind.Success);
+                ToastHost.Show(I18nCore.Tr("已清空记忆"), "删除了 " + n + " 条", ToastKind.Success);
                 Render();
             }
         };
         var add = UiClass.Btn("手动记一条", BtnKind.Chip, (_, _) => _ = AddAsync());
-        var refresh = UiClass.Btn("刷新", BtnKind.Chip, (_, _) => Render());
+        var refresh = UiClass.Btn(I18nCore.Tr("刷新"), BtnKind.Chip, (_, _) => Render());
 
         Child = UiClass.V(10,
             UiClass.Section("助手记住的事", "跨对话生效;新对话开始时会把最近的记忆带给助手",
@@ -47,7 +48,7 @@ internal sealed class AiMemoryPanel : Border
 
     private async System.Threading.Tasks.Task AddAsync()
     {
-        string? text = await Dlg.Prompt("记一条", "内容", "", "例如:我的电脑只有 8G 内存,默认给 3G");
+        string? text = await Dlg.Prompt("记一条", I18nCore.Tr("内容"), "", "例如:我的电脑只有 8G 内存,默认给 3G");
         if (string.IsNullOrWhiteSpace(text))
         {
             return;
@@ -78,15 +79,15 @@ internal sealed class AiMemoryPanel : Border
             var row = UiClass.G(null, "Auto,*,Auto,Auto");
             row.Add(UiClass.Txt(date, 11, false, "B.InkFaint").VCenter(), 0, 0);
             row.Add(text.VCenter(), 0, 1);
-            row.Add(UiClass.Btn("编辑", BtnKind.Chip, (_, _) => _ = EditAsync(index, entry, body)).VCenter(), 0, 2);
-            row.Add(UiClass.Btn("删除", BtnKind.Ghost, (_, _) => RemoveAt(index, entry)).VCenter(), 0, 3);
+            row.Add(UiClass.Btn(I18nCore.Tr("编辑"), BtnKind.Chip, (_, _) => _ = EditAsync(index, entry, body)).VCenter(), 0, 2);
+            row.Add(UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Ghost, (_, _) => RemoveAt(index, entry)).VCenter(), 0, 3);
             _list.Children.Add(UiClass.Pane(row, "B.Paper2", 8, 8));
         }
     }
 
     private async System.Threading.Tasks.Task EditAsync(int index, string entry, string body)
     {
-        string? edited = await Dlg.Prompt("编辑记忆", "内容", body);
+        string? edited = await Dlg.Prompt(I18nCore.Tr("编辑记忆"), I18nCore.Tr("内容"), body);
         if (edited == null)
         {
             return;
@@ -117,7 +118,7 @@ internal sealed class AiMemoryPanel : Border
         {
             return true;
         }
-        ToastHost.Show("记忆已变化", "文件刚被改过,已刷新列表", ToastKind.Warning);
+        ToastHost.Show(I18nCore.Tr("记忆已变化"), "文件刚被改过,已刷新列表", ToastKind.Warning);
         return false;
     }
 }

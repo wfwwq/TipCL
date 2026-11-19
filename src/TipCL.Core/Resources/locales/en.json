@@ -3058,5 +3058,6 @@
  "读取已安装列表失败": "Couldn't read the installed list",
  "添加离线账号先玩起来；微软 / 皮肤站登录在「账号」页": "Add an offline account to get started; Microsoft / skin-site sign-in is on the Account page",
  "读不到时长统计(playtime.json 可能损坏)，暂无数据": "Couldn't read playtime stats (playtime.json may be damaged)",
- "服务器列表读不出来(servers.dat 可能损坏或还没生成)，当前为空态展示": "Couldn't read the server list (servers.dat may be damaged or not created yet)"
+ "服务器列表读不出来(servers.dat 可能损坏或还没生成)，当前为空态展示": "Couldn't read the server list (servers.dat may be damaged or not created yet)",
+ "部分没能清理": "Some items couldn't be cleaned"
 }

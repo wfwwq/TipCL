@@ -3,6 +3,7 @@
 // BlockHost 宿主重新编排(见下方 [移植差异])。
 using System;
 using System.Collections.Generic;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Layout;
 
@@ -53,19 +54,19 @@ public static class LayoutBlockEntryCatalog
 	// 下载页 / 插件页的宿主只有在对应分段 / 页签被选中后才进可视树,所以 Segment / Tab 两个字段负责先切过去。
 	public static readonly Entry[] All =
 	{
-		new Entry { PageId = "settings:general", NavId = "settings", SettingsView = 0, Label = "通用" },
-		new Entry { PageId = "settings:network", NavId = "settings", SettingsView = 3, Label = "下载与网络", SingleBlock = true },
+		new Entry { PageId = "settings:general", NavId = "settings", SettingsView = 0, Label = I18nCore.Tr("通用") },
+		new Entry { PageId = "settings:network", NavId = "settings", SettingsView = 3, Label = I18nCore.Tr("下载与网络"), SingleBlock = true },
 		new Entry { PageId = "java", NavId = "settings", SettingsView = 2, Label = "Java" },
-		new Entry { PageId = "servers", NavId = "settings", SettingsView = 4, Label = "服务器" },
-		new Entry { PageId = "playtime", NavId = "settings", SettingsView = 5, Label = "游戏时长" },
-		new Entry { PageId = "feedback", NavId = "settings", SettingsView = 6, Label = "反馈与帮助" },
-		new Entry { PageId = "launch", NavId = "launch", Label = "启动" },
-		new Entry { PageId = "download", NavId = "download", Segment = 0, Label = "下载" },
-		new Entry { PageId = "account", NavId = "account", Label = "账号" },
-		new Entry { PageId = "multiplayer", NavId = "multiplayer", Label = "联机" },
-		new Entry { PageId = "tasks", NavId = "tasks", Label = "下载任务" },
-		new Entry { PageId = "library:main", NavId = "library", Label = "实例库" },
-		new Entry { PageId = "plugins", NavId = "plugins", Label = "插件" },
+		new Entry { PageId = "servers", NavId = "settings", SettingsView = 4, Label = I18nCore.Tr("服务器") },
+		new Entry { PageId = "playtime", NavId = "settings", SettingsView = 5, Label = I18nCore.Tr("游戏时长") },
+		new Entry { PageId = "feedback", NavId = "settings", SettingsView = 6, Label = I18nCore.Tr("反馈与帮助") },
+		new Entry { PageId = "launch", NavId = "launch", Label = I18nCore.Tr("启动") },
+		new Entry { PageId = "download", NavId = "download", Segment = 0, Label = I18nCore.Tr("下载") },
+		new Entry { PageId = "account", NavId = "account", Label = I18nCore.Tr("账号") },
+		new Entry { PageId = "multiplayer", NavId = "multiplayer", Label = I18nCore.Tr("联机") },
+		new Entry { PageId = "tasks", NavId = "tasks", Label = I18nCore.Tr("下载任务") },
+		new Entry { PageId = "library:main", NavId = "library", Label = I18nCore.Tr("实例库") },
+		new Entry { PageId = "plugins", NavId = "plugins", Label = I18nCore.Tr("插件") },
 		new Entry { PageId = "plugins:market", NavId = "plugins", Tab = "market", Label = "插件 · 市场" },
 		new Entry { PageId = "catalog:mod", NavId = "download", Segment = 1, Label = "资源目录 · Mod" },
 		new Entry { PageId = "catalog:modpack", NavId = "download", Segment = 2, Label = "资源目录 · 整合包" },
@@ -74,10 +75,10 @@ public static class LayoutBlockEntryCatalog
 		new Entry { PageId = "catalog:shader", NavId = "download", Segment = 5, Label = "资源目录 · 光影包" },
 		new Entry { PageId = "catalog:world", NavId = "download", Segment = 6, Label = "资源目录 · 世界" },
 		// [layout-fix 第三批] 新拆成区块的四页:AI 助手 / 版本安装 / 版本管理 / 设置 → 布局
-		new Entry { PageId = "ai", NavId = "ai", Label = "AI 助手" },
-		new Entry { PageId = "install", NavId = "download", Segment = 0, Label = "版本安装", NeedsContext = "先在「下载 → 原版」里点一个版本进入安装页,再在页面上右键「自定义布局...」" },
-		new Entry { PageId = "version-manage", NavId = "instance", Label = "版本管理" },
-		new Entry { PageId = "settings:layout", NavId = "settings", SettingsView = 7, Label = "设置 · 布局" },
+		new Entry { PageId = "ai", NavId = "ai", Label = I18nCore.Tr("AI 助手") },
+		new Entry { PageId = "install", NavId = "download", Segment = 0, Label = I18nCore.Tr("版本安装"), NeedsContext = I18nCore.Tr("先在「下载 → 原版」里点一个版本进入安装页,再在页面上右键「自定义布局...」") },
+		new Entry { PageId = "version-manage", NavId = "instance", Label = I18nCore.Tr("版本管理") },
+		new Entry { PageId = "settings:layout", NavId = "settings", SettingsView = 7, Label = I18nCore.Tr("设置 · 布局") },
 	};
 
 	/// <summary>只有单个区块的页面 id 集合(照 Windows:界面拿它换提示文案)。</summary>

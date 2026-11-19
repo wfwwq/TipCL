@@ -16,6 +16,7 @@ using TipCL.App.Common;
 using TipCL.Core;
 using TipCL.Core.Launcher.Ai;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -52,11 +53,11 @@ internal sealed class AiImageInput
         }
         var files = await host.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
         {
-            Title = "选择图片",
+            Title = I18nCore.Tr("选择图片"),
             AllowMultiple = true,
             FileTypeFilter = new[]
             {
-                new Avalonia.Platform.Storage.FilePickerFileType("图片")
+                new Avalonia.Platform.Storage.FilePickerFileType(I18nCore.Tr("图片"))
                 {
                     Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif", "*.bmp" },
                 },
@@ -85,7 +86,7 @@ internal sealed class AiImageInput
         }
         if (_paths.Count >= MaxImages)
         {
-            _toast("最多附 4 张图", "", ToastKind.Warning);
+            _toast(I18nCore.Tr("最多附 4 张图"), "", ToastKind.Warning);
             return false;
         }
         _paths.Add(path);

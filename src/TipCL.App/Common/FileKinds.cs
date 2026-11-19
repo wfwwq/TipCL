@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Common;
 
@@ -32,26 +33,26 @@ public static class FileKinds
 
     public static string Label(string kind) => kind switch
     {
-        Modpack => "整合包",
-        Mod => "模组",
-        ResourcePack => "资源包",
-        ShaderPack => "光影",
-        DataPack => "数据包",
-        World => "存档",
-        Skin => "皮肤",
-        Plugin => "TipCL 插件",
+        Modpack => I18nCore.Tr("整合包"),
+        Mod => I18nCore.Tr("模组"),
+        ResourcePack => I18nCore.Tr("资源包"),
+        ShaderPack => I18nCore.Tr("光影"),
+        DataPack => I18nCore.Tr("数据包"),
+        World => I18nCore.Tr("存档"),
+        Skin => I18nCore.Tr("皮肤"),
+        Plugin => I18nCore.Tr("TipCL 插件"),
         _ => kind,
     };
 
     public static string Action(string kind) => kind switch
     {
-        Modpack => "装成一个新版本",
+        Modpack => I18nCore.Tr("装成一个新版本"),
         Mod => "装进实例的 mods/",
         ResourcePack => "装进实例的 resourcepacks/",
         ShaderPack => "装进实例的 shaderpacks/",
         DataPack => "装进实例的 datapacks/",
         World => "装进实例的 saves/",
-        Skin => "设为离线账号的皮肤",
+        Skin => I18nCore.Tr("设为离线账号的皮肤"),
         Plugin => "安装到 TipCL 插件目录",
         _ => "不知道放哪儿",
     };

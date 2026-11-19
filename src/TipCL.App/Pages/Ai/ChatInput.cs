@@ -8,6 +8,7 @@ using TipCL.App.Common;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -16,9 +17,9 @@ internal sealed class ChatInput : Border
 {
     public TextBox Box { get; } = UiClass.Multi("问点什么…(Enter 发送,Shift+Enter 换行)", "", 72);
 
-    public Button Send { get; } = UiClass.Btn("发送", BtnKind.Primary);
+    public Button Send { get; } = UiClass.Btn(I18nCore.Tr("发送"), BtnKind.Primary);
 
-    public Button Stop { get; } = UiClass.Btn("停止", BtnKind.Ghost);
+    public Button Stop { get; } = UiClass.Btn(I18nCore.Tr("停止"), BtnKind.Ghost);
 
     public TextBlock Hint { get; } = UiClass.Small("");
 

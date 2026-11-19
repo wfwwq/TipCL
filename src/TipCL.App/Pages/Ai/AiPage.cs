@@ -24,6 +24,7 @@ using TipCL.Core;
 using TipCL.Core.Launcher.Ai;
 using UiClass = TipCL.App.Ui.Ui;
 using AppAiRisk = TipCL.Core.Launcher.Ai.AiRisk;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -76,7 +77,7 @@ public sealed class AiPage : PageBase
     private string _think = "";
     private string _text = "";
 
-    public AiPage() : base("ai", "AI 助手")
+    public AiPage() : base("ai", I18nCore.Tr("AI 助手"))
     {
         _runner = new ToolRunner(new ApiBackend())
         {
@@ -88,17 +89,17 @@ public sealed class AiPage : PageBase
             Log = line => Dispatcher.UIThread.Post(() => _status.Text = AiUiText.Trim(line, 48)),
         };
 
-        var permBtn = U.Btn("权限", BtnKind.Chip, (_, _) => OpenPermissionPanel(), "Shield");
-        var memoryBtn = U.Btn("记忆", BtnKind.Chip, (_, _) => OpenMemoryPanel(), "Star");
-        var clear = U.Btn("清空", BtnKind.Chip, (_, _) => Clear(), "Broom");
-        var settings = U.Btn("设置", BtnKind.Chip, (_, _) =>
+        var permBtn = U.Btn(I18nCore.Tr("权限"), BtnKind.Chip, (_, _) => OpenPermissionPanel(), "Shield");
+        var memoryBtn = U.Btn(I18nCore.Tr("记忆"), BtnKind.Chip, (_, _) => OpenMemoryPanel(), "Star");
+        var clear = U.Btn(I18nCore.Tr("清空"), BtnKind.Chip, (_, _) => Clear(), "Broom");
+        var settings = U.Btn(I18nCore.Tr("设置"), BtnKind.Chip, (_, _) =>
         {
             if (this.GetVisualRoot() is MainWindow w) w.Navigate("settings");
         }, "Gear");
         _usageLabel.VerticalAlignment = VerticalAlignment.Center;
         ToolTip.SetTip(_usageLabel, "上下文占用:按本会话每轮平均输入估算");
         _ringHost.Child = AiIcons.Ring(0);
-        var head = UiClass.Section("AI 助手", "问启动、模组、崩溃都行;输入 / 看命令",
+        var head = UiClass.Section(I18nCore.Tr("AI 助手"), "问启动、模组、崩溃都行;输入 / 看命令",
             UiClass.H(8, _model.VCenter(), _permLabel.VCenter(), _ringHost, _usageLabel.VCenter(), memoryBtn, permBtn, settings, clear));
         _scroll = new ScrollViewer
         {
@@ -201,10 +202,10 @@ public sealed class AiPage : PageBase
         var endpoint = TryEndpoint();
         if (endpoint == null)
         {
-            _model.Text = "未配置";
+            _model.Text = I18nCore.Tr("未配置");
             return;
         }
-        string label = Py.S(endpoint.Get("mode")) == "custom" ? "自定义端点" : "内置网关";
+        string label = Py.S(endpoint.Get("mode")) == "custom" ? "自定义端点" : I18nCore.Tr("内置网关");
         string model = Py.S(endpoint.Get("model"));
         _model.Text = model.Length == 0 ? label : label + " · " + model;
     }
@@ -228,7 +229,7 @@ public sealed class AiPage : PageBase
     private StackPanel BuildEmpty()
     {
         var col = UiClass.V(10);
-        col.Children.Add(UiClass.Empty("Lightning", "还没有对话", "下面几句最常问,点一下直接发"));
+        col.Children.Add(UiClass.Empty("Lightning", I18nCore.Tr("还没有对话"), "下面几句最常问,点一下直接发"));
         var wrap = new WrapPanel();
         foreach (string s in Suggestions)
         {
@@ -265,7 +266,7 @@ public sealed class AiPage : PageBase
     private void OpenPermissionPanel()
     {
         var panel = new AiPermissionPanel(InProcessApi.Instance, _runner.Instance);
-        var handle = Dlg.OpenPanel("权限管理", panel, 860);
+        var handle = Dlg.OpenPanel(I18nCore.Tr("权限管理"), panel, 860);
         handle.Closed.ContinueWith(_ => Dispatcher.UIThread.Post(RefreshPermissionLabel), TaskScheduler.Default);
         _ = panel.RefreshAsync();
     }
@@ -466,7 +467,7 @@ public sealed class AiPage : PageBase
     {
         if (_run != null)
         {
-            ToastHost.Show("正在生成中", "先停止再撤回", ToastKind.Warning);
+            ToastHost.Show("正在生成中", I18nCore.Tr("先停止再撤回"), ToastKind.Warning);
             return;
         }
         SaveChatHistory();
@@ -477,7 +478,7 @@ public sealed class AiPage : PageBase
         }
         catch (Exception ex)
         {
-            ToastHost.Show("撤回失败", Py.ExcStr(ex), ToastKind.Warning);
+            ToastHost.Show(I18nCore.Tr("撤回失败"), Py.ExcStr(ex), ToastKind.Warning);
             return;
         }
         if (!Py.Truthy(result.Get("ok")) && !Py.Truthy(result.Get("truncated")))
@@ -615,7 +616,7 @@ public sealed class AiPage : PageBase
             {
                 if (!AiImageInput.VisionSupported(out string reason))
                 {
-                    ToastHost.Show("当前模型可能看不了图", "图片会被省略。" + reason, ToastKind.Warning);
+                    ToastHost.Show(I18nCore.Tr("当前模型可能看不了图"), "图片会被省略。" + reason, ToastKind.Warning);
                 }
                 else
                 {
@@ -649,7 +650,7 @@ public sealed class AiPage : PageBase
         }
         catch (OperationCanceledException)
         {
-            Dispatcher.UIThread.Post(() => FinishRun("已停止"));
+            Dispatcher.UIThread.Post(() => FinishRun(I18nCore.Tr("已停止")));
         }
         catch (Exception ex)
         {
@@ -672,6 +673,11 @@ public sealed class AiPage : PageBase
                 AppendStream(ev.Text, ev.Kind == "think");
                 break;
             case "status":
+                // [audit/B X-06] 同一轮重试:Core 已把 state.Text 回滚,界面这半截也要跟着清掉
+                if (IsRetryNotice(ev.Text))
+                {
+                    ResetStreamingBubble();
+                }
                 _status.Text = ev.Text;
                 break;
             case "compact":
@@ -691,7 +697,7 @@ public sealed class AiPage : PageBase
                 }
                 CloseRound();
                 Line(ev.Call!.name, "准备:" + ev.Text, ToolState.Prepare);
-                _status.Text = "正在执行操作…";
+                _status.Text = I18nCore.Tr("正在执行操作…");
                 break;
             case "tool_done":
                 if (ev.Call != null && Tools.IsAskTool(ev.Call.name))
@@ -704,12 +710,13 @@ public sealed class AiPage : PageBase
                     var line = Line(ev.Call.name, "完成:" + ev.Text, ToolState.Done);
                     line.SetResult(Summarize(ev.Call));
                 }
-                _status.Text = "操作完成";
+                _status.Text = I18nCore.Tr("操作完成");
                 break;
             case "error":
-                if (ev.Text == "已停止")
+                // [audit/B i18n] "已停止" 来自 Core 的事件文本(AiAgent.cs:546 / Client.cs:715),比较用原文
+                if (ev.Text == I18nCore.Tr("已停止"))
                 {
-                    FinishRun("已停止");
+                    FinishRun(I18nCore.Tr("已停止"));
                 }
                 else
                 {
@@ -731,11 +738,11 @@ public sealed class AiPage : PageBase
         {
             // 被拒的步骤行要说明「为什么被拒」:reason 由 Core 的裁决带出(照 Windows 的
             // SetToolStatus(..., "denied", "[权限] 已拒绝:" + reason)),不再只显示结果 JSON。
-            return string.IsNullOrEmpty(call.error) ? "已拒绝" : call.error;
+            return string.IsNullOrEmpty(call.error) ? I18nCore.Tr("已拒绝") : call.error;
         }
         if (call.status == ToolCallStatus.FAILED)
         {
-            return "失败";
+            return I18nCore.Tr("失败");
         }
         string text = call.result ?? "";
         if (text.Length == 0)
@@ -822,7 +829,7 @@ public sealed class AiPage : PageBase
         _run?.Cancel();
         _pendingConfirm?.Reject();
         _askWaiter?.TrySetResult(null);
-        FinishRun("已停止");
+        FinishRun(I18nCore.Tr("已停止"));
     }
 
     private AiBubble Append(string role, string text)
@@ -862,6 +869,29 @@ public sealed class AiPage : PageBase
     }
 
     /// <summary>一段「正文」结束:下一个工具要开新的步骤组。</summary>
+    /// <summary>
+    /// [audit/B X-06] 这条 status 是不是「同一轮正在重试」的信号。
+    /// 判据用 Core 的原文(AiAgent.RetryNotice 固定拼「正在重试」),不改 Core 也不新增事件:
+    /// 只要命中,就说明 Core 已经把本轮半截文本回滚了,界面必须跟着回滚。
+    /// </summary>
+    private static bool IsRetryNotice(string? text)
+    {
+        return !string.IsNullOrEmpty(text) && text.IndexOf("正在重试", StringComparison.Ordinal) >= 0;
+    }
+
+    /// <summary>[audit/B X-06] 清掉本轮流式气泡里已渲染的正文与思考段(落盘的 history 不动)。</summary>
+    private void ResetStreamingBubble()
+    {
+        _text = "";
+        _think = "";
+        if (_pending == null)
+        {
+            return;
+        }
+        _pending.ResetAnswer();
+        _pending.SetThinking("");
+    }
+
     private void CloseRound()
     {
         _group = null;

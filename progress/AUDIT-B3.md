@@ -144,3 +144,67 @@ TIPCL_HOME=… dotnet src/TipCL.App/bin/Release/net8.0/TipCL.App.dll --smoke
 理由:①用户主路径(启动 / 实例库 / 下载 / 插件 / 设置 / 布局自定义 / AI / 联机 / 账号)均已逐文件读完并做行为级核对;②高危模式(`async void`、`catch{}`、UI 线程外操作控件、一个控件两个父级、`Measure/Arrange` 自激、每帧读盘/重建)已逐条 grep 并定点验证;③崩溃类与研究得出的手感类问题都已修并在 906 条测试 + 无头冒烟上通过;④i18n 剩下的部分不是"接线",而是"等英文文案"的工作量(已量化),可以按批推进而不影响可判定性。
 
 若还要一轮,建议只做两件事(都是增量的、低风险的):**(a)** 上表 ~700 条 App 侧静态文案的人工英译 + 接线(每批 50~80 条,配 `i18n-audit` 回归);**(b)**「智能推荐」这类"拿不到数据就该置灰"的入口做一次统一探测。这两件不改变架构,也不影响当前结论。
+---
+
+# 第 6 轮(2026-11-20,基于 main 880deff)
+
+## 1. i18n 继续接线:**31.04% → 40.67%**(2128 / 5233)
+
+按"词表里已有英文的先接完"的做法,本轮新接线 **+505 条**(1623 → 2128),涉及:LaunchPage(50)/LaunchPopups(22)/FeedbackView+FirstRunWizard+CrashUi(90)/Ai 全族(114)/CatalogModels+InstallPage+FileDrop(85)/LayoutBlockEntryCatalog+ThemeGalleryPage+Dlg+FileKinds(54)/其余全 App 扫尾(128,含 MainWindow、TitleBar、NavRegistry、CommandLine、SmokeRunner)。
+
+**"词表已有译文却没接线"在 App 侧基本清零**:剩余 App 侧仅 27 条,每条都有硬约束,不能接:
+
+| 位置 | 数量 | 为什么不能接 |
+|---|---|---|
+| Common/Api.cs(任务标题/事件文本/交给 Core 的 source 值) | 10 | 这些是**数据/事件契约**的一部分(如 "已取消"、source="本地"),翻译后会让上层比较与 Core 落库失真 |
+| Common/Dlg.cs PickFile/PickFiles/PickFolder | 3 | 形参默认值必须是编译期常量 |
+| Common/TaskStore.cs:135 | 1 | const string PlaceholderTitle |
+| Pages/Settings/SettingsSubs.cs:644 | 1 | const string AllInstances(常量模式比较) |
+| Pages/Library/LibraryPage.cs:833 | 1 | 形参默认值 |
+| Pages/Ai/AiChatOps.cs:155 | 1 | ForgottenOf 里跟 Core 返回的原文做前缀比较 |
+| Pages/Launch/LaunchPage.cs:865 | 1 | "自动" 与 Java 下拉值做 StartsWith 比较 |
+| Pages/Feedback/FeedbackView.cs 反馈分类 | 6 | 既是下拉项又参与等值比较(与 SettingsPage.Cards 同类,接需先把 switch 改成两侧同用 Tr,留作后续) |
+| Pages/Download/LoaderIcons.cs:67 / PluginsPage.Market.cs:255 | 2 | 同上,值/标签混用 |
+
+其余 2900+ 条未接线全在 **src/TipCL.Core/**(不在我的写入范围)** 或**拼接/插值串**(按口径不动)。
+
+本轮踩到并修掉的 3 个"接错会坏功能"的点(都已回退成原文):
+1. LaunchPage:1180 ev.Message != "已取消"、AiPage:711/AiFixView:254 "已停止"、TaskCard:163 "已取消" —— 左侧是 **Core 事件的原文**,包 Tr 会让 en 下取消/停止被当成崩溃;
+2. CatalogModels.Types(6 个筛选数组)—— CatalogPage.CategoryParam() 把选中文本**原样传给 Core** 当 category,翻译后就搜不到东西了;
+3. Dlg 三个文件选择入口的 	itle **默认参数** —— 默认值必须是常量,编译直接挡下(说明这类规则确实必要)。
+
+## 2. 跨域接掉两条
+
+- **X-06(AI 重试半截增量)**:Core 在**同一轮重试**前会发一条 status(AiAgent.RetryNotice 固定拼「正在重试」)并把 state.Text 回滚(AiAgent.cs:573),但界面已吐出的增量收不回来。App 侧处理:AiPage.OnAgentEvent / AiFixView 的 status 分支加 IsRetryNotice(ev.Text) 判据,命中即调新增的
+  ResetStreamingBubble()(→ AiBubble.ResetAnswer() 把该气泡 Markdown 清空 + 思考段清空),**不改 Core**。
+  效果:重试后气泡里不会再出现「半截 + 完整回答」。
+- **X-04(清理部分失败谎报成功)**:Cleaner.Apply 现在返回 emoved/ytes/ailed/error;SettingsPage.Cards.cs 的 CleanerResultStub 补 Failed/Error,分支改成
+  ailed>0 ⇒ Toast(Tr("部分没能清理"), Warning) + 说明行「已清理 N 个,M 个没能删掉 · <首个原因>」;只有 ailed==0 才是绿字「清理完成」。新 key「部分没能清理」已 en+zh_CN 成对入表。
+
+## 3. Linux 侧补上 stack「浮起跟手 + FLIP 让位 + 6px 滞回」(用户诉求"UI 自定义要丝滑")
+
+照 Windows 参考件移植(模型语义一行没改):
+
+| 文件 | 改动 |
+|---|---|
+| **新增** src/TipCL.App/Pages/Layout/StackDragPlan.cs | 93 行纯函数逐行同源:TargetIndex(中点 ±6px 滞回)、IndexSeries(位移序列→下标序列,测试用)、EdgeScrollStep(边缘滚动"多深→多快")。依赖的 LayoutPageState.MidpointY 本树同名同签名 |
+| LayoutEngine.cs | 新增 LayoutPageState.MoveVisibleTo(id,targetIndex):只复用已有相邻交换原语 MoveVisible + RebuildPage,**不动 span/坐标/外观**(与 Windows LayoutEngine.cs:536 逐行同源) |
+| LayoutEditor.cs | 新增浮起区域(~230 行):BeginStackFloat/MoveStackFloat/ApplyStackReorder/CaptureStackTops/FlipStackCards/StackFlipOnce/StopStackFloat/StartStackSettle/AutoScrollNearEdgeStack/StopStackAutoScroll/OnStackAutoScrollTick;BeginDrag 起手进浮起、OnDragMove 加浮起分支(每帧只写一次 TranslateTransform.Y = **零布局**;TargetIndex 变了才动模型 + 搬元素 + 给其余块补 FLIP)、EndDrag 先 StopStackFloat() 拿起点再收尾再 StartStackSettle(),时序与 Windows 完全一致 |
+| **新增** 	ests/TipCL.Tests/App/StackDragPlanTests.cs | Windows 那 12 例的等价移植(含「8 帧抖动序列恒不回头」「上下扫过单调」「不等高用缓存高」「零滞回=旧行为」「MoveVisibleTo 只动顺序/保隐藏项/与 DragReorder 等价」) |
+
+Avalonia 侧的三处等价替换:WPF DoubleAnimation+CubicEase ⇒ 复用已有 LayoutTween.Start(...) + LayoutMotion.SetOffset(ease-out 三次,160ms 让位 / 180ms 落位);Panel.SetZIndex ⇒ card.ZIndex;SmoothScroll ⇒ _scroll.Offset / ScrollBarMaximum;边缘自动滚动用 30ms DispatcherTimer(与 box 那套同节奏,但独立计时器,互不影响)。
+
+**可回退(硬要求)**:Motion.Enabled==false 或 !_state.Plan().IsSingleColumn ⇒ _stackFloat=false,走原来那条"DragReorder 交换即落位"的路径,**逐像素不变**。
+
+## 4. 本轮验证
+
+`
+dotnet build src/TipCL.App -c Release                     → 0 错误 0 警告
+dotnet test  tests/TipCL.Tests (全量)                       → 925 通过 / 1 跳过 / 0 失败(含新增 12 例 StackDragPlan)
+python tools/i18n-audit.py                                  → wrapped 2128 (40.67%) / missing en=0 zh=0 / tables 3061
+TIPCL_HOME=… TipCL.App.dll --smoke                          → 启动成功 + smoke.png,退出码 0
+`
+
+**没做到的**:覆盖率没到 60% —— 剩下的 3105 条里约 2900 条在 src/TipCL.Core/**(不是我的写入范围)或是拼接/插值串;App 侧要再往上推,只能先给"词表里还没英文"的 ~700 条人工英译(下一轮的活)。
+
+**给 aud-test 的说明**:本轮新增了测试文件 	ests/TipCL.Tests/App/StackDragPlanTests.cs(12 例,全绿),没有改测试工程文件(SDK 默认 glob 自动纳入)。

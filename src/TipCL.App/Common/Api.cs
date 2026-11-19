@@ -164,7 +164,7 @@ public sealed class InProcessApi : IApi
             }
             catch (OperationCanceledException)
             {
-                TaskStore.Finish(row, false, "已取消");
+                TaskStore.Finish(row, false, I18nCore.Tr("已取消"));
                 AppLog.Warn($"任务取消 {id} {title}");
                 RaiseEvent(new ApiEvent { Event = "finished", TaskId = id, Success = false, Message = "已取消" });
             }
@@ -237,7 +237,7 @@ public sealed class InProcessApi : IApi
             }
             case "create_instance":
             {
-                var inst = Instances.CreateUniqueInstance(args.Get("name"), Py.S(args.Get("fallback")) is { Length: > 0 } f ? f : "游戏");
+                var inst = Instances.CreateUniqueInstance(args.Get("name"), Py.S(args.Get("fallback")) is { Length: > 0 } f ? f : I18nCore.Tr("游戏"));
                 return PyDict.Of("name", inst.name, "path", inst.path);
             }
             case "rename_instance":
@@ -393,7 +393,7 @@ public sealed class InProcessApi : IApi
             {
                 // 照 Windows Core/BackendApi.java_combo_options:首项「自动选择」+ 去重后的已装 Java +
                 // 实例已保存但不在列表里的那个(标注「已保存 (…)」)。
-                var opts = new List<object> { PyDict.Of("label", "自动选择", "value", "自动选择") };
+                var opts = new List<object> { PyDict.Of("label", I18nCore.Tr("自动选择"), "value", I18nCore.Tr("自动选择")) };
                 var seen = new HashSet<string>();
                 List<object> javas = Py.Truthy(args.Get("scan_system")) ? Java.AllJavas() : Java.ListInstalledJavas();
                 foreach (PyDict item in javas)
@@ -403,7 +403,7 @@ public sealed class InProcessApi : IApi
                         opts.Add(PyDict.Of("label", Py.Or(item.Get("name"), path), "value", path));
                 }
                 string saved = new Instance(Py.S(args.Get("instance"))).JavaPref();
-                if (saved != "自动选择" && !seen.Contains(saved))
+                if (saved != I18nCore.Tr("自动选择") && !seen.Contains(saved))
                     opts.Add(PyDict.Of("label", "已保存 (" + saved + ")", "value", saved));
                 return opts;
             }
@@ -413,7 +413,7 @@ public sealed class InProcessApi : IApi
                 foreach (object item in Py.ListOr(args.Get("options")))
                     if (item is PyDict d && Py.Eq(d.Get("value"), cur))
                         return d.Get("label");
-                return "自动选择";
+                return I18nCore.Tr("自动选择");
             }
             case "get_instance_java":
                 return new Instance(Py.S(args.Get("name"))).JavaPref();
@@ -466,7 +466,7 @@ public sealed class InProcessApi : IApi
             {
                 object java0 = args.Get("java");
                 string jexe = "";
-                if (Py.Truthy(java0) && !Py.Eq(java0, "自动选择") && !Py.Eq(java0, "auto") && !Py.Eq(java0, "default") && !Py.Eq(java0, ""))
+                if (Py.Truthy(java0) && !Py.Eq(java0, I18nCore.Tr("自动选择")) && !Py.Eq(java0, "auto") && !Py.Eq(java0, "default") && !Py.Eq(java0, ""))
                     jexe = Py.Str(java0);
                 return Preflight.CheckLaunch(InstancesApi.EnsureInstance(args.Get("instance")),
                     Py.Or(args.Get("version"), ""), Py.Int(Py.Or(args.Get("memory_mb"), 0L)), jexe);
@@ -507,7 +507,7 @@ public sealed class InProcessApi : IApi
             case "check_update":
                 return Updater.Check();
             case "start_self_update":
-                return StartDetached("更新启动器", async (prog, ct) =>
+                return StartDetached(I18nCore.Tr("更新启动器"), async (prog, ct) =>
                 {
                     PyDict info = await Task.Run(() => Updater.Check(), ct);
                     if (!Py.Truthy(info["has_update"]))
@@ -622,7 +622,7 @@ public sealed class InProcessApi : IApi
 
             // —— 三种登录(都是后台任务:id 立刻返回,进度/用户码走事件流)——
             case "start_microsoft_login":
-                return StartDetached("微软登录", (prog, ct) =>
+                return StartDetached(I18nCore.Tr("微软登录"), (prog, ct) =>
                 {
                     var auth = new MicrosoftAuthenticator(Config.MsClientId());
                     PyDict acc = auth.Login(
@@ -646,7 +646,7 @@ public sealed class InProcessApi : IApi
                     return Task.CompletedTask;
                 }).Id;
             case "start_authlib_login":
-                return StartDetached("皮肤站登录", async (prog, ct) =>
+                return StartDetached(I18nCore.Tr("皮肤站登录"), async (prog, ct) =>
                 {
                     // 照 Windows:先确保 authlib-injector 就位(启动时要挂 javaagent),再登录
                     var dm = new DownloadManager();
@@ -656,7 +656,7 @@ public sealed class InProcessApi : IApi
                     prog.Log("皮肤站登录成功:" + Py.S(acc.Get("name")));
                 }).Id;
             case "start_nide8_login":
-                return StartDetached("统一通行证登录", async (prog, ct) =>
+                return StartDetached(I18nCore.Tr("统一通行证登录"), async (prog, ct) =>
                 {
                     var dm = new DownloadManager();
                     await Task.Run(() => Nide8.EnsureJar(dm, t => prog.Log(t)), ct);
@@ -818,7 +818,7 @@ public sealed class InProcessApi : IApi
             case "terracotta_snapshot":
                 return Terracotta.Snapshot(TerracottaPlayer(), LaunchCore.IsRunning);
             case "terracotta_prepare":
-                return StartDetached("准备陶瓦联机", async (prog, ct) =>
+                return StartDetached(I18nCore.Tr("准备陶瓦联机"), async (prog, ct) =>
                 {
                     var dm = new DownloadManager();
                     await Task.Run(() => Terracotta.Install(dm, t => prog.Log(t)), ct);
@@ -885,7 +885,7 @@ public sealed class InProcessApi : IApi
             // 安装类一律「后台任务 + 立刻返回 task_id」(照 Windows 版 StartTask 语义),
             // 页面拿到 id 后即可跳任务页;进度经 TaskStore/事件流回灌。
             case "install_mod":
-                return StartDetached(CatalogTitle("安装模组", args.Get("name")), (prog, ct) =>
+                return StartDetached(CatalogTitle(I18nCore.Tr("安装模组"), args.Get("name")), (prog, ct) =>
                 {
                     InstallModSync(prog, CatalogExtra(args));
                     return Task.CompletedTask;
@@ -895,7 +895,7 @@ public sealed class InProcessApi : IApi
             case "install_datapack":
             {
                 string kind = method.Substring("install_".Length);
-                string verb = kind switch { "shader" => "安装光影", "resourcepack" => "安装资源包", _ => "安装数据包" };
+                string verb = kind switch { "shader" => I18nCore.Tr("安装光影"), "resourcepack" => I18nCore.Tr("安装资源包"), _ => I18nCore.Tr("安装数据包") };
                 return StartDetached(CatalogTitle(verb, args.Get("name")), (prog, ct) =>
                 {
                     var extra = CatalogExtra(args);
@@ -906,7 +906,7 @@ public sealed class InProcessApi : IApi
                 }).Id;
             }
             case "install_world":
-                return StartDetached(CatalogTitle("安装世界", args.Get("name")), (prog, ct) =>
+                return StartDetached(CatalogTitle(I18nCore.Tr("安装世界"), args.Get("name")), (prog, ct) =>
                 {
                     var extra = CatalogExtra(args);
                     extra.SetDefault("name", args.Get("name"));
@@ -915,7 +915,7 @@ public sealed class InProcessApi : IApi
                     return Task.CompletedTask;
                 }).Id;
             case "install_modpack":
-                return StartDetached(CatalogTitle("安装整合包", args.Get("name")), (prog, ct) =>
+                return StartDetached(CatalogTitle(I18nCore.Tr("安装整合包"), args.Get("name")), (prog, ct) =>
                 {
                     var extra = CatalogExtra(args);
                     extra.SetDefault("name", args.Get("name"));
@@ -943,7 +943,7 @@ public sealed class InProcessApi : IApi
             case "get_mods_targets":
             {
                 var inst = Inst();
-                var rows = new List<object> { PyDict.Of("label", "实例共享 mods 目录", "value", "") };
+                var rows = new List<object> { PyDict.Of("label", I18nCore.Tr("实例共享 mods 目录"), "value", "") };
                 foreach (string ver in inst.InstalledIds())
                 {
                     object iso = VersionSettings.Load(inst, ver).Get("isolation");
@@ -989,7 +989,7 @@ public sealed class InProcessApi : IApi
                 var inst = Inst();
                 PyDict meta = inst.Meta();
                 if (meta.Get("modpack") is not PyDict)
-                    throw new InstanceError("该实例没有已安装整合包");
+                    throw new InstanceError(I18nCore.Tr("该实例没有已安装整合包"));
                 if (Py.Truthy(args.Get("purge_instance"))) inst.Delete();
                 else inst.SetMeta("modpack", null!);
                 RaiseEvent(new ApiEvent { Event = "ui_changed" });
@@ -1097,7 +1097,7 @@ public sealed class InProcessApi : IApi
             case "instance_java_label":
             {
                 string cur = new Instance(Py.S(args.Get("name"))).JavaPref();
-                if (cur == "自动选择") return "自动选择";
+                if (cur == I18nCore.Tr("自动选择")) return I18nCore.Tr("自动选择");
                 foreach (PyDict j in Java.AllJavas())
                 {
                     string exe = Py.S(Py.Or(Py.Or(j.Get("exe"), j.Get("path")), ""));
@@ -1180,7 +1180,7 @@ public sealed class InProcessApi : IApi
                     var inst = Inst();
                     string dest = Py.S(args.Get("dest"));
                     if (dest.Length == 0) throw new ValueError(I18nCore.Tr("请先选择保存位置"));
-                    prog.Report("导出中", 0, 1);
+                    prog.Report(I18nCore.Tr("导出中"), 0, 1);
                     string outPath = ExportPack.ExportMrpack(inst, dest,
                         new DownloadManager(2L, on_progress: (m, c, t) => prog.Report(m, c, t)), (m, c, t) => prog.Report(m, c, t));
                     prog.Log("已导出 " + outPath);
@@ -1218,7 +1218,7 @@ public sealed class InProcessApi : IApi
             case "scan_official_versions":
                 return OfficialMigrate.ScanVersions(OfficialMigrate.OfficialDir());
             case "migrate_official_launcher":
-                return StartDetached("导入官方启动器", (prog, ct) =>
+                return StartDetached(I18nCore.Tr("导入官方启动器"), (prog, ct) =>
                 {
                     string src = OfficialMigrate.OfficialDir();
                     prog.Log("正在从 " + src + " 迁移...");
@@ -1597,9 +1597,9 @@ public sealed class InProcessApi : IApi
             props = new PyDict(props);
             props["authlib_api"] = authServer;
         }
-        object java0 = Py.Or(args.Get("java"), "自动选择");
+        object java0 = Py.Or(args.Get("java"), I18nCore.Tr("自动选择"));
         var lc = McLauncher.BuildLaunchCommand(inst, vid, props,
-            Py.Eq(java0, "自动选择") || Py.Eq(java0, "") ? "自动选择" : java0,
+            Py.Eq(java0, I18nCore.Tr("自动选择")) || Py.Eq(java0, "") ? I18nCore.Tr("自动选择") : java0,
             args.Get("memory_mb"), args.Get("width"), args.Get("height"), new List<object>(), new PyDict(), "", props.Get("authlib_api"));
         return lc.cmd.Cast<object>().ToList();
     }
@@ -1642,7 +1642,7 @@ public sealed class InProcessApi : IApi
 
     /// <summary>非 Adoptium 发行版的 Java 下载任务(照 Windows install_java)。</summary>
     private string InstallJavaVendorTask(long major, string vendor)
-        => StartDetached("下载 " + vendor + " Java " + major, (prog, ct) =>
+        => StartDetached(I18nCore.Tr("下载 ") + vendor + " Java " + major, (prog, ct) =>
         {
             var dm = new DownloadManager(2L, on_progress: (m, c, t) => prog.Report(m, c, t));
             string path = Java.InstallJavaVendor(dm, major, vendor, dm.on_progress);
@@ -1971,7 +1971,7 @@ public sealed class InProcessApi : IApi
                     "mods", CountMods(modsDir),
                     "mods_dir", modsDir,
                     "hidden", hidden,
-                    "java", Py.Or(st.Get("java"), "自动选择"),
+                    "java", Py.Or(st.Get("java"), I18nCore.Tr("自动选择")),
                     "memory_mb", Py.Or(st.Get("memory_mb"), 0L)));
             }
         }

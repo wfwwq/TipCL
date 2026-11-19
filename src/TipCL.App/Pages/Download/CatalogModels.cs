@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Download;
 
@@ -20,10 +21,10 @@ public sealed class CatalogKind
         InstallMethod = "install_mod",
         InstalledMethod = "get_installed_mods",
         DeleteMethod = "delete_mod",
-        Empty = "没有找到相关模组",
-        LinkHint = "模组链接 / .jar 直链",
+        Empty = I18nCore.Tr("没有找到相关模组"),
+        LinkHint = I18nCore.Tr("模组链接 / .jar 直链"),
         LocalFilter = "*.jar",
-        Types = new[] { "全部", "优化", "科技", "魔法", "冒险", "建筑", "工具" },
+        Types = new[] { I18nCore.Tr("全部"), I18nCore.Tr("优化"), I18nCore.Tr("科技"), I18nCore.Tr("魔法"), I18nCore.Tr("冒险"), I18nCore.Tr("建筑"), I18nCore.Tr("工具") },
         FileKind = "mod",
         DefaultSource = "Modrinth",
     };
@@ -31,17 +32,17 @@ public sealed class CatalogKind
     public static readonly CatalogKind Modpack = new()
     {
         Key = "modpack",
-        Title = "整合包",
+        Title = I18nCore.Tr("整合包"),
         Icon = "Package",
         SearchMethod = "search_modpacks",
         InstallMethod = "install_modpack",
         InstalledMethod = "get_installed_modpacks",
         DeleteMethod = "delete_modpack",
-        Empty = "没有找到相关整合包",
-        LinkHint = "整合包链接 / .mrpack / .zip",
+        Empty = I18nCore.Tr("没有找到相关整合包"),
+        LinkHint = I18nCore.Tr("整合包链接 / .mrpack / .zip"),
         LocalFilter = "*.mrpack;*.zip",
         IsModpack = true,
-        Types = new[] { "全部", "生存", "空岛", "科技", "魔法", "冒险" },
+        Types = new[] { I18nCore.Tr("全部"), I18nCore.Tr("生存"), I18nCore.Tr("空岛"), I18nCore.Tr("科技"), I18nCore.Tr("魔法"), I18nCore.Tr("冒险") },
         FileKind = "modpack",
         DefaultSource = "Modrinth",
     };
@@ -49,64 +50,64 @@ public sealed class CatalogKind
     public static readonly CatalogKind Datapack = new()
     {
         Key = "datapack",
-        Title = "数据包",
+        Title = I18nCore.Tr("数据包"),
         Icon = "List",
         SearchMethod = "search_datapacks",
         InstallMethod = "install_datapack",
         InstalledMethod = "get_installed_datapacks",
         DeleteMethod = "delete_datapack",
-        Empty = "没有找到相关数据包",
-        LinkHint = "数据包下载链接",
+        Empty = I18nCore.Tr("没有找到相关数据包"),
+        LinkHint = I18nCore.Tr("数据包下载链接"),
         LocalFilter = "*.zip",
-        Types = new[] { "全部", "生存", "冒险", "装饰", "工具" },
+        Types = new[] { I18nCore.Tr("全部"), I18nCore.Tr("生存"), I18nCore.Tr("冒险"), I18nCore.Tr("装饰"), I18nCore.Tr("工具") },
         FileKind = "datapack",
     };
 
     public static readonly CatalogKind ResourcePack = new()
     {
         Key = "resourcepack",
-        Title = "资源包",
+        Title = I18nCore.Tr("资源包"),
         Icon = "Image",
         SearchMethod = "search_resourcepacks",
         InstallMethod = "install_resourcepack",
         InstalledMethod = "get_installed_resourcepacks",
         DeleteMethod = "delete_resourcepack",
-        Empty = "没有找到相关资源包",
-        LinkHint = "资源包下载链接",
+        Empty = I18nCore.Tr("没有找到相关资源包"),
+        LinkHint = I18nCore.Tr("资源包下载链接"),
         LocalFilter = "*.zip",
-        Types = new[] { "全部", "16x", "32x", "64x", "写实", "现代风", "动态效果" },
+        Types = new[] { I18nCore.Tr("全部"), "16x", "32x", "64x", I18nCore.Tr("写实"), I18nCore.Tr("现代风"), I18nCore.Tr("动态效果") },
         FileKind = "resourcepack",
     };
 
     public static readonly CatalogKind Shader = new()
     {
         Key = "shader",
-        Title = "光影包",
+        Title = I18nCore.Tr("光影包"),
         Icon = "Sun",
         SearchMethod = "search_shaders",
         InstallMethod = "install_shader",
         InstalledMethod = "get_installed_shaders",
         DeleteMethod = "delete_shader",
-        Empty = "没有找到相关光影",
-        LinkHint = "光影包下载链接",
+        Empty = I18nCore.Tr("没有找到相关光影"),
+        LinkHint = I18nCore.Tr("光影包下载链接"),
         LocalFilter = "*.zip",
-        Types = new[] { "全部", "写实", "卡通", "高性能", "光追" },
+        Types = new[] { I18nCore.Tr("全部"), I18nCore.Tr("写实"), I18nCore.Tr("卡通"), I18nCore.Tr("高性能"), I18nCore.Tr("光追") },
         FileKind = "shader",
     };
 
     public static readonly CatalogKind World = new()
     {
         Key = "world",
-        Title = "世界",
+        Title = I18nCore.Tr("世界"),
         Icon = "World",
         SearchMethod = "search_worlds",
         InstallMethod = "install_world",
         InstalledMethod = "",
         DeleteMethod = "",
-        Empty = "没有找到相关世界地图",
-        LinkHint = "世界地图下载链接",
+        Empty = I18nCore.Tr("没有找到相关世界地图"),
+        LinkHint = I18nCore.Tr("世界地图下载链接"),
         LocalFilter = "*.zip",
-        Types = new[] { "全部", "生存", "冒险", "创造", "跑酷" },
+        Types = new[] { I18nCore.Tr("全部"), I18nCore.Tr("生存"), I18nCore.Tr("冒险"), I18nCore.Tr("创造"), I18nCore.Tr("跑酷") },
         FileKind = "world",
         DefaultSource = "CurseForge",
     };
@@ -126,7 +127,7 @@ public sealed class CatalogKind
     public bool IsModpack { get; set; }
     public string[] Types { get; set; } = Array.Empty<string>();
     public string FileKind { get; set; } = "mod";
-    public string DefaultSource { get; set; } = "全部";
+    public string DefaultSource { get; set; } = I18nCore.Tr("全部");
     public string Icon { get; set; } = "";
 }
 

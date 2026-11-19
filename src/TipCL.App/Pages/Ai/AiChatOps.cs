@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -36,13 +37,13 @@ public static class AiChatOps
     /// <summary>内置斜杠命令;提示词与欢迎页快捷卡一致。</summary>
     public static readonly IReadOnlyList<SlashCommand> Commands = new List<SlashCommand>
     {
-        new SlashCommand("崩溃分析", "读最近一次崩溃报告找原因", "刚才启动失败了,读一下日志告诉我原因", "", "crash", "bkfx"),
-        new SlashCommand("扫模组", "检查版本不兼容和重复模组", "扫一下当前实例的模组冲突", "", "mods", "scan", "smz"),
-        new SlashCommand("新实例", "装好最新正式版并建一个实例", "帮我下载最新正式版 Minecraft", "", "instance", "xsl"),
-        new SlashCommand("装Fabric", "一步配好 1.20.1 性能优化", "给我装 1.20.1 Fabric,再装钠和 Iris 光影", "", "fabric"),
-        new SlashCommand("新对话", "开一个新对话", "", "new_chat", "new", "xdh"),
-        new SlashCommand("清空", "删掉当前对话的全部消息", "", "clear", "qk"),
-        new SlashCommand("撤回", "回退上一轮并还原改过的文件", "", "rewind", "undo", "ch"),
+        new SlashCommand(I18nCore.Tr("崩溃分析"), I18nCore.Tr("读最近一次崩溃报告找原因"), "刚才启动失败了,读一下日志告诉我原因", "", "crash", "bkfx"),
+        new SlashCommand("扫模组", I18nCore.Tr("检查版本不兼容和重复模组"), I18nCore.Tr("扫一下当前实例的模组冲突"), "", "mods", "scan", "smz"),
+        new SlashCommand("新实例", I18nCore.Tr("装好最新正式版并建一个实例"), I18nCore.Tr("帮我下载最新正式版 Minecraft"), "", "instance", "xsl"),
+        new SlashCommand("装Fabric", I18nCore.Tr("一步配好 1.20.1 性能优化"), "给我装 1.20.1 Fabric,再装钠和 Iris 光影", "", "fabric"),
+        new SlashCommand(I18nCore.Tr("新对话"), "开一个新对话", "", "new_chat", "new", "xdh"),
+        new SlashCommand(I18nCore.Tr("清空"), "删掉当前对话的全部消息", "", "clear", "qk"),
+        new SlashCommand(I18nCore.Tr("撤回"), "回退上一轮并还原改过的文件", "", "rewind", "undo", "ch"),
     };
 
     /// <summary>

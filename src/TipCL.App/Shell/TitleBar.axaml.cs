@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Shell;
 
@@ -39,15 +40,15 @@ public partial class TitleBar : UserControl
         ApplyShellLayout(TipCL.App.Pages.Layout.ShellTabs.CurrentShell());
 
         // 账号钮默认态:未登录 = 首字母圆 + 「未登录」(对齐 Windows `MainWindow` 构造函数)
-        AccName.Text = "未登录";
+        AccName.Text = I18nCore.Tr("未登录");
         AccInitial.Text = AccName.Text.Substring(0, 1);
         AiBtn.Click += (_, _) => AiClicked?.Invoke(this, EventArgs.Empty);
         AccBtn.Click += (_, _) => AccountClicked?.Invoke(this, EventArgs.Empty);
         ThemeBtn.Click += (_, _) => ThemeToggleClicked?.Invoke(this, EventArgs.Empty);
-        ToolTip.SetTip(ThemeBtn, "切换深色 / 浅色");
-        ToolTip.SetTip(MinBtn, "最小化");
-        ToolTip.SetTip(MaxBtn, "最大化");
-        ToolTip.SetTip(CloseBtn, "关闭");
+        ToolTip.SetTip(ThemeBtn, I18nCore.Tr("切换深色 / 浅色"));
+        ToolTip.SetTip(MinBtn, I18nCore.Tr("最小化"));
+        ToolTip.SetTip(MaxBtn, I18nCore.Tr("最大化"));
+        ToolTip.SetTip(CloseBtn, I18nCore.Tr("关闭"));
         MinBtn.Click += (_, _) => (TopLevel.GetTopLevel(this) as Window)!.WindowState = WindowState.Minimized;
         MaxBtn.Click += (_, _) => ToggleMax();
         CloseBtn.Click += (_, _) => (TopLevel.GetTopLevel(this) as Window)!.Close();
@@ -93,7 +94,7 @@ public partial class TitleBar : UserControl
     /// <summary>同步账号钮:名称 + 首字母圆(空名回落「未登录」,对齐 Windows SyncAccountChipAsync)。</summary>
     public void SetAccount(string? name)
     {
-        string n = string.IsNullOrWhiteSpace(name) ? "未登录" : name!.Trim();
+        string n = string.IsNullOrWhiteSpace(name) ? I18nCore.Tr("未登录") : name!.Trim();
         AccName.Text = n;
         AccInitial.Text = n.Substring(0, 1).ToUpperInvariant();
         ToolTip.SetTip(AccBtn, n);
@@ -103,7 +104,7 @@ public partial class TitleBar : UserControl
     public void SyncMaxGlyph(bool maximized)
     {
         MaxIco.Data = Geometry.Parse(maximized ? GeoRestore : GeoMax);
-        ToolTip.SetTip(MaxBtn, maximized ? "还原" : "最大化");
+        ToolTip.SetTip(MaxBtn, maximized ? I18nCore.Tr("还原") : I18nCore.Tr("最大化"));
     }
 
     /// <summary>同步顶部页签高亮（id 不在页签里则全部取消高亮）。</summary>

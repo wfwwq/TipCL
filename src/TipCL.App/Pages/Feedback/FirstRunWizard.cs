@@ -24,31 +24,31 @@ public static class FirstRunWizard
 {
     private static readonly (string Title, string Body)[] Highlights =
     {
-        ("把文件直接拖进窗口", "整合包、模组、资源包、光影、存档、皮肤、壁纸都认;认不准会问你一句,不用先找对页面。"),
+        (I18nCore.Tr("把文件直接拖进窗口"), "整合包、模组、资源包、光影、存档、皮肤、壁纸都认;认不准会问你一句,不用先找对页面。"),
         ("版本管理是排版的中心", "「版本管理」页能按来源分组看版本、收藏、复制、重命名、隐藏;双击直接启动。"),
-        ("换个背景", "设置页能设静态壁纸、指一个文件夹轮播;模糊和遮罩也在那儿调。"),
+        (I18nCore.Tr("换个背景"), "设置页能设静态壁纸、指一个文件夹轮播;模糊和遮罩也在那儿调。"),
         ("AI 助手在标题栏", "崩溃日志看不懂、模组冲突理不清,可以直接问它。"),
-        ("这个向导随时能再看", "「设置 → 通用」里点「重新运行向导」,目录、下载源、内存、隔离会再问一遍。"),
+        (I18nCore.Tr("这个向导随时能再看"), "「设置 → 通用」里点「重新运行向导」,目录、下载源、内存、隔离会再问一遍。"),
     };
 
     private static readonly (string Key, string Label)[] SrcOpts =
     {
         ("auto", "自动(官方慢则 BMCLAPI)"),
-        ("official", "仅官方"),
-        ("bmclapi", "仅 BMCLAPI"),
+        ("official", I18nCore.Tr("仅官方")),
+        ("bmclapi", I18nCore.Tr("仅 BMCLAPI")),
     };
 
     private static readonly (string Key, string Label)[] IsoOpts =
     {
         ("all", "完全独立(推荐)"),
-        ("mods", "隔离 Mod 与配置"),
-        ("saves", "隔离存档"),
-        ("none", "不隔离"),
+        ("mods", I18nCore.Tr("隔离 Mod 与配置")),
+        ("saves", I18nCore.Tr("隔离存档")),
+        ("none", I18nCore.Tr("不隔离")),
     };
 
     private static readonly string[] Hints =
     {
-        "先把游戏目录和下载源定下来。",
+        I18nCore.Tr("先把游戏目录和下载源定下来。"),
         "版本都会装在这个目录里;下载源决定从哪儿拉文件。",
         "这两项只影响以后新建的版本,已经装好的不受影响。",
         "最后几句,都是容易错过的地方。",
@@ -65,7 +65,7 @@ public static class FirstRunWizard
     {
         var api = InProcessApi.Instance;
         string curDir = Py.S(Config.CONFIG.Get("game_dir", Config.CONFIG.Get("root", "")));
-        var gameDir = UiClass.Input("游戏目录", curDir);
+        var gameDir = UiClass.Input(I18nCore.Tr("游戏目录"), curDir);
         var browse = U.Btn("浏览...", BtnKind.Chip, null, "Folder");
         browse.Click += (_, _) => _ = BrowseAsync();
         var dirRow = UiClass.G(null, "*,Auto");
@@ -95,18 +95,18 @@ public static class FirstRunWizard
         var pages = new Control[]
         {
             UiClass.V(6,
-                UiClass.Txt("三步就能开始玩", 14, bold: true),
-                UiClass.Muted("1. 选游戏目录和下载源"),
-                UiClass.Muted("2. 定默认内存和版本隔离"),
-                UiClass.Muted("3. 看一眼几个容易错过的功能"),
+                UiClass.Txt(I18nCore.Tr("三步就能开始玩"), 14, bold: true),
+                UiClass.Muted(I18nCore.Tr("1. 选游戏目录和下载源")),
+                UiClass.Muted(I18nCore.Tr("2. 定默认内存和版本隔离")),
+                UiClass.Muted(I18nCore.Tr("3. 看一眼几个容易错过的功能")),
                 UiClass.Small("这些以后都能在设置里改;不想现在弄就点「跳过向导」。").Wrap()),
             UiClass.V(8,
                 UiClass.Txt("游戏目录(版本都装在这里)"), dirRow,
-                UiClass.Txt("文件下载源"), src,
+                UiClass.Txt(I18nCore.Tr("文件下载源")), src,
                 UiClass.Small("国内网络建议保持「自动」:官方慢的时候会自己切到 BMCLAPI 镜像。").Wrap()),
             UiClass.V(8,
-                UiClass.Txt("默认内存"), memRow,
-                UiClass.Txt("新版本默认隔离"), iso,
+                UiClass.Txt(I18nCore.Tr("默认内存")), memRow,
+                UiClass.Txt(I18nCore.Tr("新版本默认隔离")), iso,
                 UiClass.Small("「完全独立」= 每个版本有自己的 mods / 配置 / 存档,换版本不会把上一个版本的模组拖进去。").Wrap()),
             BuildHighlights(),
         };
@@ -121,9 +121,9 @@ public static class FirstRunWizard
             host.Children.Add(p);
         }
 
-        var back = UiClass.Btn("上一步");
-        var next = UiClass.Btn("下一步", BtnKind.Primary);
-        var skip = UiClass.Btn("跳过向导", BtnKind.Ghost);
+        var back = UiClass.Btn(I18nCore.Tr("上一步"));
+        var next = UiClass.Btn(I18nCore.Tr("下一步"), BtnKind.Primary);
+        var skip = UiClass.Btn(I18nCore.Tr("跳过向导"), BtnKind.Ghost);
 
         int index = 0;
         var done = new TaskCompletionSource<bool>();
@@ -147,7 +147,7 @@ public static class FirstRunWizard
         Show(0);
 
         // 非模态面板:三个按钮自己决定结果,拿到结果就关窗(照 Windows Dlg.Panel + layer.Close)
-        var handle = Dlg.OpenPanel("欢迎使用 TipCL", body, 560);
+        var handle = Dlg.OpenPanel(I18nCore.Tr("欢迎使用 TipCL"), body, 560);
         bool finished;
         while (true)
         {
@@ -175,7 +175,7 @@ public static class FirstRunWizard
             }
             catch (Exception ex)
             {
-                await Dlg.Alert("游戏目录没能设置", $"{typed}\n\n{ex.Message}\n\n已保留原来的目录,可到「设置」里重新选择。");
+                await Dlg.Alert(I18nCore.Tr("游戏目录没能设置"), $"{typed}\n\n{ex.Message}\n\n已保留原来的目录,可到「设置」里重新选择。");
             }
         }
         await api.CallAsync<object>("save_settings", new
@@ -188,7 +188,7 @@ public static class FirstRunWizard
                 ["first_run"] = false,
             },
         });
-        ToastHost.Show("向导已完成", "目录、下载源、内存、隔离已按你的选择写入", ToastKind.Success);
+        ToastHost.Show(I18nCore.Tr("向导已完成"), I18nCore.Tr("目录、下载源、内存、隔离已按你的选择写入"), ToastKind.Success);
 
         void Show(int i)
         {
@@ -197,13 +197,13 @@ public static class FirstRunWizard
             hint.Text = Hints[index];
             step.Text = $"第 {index + 1} / {pages.Length} 步";
             back.IsEnabled = index > 0;
-            next.Content = UiClass.Txt(index == pages.Length - 1 ? "开始使用" : "下一步");
+            next.Content = UiClass.Txt(index == pages.Length - 1 ? I18nCore.Tr("开始使用") : I18nCore.Tr("下一步"));
             Motion.FadeIn(pages[index], 200, 8);
         }
 
         async Task BrowseAsync()
         {
-            string? picked = await Dlg.PickFolder("选择游戏目录");
+            string? picked = await Dlg.PickFolder(I18nCore.Tr("选择游戏目录"));
             if (picked != null) gameDir.Text = picked;
         }
     }

@@ -12,6 +12,7 @@ using TipCL.App.Common;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -37,7 +38,7 @@ internal sealed class AiBubble : Border
         avatar[!Border.BackgroundProperty] = Res.Bind(user ? "B.AccentSoft" : "B.AccentStrong");
         avatar.Child = IconLib.Make(user ? "User" : "Lightning", user ? "B.AccentText" : "B.OnAccentStrong", 14);
 
-        var name = UiClass.Txt(user ? "你" : "AI 助手", 12, bold: true, user ? "B.InkMuted" : "B.AccentText");
+        var name = UiClass.Txt(user ? "你" : I18nCore.Tr("AI 助手"), 12, bold: true, user ? "B.InkMuted" : "B.AccentText");
 
         var copy = UiClass.IconBtn("Copy", "复制这条回复", null, 12);
         copy.Click += (_, _) =>
@@ -45,7 +46,7 @@ internal sealed class AiBubble : Border
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
             if (clipboard == null) return;
             _ = clipboard.SetTextAsync(_md.Markdown);
-            ToastHost.Show("已复制", "", ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("已复制"), "", ToastKind.Success);
         };
 
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
@@ -88,6 +89,17 @@ internal sealed class AiBubble : Border
     public void AppendAnswer(string delta)
     {
         _md.SetMarkdown(_md.Markdown + delta, live: true);
+    }
+
+    /// <summary>
+    /// [audit/B X-06] 把这条气泡的流式正文清空(不改已落进 _history 的内容)。
+    /// Core 在「同一轮重试」时会把 state.Text 回滚到本次尝试之前的长度(AiAgent.cs:573),
+    /// 而界面上已经吐出去的那半截收不回来 —— 收到重试信号时用它就地清掉,否则重试后
+    /// 会看到「半截 + 完整回答」拼在一起。
+    /// </summary>
+    public void ResetAnswer()
+    {
+        _md.SetMarkdown("", live: false);
     }
 
     public void SetThinking(string think)

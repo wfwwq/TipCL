@@ -11,6 +11,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.App.Common;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -37,7 +38,7 @@ internal sealed class PlanCard : Border
 
         var head = UiClass.G(null, "Auto,Auto,Auto,*,Auto");
         head.Add(AiIcons.Icon(AiIcons.List, 14, "B.AccentText").VCenter(), 0, 0);
-        var title = UiClass.Txt("执行计划", 12.5, true, "B.Ink");
+        var title = UiClass.Txt(I18nCore.Tr("执行计划"), 12.5, true, "B.Ink");
         title.Margin = new Thickness(8, 0, 0, 0);
         head.Add(title.VCenter(), 0, 1);
         var count = UiClass.Txt($"· {Done} / {Total}", 12, false, "B.InkMuted");

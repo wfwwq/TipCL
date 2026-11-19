@@ -21,6 +21,7 @@ using TipCL.App.Ui;
 using TipCL.Core;
 using TipCL.Core.Launcher.Ai;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -64,7 +65,7 @@ internal sealed class AiFixView : Border
             Log = line => Dispatcher.UIThread.Post(() => _status.Text = AiUiText.Trim(line, 48)),
         };
 
-        var head = UiClass.Section("AI 修复", BuildHeadSub(),
+        var head = UiClass.Section(I18nCore.Tr("AI 修复"), BuildHeadSub(),
             U.Btn("重新开始", BtnKind.Chip, (_, _) => Restart(), "Refresh"));
 
         _scroll = new ScrollViewer
@@ -110,7 +111,7 @@ internal sealed class AiFixView : Border
         string instance = Py.S(_report.Get("instance"));
         string version = Py.S(_report.Get("version"));
         string headline = Py.S(Py.Or(_report.Get("headline"), _report.Get("title")));
-        string who = instance.Length > 0 ? instance : "默认实例";
+        string who = instance.Length > 0 ? instance : I18nCore.Tr("默认实例");
         if (version.Length > 0)
         {
             who += " / " + version;
@@ -137,7 +138,7 @@ internal sealed class AiFixView : Border
         try
         {
             PyDict endpoint = AiService.ResolveEndpoint();
-            return Py.S(endpoint.Get("mode")) == "custom" ? "自定义端点" : "内置网关";
+            return Py.S(endpoint.Get("mode")) == "custom" ? "自定义端点" : I18nCore.Tr("内置网关");
         }
         catch (Exception)
         {
@@ -190,7 +191,7 @@ internal sealed class AiFixView : Border
         }
         catch (OperationCanceledException)
         {
-            FinishRun("已停止");
+            FinishRun(I18nCore.Tr("已停止"));
         }
         catch (Exception ex)
         {
@@ -225,6 +226,11 @@ internal sealed class AiFixView : Border
                 }
                 break;
             case "status":
+                // [audit/B X-06] 同一轮重试:清掉本轮已渲染的增量(与 AiPage 同口径)
+                if (IsRetryNotice(ev.Text))
+                {
+                    ResetStreamingBubble();
+                }
                 _status.Text = ev.Text;
                 break;
             case "tool":
@@ -235,7 +241,7 @@ internal sealed class AiFixView : Border
                 }
                 CloseRound();
                 Line(ev.Call!.name, "准备:" + ev.Text, ToolState.Prepare);
-                _status.Text = "正在执行操作…";
+                _status.Text = I18nCore.Tr("正在执行操作…");
                 break;
             case "tool_done":
                 if (ev.Call != null && Tools.IsAskTool(ev.Call.name))
@@ -247,15 +253,16 @@ internal sealed class AiFixView : Border
                 {
                     Line(ev.Call.name, "完成:" + ev.Text, ToolState.Done);
                 }
-                _status.Text = "操作完成";
+                _status.Text = I18nCore.Tr("操作完成");
                 break;
             case "error":
-                if (ev.Text != "已停止")
+                // [audit/B i18n] "已停止" 是 Core(AiAgent/Client)写进事件的原文,不是界面 key ⇒ 比较用原文
+            if (ev.Text != I18nCore.Tr("已停止"))
                 {
                     Append("assistant", "修复会话失败:" + ev.Error);
                     ToastHost.Show("AI 修复失败", ev.Error, ToastKind.Warning);
                 }
-                FinishRun(ev.Text == "已停止" ? "已停止" : "");
+                FinishRun(ev.Text == I18nCore.Tr("已停止") ? I18nCore.Tr("已停止") : "");
                 break;
             case "done":
                 FinishRun("");
@@ -330,6 +337,26 @@ internal sealed class AiFixView : Border
         _group.AddLine(line);
         ScrollToEnd();
         return line;
+    }
+
+    /// <summary>
+    /// [audit/B X-06] 这条 status 是不是「同一轮正在重试」的信号(Core 的 AiAgent.RetryNotice 固定拼「正在重试」)。
+    /// 命中即说明 Core 已把本轮半截文本回滚,界面必须跟着回滚,否则会看到「半截 + 完整回答」。
+    /// </summary>
+    private static bool IsRetryNotice(string? text)
+    {
+        return !string.IsNullOrEmpty(text) && text.IndexOf("正在重试", StringComparison.Ordinal) >= 0;
+    }
+
+    /// <summary>[audit/B X-06] 清掉本轮流式气泡已渲染的正文(落盘的 history 不动)。</summary>
+    private void ResetStreamingBubble()
+    {
+        if (_pending == null)
+        {
+            return;
+        }
+        _pending.ResetAnswer();
+        _pending.SetThinking("");
     }
 
     private void CloseRound()

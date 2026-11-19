@@ -119,8 +119,8 @@ public static class FileDrop
                 var rest = unsure.Except(same).ToList();
                 if (rest.Count > 0)
                 {
-                    ToastHost.Show("有文件没处理",
-                        "这些认不出来,可以单独拖进来再选:" + string.Join("、", rest.Take(3).Select(x => x.Name)),
+                    ToastHost.Show(I18nCore.Tr("有文件没处理"),
+                        "这些认不出来,可以单独拖进来再选:" + string.Join(I18nCore.Tr("、"), rest.Take(3).Select(x => x.Name)),
                         ToastKind.Warning);
                 }
             }
@@ -134,13 +134,13 @@ public static class FileDrop
                 }
                 catch (Exception ex)
                 {
-                    ToastHost.Show("没能处理", Path.GetFileName(kv.Value[0]) + " — " + ex.Message, ToastKind.Error);
+                    ToastHost.Show(I18nCore.Tr("没能处理"), Path.GetFileName(kv.Value[0]) + " — " + ex.Message, ToastKind.Error);
                 }
             }
         }
         catch (Exception ex)
         {
-            ToastHost.Show("拖放处理失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(I18nCore.Tr("拖放处理失败"), ex.Message, ToastKind.Error);
         }
     }
 
@@ -169,7 +169,7 @@ public static class FileDrop
         {
             body.Children.Add(U.Small($"这一批里还有 {others} 个同样认不准的文件,会照同一个选择处理。").Wrap());
         }
-        if (!await Dlg.Ask("这个文件放哪儿?", body, "就这么放", "算了")) return "";
+        if (!await Dlg.Ask("这个文件放哪儿?", body, I18nCore.Tr("就这么放"), I18nCore.Tr("算了"))) return "";
         return picks.FirstOrDefault(p => p.Btn.IsChecked == true).Kind ?? "";
     }
 
@@ -186,7 +186,7 @@ public static class FileDrop
                         null, line => AppLog.Info("[插件安装] " + line)));
                 }
                 window?.RefreshPluginUi();
-                string names = string.Join("、", paths.Select(Path.GetFileName));
+                string names = string.Join(I18nCore.Tr("、"), paths.Select(Path.GetFileName));
                 return $"已安装 {names}(插件不会被执行,原因见插件页说明)";
             }
             case FileKinds.Modpack:
@@ -205,7 +205,7 @@ public static class FileDrop
                     FileKinds.World => "install_world",
                     _ => "",
                 };
-                if (method.Length == 0) throw new InvalidOperationException("还不支持这种文件");
+                if (method.Length == 0) throw new InvalidOperationException(I18nCore.Tr("还不支持这种文件"));
                 string instance = ctx.Instance.Length > 0 ? ctx.Instance : CurrentInstance();
                 foreach (string path in paths)
                 {
@@ -214,7 +214,7 @@ public static class FileDrop
                         ["path"] = path,
                         ["instance"] = instance,
                         ["version"] = ctx.Version,
-                        ["source"] = "本地",
+                        ["source"] = I18nCore.Tr("本地"),
                     };
                     await InProcessApi.Instance.CallAsync<string>(method, new
                     {
@@ -224,7 +224,7 @@ public static class FileDrop
                     });
                 }
                 window?.Navigate("tasks");
-                string where = ctx.Instance.Length > 0 ? $"实例「{instance}」" : "默认实例";
+                string where = ctx.Instance.Length > 0 ? $"实例「{instance}」" : I18nCore.Tr("默认实例");
                 return $"已加入下载任务,装进{where}的{FileKinds.Label(kind)}";
             }
         }
@@ -238,23 +238,23 @@ public static class FileDrop
         var body = U.V(8,
             U.Txt(suggest, 14, bold: true).Wrap(),
             U.Small(path).Wrap(),
-            U.Field("装成版本", name, "会建成一个新版本,原有版本不受影响", 78));
-        if (!await Dlg.Ask("安装整合包", body, "开始安装")) return;
+            U.Field(I18nCore.Tr("装成版本"), name, "会建成一个新版本,原有版本不受影响", 78));
+        if (!await Dlg.Ask(I18nCore.Tr("安装整合包"), body, I18nCore.Tr("开始安装"))) return;
         string target = (name.Text ?? "").Trim();
         if (target.Length == 0) target = suggest;
         var extra = new Dictionary<string, object?>
         {
             ["path"] = path,
             ["name"] = target,
-            ["source"] = "本地",
+            ["source"] = I18nCore.Tr("本地"),
             ["kind"] = "modpack",
         };
-        await InProcessApi.Instance.CallAsync<string>("install_modpack", new { name = target, source = "本地", extra });
+        await InProcessApi.Instance.CallAsync<string>("install_modpack", new { name = target, source = I18nCore.Tr("本地"), extra });
         (TopLevel.GetTopLevel(owner) as MainWindow)?.Navigate("tasks");
-        ToastHost.Show("已加入队列", $"正在安装「{target}」", ToastKind.Success);
+        ToastHost.Show(I18nCore.Tr("已加入队列"), $"正在安装「{target}」", ToastKind.Success);
     }
 
-    private static TextBox TiCLInput(string text) => U.Input("新版本名称", text, 320);
+    private static TextBox TiCLInput(string text) => U.Input(I18nCore.Tr("新版本名称"), text, 320);
 
     private static async Task<string> SetSkinAsync(string path)
     {

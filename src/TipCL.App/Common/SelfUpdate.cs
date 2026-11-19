@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using TipCL.Core;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Common;
 
@@ -26,12 +27,12 @@ internal static class SelfUpdate
         }
         catch (Exception ex)
         {
-            toast("更新失败", ex.Message, ToastKind.Error);
+            toast(I18nCore.Tr("更新失败"), ex.Message, ToastKind.Error);
             return;
         }
         if (id.Length == 0)
         {
-            toast("更新失败", "没能启动更新任务", ToastKind.Warning);
+            toast(I18nCore.Tr("更新失败"), "没能启动更新任务", ToastKind.Warning);
             return;
         }
 
@@ -44,7 +45,7 @@ internal static class SelfUpdate
             if (ev.Success) return;        // 成功交给 update_staged 那条路
             string why = (ev.Message ?? "").Trim();
             string body = why.Length > 0 ? why : "下载或校验没有通过,可以到「下载任务」页看详情";
-            Dispatcher.UIThread.Post(() => toast("更新失败", body, ToastKind.Error));
+            Dispatcher.UIThread.Post(() => toast(I18nCore.Tr("更新失败"), body, ToastKind.Error));
         };
         api2.BridgeEvent += onEvent;
     }

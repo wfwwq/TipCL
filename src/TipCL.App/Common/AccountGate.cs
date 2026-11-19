@@ -27,7 +27,7 @@ internal static class AccountGate
     public static bool IsSentinel(string? name)
     {
         string s = (name ?? "").Trim();
-        return s.Length == 0 || s == "离线模式";
+        return s.Length == 0 || s == I18nCore.Tr("离线模式");
     }
 
     /// <summary>名字合法:1–16 个字符、不含空白、不是哨兵(照参考版 ValidName)。</summary>
@@ -82,22 +82,22 @@ internal static class AccountGate
     {
         while (true)
         {
-            var name = UiClass.Input("例如 Steve", typed);
-            var skin = UiClass.Combo(new[] { "默认", "Steve", "Alex" });
+            var name = UiClass.Input(I18nCore.Tr("例如 Steve"), typed);
+            var skin = UiClass.Combo(new[] { I18nCore.Tr("默认"), "Steve", "Alex" });
             var body = UiClass.V(8,
                 UiClass.Muted("启动游戏前需要先创建一个离线用户(无正版验证)。"),
                 name,
-                UiClass.Field("默认皮肤", skin, null, 78));
-            if (!await Dlg.Ask("创建离线用户", body, "创建并继续"))
+                UiClass.Field(I18nCore.Tr("默认皮肤"), skin, null, 78));
+            if (!await Dlg.Ask(I18nCore.Tr("创建离线用户"), body, I18nCore.Tr("创建并继续")))
                 return null;
             string got = name.Text?.Trim() ?? "";
             if (ValidName(got))
             {
-                string picked = skin.SelectedItem as string ?? "默认";
+                string picked = skin.SelectedItem as string ?? I18nCore.Tr("默认");
                 return (got, picked == "Steve" ? "steve" : picked == "Alex" ? "alex" : "default");
             }
             // 名字不合法就再问一次(照参考版:提示后重开同一个对话框,不吞掉用户输入)
-            ToastHost.Show("用户名不可用", "1–16 个字符,不能含空格", ToastKind.Warning);
+            ToastHost.Show(I18nCore.Tr("用户名不可用"), "1–16 个字符,不能含空格", ToastKind.Warning);
             typed = got;
         }
     }
@@ -116,7 +116,7 @@ internal static class AccountGate
         string name = picked.Value.Name;
         await InProcessApi.Instance.CallAsync<object>("add_offline_account",
             new PyDict { ["username"] = name, ["skin"] = picked.Value.Skin });
-        ToastHost.Show("已创建离线用户", name, ToastKind.Success);
+        ToastHost.Show(I18nCore.Tr("已创建离线用户"), name, ToastKind.Success);
         return name;
     }
 }

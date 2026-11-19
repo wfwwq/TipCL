@@ -12,6 +12,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Feedback;
 
@@ -22,7 +23,7 @@ public static class CrashUi
     {
         var api = InProcessApi.Instance;
         string head = Py.S(Py.Or(report.Get("headline"), report.Get("title")));
-        if (head.Length == 0) head = "游戏异常退出";
+        if (head.Length == 0) head = I18nCore.Tr("游戏异常退出");
 
         var body = UiClass.V(12);
         body.MinWidth = 520;
@@ -64,23 +65,23 @@ public static class CrashUi
                 {
                     PyDict? res = await api.CallAsync<PyDict>("apply_crash_action", new { action = act, report });
                     bool ok = res != null && Py.Truthy(res.Get("ok"));
-                    ToastHost.Show(ok ? "已处理" : "没能处理", res == null ? "" : Py.S(res.Get("message")),
+                    ToastHost.Show(ok ? I18nCore.Tr("已处理") : I18nCore.Tr("没能处理"), res == null ? "" : Py.S(res.Get("message")),
                         ok ? ToastKind.Success : ToastKind.Warning);
                 }
                 finally
                 {
                     b.IsEnabled = true;
                 }
-            }, "处理失败");
+            }, I18nCore.Tr("处理失败"));
             actions.Children.Add(b);
         }
         if (gameError)
         {
             // M4-H P5:AI 子系统落地后接上「交给 AI 修复」(照 Windows 版 AiFixWindow 的入口)
-            Extra("交给 AI 修复", "Lightning", () =>
+            Extra(I18nCore.Tr("交给 AI 修复"), "Lightning", () =>
             {
                 var view = new Pages.Ai.AiFixView(api, report);
-                var handle = Dlg.OpenPanel("交给 AI 修复", view, 720);
+                var handle = Dlg.OpenPanel(I18nCore.Tr("交给 AI 修复"), view, 720);
                 void Forward(ApiEvent ev) => view.OnEvent(ev);
                 api.BridgeEvent += Forward;
                 handle.Closed.ContinueWith(_ => api.BridgeEvent -= Forward, TaskScheduler.Default);
@@ -88,32 +89,32 @@ public static class CrashUi
             });
         }
 
-        Extra("打开日志文件", "Folder", async () =>
+        Extra(I18nCore.Tr("打开日志文件"), "Folder", async () =>
         {
             string path = await api.CallAsync<string>("open_crash_file", new
             {
                 task_id = Py.S(report.Get("task_id")),
                 path = Py.S(report.Get("direct_file")),
             }) ?? "";
-            ToastHost.Show("已打开", path, ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("已打开"), path, ToastKind.Success);
         });
-        Extra("导出报告", "Export", async () =>
+        Extra(I18nCore.Tr("导出报告"), "Export", async () =>
         {
-            string? dest = await Dlg.SaveFile("导出崩溃报告", "tipcl-crash.txt");
+            string? dest = await Dlg.SaveFile(I18nCore.Tr("导出崩溃报告"), "tipcl-crash.txt");
             if (dest == null) return;
             string path = await api.CallAsync<string>("export_crash_report", new { task_id = taskId, dest }) ?? dest;
-            ToastHost.Show("已导出", path, ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("已导出"), path, ToastKind.Success);
         });
-        Extra("上传给开发者", "Cloud", async () =>
+        Extra(I18nCore.Tr("上传给开发者"), "Cloud", async () =>
         {
             string msg = await api.CallAsync<string>("submit_crash_report", new { task_id = taskId }) ?? "";
-            ToastHost.Show("已上传", msg, ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("已上传"), msg, ToastKind.Success);
         });
-        Extra("附说明反馈", "Send", async () =>
+        Extra(I18nCore.Tr("附说明反馈"), "Send", async () =>
         {
             var note = UiClass.Multi("崩溃前在做什么?装了什么模组?(可空)", "", 110);
-            if (!await Dlg.Ask("反馈这次崩溃",
-                    UiClass.V(8, UiClass.Muted("会把崩溃报告连同下面这段说明发给开发者,不含账号密码。"), note), "发送"))
+            if (!await Dlg.Ask(I18nCore.Tr("反馈这次崩溃"),
+                    UiClass.V(8, UiClass.Muted("会把崩溃报告连同下面这段说明发给开发者,不含账号密码。"), note), I18nCore.Tr("发送")))
                 return;
             PyDict? res = await api.CallAsync<PyDict>("submit_crash_feedback", new
             {
@@ -121,27 +122,27 @@ public static class CrashUi
                 extra = note.Text?.Trim() ?? "",
             });
             bool ok = res != null && Py.Truthy(res.Get("ok"));
-            ToastHost.Show(ok ? "已反馈" : "反馈失败", res == null ? "" : Py.S(res.Get("message")),
+            ToastHost.Show(ok ? I18nCore.Tr("已反馈") : I18nCore.Tr("反馈失败"), res == null ? "" : Py.S(res.Get("message")),
                 ok ? ToastKind.Success : ToastKind.Error);
         });
-        Extra("复制全文", "Copy", async () =>
+        Extra(I18nCore.Tr("复制全文"), "Copy", async () =>
         {
             var clipboard = (Avalonia.Application.Current?.ApplicationLifetime as
                 Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow is { } w
                 ? Avalonia.Controls.TopLevel.GetTopLevel(w)?.Clipboard
                 : null;
             if (clipboard != null) await clipboard.SetTextAsync(head + "\n" + summary + "\n\n" + detail);
-            ToastHost.Show("已复制");
+            ToastHost.Show(I18nCore.Tr("已复制"));
         });
 
-        int choice = await Dlg.Choose("启动出问题了", body, new[] { "关闭", "重新启动" }, 760);
+        int choice = await Dlg.Choose(I18nCore.Tr("启动出问题了"), body, new[] { I18nCore.Tr("关闭"), I18nCore.Tr("重新启动") }, 760);
         return choice == 1;
 
         void Extra(string text, string glyph, Func<Task> work)
         {
             var b = U.Btn(text, BtnKind.Chip, null, glyph);
             b.Margin = new Avalonia.Thickness(0, 0, 7, 7);
-            b.Click += (_, _) => _ = RunAsync(work, "失败");
+            b.Click += (_, _) => _ = RunAsync(work, I18nCore.Tr("失败"));
             actions.Children.Add(b);
         }
     }
@@ -154,7 +155,7 @@ public static class CrashUi
         }
         catch (Exception ex)
         {
-            ToastHost.Show(errTitle ?? "操作失败", ex.Message, ToastKind.Warning);
+            ToastHost.Show(errTitle ?? I18nCore.Tr("操作失败"), ex.Message, ToastKind.Warning);
         }
     }
 }

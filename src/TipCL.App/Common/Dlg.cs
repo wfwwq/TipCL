@@ -8,6 +8,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Common;
 
@@ -42,11 +43,11 @@ public static class Dlg
     /// 所以单按钮 + 恒 true 是安全的。</para>
     /// </summary>
     public static async Task Alert(string title, string body, Window? owner = null)
-        => await AskCore(title, new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap }, "知道了", null, false, 460, owner, dismissIsOk: true);
+        => await AskCore(title, new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap }, I18nCore.Tr("知道了"), null, false, 460, owner, dismissIsOk: true);
 
     /// <summary>通用问答框：自定义内容体 + 确定/取消。</summary>
     public static Task<bool> Ask(string title, Control body, string? ok = null, string? cancel = null, bool danger = false, double width = 460, Window? owner = null)
-        => AskCore(title, body, string.IsNullOrEmpty(ok) ? "确定" : ok, string.IsNullOrEmpty(cancel) ? "取消" : cancel, danger, width, owner);
+        => AskCore(title, body, string.IsNullOrEmpty(ok) ? I18nCore.Tr("确定") : ok, string.IsNullOrEmpty(cancel) ? I18nCore.Tr("取消") : cancel, danger, width, owner);
 
     /// <summary>
     /// Ask / Alert 的实现体。<paramref name="cancelLabel"/> 为 null 即**不建取消按钮**(Alert 的单按钮形态);
@@ -135,7 +136,7 @@ public static class Dlg
         var host = Resolve(owner);
         if (host == null) return;
         body.MaxWidth = Math.Max(240, width - 40);
-        var close = new Button { Content = "关闭" };
+        var close = new Button { Content = I18nCore.Tr("关闭") };
         close[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
         close[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
         close.IsCancel = true;   // 只补 Esc:面板体里常有输入框,Enter 不该等于「关闭」,故不设 IsDefault
@@ -164,7 +165,7 @@ public static class Dlg
     {
         var host = Resolve(owner);
         body.MaxWidth = Math.Max(240, width - 40);
-        var close = new Button { Content = "关闭" };
+        var close = new Button { Content = I18nCore.Tr("关闭") };
         close[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
         close[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
         close.IsCancel = true;   // 只补 Esc:面板体里常有输入框,Enter 不该等于「关闭」,故不设 IsDefault
@@ -221,10 +222,10 @@ public static class Dlg
         var host = Resolve(owner);
         if (host == null) return null;
         var box = new TextBox { Text = initial, Watermark = placeholder ?? "", MinWidth = 300 };
-        var okBtn = new Button { Content = "确定" };
+        var okBtn = new Button { Content = I18nCore.Tr("确定") };
         okBtn[!Button.BackgroundProperty] = Res.Bind("B.AccentStrong");
         okBtn[!Button.ForegroundProperty] = Res.Bind("B.OnAccentStrong");
-        var cancelBtn = new Button { Content = "取消" };
+        var cancelBtn = new Button { Content = I18nCore.Tr("取消") };
         var result = new TaskCompletionSource<string?>();
 
         var win = BuildDialog(title, WrapField(label, box), 460, new StackPanel
