@@ -79,3 +79,40 @@ $env:TEMP="D:\项目\TipCL\_tools\tmp-A"; $env:TMP=$env:TEMP
 - **P0：0 项。P1：2 项（A-01 数据丢失、A-02 进程级崩溃），P2：1 项（A-03）——全部已修并带证据。**
 - Core `dotnet build -c Release`：0 错误 0 警告；`dotnet test`：781 项通过 / 0 失败 / 1 跳过（基线同）。
 - 没有任何 public API 签名变更；A-01 只新增两个只读属性和一个私有实现，A-02 只加内部深度计数，A-03 只调整锁范围。
+
+---
+
+# 第二轮（lead 指定优先级：Installer 1411-2108 / Java.cs / Plugins / i18n 探针）
+
+基线：rebase 到第一轮合并后的 main。本轮改动集中在 `Launcher/Java.cs`、`Launcher/Utils.cs`，其余为核查。
+
+## 6. 第二轮已修问题
+
+| ID | 级别 | 文件:行 | 根因 | 修复 | 验证证据 | 状态 |
+|----|------|---------|------|------|----------|------|
+| A-04 | **P1（装了用不了 = 点了没反应）** | `Launcher/Java.cs:1129`（原 `Chmod755` 空方法体）、`Launcher/Utils.cs:1205`（`SafeExtractTargz` 丢弃 tar 的 `Mode`）、`Launcher/Utils.cs:1147`（`SafeExtractZip` 不应用 zip 的 Unix 权限位） | 三条路径装出来的 Java 在 Linux/macOS 上都**没有执行位**：①`InstallMojangRuntime` 是逐文件 HTTP 下载，`FileMode.Create` 落盘 0644，本来靠 `Chmod755` 补 0755，而它是空方法（参考版 Windows 没有权限位，空着能跑，移植过来就成了 Linux 上的真 bug）；②`InstallAdoptium`/`_InstallZulu`/`_InstallMicrosoft` 走解压，`TarReader` **解析了 `Mode` 却从不使用**，`SafeExtractZip` 也没读 `ExternalAttributes`。`Utils.FindExecutable` 只判存在，于是「装好了、路径也返回了、`runtime.meta.json` 也写了」，一启动 `Process.Start` permission denied → `JavaVersionOutput` 返回空 → `GetJavaMajor` null → 报「Java ? 无法启动此版本」/点了没反应 | ①`Java.Chmod755` 按 `Shortcut.cs:225` 的既有正确实现补齐（`OperatingSystem.IsWindows()` 守卫 + `File.SetUnixFileMode`，失败静默）；②新增 `Utils.ApplyUnixMode(path, mode)`：只搬 rwx 三段（`&0x1FF`，不还原 setuid/setgid/sticky），仅在有执行位时动手，非 Unix 平台直接返回；③`SafeExtractTargz` 写文件后按 `item2.Mode` 应用，`SafeExtractZip` 写文件后按 `(entry.ExternalAttributes>>16)&0x1FF` 应用 | Core Release **0 警告 0 错误**（CA1416 用 `OperatingSystem.IsWindows()` 而非 `IS_WINDOWS` 消掉）；全量 `dotnet test` **783 通过 / 0 失败 / 1 跳过**；harness 验证「zip 内 0755 条目解压成功且内容正确」；Windows 上权限位本就不适用，故 Windows 行为零变化 | 已修 |
+| A-05 | **P1（发行版 Java 必装失败）** | `Launcher/Java.cs:1418`（`_InstallZulu`）、`Launcher/Java.cs:1463`（`_InstallMicrosoft`） | 本地包名用 `ArchiveSuffix()`（Linux = `.tar.gz`），但**内容是 zip**：Zulu 接口 URL 写死 `archive_type=zip`，aka.ms 的 Microsoft JDK 链接也固定 `.zip`。`DownloadManager.ExtractArchive` 按**文件名后缀**派发 → `.tar.gz` 走 `GZipStream` → 对 zip 内容抛 `InvalidDataException`。于是这两个发行版在 Linux 上「下载成功、随后解压炸」，用户只看到一句底层 gzip 异常 | 新增 `ArchiveSuffixForUrl(url, fallback)`：按下载地址的真实后缀（`.zip`/`.tar.gz`/`.tgz`）决定本地包名，认不出来才回落 `ArchiveSuffix()`；两处调用点改用它 | harness 断言：同一份 zip 内容命名 `.tar.gz` → `ExtractArchive` 抛 `InvalidDataException`（复现修前失败方式）；命名 `.zip` → 解压成功、`bin/java` 落盘且内容一致；Windows 侧 `ArchiveSuffix()` 本来就是 `.zip`，行为不变 | 已修 |
+| A-06 | P2（界面显示原始 key） | `Resources/locales/zh_CN.json`（末尾）、`Resources/locales/en.json`（末尾） | `src/TipCL.App/Pages/Download/CatalogPage.cs:182` 用了 `Tr("结果列表")`，但 Core 内嵌词表里没有这个 key → 界面直接显示「结果列表」这个 key 本身（切英文时更明显）。aud-consistency 核对发现，落在 Core 词表范围 | 两侧成对新增 1 条：zh_CN `"结果列表": "结果列表"`、en `"结果列表": "Results list"`（追加在文件末尾，保持 `{`…`}` 单对象结构与 2 空格缩进；未改任何既有行） | `dotnet build -c Release` 0 错误；`--filter FullyQualifiedName~TipCL.Tests.Core` 214 项全绿、`~I18nCore` 4 项全绿（键集/键数断言未破）；探针复测：**App 侧 212 个 `Tr("…")` 字面量 → en/zh_CN 各 0 缺失**，Core 侧 37 个 → 也 0 缺失。注意探针必须重新 build（内嵌资源随 Core.dll 走），否则读到旧词表会误报 | 已修 |
+
+## 7. 第二轮：已核查无问题（记录以免重复挖）
+
+| 位置 | 结论 |
+|------|------|
+| `Plugins/PluginManifest.cs:518` 的 `long.Parse(isv.Trim())`（lead 点名） | **不是 bug**：整段包在 `try { … } catch (Exception) { throw new ValueError(key + " 必须是整数"); }` 里，任何格式错都转成中文可读的 `ValueError`；`number` 分支（`:528`）同理。 |
+| `Plugins/PluginInstaller.cs` `Swap`（`:233-258`） | 安装回滚正确：旧版本先挪 `backups/<id>` → 新版本 `Directory.Move` 进来 → 失败则删残壳并挪回旧版本 → 成功后清备份；`InstallPackage` 的 catch 会清暂存目录。 |
+| `Plugins/PluginStateStore.cs` | 并发写安全：所有读写同一把 `_lock`，写盘是 `tmp` + `File.Replace`（无则 `File.Move`）；坏 JSON 先 `File.Copy` 成 `.corrupt` 再按空表处理，不抛。 |
+| `Installer.cs:1411-1793`（Forge 现代/legacy/CLI 三条链） | `_run_install_profile_processors`：输出 `FileMatches` 全过就跳过、退出码非 0 但输出已生成只告警继续、退出码 0 但输出缺失才抛；`_install_forge_cli` 先在临时目录里铺好 `versions/<mc>` 再跑官方安装器，回拷 versions/libraries 并 `_merge_libraries_to_shared`，临时目录 finally 必删。`_install_forge_legacy` 的 `install.path/filePath` 内嵌库解包与父版本安装链完整。 |
+| `Installer.cs:1795-2108`（NeoForge / 排序 / maven-metadata） | NeoForge 版本前缀（26.x 三段 calver / 1.20.2+ 去 `1.` / 老版本 `mc-` 与 `NEOFORGE_MC_MAP` 回落）分支完整；`ParseMavenVersions` 用 `XmlResolver = null`（防外部实体）且 `XmlException` 回落空表；`_mc_tuple` 对 `1.20`、空串、非数字都有兜底。 |
+| `Java.cs:138-235` `JavaVersionOutput` | stderr + stdout **合并**后再解析（`java -version` 走 stderr 的场景已覆盖）；6s 超时后 kill 并返回空串；UTF-8 解不出 `version` 时回落 GBK(936) —— Windows 中文 JDK 的典型输出。 |
+| `Java.cs:468-508` `Which` + `:375` `RealPath` | Linux 上 `Which` 只扫 PATH（`Path.PathSeparator`），`RealPath` 解析 `/usr/bin/java → /etc/alternatives/java → /usr/lib/jvm/...` 软链，再取两级父目录作为 JDK 根，能落到各发行版的真实 JAVA_HOME。 |
+| `Java.cs:681-772` `FindSystemJavas` | JAVA_HOME / PATH / `/usr/lib/jvm`、`/usr/java`、`/opt/java`、sdkman、`.jdks`、`.gradle/jdks` 都覆盖；结果按 major 降序、临时目录里的排最后；60s 缓存。**观察（P2，未改）**：整个扫描（Windows 上最多 8s 遍历 + 15s 版本探测）都在 `_SYS_JAVA_LOCK` 里，`CachedSystemJavas()` 会跟着等；App 侧没有调用 Cached*（grep 确认），所以当前不构成 UI 卡死，若以后 UI 直接读缓存建议把锁拆成「扫描锁 + 结果锁」。 |
+| `Java.cs:876-928` `RequiredJavaMajor` | `javaVersion.majorVersion` → bootstrapLauncher 判 17 → `-p/--module-path/--add-modules` 判 17 → 否则 8；覆盖了老 Forge/1.17+ 模块参数两种极端。 |
+| `Java.cs:1062-1112` `_ArchiveValid` / `InstallAdoptium` / `_InstallZulu` / `_InstallMicrosoft` 的失败回滚 | 三者都是「先删目标目录 → 解压 → 失败删目录+删包再抛 → 找不到 java 也删目录」；`ArchiveSuffix()` 与 Adoptium（Linux tar.gz / Windows zip）真实格式相符。 |
+| Core 全部 `I18nCore.Tr("…")` 字面量（37 个） | **en / zh_CN 两边都 0 缺失**，无需补词条（App 侧缺的那 1 条见 A-06）。方法：harness 扫 Core 全部 `.cs` 抽 `Tr("…")` 字面量，用 `Tr(key, lang, "\u0001MISSING\u0001") == sentinel` 判「查表未命中」——**不能用「返回值 == key」判**：zh_CN 表是「中文→中文」的恒等映射，值天然等于键（第一版探针就是这么误报 37/37 的）。 |
+
+## 8. 第二轮未审完（下一轮顺序）
+
+1. `Launcher/Mods.cs`（54KB）、`Launcher/Modpack.cs`（58KB）、`Launcher/Catalog.cs`（44KB）—— 元数据解析、mrpack 解包与依赖安装、mod 启停/更新（仍未通读）。
+2. `Launcher/Ai/*`（`Client.cs` / `AiAgent.cs` / `ToolRunner.cs` / `Compact.cs` / `Checkpoint.cs`）—— 流式解析、工具循环、token 统计、checkpoint/rewind。
+3. `Launcher/Crash.cs`（62KB）、`Updater.cs`、`Cleaner.cs`、`Worlds.cs`、`Sync/PhoneLink.cs`、`Plugins/PluginMarket.cs`（zip 前缀与 SHA 校验）、`Plugins/PluginHost.cs`。
+4. `Launcher/Optifine.cs` / `Liteloader.cs`（`Installer.InstallOptifine/InstallLiteloader` 只是转发，本体未读）。
