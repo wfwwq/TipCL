@@ -267,6 +267,73 @@ public class RepoConsistencyTests
     }
 
     [Fact]
+    public void SmokeMatrixScriptsAgreeOnThePageList()
+    {
+        string? root = RepoRoot();
+        if (root is null)
+        {
+            return;
+        }
+
+        // tools/smoke-matrix.ps1 与 tools/smoke-matrix.sh 是同一件事的两份实现(Windows 本机 / Linux CI)。
+        // 页面清单漂移的后果很隐蔽:一边跑了 10 页、另一边只跑 8 页,而两边都"绿"。
+        string ps1 = Read(root, "tools/smoke-matrix.ps1");
+        string sh = Read(root, "tools/smoke-matrix.sh");
+
+        // 清单来源:MainWindow.axaml.cs 的 GetPage(id) switch
+        string[] pages = { "launch", "download", "library", "plugins", "settings", "instance", "account", "multiplayer", "tasks", "ai" };
+        foreach (string page in pages)
+        {
+            Assert.True(ps1.Contains("'" + page + "'", StringComparison.Ordinal),
+                "tools/smoke-matrix.ps1 的页面清单缺 " + page);
+            Assert.True(sh.Contains(page, StringComparison.Ordinal),
+                "tools/smoke-matrix.sh 的页面清单缺 " + page);
+        }
+
+        // 四条判据的门槛值也必须同源(10 KB)
+        Assert.Contains("10240", ps1, StringComparison.Ordinal);
+        Assert.Contains("10240", sh, StringComparison.Ordinal);
+        // .sh 里出现 [WARN] / [ERROR] 的计数逻辑(别只在一边数)
+        Assert.Contains("[WARN]", sh, StringComparison.Ordinal);
+        Assert.Contains("[ERROR]", sh, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PowerShellScriptsWithNonAsciiTextCarryAUtf8Bom()
+    {
+        string? root = RepoRoot();
+        if (root is null)
+        {
+            return;
+        }
+
+        // Windows PowerShell 5.1(这台机器上的默认 shell)**没有 BOM 就按 ANSI 解码** .ps1:
+        // 含中文的脚本会变成乱码,而且乱码字节经常吃掉一个引号 ⇒ 整个文件解析失败。
+        // 实测:修复前 tools/build.ps1 有 8 个 parse error、tools/package.ps1 有 19 个 ——
+        // 「一键构建 / 一键打包」在这台机器的默认 shell 里**根本跑不起来**。
+        var bad = new List<string>();
+        foreach (string file in Directory.EnumerateFiles(root, "*.ps1", SearchOption.AllDirectories))
+        {
+            if (file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
+                || file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar))
+            {
+                continue;
+            }
+            byte[] bytes = File.ReadAllBytes(file);
+            bool bom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+            bool nonAscii = bytes.Any(b => b > 0x7F);
+            if (nonAscii && !bom)
+            {
+                bad.Add(Path.GetRelativePath(root, file));
+            }
+        }
+
+        Assert.True(bad.Count == 0,
+            "以下 .ps1 含非 ASCII 但没有 UTF-8 BOM —— PowerShell 5.1 会把它当 ANSI 读,"
+            + "中文变乱码并可能直接解析失败:" + Environment.NewLine + string.Join(Environment.NewLine, bad));
+    }
+
+    [Fact]
     public void VerifyLinuxScriptDefaultsToTheDirectoryThePackagingScriptsActuallyProduce()
     {
         string? root = RepoRoot();

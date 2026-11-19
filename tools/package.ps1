@@ -1,4 +1,4 @@
-# tools/package.ps1 — TipCL Linux 版一键双端打包（M3-C2，Windows 上跑）
+﻿# tools/package.ps1 — TipCL Linux 版一键双端打包（M3-C2，Windows 上跑）
 # 用法:
 #   powershell -ExecutionPolicy Bypass -File tools/package.ps1                # 双端发布到 dist/
 #   powershell -ExecutionPolicy Bypass -File tools/package.ps1 -SkipLinux     # 只出 win-x64
