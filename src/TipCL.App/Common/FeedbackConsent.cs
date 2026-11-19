@@ -65,9 +65,9 @@ public static class FeedbackConsent
         bool bridgeConsent = Py.Truthy(Config.CONFIG.Get(Key, (object)false));
         if (!ShouldAsk(ReadRaw(Config.CONFIG_FILE), bridgeConsent)) return;
         await Task.Delay(DelayMs);
-        bool agree = await Dlg.Confirm("是否上传诊断数据",
+        bool agree = await Dlg.Confirm(I18nCore.Tr("是否上传诊断数据"),
             "第一次打开需要你亲自选择。\n\n同意后才会向开发者上传:\n· 你提交的反馈内容\n· 本机配置(CPU / 内存 / 显卡 / Java / 已装版本)\n\n暂不同意则不会上传,以后可在设置里更改。",
-            "同意", "暂不同意", owner: owner);
+            I18nCore.Tr("同意"), I18nCore.Tr("暂不同意"), owner: owner);
         try
         {
             await api.CallAsync<object>("save_settings", new { data = new { feedback_consent = agree } });

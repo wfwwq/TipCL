@@ -26,7 +26,7 @@ namespace TipCL.App.Pages.Install;
 // Fabric API（Modrinth fabric-api，主任务成功后追加安装任务）。
 public sealed class InstallPage : UserControl
 {
-    private static readonly string[] Names = { "不安装", "Fabric", "Forge", "NeoForge", "Quilt" };
+    private static readonly string[] Names = { I18nCore.Tr("不安装"), "Fabric", "Forge", "NeoForge", "Quilt" };
 
     private static readonly string[] LoaderKeys = { "fabric", "forge", "neoforge", "quilt", "optifine", "liteloader" };
 
@@ -112,7 +112,7 @@ public sealed class InstallPage : UserControl
         for (int i = 0; i < 5; i++)
         {
             int k = i;
-            _subs[i] = UiClass.Small(i == 0 ? "纯原版" : "…");
+            _subs[i] = UiClass.Small(i == 0 ? I18nCore.Tr("纯原版") : "…");
             var chk = new Border
             {
                 Width = 16,
@@ -151,13 +151,13 @@ public sealed class InstallPage : UserControl
         _of.IsCheckedChanged += (_, _) => Sync();
         _lite.IsCheckedChanged += (_, _) => Sync();
         _verRow = Row(_verLabel, null, _loaderVer);
-        _apiRow = SepRow(Row(UiClass.Txt("Fabric API", 13.5), "大多数 Fabric 模组都需要", _api));
+        _apiRow = SepRow(Row(UiClass.Txt("Fabric API", 13.5), I18nCore.Tr("大多数 Fabric 模组都需要"), _api));
         var ofGrid = Row(_ofName, null, _of);
         var why = _ofWhy;
         why.VerticalAlignment = VerticalAlignment.Center;
         why.Margin = new Thickness(8, 0, 0, 0);
         ((Grid)ofGrid).Add(why, 0, 1);
-        _liteRow = SepRow(Row(UiClass.Txt("LiteLoader", 13.5), "仅老版本可用", _lite));
+        _liteRow = SepRow(Row(UiClass.Txt("LiteLoader", 13.5), I18nCore.Tr("仅老版本可用"), _lite));
         _liteRow.IsVisible = false;
         var vbox = UiClass.Card(UiClass.V(0, _verRow, _apiRow, SepRow(ofGrid), _liteRow), 0);
         vbox.Padding = new Thickness(0, 4, 0, 4);
@@ -175,17 +175,17 @@ public sealed class InstallPage : UserControl
 
         // [layout-fix 第三批] 原来的 body = V(0, 实例名称标签, 名称框, 模组加载器标签, 5 卡, 开关卡),外边距 22,0,22,16。
         // 现在按小节拆成区块(间距 0,边距同值),小节内部原样 ⇒ 没有存档时逐行位置不变。
-        var nameBlock = UiClass.V(0, Label("实例名称", 8), nm);
-        var loaderBlock = UiClass.V(0, Label("模组加载器", 14), lds);
+        var nameBlock = UiClass.V(0, Label(I18nCore.Tr("实例名称"), 8), nm);
+        var loaderBlock = UiClass.V(0, Label(I18nCore.Tr("模组加载器"), 14), lds);
 
         // ── 底部固定栏 ──
         _go = UiClass.Btn("", BtnKind.Primary, (_, _) => _ = InstallAsync());
-        _go.Content = UiClass.H(8, IconLib.Make("Download", "B.OnAccent", 14), UiClass.Txt("开始安装", 13, bold: true).Dyn(TextBlock.ForegroundProperty, "B.OnAccent"));
+        _go.Content = UiClass.H(8, IconLib.Make("Download", "B.OnAccent", 14), UiClass.Txt(I18nCore.Tr("开始安装"), 13, bold: true).Dyn(TextBlock.ForegroundProperty, "B.OnAccent"));
         _go.Height = 38;
         _go.Padding = new Thickness(20, 0, 20, 0);
-        ToolTip.SetTip(_size, "估算值，不含首次下载的共享资源文件");
+        ToolTip.SetTip(_size, I18nCore.Tr("估算值，不含首次下载的共享资源文件"));
         var foot = UiClass.G(null, "Auto,*,Auto");
-        foot.Add(UiClass.H(6, UiClass.Muted("将安装"), _sum, _size), 0);
+        foot.Add(UiClass.H(6, UiClass.Muted(I18nCore.Tr("将安装")), _sum, _size), 0);
         ((StackPanel)foot.Children[0]).VerticalAlignment = VerticalAlignment.Center;
         foot.Add(_go, 0, 2);
         var footBar = new Border
@@ -287,7 +287,7 @@ public sealed class InstallPage : UserControl
         {
             var l = ParseLoaderRows(res[i - 1]);
             _vers[i] = l;
-            _subs[i].Text = l.Count == 0 ? "不支持此版本" : Best(l).Id;
+            _subs[i].Text = l.Count == 0 ? I18nCore.Tr("不支持此版本") : Best(l).Id;
             _cards[i].IsEnabled = l.Count > 0;
             _cards[i].Opacity = l.Count > 0 ? 1.0 : 0.45;
         }
@@ -351,7 +351,7 @@ public sealed class InstallPage : UserControl
             var items = new List<string>();
             if (l == null || l.Count == 0)
             {
-                items.Add("最新");
+                items.Add(I18nCore.Tr("最新"));
             }
             else
             {
@@ -372,7 +372,7 @@ public sealed class InstallPage : UserControl
         if (!ofOk)
             _of.IsChecked = false;
         _ofName.Opacity = ofOk ? 1.0 : 0.5;
-        _ofWhy.Text = ofOk ? "" : (!_hasOf ? "此版本没有可用的 OptiFine" : $"与 {Names[k]} 不兼容，可改装 Sodium + Iris");
+        _ofWhy.Text = ofOk ? "" : (!_hasOf ? I18nCore.Tr("此版本没有可用的 OptiFine") : $"与 {Names[k]} 不兼容，可改装 Sodium + Iris");
         if (_autoName)
         {
             _lastAutoName = k == 0 ? _ver : $"{Names[k]} {_ver}";
@@ -424,7 +424,7 @@ public sealed class InstallPage : UserControl
     private void SyncName()
     {
         string n = _name.Text?.Trim() ?? "";
-        _nameHint.Text = n.Length == 0 ? "" : _instances.Contains(n) ? "装入已有实例" : "将新建实例";
+        _nameHint.Text = n.Length == 0 ? "" : _instances.Contains(n) ? I18nCore.Tr("装入已有实例") : I18nCore.Tr("将新建实例");
     }
 
     // ───────────────────────────── 安装流 ─────────────────────────────
@@ -434,7 +434,7 @@ public sealed class InstallPage : UserControl
         string name = _name.Text?.Trim() ?? "";
         if (name.Length == 0)
         {
-            ToastHost.Show("请填写实例名称", "", ToastKind.Warning);
+            ToastHost.Show(I18nCore.Tr("请填写实例名称"), "", ToastKind.Warning);
             return;
         }
 _go.IsEnabled = false;
@@ -497,13 +497,13 @@ _go.IsEnabled = false;
             });
 
             // 飞行动画 FlyToTasks 在 Linux 降级为直接跳转（R2 §2.3）
-            ToastHost.Show("已加入队列", _sum.Text ?? "", ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("已加入队列"), _sum.Text ?? "", ToastKind.Success);
             if (this.GetVisualRoot() is MainWindow win)
                 win.Navigate("tasks");
         }
         catch (Exception ex)
         {
-            ToastHost.Show("安装失败", ex.Message, ToastKind.Warning);
+            ToastHost.Show(I18nCore.Tr("安装失败"), ex.Message, ToastKind.Warning);
         }
         finally
         {
@@ -518,7 +518,7 @@ _go.IsEnabled = false;
         if (_sel > 0) list.Add(Names[_sel]);
         if (_of.IsChecked == true) list.Add("OptiFine");
         if (_lite.IsChecked == true && _liteRow.IsVisible) list.Add("LiteLoader");
-        return "安装游戏 " + string.Join(" + ", list);
+        return I18nCore.Tr("安装游戏 ") + string.Join(" + ", list);
     }
 
     private sealed record LoaderRow(string Id, bool Stable);

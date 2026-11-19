@@ -14,6 +14,7 @@ using TipCL.App.Ui;
 using TipCL.App.Common;
 using TipCL.Core.Launcher.Ai;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -111,11 +112,11 @@ internal sealed class ConfirmCard : Border
         bodyHost[!Border.BorderBrushProperty] = Res.Bind("B.LineSoft");
 
         // 按钮的点击回调在局部函数 Done 之后才绑定:局部函数必须先声明才好在 lambda 里引用
-        var yes = U.Btn("允许", BtnKind.Primary);
-        var always = U.Btn("本对话都允许", BtnKind.Normal);
-        ToolTip.SetTip(always, "同类操作以后不再询问");
-        var scope = UiClass.Combo(new[] { "仅当前实例", "所有实例" }, "仅当前实例", 110);
-        var no = U.Btn("拒绝", BtnKind.Normal);
+        var yes = U.Btn(I18nCore.Tr("允许"), BtnKind.Primary);
+        var always = U.Btn(I18nCore.Tr("本对话都允许"), BtnKind.Normal);
+        ToolTip.SetTip(always, I18nCore.Tr("同类操作以后不再询问"));
+        var scope = UiClass.Combo(new[] { I18nCore.Tr("仅当前实例"), I18nCore.Tr("所有实例") }, I18nCore.Tr("仅当前实例"), 110);
+        var no = U.Btn(I18nCore.Tr("拒绝"), BtnKind.Normal);
         var state = UiClass.Txt("", 12, false, "B.InkMuted");
         always.IsVisible = allowAlways;
         scope.IsVisible = allowAlways;
@@ -164,7 +165,7 @@ internal sealed class ConfirmCard : Border
             always.IsEnabled = false;
             no.IsEnabled = false;
             scope.IsEnabled = false;
-            state.Text = !ok ? "已拒绝" : (remember ? "已记住并允许" : "已允许");
+            state.Text = !ok ? I18nCore.Tr("已拒绝") : (remember ? I18nCore.Tr("已记住并允许") : I18nCore.Tr("已允许"));
             _answer(ok, remember, scope.SelectedIndex == 1 ? "global" : "instance");
         }
 

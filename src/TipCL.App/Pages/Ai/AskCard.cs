@@ -15,6 +15,7 @@ using TipCL.App.Ui;
 using TipCL.App.Common;
 using TipCL.Core;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -22,7 +23,7 @@ namespace TipCL.App.Pages.Ai;
 internal sealed class AskBlock
 {
     private readonly List<(ToggleButton Button, string Id, string Label)> _opts = new();
-    private readonly TextBox _other = UiClass.Input("选「其他」时在这里填");
+    private readonly TextBox _other = UiClass.Input(I18nCore.Tr("选「其他」时在这里填"));
     private readonly bool _multi;
     private readonly ToggleButton? _otherBtn;
 
@@ -37,7 +38,7 @@ internal sealed class AskBlock
         string id = Py.S(question.Get("id"));
         Id = id.Length > 0 ? id : "q1";
         string prompt = Py.S(question.Get("prompt"));
-        Prompt = prompt.Length > 0 ? prompt : "请选择";
+        Prompt = prompt.Length > 0 ? prompt : I18nCore.Tr("请选择");
         _multi = Py.Truthy(question.Get("allow_multiple"));
 
         Root = UiClass.V(5, UiClass.Txt(Prompt + (_multi ? "(可多选)" : ""), 12.5).Wrap());
@@ -108,8 +109,8 @@ internal sealed class AskCard : Border
             _body.Children.Add(block.Root);
         }
 
-        _ok = U.Btn("确定", BtnKind.Primary, (_, _) => Submit());
-        _skip = U.Btn("跳过", BtnKind.Normal, (_, _) => Skip());
+        _ok = U.Btn(I18nCore.Tr("确定"), BtnKind.Primary, (_, _) => Submit());
+        _skip = U.Btn(I18nCore.Tr("跳过"), BtnKind.Normal, (_, _) => Skip());
         _body.Children.Add(UiClass.H(8, _ok, _skip));
 
         CornerRadius = new CornerRadius(10);
@@ -134,12 +135,12 @@ internal sealed class AskCard : Border
             PyDict? picked = block.Collect();
             if (picked == null)
             {
-                ToastHost.Show("还没选", block.Prompt, ToastKind.Warning);
+                ToastHost.Show(I18nCore.Tr("还没选"), block.Prompt, ToastKind.Warning);
                 return;
             }
             answers[block.Id] = picked;
         }
-        Freeze("已提交");
+        Freeze(I18nCore.Tr("已提交"));
         _submit(PyDict.Of("answers", answers));
     }
 
@@ -149,7 +150,7 @@ internal sealed class AskCard : Border
         {
             return;
         }
-        Freeze("已跳过");
+        Freeze(I18nCore.Tr("已跳过"));
         _submit(null);
     }
 

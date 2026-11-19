@@ -14,6 +14,7 @@ using TipCL.App.Common;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -62,7 +63,7 @@ internal sealed class SlashMenu : Border
             var desc = UiClass.Txt(cmd.Desc, 11.5, false, "B.InkMuted");
             desc.Margin = new Thickness(8, 0, 0, 0);
             grid.Add(desc.VCenter(), 0, 1);
-            grid.Add(UiClass.Txt(cmd.Local.Length > 0 ? "本地" : "发给助手", 10.5, false, "B.InkFaint").VCenter(), 0, 2);
+            grid.Add(UiClass.Txt(cmd.Local.Length > 0 ? I18nCore.Tr("本地") : "发给助手", 10.5, false, "B.InkFaint").VCenter(), 0, 2);
 
             var row = new Border
             {

@@ -19,6 +19,7 @@ using TipCL.App.Common;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -415,7 +416,7 @@ internal sealed class MdView : UserControl
         langText.Foreground = new SolidColorBrush(Color.FromRgb(140, 176, 160));
         var copy = new Button
         {
-            Content = UiClass.Txt("复制", 11, fg: "B.AccentText"),
+            Content = UiClass.Txt(I18nCore.Tr("复制"), 11, fg: "B.AccentText"),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Padding = new Thickness(4, 1, 4, 1),
@@ -431,7 +432,7 @@ internal sealed class MdView : UserControl
                 : null;
             if (clipboard == null) return;
             _ = clipboard.SetTextAsync(code);
-            ToastHost.Show("已复制", "", ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("已复制"), "", ToastKind.Success);
         };
 
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };

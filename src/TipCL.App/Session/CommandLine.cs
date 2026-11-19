@@ -181,7 +181,7 @@ internal static class CommandLine
             // Windows 侧快捷方式可以带 --account <名>(「离线模式」= 用当前账号)。
             // 启动链要求账号已存在,这里先按「当前账号」语义解析成真实账号名再传。
             var manager = new AccountManager();
-            if (cmd.Account == "离线模式" || cmd.Account == "offline")
+            if (cmd.Account == I18nCore.Tr("离线模式") || cmd.Account == "offline")
             {
                 PyDict active = manager.GetActive();
                 if (active == null) throw new LaunchError(I18nCore.Tr("还没有账号,请先在启动器里添加一个账号"));

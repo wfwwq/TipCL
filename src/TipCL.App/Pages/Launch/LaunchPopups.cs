@@ -13,6 +13,7 @@ using TipCL.App.Shell;
 using TipCL.App.Ui;
 using UiClass = TipCL.App.Ui.Ui;
 using TipCL.Core;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Launch;
 
@@ -106,14 +107,14 @@ public sealed partial class LaunchPage
             _configBody = BuildConfig();
         if (_configPopup == null)
         {
-            var head = UiClass.Txt("启动配置", 15, bold: true);
+            var head = UiClass.Txt(I18nCore.Tr("启动配置"), 15, bold: true);
             var close = new Button
             {
                 Theme = UiClass.Theme("Btn.Icon"),
                 VerticalAlignment = VerticalAlignment.Center,
                 Content = IconLib.Make("Close", "B.Ink", 13),
             };
-            ToolTip.SetTip(close, "关闭");
+            ToolTip.SetTip(close, I18nCore.Tr("关闭"));
             close.Click += (_, _) =>
             {
                 if (_configPopup != null)
@@ -149,28 +150,28 @@ public sealed partial class LaunchPage
 
         var advanced = UiClass.V(9,
             UiClass.Field("Java", _java, labelWidth: 58),
-            UiClass.Field("内存", memRow, labelWidth: 58),
-            UiClass.Field("分辨率", resRow, labelWidth: 58),
-            UiClass.Field("直连", _server, labelWidth: 58));
+            UiClass.Field(I18nCore.Tr("内存"), memRow, labelWidth: 58),
+            UiClass.Field(I18nCore.Tr("分辨率"), resRow, labelWidth: 58),
+            UiClass.Field(I18nCore.Tr("直连"), _server, labelWidth: 58));
         advanced.IsVisible = false;
         Button? toggle = null;
-        toggle = UiClass.Btn("更多设置", BtnKind.Ghost, (_, _) =>
+        toggle = UiClass.Btn(I18nCore.Tr("更多设置"), BtnKind.Ghost, (_, _) =>
         {
             bool open = !advanced.IsVisible;
             advanced.IsVisible = open;
-            toggle!.Content = UiClass.Txt(open ? "收起" : "更多设置");
+            toggle!.Content = UiClass.Txt(open ? I18nCore.Tr("收起") : I18nCore.Tr("更多设置"));
         });
         toggle.HorizontalAlignment = HorizontalAlignment.Left;
 
-        var msLogin = UiClass.Btn("微软登录", BtnKind.Soft, (_, _) =>
-            Toast("微软登录", "账号能力将在 M3 接入", ToastKind.Info));
-        var authlib = UiClass.Btn("皮肤站", BtnKind.Chip, (_, _) =>
-            Toast("皮肤站登录", "账号能力将在 M3 接入", ToastKind.Info));
+        var msLogin = UiClass.Btn(I18nCore.Tr("微软登录"), BtnKind.Soft, (_, _) =>
+            Toast(I18nCore.Tr("微软登录"), "账号能力将在 M3 接入", ToastKind.Info));
+        var authlib = UiClass.Btn(I18nCore.Tr("皮肤站"), BtnKind.Chip, (_, _) =>
+            Toast(I18nCore.Tr("皮肤站登录"), "账号能力将在 M3 接入", ToastKind.Info));
 
         return UiClass.V(9,
-            UiClass.Field("实例", _inst, labelWidth: 58),
-            UiClass.Field("版本", _ver, labelWidth: 58),
-            UiClass.Field("用户", _user, labelWidth: 58),
+            UiClass.Field(I18nCore.Tr("实例"), _inst, labelWidth: 58),
+            UiClass.Field(I18nCore.Tr("版本"), _ver, labelWidth: 58),
+            UiClass.Field(I18nCore.Tr("用户"), _user, labelWidth: 58),
             toggle,
             advanced,
             UiClass.Sep(),
@@ -183,7 +184,7 @@ public sealed partial class LaunchPage
     {
         if (_switchPopup == null)
         {
-            _switchSearch = UiClass.Input("搜索实例…");
+            _switchSearch = UiClass.Input(I18nCore.Tr("搜索实例…"));
             _switchSearch.Height = 30;
             _switchSearch.Padding = new Thickness(6, 5, 6, 5);
             _switchSearch.TextChanged += (_, _) => RenderSwitchRows();
@@ -201,7 +202,7 @@ public sealed partial class LaunchPage
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 MaxHeight = 300,
             };
-            var openLib = UiClass.Btn("打开实例库", BtnKind.Ghost, (_, _) =>
+            var openLib = UiClass.Btn(I18nCore.Tr("打开实例库"), BtnKind.Ghost, (_, _) =>
             {
                 _switchPopup!.IsOpen = false;
                 (TopLevel.GetTopLevel(this) as MainWindow)?.Navigate("library");
@@ -209,7 +210,7 @@ public sealed partial class LaunchPage
             openLib.FontSize = 12;
             openLib.HorizontalAlignment = HorizontalAlignment.Left;
             // 照 Windows ManageLink:浮层里直接进「版本管理」
-            var manage = UiClass.Btn("管理", BtnKind.Ghost, (_, _) =>
+            var manage = UiClass.Btn(I18nCore.Tr("管理"), BtnKind.Ghost, (_, _) =>
             {
                 _switchPopup!.IsOpen = false;
                 (TopLevel.GetTopLevel(this) as MainWindow)?.Navigate("instance");
@@ -296,7 +297,7 @@ public sealed partial class LaunchPage
                 continue;
             if (vers.Count == 0)
             {
-                var hint = UiClass.Muted("这个实例还没有版本，先去「下载」装一个");
+                var hint = UiClass.Muted(I18nCore.Tr("这个实例还没有版本，先去「下载」装一个"));
                 hint.Margin = new Thickness(24, 4, 4, 8);
                 _switchList.Children.Add(hint);
                 continue;
@@ -306,7 +307,7 @@ public sealed partial class LaunchPage
         }
         if (shown == 0)
         {
-            var none = UiClass.Muted("没有匹配的实例");
+            var none = UiClass.Muted(I18nCore.Tr("没有匹配的实例"));
             none.Margin = new Thickness(4, 6, 4, 6);
             _switchList.Children.Add(none);
         }
@@ -359,12 +360,12 @@ public sealed partial class LaunchPage
     {
         var dot = new Ellipse { Width = 7, Height = 7 };
         dot.Dyn(Shape.FillProperty, "B.Accent");
-        return UiClass.H(5, dot, UiClass.Txt("当前", 11.5, fg: "B.InkMuted"));
+        return UiClass.H(5, dot, UiClass.Txt(I18nCore.Tr("当前"), 11.5, fg: "B.InkMuted"));
     }
 
     private Button ManageLink()
     {
-        var b = UiClass.Btn("管理", BtnKind.Ghost, (_, _) =>
+        var b = UiClass.Btn(I18nCore.Tr("管理"), BtnKind.Ghost, (_, _) =>
         {
             if (_switchPopup != null)
                 _switchPopup.IsOpen = false;

@@ -15,6 +15,7 @@ using TipCL.App.Ui;
 using TipCL.Core;
 using TipCL.Core.Launcher.Ai;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -25,18 +26,18 @@ internal sealed class AiPermissionPanel : Border
     internal static readonly string[] Modes = { "default", "acceptEdits", "plan", "yolo", "custom" };
 
     /// <summary>档位文案(顺序与 Modes 对齐)。</summary>
-    internal static readonly string[] ModeLabels = { "每次确认", "写直接执行", "只看不动", "全自动", "自定义" };
+    internal static readonly string[] ModeLabels = { I18nCore.Tr("每次确认"), I18nCore.Tr("写直接执行"), I18nCore.Tr("只看不动"), I18nCore.Tr("全自动"), I18nCore.Tr("自定义") };
 
     private static readonly string[] Behaviors = { "allow", "deny", "ask" };
 
-    private static readonly string[] BehaviorLabels = { "允许", "禁止", "每次问" };
+    private static readonly string[] BehaviorLabels = { I18nCore.Tr("允许"), I18nCore.Tr("禁止"), I18nCore.Tr("每次问") };
 
     private readonly IApi _api;
     private readonly string _instance;
-    private readonly ComboBox _mode = UiClass.Combo(ModeLabels.ToList(), "每次确认", 170);
+    private readonly ComboBox _mode = UiClass.Combo(ModeLabels.ToList(), I18nCore.Tr("每次确认"), 170);
     private readonly ComboBox _tool = UiClass.Combo(Tools.Names(), null, 190);
-    private readonly ComboBox _behavior = UiClass.Combo(BehaviorLabels.ToList(), "允许", 100);
-    private readonly ComboBox _scope = UiClass.Combo(new[] { "所有实例", "仅当前实例" }, "所有实例", 125);
+    private readonly ComboBox _behavior = UiClass.Combo(BehaviorLabels.ToList(), I18nCore.Tr("允许"), 100);
+    private readonly ComboBox _scope = UiClass.Combo(new[] { I18nCore.Tr("所有实例"), I18nCore.Tr("仅当前实例") }, I18nCore.Tr("所有实例"), 125);
     private readonly TextBox _content = UiClass.Input("限定参数(留空 = 整个工具)");
     private readonly StackPanel _rules = UiClass.V(6);
     private readonly TextBlock _status = UiClass.Small("");
@@ -47,9 +48,9 @@ internal sealed class AiPermissionPanel : Border
         _api = api;
         _instance = instance;
 
-        var save = U.Btn("保存档位", BtnKind.Primary, (_, _) => _ = SaveModeAsync());
+        var save = U.Btn(I18nCore.Tr("保存档位"), BtnKind.Primary, (_, _) => _ = SaveModeAsync());
         var control = UiClass.H(8, _mode, save);
-        var add = U.Btn("添加规则", BtnKind.Soft, (_, _) => _ = AddRuleAsync());
+        var add = U.Btn(I18nCore.Tr("添加规则"), BtnKind.Soft, (_, _) => _ = AddRuleAsync());
         var row = UiClass.G(null, "*,Auto,Auto,Auto,Auto");
         row.Add(_tool, 0, 0);
         row.Add(UiExt.Mk(_behavior, 8, 0, 0, 0), 0, 1);
@@ -58,9 +59,9 @@ internal sealed class AiPermissionPanel : Border
         row.Add(UiExt.Mk(add, 8, 0, 0, 0), 0, 4);
 
         var body = UiClass.V(8,
-            UiClass.Section("权限档位", "与 Windows 版共用五档权限;自定义规则会覆盖默认判定"),
-            UiClass.Field("当前档位", control, "点保存后立即对下一轮生效"),
-            UiClass.Section("规则", "规则可记到全局或当前实例;删除类工具不提供「始终允许」"),
+            UiClass.Section(I18nCore.Tr("权限档位"), "与 Windows 版共用五档权限;自定义规则会覆盖默认判定"),
+            UiClass.Field(I18nCore.Tr("当前档位"), control, I18nCore.Tr("点保存后立即对下一轮生效")),
+            UiClass.Section(I18nCore.Tr("规则"), "规则可记到全局或当前实例;删除类工具不提供「始终允许」"),
             row,
             _status,
             _usage,
@@ -90,7 +91,7 @@ internal sealed class AiPermissionPanel : Border
                 ai_confirm_writes = Modes[index] != "yolo",
             },
         });
-        _status.Text = "已保存";
+        _status.Text = I18nCore.Tr("已保存");
     }
 
     private async Task AddRuleAsync()
@@ -144,15 +145,15 @@ internal sealed class AiPermissionPanel : Border
                 denied++;
             }
             int behaviorIndex = Array.IndexOf(Behaviors, behavior);
-            string text = (scope.Length == 0 ? "全局" : scope) + " · " + tool
+            string text = (scope.Length == 0 ? I18nCore.Tr("全局") : scope) + " · " + tool
                 + (content.Length > 0 ? " · " + content : "")
                 + " · " + BehaviorLabels[behaviorIndex >= 0 ? behaviorIndex : 0];
-            var del = UiClass.IconBtn("Close", "删除规则", (_, _) => _ = RemoveRuleAsync(tool, scope));
+            var del = UiClass.IconBtn("Close", I18nCore.Tr("删除规则"), (_, _) => _ = RemoveRuleAsync(tool, scope));
             _rules.Children.Add(UiClass.G(null, "*,Auto").Add(UiClass.Muted(text).Wrap(), 0, 0).Add(del, 0, 1));
         }
         if (total == 0)
         {
-            _rules.Children.Add(UiClass.Muted("还没有自定义规则"));
+            _rules.Children.Add(UiClass.Muted(I18nCore.Tr("还没有自定义规则")));
         }
         int modeIndex = Math.Clamp(_mode.SelectedIndex, 0, ModeLabels.Length - 1);
         _usage.Text = "当前档位:" + ModeLabels[modeIndex]

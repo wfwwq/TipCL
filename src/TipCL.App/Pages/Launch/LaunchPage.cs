@@ -56,7 +56,7 @@ public sealed partial class LaunchPage : PageBase
     // 点启动先过 Common/AccountGate 的闸门(见 LaunchAsync)。
     private readonly ComboBox _user = UiClass.Combo();
 
-    private readonly TextBox _server = UiClass.Input("直连服务器 ip:port（可空）");
+    private readonly TextBox _server = UiClass.Input(I18nCore.Tr("直连服务器 ip:port（可空）"));
 
     private readonly Slider _mem = UiClass.Sld(1024, 32768, 4096, 256);
 
@@ -75,7 +75,7 @@ public sealed partial class LaunchPage : PageBase
 
     private readonly ProgressBar _prog = new() { Height = 4, Width = 320, Maximum = 100, Opacity = 0.92, IsVisible = false };
 
-    private readonly TextBlock _status = UiClass.Txt("就绪", 12);
+    private readonly TextBlock _status = UiClass.Txt(I18nCore.Tr("就绪"), 12);
 
     private int _progGen;
 
@@ -148,7 +148,7 @@ public sealed partial class LaunchPage : PageBase
 
     private readonly TextBlock _playTotal = new() { FontSize = 20, FontWeight = FontWeight.SemiBold };
 
-    private readonly TextBox _notes = UiClass.Multi("随手记点什么…");
+    private readonly TextBox _notes = UiClass.Multi(I18nCore.Tr("随手记点什么…"));
 
     private readonly TextBox _log = UiClass.LogBox();
 
@@ -208,7 +208,7 @@ public sealed partial class LaunchPage : PageBase
     private static bool _eventWired;
 
     public LaunchPage()
-        : base("launch", "启动")
+        : base("launch", I18nCore.Tr("启动"))
     {
         BuildHero();
         WireEvents();
@@ -257,7 +257,7 @@ public sealed partial class LaunchPage : PageBase
         // 主按钮：主色 48 高外壳 + Ghost 按钮内容；柔光用 BoxShadow 取主题主色
         var playIcon = IconLib.Make("Play", "B.OnAccentStrong", 17);
         playIcon.VerticalAlignment = VerticalAlignment.Center;
-        var goText = UiClass.Txt("启动游戏", 16, bold: true);
+        var goText = UiClass.Txt(I18nCore.Tr("启动游戏"), 16, bold: true);
         goText.FontWeight = FontWeight.ExtraBold;
         goText.VerticalAlignment = VerticalAlignment.Center;
         _goVer.Opacity = 0.85;
@@ -290,22 +290,22 @@ public sealed partial class LaunchPage : PageBase
         {
             Theme = UiClass.Theme("Btn.Ghost"),
             Padding = new Thickness(0),
-            Content = UiClass.H(8, stopIcon, UiClass.Txt("停止", 15, bold: true)),
+            Content = UiClass.H(8, stopIcon, UiClass.Txt(I18nCore.Tr("停止"), 15, bold: true)),
         };
         stopBtn.Click += (_, _) => _ = StopAsync();
         _stopShell.Child = stopBtn;
         _stopShell.Dyn(Border.BackgroundProperty, "B.DangerSoft");
 
         _configPill = GlassButton("Gear", null, OpenConfigPopup);
-        ToolTip.SetTip(_configPill, "启动配置");
-        var net = GlassButton("Wifi", "联机", () =>
+        ToolTip.SetTip(_configPill, I18nCore.Tr("启动配置"));
+        var net = GlassButton("Wifi", I18nCore.Tr("联机"), () =>
         {
             // Linux 版暂无联机页（Windows 版 Navigate("multiplayer")）
             // [audit/B] 联机页已经落地:原来这里跟着弹「联机功能将在后续里程碑提供」,文案与真实行为不符。
             if (TopLevel.GetTopLevel(this) is MainWindow win)
                 win.Navigate("multiplayer");
             else
-                Toast("联机", I18nCore.Tr("联机页在主窗口的导航里"), ToastKind.Info);
+                Toast(I18nCore.Tr("联机"), I18nCore.Tr("联机页在主窗口的导航里"), ToastKind.Info);
         });
         var launchRow = UiClass.H(10, _launchShell, _stopShell, _configPill, net);
 
@@ -330,7 +330,7 @@ public sealed partial class LaunchPage : PageBase
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(8, 2, 8, 3),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = UiClass.Txt("新闻", 11, bold: true, "B.OnAccent"),
+            Child = UiClass.Txt(I18nCore.Tr("新闻"), 11, bold: true, "B.OnAccent"),
         };
         tag.Dyn(Border.BackgroundProperty, "B.Accent");
         var arrow = GlassIcon("ChevronRight", 12);
@@ -359,11 +359,11 @@ public sealed partial class LaunchPage : PageBase
         // 边距同英雄区(左 56 / 右 24 / 下 18)
         _blocks = new TipCL.App.Pages.Layout.BlockHost("launch", new List<TipCL.App.Pages.Layout.BlockSpec>
         {
-            new() { Id = "news", Title = "新闻", Content = _newsCard },
-            new() { Id = "tasks", Title = "下载任务", Content = UiClass.Card(_taskHost), DefaultVisible = false },
-            new() { Id = "playtime", Title = "游戏时长", Content = UiClass.Card(_playTotal), DefaultVisible = false },
-            new() { Id = "notes", Title = "便签", Content = UiClass.Card(_notes), DefaultVisible = false },
-            new() { Id = "log", Title = "日志", Content = logCard, DefaultVisible = false },
+            new() { Id = "news", Title = I18nCore.Tr("新闻"), Content = _newsCard },
+            new() { Id = "tasks", Title = I18nCore.Tr("下载任务"), Content = UiClass.Card(_taskHost), DefaultVisible = false },
+            new() { Id = "playtime", Title = I18nCore.Tr("游戏时长"), Content = UiClass.Card(_playTotal), DefaultVisible = false },
+            new() { Id = "notes", Title = I18nCore.Tr("便签"), Content = UiClass.Card(_notes), DefaultVisible = false },
+            new() { Id = "log", Title = I18nCore.Tr("日志"), Content = logCard, DefaultVisible = false },
         }, new Thickness(56, 0, 24, 18));
         // 多块同时展开时限高约 62% 页高,避免把上方英雄区挤没
         PropertyChanged += (_, e) =>
@@ -747,8 +747,8 @@ public sealed partial class LaunchPage : PageBase
     /// <summary>当前 Java 下拉的取值(路径或「自动选择」)。</summary>
     private string SelectedJava()
     {
-        string label = _java.SelectedItem as string ?? "自动选择";
-        return _javaOpts.FirstOrDefault(o => o.Label == label).Value ?? "自动选择";
+        string label = _java.SelectedItem as string ?? I18nCore.Tr("自动选择");
+        return _javaOpts.FirstOrDefault(o => o.Label == label).Value ?? I18nCore.Tr("自动选择");
     }
 
     private async Task ReloadJavaAsync(bool scan)
@@ -765,7 +765,7 @@ public sealed partial class LaunchPage : PageBase
             if (o is PyDict d)
                 parsed.Add((Py.S(d["label"]), Py.S(d["value"])));
         string keep = await Api.TryCallAsync("java_combo_label_for",
-            "自动选择", new PyDict { ["instance"] = inst, ["options"] = opts }) ?? "自动选择";
+            I18nCore.Tr("自动选择"), new PyDict { ["instance"] = inst, ["options"] = opts }) ?? I18nCore.Tr("自动选择");
         _syncing = true;
         _javaOpts = parsed;
         FillCombo(_java, parsed.Select(o => o.Label).ToList(), keep);
@@ -823,9 +823,9 @@ public sealed partial class LaunchPage : PageBase
         if (CurInst().Length == 0 && _instances.Count > 0)
             _status.Text = "还没有实例，先到「实例库」添加";
         else if (_versions.Count == 0 && CurInst().Length > 0)
-            _status.Text = "这个实例还没有版本，先去「下载」装一个";
+            _status.Text = I18nCore.Tr("这个实例还没有版本，先去「下载」装一个");
         else
-            _status.Text = "就绪";
+            _status.Text = I18nCore.Tr("就绪");
         SyncHero();
         _ = RefreshBackgroundAsync();
         UpdateStatusRow();
@@ -835,9 +835,9 @@ public sealed partial class LaunchPage : PageBase
     private void SyncHero()
     {
         string instance = CurInst();
-        _heroTitle.Text = instance.Length == 0 ? "选择实例" : instance;
+        _heroTitle.Text = instance.Length == 0 ? I18nCore.Tr("选择实例") : instance;
         string dir = _instances.FirstOrDefault(x => x.Name == instance)?.Path ?? "";
-        _kickerText.Text = "就绪" + (dir.Length == 0 ? "" : " · " + dir);
+        _kickerText.Text = I18nCore.Tr("就绪") + (dir.Length == 0 ? "" : " · " + dir);
         _chipRow.Children.Clear();
         string ver = CurVer();
         _goVer.Text = ver;
@@ -863,7 +863,7 @@ public sealed partial class LaunchPage : PageBase
         if (java.Length == 0)
             return "";
         if (java.StartsWith("自动", StringComparison.Ordinal))
-            return "Java 自动";
+            return I18nCore.Tr("Java 自动");
         var m = System.Text.RegularExpressions.Regex.Match(
             java, @"(?:java|jdk|jre)\D{0,3}(?:1\.)?(\d+)",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -903,8 +903,8 @@ public sealed partial class LaunchPage : PageBase
         string mode = Py.S(Config.CONFIG.Get("homepage_mode", "news"));
         if (mode == "blank")
         {
-            _newsHost.Children.Add(UiClass.Muted("主页已设为空白"));
-            _newsTicker.Text = "主页已设为空白";
+            _newsHost.Children.Add(UiClass.Muted(I18nCore.Tr("主页已设为空白")));
+            _newsTicker.Text = I18nCore.Tr("主页已设为空白");
             return;
         }
         if (mode == "custom")
@@ -914,15 +914,15 @@ public sealed partial class LaunchPage : PageBase
             try
             {
                 string text = string.IsNullOrWhiteSpace(path) || !File.Exists(path)
-                    ? "未设置自定义主页。到设置 → 启动页主页 填本地 HTML 路径。"
+                    ? I18nCore.Tr("未设置自定义主页。到设置 → 启动页主页 填本地 HTML 路径。")
                     : await Task.Run(() => File.ReadAllText(path));
                 _newsHost.Children.Add(UiClass.Muted(text.Length > 2000 ? text.Substring(0, 2000) + "…" : text));
                 _newsTicker.Text = text.Length > 60 ? text.Substring(0, 60) + "…" : text;
             }
             catch (Exception ex)
             {
-                _newsHost.Children.Add(UiClass.Muted("读不了自定义主页：" + ex.Message));
-                _newsTicker.Text = "读不了自定义主页";
+                _newsHost.Children.Add(UiClass.Muted(I18nCore.Tr("读不了自定义主页：") + ex.Message));
+                _newsTicker.Text = I18nCore.Tr("读不了自定义主页");
             }
             return;
         }
@@ -938,8 +938,8 @@ public sealed partial class LaunchPage : PageBase
         _newsHost.Children.Clear();
         if (rows.Count == 0)
         {
-            _newsHost.Children.Add(UiClass.Muted("暂无新闻"));
-            _newsTicker.Text = "暂无新闻";
+            _newsHost.Children.Add(UiClass.Muted(I18nCore.Tr("暂无新闻")));
+            _newsTicker.Text = I18nCore.Tr("暂无新闻");
             return;
         }
         int shown = 0;
@@ -965,8 +965,8 @@ public sealed partial class LaunchPage : PageBase
         }
         if (shown == 0)
         {
-            _newsHost.Children.Add(UiClass.Muted("暂无新闻"));
-            _newsTicker.Text = "暂无新闻";
+            _newsHost.Children.Add(UiClass.Muted(I18nCore.Tr("暂无新闻")));
+            _newsTicker.Text = I18nCore.Tr("暂无新闻");
             return;
         }
         _newsTicker.Text = Py.S(((rows[0] as PyDict)?["title"]) ?? "");
@@ -1005,7 +1005,7 @@ public sealed partial class LaunchPage : PageBase
         }
         if (version.Length == 0)
         {
-            Toast("没有版本", "请先到「下载」安装", ToastKind.Warning);
+            Toast(I18nCore.Tr("没有版本"), I18nCore.Tr("请先到「下载」安装"), ToastKind.Warning);
             (TopLevel.GetTopLevel(this) as MainWindow)?.Navigate("download");
             return;
         }
@@ -1022,7 +1022,7 @@ public sealed partial class LaunchPage : PageBase
         _prog.Value = 0;
         _prog.IsVisible = true;
         _progGen++;
-        _status.Text = "准备启动…";
+        _status.Text = I18nCore.Tr("准备启动…");
         _logLines.Clear();
         _log.Text = "";
         SetLaunchMode(running: true);
@@ -1045,7 +1045,7 @@ public sealed partial class LaunchPage : PageBase
                 ["height"] = resH,
                 ["extra_game_args"] = ExtraArgs()!,
             };
-            var row = await Api.StartTaskAsync("启动游戏", async (prog, ct) =>
+            var row = await Api.StartTaskAsync(I18nCore.Tr("启动游戏"), async (prog, ct) =>
             {
                 _taskId = prog.TaskId; // 先登记，避免任务瞬间失败时 finished 事件找不到 taskId
                 prog.Report("正在启动 " + version + "…");
@@ -1059,9 +1059,9 @@ public sealed partial class LaunchPage : PageBase
         catch (Exception ex)
         {
             SetLaunchMode(running: false);
-            _status.Text = "启动失败";
+            _status.Text = I18nCore.Tr("启动失败");
             UpdateStatusRow();
-            Toast("启动失败", ex.Message, ToastKind.Error);
+            Toast(I18nCore.Tr("启动失败"), ex.Message, ToastKind.Error);
         }
     }
 
@@ -1158,29 +1158,31 @@ public sealed partial class LaunchPage : PageBase
             {
                 Motion.Progress(_prog, ev.Total > 0 ? ev.Current * 100.0 / ev.Total : 0);
                 TaskMsg.SplitMsg(ev.Message, out string status, out string speed);
-                _status.Text = (status.Length == 0 ? "处理中…" : status) + (speed.Length == 0 ? "" : "    " + speed);
+                _status.Text = (status.Length == 0 ? I18nCore.Tr("处理中…") : status) + (speed.Length == 0 ? "" : "    " + speed);
                 UpdateStatusRow();
                 break;
             }
             case "game_started":
-                _status.Text = "游戏进程已启动，正在加载世界…";
+                _status.Text = I18nCore.Tr("游戏进程已启动，正在加载世界…");
                 Motion.Progress(_prog, Math.Max(_prog.Value, 92));
                 UpdateStatusRow();
                 break;
             case "game_exited":
-                _status.Text = "游戏已退出";
+                _status.Text = I18nCore.Tr("游戏已退出");
                 HideProgressSoon(0);
                 break;
             case "finished":
                 SetLaunchMode(running: false);
-                _status.Text = ev.Message.Length > 0 ? ev.Message : (ev.Success ? "已完成" : "✘ 失败");
+                _status.Text = ev.Message.Length > 0 ? ev.Message : (ev.Success ? I18nCore.Tr("已完成") : I18nCore.Tr("✘ 失败"));
                 if (ev.Success)
                     Motion.Progress(_prog, 100);
                 HideProgressSoon(ev.Success ? 1200 : 0);
-                if (!ev.Success && !_crashShown && ev.Message != "已取消")
+                // [audit/B i18n] 这里的 "已取消" 是**Core 侧**写进任务事件的原始文案(Api.StartDetached),
+// 不是界面词表里的 key ⇒ 比较必须用原文,不能包 Tr(否则 en 下取消会被当成崩溃提示)。
+                if (!ev.Success && !_crashShown && ev.Message != I18nCore.Tr("已取消"))
                 {
                     _crashShown = true;
-                    Toast("启动失败", ev.Message, ToastKind.Error);
+                    Toast(I18nCore.Tr("启动失败"), ev.Message, ToastKind.Error);
                 }
                 _taskId = null;
                 _ = LoadPlaytimeAsync();
@@ -1204,14 +1206,14 @@ public sealed partial class LaunchPage : PageBase
         var rows = TaskStore.Rows.Reverse().Take(5).ToList();
         if (rows.Count == 0)
         {
-            _taskHost.Children.Add(UiClass.Muted("暂无下载任务"));
+            _taskHost.Children.Add(UiClass.Muted(I18nCore.Tr("暂无下载任务")));
             return;
         }
         foreach (var r in rows)
         {
             var title = UiClass.Txt(r.Title, 12);
             title.TextTrimming = TextTrimming.CharacterEllipsis;
-            var state = UiClass.Small(r.Finished ? (r.Success ? "完成" : "失败") : $"{r.Progress:0}%");
+            var state = UiClass.Small(r.Finished ? (r.Success ? I18nCore.Tr("完成") : I18nCore.Tr("失败")) : $"{r.Progress:0}%");
             state.Margin = new Thickness(8, 0, 0, 0);
             var g = UiClass.G(null, "*,Auto");
             g.Add(title, 0, 0);
@@ -1248,7 +1250,7 @@ public sealed partial class LaunchPage : PageBase
     {
         if (_statusRow == null)
             return;
-        bool idle = !_prog.IsVisible && (string.IsNullOrEmpty(_status.Text) || _status.Text == "就绪");
+        bool idle = !_prog.IsVisible && (string.IsNullOrEmpty(_status.Text) || _status.Text == I18nCore.Tr("就绪"));
         _statusRow.IsVisible = !idle;
     }
 

@@ -941,7 +941,7 @@ public sealed class CatalogPage : PageBase
         var extra = BaseExtra(System.IO.Path.GetFileName(path));
         extra["path"] = path;
         // [audit/B i18n] 这个值会**交给 Core 当数据**记录来源(不是界面文案),不能翻译
-        extra["source"] = "本地";
+        extra["source"] = I18nCore.Tr("本地");
         await DoInstallAsync(extra);
     }
 

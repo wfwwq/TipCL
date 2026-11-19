@@ -11,6 +11,7 @@ using Avalonia.Threading;
 using TipCL.App.Common;
 using TipCL.App.Shell;
 using TipCL.App.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Session;
 
@@ -231,9 +232,9 @@ internal static class SmokeRunner
                     RenderPass();
                     Console.WriteLine("DIALOG-CLOSE: 宿主窗口已显示");
 
-                    CheckClick("确定", wmClose: false, expected: true);
-                    CheckClick("取消", wmClose: false, expected: false);
-                    CheckClick("确定", wmClose: true, expected: false);   // 只关窗 = 取消(兜底语义)
+                    CheckClick(I18nCore.Tr("确定"), wmClose: false, expected: true);
+                    CheckClick(I18nCore.Tr("取消"), wmClose: false, expected: false);
+                    CheckClick(I18nCore.Tr("确定"), wmClose: true, expected: false);   // 只关窗 = 取消(兜底语义)
                 }
                 catch (Exception ex)
                 {
@@ -248,7 +249,7 @@ internal static class SmokeRunner
                 void CheckClick(string label, bool wmClose, bool expected)
                 {
                     var what = wmClose ? "只关窗(WM_DELETE_WINDOW)" : $"点「{label}」";
-                    var task = Dlg.Confirm("探针", $"{what}应关窗", "确定", "取消", owner: host);
+                    var task = Dlg.Confirm("探针", $"{what}应关窗", I18nCore.Tr("确定"), I18nCore.Tr("取消"), owner: host);
                     var dlg = PumpFor(() => host!.OwnedWindows.FirstOrDefault(), TimeoutMs);
                     if (dlg is null)
                     {
@@ -421,7 +422,7 @@ internal static class SmokeRunner
                     RenderPass();
                     // 真机复现路径:先点开「更多设置」(Java/内存/分辨率/直连都在里面)
                     // 从浮层 Child 往下找(不依赖 Popup 是否把 Child 暴露成逻辑子级)
-                    var more = bRoot == null ? null : ButtonByTextLogical(bRoot, "更多设置");
+                    var more = bRoot == null ? null : ButtonByTextLogical(bRoot, I18nCore.Tr("更多设置"));
                     if (more is null)
                         problems.Add("真实配置浮层里没找到「更多设置」按钮,内存/分辨率那几行还是折叠的");
                     else
@@ -791,7 +792,7 @@ internal static class SmokeRunner
     private static (StackPanel Panel, Control[] Kids) BuildProbeGroup()
     {
         var input = TipCL.App.Ui.Ui.Input("854", "854", 74);
-        var combo = TipCL.App.Ui.Ui.Combo(new[] { "自动", "17" }, "自动");
+        var combo = TipCL.App.Ui.Ui.Combo(new[] { I18nCore.Tr("自动"), "17" }, I18nCore.Tr("自动"));
         var slider = TipCL.App.Ui.Ui.Sld(0, 100, 50);
         var btn = TipCL.App.Ui.Ui.Btn("x", TipCL.App.Ui.BtnKind.Soft);
         var txt = new TextBlock { Text = "对照组文本" };

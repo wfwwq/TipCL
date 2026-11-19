@@ -69,7 +69,7 @@ public static class LaunchCore
 
         object javaPref = args.Get("java");
         string javaExe = "";
-        if (Py.Truthy(javaPref) && !Py.Eq(javaPref, "自动选择") && !Py.Eq(javaPref, "auto") && !Py.Eq(javaPref, "default") && !Py.Eq(javaPref, ""))
+        if (Py.Truthy(javaPref) && !Py.Eq(javaPref, I18nCore.Tr("自动选择")) && !Py.Eq(javaPref, "auto") && !Py.Eq(javaPref, "default") && !Py.Eq(javaPref, ""))
             javaExe = Py.Str(javaPref);
 
         Instance inst = InstancesApi.EnsureInstance(args.Get("instance"));
@@ -149,13 +149,13 @@ public static class LaunchCore
         // Java 解析：参数 java → 版本设置 java → 实例 JavaPref → 全局 default_java
         object javaSel = null;
         object javaArg = args.Get("java");
-        if (Py.Truthy(settings.Get("java")) && !Py.Eq(settings["java"], "自动选择"))
+        if (Py.Truthy(settings.Get("java")) && !Py.Eq(settings["java"], I18nCore.Tr("自动选择")))
             javaArg = settings["java"];
-        if (!Py.Truthy(javaArg) || Py.Eq(javaArg, "自动选择"))
+        if (!Py.Truthy(javaArg) || Py.Eq(javaArg, I18nCore.Tr("自动选择")))
             javaArg = inst.JavaPref();
-        if (!Py.Truthy(javaArg) || Py.Eq(javaArg, "自动选择"))
+        if (!Py.Truthy(javaArg) || Py.Eq(javaArg, I18nCore.Tr("自动选择")))
             javaArg = Py.Or(Config.CONFIG.Get("default_java"), "");
-        if (Py.Truthy(javaArg) && !Py.Eq(javaArg, "自动选择"))
+        if (Py.Truthy(javaArg) && !Py.Eq(javaArg, I18nCore.Tr("自动选择")))
         {
             foreach (PyDict j in Java.AllJavas())
             {
@@ -319,15 +319,15 @@ public static class LaunchCore
     public static bool IsOfflineAccount(object account)
     {
         string s = Py.S(account);
-        if (s.Length != 0 && s != "离线模式") return s == I18nCore.Tr("离线模式");
+        if (s.Length != 0 && s != I18nCore.Tr("离线模式")) return s == I18nCore.Tr("离线模式");
         return true;
     }
 
     /// <summary>归一化 Java 偏好：名字 → exe 路径；找不到原样返回（对齐 normalize_java_pref）。</summary>
     public static object NormalizeJavaPref(object java)
     {
-        if (!Py.Truthy(java) || Py.Eq(java, "自动选择") || Py.Eq(java, "auto") || Py.Eq(java, "default"))
-            return "自动选择";
+        if (!Py.Truthy(java) || Py.Eq(java, I18nCore.Tr("自动选择")) || Py.Eq(java, "auto") || Py.Eq(java, "default"))
+            return I18nCore.Tr("自动选择");
         foreach (PyDict j in Java.AllJavas())
         {
             if (Py.Eq(j.Get("name"), java) || Py.Eq(j.Get("exe"), java))

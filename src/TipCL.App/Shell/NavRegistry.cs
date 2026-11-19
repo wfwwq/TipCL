@@ -1,4 +1,5 @@
 using System;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Shell;
 
@@ -12,10 +13,10 @@ public static class NavRegistry
     /// <summary>顶部 5 页签(与 Windows `MainWindow.xaml` Tab.Top 同序同文案)。</summary>
     public static readonly (string Id, string Title)[] TopTabs =
     {
-        ("launch", "启动"),
-        ("library", "实例库"),
-        ("download", "下载"),
-        ("plugins", "插件"),
-        ("settings", "设置"),
+        ("launch", I18nCore.Tr("启动")),
+        ("library", I18nCore.Tr("实例库")),
+        ("download", I18nCore.Tr("下载")),
+        ("plugins", I18nCore.Tr("插件")),
+        ("settings", I18nCore.Tr("设置")),
     };
 }

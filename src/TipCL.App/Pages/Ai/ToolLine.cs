@@ -13,6 +13,7 @@ using TipCL.App.Ui;
 using TipCL.App.Common;
 using TipCL.Core.Launcher.Ai;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Ai;
 
@@ -46,7 +47,7 @@ internal sealed class ToolLine : Border
         _arg.Margin = new Thickness(8, 0, 8, 0);
         _result = UiClass.Txt("", 11.5, false, "B.InkFaint");
 
-        _mcp = UiClass.Tag("MCP · 外部", "B.Info", "B.InfoSoft");
+        _mcp = UiClass.Tag(I18nCore.Tr("MCP · 外部"), "B.Info", "B.InfoSoft");
         _mcp.Margin = new Thickness(8, 0, 0, 0);
         _mcp.IsVisible = AiUiText.IsMcp(tool);
 
@@ -111,7 +112,7 @@ internal sealed class ToolLine : Border
         _iconHost.Child = AiIcons.Tile(icon, _state);
         if (_state == ToolState.Skipped && (_result.Text ?? "").Length == 0)
         {
-            _result.Text = "已跳过";
+            _result.Text = I18nCore.Tr("已跳过");
         }
     }
 
@@ -120,7 +121,7 @@ internal sealed class ToolLine : Border
     {
         _bar.IsVisible = true;
         _bar.IsIndeterminate = true;
-        _result.Text = "后台进行中";
+        _result.Text = I18nCore.Tr("后台进行中");
     }
 
     /// <summary>任务进度回调。</summary>
@@ -150,7 +151,7 @@ internal sealed class ToolLine : Border
             _bar.Value = 100;
             _bar.IsVisible = false;
         }
-        _result.Text = success ? "完成" : "失败";
+        _result.Text = success ? I18nCore.Tr("完成") : I18nCore.Tr("失败");
         if (!string.IsNullOrWhiteSpace(message))
         {
             _arg.Text = message;

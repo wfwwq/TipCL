@@ -9,6 +9,7 @@ using Avalonia.Media;
 namespace TipCL.App.Ui;
 
 using static TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 /// <summary>
 /// 主题样张页（M1 临时页）：展示全部设计令牌与控件样式的明暗两态。
@@ -63,14 +64,14 @@ public sealed class ThemeGalleryPage : UserControl
             padding: 14);
 
     private static Control ButtonSection() => Card(V(10,
-        Ui.H3("按钮"),
+        Ui.H3(I18nCore.Tr("按钮")),
         H(8,
             Ui.Btn("主要操作", BtnKind.Primary),
             Ui.Btn("柔和", BtnKind.Soft),
             Ui.Btn("普通", BtnKind.Normal),
-            Ui.Btn("管理", BtnKind.Ghost),
-            Ui.Btn("删除", BtnKind.Danger),
-            Ui.Btn("筛选", BtnKind.Chip),
+            Ui.Btn(I18nCore.Tr("管理"), BtnKind.Ghost),
+            Ui.Btn(I18nCore.Tr("删除"), BtnKind.Danger),
+            Ui.Btn(I18nCore.Tr("筛选"), BtnKind.Chip),
             Ui.IconBtn("\uE712")),
         H(8,
             Disabled(Ui.Btn("禁用态", BtnKind.Primary)),
@@ -81,22 +82,22 @@ public sealed class ThemeGalleryPage : UserControl
                 Background = Brushes.Transparent
             }),
         H(8,
-            (Control)SegRail("全部", "官方", "镜像"),
-            (Control)H(2, TopTab("启动", true), TopTab("实例库", false), TopTab("下载", false)))),
+            (Control)SegRail(I18nCore.Tr("全部"), "官方", "镜像"),
+            (Control)H(2, TopTab(I18nCore.Tr("启动"), true), TopTab(I18nCore.Tr("实例库"), false), TopTab(I18nCore.Tr("下载"), false)))),
         padding: 14);
 
     private static Control InputSection() => Card(V(10,
         Ui.H3("输入"),
-        Ui.Field("用户名", Ui.Input("邮箱或用户名")),
-        Ui.Field("密码", Ui.Pw()),
+        Ui.Field(I18nCore.Tr("用户名"), Ui.Input("邮箱或用户名")),
+        Ui.Field(I18nCore.Tr("密码"), Ui.Pw()),
         Ui.Field("备注", Ui.Multi("选填…")),
-        Ui.Field("日志", Ui.LogBox(), hint: "只读等宽", labelWidth: 80)),
+        Ui.Field(I18nCore.Tr("日志"), Ui.LogBox(), hint: "只读等宽", labelWidth: 80)),
         padding: 14);
 
     private static Control PickSection() => Card(V(10,
         Ui.H3("选择"),
-        Ui.Field("版本", Ui.Combo(new[] { "1.21.4", "1.20.6", "1.20.1" }, selected: "1.21.4"), hint: "下拉框"),
-        Ui.Field("加载器", Ui.Combo(placeholder: "选择加载器"), hint: "空下拉占位"),
+        Ui.Field(I18nCore.Tr("版本"), Ui.Combo(new[] { "1.21.4", "1.20.6", "1.20.1" }, selected: "1.21.4"), hint: "下拉框"),
+        Ui.Field(I18nCore.Tr("加载器"), Ui.Combo(placeholder: "选择加载器"), hint: "空下拉占位"),
         H(16, Ui.Check("自动选择内存", false), Ui.Check("保持登录", true),
             Ui.Switch(true), Ui.Switch(false))),
         padding: 14);
@@ -109,7 +110,7 @@ public sealed class ThemeGalleryPage : UserControl
             new ProgressBar { Value = 62, Maximum = 100 },
             Ui.Small("进度条 Prog 6px"))),
         Ui.RowCard(H(10, Ui.Glyph("\uE7C9"), V(2, Ui.Txt("可点击行卡 RowCard"), Ui.Small("圆角 8 · 1px 描边")),
-            Ui.Spring(), Ui.Tag("推荐"))),
+            Ui.Spring(), Ui.Tag(I18nCore.Tr("推荐")))),
         Ui.RowCard(H(10, Ui.Glyph("\uE8FB"), V(2, Ui.Txt("再来一张行卡"), Ui.Small("整行可点")),
             Ui.Spring(), Ui.Badge("3"))),
         Ui.Pane(V(4, Ui.Txt("Pane 内嵌面板"), Ui.Small("B.Paper2 底 · 圆角 8 · 内边距 10"))),
@@ -120,11 +121,11 @@ public sealed class ThemeGalleryPage : UserControl
     private static Control ChipSection() => Card(V(10,
         Ui.H3("标签与徽章"),
         H(8,
-            Ui.Tag("正式版"),
-            Ui.Tag("快照", "B.Info", "B.InfoSoft"),
+            Ui.Tag(I18nCore.Tr("正式版")),
+            Ui.Tag(I18nCore.Tr("快照"), "B.Info", "B.InfoSoft"),
             Ui.Tag("警告", "B.Warn", "B.WarnSoft"),
             Ui.Tag("危险", "B.Danger", "B.DangerSoft"),
-            Ui.Tag("成功", "B.Ok", "B.AccentSoft"),
+            Ui.Tag(I18nCore.Tr("成功"), "B.Ok", "B.AccentSoft"),
             Ui.Badge("12"),
             Ui.Badge("99+"))),
         padding: 14);
