@@ -35,7 +35,11 @@ public partial class App : Application
 	// 少了 --design-sheet 时,windows/DECISIONS.md:44「--shot/--design-sheet 加入 SelfCheckArgs」的
 	// 决定在代码里是断的 —— 非管理员 shell 跑 `TipCL.exe --design-sheet` 会弹 UAC 并重启一个分离进程,
 	// DevShot 的 stdout / 退出码全部丢给那个新进程,截图工具直接失效。
-	private static readonly string[] SelfCheckArgs = new string[7] { "--nav-dump", "--ime-check", "--i18n-check", "--consent-check", "--smoke", "--shot", "--design-sheet" };
+	// --ai-ui-selftest 同口径补上:它同样是"跑完靠退出码/输出交差"的自检 CLI
+	// (Pages/Ai/AiSelfTest.cs:29 解析该参数),被 UAC 重启分离后结果一样丢失;且它只用
+	// %LOCALAPPDATA% 下的数据目录,不需要管理员权限。CI/验收按 DECISIONS.md:412/498/506 的口径
+	// 直接调 CLI,不该被提权打断。
+	private static readonly string[] SelfCheckArgs = new string[8] { "--nav-dump", "--ime-check", "--i18n-check", "--consent-check", "--smoke", "--shot", "--design-sheet", "--ai-ui-selftest" };
 
 	private const int DeclineExitCode = 1223;
 
