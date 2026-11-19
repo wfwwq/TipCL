@@ -358,3 +358,62 @@ R2 里的边缘自动滚动只覆盖 grid/canvas(`_boxScroll`)。stack 长列表
 **WPF 层可判定审计完毕。** 依据:三轮里所有能机械化的判据都已清零或量化 —— RPC 名/参数覆盖(199/199)、i18n 键(1985 条字面量 + Core 侧 `I18nCore.Tr` 抽查)、XAML 资源键(125 定义 vs 全部引用)、`async void`/空 catch/`.Result`/Timer/静态事件退订/静态集合加锁、net48 API 垫片;编译 0 警告、559 测试全绿。
 
 若还要继续,建议下一轮不是"审计"而是"逐行深审"这几个具体模块(Ai 工具循环的取消/超时、Plugins 宿主生命周期、Crash/Modpack 的解析健壮性)——它们体量大但**没有已知可疑点**,属于覆盖率补完而不是救火。
+
+---
+
+# 第四轮 — 覆盖率补完(通读体量大、无已知可疑点的模块)
+
+本轮**不改行为**:只做通读/结构性验证;没有发现需要动代码的真 bug(见 R4.5 的判定依据)。验证口径与前三轮一致:`dotnet build … -c Release` 0 警告 0 错误、`dotnet test windos/tests/TipCL.Tests` 559/559。
+
+## R4.1 `Ai/Agent.cs`(工具循环)—— 通读关键段,四项均已验证
+
+| 关注点 | 结论 | 证据(`windos/src/TipCL/Core/Launcher/Ai/Agent.cs`) |
+|---|---|---|
+| **退出条件** | 三层封顶,不会无限转:①预设/设置的 `ai_max_rounds`(`num2`,`:639`,`PluginAgentBridge.MaxRounds`);②预设 0 = 硬上限 `AgentPresets.HardMaxRounds = 10000`;③达到上限走 `_result(..., "max_rounds", ...)`(`:1469`)并把"已用 N/M 回合"交给用户。另有失败计数 `toolFailures`(`:605`)与"上下文反复逼近窗口"主动中断(`:710`) | `:634-710`、`:1464-1469` |
+| **重复副作用(同一工具跑两次)** | **没有自动重试工具执行**。工具异常一律转成结构化错误回给模型(`:1411-1422`,`Tools.ToolErrorPayload`),由模型决定要不要换个做法;HTTP 层的 `attempt` 重试(`:788`)只重发*模型请求*,发生在工具执行之前(工具在一轮流结束后才批量执行,`:1296-1300` 的 `ToolStarted`),因此流中断不会重放已执行的写操作 | `:788`(重试范围)、`:1296-1423`(执行与错误) |
+| **取消传播** | `_check()`(`:1509-1515`,`cancelled()` 为真即 `AgentCancelled`)在 6 个关键点:`:646`(回合开头)、`:794`(请求前)、`:881`/`:1296`(工具批次前后)、`:1489`/`:1700-1726`(等待子任务/落盘循环)。工具内的 `ToolCancelled` 单独 catch 后**重新抛**(`:1405-1410`),不会被当成普通错误吞掉;外层 `catch (ToolCancelled)` 转成 `AgentCancelled`(`:1433-1438`) | `:1405-1438`、`:1509-1515` |
+| **超大工具返回的内存** | `Tools._clip`(`Tools.cs:349-358`)在 **> 8000 字符**时改走 `Artifacts.Store`:落盘 `cache/ai_results/yyyyMMdd-HHmmss-<sha1前8>.txt`,只把"前 120 行 + 总行数/总字节 + 文件名"给模型;模型要更多内容用 `read_artifact(offset,limit)` 回读(`Tools.cs:1021`)。落盘失败时仍截断到 4000 字符(`Artifacts.cs:112-115`),不会把巨型字符串整个塞进上下文。保留策略 7 天 / 300 个文件(`Artifacts.Prune`) | `Tools.cs:349-358`、`Artifacts.cs:91-118` |
+
+**`AskUser` 类交互在非 UI 线程的表现(R4.1 重点)**:安全,不存在"UI 线程阻塞等 UI 答案"的死锁。链路是:AI 回合跑在 `ai_send` 起的背景线程(`BackendApi.cs:570-577`,**锁已释放**后才起线程)→ `AskFn`/`ConfirmFn`(`BackendApi.cs:699-764`)`Reset()` 事件、`Emit` 让 WPF 弹卡 → `WaitCard`(`BackendApi.cs:898-908`)在**背景线程**上 `ManualResetEventSlim.Wait(200)` 轮询,每 200ms 检查 `_ai_cancel`(所以取消能立刻打断等待)→ 用户点确认/回答通过另一个 RPC 线程 `ai_confirm`/`ai_answer`(`:325-337`/`:376-379`)`Set()` 事件。单回合由 `_ai_lock + _ai_busy`(`:559-568`)保证,共享的 `_ai_confirm_ok`/`_ai_ask_result` 不会被两个回合互相覆盖。
+
+## R4.2 `Ai/Tools.cs` / `Ai/ExtraTools.cs` —— 通读边界
+
+- 工具清单是**静态 schema + 白名单**(`TOOL_SCHEMAS`,`Tools.cs:83`),没有从网络/插件动态拼 schema 的入口;`ask_user` 的工具实现直接返回"由界面处理"(`:820-821`),真正的交互走 `askFn`,职责清晰 —— 不会出现"模型以为问了、界面没弹"。
+- 文件类工具(`ExtraTools`)有顶层 deny 列表与二进制后缀表(`ExtraTools.cs:507-516`),路径合法性统一走 `Utils.SafeChildPath` / `AiFs`(前几轮已核)。
+- 错误回给模型时统一包裹 `{ok:false,error_code,message,detail}`(`Tools.cs:1059`),`detail` 截到 200 字符 —— 不会把整段异常栈灌进上下文。
+
+## R4.3 `Core/Plugins/**` —— 单插件隔离成立
+
+- `Discover`(`PluginManager.cs:288-328`):先按状态表逐个 `DiscoverOne`,再扫目录;目录项单独 `try/catch`(`:306-324`),坏清单/坏 id 只跳过自己。
+- `DiscoverOne`(`:330-362`):清单加载失败 → `p.State = "error"` + `p.Error = ex.Message`,**不影响其它插件**,也不抛给调用方。
+- 卸载/停止路径(`:1200-1500` 区间,含 Node 宿主停止、定时器清理、`PluginSessions`/`PluginPresets` 注销)都在 `lock (_lock)` + 单插件 `try/catch` 内;`PluginTools`/`PluginHooks`/`PluginUiRegistry` 的静态表均加锁(第三轮已核)。
+- 权限边界:`PluginHostApi.LauncherDeny`(`PluginHostApi.cs:20`)显式禁止插件调 `ai_confirm`/`ai_answer`/`shutdown`/`start_task` —— 插件不能替用户点"同意",也不能关启动器。
+
+## R4.4 `Crash.cs` / `Terracotta.cs` / `Mods.cs` / `Modpack.cs` / `Catalog.cs`
+
+- **IO 健壮性**:`Crash.ReadText`(`Crash.cs:841-862`)读文件、解码(严格 UTF-8 → 兜底)全部在 `try/catch` 内,读不到返回空串;`Crash.cs` 里只有两处 `File.*` 且都在守卫内。崩溃分析不会因为"日志被占用/是二进制"而抛。
+- **用户看到的"为什么崩了"**:`AnalyzeLaunch`(`Crash.cs:1793`)把结论拆成 `is_crash`/`summary`/`headline`/`detail`/`exit_hint`/`files`,失败时 `throw GameCrashError(report)`(`BackendApi.cs:3227`)让上层弹崩溃卡 + 「AI 修复」入口;导出报告(`ExportReport`)带"分析结论/游戏崩溃前的输出/latest.log"三个文件并做密钥过滤(`FilterSecrets`)。**文案可操作性**:报告里的 `exit_hint` 与"下一步该做什么"按规则给(如内存不足、Java 版本、模组冲突),这条路是通的。
+- **`Mods`/`Modpack`/`Catalog`**:路径穿越、zip 条目名、Modrinth/CurseForge 目录隔离在前几轮已核(`SafeChildPath`、`Utils.SafeExtractZip`、`ResolveModsDirForInstall`);本轮只做 grep 级(见 R4.6)。
+
+## R4.5 本轮为什么没有改代码
+
+四条重点里**没有找到可复现的真 bug**:工具循环的退出/取消/重试边界是收敛的且有三层封顶;ask/confirm 的等待发生在背景线程、UI 只负责弹卡;插件加载是逐插件隔离的;Crash 的 IO 全部在守卫内。
+特别说明一处**看着像 bug 但判定不是**:`BackendApi.cs:3222` 的 `Crash.AnalyzeLaunch(...)` 没有 try/catch(分析抛异常会连带吞掉 `game.exit` 钩子和"游戏已退出"返回值)。按"真 bug 才动代码"的纪律,我在 `Crash.cs` 里核到所有文件读取/解码都有兜底、`ReError` 只在编译固定正则时抛,构造不出让它抛的输入 —— 所以**只记录、不加防御性冗余**(加了属于猜改动)。若你想彻底免疫,可以给这一行包一层 `try/catch` + 记日志,代价约 6 行。
+
+## R4.6 覆盖率结论(逐模块)
+
+| 模块 | 覆盖级别 | 说明 |
+|---|---|---|
+| `Pages/Layout/**`、`BlockHost`、`LayoutShellHooks`、`PageLayoutStore`、`LayoutStoreV2` | **通读 + 单测** | 三轮共改 3 处、新增 12 例单测 |
+| `Pages/**`(LaunchPage/TasksPage/InstallPage/CatalogPage/InstanceDetail/ModsDialog/GlobalMods/SettingsPage/AiPage 事件面) | **通读(事件与持久化路径)** | 13 处写操作改 `MutateAsync` |
+| `Services/**`(BridgeClient/BridgeHost/WebViewHost/Dlg/Motion/SmoothScroll/TaskStore/I18n/AppServices/Wallpaper 片段) | **通读** | 修 WebView2 泄漏 ×2、`wpf-ui.json` 原子写 |
+| `MainWindow` / `App` / `Shortcut` / `Utils` / `DownloadManager` / `Manifest` / `McLauncher` / `Java` / `Installer`(natives) / `Saves` / `BridgeServer` / `RpcDispatcher` | **通读** | 修启动重入、快捷方式、`--design-sheet`、过期注释 |
+| `Core/Launcher/Ai/**`(Agent/Tools/ExtraTools/Client/Artifacts/AiResponse/AiSession 片段) | **通读关键段 + grep 全量** | 本轮四项重点全查;`Compact/Checkpoint/Rewind/Permission/Conflict/Preview/Mcp*` 仍只到 grep 级 |
+| `Core/Plugins/**` | **grep 全量 + 关键路径通读**(加载/隔离/卸载/权限) | `JsonRpcPeer`/`NodeRuntime`/`PluginLlm` 只到 grep 级 |
+| `Crash.cs` | **grep 全量 + IO/报告出口通读** | 规则表(约 1900 行里的匹配逻辑)只到 grep 级 |
+| `Terracotta.cs` / `Mods.cs` / `Modpack.cs` / `Catalog.cs` / `Sysinfo.cs` / `BackendApi.cs`(AI 段以外) | **grep 级** | 结构性检查通过(RPC 覆盖、空 catch、加锁、路径校验),未逐行 |
+
+## R4.7 跨域(与 Linux 移植版的潜在分叉,只报告不改 `src/**`)
+
+- 本轮未发现新增分叉。已知两条仍有效:①`--ai-ui-selftest` 不在 Windows 免提权白名单(§X-02);②桌面快捷方式参数形状两边必须同步(§X-03)。
+- aud-core 若在 Linux `Crash.cs` 里动了"崩溃结论字段名",注意 Windows 侧 `GameCrashError`(`BackendApi.cs:3227`)与 WPF `CrashUi`/`CrashReport` 都按 `summary/headline/detail/exit_hint/files` 取值,字段名要一起改。
