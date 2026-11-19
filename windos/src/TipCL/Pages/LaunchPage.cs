@@ -1025,17 +1025,18 @@ public sealed partial class LaunchPage : PageBase
 		string text = _inst.Str();
 		if (!string.IsNullOrEmpty(text))
 		{
-			await PageBase.Api.TryCallAsync<object>("set_instance_java", new
+			// 写操作:失败必须让用户看到(原来静默吞掉 → 选了 Java 下次启动还是旧的)
+			await PageBase.Api.MutateAsync("set_instance_java", new
 			{
 				name = text,
 				java = SelectedJava()
-			});
+			}, I18n.L("保存 Java 选择失败"));
 		}
 	}
 
 	private async Task SaveDisplayPrefsAsync()
 	{
-		await PageBase.Api.TryCallAsync<object>("update_settings", new
+		await PageBase.Api.MutateAsync("update_settings", new
 		{
 			settings = new
 			{
@@ -1535,10 +1536,15 @@ public sealed partial class LaunchPage : PageBase
 	{
 		if (_taskId != null)
 		{
-			await PageBase.Api.TryCallAsync<object>("cancel_task", new
+			// 停止失败要说话(否则"点了停止,游戏还在跑"看起来像按钮坏了)
+			bool ok = await PageBase.Api.MutateAsync("cancel_task", new
 			{
 				task_id = _taskId
-			});
+			}, I18n.L("停止失败"));
+			if (!ok)
+			{
+				_stopBtn.IsEnabled = true;
+			}
 		}
 	}
 

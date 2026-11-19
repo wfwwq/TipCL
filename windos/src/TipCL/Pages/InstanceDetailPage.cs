@@ -214,11 +214,11 @@ public sealed class InstanceDetailPage : PageBase
 				CheckBox sw = Ui.Switch(m.Enabled);
 				sw.Checked += delegate
 				{
-					Run(() => Api.TryCallAsync<object>("enable_mod", new { instance = _inst, filename = file, version = ver }));
+					Run(() => Api.MutateAsync("enable_mod", new { instance = _inst, filename = file, version = ver }, I18n.L("启用模组失败")));
 				};
 				sw.Unchecked += delegate
 				{
-					Run(() => Api.TryCallAsync<object>("disable_mod", new { instance = _inst, filename = file, version = ver }));
+					Run(() => Api.MutateAsync("disable_mod", new { instance = _inst, filename = file, version = ver }, I18n.L("停用模组失败")));
 				};
 #if PREMIUM
 				// premium：副行显示版本号（后端 ModEntry 无作者字段，作者无法显示）；compact 保持文件名

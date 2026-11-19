@@ -1666,7 +1666,8 @@ public sealed partial class SettingsPage : PageBase
 		bool langChanged = !string.IsNullOrEmpty(lang) && lang != _lang0;
 		if (langChanged)
 		{
-			await PageBase.Api.TryCallAsync<object>("set_language", new { lang });
+			// 语言是写操作:失败要告诉用户(原来 TryCallAsync 吞掉 = 选了语言没反应)
+			await PageBase.Api.MutateAsync("set_language", new { lang }, I18n.L("切换语言失败"));
 			_lang0 = lang;
 		}
 		Extras.ThemeColor = _color;

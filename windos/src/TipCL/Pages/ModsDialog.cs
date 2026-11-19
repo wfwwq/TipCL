@@ -114,21 +114,22 @@ public static class ModsDialog
 				CheckBox checkBox = Ui.Switch(item.Enabled);
 				checkBox.Checked += delegate
 				{
-					PageBase.Run(() => api.TryCallAsync<object>("enable_mod", new
+					// 写操作走 MutateAsync:失败要弹提示,不能静默(原来 TryCallAsync 吞异常 = 开关点了没反应)
+					PageBase.Run(() => api.MutateAsync("enable_mod", new
 					{
 						instance = instance,
 						filename = file,
 						version = ver
-					}));
+					}, I18n.L("启用模组失败")));
 				};
 				checkBox.Unchecked += delegate
 				{
-					PageBase.Run(() => api.TryCallAsync<object>("disable_mod", new
+					PageBase.Run(() => api.MutateAsync("disable_mod", new
 					{
 						instance = instance,
 						filename = file,
 						version = ver
-					}));
+					}, I18n.L("停用模组失败")));
 				};
 				Grid grid2 = Ui.G(null, "Auto,*,Auto");
 				grid2.Add(checkBox.M(0.0, 0.0, 12.0).VCenter(), 0);
