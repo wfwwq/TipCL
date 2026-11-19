@@ -168,6 +168,8 @@ public static class Cleaner
 		PyDict pyDict = Preview();
 		long num = 0L;
 		long num2 = 0L;
+		long num3 = 0L;          // 删失败的文件数(以前这些失败被完全吞掉)
+		string firstError = null; // 首个失败原因,回给调用方做提示
 		foreach (string item3 in list)
 		{
 			if (item3 != "unused_libraries" && item3 != "parts" && item3 != "cache")
@@ -180,19 +182,24 @@ public static class Cleaner
 				try
 				{
 					long length = new FileInfo(text).Length;
-					if (!File.Exists(text))
-					{
-						throw new IOException();
-					}
 					File.Delete(text);
 					num++;
 					num2 += length;
 				}
-				catch (Exception)
+				catch (Exception e)
 				{
+					// 删不掉(权限 / 被占用 / 已被别人删了)以前是彻底静默:界面照样弹绿字「清理完成」
+					// 却显示「已清理 0 个文件」,用户完全不知道为什么没清掉。这里至少把失败数与首个原因
+					// 带回返回值并落日志,App 侧可以据此提示(见报告跨域表)。
+					num3++;
+					if (firstError == null)
+					{
+						firstError = Py.ExcStr(e);
+					}
+					Utils.log.Warning("清理失败 %s: %s", text, Py.ExcStr(e));
 				}
 			}
 		}
-		return PyDict.Of("removed", num, "bytes", num2);
+		return PyDict.Of("removed", num, "bytes", num2, "failed", num3, "error", firstError ?? "");
 	}
 }

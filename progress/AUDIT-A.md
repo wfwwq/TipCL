@@ -116,3 +116,48 @@ $env:TEMP="D:\项目\TipCL\_tools\tmp-A"; $env:TMP=$env:TEMP
 2. `Launcher/Ai/*`（`Client.cs` / `AiAgent.cs` / `ToolRunner.cs` / `Compact.cs` / `Checkpoint.cs`）—— 流式解析、工具循环、token 统计、checkpoint/rewind。
 3. `Launcher/Crash.cs`（62KB）、`Updater.cs`、`Cleaner.cs`、`Worlds.cs`、`Sync/PhoneLink.cs`、`Plugins/PluginMarket.cs`（zip 前缀与 SHA 校验）、`Plugins/PluginHost.cs`。
 4. `Launcher/Optifine.cs` / `Liteloader.cs`（`Installer.InstallOptifine/InstallLiteloader` 只是转发，本体未读）。
+---
+
+# 第三轮（lead 优先级：Mods / Modpack / Catalog → Ai/* → Crash/Updater/Cleaner/Worlds/Sync/PluginMarket/PluginHost → Optifine/Liteloader）
+
+基线：rebase 到第二轮合并后的 main。判据按 lead 追加的两条：**静默失败＝P1**、**异常消息能否被 UI 直接展示**。
+
+## 9. 第三轮已修问题
+
+| ID | 级别 | 文件:行 | 根因 | 修复 | 验证证据 | 状态 |
+|----|------|---------|------|------|----------|------|
+| A-07 | **P1（静默失败）** | `Launcher/Mods.cs` InstallModrinthMod 依赖分支（原 `Utils.log.Warning` 处）、`_install_cf_required_deps` 的 catch | 前置依赖（如 Fabric API）下载失败时**只写日志**：任务卡一路显示「模组安装完成」/「已随装前置:…」，进游戏才因缺前置崩。App 侧`InstallModSync`（`Api.cs:1462`）连 Modrinth 分支的返回值都不接，用户没有任何反馈 | 两处 catch 在日志之外追加 `on_progress?.Invoke("前置 <名字> 下载失败,请到模组列表手动补装", 0, 1)`/`("前置(addon <id>)安装失败,…")`。`on_progress` 正是 App 任务卡的日志通道（`dm.on_progress`），零改动 App 即可见 | Core Release 0 警告 0 错误；全量 `dotnet test` **906 通过 / 0 失败 / 1 跳过**；消息全中文、不含原始异常串 | 已修 |
+| A-08 | **P1（装完看不到/游戏不加载）** | `Launcher/Mods.cs:1146` `InstallModrinthContent`（原 `string text = PPath.Join(instance.path, subdir)`；调用点 `:1303`） | `InstallContentFromSource` 已经按「实例＋版本隔离」算好目标目录（`ContentDir` → `<实例>/versions/<版本>/<subdir>`）并传给 `InstallCfContent`（它有 `dest_dir` 参数），但传给 `InstallModrinthContent` 时**没传**，后者自己拼 `<实例>/<subdir>`。隔离模式 `all`/`saves` 下两者不同 → Modrinth 源的光影/资源包/数据包被写进共享目录：列表（`ListContentFiles` 用 ContentDir）看不到、游戏也不加载 = 点了安装没反应（Windows 参考版同一处同样缺陷） | `InstallModrinthContent` 末尾新增可选参数 `string dest_dir = null`（源码兼容，唯一调用点已改），内部 `Py.Truthy(dest_dir) ? dest_dir : ContentDir(instance, subdir)`；调用点把 `text` 传进去 | harness 断言：`Utils.SetRoot(temp)` + 建实例 + `VersionSettings.SetIsolation(…, "all")` 后，`Mods.ContentDir(inst, "shaderpacks", ver)` ≠ `<实例>/shaderpacks` 且落在 `versions/1.20.1/` 下（**复现修前写错目录的前提**）；全量测试 906 项绿；Windows 无隔离/共享目录场景结果不变 | 已修 |
+| A-09 | P2（假成功提示 + 空消息异常） | `Launcher/Cleaner.cs` `Apply`（原 `catch (Exception) {}` + `throw new IOException()`） | 清理时**每个删除失败都被完全吞掉**（连日志都没有）：界面照样 Toast「清理完成」（绿字）而正文是「已清理 0 个文件」，用户不知道为什么没清掉；`throw new IOException()` 写在同一个 try 里且立刻被自己的 catch 吃掉，是死代码，就算抛也没有任何消息 | 去掉死代码；失败时累加 `failed` 计数、记下首个原因（`Py.ExcStr`）、`Utils.log.Warning`；返回值追加 `"failed"`/`"error"` 两个键（App 侧要不要显示见跨域表 X-04） | Core Release 0 警告 0 错误；全量测试绿；`Preview`/`Apply` 的既有键（removed/bytes）语义未变 | 已修 |
+
+## 10. 第三轮跨域问题
+
+| ID | 目标 | 级别 | 位置 | 说明 |
+|----|------|------|------|------|
+| X-04 | aud-app | P2 | `Pages/Settings/SettingsPage.Cards.cs:274` | 清理结果只读 `result.Removed` 并固定弹绿字「清理完成」。Core 现在已回 `failed`/`error`（见 A-09），建议：`failed > 0` 时改 Warning 提示并显示首个原因，否则用户只会看到「已清理 0 个文件」的假成功。 |
+| X-05 | aud-app | P2 | `Common/Api.cs:1462` | Modrinth 分支的安装结果被整体丢弃（`deps` 永远为空）。Core 已在 `InstallModrinthMod` 的返回值里带 `files`；若要像 CF 那样显示「已随装前置」，需要把返回值接住并读 `dependencies`。A-07 已经让「前置失败」通过任务卡日志可见，这条只是锦上添花。 |
+
+## 11. 第三轮：已核查无问题
+
+| 位置 | 结论 |
+|------|------|
+| `Mods.cs` `_mod_file_at` / `_download_dest` / `SetModEnabled` / `DeleteContentFile` | 非法名（含 `/ \ :`、`..`、大小写拼写变体）都过 `LooksLikePathSpelling+NormPathSpelling` 与 `Resolve+Parent.Equals` 双校验；启停的 `.disabled` 往返与冲突检测正确 |
+| `Mods.cs` `InstallCfContent` | 目标目录走 `dest_dir`（调用方传 `ContentDir`）——**正是它对照出 A-08**；下载候选（downloadUrl → CDN 两种规则）去重后逐个试，全失败才抛中文错误 |
+| `Mods.cs` `InstallCurseforgeMod` / `_pick_cf_file` / `_download_cf_file` | 文件 id 命中→列表兜底→MC/loader 过滤→最新文件，逐级兜底都有中文提示；下载失败 `Utils.RemoveTree(dest)` 清残包再换下一个源 |
+| `Modpack.cs` `InstallMrpack` | `modrinth.index.json` 嵌套识别、`formatVersion` 提示、每条 `files[].path` 都做 `Resolve+StartsWith(目标目录)` 越界校验、`sha512` 二次校验、`overrides/client-overrides` 复制、`CleanupTemp` 对「本地目录/本地文件/下载来的」三种来源分别判断（**不会误删用户的包文件**，已逐分支核对） |
+| `Modpack.cs` `InstallCfZip` / `_install_plain_zip` | `manifest.json` 缺失时回落静态识别 `.minecraft` 目录结构（`_plain_pack_root`/`_plain_pack_version`），错误文案明确列出四种支持格式与 zip 顶层内容；`CfManifestLoaders` 缺加载器时给出「只装原版不会加载 mods」的解释 |
+| `Modpack.cs` `_copy_embedded_versions` / `_prepare_target_version` | 包内自带 `versions` 优先复用、`version_name` 重命名走 `VersionOps.UniqueId`、隔离时 `SetIsolation`+`GameDir` 取真实游戏目录 |
+| `Mods.cs` `_pick_version` / `ListVersions` / `SearchMods*` | 版本匹配失败会降级到「仅按 MC 版本」，再失败才抛；`RankHits` 加权排序与中文别名回退逻辑自洽 |
+
+## 12. 观察（不改，留记录）
+
+1. `Modpack.InstallCfZip:843` 临时包名用 `"tipcl_cfpack_" + Math.Abs((long)text.GetHashCode()) + ".zip"`：.NET 的字符串哈希**进程内随机化**且同 URL 恒定 → 同进程并发安装同一个 URL 会撞同一个临时文件（先完成的 `CleanupTemp` 会把后一个的下载删掉，表现为莫名其妙的「整合包无效」）。当前 UI 是串行任务队列，触发概率低；若要修，改成 `Guid` 即可。
+2. `Java.FindSystemJavas` 全程持 `_SYS_JAVA_LOCK`（第二轮已记，App 未调用 `Cached*`，暂不影响）。
+3. `Cleaner.Preview` 把 `.part` 与未引用库分开统计，`Apply` 默认三类全清——语义与 Windows 版一致，未改。
+
+## 13. 第三轮未审完（下一轮顺序）
+
+1. `Launcher/Catalog.cs`（607 行，仍只做了 grep 级扫描）。
+2. `Launcher/Ai/*`（`Client.cs`/`AiAgent.cs`/`ToolRunner.cs`/`Compact.cs`/`Checkpoint.cs`）—— 流式解析、工具循环超时与取消、上下文压缩边界。
+3. `Launcher/Crash.cs`（62KB）、`Updater.cs`、`Worlds.cs`、`Sync/PhoneLink.cs`、`Plugins/PluginMarket.cs`、`Plugins/PluginHost.cs`。
+4. `Launcher/Optifine.cs` / `Liteloader.cs` 本体（`Installer.InstallOptifine/InstallLiteloader` 只是转发）。
