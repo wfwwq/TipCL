@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "notes": "布局 v2:页面可自排(网格/自由摆放)、AI 排版、自建区块与布局方案导入导出(仅 Windows);体积回收 −14.2%;Linux 提供自包含 AppImage 与 .deb",
+  "notes": "布局 v2:页面可自排(网格/自由摆放)、AI 排版、自建区块与布局方案导入导出(仅 Windows);体积回收 −14.2%;Linux 提供自包含 AppImage 与 .deb。修订(2026-11-19):录屏 7 条问题修复、布局引擎审计修复、自建区块管理面板启用(见发版说明「修订」段)",
   "url": "https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL.exe",
-  "sha256": "fcc10d90cda88f404047172ed147a9848ebac06739554237e4f913ec00f78857"
+  "sha256": "a7dba497ed1729cbc63aad5c0a784f2707b42426910dda6741eab8e42b1c5ac6"
 }
