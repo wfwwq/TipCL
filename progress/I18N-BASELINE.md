@@ -1,7 +1,7 @@
 # i18n 接线基线(未接线的用户可见 CJK 字面量)
 
 > 自动生成,**不要手改**:`python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md`
-> 生成时间:2026-11-20 01:38:59
+> 生成时间:2026-11-20 02:25:54
 >
 > 判据(与 `tools/i18n-audit.py --help` 顶部同一份口径):
 >   * **已接线(wrapped)** = 字面量是 `I18nCore.Tr(...)` 的实参 —— 切语言**能**改变它;
@@ -12,34 +12,25 @@
 
 | 指标 | 数值 |
 | --- | --- |
-| CJK 字面量(分母) | 5217 |
-| 已接线(wrapped) | 299(5.73%) |
-| 未接线(unwrapped) | 4918 |
-| 其中**词表里已有 en 译文**(只差接线) | 2090 |
-| 涉及的 .cs 文件 | 175 |
-| 词表条目(en / zh_CN) | 3029 / 3029 |
+| CJK 字面量(分母) | 5228 |
+| 已接线(wrapped) | 1623(31.04%) |
+| 未接线(unwrapped) | 3605 |
+| 其中**词表里已有 en 译文**(只差接线) | 795 |
+| 涉及的 .cs 文件 | 174 |
+| 词表条目(en / zh_CN) | 3060 / 3060 |
 
 ## 按文件聚合(未接线条数降序)
 
 | 未接线 | 其中已有 en 译文 | 文件 |
 | --- | --- | --- |
 | 330 | 8 | `src/TipCL.Core/Launcher/Catalog.cs` |
-| 193 | 183 | `src/TipCL.App/Pages/Settings/SettingsPage.cs` |
-| 187 | 126 | `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs` |
-| 154 | 119 | `src/TipCL.App/Pages/Settings/SettingsSubs.cs` |
 | 153 | 15 | `src/TipCL.Core/Launcher/Crash.cs` |
 | 153 | 9 | `src/TipCL.Core/Launcher/Modpack.cs` |
-| 143 | 106 | `src/TipCL.App/Pages/Version/VersionManagePage.cs` |
-| 141 | 116 | `src/TipCL.App/Pages/Download/CatalogPage.cs` |
 | 122 | 2 | `src/TipCL.Core/Launcher/Installer.cs` |
 | 110 | 9 | `src/TipCL.Core/Launcher/Ai/AiSelfTest.cs` |
-| 108 | 85 | `src/TipCL.App/Pages/AccountPage.cs` |
-| 108 | 91 | `src/TipCL.App/Pages/MultiplayerPage.cs` |
-| 99 | 49 | `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs` |
 | 98 | 39 | `src/TipCL.App/Common/Api.cs` |
 | 86 | 36 | `src/TipCL.Core/Launcher/Ai/Tools.cs` |
 | 85 | 8 | `src/TipCL.App/Session/SmokeRunner.cs` |
-| 84 | 68 | `src/TipCL.App/Pages/Library/LibraryPage.cs` |
 | 80 | 4 | `src/TipCL.Core/Launcher/Mods.cs` |
 | 77 | 13 | `src/TipCL.Core/Launcher/Ai/AiData.cs` |
 | 76 | 14 | `src/TipCL.Core/Launcher/Terracotta.cs` |
@@ -47,40 +38,37 @@
 | 65 | 21 | `src/TipCL.App/Pages/Ai/AiPage.cs` |
 | 64 | 45 | `src/TipCL.App/Pages/Feedback/FeedbackView.cs` |
 | 62 | 17 | `src/TipCL.App/Ui/ThemeGalleryPage.cs` |
+| 61 | 0 | `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs` |
 | 61 | 3 | `src/TipCL.Core/Launcher/DownloadManager.cs` |
 | 59 | 23 | `src/TipCL.Core/Launcher/Ai/ToolRunner.cs` |
-| 57 | 51 | `src/TipCL.App/Pages/Launch/LaunchPage.cs` |
-| 54 | 44 | `src/TipCL.App/Pages/Version/SavesDialog.cs` |
+| 56 | 51 | `src/TipCL.App/Pages/Launch/LaunchPage.cs` |
 | 52 | 50 | `src/TipCL.App/Pages/Download/CatalogModels.cs` |
-| 51 | 36 | `src/TipCL.App/Pages/Plugins/PluginsPage.Installed.cs` |
-| 50 | 29 | `src/TipCL.App/Pages/Plugins/PluginsPage.Market.cs` |
+| 48 | 0 | `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs` |
 | 47 | 11 | `src/TipCL.Core/Launcher/Ai/Client.cs` |
 | 46 | 27 | `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs` |
-| 45 | 31 | `src/TipCL.App/Pages/Settings/SettingsPage.SaveLoad.cs` |
-| 45 | 37 | `src/TipCL.App/Pages/Version/VersionSetupDialog.cs` |
 | 44 | 4 | `src/TipCL.Core/Plugins/PluginManifest.cs` |
-| 42 | 20 | `src/TipCL.App/Pages/Settings/PhoneSyncPanel.cs` |
-| 39 | 29 | `src/TipCL.App/Pages/Version/ModsDialog.cs` |
 | 37 | 10 | `src/TipCL.App/Common/FileKinds.cs` |
-| 36 | 28 | `src/TipCL.App/Pages/Plugins/PluginSettingsCard.cs` |
+| 37 | 0 | `src/TipCL.App/Pages/Version/VersionManagePage.cs` |
 | 34 | 22 | `src/TipCL.App/Pages/Launch/LaunchPopups.cs` |
-| 33 | 11 | `src/TipCL.App/Pages/Plugins/PluginsPage.Dev.cs` |
 | 32 | 2 | `src/TipCL.Core/Launcher/Ai/AiAgent.cs` |
 | 30 | 23 | `src/TipCL.App/Pages/Ai/AiPermissionPanel.cs` |
 | 30 | 4 | `src/TipCL.Core/Launcher/DownloadTracker.cs` |
 | 29 | 0 | `src/TipCL.Core/Launcher/Java.cs` |
 | 28 | 17 | `src/TipCL.App/Common/FileDrop.cs` |
 | 28 | 25 | `src/TipCL.App/Pages/Feedback/CrashUi.cs` |
-| 27 | 21 | `src/TipCL.App/Pages/Library/InstanceDetailPage.cs` |
+| 26 | 1 | `src/TipCL.App/Pages/Download/CatalogPage.cs` |
 | 25 | 8 | `src/TipCL.App/Common/Launch/LaunchCore.cs` |
 | 24 | 10 | `src/TipCL.App/Pages/Ai/AiMemoryPanel.cs` |
-| 24 | 20 | `src/TipCL.App/Pages/Download/DownloadPage.cs` |
 | 24 | 18 | `src/TipCL.App/Pages/Install/InstallPage.cs` |
 | 24 | 17 | `src/TipCL.App/Pages/Layout/LayoutBlockEntryCatalog.cs` |
 | 24 | 7 | `src/TipCL.App/Shell/MainWindow.axaml.cs` |
 | 24 | 4 | `src/TipCL.Core/Launcher/Ai/AiFixChat.cs` |
+| 23 | 0 | `src/TipCL.App/Pages/AccountPage.cs` |
+| 22 | 0 | `src/TipCL.App/Pages/Plugins/PluginsPage.Dev.cs` |
+| 22 | 0 | `src/TipCL.App/Pages/Settings/PhoneSyncPanel.cs` |
+| 22 | 1 | `src/TipCL.App/Pages/Settings/SettingsSubs.cs` |
 | 22 | 2 | `src/TipCL.Core/Launcher/DownloadStatus.cs` |
-| 21 | 11 | `src/TipCL.App/Pages/Plugins/PluginsPage.Settings.cs` |
+| 21 | 0 | `src/TipCL.App/Pages/Plugins/PluginsPage.Market.cs` |
 | 21 | 1 | `src/TipCL.Core/Launcher/Optifine.cs` |
 | 21 | 3 | `src/TipCL.Core/Launcher/Sync/PhoneLink.cs` |
 | 20 | 11 | `src/TipCL.App/Pages/Ai/AiChatOps.cs` |
@@ -88,12 +76,12 @@
 | 20 | 3 | `src/TipCL.Core/Launcher/Saves.cs` |
 | 19 | 9 | `src/TipCL.App/Pages/Ai/AiFixView.cs` |
 | 19 | 1 | `src/TipCL.App/Session/CommandLine.cs` |
-| 18 | 13 | `src/TipCL.App/Pages/Plugins/PluginsPage.cs` |
 | 18 | 0 | `src/TipCL.Core/Launcher/MicrosoftAuthenticator.cs` |
 | 18 | 10 | `src/TipCL.Core/Launcher/Ai/AiUiText.cs` |
+| 17 | 0 | `src/TipCL.App/Pages/MultiplayerPage.cs` |
+| 17 | 1 | `src/TipCL.App/Pages/Library/LibraryPage.cs` |
+| 16 | 0 | `src/TipCL.App/Pages/Plugins/PluginsPage.Installed.cs` |
 | 14 | 0 | `src/TipCL.App/Controls/PageLayoutHost.cs` |
-| 14 | 12 | `src/TipCL.App/Pages/TasksPage.cs` |
-| 14 | 3 | `src/TipCL.App/Pages/Plugins/PluginHostPage.cs` |
 | 14 | 0 | `src/TipCL.Core/Launcher/McLauncher.cs` |
 | 14 | 1 | `src/TipCL.Core/Launcher/Sysinfo.cs` |
 | 14 | 1 | `src/TipCL.Core/Launcher/Updater.cs` |
@@ -109,13 +97,18 @@
 | 12 | 0 | `src/TipCL.Core/Launcher/Ai/VisionCaps.cs` |
 | 12 | 1 | `src/TipCL.Core/Launcher/Sync/PhoneClient.cs` |
 | 11 | 9 | `src/TipCL.App/Common/AccountGate.cs` |
+| 11 | 0 | `src/TipCL.App/Pages/Plugins/PluginHostPage.cs` |
+| 11 | 0 | `src/TipCL.App/Pages/Settings/SettingsPage.SaveLoad.cs` |
 | 11 | 2 | `src/TipCL.Core/Launcher/Feedback.cs` |
 | 11 | 6 | `src/TipCL.Core/Launcher/Instance.cs` |
 | 11 | 2 | `src/TipCL.Core/Launcher/Nide8.cs` |
 | 11 | 0 | `src/TipCL.Core/Launcher/Servers.cs` |
 | 11 | 1 | `src/TipCL.Core/Launcher/Ai/Images.cs` |
 | 10 | 9 | `src/TipCL.App/Pages/Ai/TaskCard.cs` |
-| 10 | 5 | `src/TipCL.App/Pages/Settings/SettingsPage.Update.cs` |
+| 10 | 0 | `src/TipCL.App/Pages/Plugins/PluginsPage.Settings.cs` |
+| 10 | 0 | `src/TipCL.App/Pages/Settings/SettingsPage.cs` |
+| 10 | 0 | `src/TipCL.App/Pages/Version/ModsDialog.cs` |
+| 10 | 0 | `src/TipCL.App/Pages/Version/SavesDialog.cs` |
 | 10 | 1 | `src/TipCL.Core/Launcher/Authlib.cs` |
 | 10 | 4 | `src/TipCL.Core/Launcher/GameInstall.cs` |
 | 10 | 0 | `src/TipCL.Core/Launcher/Manifest.cs` |
@@ -124,12 +117,16 @@
 | 9 | 0 | `src/TipCL.App/Pages/Plugins/PluginModels.cs` |
 | 9 | 0 | `src/TipCL.Core/Launcher/Ai/Conflict.cs` |
 | 8 | 7 | `src/TipCL.App/Pages/Ai/AskCard.cs` |
+| 8 | 0 | `src/TipCL.App/Pages/Plugins/PluginSettingsCard.cs` |
+| 8 | 0 | `src/TipCL.App/Pages/Version/VersionSetupDialog.cs` |
 | 8 | 8 | `src/TipCL.App/Shell/TitleBar.axaml.cs` |
 | 8 | 3 | `src/TipCL.Core/Launcher/FeedbackDefaults.cs` |
 | 8 | 0 | `src/TipCL.Core/Launcher/Ai/Compact.cs` |
 | 7 | 0 | `src/TipCL.App/Session/AiSelfTestCli.cs` |
 | 7 | 4 | `src/TipCL.Core/Launcher/Instances.cs` |
 | 7 | 5 | `src/TipCL.Core/Launcher/VersionSettings.cs` |
+| 6 | 0 | `src/TipCL.App/Pages/Library/InstanceDetailPage.cs` |
+| 6 | 0 | `src/TipCL.App/Pages/Plugins/PluginsPage.cs` |
 | 6 | 0 | `src/TipCL.Core/Launcher/Liteloader.cs` |
 | 6 | 0 | `src/TipCL.Core/Launcher/Repair.cs` |
 | 6 | 1 | `src/TipCL.Core/Launcher/Source.cs` |
@@ -140,11 +137,12 @@
 | 5 | 3 | `src/TipCL.App/Common/SelfUpdate.cs` |
 | 5 | 2 | `src/TipCL.App/Pages/Ai/AiBubble.cs` |
 | 5 | 5 | `src/TipCL.App/Pages/Ai/ToolLine.cs` |
-| 5 | 5 | `src/TipCL.App/Pages/Version/GlobalModsDialog.cs` |
+| 5 | 0 | `src/TipCL.App/Pages/Settings/SettingsPage.Update.cs` |
 | 5 | 5 | `src/TipCL.App/Shell/NavRegistry.cs` |
 | 5 | 0 | `src/TipCL.Core/Launcher/Ai/McpClient.cs` |
 | 4 | 4 | `src/TipCL.App/Common/TaskStore.cs` |
 | 4 | 3 | `src/TipCL.App/Pages/Ai/AiImages.cs` |
+| 4 | 0 | `src/TipCL.App/Pages/Download/DownloadPage.cs` |
 | 4 | 4 | `src/TipCL.App/Pages/Layout/LayoutEditor.cs` |
 | 4 | 2 | `src/TipCL.Core/BackendWorker.cs` |
 | 4 | 0 | `src/TipCL.Core/Launcher/ContentExport.cs` |
@@ -172,6 +170,7 @@
 | 2 | 0 | `src/TipCL.App/Common/FpsOverlay.cs` |
 | 2 | 0 | `src/TipCL.App/Common/ImportBatch.cs` |
 | 2 | 0 | `src/TipCL.App/Common/Ai/AiService.cs` |
+| 2 | 0 | `src/TipCL.App/Pages/TasksPage.cs` |
 | 2 | 2 | `src/TipCL.App/Pages/Ai/MdView.cs` |
 | 2 | 1 | `src/TipCL.App/Pages/Ai/SlashMenu.cs` |
 | 2 | 0 | `src/TipCL.Core/Launcher/AccountManager.cs` |
@@ -247,138 +246,6 @@
 - `src/TipCL.Core/Launcher/Catalog.cs:116` 饥饿值显示
 - `src/TipCL.Core/Launcher/Catalog.cs:117` 伤害显示
 - …… 另有 290 条(见 `--list-unwrapped` 全量输出)
-
-### `src/TipCL.App/Pages/Settings/SettingsPage.cs`(193 条)
-
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:38` 关闭（共用实例目录） `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:39` 隔离存档 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:40` 隔离 Mod 与配置 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:41` 隔离全部 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:46` G1（推荐） `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:48` 调优 G1 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:50` 不指定 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:55` 保持显示 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:56` 最小化 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:57` 隐藏 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:58` 隐藏，退出后重开 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:59` 关闭启动器 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:64` Minecraft 新闻 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:65` 本地 HTML `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:66` 空白 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:71` 窗口 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:72` 全屏 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:77` 自动（官方慢则走 BMCLAPI） `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:78` 仅官方 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:79` 仅 BMCLAPI `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:84` 自动 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:85` 仅官方 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:86` 仅 MCIM `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:91` 默认 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:92` 护眼绿 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:93` 暖米 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:94` 雾蓝 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:99` 内置网关（免配置） `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:100` 自定义 OpenAI 兼容端点 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:105` 松绿 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:106` 湛蓝 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:107` 紫罗兰 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:108` 暖橙 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:109` 绯红 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:110` 青碧 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:123` 图片或视频路径，留空则不用壁纸 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:124` 壁纸文件夹（设了就轮播，优先于上面那张） `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:127` 10 分钟 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:148` CurseForge API Key（留空用内置） `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.cs:160` 例如 -XX:+UseG1GC（可空） `[已有译文]`
-- …… 另有 153 条(见 `--list-unwrapped` 全量输出)
-
-### `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs`(187 条)
-
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:72` 布局 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:73` 默认布局 = 各页现状;这里的改动即时写进 ui_layout_v2.json,老版本程序照旧读得懂 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:74` 外观与密度 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:75` 页签与标题栏 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:76` 页面区块 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:77` 分栏比例 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:78` 自建区块 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:79` 布局方案 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:147` 紧凑 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:147` 标准 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:147` 宽松 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:157` 布局已保存 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:162` 密度 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:162` 只影响区块间距档(紧凑 6 / 标准 10 / 宽松 14) `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:180` 紧凑 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:181` 宽松 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:182` 标准 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:198` 页签显示:
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:202` 「设置」页签始终显示,否则没有入口改回来
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:213` 上移 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:214` 下移 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:215` 上移页签:
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:216` 下移页签:
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:227` 页签顺序与显隐 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:230` 桥接 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:233` Linux 标题栏没有桥接药丸钮:开关会写入文档,但本树无宿主可显隐
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:237` 只隐藏 / 显示,不改形态 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:238` 主题 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:241` 只隐藏 / 显示,不改形态 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:242` 账号 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:245` 只隐藏 / 显示,不改形态 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:252` 标题栏:
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:261` 桥接 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:265` 标题栏:
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:292` 自定义布局... `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:296` 自定义布局:
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:297` 跳到该页并进入区块编辑(完成编辑后自动保存) `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:299` 单块页 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:299` 单块页(下载与网络)也能进编辑态:可以调外观、标题或先隐藏
-- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:340` 已进入自定义布局 `[已有译文]`
-- …… 另有 147 条(见 `--list-unwrapped` 全量输出)
-
-### `src/TipCL.App/Pages/Settings/SettingsSubs.cs`(154 条)
-
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:62` 操作失败 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:65` 加载失败 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:92` 账号 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:92` 启动游戏时使用标记为「当前」的账号 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:94` 添加离线账号 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:94` 添加失败 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:98` 微软登录 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:99` 在「账号」页用微软账号登录(设备码)
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:100` 皮肤站登录 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:101` 在「账号」页用皮肤站(Yggdrasil)登录
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:114` 账号 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:114` 在「账号」页用微软 / 皮肤站登录
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:132` 共 {} 个
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:135` 还没有账号 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:135` 添加离线账号先玩起来；微软 / 皮肤站登录在「账号」页
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:142` 微软 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:143` 离线 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:144` 皮肤站 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:145` 统一通行证 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:146` 其他 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:152` 当前 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:154` 账号 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:157` 设为当前 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:160` 已切换 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:160` 当前账号：{}
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:162` 切换失败 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:163` 删除 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:165` 删除账号 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:165` 将删除「{}」。
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:165` 删除 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:165` 取消 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:170` 删除失败 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:178` 例如 Steve `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:179` 添加离线账号 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:179` 离线模式，无正版验证 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:179` 添加 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:182` 缺少名字 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:182` 请填写离线角色名 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:186` 已添加 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsSubs.cs:201` 1.16 及以下旧版本 `[已有译文]`
-- …… 另有 114 条(见 `--list-unwrapped` 全量输出)
 
 ### `src/TipCL.Core/Launcher/Crash.cs`(153 条)
 
@@ -495,94 +362,6 @@
 - `src/TipCL.Core/Launcher/Modpack.cs:708` 安装到实例 
 - …… 另有 113 条(见 `--list-unwrapped` 全量输出)
 
-### `src/TipCL.App/Pages/Version/VersionManagePage.cs`(143 条)
-
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:80` 收藏的版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:81` Fabric 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:82` Forge 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:83` Quilt 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:84` NeoForge 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:85` OptiFine 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:86` LiteLoader 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:87` 原版版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:88` 不常用版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:89` 隐藏的版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:98` 过滤版本名 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:100` 这个文件夹还没有版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:100` 点左侧「添加或导入」,或到「下载」页装一个
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:123` 版本管理 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:127` 添加已有文件夹 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:127` 导入失败 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:128` 导入整合包 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:129` 新建实例 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:129` 创建失败 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:130` 导入官方启动器 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:132` 文件夹列表 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:135` 添加或导入 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:140` 刷新 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:142` 版本选择 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:142` 双击版本直接启动;卡片右侧:收藏 / 卸载 / 设置
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:296` 当前文件夹  `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:296` 当前文件夹 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:304` {} 个版本
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:315` 默认 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:316` 实例操作 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:388` 共 {} 个版本
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:442` 模组 {}
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:455` 取消收藏
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:455` 收藏 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:458` 卸载这个版本 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:459` 卸载失败 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:460` 版本设置 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:469` 开:这个版本用自己的 mods / config;关:与实例里其它版本共用那一份
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:470` 切换失败 `[已有译文]`
-- `src/TipCL.App/Pages/Version/VersionManagePage.cs:513` 完全独立 `[已有译文]`
-- …… 另有 103 条(见 `--list-unwrapped` 全量输出)
-
-### `src/TipCL.App/Pages/Download/CatalogPage.cs`(141 条)
-
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:40` 全部 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:44` 全部 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:82` 搜索 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:82` ,留空看热门
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:83` 全部 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:84` 全部 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:85` 全部 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:89` 搜索下载 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:90` 已安装 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:91` 收藏 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:96` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:111` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:114` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:115` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:116` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:121` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:125` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:129` 搜索 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:129` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:135` 重置条件 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:136` 检查更新 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:136` 检查更新失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:138` 全部导出 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:138` 导出失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:140` 链接安装 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:140` 链接安装失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:141` 导入本地文件 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:142` 刷新 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:142` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:146` 来源 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:147` 类型 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:148` 游戏版本 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:149` 实例 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:150` 已装于版本 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:230` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:240` 搜索失败 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:264` 从 Modrinth / CurseForge 搜模组,装进所选实例
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:265` 一键安装整合包到独立实例 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:266` 数据包会放进实例 datapacks 目录 `[已有译文]`
-- `src/TipCL.App/Pages/Download/CatalogPage.cs:267` 资源包会放进实例 resourcepacks 目录 `[已有译文]`
-- …… 另有 101 条(见 `--list-unwrapped` 全量输出)
-
 ### `src/TipCL.Core/Launcher/Installer.cs`(122 条)
 
 - `src/TipCL.Core/Launcher/Installer.cs:398` 缺少 natives jar: %s
@@ -670,138 +449,6 @@
 - `src/TipCL.Core/Launcher/Ai/AiSelfTest.cs:123` 只看不动档理由说明档位
 - `src/TipCL.Core/Launcher/Ai/AiSelfTest.cs:123` 只看不动 `[已有译文]`
 - …… 另有 70 条(见 `--list-unwrapped` 全量输出)
-
-### `src/TipCL.App/Pages/AccountPage.cs`(108 条)
-
-- `src/TipCL.App/Pages/AccountPage.cs:48` 未登录 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:68` 账号 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:70` 添加离线账号 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:70` 添加失败 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:71` 微软登录 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:71` 微软登录失败 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:72` 皮肤站登录 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:72` 皮肤站登录失败 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:73` 统一通行证 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:73` 统一通行证登录失败 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:74` 刷新 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:76` 账号 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:76` 启动游戏时使用标记为「当前」的账号 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:97` 账号操作 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:98` 账号卡 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:138` 共 {} 个
-- `src/TipCL.App/Pages/AccountPage.cs:141` 还没有账号 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:141` 添加离线账号,或用微软 / 皮肤站 / 统一通行证登录
-- `src/TipCL.App/Pages/AccountPage.cs:157` 未登录 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:158` 先添加一个账号 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:197` 微软 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:198` 离线 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:199` 皮肤站 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:200` 统一通行证 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:201` 皮肤站 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:201` 其他 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:212` 当前 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:214` 自定义皮肤 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:215` 账号 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:221` 皮肤 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:221` 皮肤没能保存 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:223` 设为当前 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:223` 切换失败 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:224` 删除 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:224` 删除失败 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:242` 已切换 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:242` 当前账号:
-- `src/TipCL.App/Pages/AccountPage.cs:248` 删除账号 `[已有译文]`
-- `src/TipCL.App/Pages/AccountPage.cs:249` 将删除「{}」。微软账号的刷新令牌也会一并丢失,需要重新走设备码登录。
-- `src/TipCL.App/Pages/AccountPage.cs:250` 删除 `[已有译文]`
-- …… 另有 68 条(见 `--list-unwrapped` 全量输出)
-
-### `src/TipCL.App/Pages/MultiplayerPage.cs`(108 条)
-
-- `src/TipCL.App/Pages/MultiplayerPage.cs:44` 房间成员 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:62` 联机 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:64` 允许访问 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:65` 打开设置 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:66` 关闭内核 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:78` 复制邀请码 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:79` 已把邀请码复制到剪贴板 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:81` 邀请码 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:87` Terracotta 项目主页 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:89` Terracotta \| 陶瓦联机  © burningtnt  ·  基于 EasyTier `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:91` 陶瓦联机 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:92` 输入邀请码即可加入。陶瓦是 EasyTier P2P 打洞,不是 FRP 隧道;会与 HMCL 一样带上自定义会合节点。PCL 房间号不互通,局域网请用下面的地址。
-- `src/TipCL.App/Pages/MultiplayerPage.cs:96` 说明 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:97` 状态卡 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:98` 房间卡 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:99` 操作区 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:100` 玩家列表 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:101` 节点说明 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:132` 本机局域网地址:
-- `src/TipCL.App/Pages/MultiplayerPage.cs:132` 、 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:184` 加入失败 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:199` 当前系统架构不支持 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:200` 内核已安装 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:200` 内核未安装 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:201` 内核运行中 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:201` 内核未运行 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:204` 玩家  `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:206` 游戏运行中 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:215` 陶瓦联机大厅 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:217` 让好友在联机页选「我想当房客」,填这串邀请码。
-- `src/TipCL.App/Pages/MultiplayerPage.cs:218` 启动游戏 → 多人游戏 → 双击「陶瓦联机大厅」。 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:222` 会合节点 {} 个:{}
-- `src/TipCL.App/Pages/MultiplayerPage.cs:233` 已把邀请码复制到剪贴板 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:269` 玩家 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:270` 房主 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:270` 成员 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:271` 房主 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:271` 成员 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:283` 下载陶瓦联机内核 `[已有译文]`
-- `src/TipCL.App/Pages/MultiplayerPage.cs:283` 首次使用需要下载约 8 MB 的官方内核,之后可直接开房。
-- …… 另有 68 条(见 `--list-unwrapped` 全量输出)
-
-### `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs`(99 条)
-
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:35` 还没有记忆。对话里说出偏好或修好问题后，助手会自己记下 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:36` 共 {} 条，新对话开始时会带给助手
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:48` 编辑 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:50` 编辑记忆 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:50` 内容 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:55` 删除 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:68` 记忆已变化 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:68` 文件刚被改过，已刷新列表 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:71` 清空全部 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:73` 清空全部记忆？ `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:73` 助手记下的偏好、配置和修好过的问题都会删除，无法恢复。 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:73` 清空 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:76` 已清空记忆 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:76` 删除了 {} 条
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:80` 刷新 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:84` 记忆 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:84` AI 助手跨对话记住的偏好和配置（数据目录 ai_memory.md，一行一条） `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:92` 手机上显示的地址，例如 192.168.1.5:8765
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:93` 配对码 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:100` 连接 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:102` 连接中...
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:107` 已连接:{}
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:108` 已连接手机
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:109` 连接失败
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:110` USB 自动连接 `[已有译文]`
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:112` USB 连接中...
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:115` 已连接:{}
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:116` 已连接手机
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:117` USB 连接失败
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:118` 断开
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:121` 已断开
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:122` 断开失败
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:124` 同步面板
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:126` 已连接：{}
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:128` 未连接。手机端装 TipCL 同步 App，同一局域网内输入地址与配对码
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:129` 电脑和手机互传存档、截图与配置
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:131` 手机地址
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:131` 格式 地址:端口
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:132` 手机插 USB 且开了 USB 调试（adb）时可用
-- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:133` 同步
-- …… 另有 59 条(见 `--list-unwrapped` 全量输出)
 
 ### `src/TipCL.App/Common/Api.cs`(98 条)
 
@@ -936,50 +583,6 @@
 - `src/TipCL.App/Session/SmokeRunner.cs:424` 更多设置 `[已有译文]`
 - `src/TipCL.App/Session/SmokeRunner.cs:426` 真实配置浮层里没找到「更多设置」按钮,内存/分辨率那几行还是折叠的
 - …… 另有 45 条(见 `--list-unwrapped` 全量输出)
-
-### `src/TipCL.App/Pages/Library/LibraryPage.cs`(84 条)
-
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:76` Fabric 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:77` Forge 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:78` Quilt 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:79` NeoForge 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:80` OptiFine 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:81` LiteLoader 版本 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:82` 原版版本 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:95` 过滤版本名 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:97` 这个文件夹还没有版本 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:97` 点左侧「添加或导入」，或到「下载」页装一个 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:119` 实例库 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:122` 添加已有文件夹 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:122` 导入失败 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:123` 导入整合包 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:124` 新建实例 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:124` 创建失败 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:125` 导入官方启动器 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:127` 文件夹列表 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:129` 添加或导入 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:135` 版本选择 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:137` 刷新 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:138` 实例详情 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:138` 打开失败 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:141` 双击版本直接启动；行尾可收藏/删除/设置 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:392` 当前文件夹 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:401` {} 个版本
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:413` 默认 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:414` 实例操作 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:511` 共 {} 个版本
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:524` 已折叠 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:570` 快照 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:572` 模组 {}
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:583` 取消收藏
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:583` 收藏 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:591` 卸载这个版本 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:592` 卸载失败 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:596` 版本设置 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:648` 正式版 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:649` 快照 `[已有译文]`
-- `src/TipCL.App/Pages/Library/LibraryPage.cs:650` 旧测试 `[已有译文]`
-- …… 另有 44 条(见 `--list-unwrapped` 全量输出)
 
 ### `src/TipCL.Core/Launcher/Mods.cs`(80 条)
 
@@ -1341,6 +944,50 @@
 - `src/TipCL.App/Ui/ThemeGalleryPage.cs:99` 空下拉占位
 - …… 另有 22 条(见 `--list-unwrapped` 全量输出)
 
+### `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs`(61 条)
+
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:198` 页签显示:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:202` 「设置」页签始终显示,否则没有入口改回来
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:215` 上移页签:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:216` 下移页签:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:233` Linux 标题栏没有桥接药丸钮:开关会写入文档,但本树无宿主可显隐
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:252` 标题栏:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:265` 标题栏:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:296` 自定义布局:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:299` 单块页(下载与网络)也能进编辑态:可以调外观、标题或先隐藏
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:417` 恢复默认分栏:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:419` 当前 
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:428` 全部复位分栏
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:443` 已复位 
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:443`  处
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:454` 星号 
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:456` 现状:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:456`  · 留白 
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:491` 自建区块加到页面
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:492` 加到页面
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:492` 选一个页面;添加后会自动跳过去,区块立刻上屏
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:505` 添加部件:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:507` 可选部件
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:513` 还没有自建区块:上面任意一行点「添加」即可
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:525` 删除部件:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:545` 不支持的部件类型
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:550` 写盘失败
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:584` 区块已写入布局文档,下次打开该页生效
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:591` 区块已出现在当前页,可在右键「自定义布局...」里拖动
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:623` 写盘失败
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:626` 已删除自建区块
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:648` 导入布局文件
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:649` 导出布局文件
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:651` 当前方案:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:689` 应用方案:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:698` 我的布局 
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:709` 布局方案「
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:709` 」已保存
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:721` 布局方案「
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:721` 」已应用
+- `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs:721` 原来的布局已存为方案「
+- …… 另有 21 条(见 `--list-unwrapped` 全量输出)
+
 ### `src/TipCL.Core/Launcher/DownloadManager.cs`(61 条)
 
 - `src/TipCL.Core/Launcher/DownloadManager.cs:118` 用户取消
@@ -1385,10 +1032,363 @@
 - `src/TipCL.Core/Launcher/DownloadManager.cs:763` 分片下载 %s：%d 段，共 %s
 - …… 另有 21 条(见 `--list-unwrapped` 全量输出)
 
+### `src/TipCL.Core/Launcher/Ai/ToolRunner.cs`(59 条)
+
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:83` 用户开启了「不询问」模式 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:97` 当前是「只看不动」模式，不能执行这类操作 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:105` 规则允许 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:106` 这条操作被你的规则禁止 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:107` 规则要求先询问 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:115` 未知工具 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:119` 只读操作
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:127` 免确认模式 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:129` 当前是「只看不动」模式，不能执行这类操作 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:131` 删除操作仍需确认 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:132` 写操作直接执行
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:134` 删除/启动操作仍需确认 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:135` 安装/下载类直接执行
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:137` 文件类修改直接执行
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:138` 这类操作需要确认
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:141` 用户开启了「不询问」模式 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:144` 高风险操作需要确认 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:145` 写操作需要确认 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:200` [权限设置] 用户选了「全自动」：写操作直接执行，不会弹确认。你仍要先用一句话说明将要做什么。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:201` [权限设置] 用户选了「只看不动」：你只能查看和诊断，不能安装/删除/改配置。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:202` [权限设置] 写操作会直接执行；删除实例、删除模组前仍会先询问，要等用户点了才执行。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:203` [权限设置] 用户选了「不询问」：需要确认的写操作会被直接拒绝，只读查看照常。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:204` [权限设置] 文件类修改直接执行；安装、删除、启动前会弹确认，要等用户点了才执行。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:205` [权限设置] 安装、删除、禁用、改配置、启动这类写操作执行前都会弹确认，用户点了才会真的执行；查看类操作不弹。被拒绝时不要重复发起同一操作，改为说明原因。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:266` 未知工具 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:267` 没有这个工具: 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:279` 已拒绝:
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:281` 当前是「只看不动」档位,不能执行写操作
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:281` 当前权限档位不允许这一步
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:287` 需要用户确认
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:288` 这一步需要用户确认,但界面没有接确认回调
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:307` 用户拒绝
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:308` 用户拒绝了这一步
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:324` 已停止 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:325` 用户停止了这次操作
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:331` 失败: 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:340` 免确认模式 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:341` 当前是「只看不动」模式，不能执行这类操作 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:342` 外部 MCP 工具能力未知，需确认
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.cs:417` 全部 `[已有译文]`
+- …… 另有 19 条(见 `--list-unwrapped` 全量输出)
+
+### `src/TipCL.App/Pages/Launch/LaunchPage.cs`(56 条)
+
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:59` 直连服务器 ip:port（可空） `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:78` 就绪 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:151` 随手记点什么… `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:211` 启动 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:260` 启动游戏 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:293` 停止 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:300` 启动配置 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:301` 联机 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:308` 联机 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:333` 新闻 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:362` 新闻 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:363` 下载任务 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:364` 游戏时长 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:365` 便签 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:366` 日志 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:750` 自动选择 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:751` 自动选择 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:768` 自动选择 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:768` 自动选择 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:824` 还没有实例，先到「实例库」添加
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:826` 这个实例还没有版本，先去「下载」装一个 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:828` 就绪 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:838` 选择实例 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:840` 就绪 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:853` {} 个模组
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:865` 自动 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:866` Java 自动 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:906` 主页已设为空白 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:907` 主页已设为空白 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:917` 未设置自定义主页。到设置 → 启动页主页 填本地 HTML 路径。 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:924` 读不了自定义主页： `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:925` 读不了自定义主页 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:941` 暂无新闻 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:942` 暂无新闻 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:968` 暂无新闻 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:969` 暂无新闻 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:1008` 没有版本 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:1008` 请先到「下载」安装 `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:1025` 准备启动… `[已有译文]`
+- `src/TipCL.App/Pages/Launch/LaunchPage.cs:1048` 启动游戏 `[已有译文]`
+- …… 另有 16 条(见 `--list-unwrapped` 全量输出)
+
+### `src/TipCL.App/Pages/Download/CatalogModels.cs`(52 条)
+
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:23` 没有找到相关模组 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:24` 模组链接 / .jar 直链 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:26` 全部 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:26` 优化 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:26` 科技 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:26` 魔法 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:26` 冒险 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:26` 建筑 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:26` 工具 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:34` 整合包 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:40` 没有找到相关整合包 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:41` 整合包链接 / .mrpack / .zip `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:44` 全部 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:44` 生存 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:44` 空岛 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:44` 科技 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:44` 魔法 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:44` 冒险 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:52` 数据包 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:58` 没有找到相关数据包 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:59` 数据包下载链接 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:61` 全部 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:61` 生存 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:61` 冒险 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:61` 装饰 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:61` 工具 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:68` 资源包 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:74` 没有找到相关资源包 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:75` 资源包下载链接 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:77` 全部 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:77` 写实 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:77` 现代风 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:77` 动态效果 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:84` 光影包 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:90` 没有找到相关光影 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:91` 光影包下载链接 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:93` 全部 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:93` 写实 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:93` 卡通 `[已有译文]`
+- `src/TipCL.App/Pages/Download/CatalogModels.cs:93` 高性能 `[已有译文]`
+- …… 另有 12 条(见 `--list-unwrapped` 全量输出)
+
+### `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs`(48 条)
+
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:36` 共 {} 条，新对话开始时会带给助手
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:76` 删除了 {} 条
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:92` 手机上显示的地址，例如 192.168.1.5:8765
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:102` 连接中...
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:107` 已连接:{}
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:108` 已连接手机
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:109` 连接失败
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:112` USB 连接中...
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:115` 已连接:{}
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:116` 已连接手机
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:117` USB 连接失败
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:118` 断开
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:121` 已断开
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:122` 断开失败
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:124` 同步面板
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:126` 已连接：{}
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:128` 未连接。手机端装 TipCL 同步 App，同一局域网内输入地址与配对码
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:129` 电脑和手机互传存档、截图与配置
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:131` 手机地址
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:131` 格式 地址:端口
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:132` 手机插 USB 且开了 USB 调试（adb）时可用
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:133` 同步
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:133` 对比电脑与手机的世界存档,逐个传或一键同步
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:144` 还没连接手机
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:144` 先点上面的「连接」或「USB 自动连接」
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:152` @368****168 — 帮忙测试了正版（微软）验证
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:155` （Linux 移植版）
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:169` 说说你的使用体验、遇到的问题或想要的功能...
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:177` 先写点内容
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:177` 反馈内容不能为空
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:184` 发送中...
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:201` 已发送(编号 {}),谢谢!
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:201` 已发送,谢谢你的反馈!
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:202` 感谢你的反馈
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:207` 发送失败:
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:216` 去 GitHub 提 issue
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:218` 问题与建议直通车
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:230` 发送反馈需要同意上传诊断数据
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:231` 会随反馈一起上传:随机设备标识、启动器版本、系统与硬件摘要、已装 Java 摘要。
+
+- `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs:232` 不包含账号密码、存档内容与聊天记录。
+- …… 另有 8 条(见 `--list-unwrapped` 全量输出)
+
+### `src/TipCL.Core/Launcher/Ai/Client.cs`(47 条)
+
+- `src/TipCL.Core/Launcher/Ai/Client.cs:21` 上下文长度
+- `src/TipCL.Core/Launcher/Ai/Client.cs:21` 上下文过长
+- `src/TipCL.Core/Launcher/Ai/Client.cs:21` 输入过长
+- `src/TipCL.Core/Launcher/Ai/Client.cs:21` 请求过长
+- `src/TipCL.Core/Launcher/Ai/Client.cs:22` 超出长度
+- `src/TipCL.Core/Launcher/Ai/Client.cs:28` 令牌无效 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/Client.cs:32` 限制
+- `src/TipCL.Core/Launcher/Ai/Client.cs:32` 额度
+- `src/TipCL.Core/Launcher/Ai/Client.cs:36` 超时
+- `src/TipCL.Core/Launcher/Ai/Client.cs:40` 连不上
+- `src/TipCL.Core/Launcher/Ai/Client.cs:40` 网络
+- `src/TipCL.Core/Launcher/Ai/Client.cs:97` 自定义 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/Client.cs:161` 请在设置里填写「自定义 OpenAI 兼容端点」的地址（到 /v1 为止）
+- `src/TipCL.Core/Launcher/Ai/Client.cs:174` 这个版本没有内置 AI 网关，请到「设置 → AI 助手」切到「自定义 OpenAI 兼容端点」
+- `src/TipCL.Core/Launcher/Ai/Client.cs:227` 已连通
+- `src/TipCL.Core/Launcher/Ai/Client.cs:231` 内置网关正常，模型 
+- `src/TipCL.Core/Launcher/Ai/Client.cs:236` 自定义端点正常，可用模型 
+- `src/TipCL.Core/Launcher/Ai/Client.cs:236`  个，例如 
+- `src/TipCL.Core/Launcher/Ai/Client.cs:238` 自定义端点已连通
+- `src/TipCL.Core/Launcher/Ai/Client.cs:281` 模型列表接口返回的不是 JSON（可能网关未启用该接口）
+- `src/TipCL.Core/Launcher/Ai/Client.cs:285` 模型列表接口返回格式不对
+- `src/TipCL.Core/Launcher/Ai/Client.cs:330` 接口错误
+- `src/TipCL.Core/Launcher/Ai/Client.cs:372` 接口错误
+- `src/TipCL.Core/Launcher/Ai/Client.cs:375` 接口错误
+- `src/TipCL.Core/Launcher/Ai/Client.cs:503` 接口超时，正在换一次非流式
+- `src/TipCL.Core/Launcher/Ai/Client.cs:539` 工具参数不完整，正在换一次非流式
+- `src/TipCL.Core/Launcher/Ai/Client.cs:641` 工具参数不完整，正在换一次非流式
+- `src/TipCL.Core/Launcher/Ai/Client.cs:673` 工具参数不完整，正在换一次非流式
+- `src/TipCL.Core/Launcher/Ai/Client.cs:698` 接口没有返回内容
+- `src/TipCL.Core/Launcher/Ai/Client.cs:715` 已停止 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/Client.cs:717` 连不上接口: 
+- `src/TipCL.Core/Launcher/Ai/Client.cs:776` ： `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/Client.cs:780` ： `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/Client.cs:789` （这些图片没能附上：
+- `src/TipCL.Core/Launcher/Ai/Client.cs:789` ； `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/Client.cs:789` ） `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/Client.cs:802` （用户附了 
+- `src/TipCL.Core/Launcher/Ai/Client.cs:802`  张图片，但当前模型不支持看图，已省略。如需识别图片，请在设置里换成支持图片的模型。）
+- `src/TipCL.Core/Launcher/Ai/Client.cs:814` 还没选模型：到「设置 → AI 助手」刷新模型列表后选一个
+- `src/TipCL.Core/Launcher/Ai/Client.cs:845` 已停止 `[已有译文]`
+- …… 另有 7 条(见 `--list-unwrapped` 全量输出)
+
+### `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs`(46 条)
+
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:27` 把文件直接拖进窗口 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:27` 整合包、模组、资源包、光影、存档、皮肤、壁纸都认;认不准会问你一句,不用先找对页面。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:28` 版本管理是排版的中心
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:28` 「版本管理」页能按来源分组看版本、收藏、复制、重命名、隐藏;双击直接启动。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:29` 换个背景 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:29` 设置页能设静态壁纸、指一个文件夹轮播;模糊和遮罩也在那儿调。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:30` AI 助手在标题栏
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:30` 崩溃日志看不懂、模组冲突理不清,可以直接问它。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:31` 这个向导随时能再看 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:31` 「设置 → 通用」里点「重新运行向导」,目录、下载源、内存、隔离会再问一遍。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:36` 自动(官方慢则 BMCLAPI)
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:37` 仅官方 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:38` 仅 BMCLAPI `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:43` 完全独立(推荐)
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:44` 隔离 Mod 与配置 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:45` 隔离存档 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:46` 不隔离 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:51` 先把游戏目录和下载源定下来。 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:52` 版本都会装在这个目录里;下载源决定从哪儿拉文件。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:53` 这两项只影响以后新建的版本,已经装好的不受影响。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:54` 最后几句,都是容易错过的地方。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:68` 游戏目录 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:69` 浏览...
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:98` 三步就能开始玩 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:99` 1. 选游戏目录和下载源 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:100` 2. 定默认内存和版本隔离 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:101` 3. 看一眼几个容易错过的功能 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:102` 这些以后都能在设置里改;不想现在弄就点「跳过向导」。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:104` 游戏目录(版本都装在这里)
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:105` 文件下载源 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:106` 国内网络建议保持「自动」:官方慢的时候会自己切到 BMCLAPI 镜像。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:108` 默认内存 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:109` 新版本默认隔离 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:110` 「完全独立」= 每个版本有自己的 mods / 配置 / 存档,换版本不会把上一个版本的模组拖进去。
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:124` 上一步 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:125` 下一步 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:126` 跳过向导 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:150` 欢迎使用 TipCL `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:178` 游戏目录没能设置 `[已有译文]`
+- `src/TipCL.App/Pages/Feedback/FirstRunWizard.cs:178` {}
+
+{}
+
+已保留原来的目录,可到「设置」里重新选择。
+- …… 另有 6 条(见 `--list-unwrapped` 全量输出)
+
+### `src/TipCL.Core/Plugins/PluginManifest.cs`(44 条)
+
+- `src/TipCL.Core/Plugins/PluginManifest.cs:44` 调用启动器全部功能（启动游戏、改实例、读写设置等）
+- `src/TipCL.Core/Plugins/PluginManifest.cs:46` 给 AI 助手添加工具
+- `src/TipCL.Core/Plugins/PluginManifest.cs:48` 添加 AI 预设（人设）
+- `src/TipCL.Core/Plugins/PluginManifest.cs:50` 新建、读取并驱动 AI 对话
+- `src/TipCL.Core/Plugins/PluginManifest.cs:52` 直接调用 AI 模型（消耗你的额度）
+- `src/TipCL.Core/Plugins/PluginManifest.cs:54` 保存和读取自己的密钥
+- `src/TipCL.Core/Plugins/PluginManifest.cs:56` 添加页面、AI 标签、首页卡片和提示框
+- `src/TipCL.Core/Plugins/PluginManifest.cs:58` 在主窗口上显示浮层 `[已有译文]`
+- `src/TipCL.Core/Plugins/PluginManifest.cs:60` 完整电脑权限：可以读写文件、联网、运行程序
+- `src/TipCL.Core/Plugins/PluginManifest.cs:153` 找不到 
+- `src/TipCL.Core/Plugins/PluginManifest.cs:153` ： `[已有译文]`
+- `src/TipCL.Core/Plugins/PluginManifest.cs:172`  不是合法 JSON：
+- `src/TipCL.Core/Plugins/PluginManifest.cs:176`  必须是 JSON 对象
+- `src/TipCL.Core/Plugins/PluginManifest.cs:186` 插件清单有误：
+- `src/TipCL.Core/Plugins/PluginManifest.cs:186` ； `[已有译文]`
+- `src/TipCL.Core/Plugins/PluginManifest.cs:293` id 必须是 2~64 位小写字母/数字/-_.，并以字母或数字开头
+- `src/TipCL.Core/Plugins/PluginManifest.cs:297` id 不能是 host（保留给 Node 宿主）
+- `src/TipCL.Core/Plugins/PluginManifest.cs:302` version 必须是 semver（如 1.0.0）
+- `src/TipCL.Core/Plugins/PluginManifest.cs:311` runtime 只能是 node 或 dotnet
+- `src/TipCL.Core/Plugins/PluginManifest.cs:319` main 必须是字符串或字符串数组
+- `src/TipCL.Core/Plugins/PluginManifest.cs:323` node 插件至少要有 main 或 client
+- `src/TipCL.Core/Plugins/PluginManifest.cs:329` 入口路径不能跳出插件目录：
+- `src/TipCL.Core/Plugins/PluginManifest.cs:338` dotnet 插件必须声明 assembly（插件目录内的相对路径）
+- `src/TipCL.Core/Plugins/PluginManifest.cs:342` dotnet 插件必须声明 entryType
+- `src/TipCL.Core/Plugins/PluginManifest.cs:349` 未知权限：
+- `src/TipCL.Core/Plugins/PluginManifest.cs:358`  不是合法的版本范围
+- `src/TipCL.Core/Plugins/PluginManifest.cs:370`  里的 id 不合法：
+- `src/TipCL.Core/Plugins/PluginManifest.cs:374`  不是合法的版本范围
+- `src/TipCL.Core/Plugins/PluginManifest.cs:380`  必须是对象
+- `src/TipCL.Core/Plugins/PluginManifest.cs:387` config 必须是对象
+- `src/TipCL.Core/Plugins/PluginManifest.cs:395`  必须是对象
+- `src/TipCL.Core/Plugins/PluginManifest.cs:401` .type 只能是 string/boolean/integer/number
+- `src/TipCL.Core/Plugins/PluginManifest.cs:413` agentPresets 的 id 不合法：
+- `src/TipCL.Core/Plugins/PluginManifest.cs:418` systemPromptFile 不能跳出插件目录：
+- `src/TipCL.Core/Plugins/PluginManifest.cs:424` contributes 必须是对象
+- `src/TipCL.Core/Plugins/PluginManifest.cs:450` 需要 TipCL 
+- `src/TipCL.Core/Plugins/PluginManifest.cs:450` （当前 
+- `src/TipCL.Core/Plugins/PluginManifest.cs:450` ） `[已有译文]`
+- `src/TipCL.Core/Plugins/PluginManifest.cs:499` 未声明的配置项：
+- `src/TipCL.Core/Plugins/PluginManifest.cs:522`  必须是整数
+- …… 另有 4 条(见 `--list-unwrapped` 全量输出)
+
+### `src/TipCL.App/Common/FileKinds.cs`(37 条)
+
+- `src/TipCL.App/Common/FileKinds.cs:35` 整合包 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:36` 模组 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:37` 资源包 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:38` 光影 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:39` 数据包 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:40` 存档 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:41` 皮肤 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:42` TipCL 插件 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:48` 装成一个新版本 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:49` 装进实例的 mods/
+- `src/TipCL.App/Common/FileKinds.cs:50` 装进实例的 resourcepacks/
+- `src/TipCL.App/Common/FileKinds.cs:51` 装进实例的 shaderpacks/
+- `src/TipCL.App/Common/FileKinds.cs:52` 装进实例的 datapacks/
+- `src/TipCL.App/Common/FileKinds.cs:53` 装进实例的 saves/
+- `src/TipCL.App/Common/FileKinds.cs:54` 设为离线账号的皮肤 `[已有译文]`
+- `src/TipCL.App/Common/FileKinds.cs:55` 安装到 TipCL 插件目录
+- `src/TipCL.App/Common/FileKinds.cs:56` 不知道放哪儿
+- `src/TipCL.App/Common/FileKinds.cs:94` 找不到这个文件。
+- `src/TipCL.App/Common/FileKinds.cs:102` Modrinth 整合包(.mrpack)
+- `src/TipCL.App/Common/FileKinds.cs:116` Minecraft 皮肤({}×{})
+- `src/TipCL.App/Common/FileKinds.cs:120` 看起来是图片;64×64 / 64×32 的 PNG 才能当皮肤。
+- `src/TipCL.App/Common/FileKinds.cs:124` 这个后缀不认识。
+- `src/TipCL.App/Common/FileKinds.cs:130` 读这个文件出错了:
+- `src/TipCL.App/Common/FileKinds.cs:141` 带 tipcl-plugin.json 的插件文件夹
+- `src/TipCL.App/Common/FileKinds.cs:148` 带 level.dat 的存档文件夹
+- `src/TipCL.App/Common/FileKinds.cs:157` 整合包文件夹(mods/ 或 versions/)
+- `src/TipCL.App/Common/FileKinds.cs:161` 文件夹里没有能认出来的标志(插件要 tipcl-plugin.json,存档要 level.dat,整合包要有 mods/ 或 versions/)。
+- `src/TipCL.App/Common/FileKinds.cs:175` TipCL 插件包(tipcl-plugin.json)
+- `src/TipCL.App/Common/FileKinds.cs:182` Modrinth 整合包(modrinth.index.json)
+- `src/TipCL.App/Common/FileKinds.cs:189` CurseForge 整合包(manifest.json)
+- `src/TipCL.App/Common/FileKinds.cs:196` 存档压缩包(level.dat)
+- `src/TipCL.App/Common/FileKinds.cs:206` 资源包(pack.mcmeta + assets/)
+- `src/TipCL.App/Common/FileKinds.cs:213` 数据包(pack.mcmeta + data/)
+- `src/TipCL.App/Common/FileKinds.cs:220` 光影包(shaders/)
+- `src/TipCL.App/Common/FileKinds.cs:227` 模组 jar
+- `src/TipCL.App/Common/FileKinds.cs:227` 模组压缩包
+- `src/TipCL.App/Common/FileKinds.cs:231` 包里的内容认不准。
+
 ## 机读守卫块(守卫测试读这里,勿改格式)
 
 <!-- I18N-GUARD-BEGIN -->
 ```json
-{"cjk_literals": 5217, "files": 175, "generated": "2026-11-20T01:38:59", "per_file": {"src/TipCL.App/Common/AccountGate.cs": 11, "src/TipCL.App/Common/Ai/AiService.cs": 2, "src/TipCL.App/Common/Api.cs": 98, "src/TipCL.App/Common/AppLog.cs": 2, "src/TipCL.App/Common/Dlg.cs": 12, "src/TipCL.App/Common/FeedbackConsent.cs": 5, "src/TipCL.App/Common/FileDrop.cs": 28, "src/TipCL.App/Common/FileKinds.cs": 37, "src/TipCL.App/Common/FpsOverlay.cs": 2, "src/TipCL.App/Common/ImportBatch.cs": 2, "src/TipCL.App/Common/Launch/LaunchCore.cs": 25, "src/TipCL.App/Common/Motion.cs": 1, "src/TipCL.App/Common/SelfUpdate.cs": 5, "src/TipCL.App/Common/TaskStore.cs": 4, "src/TipCL.App/Controls/PageLayoutHost.cs": 14, "src/TipCL.App/Pages/AccountPage.cs": 108, "src/TipCL.App/Pages/Ai/AiBubble.cs": 5, "src/TipCL.App/Pages/Ai/AiChatOps.cs": 20, "src/TipCL.App/Pages/Ai/AiFixView.cs": 19, "src/TipCL.App/Pages/Ai/AiImages.cs": 4, "src/TipCL.App/Pages/Ai/AiMemoryPanel.cs": 24, "src/TipCL.App/Pages/Ai/AiPage.cs": 65, "src/TipCL.App/Pages/Ai/AiPermissionPanel.cs": 30, "src/TipCL.App/Pages/Ai/AskCard.cs": 8, "src/TipCL.App/Pages/Ai/ChatInput.cs": 3, "src/TipCL.App/Pages/Ai/ConfirmCard.cs": 13, "src/TipCL.App/Pages/Ai/MdView.cs": 2, "src/TipCL.App/Pages/Ai/PlanCard.cs": 1, "src/TipCL.App/Pages/Ai/SlashMenu.cs": 2, "src/TipCL.App/Pages/Ai/StepGroup.cs": 3, "src/TipCL.App/Pages/Ai/TaskCard.cs": 10, "src/TipCL.App/Pages/Ai/ToolLine.cs": 5, "src/TipCL.App/Pages/Download/CatalogModels.cs": 52, "src/TipCL.App/Pages/Download/CatalogPage.cs": 141, "src/TipCL.App/Pages/Download/DownloadPage.cs": 24, "src/TipCL.App/Pages/Download/LoaderIcons.cs": 1, "src/TipCL.App/Pages/Feedback/CrashUi.cs": 28, "src/TipCL.App/Pages/Feedback/FeedbackView.cs": 64, "src/TipCL.App/Pages/Feedback/FirstRunWizard.cs": 46, "src/TipCL.App/Pages/Install/InstallPage.cs": 24, "src/TipCL.App/Pages/Launch/LaunchPage.cs": 57, "src/TipCL.App/Pages/Launch/LaunchPopups.cs": 34, "src/TipCL.App/Pages/Layout/LayoutBlockEntryCatalog.cs": 24, "src/TipCL.App/Pages/Layout/LayoutEditor.cs": 4, "src/TipCL.App/Pages/Layout/LayoutWidgetOps.cs": 1, "src/TipCL.App/Pages/Library/InstanceDetailPage.cs": 27, "src/TipCL.App/Pages/Library/LibraryPage.cs": 84, "src/TipCL.App/Pages/MultiplayerPage.cs": 108, "src/TipCL.App/Pages/PlaceholderPage.cs": 1, "src/TipCL.App/Pages/Plugins/PluginHostPage.cs": 14, "src/TipCL.App/Pages/Plugins/PluginModels.cs": 9, "src/TipCL.App/Pages/Plugins/PluginSettingsCard.cs": 36, "src/TipCL.App/Pages/Plugins/PluginsPage.Dev.cs": 33, "src/TipCL.App/Pages/Plugins/PluginsPage.Installed.cs": 51, "src/TipCL.App/Pages/Plugins/PluginsPage.Market.cs": 50, "src/TipCL.App/Pages/Plugins/PluginsPage.Settings.cs": 21, "src/TipCL.App/Pages/Plugins/PluginsPage.cs": 18, "src/TipCL.App/Pages/Settings/PhoneSyncPanel.cs": 42, "src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs": 99, "src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs": 187, "src/TipCL.App/Pages/Settings/SettingsPage.SaveLoad.cs": 45, "src/TipCL.App/Pages/Settings/SettingsPage.Update.cs": 10, "src/TipCL.App/Pages/Settings/SettingsPage.cs": 193, "src/TipCL.App/Pages/Settings/SettingsSubs.cs": 154, "src/TipCL.App/Pages/TasksPage.cs": 14, "src/TipCL.App/Pages/Version/GlobalModsDialog.cs": 5, "src/TipCL.App/Pages/Version/ModsDialog.cs": 39, "src/TipCL.App/Pages/Version/SavesDialog.cs": 54, "src/TipCL.App/Pages/Version/VersionManagePage.cs": 143, "src/TipCL.App/Pages/Version/VersionSetupDialog.cs": 45, "src/TipCL.App/Program.cs": 3, "src/TipCL.App/Session/AiSelfTestCli.cs": 7, "src/TipCL.App/Session/CommandLine.cs": 19, "src/TipCL.App/Session/SmokeRunner.cs": 85, "src/TipCL.App/Shell/MainWindow.axaml.cs": 24, "src/TipCL.App/Shell/NavRegistry.cs": 5, "src/TipCL.App/Shell/TitleBar.axaml.cs": 8, "src/TipCL.App/Ui/ThemeGalleryPage.cs": 62, "src/TipCL.Core/BackendWorker.cs": 4, "src/TipCL.Core/Launcher/AccountManager.cs": 2, "src/TipCL.Core/Launcher/Ai/AiAgent.cs": 32, "src/TipCL.Core/Launcher/Ai/AiData.cs": 77, "src/TipCL.Core/Launcher/Ai/AiFixChat.cs": 24, "src/TipCL.Core/Launcher/Ai/AiMemory.cs": 1, "src/TipCL.Core/Launcher/Ai/AiResponse.cs": 1, "src/TipCL.Core/Launcher/Ai/AiSelfTest.cs": 110, "src/TipCL.Core/Launcher/Ai/AiUiText.cs": 18, "src/TipCL.Core/Launcher/Ai/Artifacts.cs": 13, "src/TipCL.Core/Launcher/Ai/Checkpoint.cs": 6, "src/TipCL.Core/Launcher/Ai/Client.cs": 47, "src/TipCL.Core/Launcher/Ai/Compact.cs": 8, "src/TipCL.Core/Launcher/Ai/Conflict.cs": 9, "src/TipCL.Core/Launcher/Ai/FileMemory.cs": 13, "src/TipCL.Core/Launcher/Ai/Images.cs": 11, "src/TipCL.Core/Launcher/Ai/Mcp.cs": 3, "src/TipCL.Core/Launcher/Ai/McpClient.cs": 5, "src/TipCL.Core/Launcher/Ai/Rewind.cs": 1, "src/TipCL.Core/Launcher/Ai/Store.cs": 3, "src/TipCL.Core/Launcher/Ai/ToolRunner.cs": 59, "src/TipCL.Core/Launcher/Ai/Tools.cs": 86, "src/TipCL.Core/Launcher/Ai/VisionCaps.cs": 12, "src/TipCL.Core/Launcher/AppInfo.cs": 1, "src/TipCL.Core/Launcher/Auth.cs": 12, "src/TipCL.Core/Launcher/Authlib.cs": 10, "src/TipCL.Core/Launcher/Catalog.cs": 330, "src/TipCL.Core/Launcher/CatalogFiles.cs": 20, "src/TipCL.Core/Launcher/Cleaner.cs": 1, "src/TipCL.Core/Launcher/ContentExport.cs": 4, "src/TipCL.Core/Launcher/Crash.cs": 153, "src/TipCL.Core/Launcher/DownloadManager.cs": 61, "src/TipCL.Core/Launcher/DownloadSnapshot.cs": 4, "src/TipCL.Core/Launcher/DownloadStatus.cs": 22, "src/TipCL.Core/Launcher/DownloadTracker.cs": 30, "src/TipCL.Core/Launcher/Downloader.cs": 4, "src/TipCL.Core/Launcher/ExportPack.cs": 4, "src/TipCL.Core/Launcher/Feedback.cs": 11, "src/TipCL.Core/Launcher/FeedbackDefaults.cs": 8, "src/TipCL.Core/Launcher/GameCrashError.cs": 1, "src/TipCL.Core/Launcher/GameInstall.cs": 10, "src/TipCL.Core/Launcher/Gc.cs": 3, "src/TipCL.Core/Launcher/GlobalMods.cs": 2, "src/TipCL.Core/Launcher/HelpContent.cs": 12, "src/TipCL.Core/Launcher/I18nCore.cs": 1, "src/TipCL.Core/Launcher/Installer.cs": 122, "src/TipCL.Core/Launcher/Instance.cs": 11, "src/TipCL.Core/Launcher/Instances.cs": 7, "src/TipCL.Core/Launcher/Java.cs": 29, "src/TipCL.Core/Launcher/Lan.cs": 1, "src/TipCL.Core/Launcher/LaunchFlow.cs": 4, "src/TipCL.Core/Launcher/LauncherConfig.cs": 3, "src/TipCL.Core/Launcher/Liteloader.cs": 6, "src/TipCL.Core/Launcher/LoaderMeta.cs": 1, "src/TipCL.Core/Launcher/Manifest.cs": 10, "src/TipCL.Core/Launcher/McLauncher.cs": 14, "src/TipCL.Core/Launcher/MicrosoftAuthenticator.cs": 18, "src/TipCL.Core/Launcher/ModUpdate.cs": 4, "src/TipCL.Core/Launcher/Modpack.cs": 153, "src/TipCL.Core/Launcher/Mods.cs": 80, "src/TipCL.Core/Launcher/News.cs": 3, "src/TipCL.Core/Launcher/Nide8.cs": 11, "src/TipCL.Core/Launcher/OfficialMigrate.cs": 4, "src/TipCL.Core/Launcher/Optifine.cs": 21, "src/TipCL.Core/Launcher/Playtime.cs": 10, "src/TipCL.Core/Launcher/Preflight.cs": 67, "src/TipCL.Core/Launcher/RSAKey.cs": 1, "src/TipCL.Core/Launcher/Repair.cs": 6, "src/TipCL.Core/Launcher/RsaLite.cs": 3, "src/TipCL.Core/Launcher/Saves.cs": 20, "src/TipCL.Core/Launcher/Servers.cs": 11, "src/TipCL.Core/Launcher/Shortcut.cs": 4, "src/TipCL.Core/Launcher/Skin.cs": 4, "src/TipCL.Core/Launcher/SkinServer.cs": 3, "src/TipCL.Core/Launcher/Source.cs": 6, "src/TipCL.Core/Launcher/Sync/LevelDat.cs": 2, "src/TipCL.Core/Launcher/Sync/PhoneClient.cs": 12, "src/TipCL.Core/Launcher/Sync/PhoneLink.cs": 21, "src/TipCL.Core/Launcher/Sync/SaveSync.cs": 3, "src/TipCL.Core/Launcher/Sysinfo.cs": 14, "src/TipCL.Core/Launcher/Terracotta.cs": 76, "src/TipCL.Core/Launcher/Themes.cs": 6, "src/TipCL.Core/Launcher/UiLayout.cs": 1, "src/TipCL.Core/Launcher/UiPrefs.cs": 2, "src/TipCL.Core/Launcher/Updater.cs": 14, "src/TipCL.Core/Launcher/Utils.cs": 12, "src/TipCL.Core/Launcher/VersionOps.cs": 6, "src/TipCL.Core/Launcher/VersionSettings.cs": 7, "src/TipCL.Core/Launcher/Worlds.cs": 10, "src/TipCL.Core/Layout/PageLayoutStore.cs": 2, "src/TipCL.Core/Plugins/PluginDirs.cs": 1, "src/TipCL.Core/Plugins/PluginHost.cs": 14, "src/TipCL.Core/Plugins/PluginInstaller.cs": 2, "src/TipCL.Core/Plugins/PluginManifest.cs": 44, "src/TipCL.Core/Plugins/PluginMarket.cs": 14, "src/TipCL.Core/Plugins/SemVer.cs": 1, "src/TipCL.Core/Tests/CoreReuseSmokeTests.cs": 3}, "unwrapped_total": 4918, "unwrapped_with_en_key": 2090, "wrapped": 299}
+{"cjk_literals": 5228, "files": 174, "generated": "2026-11-20T02:25:54", "per_file": {"src/TipCL.App/Common/AccountGate.cs": 11, "src/TipCL.App/Common/Ai/AiService.cs": 2, "src/TipCL.App/Common/Api.cs": 98, "src/TipCL.App/Common/AppLog.cs": 2, "src/TipCL.App/Common/Dlg.cs": 12, "src/TipCL.App/Common/FeedbackConsent.cs": 5, "src/TipCL.App/Common/FileDrop.cs": 28, "src/TipCL.App/Common/FileKinds.cs": 37, "src/TipCL.App/Common/FpsOverlay.cs": 2, "src/TipCL.App/Common/ImportBatch.cs": 2, "src/TipCL.App/Common/Launch/LaunchCore.cs": 25, "src/TipCL.App/Common/Motion.cs": 1, "src/TipCL.App/Common/SelfUpdate.cs": 5, "src/TipCL.App/Common/TaskStore.cs": 4, "src/TipCL.App/Controls/PageLayoutHost.cs": 14, "src/TipCL.App/Pages/AccountPage.cs": 23, "src/TipCL.App/Pages/Ai/AiBubble.cs": 5, "src/TipCL.App/Pages/Ai/AiChatOps.cs": 20, "src/TipCL.App/Pages/Ai/AiFixView.cs": 19, "src/TipCL.App/Pages/Ai/AiImages.cs": 4, "src/TipCL.App/Pages/Ai/AiMemoryPanel.cs": 24, "src/TipCL.App/Pages/Ai/AiPage.cs": 65, "src/TipCL.App/Pages/Ai/AiPermissionPanel.cs": 30, "src/TipCL.App/Pages/Ai/AskCard.cs": 8, "src/TipCL.App/Pages/Ai/ChatInput.cs": 3, "src/TipCL.App/Pages/Ai/ConfirmCard.cs": 13, "src/TipCL.App/Pages/Ai/MdView.cs": 2, "src/TipCL.App/Pages/Ai/PlanCard.cs": 1, "src/TipCL.App/Pages/Ai/SlashMenu.cs": 2, "src/TipCL.App/Pages/Ai/StepGroup.cs": 3, "src/TipCL.App/Pages/Ai/TaskCard.cs": 10, "src/TipCL.App/Pages/Ai/ToolLine.cs": 5, "src/TipCL.App/Pages/Download/CatalogModels.cs": 52, "src/TipCL.App/Pages/Download/CatalogPage.cs": 26, "src/TipCL.App/Pages/Download/DownloadPage.cs": 4, "src/TipCL.App/Pages/Download/LoaderIcons.cs": 1, "src/TipCL.App/Pages/Feedback/CrashUi.cs": 28, "src/TipCL.App/Pages/Feedback/FeedbackView.cs": 64, "src/TipCL.App/Pages/Feedback/FirstRunWizard.cs": 46, "src/TipCL.App/Pages/Install/InstallPage.cs": 24, "src/TipCL.App/Pages/Launch/LaunchPage.cs": 56, "src/TipCL.App/Pages/Launch/LaunchPopups.cs": 34, "src/TipCL.App/Pages/Layout/LayoutBlockEntryCatalog.cs": 24, "src/TipCL.App/Pages/Layout/LayoutEditor.cs": 4, "src/TipCL.App/Pages/Layout/LayoutWidgetOps.cs": 1, "src/TipCL.App/Pages/Library/InstanceDetailPage.cs": 6, "src/TipCL.App/Pages/Library/LibraryPage.cs": 17, "src/TipCL.App/Pages/MultiplayerPage.cs": 17, "src/TipCL.App/Pages/PlaceholderPage.cs": 1, "src/TipCL.App/Pages/Plugins/PluginHostPage.cs": 11, "src/TipCL.App/Pages/Plugins/PluginModels.cs": 9, "src/TipCL.App/Pages/Plugins/PluginSettingsCard.cs": 8, "src/TipCL.App/Pages/Plugins/PluginsPage.Dev.cs": 22, "src/TipCL.App/Pages/Plugins/PluginsPage.Installed.cs": 16, "src/TipCL.App/Pages/Plugins/PluginsPage.Market.cs": 21, "src/TipCL.App/Pages/Plugins/PluginsPage.Settings.cs": 10, "src/TipCL.App/Pages/Plugins/PluginsPage.cs": 6, "src/TipCL.App/Pages/Settings/PhoneSyncPanel.cs": 22, "src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs": 48, "src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs": 61, "src/TipCL.App/Pages/Settings/SettingsPage.SaveLoad.cs": 11, "src/TipCL.App/Pages/Settings/SettingsPage.Update.cs": 5, "src/TipCL.App/Pages/Settings/SettingsPage.cs": 10, "src/TipCL.App/Pages/Settings/SettingsSubs.cs": 22, "src/TipCL.App/Pages/TasksPage.cs": 2, "src/TipCL.App/Pages/Version/ModsDialog.cs": 10, "src/TipCL.App/Pages/Version/SavesDialog.cs": 10, "src/TipCL.App/Pages/Version/VersionManagePage.cs": 37, "src/TipCL.App/Pages/Version/VersionSetupDialog.cs": 8, "src/TipCL.App/Program.cs": 3, "src/TipCL.App/Session/AiSelfTestCli.cs": 7, "src/TipCL.App/Session/CommandLine.cs": 19, "src/TipCL.App/Session/SmokeRunner.cs": 85, "src/TipCL.App/Shell/MainWindow.axaml.cs": 24, "src/TipCL.App/Shell/NavRegistry.cs": 5, "src/TipCL.App/Shell/TitleBar.axaml.cs": 8, "src/TipCL.App/Ui/ThemeGalleryPage.cs": 62, "src/TipCL.Core/BackendWorker.cs": 4, "src/TipCL.Core/Launcher/AccountManager.cs": 2, "src/TipCL.Core/Launcher/Ai/AiAgent.cs": 32, "src/TipCL.Core/Launcher/Ai/AiData.cs": 77, "src/TipCL.Core/Launcher/Ai/AiFixChat.cs": 24, "src/TipCL.Core/Launcher/Ai/AiMemory.cs": 1, "src/TipCL.Core/Launcher/Ai/AiResponse.cs": 1, "src/TipCL.Core/Launcher/Ai/AiSelfTest.cs": 110, "src/TipCL.Core/Launcher/Ai/AiUiText.cs": 18, "src/TipCL.Core/Launcher/Ai/Artifacts.cs": 13, "src/TipCL.Core/Launcher/Ai/Checkpoint.cs": 6, "src/TipCL.Core/Launcher/Ai/Client.cs": 47, "src/TipCL.Core/Launcher/Ai/Compact.cs": 8, "src/TipCL.Core/Launcher/Ai/Conflict.cs": 9, "src/TipCL.Core/Launcher/Ai/FileMemory.cs": 13, "src/TipCL.Core/Launcher/Ai/Images.cs": 11, "src/TipCL.Core/Launcher/Ai/Mcp.cs": 3, "src/TipCL.Core/Launcher/Ai/McpClient.cs": 5, "src/TipCL.Core/Launcher/Ai/Rewind.cs": 1, "src/TipCL.Core/Launcher/Ai/Store.cs": 3, "src/TipCL.Core/Launcher/Ai/ToolRunner.cs": 59, "src/TipCL.Core/Launcher/Ai/Tools.cs": 86, "src/TipCL.Core/Launcher/Ai/VisionCaps.cs": 12, "src/TipCL.Core/Launcher/AppInfo.cs": 1, "src/TipCL.Core/Launcher/Auth.cs": 12, "src/TipCL.Core/Launcher/Authlib.cs": 10, "src/TipCL.Core/Launcher/Catalog.cs": 330, "src/TipCL.Core/Launcher/CatalogFiles.cs": 20, "src/TipCL.Core/Launcher/Cleaner.cs": 1, "src/TipCL.Core/Launcher/ContentExport.cs": 4, "src/TipCL.Core/Launcher/Crash.cs": 153, "src/TipCL.Core/Launcher/DownloadManager.cs": 61, "src/TipCL.Core/Launcher/DownloadSnapshot.cs": 4, "src/TipCL.Core/Launcher/DownloadStatus.cs": 22, "src/TipCL.Core/Launcher/DownloadTracker.cs": 30, "src/TipCL.Core/Launcher/Downloader.cs": 4, "src/TipCL.Core/Launcher/ExportPack.cs": 4, "src/TipCL.Core/Launcher/Feedback.cs": 11, "src/TipCL.Core/Launcher/FeedbackDefaults.cs": 8, "src/TipCL.Core/Launcher/GameCrashError.cs": 1, "src/TipCL.Core/Launcher/GameInstall.cs": 10, "src/TipCL.Core/Launcher/Gc.cs": 3, "src/TipCL.Core/Launcher/GlobalMods.cs": 2, "src/TipCL.Core/Launcher/HelpContent.cs": 12, "src/TipCL.Core/Launcher/I18nCore.cs": 1, "src/TipCL.Core/Launcher/Installer.cs": 122, "src/TipCL.Core/Launcher/Instance.cs": 11, "src/TipCL.Core/Launcher/Instances.cs": 7, "src/TipCL.Core/Launcher/Java.cs": 29, "src/TipCL.Core/Launcher/Lan.cs": 1, "src/TipCL.Core/Launcher/LaunchFlow.cs": 4, "src/TipCL.Core/Launcher/LauncherConfig.cs": 3, "src/TipCL.Core/Launcher/Liteloader.cs": 6, "src/TipCL.Core/Launcher/LoaderMeta.cs": 1, "src/TipCL.Core/Launcher/Manifest.cs": 10, "src/TipCL.Core/Launcher/McLauncher.cs": 14, "src/TipCL.Core/Launcher/MicrosoftAuthenticator.cs": 18, "src/TipCL.Core/Launcher/ModUpdate.cs": 4, "src/TipCL.Core/Launcher/Modpack.cs": 153, "src/TipCL.Core/Launcher/Mods.cs": 80, "src/TipCL.Core/Launcher/News.cs": 3, "src/TipCL.Core/Launcher/Nide8.cs": 11, "src/TipCL.Core/Launcher/OfficialMigrate.cs": 4, "src/TipCL.Core/Launcher/Optifine.cs": 21, "src/TipCL.Core/Launcher/Playtime.cs": 10, "src/TipCL.Core/Launcher/Preflight.cs": 67, "src/TipCL.Core/Launcher/RSAKey.cs": 1, "src/TipCL.Core/Launcher/Repair.cs": 6, "src/TipCL.Core/Launcher/RsaLite.cs": 3, "src/TipCL.Core/Launcher/Saves.cs": 20, "src/TipCL.Core/Launcher/Servers.cs": 11, "src/TipCL.Core/Launcher/Shortcut.cs": 4, "src/TipCL.Core/Launcher/Skin.cs": 4, "src/TipCL.Core/Launcher/SkinServer.cs": 3, "src/TipCL.Core/Launcher/Source.cs": 6, "src/TipCL.Core/Launcher/Sync/LevelDat.cs": 2, "src/TipCL.Core/Launcher/Sync/PhoneClient.cs": 12, "src/TipCL.Core/Launcher/Sync/PhoneLink.cs": 21, "src/TipCL.Core/Launcher/Sync/SaveSync.cs": 3, "src/TipCL.Core/Launcher/Sysinfo.cs": 14, "src/TipCL.Core/Launcher/Terracotta.cs": 76, "src/TipCL.Core/Launcher/Themes.cs": 6, "src/TipCL.Core/Launcher/UiLayout.cs": 1, "src/TipCL.Core/Launcher/UiPrefs.cs": 2, "src/TipCL.Core/Launcher/Updater.cs": 14, "src/TipCL.Core/Launcher/Utils.cs": 12, "src/TipCL.Core/Launcher/VersionOps.cs": 6, "src/TipCL.Core/Launcher/VersionSettings.cs": 7, "src/TipCL.Core/Launcher/Worlds.cs": 10, "src/TipCL.Core/Layout/PageLayoutStore.cs": 2, "src/TipCL.Core/Plugins/PluginDirs.cs": 1, "src/TipCL.Core/Plugins/PluginHost.cs": 14, "src/TipCL.Core/Plugins/PluginInstaller.cs": 2, "src/TipCL.Core/Plugins/PluginManifest.cs": 44, "src/TipCL.Core/Plugins/PluginMarket.cs": 14, "src/TipCL.Core/Plugins/SemVer.cs": 1, "src/TipCL.Core/Tests/CoreReuseSmokeTests.cs": 3}, "unwrapped_total": 3605, "unwrapped_with_en_key": 795, "wrapped": 1623}
 ```
 <!-- I18N-GUARD-END -->

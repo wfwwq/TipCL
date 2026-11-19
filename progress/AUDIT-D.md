@@ -478,3 +478,101 @@ python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md                 
 $env:TIPCL_CLICKSWEEP_OUT="<path>\sweep.tsv"; dotnet test tests\TipCL.Tests\TipCL.Tests.csproj --filter "FullyQualifiedName~ClickSweepTests"
 $env:TIPCL_WPF_SMOKE_REPORT="<run>\report.json"; dotnet test windos\tests\TipCL.Tests\TipCL.Tests.csproj --filter "FullyQualifiedName~SmokeReportCriteria"
 ```
+
+---
+
+# 第 6 轮(最终 main 上的回归 + 把新逻辑钉成断言)
+
+分支 `audit/D` = `main`(`880deff`)+ 1 个提交。本轮不碰 `src/**`。
+
+## 6.1 全量回归(final main 上)
+
+| 批次 | 上一轮 | 本轮(final main) | 增量归因 |
+| --- | --- | --- | --- |
+| Linux 批次 1(App) | 359 | **359** | — |
+| Linux 批次 2(其余) | 555(554 + 1 跳过) | **566**(565 + 1 跳过) | +11:`CoreHardeningTests` 7 + `LayoutMotionAndHeightTests` 4 |
+| Windows 侧 | 573 | **576** | +3:`SilentMutationGuardTests` |
+| 合计 | 914 | **931**(930 通过 + 1 跳过)/ **0 失败** | +17 |
+
+**三处都是 0 失败**;A/B/C/D/E 五路合并后没有引入新的红,也没有出现"测试自身失效"(条数只增不减)。
+另外跑了两遍确认非偶发(batch2 两次同数字)。
+
+## 6.2 逐页冒烟矩阵复跑(final main)
+
+| 页面 | exit | smoke.png (B) | WARN | ERROR | 耗时 (ms) |
+| --- | --- | --- | --- | --- | --- |
+| launch | 0 | 570,036 | 0 | 0 | 1377 |
+| download | 0 | 23,643 | 0 | 0 | 1113 |
+| library | 0 | 44,717 | 0 | 0 | 1139 |
+| plugins | 0 | 34,991 | 0 | 0 | 1122 |
+| settings | 0 | 38,071 | 0 | 0 | 1438 |
+| instance | 0 | 41,751 | 0 | 0 | 1134 |
+| account | 0 | 34,345 | 0 | 0 | 1141 |
+| multiplayer | 0 | 46,005 | 0 | 0 | 1117 |
+| tasks | 0 | 23,954 | 0 | 0 | 1065 |
+| ai | 0 | 37,542 | 0 | 0 | 1154 |
+
+**10/10 全绿**(四条判据全过)。
+
+## 6.3 新逻辑钉成断言(本轮主任务)
+
+### Core(`tests/TipCL.Tests/Core/CoreHardeningTests.cs`,7 条)
+
+| 用例 | 钉住的行为 |
+| --- | --- |
+| `PyJson_AcceptsAReasonableNestingDepth` | 100 层嵌套照常解析 |
+| `PyJson_RejectsPathologicalNestingWithACatchableError` | 600 层必须抛**可捕获**的 `JSONDecodeError`(不是 `StackOverflowException` —— 那种异常 .NET 捕不了,进程直接没),且 `LoadsOr` 回落默认值(数组/对象两种分支都验) |
+| `PyJson_DepthLimitAlsoGuardsMixedNesting` | `{[]}` 交替嵌套共用同一个深度计数,不能只挡纯数组 |
+| `Cleaner_ApplyAlwaysReportsTheFourContractKeys` | 返回必含 `removed`/`bytes`/`failed`/`error`;**failed==0 时 error 必须是空串**(error 里塞话术会让"有没有失败"不可判定) |
+| `Cleaner_PreviewIsReadOnlyAndDoesNotDeleteAnything` | Preview 只预览、不删文件 |
+| `LayoutStoreV2_BacksUpCorruptFileBeforeOverwritingIt` | 读到损坏 v2:标记 `LastLoadV2Corrupt`、**原文件一个字节都不动**;下一次 `Save` 前先把损坏原件改名备份(`LastCorruptBackup` 非空且内容一致),原位换成合法 v2 |
+| `Mods_ContentDirFollowsPerVersionGameDirWhenIsolated` | 不开隔离 → 实例根/子目录;开版本隔离 → 落点必须跟着 `--gameDir` 走(含版本号、以子目录名结尾),否则资源包/光影/数据包跨版本串台 |
+
+### Linux 布局(`tests/TipCL.Tests/Layout/LayoutMotionAndHeightTests.cs`,4 条)
+
+| 用例 | 钉住的行为 |
+| --- | --- |
+| `ColumnWidthShrinksWithAvailableWidth_WhichIsWhatMakesRowHeightRecompute` | "滚动条出现 → 行高重量"所依赖的算术:可用宽 400→380 时列宽必须变窄(每列少 10px),且列数越多单列越窄 |
+| `HeightPxRoundTripsThroughJsonBothDirections` | `WriteHeightPx` → `ToDict` → JSON → `BlockLayout.FromJson` → `ReadHeightPx` 回来仍是 260(两侧导出的 JSON 互相能读) |
+| `HeightPxAcceptsWhateverTheOtherSideWrote` | 整数 `260` / 浮点 `260.0` 都读成 260;缺失 / null / 字符串 / 非数字 / 负数 一律 0(跟随内容)且不抛 |
+| `WriteHeightPxWithNonPositiveValueRemovesTheField` | ≤0 必须把 `extra.height_px` **删掉**(留 0 会被读成非法值) |
+| `FlipResidueDecaysToZeroSoADragStartsAtThePointer` + `NegligibleFlipResidueDoesNotStartAnAnimation` | 拖拽起手的残留位移:`FlipOffset` 只在有残余时非零、`FlipRemaining` 到 p=1 必须**正好归零**(否则抓起来的卡片会自己滑一下),且小于 Epsilon 不启动动画 |
+
+> 诚实边界:`GridCanvasPanel` 的**端到端**(滚动条 → 重算行高)需要宿主把子控件登记成 `LayoutCell`,
+> 纯单测里拿不到那条注册链(实测:未登记时子控件按 `LayoutCanvas.FallbackMinH` 量,行高恒为 120)。
+> 所以这里钉的是它依赖的列宽算术;端到端表现由 6.2 的矩阵(有滚动条的 settings/library 页 0 WARN)
+> 与 aud-app 的视觉证据覆盖。**不假装测了做不到的事**。
+
+### Windows(`windos/tests/TipCL.Tests/SilentMutationGuardTests.cs`,3 条)
+
+| 用例 | 钉住的行为 |
+| --- | --- |
+| `MutateAsyncStillIsTheVisibleFailureEntryPoint` | 反射:写操作的"失败可见"入口 `BridgeClient.MutateAsync(string, object?, string?) => Task<bool>` 必须还在 |
+| `NoWriteRpcGoesThroughTheSilentTryCallAsync` | 静态扫 `windos/src`:**写类** RPC(`set_/save_/delete_/enable_/disable_/apply_/create_/…`)不许走 `TryCallAsync`(它吞掉所有异常 ⇒ 用户看到"点了没反应")。当前只白名单一条:`FeedbackConsent.cs:save_settings`(同意状态是"尽力写",失败按未同意处理) |
+| `PageRunWrappersDoNotSwallowAsyncFailures` | `PageBase` 的失败出口必须弹 Toast;禁"无条件空 catch"(`catch { }` / `catch (Exception) { }`),`catch (OperationCanceledException) { }` 合法放行 |
+
+> `StackDragPlan` 是 aud-wpf 已有的 12 例,**没有重复**;这轮只补 Windows 侧缺的"静默失败"机制守卫。
+
+## 6.4 i18n 基线刷新(B3 接线后)
+
+| 指标 | 上一轮(4,918) | 本轮 | 变化 |
+| --- | --- | --- | --- |
+| CJK 字面量(分母) | 5,217 | 5,228 | +11 |
+| 已接线(wrapped) | 299(5.73%) | **1,623(31.05%)** | **+1,324** |
+| 未接线(unwrapped) | 4,918 | **3,605** | **−1,313** |
+| 其中已有 en 译文 | 2,090 | **795** | −1,295(接线把"已有译文的存量"消化掉了) |
+
+- 基线**大幅变小**(4,918 → 3,605),方向正确 —— B3 的接线生效,守卫测试绿。
+- 剩余 3,605 条里只有 795 条词表里已有译文;剩下 2,810 条**要先补词表**。
+- 刷新命令:`python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md`(本轮已刷新并入库)。
+- aud-app 后续再接线时:再跑一次刷新即可;若数字**变大**,守卫会红并指出涨在哪个文件。
+
+## 6.5 CI 侧再核
+
+| 检查项 | 结论 |
+| --- | --- |
+| `tools/smoke-matrix.sh` 语法/依赖 | `bash -n` 通过;只用 bash 内建 + `stat`/`date`/`grep`(ubuntu-latest 全有);`--timeout` 默认 180 s/页,超时算红(不会挂死) |
+| `ci.yml` 顺序 | `Release build` → `逐页冒烟矩阵(Linux)` → job summary → artifact;矩阵用的是上一步刚构建的 `src/TipCL.App/bin/Release/net8.0/TipCL.App.dll`,路径一致 |
+| artifact 路径 | 上传 `dist/smoke-matrix`(`--out dist/smoke-matrix` 同路径),`if-no-files-found: warn`;矩阵结论写 `$GITHUB_STEP_SUMMARY`,失败也能看到 |
+| LF/BOM 守卫覆盖 | 新增的 `.sh`/`.ps1` 全在 `tools/**` 或 `windos/tools/**`:`AllShellScriptsAreLfOnlyWithoutBom` 扫这两处的 `*.sh`,`PowerShellScriptsWithNonAsciiTextCarryAUtf8Bom` 扫**全仓** `*.ps1`。本轮 B/C 只新增 `.cs`,不在守卫范围(也不需要);若以后新增 `.sh`/`.ps1` 会被自动纳入 |
+| 本轮新增文件 | 全部 `.cs`,无新增脚本 ⇒ 守卫无需扩展 |
