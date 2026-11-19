@@ -836,7 +836,11 @@ public static class Mods
 								}
 								catch (Exception e2)
 								{
-									Utils.log.Warning("下载依赖 %s 失败: %s", Py.Str(Py.Or(Gt(item, "file_name"), obj3)), Py.ExcStr(e2));
+									// 前置装不上必须让用户看见:以前只写日志,任务卡一路显示「模组安装完成」,
+									// 进游戏才报缺少前置(NoClassDefFoundError / 依赖缺失) —— 典型的点了没反应。
+									string depName = Py.Str(Py.Or(Gt(item, "file_name"), obj3));
+									Utils.log.Warning("下载依赖 %s 失败: %s", depName, Py.ExcStr(e2));
+									on_progress?.Invoke("前置 " + depName + " 下载失败,请到模组列表手动补装", 0L, 1L);
 								}
 							}
 						}
@@ -1020,6 +1024,8 @@ public static class Mods
 			catch (Exception e)
 			{
 				Utils.log.Warning("安装依赖 %s 失败（不阻断主流程）: %s", Py.Str(obj), Py.ExcStr(e));
+				// 同 InstallModrinthMod:前置失败不能只在日志里说,任务卡要给用户一句可读的话
+				on_progress?.Invoke("前置(addon " + Py.Str(obj) + ")安装失败,请到模组列表手动补装", 0L, 1L);
 			}
 		}
 		return list;
@@ -1143,10 +1149,13 @@ public static class Mods
 		return InstallModrinthMod(dm, text2, instance, mc_version, loader, on_progress, use_mirror: true, version_id, text);
 	}
 
-	public static PyDict InstallModrinthContent(DownloadManager dm, object slug, Instance instance, string subdir, object mc_version = null, Action<string, long, long> on_progress = null, object version_id = null)
+	public static PyDict InstallModrinthContent(DownloadManager dm, object slug, Instance instance, string subdir, object mc_version = null, Action<string, long, long> on_progress = null, object version_id = null, string dest_dir = null)
 	{
 		instance.EnsureStandardDirs();
-		string text = PPath.Join(instance.path, subdir);
+		// 目标目录必须由调用方按「实例 + 是否版本隔离」算好传进来(与 InstallCfContent 的 dest_dir 同义)。
+		// 老写法在这里自己拼 <实例>/<subdir>,版本隔离(all/saves)时游戏实际读的是
+		// <实例>/versions/<版本>/<subdir> —— 结果就是「点了安装、列表里什么也没有」(隔离越彻底越明显)。
+		string text = (Py.Truthy(dest_dir) ? dest_dir : ContentDir(instance, subdir));
 		Utils.EnsureDir(text);
 		List<object> list;
 		if (Py.Truthy(version_id))
@@ -1300,7 +1309,7 @@ public static class Mods
 		{
 			throw new ModError("缺少 slug / 文件 / 链接");
 		}
-		return InstallModrinthContent(dm, obj2, instance, subdir, obj, on_progress, extra["version_id"]);
+		return InstallModrinthContent(dm, obj2, instance, subdir, obj, on_progress, extra["version_id"], text);
 	}
 
 	internal static object Gt(object o, string k)
