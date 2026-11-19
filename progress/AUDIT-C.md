@@ -246,7 +246,8 @@ MouseMove
 
 ## R2.4 第二轮提交
 
-`90127a8` audit/C R2: 边缘自动滚动改计时器驱动 + 补 `ai_presets` RPC + 写操作改 `MutateAsync` 失败可见 + 补两条词表(含重压的 `.gz`)
+`audit/C` 上的 R2 提交(标题):「边缘自动滚动改计时器驱动(指针停住也滚/速度与事件率无关)+ 补 ai_presets RPC(预设下拉原本是死的)+ 写操作改 MutateAsync 失败可见 + 补两条词表」。
+精确哈希看 `git log -1 --format=%h`——报告里不写死,避免后续 amend 后对不上。
 
 ## R2.5 仍需实机确认(无交互桌面,无法自动验证)
 
