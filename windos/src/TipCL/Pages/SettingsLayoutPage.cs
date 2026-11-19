@@ -438,19 +438,293 @@ public sealed partial class SettingsPage
 		};
 	}
 
-	// ————— e 自建区块(L6 落地后接在这里) —————
+	// ————— e 自建区块(L6:内联管理面板) —————
+
+	// 面板开合状态跨视图重建保留(每次保存/刷新都会重建整个布局视图)
+	private bool _layoutWidgetPanelOpen;
+
+	private bool _layoutWidgetCreateOpen;
 
 	private FrameworkElement[] LayoutWidgetRows()
 	{
 		LayoutV2 doc = LayoutStoreV2.Load();
-		int count = doc.Layout.Widgets?.Count ?? 0;
-		Button add = Ui.Btn(I18n.L("添加自建区块"), BtnKind.Normal, null);
-		add.IsEnabled = false;
-		return new FrameworkElement[2]
+		List<WidgetDef> widgets = ((doc.Layout.Widgets != null) ? doc.Layout.Widgets : new List<WidgetDef>());
+		List<FrameworkElement> rows = new List<FrameworkElement>();
+		Button add = Ui.Btn(_layoutWidgetPanelOpen ? I18n.L("收起管理") : I18n.L("添加自建区块"), BtnKind.Normal, null);
+		add.Click += delegate
 		{
-			Ui.Field(I18n.L("自建区块"), Ui.H(8.0, Ui.Small(I18n.L("已保存 {0} 个", count)).VCenter(), add), I18n.L("便签 / 快捷启动 / 时钟 / 分隔 / 时长概览由下一包(L6)落地后在这里增删改")),
-			Ui.Field(I18n.L("危险类型"), Ui.Muted(I18n.L("网页 / 按钮默认关闭,需显式开启(L6)")), "")
+			_layoutWidgetPanelOpen = !_layoutWidgetPanelOpen;
+			if (!_layoutWidgetPanelOpen)
+			{
+				_layoutWidgetCreateOpen = false;
+			}
+			RefreshLayoutView();
 		};
+		rows.Add(Ui.Field(I18n.L("自建区块"), Ui.H(8.0, Ui.Small(I18n.L("已保存 {0} 个", widgets.Count)).VCenter(), add), I18n.L("便签 / 快捷启动 / 时钟 / 分隔线 / 游戏时长")));
+		if (!_layoutWidgetPanelOpen)
+		{
+			rows.Add(Ui.Field(I18n.L("危险类型"), Ui.Muted(I18n.L("网页 / 按钮默认关闭,需显式开启(L6)")), ""));
+			return rows.ToArray();
+		}
+		// 新建表单:只列出 5 种安全类型(web / button 没有创建入口)
+		if (_layoutWidgetCreateOpen)
+		{
+			rows.Add(WidgetCreateForm());
+		}
+		else
+		{
+			Button create = Ui.Btn(I18n.L("新建自建区块"), BtnKind.Primary, delegate
+			{
+				_layoutWidgetCreateOpen = true;
+				RefreshLayoutView();
+			});
+			rows.Add(Ui.Field(I18n.L("新建"), create, I18n.L("新建出来的块不会自动加到任何页面;到页面的编辑态里用「+ 自建区块」添加")));
+		}
+		if (widgets.Count == 0)
+		{
+			rows.Add(Ui.Field(I18n.L("还没有自建区块"), Ui.Muted(I18n.L("点「新建自建区块」建一个便签 / 时钟等")), ""));
+		}
+		else
+		{
+			foreach (WidgetDef widget in widgets)
+			{
+				if (widget != null)
+				{
+					rows.Add(WidgetAdminRow(doc, widget));
+				}
+			}
+		}
+		rows.Add(Ui.Field(I18n.L("危险类型"), Ui.Muted(I18n.L("网页 / 按钮默认关闭,需显式开启;参数请在布局 JSON 里配置")), ""));
+		return rows.ToArray();
+	}
+
+	// 新建表单:类型 / 标题 / 参数(按类型切占位与显隐)/ 创建
+	private FrameworkElement WidgetCreateForm()
+	{
+		string[] labels = SafeTypeLabels();
+		ComboBox type = Ui.Combo(labels, labels[0], 150.0);
+		TextBox title = Ui.Input(I18n.L("例如:今天的待办"));
+		TextBox param = Ui.Input("");
+		param.Width = 220.0;
+		TextBox version = Ui.Input(I18n.L("版本(可空)"));
+		version.Width = 160.0;
+		TextBlock hint = Ui.Small("").Wrap();
+		SPanel paramRow = Ui.H(8.0, param, version);
+		version.Visibility = Visibility.Collapsed;
+		Action applyType = delegate
+		{
+			int index = Math.Max(0, Math.Min(type.SelectedIndex, WidgetRegistry.SafeTypes.Length - 1));
+			string key = WidgetLibrary.ParameterKey(WidgetRegistry.SafeTypes[index]);
+			bool needParam = (key.Length > 0);
+			param.Visibility = (needParam ? Visibility.Visible : Visibility.Collapsed);
+			version.Visibility = ((needParam && string.Equals(key, "instance", StringComparison.Ordinal)) ? Visibility.Visible : Visibility.Collapsed);
+			if (string.Equals(key, "text", StringComparison.Ordinal))
+			{
+				param.Tag = I18n.L("文本内容");
+				hint.Text = I18n.L("便签内容会显示在本页的卡片里");
+			}
+			else if (string.Equals(key, "instance", StringComparison.Ordinal))
+			{
+				param.Tag = I18n.L("实例名");
+				hint.Text = I18n.L("实例名必填,版本可空");
+			}
+			else if (string.Equals(key, "format", StringComparison.Ordinal))
+			{
+				param.Tag = I18n.L("时间格式(留空默认 HH:mm)");
+				hint.Text = I18n.L("按 .NET 时间格式填写,例如 HH:mm");
+			}
+			else
+			{
+				hint.Text = I18n.L("该类型不需要参数");
+			}
+		};
+		type.SelectionChanged += delegate
+		{
+			if (!_layoutRebuilding)
+			{
+				applyType();
+			}
+		};
+		applyType();
+		Button create = Ui.Btn(I18n.L("创建"), BtnKind.Primary, delegate
+		{
+			int index = Math.Max(0, Math.Min(type.SelectedIndex, WidgetRegistry.SafeTypes.Length - 1));
+			string error = "";
+			LayoutV2 fresh = LayoutStoreV2.Load();
+			WidgetDef? widget = WidgetLibrary.CreateFor(fresh, WidgetRegistry.SafeTypes[index], title.Text, param.Text, version.Text, out error);
+			if (widget == null)
+			{
+				PageBase.Toast(I18n.L("自建区块未能保存"), error, ToastKind.Warning);
+				return;
+			}
+			fresh.Layout.Widgets.Add(widget);
+			if (SaveWidgetDoc(fresh, I18n.L("自建区块已创建")))
+			{
+				_layoutWidgetCreateOpen = false;
+				RefreshLayoutView();
+			}
+		});
+		Button cancel = Ui.Btn(I18n.L("取消"), BtnKind.Chip, delegate
+		{
+			_layoutWidgetCreateOpen = false;
+			RefreshLayoutView();
+		});
+		return Ui.V(2.0,
+			Ui.Field(I18n.L("类型"), type, I18n.L("只看 5 种安全类型;网页 / 按钮默认关闭")),
+			Ui.Field(I18n.L("标题"), title, I18n.L("列表里显示的名字")),
+			Ui.Field(I18n.L("参数"), paramRow, ""),
+			Ui.H(8.0, create, cancel),
+			hint.M(0.0, 0.0, 0.0, 6.0));
+	}
+
+	// 已有定义:标题 / 类型 / 引用数 + 参数编辑 + 保存 / 删除
+	private FrameworkElement WidgetAdminRow(LayoutV2 doc, WidgetDef widget)
+	{
+		int refs = WidgetLibrary.CountReferences(doc, widget.Id);
+		bool safe = WidgetLibrary.IsSafeType(widget.Type);
+		TextBox title = Ui.Input("", widget.Title ?? "");
+		title.Width = 180.0;
+		TextBlock refText = Ui.Small(I18n.L("被 {0} 个页面引用", refs));
+		SPanel head = Ui.H(8.0, title, Ui.Tag(WidgetUI.TypeLabel(widget.Type)), refText.VCenter());
+		Button save = Ui.Btn(I18n.L("保存"), BtnKind.Soft, null);
+		Button del = Ui.Btn(I18n.L("删除"), BtnKind.Ghost, null);
+		TextBox? paramBox = null;
+		TextBox? versionBox = null;
+		SPanel body;
+		if (safe)
+		{
+			string key = WidgetLibrary.ParameterKey(widget.Type);
+			paramBox = Ui.Input("", WidgetLibrary.ParameterOf(widget));
+			paramBox.Width = 180.0;
+			versionBox = Ui.Input(I18n.L("版本(可空)"), WidgetLibrary.VersionOf(widget));
+			versionBox.Width = 140.0;
+			bool isShortcut = string.Equals(widget.Type, LayoutSchema.WidgetShortcut, StringComparison.Ordinal);
+			paramBox.Visibility = ((key.Length > 0) ? Visibility.Visible : Visibility.Collapsed);
+			versionBox.Visibility = (isShortcut ? Visibility.Visible : Visibility.Collapsed);
+			paramBox.Tag = ParamPlaceholder(key);
+			body = Ui.V(6.0, head, Ui.H(8.0, Ui.Small(I18n.L("参数")).VCenter(), paramBox, versionBox, save, del));
+		}
+		else
+		{
+			body = Ui.V(6.0, head, Ui.H(8.0, Ui.Small(I18n.L("危险类型:参数请在布局 JSON 里编辑")).VCenter(), save, del));
+		}
+		save.Click += delegate
+		{
+			string error = "";
+			LayoutV2 fresh = LayoutStoreV2.Load();
+			WidgetDef? target = FindWidget(fresh, widget.Id);
+			if (target == null)
+			{
+				PageBase.Toast(I18n.L("自建区块不存在"), "", ToastKind.Warning);
+				return;
+			}
+			if (!WidgetLibrary.TryRename(target, title.Text, out error))
+			{
+				PageBase.Toast(I18n.L("自建区块未能保存"), error, ToastKind.Warning);
+				return;
+			}
+			if (safe)
+			{
+				string paramText = ((paramBox != null) ? paramBox.Text : "");
+				string versionText = ((versionBox != null && versionBox.Visibility == Visibility.Visible) ? versionBox.Text : "");
+				if (!WidgetLibrary.TryUpdateSettings(target, paramText, versionText, out error))
+				{
+					PageBase.Toast(I18n.L("自建区块未能保存"), error, ToastKind.Warning);
+					return;
+				}
+			}
+			if (SaveWidgetDoc(fresh, I18n.L("自建区块「{0}」已保存", target.Title)))
+			{
+				RefreshLayoutView();
+			}
+		};
+		del.Click += delegate
+		{
+			PageBase.Run(async delegate
+			{
+				string name = widget.Title ?? widget.Id;
+				string body = ((refs > 0) ? I18n.L("删除定义,并从 {0} 个页面移除这个区块(不可撤销)", refs) : I18n.L("删除定义(不可撤销)"));
+				if (!await Dlg.Confirm(I18n.L("删除自建区块「{0}」?", name), body, I18n.L("删除"), I18n.L("取消"), danger: true))
+				{
+					return;
+				}
+				LayoutV2 fresh = LayoutStoreV2.Load();
+				int removed = WidgetLibrary.Delete(fresh, widget.Id);
+				if (removed < 0)
+				{
+					PageBase.Toast(I18n.L("自建区块不存在"), "", ToastKind.Warning);
+					return;
+				}
+				if (SaveWidgetDoc(fresh, I18n.L("自建区块「{0}」已删除", name)))
+				{
+					RefreshLayoutView();
+				}
+			});
+		};
+		return body;
+	}
+
+	private static string ParamPlaceholder(string key)
+	{
+		if (string.Equals(key, "text", StringComparison.Ordinal))
+		{
+			return I18n.L("文本内容");
+		}
+		if (string.Equals(key, "instance", StringComparison.Ordinal))
+		{
+			return I18n.L("实例名");
+		}
+		if (string.Equals(key, "format", StringComparison.Ordinal))
+		{
+			return I18n.L("时间格式");
+		}
+		return "";
+	}
+
+	private static string[] SafeTypeLabels()
+	{
+		string[] labels = new string[WidgetRegistry.SafeTypes.Length];
+		for (int i = 0; i < WidgetRegistry.SafeTypes.Length; i++)
+		{
+			labels[i] = WidgetUI.TypeLabel(WidgetRegistry.SafeTypes[i]);
+		}
+		return labels;
+	}
+
+	private static WidgetDef? FindWidget(LayoutV2 doc, string widgetId)
+	{
+		if (doc.Layout.Widgets == null)
+		{
+			return null;
+		}
+		foreach (WidgetDef widget in doc.Layout.Widgets)
+		{
+			if (widget != null && string.Equals(widget.Id, widgetId, StringComparison.Ordinal))
+			{
+				return widget;
+			}
+		}
+		return null;
+	}
+
+	// 自建块管理专用的落盘(与 WriteLayout 同规矩,但需要知道成功与否来刷新面板)
+	private static bool SaveWidgetDoc(LayoutV2 doc, string toast)
+	{
+		try
+		{
+			if (!LayoutStoreV2.Save(doc))
+			{
+				PageBase.Toast(I18n.L("布局未能保存"), I18n.L("改动只保留在本次运行"), ToastKind.Warning);
+				return false;
+			}
+			PageBase.Toast(toast, "", ToastKind.Success);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			PageBase.Toast(I18n.L("布局未能保存"), ex.Message, ToastKind.Error);
+			return false;
+		}
 	}
 
 	// ————— f 整机布局方案 —————

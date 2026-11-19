@@ -52,6 +52,15 @@ public sealed class LayoutEditor
 
 	private readonly WrapPanel _tray = new WrapPanel();
 
+	// L6:编辑态托盘里的「+ 自建区块」入口(列出已定义但本页还没有的自建块)
+	private readonly WrapPanel _trayAdd = new WrapPanel();
+
+	private SPanel? _hiddenTrayPanel;
+
+	private SPanel? _addTrayPanel;
+
+	private bool _trayAddOpen;
+
 	private readonly Border _barHost = new Border();
 
 	private readonly Grid _root;
@@ -198,8 +207,11 @@ public sealed class LayoutEditor
 			}
 		}
 		_list.Margin = (_marginOverride ?? new Thickness(18.0, 14.0, 18.0, 16.0));
-		// 底部托盘(编辑态):已隐藏区块以「+ 标题」chip 呈现,点击恢复
-		SPanel sPanel = Ui.V(6.0, Ui.Muted(I18n.L("已隐藏的区块")), _tray);
+		// 底部托盘(编辑态):已隐藏区块以「+ 标题」chip 呈现,点击恢复;L6 追加「+ 自建区块」入口
+		_hiddenTrayPanel = Ui.V(6.0, Ui.Muted(I18n.L("已隐藏的区块")), _tray);
+		_addTrayPanel = Ui.V(6.0, Ui.Muted(I18n.L("添加自建区块到本页")), _trayAdd);
+		_addTrayPanel.Visibility = Visibility.Collapsed;
+		SPanel sPanel = Ui.V(10.0, _hiddenTrayPanel, _addTrayPanel);
 		_trayHost.CornerRadius = new CornerRadius(8.0);
 		_trayHost.Padding = new Thickness(10.0);
 		_trayHost.Visibility = Visibility.Collapsed;
@@ -530,6 +542,7 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = true;
+		_trayAddOpen = false;
 		PrepareEditableGrid();
 		CompactState(null);
 		// 每次进编辑态都是一次新会话:多选与撤销栈清空(历史上的改动已经即时落盘,不需要跨会话撤销)
@@ -556,6 +569,7 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = false;
+		_trayAddOpen = false;
 		// stack 拖拽可能还没收尾(比如被快捷键/外部调用结束编辑):必须解绑并释放捕获,
 		// 否则之后鼠标一动还会改序、EndDrag 还会无条件落盘(P1)
 		CancelDrag(_dragCard, _dragSrc);
@@ -1167,7 +1181,9 @@ public sealed class LayoutEditor
 		string? widget = LayoutEngine.WidgetIdOf(id);
 		if (widget != null)
 		{
-			synthetic.Title = widget;
+			// 自建块:操作条 / 托盘显示用户起的标题,而不是裸 widgetId
+			WidgetDef? def = WidgetRegistry.FindWidgetById(widget);
+			synthetic.Title = ((def != null) ? WidgetUI.TitleOf(def) : widget);
 		}
 		else if (LayoutEngine.TryParsePluginId(id, out string plugin, out string inner))
 		{
@@ -1221,7 +1237,109 @@ public sealed class LayoutEditor
 			button.M(0.0, 0.0, 8.0, 6.0);
 			_tray.Children.Add(button);
 		}
-		_trayHost.Visibility = ((_edit && _tray.Children.Count > 0) ? Visibility.Visible : Visibility.Collapsed);
+		if (_hiddenTrayPanel != null)
+		{
+			_hiddenTrayPanel.Visibility = ((_tray.Children.Count > 0) ? Visibility.Visible : Visibility.Collapsed);
+		}
+		// L6:已定义、但本页还没有的自建块 —— 点一下就等于把它追加到本页末尾
+		_trayAdd.Children.Clear();
+		List<WidgetDef> candidates = AvailableWidgets();
+		if (_addTrayPanel != null)
+		{
+			_addTrayPanel.Visibility = ((_edit && candidates.Count > 0) ? Visibility.Visible : Visibility.Collapsed);
+		}
+		if (_edit && candidates.Count > 0)
+		{
+			Button toggle = Ui.Btn(_trayAddOpen ? I18n.L("收起") : I18n.L("+ 自建区块"), BtnKind.Chip, delegate
+			{
+				_trayAddOpen = !_trayAddOpen;
+				RefreshTray();
+			});
+			toggle.M(0.0, 0.0, 8.0, 6.0);
+			_trayAdd.Children.Add(toggle);
+			if (_trayAddOpen)
+			{
+				foreach (WidgetDef widget in candidates)
+				{
+					string id = widget.Id;
+					Button chip = Ui.Btn(WidgetUI.TitleOf(widget), BtnKind.Chip, delegate
+					{
+						AddCustomBlock(id);
+					}, Ico.Add);
+					chip.ToolTip = WidgetUI.TypeLabel(widget.Type);
+					chip.M(0.0, 0.0, 8.0, 6.0);
+					_trayAdd.Children.Add(chip);
+				}
+			}
+		}
+		bool any = ((_hiddenTrayPanel != null && _hiddenTrayPanel.Visibility == Visibility.Visible)
+			|| (_addTrayPanel != null && _addTrayPanel.Visibility == Visibility.Visible));
+		_trayHost.Visibility = ((_edit && any) ? Visibility.Visible : Visibility.Collapsed);
+	}
+
+	// 自建块定义里,本页 BlockLayout 还没有 custom:<id> 的那些(按文档顺序)
+	private List<WidgetDef> AvailableWidgets()
+	{
+		List<WidgetDef> list = new List<WidgetDef>();
+		HashSet<string> present = new HashSet<string>(StringComparer.Ordinal);
+		if (_state.Page?.Blocks != null)
+		{
+			foreach (BlockLayout block in _state.Page.Blocks)
+			{
+				if (block != null && !string.IsNullOrEmpty(block.Id))
+				{
+					present.Add(block.Id);
+				}
+			}
+		}
+		foreach (WidgetDef widget in WidgetRegistry.AllWidgets())
+		{
+			if (widget == null || string.IsNullOrEmpty(widget.Id))
+			{
+				continue;
+			}
+			if (!present.Contains(LayoutEngine.CustomPrefix + widget.Id))
+			{
+				list.Add(widget);
+			}
+		}
+		return list;
+	}
+
+	/// <summary>
+	/// L6:把某个自建块追加到本页末尾(编辑态)。走 LayoutEditSession.AppendImplicit → 复用"粘贴到页面末尾"
+	/// 的白名单/去重规则;先压撤销快照,再重建页状态并 Persist,所以可撤销、最终由完成编辑/即时落盘写进 v2。
+	/// </summary>
+	internal void AddCustomBlock(string widgetId)
+	{
+		if (!_edit || string.IsNullOrEmpty(widgetId))
+		{
+			return;
+		}
+		string blockId = LayoutEngine.CustomPrefix + widgetId;
+		PageLayoutV2 page = _state.ToPage();
+		int count = _session.AppendImplicit(page, blockId, _refs);
+		if (count == 0)
+		{
+			AppServices.Window?.Toast(I18n.L("本页已有这个区块"), "", ToastKind.Info);
+			return;
+		}
+		// 新块落位到页尾(编辑态 stack 已折成网格,不给坐标会叠在 0,0)
+		if (page.Blocks != null && page.Blocks.Count > 0)
+		{
+			BlockLayout appended = page.Blocks[page.Blocks.Count - 1];
+			if (appended != null && string.Equals(appended.Id, blockId, StringComparison.Ordinal))
+			{
+				LayoutEngine.PlaceAppendedBlock(page, appended);
+			}
+		}
+		_session.PushUndo(_state.ToPage());
+		_state = LayoutEngine.LoadState(_pageId, page, _refs);
+		_session.Retain(_state.Order);
+		_trayAddOpen = false;
+		Persist();
+		Render();
+		AppServices.Window?.Toast(I18n.L("已添加到本页"), WidgetRegistry.FindWidgetById(widgetId)?.Title ?? "", ToastKind.Success);
 	}
 
 	internal void HideBlock(BlockSpec spec)
