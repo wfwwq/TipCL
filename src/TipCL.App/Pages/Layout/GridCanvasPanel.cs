@@ -108,6 +108,12 @@ public sealed class GridCanvasPanel : Decorator
 
 	private double _columnWidth = 1.0;
 
+	// [audit/B] 上一趟测量用的宽度基准(Arrange 宽不同 ⇒ 行高要按新宽重量),
+	// 以及"已经为这些宽度补过一次 InvalidateMeasure"的防抖集合(避免两趟布局互相触发、来回抖)
+	private double _measuredWidth;
+
+	private readonly HashSet<double> _remeasureWidths = new HashSet<double>();
+
 	private int _rows;
 
 	/// <summary>页面模式(grid | canvas;stack 时本 Panel 不被使用)。</summary>
@@ -339,6 +345,8 @@ public sealed class GridCanvasPanel : Decorator
 			_cells = LayoutCanvas.StackedOrder(_cells);
 		}
 		_rows = LayoutGrid.RowCount(_cells);
+		// 换了页 / 换了列数:上一套宽度下的"已补过失效"记录不再成立
+		_remeasureWidths.Clear();
 		InvalidateMeasure();
 		InvalidateVisual();
 	}
@@ -487,7 +495,7 @@ public sealed class GridCanvasPanel : Decorator
 		if (IsCanvas)
 		{
 			double height = ResolveCanvasHeight(available.Height);
-			_rects = LayoutCanvas.Rects(_cells, width, height);
+			RebuildCanvasRects(width, height);
 			foreach (Control child in Children)
 			{
 				LayoutRect? rect = RectOf(IdOf(child));
@@ -495,11 +503,25 @@ public sealed class GridCanvasPanel : Decorator
 			}
 			return new Size(((double.IsInfinity(available.Width) || available.Width <= 0.0) ? width : available.Width), height);
 		}
+		double gridTotal = MeasureGridChildren(width, available.Height);
+		return new Size(((double.IsInfinity(available.Width) || available.Width <= 0.0) ? width : available.Width), gridTotal);
+	}
+
+	/// <summary>
+	/// grid 的第一趟(按给定宽度):量每块需求高 → 算列宽 / 行高 / 矩形,返回内容总高。
+	/// [audit/B] 抽成方法的原因与 Windows 参考件(<c>GridCanvasPanel.MeasureGridChildren</c>)一致:
+	/// Arrange 拿到的宽度可能与测量时不同 —— 纵向滚动条一出现就吃掉 10px 可用宽,父级也可能按别的宽 Arrange。
+	/// 那时行高必须按**新宽度**重新量,否则自动行高还是按旧的(更宽)列宽算的,内容被裁在矮行里
+	/// (用户体感 = 滚动条一冒出来,卡片内容就被切一刀)。
+	/// </summary>
+	private double MeasureGridChildren(double width, double availableHeight)
+	{
+		_measuredWidth = width;
 		_columnWidth = LayoutGrid.ColumnWidth(width, Cols, Gap);
 		Dictionary<string, double> desired = new Dictionary<string, double>(StringComparer.Ordinal);
 		HashSet<string> noMin = new HashSet<string>(StringComparer.Ordinal);
 		// [layout-fix 第三批] 吃满视口块:先跳过,等其它块量完、行高算出来再按剩余高度量它
-		bool fillOpen = RowH <= 0.0 && !string.IsNullOrEmpty(FillId) && !double.IsInfinity(available.Height) && available.Height > 0.0;
+		bool fillOpen = RowH <= 0.0 && !string.IsNullOrEmpty(FillId) && !double.IsInfinity(availableHeight) && availableHeight > 0.0;
 		Control? fillChild = null;
 		LayoutCell? fillCell = null;
 		double fillWidth = 0.0;
@@ -565,18 +587,67 @@ public sealed class GridCanvasPanel : Decorator
 		{
 			// 不计填充块时的行高 → 它该拿的高度 → 按这个有限高度量它(它自带的滚动条因此有界)→ 重算行高
 			double[] without = LayoutGrid.RowHeights(WithoutCell(rowCells, fillCell.Id), _rows, RowH, desired, RowFallback);
-			double fillHeight = LayoutGrid.FillHeight(without, fillCell.Y, fillCell.H, Gap, available.Height, MinFillHeight);
+			double fillHeight = LayoutGrid.FillHeight(without, fillCell.Y, fillCell.H, Gap, availableHeight, MinFillHeight);
 			fillChild.Measure(new Size(Math.Max(1.0, fillWidth), fillHeight));
 			desired[fillCell.Id] = fillHeight;
 			_rowHeights = LayoutGrid.RowHeights(rowCells, _rows, RowH, desired, RowFallback);
 		}
-		_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
-		double total = 0.0;
+		RebuildGridRects();
+		return RowTotalHeight();
+	}
+
+	/// <summary>行高合计(含行间 gap)。</summary>
+	private double RowTotalHeight()
+	{
+		double sum = 0.0;
 		for (int i = 0; i < _rowHeights.Length; i++)
 		{
-			total += _rowHeights[i] + ((i < _rowHeights.Length - 1) ? Gap : 0.0);
+			sum += _rowHeights[i] + ((i < _rowHeights.Length - 1) ? Gap : 0.0);
 		}
-		return new Size(((double.IsInfinity(available.Width) || available.Width <= 0.0) ? width : available.Width), total);
+		return sum;
+	}
+
+	// 整表排布结果:复用同一个 List(落点每变一次就重排,拖动期间不再每帧新分配一个 List)
+	private void RebuildGridRects()
+	{
+		_rects.Clear();
+		for (int i = 0; i < _cells.Count; i++)
+		{
+			_rects.Add(LayoutGrid.Place(_cells[i], _columnWidth, _rowHeights, Gap));
+		}
+	}
+
+	private void RebuildCanvasRects(double width, double height)
+	{
+		_rects.Clear();
+		for (int i = 0; i < _cells.Count; i++)
+		{
+			_rects.Add(LayoutCanvas.Place(_cells[i], width, height));
+		}
+	}
+
+	/// <summary>
+	/// 与测量趟同一套高度约束(否则测量与排布两趟约束不同,这块每次布局都要重量):
+	/// canvas 用真实像素高;grid 里拖过固定像素高的块用 HeightPx;吃满视口的块用矩形高;其余给无限高(跟随内容)。
+	/// 关键作用:落位动画期间 <paramref name="rectHeight"/> 是插值中的中间值,若拿它去 Measure,
+	/// 每帧都会按新高度重排一次内容;这里换成稳定的约束 ⇒ 尺寸没变时 Measure 走缓存(空操作)。
+	/// </summary>
+	private double MeasureHeightFor(string id, double rectHeight)
+	{
+		if (IsCanvas)
+		{
+			return rectHeight;
+		}
+		if (RowH <= 0.0 && !string.IsNullOrEmpty(FillId) && string.Equals(id, FillId, StringComparison.Ordinal))
+		{
+			return rectHeight;
+		}
+		LayoutCell? cell = CellOf(id);
+		if (RowH <= 0.0 && cell != null && cell.HeightPx > 0.0)
+		{
+			return cell.HeightPx;
+		}
+		return double.PositiveInfinity;
 	}
 
 	/// <summary>
@@ -591,12 +662,25 @@ public sealed class GridCanvasPanel : Decorator
 		if (IsCanvas)
 		{
 			double height = ResolveCanvasHeight(final.Height);
-			_rects = LayoutCanvas.Rects(_cells, width, height);
+			RebuildCanvasRects(width, height);
+		}
+		else if (Math.Abs(width - _measuredWidth) > 0.5)
+		{
+			// [audit/B] Arrange 宽 ≠ 测量宽(滚动条出现 / 父级换了宽度):行高按新宽重量一遍。
+			// 只在"更窄"且内容总高确实变了时补一次 InvalidateMeasure(更宽时内容只会变矮,不存在裁切;
+			// 同一宽度只补一次,避免两趟布局之间来回抖动 —— 与 Windows 参考件的 _remeasureWidths 守卫同口径)。
+			double before = RowTotalHeight();
+			double previousWidth = _measuredWidth;
+			double total = MeasureGridChildren(width, final.Height);
+			if (Math.Abs(total - before) > 0.5 && width < previousWidth && _remeasureWidths.Add(Math.Round(width, 1)))
+			{
+				InvalidateMeasure();
+			}
 		}
 		else
 		{
 			_columnWidth = LayoutGrid.ColumnWidth(width, Cols, Gap);
-			_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
+			RebuildGridRects();
 		}
 		bool flip = _flipArmed;
 		_flipArmed = false;
@@ -611,16 +695,19 @@ public sealed class GridCanvasPanel : Decorator
 			}
 			LayoutRect value = rect.Value;
 			Rect target;
+			bool freeSize = false;
 			if (_floating.TryGetValue(id, out LayoutRect floatRect))
 			{
 				// [任务 B] 手势中的块:排在像素矩形上(跟手),不参与 FLIP
 				target = new Rect(floatRect.X, floatRect.Y, Math.Max(0.0, floatRect.W), Math.Max(0.0, floatRect.H));
+				freeSize = true;
 			}
 			else if (_landing.TryGetValue(id, out (LayoutRect From, double P) land))
 			{
 				// [任务 B] 改大小松手后的落位:像素矩形 → 槽位矩形,ease-out 插值
 				LayoutRect r = LayoutMotion.LerpRect(land.From, value, LayoutMotion.EaseOutCubic(land.P));
 				target = new Rect(r.X, r.Y, Math.Max(0.0, r.W), Math.Max(0.0, r.H));
+				freeSize = true;
 			}
 			else
 			{
@@ -640,6 +727,13 @@ public sealed class GridCanvasPanel : Decorator
 						LayoutMotion.SetOffset(child, 0.0, 0.0);
 					}
 				}
+			}
+			// [audit/B] 浮起的块(拖动跟手 / 缩放预览 / 落位动画)与 canvas 的块:矩形尺寸变了就按新尺寸补量一次,
+			// 否则内容(文本折行 / 卡内滚动区)还按旧宽度排着 —— 用户看到的正是"拉右边时卡片框变宽了、字却挤在
+			// 老宽度里,松手才跳成新版式"。尺寸没变时 Measure 走缓存(空操作),动画期间不会让整张画布重量。
+			if (freeSize || IsCanvas)
+			{
+				child.Measure(new Size(Math.Max(0.0, target.Width), MeasureHeightFor(id, target.Height)));
 			}
 			child.Arrange(target);
 			_lastArranged[id] = target;

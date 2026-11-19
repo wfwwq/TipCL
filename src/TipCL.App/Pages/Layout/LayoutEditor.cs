@@ -1472,6 +1472,21 @@ public sealed class LayoutEditor
 	private void StartGesture(string kind, LayoutCard card, PointerPressedEventArgs e)
 	{
 		// [任务 B] 上一段动画还没放完就开始新手势:先推到终点,保证起手矩形 / 命中与看到的一致
+		// [audit/B] 但推到终点之前要把"眼睛看到的残留平移"记下来 —— 被抓起的这块必须从**看到的位置**接着走,
+		// 否则抓起的一瞬间它先跳回槽位再跟手(用户体感就是"抓起来卡一下 / 跳位")。
+		// 其它块按原样归位(它们本来就在 160ms 让位动画的最后一两像素上,肉眼看不出)。
+		Dictionary<string, Vector> residue = new Dictionary<string, Vector>(StringComparer.Ordinal);
+		foreach (Control child in _box.Children)
+		{
+			if (child is LayoutCard visible)
+			{
+				Vector offset = LayoutMotion.GetOffset(visible);
+				if (offset != default(Vector))
+				{
+					residue[visible.Spec.Id] = offset;
+				}
+			}
+		}
 		_box.FinishAnimations();
 		_gestureTarget = "";
 		_snapHad = false;
@@ -1520,7 +1535,17 @@ public sealed class LayoutEditor
 			LayoutRect? rect = _box.RectOf(id);
 			if (rect.HasValue)
 			{
-				_gestureRects[id] = rect.Value;
+				LayoutRect start = rect.Value;
+				if (residue.TryGetValue(id, out Vector offset))
+				{
+					// 从"眼睛看到的位置"起手:把残留平移折进起手矩形
+					start = LayoutMotion.Offset(start, offset.X, offset.Y);
+					if (string.Equals(id, card.Spec.Id, StringComparison.Ordinal))
+					{
+						_gestureAnchor = start;
+					}
+				}
+				_gestureRects[id] = start;
 			}
 		}
 		// [Avalonia] CaptureMouse → e.Pointer.Capture(_box)
@@ -1696,6 +1721,14 @@ public sealed class LayoutEditor
 		_boxPointer?.Capture(null);
 		_boxPointer = null;
 		_guide.Clear();
+		// [audit/B] 手势收尾:预览期的裁剪一并收掉(缩小时临时裁在卡片里,落定 / 取消后要还回来)
+		foreach (string id in touchedIds)
+		{
+			if (_cards.TryGetValue(id, out LayoutCard? done))
+			{
+				done.ClipToBounds = false;
+			}
+		}
 		if (!movedSomething)
 		{
 			foreach (string id in touchedIds)
@@ -1870,6 +1903,12 @@ public sealed class LayoutEditor
 			foreach (KeyValuePair<string, LayoutRect> kv in _gestureRects)
 			{
 				_box.SetFloating(kv.Key, LayoutMotion.ResizePixels(kv.Value, _gestureHandle, dx, dy, minW, minH, full - kv.Value.X));
+				// [audit/B] 缩小预览时内容可能比卡片高:先在卡片里裁住(不然内容溢出卡片边界糊出去),
+				// 落定后由 EndBoxGesture 恢复 —— 对齐 Windows 参考件 ResizeFloat 的 ClipToBounds 处理。
+				if (_cards.TryGetValue(kv.Key, out LayoutCard? shrinking))
+				{
+					shrinking.ClipToBounds = true;
+				}
 			}
 			if (_box.Floating.TryGetValue(primary, out LayoutRect live))
 			{
