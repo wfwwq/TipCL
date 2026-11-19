@@ -305,7 +305,7 @@ public sealed partial class LaunchPage : PageBase
             if (TopLevel.GetTopLevel(this) is MainWindow win)
                 win.Navigate("multiplayer");
             else
-                Toast("联机", "联机页在主窗口的导航里", ToastKind.Info);
+                Toast("联机", I18nCore.Tr("联机页在主窗口的导航里"), ToastKind.Info);
         });
         var launchRow = UiClass.H(10, _launchShell, _stopShell, _configPill, net);
 

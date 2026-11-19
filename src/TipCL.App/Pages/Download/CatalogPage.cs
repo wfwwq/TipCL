@@ -37,11 +37,11 @@ public sealed class CatalogPage : PageBase
     /// <summary>「游戏版本」候选(照 Windows 版 CatalogPage.GameVersions)。</summary>
     private static readonly string[] GameVersions =
     {
-        "全部", "26.3", "26.2", "26.1.2", "26.1", "1.21.11", "1.21.10", "1.21.8", "1.21.5", "1.21.4",
+        I18nCore.Tr("全部"), "26.3", "26.2", "26.1.2", "26.1", "1.21.11", "1.21.10", "1.21.8", "1.21.5", "1.21.4",
         "1.21.1", "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.19.2", "1.18.2", "1.17.1", "1.16.5", "1.12.2", "1.7.10",
     };
 
-    private static readonly string[] Sources = { "全部", "Modrinth", "CurseForge" };
+    private static readonly string[] Sources = { I18nCore.Tr("全部"), "Modrinth", "CurseForge" };
 
     /// <summary>远程搜索超时(对齐 Windows 版 SearchTimeoutMs)。</summary>
     public static int SearchTimeoutMs = 9000;
@@ -79,21 +79,21 @@ public sealed class CatalogPage : PageBase
     public CatalogPage(CatalogKind kind) : base("catalog-" + kind.Key, kind.Title)
     {
         _kind = kind;
-        _search = UiClass.Input("搜索" + kind.Title + ",留空看热门");
-        _source = UiClass.Combo(Sources, Sources.Contains(kind.DefaultSource) ? kind.DefaultSource : "全部", 116);
-        _type = UiClass.Combo(kind.Types, "全部", 116);
-        _version = UiClass.Combo(GameVersions, "全部", 140);
+        _search = UiClass.Input(I18nCore.Tr("搜索") + kind.Title + ",留空看热门");
+        _source = UiClass.Combo(Sources, Sources.Contains(kind.DefaultSource) ? kind.DefaultSource : I18nCore.Tr("全部"), 116);
+        _type = UiClass.Combo(kind.Types, I18nCore.Tr("全部"), 116);
+        _version = UiClass.Combo(GameVersions, I18nCore.Tr("全部"), 140);
         _inst = UiClass.Combo(null, null, 150);
         _installedVer = UiClass.Combo(null, null, 150);
 
-        _modeSearch = ModeTab("搜索下载", true, () => SetMode(Mode.Search));
-        _modeInstalled = ModeTab("已安装", false, () => SetMode(Mode.Installed));
-        _modeFav = ModeTab("收藏", false, () => SetMode(Mode.Favorites));
+        _modeSearch = ModeTab(I18nCore.Tr("搜索下载"), true, () => SetMode(Mode.Search));
+        _modeInstalled = ModeTab(I18nCore.Tr("已安装"), false, () => SetMode(Mode.Installed));
+        _modeFav = ModeTab(I18nCore.Tr("收藏"), false, () => SetMode(Mode.Favorites));
 
         _debounce.Tick += (_, _) =>
         {
             _debounce.Stop();
-            if (_mode == Mode.Search) Run(SearchAsync, "搜索失败");
+            if (_mode == Mode.Search) Run(SearchAsync, I18nCore.Tr("搜索失败"));
         };
         _search.TextChanged += (_, _) =>
         {
@@ -108,46 +108,46 @@ public sealed class CatalogPage : PageBase
             if (e.Key == Key.Enter)
             {
                 _debounce.Stop();
-                Run(SearchAsync, "搜索失败");
+                Run(SearchAsync, I18nCore.Tr("搜索失败"));
             }
         };
-        _source.SelectionChanged += (_, _) => { if (!_sync) Run(SearchAsync, "搜索失败"); };
-        _type.SelectionChanged += (_, _) => { if (!_sync) Run(SearchAsync, "搜索失败"); };
-        _version.SelectionChanged += (_, _) => { if (!_sync) Run(SearchAsync, "搜索失败"); };
+        _source.SelectionChanged += (_, _) => { if (!_sync) Run(SearchAsync, I18nCore.Tr("搜索失败")); };
+        _type.SelectionChanged += (_, _) => { if (!_sync) Run(SearchAsync, I18nCore.Tr("搜索失败")); };
+        _version.SelectionChanged += (_, _) => { if (!_sync) Run(SearchAsync, I18nCore.Tr("搜索失败")); };
         _inst.SelectionChanged += (_, _) =>
         {
             if (_sync) return;
             SaveCatalogInstance();
-            Run(ReloadCurrentAsync, "搜索失败");
+            Run(ReloadCurrentAsync, I18nCore.Tr("搜索失败"));
         };
         _installedVer.SelectionChanged += (_, _) =>
         {
-            if (!_sync && _mode == Mode.Installed) Run(LoadInstalledAsync, "搜索失败");
+            if (!_sync && _mode == Mode.Installed) Run(LoadInstalledAsync, I18nCore.Tr("搜索失败"));
         };
 
         // ── 搜索行 + 筛选行(卡内)──
-        var searchBtn = U.Btn("搜索", BtnKind.Primary, (_, _) => Run(SearchAsync, "搜索失败"), "Search");
+        var searchBtn = U.Btn(I18nCore.Tr("搜索"), BtnKind.Primary, (_, _) => Run(SearchAsync, I18nCore.Tr("搜索失败")), "Search");
         var searchRow = UiClass.G(null, "*,Auto");
         searchRow.Add(_search, 0, 0);
         searchBtn.Mk(8, 0, 0, 0);
         searchRow.Add(searchBtn, 0, 1);
 
-        var resetBtn = U.Btn("重置条件", BtnKind.Chip, (_, _) => ResetFilters(), "Refresh");
-        var updateBtn = U.Btn("检查更新", BtnKind.Chip, (_, _) => Run(CheckUpdatesAsync, "检查更新失败"), "Refresh");
+        var resetBtn = U.Btn(I18nCore.Tr("重置条件"), BtnKind.Chip, (_, _) => ResetFilters(), "Refresh");
+        var updateBtn = U.Btn(I18nCore.Tr("检查更新"), BtnKind.Chip, (_, _) => Run(CheckUpdatesAsync, I18nCore.Tr("检查更新失败")), "Refresh");
         updateBtn.IsVisible = kind.Key == "mod";
-        var exportAllBtn = U.Btn("全部导出", BtnKind.Chip, (_, _) => Run(() => ExportAllInstalledAsync(_installedNames), "导出失败"), "Export");
+        var exportAllBtn = U.Btn(I18nCore.Tr("全部导出"), BtnKind.Chip, (_, _) => Run(() => ExportAllInstalledAsync(_installedNames), I18nCore.Tr("导出失败")), "Export");
         exportAllBtn.IsVisible = ExportKind().Length > 0;
-        var linkBtn = U.Btn("链接安装", BtnKind.Chip, (_, _) => Run(InstallFromLinkAsync, "链接安装失败"), "Open");
-        var localBtn = U.Btn("导入本地文件", BtnKind.Chip, (_, _) => _ = ImportLocalAsync(), "Import");
-        var refreshBtn = U.IconBtn("Refresh", "刷新", (_, _) => Run(ReloadCurrentAsync, "搜索失败"));
+        var linkBtn = U.Btn(I18nCore.Tr("链接安装"), BtnKind.Chip, (_, _) => Run(InstallFromLinkAsync, I18nCore.Tr("链接安装失败")), "Open");
+        var localBtn = U.Btn(I18nCore.Tr("导入本地文件"), BtnKind.Chip, (_, _) => _ = ImportLocalAsync(), "Import");
+        var refreshBtn = U.IconBtn("Refresh", I18nCore.Tr("刷新"), (_, _) => Run(ReloadCurrentAsync, I18nCore.Tr("搜索失败")));
 
         var filters = new WrapPanel();
         filters.Children.Add(UiClass.H(7, resetBtn, linkBtn, localBtn, updateBtn, exportAllBtn, refreshBtn).Mk(0, 0, 0, 8));
-        Labeled("来源", _source);
-        Labeled("类型", _type);
-        Labeled("游戏版本", _version);
-        Labeled("实例", _inst);
-        if (kind.InstalledMethod.Length > 0) Labeled("已装于版本", _installedVer);
+        Labeled(I18nCore.Tr("来源"), _source);
+        Labeled(I18nCore.Tr("类型"), _type);
+        Labeled(I18nCore.Tr("游戏版本"), _version);
+        Labeled(I18nCore.Tr("实例"), _inst);
+        if (kind.InstalledMethod.Length > 0) Labeled(I18nCore.Tr("已装于版本"), _installedVer);
         var card = UiClass.Card(UiClass.V(10, searchRow, filters), 14);
 
         // ── 结果区 / 占位区 ──
@@ -227,7 +227,7 @@ public sealed class CatalogPage : PageBase
 
     // ───────────────────────────── 生命周期 ─────────────────────────────
 
-    protected override void OnCreate() => Run(LoadAsync, "搜索失败");
+    protected override void OnCreate() => Run(LoadAsync, I18nCore.Tr("搜索失败"));
 
     protected override void OnActivate()
     {
@@ -237,7 +237,7 @@ public sealed class CatalogPage : PageBase
         if (_searchInterrupted)
         {
             _searchInterrupted = false;
-            Run(ReloadCurrentAsync, "搜索失败");
+            Run(ReloadCurrentAsync, I18nCore.Tr("搜索失败"));
         }
     }
 
@@ -254,7 +254,7 @@ public sealed class CatalogPage : PageBase
     protected override void OnEvent(ApiEvent ev)
     {
         if (ev.Event == "finished" && ev.Success && _mode == Mode.Installed)
-            Run(LoadInstalledAsync);
+            Run(LoadInstalledAsync, I18nCore.Tr("读取已安装列表失败"));
     }
 
     // ───────────────────────────── 取值 ─────────────────────────────
@@ -262,11 +262,11 @@ public sealed class CatalogPage : PageBase
     private string SubTitle() => _kind.Key switch
     {
         "mod" => "从 Modrinth / CurseForge 搜模组,装进所选实例",
-        "modpack" => "一键安装整合包到独立实例",
-        "datapack" => "数据包会放进实例 datapacks 目录",
-        "resourcepack" => "资源包会放进实例 resourcepacks 目录",
-        "shader" => "光影包会放进实例 shaderpacks 目录",
-        _ => "世界地图会解压成实例存档",
+        "modpack" => I18nCore.Tr("一键安装整合包到独立实例"),
+        "datapack" => I18nCore.Tr("数据包会放进实例 datapacks 目录"),
+        "resourcepack" => I18nCore.Tr("资源包会放进实例 resourcepacks 目录"),
+        "shader" => I18nCore.Tr("光影包会放进实例 shaderpacks 目录"),
+        _ => I18nCore.Tr("世界地图会解压成实例存档"),
     };
 
     private string CurrentInstance() => _inst.SelectedItem as string ?? "";
@@ -292,13 +292,13 @@ public sealed class CatalogPage : PageBase
     private string GameVersionFilter()
     {
         string t = (_version.SelectedItem as string ?? "").Trim();
-        return t.Length == 0 || t == "全部" ? "" : t;
+        return t.Length == 0 || t == I18nCore.Tr("全部") ? "" : t;
     }
 
     private string SourceParam()
     {
-        string t = _source.SelectedItem as string ?? "全部";
-        return t == "全部" ? "all" : t;
+        string t = _source.SelectedItem as string ?? I18nCore.Tr("全部");
+        return t == I18nCore.Tr("全部") ? "all" : t;
     }
 
     private string CategoryParam() => _type.SelectedIndex <= 0 ? "" : _type.SelectedItem as string ?? "";
@@ -353,18 +353,18 @@ public sealed class CatalogPage : PageBase
         _modeSearch.IsChecked = mode == Mode.Search;
         _modeInstalled.IsChecked = mode == Mode.Installed;
         _modeFav.IsChecked = mode == Mode.Favorites;
-        Run(ReloadCurrentAsync, "搜索失败");
+        Run(ReloadCurrentAsync, I18nCore.Tr("搜索失败"));
     }
 
     private void ResetFilters()
     {
         _sync = true;
         _search.Text = "";
-        _source.SelectedItem = Sources.Contains(_kind.DefaultSource) ? _kind.DefaultSource : "全部";
+        _source.SelectedItem = Sources.Contains(_kind.DefaultSource) ? _kind.DefaultSource : I18nCore.Tr("全部");
         _type.SelectedIndex = 0;
         _version.SelectedIndex = 0;
         _sync = false;
-        Run(ReloadCurrentAsync, "搜索失败");
+        Run(ReloadCurrentAsync, I18nCore.Tr("搜索失败"));
     }
 
     private CancellationToken NextSearchToken()
@@ -416,11 +416,11 @@ public sealed class CatalogPage : PageBase
         catch (OperationCanceledException)
         {
             if (token == _searchToken && !_searchInterrupted)
-                ShowFailure("搜索超时", $"{(SearchTimeoutMs + 999) / 1000} 秒内没等到结果。检查网络或换个来源再试。");
+                ShowFailure(I18nCore.Tr("搜索超时"), $"{(SearchTimeoutMs + 999) / 1000} 秒内没等到结果。检查网络或换个来源再试。");
         }
         catch (Exception ex)
         {
-            if (token == _searchToken) ShowFailure("搜索失败", ex.Message);
+            if (token == _searchToken) ShowFailure(I18nCore.Tr("搜索失败"), ex.Message);
         }
         finally
         {
@@ -437,7 +437,7 @@ public sealed class CatalogPage : PageBase
         if (token != _searchToken) return;
         _favKeys = rows.Select(x => x.FavKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (rows.Count == 0)
-            ShowPlaceholder(UiClass.Empty("Star", "还没有收藏", "在搜索结果里点右边的星星就能收藏"));
+            ShowPlaceholder(UiClass.Empty("Star", I18nCore.Tr("还没有收藏"), I18nCore.Tr("在搜索结果里点右边的星星就能收藏")));
         else
             ShowRows(rows.Cast<object>().ToList());
     }
@@ -450,7 +450,7 @@ public sealed class CatalogPage : PageBase
         string inst = CurrentInstance();
         if (inst.Length == 0)
         {
-            ShowPlaceholder(UiClass.Empty(_kind.Icon, "还没有实例", "先到「实例库」页新建一个"));
+            ShowPlaceholder(UiClass.Empty(_kind.Icon, I18nCore.Tr("还没有实例"), "先到「实例库」页新建一个"));
             return;
         }
         await FillInstalledVersionsAsync(inst);
@@ -463,7 +463,7 @@ public sealed class CatalogPage : PageBase
                     new { instance = inst, version }) ?? new();
                 if (token != _searchToken) return;
                 if (mods.Count == 0)
-                    ShowPlaceholder(UiClass.Empty(_kind.Icon, "这个实例还没有 Mod", "切回「搜索下载」装一个"));
+                    ShowPlaceholder(UiClass.Empty(_kind.Icon, I18nCore.Tr("这个实例还没有 Mod"), I18nCore.Tr("切回「搜索下载」装一个")));
                 else
                     ShowRows(mods.Cast<object>().ToList());
                 return;
@@ -476,7 +476,7 @@ public sealed class CatalogPage : PageBase
             var files = await Api.TryCallAsync<List<string>>(_kind.InstalledMethod, null, new { instance = inst }) ?? new();
             if (token != _searchToken) return;
             if (files.Count == 0)
-                ShowPlaceholder(UiClass.Empty(_kind.Icon, $"这个实例还没有{_kind.Title}", "切回「搜索下载」装一个"));
+                ShowPlaceholder(UiClass.Empty(_kind.Icon, $"这个实例还没有{_kind.Title}", I18nCore.Tr("切回「搜索下载」装一个")));
             else
             {
                 _installedNames = files;
@@ -485,14 +485,14 @@ public sealed class CatalogPage : PageBase
         }
         catch (Exception ex)
         {
-            if (token == _searchToken) ShowPlaceholder(UiClass.Empty("Warning", "读取失败", ex.Message));
+            if (token == _searchToken) ShowPlaceholder(UiClass.Empty("Warning", I18nCore.Tr("读取失败"), ex.Message));
         }
     }
 
     private async Task FillInstalledVersionsAsync(string instance)
     {
         var targets = await Api.TryCallAsync<List<ModsTarget>>("get_mods_targets", null, new { instance }) ?? new();
-        if (targets.Count == 0) targets.Add(new ModsTarget { Label = "实例共享目录", Value = "" });
+        if (targets.Count == 0) targets.Add(new ModsTarget { Label = I18nCore.Tr("实例共享目录"), Value = "" });
         int prev = _installedVer.SelectedIndex;
         _sync = true;
         _installedVer.Items.Clear();
@@ -505,7 +505,7 @@ public sealed class CatalogPage : PageBase
     private async Task CheckUpdatesAsync()
     {
         var rows = await Api.CallAsync<List<object?>>("check_mod_updates", new { instance = CurrentInstance() }) ?? new();
-        if (rows.Count == 0) Toast("没有可更新的模组");
+        if (rows.Count == 0) Toast(I18nCore.Tr("没有可更新的模组"));
         else Toast("有可用更新", $"{rows.Count} 个模组可以更新(到「实例详情」页处理)");
         if (_mode == Mode.Installed) await LoadInstalledAsync();
     }
@@ -532,7 +532,7 @@ public sealed class CatalogPage : PageBase
 
     private void ShowFailure(string title, string detail)
     {
-        var retry = U.Btn("重试", BtnKind.Soft, (_, _) => Run(ReloadCurrentAsync, "搜索失败"), "Refresh");
+        var retry = U.Btn(I18nCore.Tr("重试"), BtnKind.Soft, (_, _) => Run(ReloadCurrentAsync, I18nCore.Tr("搜索失败")), "Refresh");
         retry.HorizontalAlignment = HorizontalAlignment.Center;
         ShowPlaceholder(UiClass.Empty("Warning", title, detail), retry);
     }
@@ -559,9 +559,9 @@ public sealed class CatalogPage : PageBase
         thumb.Mk(0, 0, 12, 0);
 
         var meta = UiClass.H(7,
-            UiClass.Muted(string.IsNullOrEmpty(item.Author) ? "佚名" : item.Author).VCenter(),
+            UiClass.Muted(string.IsNullOrEmpty(item.Author) ? I18nCore.Tr("佚名") : item.Author).VCenter(),
             UiClass.Muted("·").VCenter(),
-            UiClass.Muted(CatalogFmt.Downloads(item.Downloads) + " 次下载").VCenter(),
+            UiClass.Muted(CatalogFmt.Downloads(item.Downloads) + I18nCore.Tr(" 次下载")).VCenter(),
             string.IsNullOrEmpty(item.Source) ? null : UiClass.Tag(item.Source, "B.AccentText", "B.AccentSoft"));
         var col = UiClass.V(3, UiClass.Txt(item.Name, 13.5, bold: true), meta);
         if (!string.IsNullOrWhiteSpace(item.Description))
@@ -582,20 +582,20 @@ public sealed class CatalogPage : PageBase
             Content = IconLib.Make("Star", fav ? "B.Accent" : "B.InkMuted", 13),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        ToolTip.SetTip(star, "收藏");
+        ToolTip.SetTip(star, I18nCore.Tr("收藏"));
         star.Click += (_, e) =>
         {
             e.Handled = true;
-            Run(() => ToggleFavAsync(item, star), "收藏失败");
+            Run(() => ToggleFavAsync(item, star), I18nCore.Tr("收藏失败"));
         };
 
-        var install = U.Btn("安装", BtnKind.Soft, null, "Download");
+        var install = U.Btn(I18nCore.Tr("安装"), BtnKind.Soft, null, "Download");
         install.VerticalAlignment = VerticalAlignment.Center;
         install.Mk(8, 0, 0, 0);
         install.Click += (_, e) =>
         {
             e.Handled = true;
-            Run(() => InstallAsync(item), "安装失败");
+            Run(() => InstallAsync(item), I18nCore.Tr("安装失败"));
         };
 
         var grid = UiClass.G(null, "Auto,*,Auto,Auto");
@@ -608,13 +608,13 @@ public sealed class CatalogPage : PageBase
         var rowCard = UiClass.RowCard(grid, null, 13);
         if (!string.IsNullOrWhiteSpace(item.ProjectUrl))
         {
-            ToolTip.SetTip(rowCard, "打开介绍页");
+            ToolTip.SetTip(rowCard, I18nCore.Tr("打开介绍页"));
             rowCard.Cursor = new Cursor(StandardCursorType.Hand);
             rowCard.PointerReleased += (_, e) =>
             {
                 if (HitButton(e.Source as Control)) return;
                 try { TipCL.Core.Launcher.Crash.ShellOpen(item.ProjectUrl); }
-                catch (Exception ex) { Toast("打开失败", ex.Message, ToastKind.Warning); }
+                catch (Exception ex) { Toast(I18nCore.Tr("打开失败"), ex.Message, ToastKind.Warning); }
             };
             Motion.HoverLift(rowCard, 1.004);
         }
@@ -639,7 +639,7 @@ public sealed class CatalogPage : PageBase
                 if (_mode == Mode.Installed) await LoadInstalledAsync();
             });
         };
-        var del = UiClass.Btn("删除", BtnKind.Ghost, (_, _) => Run(() => DeleteInstalledAsync(file), "删除失败"));
+        var del = UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Ghost, (_, _) => Run(() => DeleteInstalledAsync(file), I18nCore.Tr("删除失败")));
 
         var col = UiClass.V(1,
             UiClass.Txt(string.IsNullOrWhiteSpace(m.Name) ? file : m.Name),
@@ -651,7 +651,7 @@ public sealed class CatalogPage : PageBase
         sw.VerticalAlignment = VerticalAlignment.Center;
         grid.Add(sw, 0, 0);
         grid.Add(col, 0, 1);
-        var state = UiClass.Small(m.Enabled ? "" : "已禁用");
+        var state = UiClass.Small(m.Enabled ? "" : I18nCore.Tr("已禁用"));
         state.Mk(8, 0, 0, 0);
         state.VerticalAlignment = VerticalAlignment.Center;
         grid.Add(state, 0, 2);
@@ -663,8 +663,8 @@ public sealed class CatalogPage : PageBase
 
     private Control InstalledRow(string file)
     {
-        var del = UiClass.Btn(_kind.IsModpack ? "移除标记" : "删除", BtnKind.Ghost,
-            (_, _) => Run(() => DeleteInstalledAsync(file), "删除失败"));
+        var del = UiClass.Btn(_kind.IsModpack ? I18nCore.Tr("移除标记") : I18nCore.Tr("删除"), BtnKind.Ghost,
+            (_, _) => Run(() => DeleteInstalledAsync(file), I18nCore.Tr("删除失败")));
         del.VerticalAlignment = VerticalAlignment.Center;
         var grid = UiClass.G(null, "*,Auto,Auto");
         var name = UiClass.Txt(file, 12.5);
@@ -672,7 +672,7 @@ public sealed class CatalogPage : PageBase
         grid.Add(name, 0, 0);
         if (ExportKind().Length > 0)
         {
-            var exp = U.Btn("导出", BtnKind.Chip, (_, _) => Run(() => ExportInstalledAsync(file), "导出失败"), "Export");
+            var exp = U.Btn(I18nCore.Tr("导出"), BtnKind.Chip, (_, _) => Run(() => ExportInstalledAsync(file), I18nCore.Tr("导出失败")), "Export");
             exp.Mk(0, 0, 6, 0);
             exp.VerticalAlignment = VerticalAlignment.Center;
             grid.Add(exp, 0, 1);
@@ -703,7 +703,7 @@ public sealed class CatalogPage : PageBase
         bool fav = _favKeys.Contains(item.FavKey);
         star.IsChecked = fav;
         star.Content = IconLib.Make("Star", fav ? "B.Accent" : "B.InkMuted", 13);
-        Toast(fav ? "已收藏" : "已取消收藏", item.Name);
+        Toast(fav ? I18nCore.Tr("已收藏") : I18nCore.Tr("已取消收藏"), item.Name);
         if (_mode == Mode.Favorites) await LoadFavoritesAsync();
     }
 
@@ -742,7 +742,7 @@ public sealed class CatalogPage : PageBase
                 var names = new[] { "装进实例存档目录" }.Concat(saves.Select(s => s.Name)).ToArray();
                 var pick = UiClass.Combo(names, names[0], 260);
                 bool go = await Dlg.Ask($"装进哪里 · {item.Name}", UiClass.V(8,
-                    UiClass.Muted("世界会解压到该实例的 saves 目录。"), pick), "继续");
+                    UiClass.Muted("世界会解压到该实例的 saves 目录。"), pick), I18nCore.Tr("继续"));
                 if (!go) return;
                 extra["version"] = "";
             }
@@ -759,10 +759,10 @@ public sealed class CatalogPage : PageBase
         string version = InstalledVersion();
         var saves = await Api.TryCallAsync<List<SaveRow>>("list_saves", null, new { instance = inst, version }) ?? new();
         if (saves.Count == 0) return extra;
-        var names = new[] { "不装进存档" }.Concat(saves.Select(s => s.Name)).ToArray();
+        var names = new[] { I18nCore.Tr("不装进存档") }.Concat(saves.Select(s => s.Name)).ToArray();
         var pick = UiClass.Combo(names, names[0], 260);
-        bool ok = await Dlg.Ask("装进存档", UiClass.V(8,
-            UiClass.Muted("可选:把数据包直接装进某个世界,或只放到 datapacks 文件夹。"), pick), "继续");
+        bool ok = await Dlg.Ask(I18nCore.Tr("装进存档"), UiClass.V(8,
+            UiClass.Muted("可选:把数据包直接装进某个世界,或只放到 datapacks 文件夹。"), pick), I18nCore.Tr("继续"));
         if (!ok || pick.SelectedIndex <= 0) return extra;
         return new Dictionary<string, object?>(extra) { ["save"] = pick.SelectedItem as string ?? "" };
     }
@@ -772,14 +772,14 @@ public sealed class CatalogPage : PageBase
         var files = await Api.TryCallAsync<List<CatalogFile>>("list_catalog_files", null, new { extra }) ?? new();
         if (files.Count == 0)
         {
-            bool go = await Dlg.Confirm("没有找到版本文件", "在线列表为空,要直接尝试安装最新版吗?", "安装最新", "取消");
+            bool go = await Dlg.Confirm(I18nCore.Tr("没有找到版本文件"), "在线列表为空,要直接尝试安装最新版吗?", I18nCore.Tr("安装最新"), I18nCore.Tr("取消"));
             return go ? extra : null;
         }
 
         var chosen = files[0];
         var listHost = UiClass.V(6);
-        var gvBox = UiClass.Combo(new[] { "全部" }.Concat(files.SelectMany(f => f.GameVersions ?? new()).Distinct()), "全部", 130);
-        var loaderBox = UiClass.Combo(new[] { "全部" }.Concat(files.SelectMany(f => f.Loaders ?? new()).Distinct()), "全部", 130);
+        var gvBox = UiClass.Combo(new[] { I18nCore.Tr("全部") }.Concat(files.SelectMany(f => f.GameVersions ?? new()).Distinct()), I18nCore.Tr("全部"), 130);
+        var loaderBox = UiClass.Combo(new[] { I18nCore.Tr("全部") }.Concat(files.SelectMany(f => f.Loaders ?? new()).Distinct()), I18nCore.Tr("全部"), 130);
         var count = UiClass.Muted("");
         var scroll = new ScrollViewer
         {
@@ -792,11 +792,11 @@ public sealed class CatalogPage : PageBase
         loaderBox.SelectionChanged += (_, _) => Refill();
         Refill();
         var bar = UiClass.H(8,
-            UiClass.Txt("游戏版本", 12, fg: "B.InkMuted").VCenter(), gvBox,
-            UiClass.Txt("加载器", 12, fg: "B.InkMuted").VCenter(), loaderBox, count.VCenter());
+            UiClass.Txt(I18nCore.Tr("游戏版本"), 12, fg: "B.InkMuted").VCenter(), gvBox,
+            UiClass.Txt(I18nCore.Tr("加载器"), 12, fg: "B.InkMuted").VCenter(), loaderBox, count.VCenter());
 
         int choice = await Dlg.Choose($"选择版本文件 · {item.Name}", UiClass.V(10, bar, scroll),
-            new[] { "取消", "安装最新", "安装所选" }, 700);
+            new[] { I18nCore.Tr("取消"), I18nCore.Tr("安装最新"), I18nCore.Tr("安装所选") }, 700);
         if (choice == 1) return extra;
         if (choice != 2) return null;
         var picked = new Dictionary<string, object?>(extra)
@@ -820,8 +820,8 @@ public sealed class CatalogPage : PageBase
 
         void Refill()
         {
-            string gv = gvBox.SelectedItem as string ?? "全部";
-            string ld = loaderBox.SelectedItem as string ?? "全部";
+            string gv = gvBox.SelectedItem as string ?? I18nCore.Tr("全部");
+            string ld = loaderBox.SelectedItem as string ?? I18nCore.Tr("全部");
             bool anyGv = gvBox.SelectedIndex <= 0;
             bool anyLd = loaderBox.SelectedIndex <= 0;
             var filtered = files.Where(f =>
@@ -869,14 +869,14 @@ public sealed class CatalogPage : PageBase
             }
             : new { name, instance = CurrentInstance(), extra };
         string taskId = await Api.CallAsync<string>(method, payload) ?? "";
-        Toast("已加入队列", name, ToastKind.Success);
+        Toast(I18nCore.Tr("已加入队列"), name, ToastKind.Success);
         if (this.GetVisualRoot() is MainWindow win) win.Navigate("tasks");
         return taskId;
     }
 
     private async Task InstallFromLinkAsync()
     {
-        string? url = await Dlg.Prompt(_kind.Title + " · 链接安装", _kind.LinkHint, "", "https://...");
+        string? url = await Dlg.Prompt(_kind.Title + I18nCore.Tr(" · 链接安装"), _kind.LinkHint, "", "https://...");
         if (string.IsNullOrWhiteSpace(url)) return;
         var extra = BaseExtra(url.Trim());
         extra["url"] = url.Trim();
@@ -893,12 +893,12 @@ public sealed class CatalogPage : PageBase
         try
         {
             var patterns = _kind.LocalFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
-            var files = await Dlg.PickFiles("导入本地" + _kind.Title, patterns.Length > 0 ? patterns : new[] { "*.*" });
+            var files = await Dlg.PickFiles(I18nCore.Tr("导入本地") + _kind.Title, patterns.Length > 0 ? patterns : new[] { "*.*" });
             await ImportLocalFilesAsync(files);
         }
         catch (Exception ex)
         {
-            Toast("导入失败", ex.Message, ToastKind.Warning);
+            Toast(I18nCore.Tr("导入失败"), ex.Message, ToastKind.Warning);
         }
     }
 
@@ -925,11 +925,11 @@ public sealed class CatalogPage : PageBase
         if (batch.Total == 1)
         {
             // 单个文件:DoInstallAsync 已经把「已加入队列」报出去了;失败才补一条(与改动前逐字一致)
-            if (batch.AnyFailed) Toast("导入失败", batch.Failures[0].Reason, ToastKind.Warning);
+            if (batch.AnyFailed) Toast(I18nCore.Tr("导入失败"), batch.Failures[0].Reason, ToastKind.Warning);
         }
         else if (!batch.Canceled)
         {
-            Toast(batch.AnyFailed ? "导入失败" : "已加入队列", batch.SummaryText(),
+            Toast(batch.AnyFailed ? I18nCore.Tr("导入失败") : I18nCore.Tr("已加入队列"), batch.SummaryText(),
                 batch.AnyFailed ? ToastKind.Warning : ToastKind.Success);
         }
         return batch;
@@ -940,6 +940,7 @@ public sealed class CatalogPage : PageBase
     {
         var extra = BaseExtra(System.IO.Path.GetFileName(path));
         extra["path"] = path;
+        // [audit/B i18n] 这个值会**交给 Core 当数据**记录来源(不是界面文案),不能翻译
         extra["source"] = "本地";
         await DoInstallAsync(extra);
     }
@@ -950,22 +951,22 @@ public sealed class CatalogPage : PageBase
         string inst = CurrentInstance();
         if (_kind.DeleteMethod == "delete_modpack")
         {
-            bool ok = await Dlg.Confirm("移除整合包标记",
+            bool ok = await Dlg.Confirm(I18nCore.Tr("移除整合包标记"),
                 "只清掉「已安装整合包」这条记录,游戏目录里的模组与存档一个不动。\n要腾空间的话,到「实例库」里逐个卸载版本。",
-                "移除标记", "取消");
+                I18nCore.Tr("移除标记"), I18nCore.Tr("取消"));
             if (!ok) return;
             await Api.CallAsync<object>("delete_modpack", new { instance = inst, filename, purge_instance = false });
         }
         else
         {
-            bool ok = await Dlg.Confirm("删除确认", $"将删除「{filename}」,不可恢复。", "删除", "取消", danger: true);
+            bool ok = await Dlg.Confirm(I18nCore.Tr("删除确认"), $"将删除「{filename}」,不可恢复。", I18nCore.Tr("删除"), I18nCore.Tr("取消"), danger: true);
             if (!ok) return;
             if (_kind.DeleteMethod == "delete_mod")
                 await Api.CallAsync<object>(_kind.DeleteMethod, new { instance = inst, filename, version = "" });
             else
                 await Api.CallAsync<object>(_kind.DeleteMethod, new { instance = inst, filename, version = InstalledVersion() });
         }
-        Toast("已处理", filename, ToastKind.Success);
+        Toast(I18nCore.Tr("已处理"), filename, ToastKind.Success);
         await LoadInstalledAsync();
     }
 
@@ -974,7 +975,7 @@ public sealed class CatalogPage : PageBase
         string kind = ExportKind();
         if (kind.Length == 0) return;
         string last = await Api.TryCallAsync<string>("default_export_dir", null) ?? "";
-        string? folder = await Dlg.PickFolder(last.Length == 0 ? "选择导出位置" : $"选择导出位置(上次:{last})");
+        string? folder = await Dlg.PickFolder(last.Length == 0 ? I18nCore.Tr("选择导出位置") : $"选择导出位置(上次:{last})");
         if (folder == null) return;
         await Api.TryCallAsync<string>("remember_export_dir", folder, new { path = folder });
         string? dest = await Api.CallAsync<string>("export_content", new
@@ -985,7 +986,7 @@ public sealed class CatalogPage : PageBase
             version = InstalledVersion(),
             instance = CurrentInstance(),
         });
-        Toast("已导出", dest ?? folder, ToastKind.Success);
+        Toast(I18nCore.Tr("已导出"), dest ?? folder, ToastKind.Success);
     }
 
     private async Task ExportAllInstalledAsync(List<string> names)
@@ -993,7 +994,7 @@ public sealed class CatalogPage : PageBase
         string kind = ExportKind();
         if (kind.Length == 0 || names.Count == 0) return;
         string last = await Api.TryCallAsync<string>("default_export_dir", null) ?? "";
-        string? folder = await Dlg.PickFolder(last.Length == 0 ? "选择导出位置" : $"选择导出位置(上次:{last})");
+        string? folder = await Dlg.PickFolder(last.Length == 0 ? I18nCore.Tr("选择导出位置") : $"选择导出位置(上次:{last})");
         if (folder == null) return;
         await Api.TryCallAsync<string>("remember_export_dir", folder, new { path = folder });
         // ContentExport.ExportMany 返回 {dir, exported[], failed[{name,error}]}:
@@ -1013,13 +1014,13 @@ public sealed class CatalogPage : PageBase
         string dest = Py.S(Py.Or(res.Get("dir"), folder));
         if (failed.Count == 0)
         {
-            Toast("已导出", $"{exported.Count} 个 → {dest}", ToastKind.Success);
+            Toast(I18nCore.Tr("已导出"), $"{exported.Count} 个 → {dest}", ToastKind.Success);
         }
         else
         {
             var lines = failed.OfType<PyDict>()
                 .Select(f => Py.S(f.Get("name")) + " — " + Py.S(f.Get("error")));
-            await Dlg.Alert("部分没能导出", $"成功 {exported.Count} 个,失败 {failed.Count} 个:\n\n" + string.Join("\n", lines));
+            await Dlg.Alert(I18nCore.Tr("部分没能导出"), $"成功 {exported.Count} 个,失败 {failed.Count} 个:\n\n" + string.Join("\n", lines));
         }
     }
 
@@ -1036,7 +1037,7 @@ public sealed class CatalogPage : PageBase
             if (!low.Contains("modrinth.com") && !low.Contains("curseforge.com")) return;
             _clipSeen = text;
             if ((_search.Text ?? "").Trim().Length == 0) _search.Text = text;
-            Toast("识别到剪贴板链接", text.Length > 96 ? text[..96] + "..." : text);
+            Toast(I18nCore.Tr("识别到剪贴板链接"), text.Length > 96 ? text[..96] + "..." : text);
         }
         catch (Exception ex)
         {
@@ -1054,8 +1055,9 @@ public sealed class CatalogPage : PageBase
         }
         catch (Exception ex)
         {
-            if (errTitle != null) Toast(errTitle, ex.Message, ToastKind.Warning);
-            else AppLog.Warn("目录页操作失败: " + ex.Message);
+            // [audit/B] 静默失败统一:没给 errTitle 也要有一次可见反馈(原来只写 AppLog,用户点了毫无反应)
+            AppLog.Warn("目录页操作失败: " + ex.Message);
+            Toast(errTitle ?? I18nCore.Tr("操作没有完成"), ex.Message, ToastKind.Warning);
         }
     }
 }

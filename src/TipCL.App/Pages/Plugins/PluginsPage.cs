@@ -17,6 +17,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher;
@@ -73,22 +74,37 @@ public sealed partial class PluginsPage : PageBase
     private readonly PluginDirs _dirs;
     private readonly PluginStateStore _store;
 
-    public PluginsPage() : base("plugins", "插件")
+    public PluginsPage() : base("plugins", I18nCore.Tr("插件"))
     {
         _dirs = PluginRuntime.Host.Dirs;
         _store = PluginRuntime.Host.StateStore;
-        _tInstalled = TabBtn("已安装", Tab.Installed);
-        _tMarket = TabBtn("市场", Tab.Market);
-        var more = U.IconBtn(MoreGlyph, "更多");
+        _tInstalled = TabBtn(I18nCore.Tr("已安装"), Tab.Installed);
+        _tMarket = TabBtn(I18nCore.Tr("市场"), Tab.Market);
+        var more = U.IconBtn(MoreGlyph, I18nCore.Tr("更多"));
         var menu = new ContextMenu();
-        AddItem(menu, "刷新", RefreshGlyph, delegate { _ = ReloadAllAsync(); });
-        AddItem(menu, "开发者", DevGlyph, delegate { SelectTab(Tab.Dev); });
-        AddItem(menu, "插件设置", SettingsGlyph, delegate { ShowSubView("插件设置", new ScrollViewer { Content = PluginSettingsCard.Build() }); });
+        AddItem(menu, I18nCore.Tr("刷新"), RefreshGlyph, delegate { _ = ReloadAllAsync(); });
+        AddItem(menu, I18nCore.Tr("开发者"), DevGlyph, delegate { SelectTab(Tab.Dev); });
+        AddItem(menu, I18nCore.Tr("插件设置"), SettingsGlyph, delegate { ShowSubView(I18nCore.Tr("插件设置"), new ScrollViewer { Content = PluginSettingsCard.Build() }); });
         more.ContextMenu = menu;
         more.Click += delegate
         {
-            menu.PlacementTarget = more;
-            menu.Open(menu.PlacementTarget);
+            // [audit/B] 菜单要挂在**已进可视树**的按钮上才能定位;卡片刚被移出列表 / 连点时
+            // 目标可能没有可视根,Open 会抛(Avalonia 侧是 InvalidOperationException;
+            // aud-wpf 报的 WPF「⋯」抛 ArgumentException 属同一类)。这里先判可视根,再兜住异常,
+            // 保证一个菜单打不开不会把整个界面带走。
+            if (more.GetVisualRoot() == null)
+            {
+                return;
+            }
+            try
+            {
+                menu.PlacementTarget = more;
+                menu.Open(menu.PlacementTarget);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("插件页「更多」菜单打不开: " + ex.Message);
+            }
         };
         var head = U.G(null, "*,Auto");
         head.Margin = new Thickness(22, 16, 22, 12);
@@ -99,9 +115,9 @@ public sealed partial class PluginsPage : PageBase
             HorizontalAlignment = HorizontalAlignment.Left,
         }, 0);
         head.Add(U.H(6,
-            U.Btn("从文件安装", BtnKind.Normal, async delegate
+            U.Btn(I18nCore.Tr("从文件安装"), BtnKind.Normal, async delegate
             {
-                string? path = await Dlg.PickFile("选择插件包", "*.zip");
+                string? path = await Dlg.PickFile(I18nCore.Tr("选择插件包"), "*.zip");
                 if (path != null) await InstallLocalAsync(path, dev: false);
             }), more).VCenter(), 0, 1);
         // [R32-LINMORE] 规格 §3-问题3:插件页整体改成区块宿主 BlockHost("plugins"),两个区块 =「页签」「内容」。
@@ -115,7 +131,7 @@ public sealed partial class PluginsPage : PageBase
             // [2026-11-19 修复 #7] 网格模式下的最小列宽:旧存档里被缩成 1 列的块渲染时撑回来,
             // 否则插件卡片网格「被压成一条细线、插件全看不见」(录屏 1:06–1:16)。只影响渲染,不改写存档。
             new BlockSpec { Id = "tabs", Title = "页签", Content = head, MinCols = 4 },
-            new BlockSpec { Id = "body", Title = "内容", Content = _body, MinCols = 6 },
+            new BlockSpec { Id = "body", Title = I18nCore.Tr("内容"), Content = _body, MinCols = 6 },
         }, new Thickness(0), PluginsDefaultPage());
         BuildMarketChrome();
         BuildDev();
@@ -220,7 +236,7 @@ public sealed partial class PluginsPage : PageBase
         }
         catch (Exception ex)
         {
-            ToastHost.Show("打不开文件夹", ex.Message, ToastKind.Warning);
+            ToastHost.Show(I18nCore.Tr("打不开文件夹"), ex.Message, ToastKind.Warning);
         }
     }
 
@@ -232,7 +248,7 @@ public sealed partial class PluginsPage : PageBase
         }
         catch (Exception ex)
         {
-            ToastHost.Show("打不开链接", ex.Message, ToastKind.Warning);
+            ToastHost.Show(I18nCore.Tr("打不开链接"), ex.Message, ToastKind.Warning);
         }
     }
     /// <summary>

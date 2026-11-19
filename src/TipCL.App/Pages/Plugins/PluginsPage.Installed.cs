@@ -15,6 +15,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher;
@@ -89,7 +90,7 @@ public sealed partial class PluginsPage
 
     /// <summary>「有更新」徽标的文案(有市场版本号就带上,便于一眼看出更新到哪一版)。</summary>
     internal static string UpdateBadgeText(PluginInfo p)
-        => p.MarketVersion.Length > 0 ? "有更新 → v" + p.MarketVersion : "有更新";
+        => p.MarketVersion.Length > 0 ? "有更新 → v" + p.MarketVersion : I18nCore.Tr("有更新");
 
     /// <summary>把市场索引里的版本信息贴到已安装列表上(有更新就显示徽标)。</summary>
     private void ApplyMarketBadges()
@@ -166,7 +167,7 @@ public sealed partial class PluginsPage
         _installedHost.Columns = (_installed.Count == 0) ? 1 : SplitRatioStore.PageColumns("plugins", 3, 1, 6);
         if (_installed.Count == 0)
         {
-            _installedHost.Children.Add(U.Empty("◇", "还没有安装插件", "去插件市场看看，或者把插件 zip 拖进这个页面。"));
+            _installedHost.Children.Add(U.Empty("◇", I18nCore.Tr("还没有安装插件"), I18nCore.Tr("去插件市场看看，或者把插件 zip 拖进这个页面。")));
             return;
         }
         foreach (PluginInfo p in _installed.OrderBy(x => x.DisplayName, StringComparer.CurrentCulture))
@@ -179,16 +180,16 @@ public sealed partial class PluginsPage
     {
         if (!p.Enabled && p.State != "restart_required")
         {
-            return U.Tag("已禁用");
+            return U.Tag(I18nCore.Tr("已禁用"));
         }
         return p.State switch
         {
-            "running" => U.Tag("运行中", "B.Ok", "B.AccentSoft"),
-            "error" => U.Tag("出错", "B.Danger", "B.DangerSoft"),
-            "restart_required" => U.Tag("重启后生效", "B.Warn", "B.WarnSoft"),
-            "loading" => U.Tag("加载中", "B.Info", "B.InfoSoft"),
-            "stopped" => U.Tag("已停止"),
-            _ => U.Tag(p.State.Length > 0 ? p.State : "未知"),
+            "running" => U.Tag(I18nCore.Tr("运行中"), "B.Ok", "B.AccentSoft"),
+            "error" => U.Tag(I18nCore.Tr("出错"), "B.Danger", "B.DangerSoft"),
+            "restart_required" => U.Tag(I18nCore.Tr("重启后生效"), "B.Warn", "B.WarnSoft"),
+            "loading" => U.Tag(I18nCore.Tr("加载中"), "B.Info", "B.InfoSoft"),
+            "stopped" => U.Tag(I18nCore.Tr("已停止")),
+            _ => U.Tag(p.State.Length > 0 ? p.State : I18nCore.Tr("未知")),
         };
     }
 
@@ -205,7 +206,7 @@ public sealed partial class PluginsPage
         name.FontWeight = FontWeight.ExtraBold;
         name.Tip(p.Id);
         var sw = U.Switch(p.Enabled);
-        sw.Tip(p.Enabled ? "点击禁用" : "点击启用");
+        sw.Tip(p.Enabled ? I18nCore.Tr("点击禁用") : I18nCore.Tr("点击启用"));
         sw.IsCheckedChanged += delegate
         {
             bool on = sw.IsChecked == true;
@@ -219,13 +220,13 @@ public sealed partial class PluginsPage
                 }
                 else
                 {
-                    ToastHost.Show(on ? "已启用" : "已禁用", p.DisplayName, ToastKind.Success);
+                    ToastHost.Show(on ? "已启用" : I18nCore.Tr("已禁用"), p.DisplayName, ToastKind.Success);
                 }
             }
             catch
             {
                 sw.IsChecked = !on;
-                ToastHost.Show(on ? "启用失败" : "禁用失败", "", ToastKind.Error);
+                ToastHost.Show(on ? I18nCore.Tr("启用失败") : I18nCore.Tr("禁用失败"), "", ToastKind.Error);
                 return;
             }
             _ = LoadInstalledAsync();
@@ -239,39 +240,52 @@ public sealed partial class PluginsPage
         desc.Height = 36;
         desc.TextTrimming = TextTrimming.CharacterEllipsis;
         desc.Margin = new Thickness(0, 10, 0, 12);
-        var moreBtn = U.IconBtn(MoreGlyph, "更多");
+        var moreBtn = U.IconBtn(MoreGlyph, I18nCore.Tr("更多"));
         var menu = new ContextMenu();
-        AddItem(menu, "设置", SettingsGlyph, delegate { ShowSettings(p); });
-        AddItem(menu, "权限", "⚿", delegate { ShowPermissions(p); });
+        AddItem(menu, I18nCore.Tr("设置"), SettingsGlyph, delegate { ShowSettings(p); });
+        AddItem(menu, I18nCore.Tr("权限"), "⚿", delegate { ShowPermissions(p); });
         if (p.Source == "market")
         {
             AddItem(menu, p.MarketVersion.Length > 0 ? "更新到 v" + p.MarketVersion : "从市场更新", "↑", async delegate { await UpdateFromMarketAsync(p); });
         }
-        AddItem(menu, "打开数据目录", "▤", delegate { OpenFolder(_dirs.DataDir(p.Id)); });
-        AddItem(menu, "查看日志", "≡", delegate { _ = ShowLogAsync(p.Id, p.DisplayName); });
+        AddItem(menu, I18nCore.Tr("打开数据目录"), "▤", delegate { OpenFolder(_dirs.DataDir(p.Id)); });
+        AddItem(menu, I18nCore.Tr("查看日志"), "≡", delegate { _ = ShowLogAsync(p.Id, p.DisplayName); });
         if (p.Source == "dev" && p.DevPath.Length > 0)
         {
-            AddItem(menu, "打开开发文件夹", "▤", delegate { OpenFolder(p.DevPath); });
+            AddItem(menu, I18nCore.Tr("打开开发文件夹"), "▤", delegate { OpenFolder(p.DevPath); });
         }
         if (p.Homepage.Length > 0)
         {
-            AddItem(menu, "插件主页", "⌘", delegate { OpenUrl(p.Homepage); });
+            AddItem(menu, I18nCore.Tr("插件主页"), "⌘", delegate { OpenUrl(p.Homepage); });
         }
         menu.Items.Add(new Separator());
-        AddItem(menu, p.Source == "dev" ? "取消链接" : "卸载", "✕", async delegate { await UninstallAsync(p); });
+        AddItem(menu, p.Source == "dev" ? I18nCore.Tr("取消链接") : I18nCore.Tr("卸载"), "✕", async delegate { await UninstallAsync(p); });
         moreBtn.ContextMenu = menu;
         moreBtn.Click += delegate
         {
-            menu.PlacementTarget = moreBtn;
-            menu.Open(menu.PlacementTarget);
+            // [audit/B] 同 PluginsPage.cs 的「更多」菜单:先确认按钮还在可视树里再 Open,
+            // 并对 Open 自身做兜底(点得快 / 卡片刚被重建时目标可能没有可视根)。
+            if (moreBtn.GetVisualRoot() == null)
+            {
+                return;
+            }
+            try
+            {
+                menu.PlacementTarget = moreBtn;
+                menu.Open(menu.PlacementTarget);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("插件卡「更多」菜单打不开: " + ex.Message);
+            }
         };
         var foot = U.G(null, "*,Auto");
         foot.Add(U.H(6,
-            U.Muted(p.Source == "dev" ? "开发链接" : (p.Version.Length > 0 ? "v" + p.Version : "")).VCenter(),
+            U.Muted(p.Source == "dev" ? I18nCore.Tr("开发链接") : (p.Version.Length > 0 ? "v" + p.Version : "")).VCenter(),
             (p.State == "running" && p.Enabled) ? null : StateBadge(p),
             p.UpdateAvailable ? U.Tag(UpdateBadgeText(p), "B.Warn", "B.WarnSoft").Tip("市场里有比本机更新的版本,在右侧菜单里更新") : null,
-            p.Source == "dev" ? U.Tag("开发", "B.Warn", "B.WarnSoft").Tip(p.DevPath) : null,
-            p.Source == "local" ? U.Tag("本地") : null,
+            p.Source == "dev" ? U.Tag(I18nCore.Tr("开发"), "B.Warn", "B.WarnSoft").Tip(p.DevPath) : null,
+            p.Source == "local" ? U.Tag(I18nCore.Tr("本地")) : null,
             p.Runtime == "dotnet" ? U.Tag(".NET") : null).VCenter(), 0);
         foot.Add(moreBtn.VCenter(), 0, 1);
         var body = U.V(0, top, desc, foot);
@@ -291,18 +305,18 @@ public sealed partial class PluginsPage
     {
         var delData = new CheckBox { Content = U.Txt("同时删除数据（插件数据目录）"), IsChecked = false };
         var body = U.V(10,
-            U.Muted(p.Source == "dev" ? "取消链接后开发文件夹本身不会被删除。" : "会删除插件文件；之后可以从市场重新安装。").Wrap(),
+            U.Muted(p.Source == "dev" ? I18nCore.Tr("取消链接后开发文件夹本身不会被删除。") : I18nCore.Tr("会删除插件文件；之后可以从市场重新安装。")).Wrap(),
             delData);
         body.MinWidth = 360;
         if (!await Dlg.Ask(p.Source == "dev" ? $"取消链接「{p.DisplayName}」？" : $"卸载「{p.DisplayName}」？", body)) return;
         try
         {
             PluginRuntime.Uninstall(p.Id, delData.IsChecked == true);
-            ToastHost.Show(p.Source == "dev" ? "已取消链接" : "已卸载", p.DisplayName, ToastKind.Success);
+            ToastHost.Show(p.Source == "dev" ? "已取消链接" : I18nCore.Tr("已卸载"), p.DisplayName, ToastKind.Success);
         }
         catch (Exception ex)
         {
-            ToastHost.Show("卸载失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(I18nCore.Tr("卸载失败"), ex.Message, ToastKind.Error);
         }
         await LoadInstalledAsync();
     }
@@ -331,10 +345,10 @@ public sealed partial class PluginsPage
         }
         if (err.Length > 0)
         {
-            ToastHost.Show("安装失败", err, ToastKind.Error);
+            ToastHost.Show(I18nCore.Tr("安装失败"), err, ToastKind.Error);
             return;
         }
-        ToastHost.Show(dev ? "已链接开发文件夹" : "插件已安装", label, ToastKind.Success);
+        ToastHost.Show(dev ? I18nCore.Tr("已链接开发文件夹") : I18nCore.Tr("插件已安装"), label, ToastKind.Success);
         (TopLevel.GetTopLevel(this) as TipCL.App.Shell.MainWindow)?.RefreshPluginUi();
         await LoadInstalledAsync();
     }
@@ -370,7 +384,7 @@ public sealed partial class PluginsPage
         }
         catch (Exception ex)
         {
-            ToastHost.Show("更新失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(I18nCore.Tr("更新失败"), ex.Message, ToastKind.Error);
             return;
         }
         if (entry == null)
@@ -385,7 +399,7 @@ public sealed partial class PluginsPage
         }
         catch (Exception ex)
         {
-            ToastHost.Show("更新失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(I18nCore.Tr("更新失败"), ex.Message, ToastKind.Error);
         }
     }
 
