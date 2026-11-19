@@ -34,7 +34,24 @@ public sealed class GridCanvasPanel : Panel
 
 	private double _columnWidth = 1.0;
 
+	// 这次 _columnWidth / _rowHeights 是按哪个宽度量的:Arrange 拿到的宽度不同就得重新量行高
+	private double _measuredWidth;
+
+	// 已经为哪些宽度补过 InvalidateMeasure(同一宽度只补一次,避免布局在两宽度间来回时反复失效)
+	private readonly HashSet<double> _remeasureWidths = new HashSet<double>();
+
 	private int _rows;
+
+	public GridCanvasPanel()
+	{
+		// 兜底:面板离开可视树(切页 / 切回 stack)时 CompositionTarget.Rendering 的订阅还在跑 —— 在这里解掉
+		Unloaded += OnUnloaded;
+	}
+
+	private void OnUnloaded(object sender, RoutedEventArgs e)
+	{
+		ClearDragVisuals();
+	}
 
 	/// <summary>页面模式(grid | canvas;stack 时本 Panel 不被使用)。</summary>
 	public string Mode { get; private set; } = LayoutSchema.ModeStack;
@@ -188,6 +205,7 @@ public sealed class GridCanvasPanel : Panel
 			_cells = LayoutCanvas.StackedOrder(_cells);
 		}
 		_rows = LayoutGrid.RowCount(_cells);
+		_remeasureWidths.Clear();
 		InvalidateMeasure();
 		InvalidateVisual();
 	}
@@ -216,6 +234,7 @@ public sealed class GridCanvasPanel : Panel
 	public void Reflow()
 	{
 		_rows = LayoutGrid.RowCount(_cells);
+		_remeasureWidths.Clear();
 		InvalidateMeasure();
 		InvalidateArrange();
 		InvalidateVisual();
@@ -325,12 +344,13 @@ public sealed class GridCanvasPanel : Panel
 		if (IsCanvas)
 		{
 			double height = ResolveCanvasHeight(available.Height);
-			_rects = LayoutCanvas.Rects(_cells, width, height);
+			RebuildCanvasRects(width, height);
 			foreach (UIElement child in base.InternalChildren)
 			{
-				if (child is DropPlaceholder)
+				if (child is DropPlaceholder placeholder)
 				{
-					child.Measure(default(Size));
+					// 占位框:测量尺寸与排布尺寸一致(按它将要排到的矩形量,而不是量 0 再按非零矩形排)
+					MeasurePlaceholder(placeholder);
 					continue;
 				}
 				LayoutRect? rect = RectOf(IdOf(child));
@@ -338,14 +358,25 @@ public sealed class GridCanvasPanel : Panel
 			}
 			return new Size(((double.IsInfinity(available.Width) || available.Width <= 0.0) ? width : available.Width), height);
 		}
+		double total = MeasureGridChildren(width);
+		return new Size(((double.IsInfinity(available.Width) || available.Width <= 0.0) ? width : available.Width), total);
+	}
+
+	/// <summary>
+	/// grid 模式的第一趟(按给定宽度):量每块需求高 → 算列宽 / 行高 / 矩形。
+	/// Measure 与「Arrange 拿到的宽度和测量时不一样」(滚动条出现 / 父级以别的宽度 Arrange)两处共用,
+	/// 保证行高永远是按当前宽度量出来的。
+	/// </summary>
+	private double MeasureGridChildren(double width)
+	{
+		_measuredWidth = width;
 		_columnWidth = LayoutGrid.ColumnWidth(width, Cols, Gap);
 		Dictionary<string, double> desired = new Dictionary<string, double>(StringComparer.Ordinal);
 		foreach (UIElement child in base.InternalChildren)
 		{
 			if (child is DropPlaceholder)
 			{
-				child.Measure(default(Size));
-				continue;
+				continue; // 占位框没有内容:等槽位矩形算出来再按目标矩形量(见方法末尾)
 			}
 			string id = IdOf(child);
 			LayoutCell? cell = CellOf(id);
@@ -373,7 +404,7 @@ public sealed class GridCanvasPanel : Panel
 		{
 			_rowHeights = LayoutGrid.FillRows(_cells, _rowHeights, _fillIds, Gap, _fillHeight);
 		}
-		_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
+		RebuildGridRects(_columnWidth, _rowHeights, Gap);
 		if (HasFill)
 		{
 			// Fill 块按最终格子尺寸再量一次:内容(对话区的滚动)拿到的是真实可视高,滚动与吸底照常
@@ -387,12 +418,57 @@ public sealed class GridCanvasPanel : Panel
 				}
 			}
 		}
+		foreach (UIElement child in base.InternalChildren)
+		{
+			if (child is DropPlaceholder placeholder)
+			{
+				MeasurePlaceholder(placeholder);
+			}
+		}
+		return RowTotalHeight();
+	}
+
+	/// <summary>行高合计(含行间 gap)。</summary>
+	private double RowTotalHeight()
+	{
 		double total = 0.0;
 		for (int i = 0; i < _rowHeights.Length; i++)
 		{
 			total += _rowHeights[i] + ((i < _rowHeights.Length - 1) ? Gap : 0.0);
 		}
-		return new Size(((double.IsInfinity(available.Width) || available.Width <= 0.0) ? width : available.Width), total);
+		return total;
+	}
+
+	// 整表排布结果:复用同一个 List(每次排布不再新分配);公式仍全部来自纯模型 Place
+	private void RebuildGridRects(double columnWidth, double[] rowHeights, double gap)
+	{
+		_rects.Clear();
+		for (int i = 0; i < _cells.Count; i++)
+		{
+			_rects.Add(LayoutGrid.Place(_cells[i], columnWidth, rowHeights, gap));
+		}
+	}
+
+	private void RebuildCanvasRects(double width, double height)
+	{
+		_rects.Clear();
+		for (int i = 0; i < _cells.Count; i++)
+		{
+			_rects.Add(LayoutCanvas.Place(_cells[i], width, height));
+		}
+	}
+
+	// 占位框按"将要排到的矩形"测量:落点预览矩形优先,否则用它在槽位里的矩形
+	private void MeasurePlaceholder(DropPlaceholder placeholder)
+	{
+		LayoutRect? rect = ((_placeholderRects.TryGetValue(placeholder.BlockId, out LayoutRect over)) ? over : RectOf(placeholder.BlockId));
+		if (!rect.HasValue)
+		{
+			placeholder.Measure(default(Size));
+			return;
+		}
+		LayoutRect value = rect.Value;
+		placeholder.Measure(new Size(Math.Max(0.0, value.W), Math.Max(0.0, value.H)));
 	}
 
 	/// <summary>
@@ -405,12 +481,26 @@ public sealed class GridCanvasPanel : Panel
 		if (IsCanvas)
 		{
 			double height = ResolveCanvasHeight(final.Height);
-			_rects = LayoutCanvas.Rects(_cells, width, height);
+			RebuildCanvasRects(width, height);
+		}
+		else if (Math.Abs(width - _measuredWidth) > 0.5)
+		{
+			// Arrange 宽和测量宽不一致(滚动条出现 / 父级以别的宽度 Arrange):行高必须按新宽度重新量一遍,
+			// 否则 auto 行高还是按旧的(更宽)列宽算的 —— 内容会被裁在矮行里。
+			double before = RowTotalHeight();
+			double previousWidth = _measuredWidth;
+			double total = MeasureGridChildren(width);
+			// Arrange 更窄时内容总高只增不减 → 期望高变了就得让宿主下一趟按新的内容高给滚动区(否则底部滚不到)。
+			// 只在"更窄"时补一次失效(更宽时内容只会变矮,不存在裁切);同一宽度只补一次,避免布局来回抖动。
+			if (Math.Abs(total - before) > 0.5 && width < previousWidth && _remeasureWidths.Add(Math.Round(width, 1)))
+			{
+				InvalidateMeasure();
+			}
 		}
 		else
 		{
 			_columnWidth = LayoutGrid.ColumnWidth(width, Cols, Gap);
-			_rects = LayoutGrid.Rects(_cells, _columnWidth, _rowHeights, Gap);
+			RebuildGridRects(_columnWidth, _rowHeights, Gap);
 		}
 		bool flip = _flipPending && Motion.Enabled;
 		foreach (UIElement child in base.InternalChildren)
@@ -633,7 +723,7 @@ public sealed class GridCanvasPanel : Panel
 				continue;
 			}
 			TranslateTransform tt = TranslateOf(child);
-			StopAnimation(tt);
+			// 浮起期间这块不会再被别人起 FLIP 动画(BeginFloat 已把动画停掉),这里逐帧撤动画是纯多余
 			tt.X = dx;
 			tt.Y = dy;
 		}
@@ -718,6 +808,16 @@ public sealed class GridCanvasPanel : Panel
 				base.Children.Insert(0, placeholder);
 			}
 		}
+	}
+
+	/// <summary>主题切换:栅格底纹重画(配色在 OnRender 里现取)+ 占位框重取主题色。</summary>
+	public void RefreshThemeVisuals()
+	{
+		foreach (DropPlaceholder placeholder in _placeholders.Values)
+		{
+			placeholder.ApplyTheme();
+		}
+		InvalidateVisual();
 	}
 
 	/// <summary>收掉所有拖动视觉(浮起的卡片、落点占位框、进行中的动画),立即回到格子位置。</summary>
@@ -948,6 +1048,9 @@ internal sealed class DropPlaceholder : Border
 
 	public string BlockId { get; }
 
+	// 当前配色对应的主题色:主题切换后重取一次(颜色没变时 ApplyTheme 什么都不做)
+	private Color _accent;
+
 	public DropPlaceholder(string blockId)
 	{
 		BlockId = blockId ?? "";
@@ -955,13 +1058,24 @@ internal sealed class DropPlaceholder : Border
 		Focusable = false;
 		CornerRadius = new CornerRadius(10.0);
 		BorderThickness = new Thickness(1.5);
+		ApplyTheme();
+		Tag = Prefix + BlockId;
+	}
+
+	/// <summary>按当前主题重取配色(占位框在构造时固化过配色,主题切换后必须刷新)。</summary>
+	public void ApplyTheme()
+	{
 		Color accent = LayoutEditor.AccentColor();
+		if (Background != null && accent == _accent)
+		{
+			return;
+		}
+		_accent = accent;
 		SolidColorBrush fill = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
 		fill.Freeze();
 		SolidColorBrush stroke = new SolidColorBrush(Color.FromArgb(200, accent.R, accent.G, accent.B));
 		stroke.Freeze();
 		Background = fill;
 		BorderBrush = stroke;
-		Tag = Prefix + BlockId;
 	}
 }

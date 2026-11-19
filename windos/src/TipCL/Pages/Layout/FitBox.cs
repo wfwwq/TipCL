@@ -14,11 +14,46 @@ namespace TipCL.Pages.Layout;
 /// </summary>
 public sealed class FitBox : Decorator
 {
+	private double _minScale = 0.55;
+
+	private double _maxNaturalHeight = 170.0;
+
 	/// <summary>缩放下限(0.55 = 最窄缩到 55%)。</summary>
-	public double MinScale { get; set; } = 0.55;
+	public double MinScale
+	{
+		get
+		{
+			return _minScale;
+		}
+		set
+		{
+			// 改了缩放参数必须重新量(否则要等下一次无关的布局失效才生效)
+			if (Math.Abs(value - _minScale) < 1e-9)
+			{
+				return;
+			}
+			_minScale = value;
+			InvalidateMeasure();
+		}
+	}
 
 	/// <summary>只有"矮内容"才缩放:自然高度超过这个值的(列表等)照常按宽度排版;≤ 0 = 不缩放(纯透传)。</summary>
-	public double MaxNaturalHeight { get; set; } = 170.0;
+	public double MaxNaturalHeight
+	{
+		get
+		{
+			return _maxNaturalHeight;
+		}
+		set
+		{
+			if (Math.Abs(value - _maxNaturalHeight) < 1e-9)
+			{
+				return;
+			}
+			_maxNaturalHeight = value;
+			InvalidateMeasure();
+		}
+	}
 
 	private double _scale = 1.0;
 
@@ -26,6 +61,11 @@ public sealed class FitBox : Decorator
 	private Transform? _applied;
 
 	private Transform? _original;
+
+	// 内容自己的 RenderTransformOrigin:我们缩放期间会把它临时设成 (0,0),撤销时必须还回去(否则恢复 1.0 后原点永久变成 (0,0))
+	private Point _originalOrigin;
+
+	private bool _originSaved;
 
 	public double Scale => _scale;
 
@@ -73,7 +113,15 @@ public sealed class FitBox : Decorator
 		child.Arrange(new Rect(0.0, 0.0, want.Width, want.Height));
 		if (_applied == null || !ReferenceEquals(child.RenderTransform, _applied))
 		{
+			// 内容自己的变换(RenderTransform)不丢:它被原样放进 TransformGroup 的最里层,
+			// 悬停上浮 / 淡入位移这类动画作用的还是同一个变换实例,照常生效;我们只在外层再加一层等比缩放。
+			// 原点在同一次缩放期间只记一次(内容中途换了变换也不覆盖已经记下的原点)。
 			_original = child.RenderTransform;
+			if (!_originSaved)
+			{
+				_originalOrigin = child.RenderTransformOrigin;
+				_originSaved = true;
+			}
 		}
 		TransformGroup group = new TransformGroup();
 		if (_original != null && !(_original is MatrixTransform { Matrix: { IsIdentity: not false } }))
@@ -81,6 +129,7 @@ public sealed class FitBox : Decorator
 			group.Children.Add(_original);
 		}
 		group.Children.Add(new ScaleTransform(_scale, _scale));
+		// 缩放以内容左上角为原点(外层缩放的语义);原值已记下,恢复时还原
 		child.RenderTransformOrigin = new Point(0.0, 0.0);
 		child.RenderTransform = group;
 		_applied = group;
@@ -92,13 +141,20 @@ public sealed class FitBox : Decorator
 	{
 		if (_applied == null)
 		{
+			_originSaved = false;
 			return;
 		}
 		if (ReferenceEquals(child.RenderTransform, _applied))
 		{
 			child.RenderTransform = _original ?? Transform.Identity;
 		}
+		// 只还原我们自己设成 (0,0) 的原点;内容在我们之后自己改过就尊重它的值
+		if (_originSaved && child.RenderTransformOrigin == new Point(0.0, 0.0))
+		{
+			child.RenderTransformOrigin = _originalOrigin;
+		}
 		_applied = null;
 		_original = null;
+		_originSaved = false;
 	}
 }
