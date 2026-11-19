@@ -164,6 +164,12 @@ public static class LayoutMotion
 
 	// ————— 平移读写(卡片的 RenderTransform 只用来放这一个平移) —————
 
+	/// <summary>平移一个矩形(把 RenderTransform 上残留的位移折进矩形:只改位置,不动尺寸)。</summary>
+	public static LayoutRect Offset(LayoutRect rect, double dx, double dy)
+	{
+		return new LayoutRect(rect.X + dx, rect.Y + dy, rect.W, rect.H);
+	}
+
 	/// <summary>读卡片当前的平移(没有平移 = 0)。</summary>
 	public static Vector GetOffset(Visual visual)
 	{
