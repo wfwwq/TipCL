@@ -2973,5 +2973,15 @@
 "重置本页布局": "Reset this page's layout",
 "隐藏文件夹栏": "Hide folder panel",
 "页签": "Tabs",
-"页签、密度、分栏比例可以在「设置 → 布局」里调整": "Tabs, density and split ratios can be adjusted in Settings → Layout"
+"页签、密度、分栏比例可以在「设置 → 布局」里调整": "Tabs, density and split ratios can be adjusted in Settings → Layout",
+ "自动靠拢": "Auto-pack",
+ "开:松手后区块自动向上靠拢、与相邻区块互换位置、靠近时磁性吸附;关:区块停在你放下的位置": "On: blocks pack upward, swap with neighbours and snap magnetically when released; Off: blocks stay where you drop them",
+ "开": "On",
+ "自动靠拢已开启": "Auto-pack on",
+ "自动靠拢已关闭": "Auto-pack off",
+ "区块松手后会自动靠拢相邻区块": "Blocks will pack against their neighbours when released",
+ "区块会停在你放下的位置": "Blocks will stay where you drop them",
+ "实例状态": "Instance status",
+ "还没有选中实例": "No instance selected",
+ "最近游玩": "Last played"
 }

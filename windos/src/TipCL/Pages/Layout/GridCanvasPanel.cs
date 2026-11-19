@@ -198,11 +198,17 @@ public sealed class GridCanvasPanel : Panel
 	/// </summary>
 	public void CompactCells(ICollection<string>? pinned, bool swapX)
 	{
+		CompactCells(pinned, swapX, gravity: true);
+	}
+
+	/// <summary>压紧;<paramref name="gravity"/> = false = 「自动靠拢」关:只解冲突,不上浮、不互换。</summary>
+	public void CompactCells(ICollection<string>? pinned, bool swapX, bool gravity)
+	{
 		if (IsCanvas)
 		{
 			return; // 自由画布没有"格子"概念,不做压紧
 		}
-		LayoutGrid.Compact(_cells, Cols, pinned, swapX);
+		LayoutGrid.Compact(_cells, Cols, pinned, gravity && swapX, gravity);
 		Reflow();
 	}
 

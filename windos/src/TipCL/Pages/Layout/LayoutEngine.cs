@@ -1107,6 +1107,16 @@ public static class LayoutGrid
 	/// </summary>
 	public static void Compact(List<LayoutCell> cells, int cols, ICollection<string>? pinned, bool swapX)
 	{
+		Compact(cells, cols, pinned, swapX, gravity: true);
+	}
+
+	/// <summary>
+	/// 同上;<paramref name="gravity"/> = false 时关闭「自动靠拢」:其余块**不上浮**、也不左右互换,
+	/// 只在与固定块 / 已放好的块冲突时才在本列往下让位 —— 用户拖出来的空隙原样保留
+	/// (2026-11-19 录屏反馈:"自动靠到和它近的窗口上的功能应该做个开关")。
+	/// </summary>
+	public static void Compact(List<LayoutCell> cells, int cols, ICollection<string>? pinned, bool swapX, bool gravity)
+	{
 		if (cells == null || cells.Count == 0)
 		{
 			return;
@@ -1166,6 +1176,18 @@ public static class LayoutGrid
 			cell.W = LayoutSchema.ClampInt(cell.W, 1, n);
 			cell.X = LayoutSchema.ClampInt(cell.X, 0, Math.Max(0, n - cell.W));
 			cell.H = Math.Max(1, cell.H);
+			if (!gravity)
+			{
+				// 不上浮:原位能放就原位,放不下才在本列往下找第一个空位
+				cell.Y = Math.Max(0, cell.Y);
+				if (!occupancy.IsFree(cell.X, cell.Y, cell.W, cell.H))
+				{
+					occupancy.FirstFreeInColumnH(cell.X, cell.W, cell.H, cell.Y, out int pushed);
+					cell.Y = pushed;
+				}
+				occupancy.Fill(cell.X, cell.Y, cell.W, cell.H);
+				continue;
+			}
 			occupancy.FirstFreeInColumnH(cell.X, cell.W, cell.H, 0, out int y);
 			int bestX = cell.X;
 			int bestY = y;

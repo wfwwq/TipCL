@@ -128,6 +128,12 @@ public sealed class LibraryPage : PageBase
 
 	private readonly SPanel _rightCol;
 
+	// 「实例状态」区块(2026-11-19 录屏反馈:"实例管理加个实例状态卡片"):默认收在「已隐藏的区块」托盘里,
+	// 编辑态点「+ 实例状态」即可加到页面上。内容随选中的文件夹 / 版本列表刷新。
+	private readonly SPanel _statusBody = Ui.V(8.0);
+
+	private readonly Border _statusCard;
+
 	public override string Title => I18n.L("实例库");
 
 	public LibraryPage()
@@ -191,6 +197,11 @@ public sealed class LibraryPage : PageBase
 		right.VerticalAlignment = VerticalAlignment.Top;
 		_leftCard = left;
 		_rightCol = right;
+		TextBlock h3 = Ui.Txt(I18n.L("实例状态"), 18.0, bold: true);
+		h3.FontWeight = FontWeights.ExtraBold;
+		_statusCard = Ui.Card(Ui.V(10.0, h3, _statusBody), 14.0);
+		_statusCard.HorizontalAlignment = HorizontalAlignment.Stretch;
+		RenderStatus();
 		// 两个区块 + 页面默认布局(12 列网格:文件夹 4 列 / 版本 8 列,观感同原来的 1:2)。
 		// 文档里还没有 library:main 时用这份默认布局;用户拖过之后才写进 v2。
 		_host = new BlockHost("library:main", new List<BlockSpec>
@@ -206,6 +217,14 @@ public sealed class LibraryPage : PageBase
 				Id = "versions",
 				Title = I18n.L("版本选择"),
 				Content = _rightCol
+			},
+			new BlockSpec
+			{
+				Id = "status",
+				Title = I18n.L("实例状态"),
+				Content = _statusCard,
+				DefaultVisible = false,
+				MinCols = 3
 			}
 		}, null, DefaultLibraryPage());
 		// 每次弹出前重建:菜单文字/勾选状态跟着当前布局走
@@ -600,10 +619,110 @@ public sealed class LibraryPage : PageBase
 		}
 		_empty.Show(total == 0);
 		_count.Text = I18n.L("共 {0} 个版本", total);
+		RenderStatus();
 		if (cards.Count > 0)
 		{
 			Motion.StaggerItems(cards);
 		}
+	}
+
+	// ————— 实例状态区块 —————
+
+	private void RenderStatus()
+	{
+		_statusBody.Children.Clear();
+		if (string.IsNullOrEmpty(_folder))
+		{
+			_statusBody.Children.Add(Ui.Muted(I18n.L("还没有选中实例")));
+			return;
+		}
+		InstanceInfo? info = _instances.FirstOrDefault((InstanceInfo i) => i.Name == _folder);
+		bool isDefault = string.Equals(_folder, _defaultInstance, StringComparison.Ordinal);
+		// 第一行:实例名 + 「默认」标签
+		TextBlock name = Ui.Txt(_folder, 15.0, bold: true).Trim();
+		SPanel nameRow = Ui.H(8.0, name.VCenter());
+		if (isDefault)
+		{
+			nameRow.Children.Add(Ui.Tag(I18n.L("默认"), "B.OnAccent", "B.Accent").VCenter());
+		}
+		_statusBody.Children.Add(nameRow);
+		string path = FolderPathFor(_folder);
+		if (!string.IsNullOrEmpty(path))
+		{
+			TextBlock pathText = Ui.Small(path).Trim();
+			pathText.ToolTip = path;
+			_statusBody.Children.Add(pathText);
+		}
+		// 统计:版本数 / 模组总数 / 已装加载器 / 收藏
+		int versions = _vers.Count;
+		int mods = _vers.Sum((Ver v) => Math.Max(0, v.Mods));
+		List<string> loaders = _vers.Select((Ver v) => LoaderLabel(v.Loader)).Where((string l) => l.Length > 0).Distinct().ToList();
+		int favs = _vers.Count((Ver v) => IsFav(v.Id));
+		_statusBody.Children.Add(StatusLine(I18n.L("版本"), versions.ToString()));
+		_statusBody.Children.Add(StatusLine(I18n.L("模组"), mods.ToString()));
+		_statusBody.Children.Add(StatusLine(I18n.L("加载器"), (loaders.Count > 0) ? string.Join(" / ", loaders) : I18n.L("原版")));
+		if (favs > 0)
+		{
+			_statusBody.Children.Add(StatusLine(I18n.L("收藏"), favs.ToString()));
+		}
+		string mc = (info != null) ? (string.IsNullOrEmpty(info.McVersion) ? info.Mc : info.McVersion) : "";
+		if (!string.IsNullOrEmpty(mc))
+		{
+			_statusBody.Children.Add(StatusLine(I18n.L("游戏版本"), mc));
+		}
+		if (info != null && !string.IsNullOrEmpty(info.Pack))
+		{
+			_statusBody.Children.Add(StatusLine(I18n.L("整合包"), string.IsNullOrEmpty(info.PackVersion) ? info.Pack : (info.Pack + " " + info.PackVersion)));
+		}
+		string java = (info != null) ? (string.IsNullOrEmpty(info.JavaLabel) ? info.Java : info.JavaLabel) : "";
+		_statusBody.Children.Add(StatusLine("Java", string.IsNullOrEmpty(java) ? I18n.L("自动") : java));
+		// 最近游玩的版本
+		Ver? last = _vers.Where((Ver v) => v.LastPlayed > 0).OrderByDescending((Ver v) => v.LastPlayed).FirstOrDefault();
+		if (last != null)
+		{
+			_statusBody.Children.Add(StatusLine(I18n.L("最近游玩"), last.Id + " · " + LastPlayedText(last.LastPlayed)));
+		}
+		else if (versions == 0)
+		{
+			_statusBody.Children.Add(Ui.Muted(I18n.L("这个文件夹还没有版本")));
+		}
+		// 动作:实例详情(与版本选择区头部同一入口)
+		Button detail = Ui.Btn(I18n.L("实例详情"), BtnKind.Chip, delegate
+		{
+			Run(OpenDetailAsync, I18n.L("打开失败"));
+		}, "\ue946");
+		detail.HorizontalAlignment = HorizontalAlignment.Left;
+		detail.Margin = new Thickness(0.0, 4.0, 0.0, 0.0);
+		_statusBody.Children.Add(detail);
+	}
+
+	private static UIElement StatusLine(string label, string value)
+	{
+		Grid g = Ui.G(null, "Auto,*");
+		TextBlock l = Ui.Small(label);
+		l.MinWidth = 64.0;
+		TextBlock v = Ui.Txt(value, 12.5).Trim();
+		v.ToolTip = value;
+		g.Add(l.VCenter(), 0, 0);
+		g.Add(v.VCenter().M(8.0, 0.0, 0.0, 0.0), 0, 1);
+		return g;
+	}
+
+	private static string LoaderLabel(string? loader)
+	{
+		string key = (loader ?? "").Trim().ToLowerInvariant();
+		if (key.Length == 0 || key == "vanilla")
+		{
+			return "";
+		}
+		for (int i = 0; i < LoaderKeys.Length; i++)
+		{
+			if (key.Contains(LoaderKeys[i]))
+			{
+				return LoaderNames[i];
+			}
+		}
+		return loader ?? "";
 	}
 
 	private Group BuildGroup(string key, string title, int count, bool open)

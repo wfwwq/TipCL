@@ -460,7 +460,9 @@ public sealed partial class LaunchPage : PageBase
 			BorderThickness = new Thickness(1.0),
 			Padding = new Thickness(8.0, 8.0, 14.0, 8.0),
 			HorizontalAlignment = HorizontalAlignment.Left,
-			VerticalAlignment = VerticalAlignment.Bottom,
+			// Top:进了网格 / 画布区块后格子往往比新闻卡高,Bottom 会让新闻卡沉到格子底部、
+			// 看起来像"跑出了区块"(录屏 0:26–0:46)。默认纵向流里格子高 = 内容高,Top / Bottom 观感相同。
+			VerticalAlignment = VerticalAlignment.Top,
 			Cursor = Cursors.Hand,
 			Child = Ui.H(10.0, tag, _newsTicker, arrow)
 		};
@@ -490,13 +492,47 @@ public sealed partial class LaunchPage : PageBase
 		// —— 根布局：背景层铺满两行；内容 * / 区块 Auto ——
 		Grid root = Ui.G("*,Auto");
 		root.ClipToBounds = true;
+		root.Background = Brushes.Transparent; // 没截图时英雄区空白处也要能接到滚轮
 		root.Add(_bgImage, 0, 0, 2);
 		root.Add(_bgShade, 0, 0, 2);
 		root.Add(_hero, 0);
 		root.Add(_blocks.Root, 1);
 		base.Content = root;
+		// 非编辑态滚轮:鼠标在英雄区 / 背景图上(不在区块宿主里)时,把滚轮转交给自定义布局区 ——
+		// 区块多了被限高(62% 页高)之后,原来只有指针正好压在区块上才滑得动(录屏 2:30「非自定义布局模式下无法滑动」)。
+		root.PreviewMouseWheel += delegate(object _, MouseWheelEventArgs e)
+		{
+			if (e.Handled || _blocks == null)
+			{
+				return;
+			}
+			if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != ModifierKeys.None)
+			{
+				return;
+			}
+			if (e.OriginalSource is DependencyObject src && IsInside(src, _blocks.Root))
+			{
+				return; // 区块里面:交给区块自己的滚动(以及窗口级滚轮转交)
+			}
+			if (_blocks.ScrollBy(e.Delta))
+			{
+				e.Handled = true;
+			}
+		};
 		ApplyHeroTone(onImage: false);
 		SyncHero();
+	}
+
+	private static bool IsInside(DependencyObject node, DependencyObject ancestor)
+	{
+		for (DependencyObject? cur = node; cur != null; cur = (cur is Visual || cur is System.Windows.Media.Media3D.Visual3D) ? VisualTreeHelper.GetParent(cur) : LogicalTreeHelper.GetParent(cur))
+		{
+			if (ReferenceEquals(cur, ancestor))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	// 半透明按钮（48 高，圆角 12）；label 为 null 即 48×48 图标钮

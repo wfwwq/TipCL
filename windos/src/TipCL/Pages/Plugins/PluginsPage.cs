@@ -91,13 +91,18 @@ public sealed partial class PluginsPage : PageBase
 			{
 				Id = "tabs",
 				Title = I18n.L("页签"),
-				Content = head
+				Content = head,
+				MinCols = 4
 			},
 			new BlockSpec
 			{
 				Id = "content",
 				Title = I18n.L("内容"),
-				Content = _body
+				Content = _body,
+				// 内容自带滚动(已安装列表 / 市场):网格里占满剩余高度,且至少半宽,
+				// 否则插件卡片网格会被缩成一条细线(录屏 1:06–1:16)
+				Fill = true,
+				MinCols = 6
 			}
 		});
 		base.Content = host;

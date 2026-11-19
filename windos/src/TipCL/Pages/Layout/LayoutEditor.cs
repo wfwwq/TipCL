@@ -135,6 +135,9 @@ public sealed class LayoutEditor
 	// 吸附档按钮(只在 grid/canvas 编辑态可用)
 	private Button? _snapBtn;
 
+	// 「自动靠拢」开关按钮(grid 压紧上浮 / 左右互换 / canvas 磁性吸附;偏好存 UiPrefs.LayoutAutoPack)
+	private Button? _autoPackBtn;
+
 	// 底部托盘 + 工具条的外壳:只在编辑态占位(常态整行折叠,内容区高度与改动前一致)
 	private readonly SPanel _bottom;
 
@@ -201,6 +204,11 @@ public sealed class LayoutEditor
 			CycleSnapStep();
 		});
 		_snapBtn.ToolTip = I18n.L("吸附到栅格");
+		_autoPackBtn = Ui.Btn(I18n.L("自动靠拢"), BtnKind.Normal, delegate
+		{
+			ToggleAutoPack();
+		});
+		_autoPackBtn.ToolTip = I18n.L("开:松手后区块自动向上靠拢、与相邻区块互换位置、靠近时磁性吸附;关:区块停在你放下的位置");
 		// 按钮放进 WrapPanel:窄窗/高分屏下换行,不再像原来那样横向排一排被右侧裁掉半截。
 		WrapPanel barButtons = new WrapPanel
 		{
@@ -209,6 +217,7 @@ public sealed class LayoutEditor
 		barButtons.Children.Add(_undoBtn);
 		barButtons.Children.Add(_redoBtn);
 		barButtons.Children.Add(_snapBtn);
+		barButtons.Children.Add(_autoPackBtn);
 		barButtons.Children.Add(Ui.Btn(I18n.L("完成编辑"), BtnKind.Primary, delegate
 		{
 			ExitEdit();
@@ -266,6 +275,8 @@ public sealed class LayoutEditor
 		_bottom = bottom;
 		_root = Ui.G("*,Auto");
 		_scroll = Ui.Scroll(_list);
+		// 透明底:区块之间的空隙也能接到滚轮(null 底时滚轮穿透到页面背景,看起来"滑不动")
+		_scroll.Background = Brushes.Transparent;
 		_root.Add(_scroll, 0);
 		_root.Add(bottom, 1);
 		// grid/canvas 模式的可视宿主:自绘画布 Panel + 其上的对齐辅助线/框选覆盖层(同一格叠放)。
@@ -273,6 +284,7 @@ public sealed class LayoutEditor
 		_stage.Children.Add(_box);
 		_stage.Children.Add(_guide);
 		_boxScroll = Ui.Scroll(_stage);
+		_boxScroll.Background = Brushes.Transparent;
 		// 占满剩余高度的区块(AI 对话区等):画布按可视高度把余量分给这些块所在的行
 		_box.FillIds = _fillIds;
 		_boxScroll.SizeChanged += delegate
@@ -611,6 +623,12 @@ public sealed class LayoutEditor
 		LeaveNativeHost();
 		_list.Children.Clear();
 		LayoutPlan plan = _state.Plan();
+		if (!IsBoxMode)
+		{
+			// 从 grid/canvas 回到 stack(完成编辑时还原、窄窗变体切换):卡片还挂在画布上,
+			// 不先摘下来就会在下面 Add 时抛「指定的元素已经是另一个元素的逻辑子元素」。
+			_box.Children.Clear();
+		}
 		if (IsBoxMode)
 		{
 			// grid / canvas:整体交给画布 Panel(自绘 + 两趟测量);stack 的纵向流一行都不执行
@@ -636,7 +654,7 @@ public sealed class LayoutEditor
 					card.SetBoxMode(LayoutSchema.ModeStack);
 					card.SetEdit(_edit);
 					ApplyLook(card);
-					_list.Children.Add(card);
+					AttachCard(_list, card);
 				}
 			}
 		}
@@ -661,6 +679,7 @@ public sealed class LayoutEditor
 		PageLayoutV2 page = _state.Page;
 		double gap = LayoutAppearance.EffectiveGap(_density, page.Gap);
 		_box.SetLayout(page.Mode, LayoutGrid.Columns(page), page.RowH, gap, page);
+		SanitizeCellWidths();
 		_box.SnapStep = _snapStep;
 		_box.EditMode = _edit;
 		_box.Margin = (_marginOverride ?? PadOf(_state.Plan()));
@@ -675,10 +694,55 @@ public sealed class LayoutEditor
 			card.SetSelected(_edit && _session.IsSelected(cell.Id));
 			card.SetFixedHeight(PageHeightOf(cell.Id));
 			ApplyLook(card);
-			_box.Children.Add(card);
+			AttachCard(_box, card);
 		}
 		_box.ReattachOverlays();
 		_box.Reflow();
+	}
+
+	// 渲染前的宽度兜底(只改画布里的格子,不写回存档):
+	// 旧存档 / 外部导入的布局里可能有被缩成 1 列的块 —— 常态下没人调 ClampMinWidth,
+	// 内容(插件卡片网格)被 FitBox 缩到看不见。这里按「全局 2 列 + 块自己的 MinCols」撑回来,冲突交给压紧解决。
+	private void SanitizeCellWidths()
+	{
+		if (_box.IsCanvas)
+		{
+			return;
+		}
+		int cols = Math.Max(1, LayoutGrid.Columns(_state.Page));
+		bool changed = false;
+		foreach (LayoutCell cell in _box.Cells)
+		{
+			if (cell == null)
+			{
+				continue;
+			}
+			int min = Math.Min(cols, Math.Max(2, MinColsOf(cell.Id, cols)));
+			if (cell.W < min)
+			{
+				cell.W = min;
+				if (cell.X + cell.W > cols)
+				{
+					cell.X = Math.Max(0, cols - cell.W);
+				}
+				changed = true;
+			}
+		}
+		if (changed)
+		{
+			// 撑宽后可能与同行的块重叠:只解冲突(不上浮),尽量保持用户原来的摆放
+			_box.CompactCells(null, false, false);
+		}
+	}
+
+	// BlockSpec.MinCols 按 12 列制给出,换算到本页列数
+	private int MinColsOf(string id, int cols)
+	{
+		if (string.IsNullOrEmpty(id) || !_byId.TryGetValue(id, out BlockSpec? spec) || spec.MinCols <= 0)
+		{
+			return 0;
+		}
+		return (int)Math.Ceiling(spec.MinCols * (cols / 12.0));
 	}
 
 	// 占满剩余高度:画布可视高(滚动区高 - 画布上下边距)喂给画布,余量分给 Fill 块所在的行
@@ -770,7 +834,59 @@ public sealed class LayoutEditor
 		case Panel panel:
 			panel.Children.Remove(element);
 			break;
+		case ItemsControl items:
+			items.Items.Remove(element);
+			break;
 		}
+	}
+
+	/// <summary>
+	/// 把卡片挂到新的面板上:先从旧父级摘下来。
+	/// 卡片是常驻缓存的,多列行(BuildRow 每次新建的 Grid)、画布、纵向流之间来回切换时
+	/// 旧父级可能还持有它 —— 直接 Add 会抛「指定的元素已经是另一个元素的逻辑子元素。请先将其断开连接。」
+	/// (2026-11-19 录屏 0:20:编辑态切页后回到启动页弹出的就是这个错误)。
+	/// </summary>
+	private static void AttachCard(Panel panel, LayoutCard card)
+	{
+		if (ReferenceEquals(card.Parent, panel) || ReferenceEquals(VisualTreeHelper.GetParent(card), panel))
+		{
+			if (!panel.Children.Contains(card))
+			{
+				panel.Children.Add(card);
+			}
+			return;
+		}
+		DetachFromParent(card);
+		// 逻辑父级已断开但可视父级仍是别的 Panel(Panel.Children 被别处直接改过)时也摘一次
+		if (VisualTreeHelper.GetParent(card) is Panel visualParent && !ReferenceEquals(visualParent, panel))
+		{
+			visualParent.Children.Remove(card);
+		}
+		panel.Children.Add(card);
+	}
+
+	/// <summary>
+	/// 让当前内容区按滚轮增量滚动(能滚才滚,返回是否滚了)。
+	/// 给页面用:鼠标在区块宿主之外(启动页英雄区、背景图)时,滚轮也能滚动自定义布局区。
+	/// </summary>
+	public bool ScrollBy(int delta)
+	{
+		if (_nativeActive && !_edit)
+		{
+			return false;
+		}
+		SmoothScroll host = (IsBoxMode ? _boxScroll : _scroll);
+		if (!host.IsVisible || host.ScrollableHeight <= 0.5)
+		{
+			return false;
+		}
+		bool canMove = (delta < 0) ? (host.VerticalOffset < host.ScrollableHeight - 0.5) : (host.VerticalOffset > 0.5);
+		if (!canMove)
+		{
+			return false;
+		}
+		host.WheelBy(delta);
+		return true;
 	}
 
 	// 可视宿主二选一:stack = SPanel 纵向流(与 L1 逐像素一致),grid/canvas = 画布 Panel
@@ -827,9 +943,22 @@ public sealed class LayoutEditor
 			_snapBtn.IsEnabled = IsBoxMode;
 			_snapBtn.Content = I18n.L("吸附") + " " + _snapStep.ToString("0");
 		}
+		if (_autoPackBtn != null)
+		{
+			_autoPackBtn.IsEnabled = IsBoxMode;
+			_autoPackBtn.Content = I18n.L("自动靠拢") + " " + (LayoutEditPrefs.AutoPack ? I18n.L("开") : I18n.L("关"));
+		}
 	}
 
 	// 吸附档循环:0 → 4 → 8 → 16 → 24 → 0(与旧 DashLayout.Grid 的档位表一致)
+	// 「自动靠拢」开关:全局偏好(所有页面共用),即时生效;关掉后不再自动上浮 / 互换 / 磁性吸附
+	private void ToggleAutoPack()
+	{
+		LayoutEditPrefs.AutoPack = !LayoutEditPrefs.AutoPack;
+		RefreshToolbar();
+		AppServices.Window?.Toast(I18n.L(LayoutEditPrefs.AutoPack ? "自动靠拢已开启" : "自动靠拢已关闭"), LayoutEditPrefs.AutoPack ? I18n.L("区块松手后会自动靠拢相邻区块") : I18n.L("区块会停在你放下的位置"), ToastKind.Success);
+	}
+
 	private void CycleSnapStep()
 	{
 		double[] steps = LayoutCanvas.Steps;
@@ -895,7 +1024,7 @@ public sealed class LayoutEditor
 			Grid.SetColumn(card, column);
 			Grid.SetColumnSpan(card, LayoutSchema.ClampInt(slot.Span, 1, columns - column));
 			card.Margin = new Thickness(0.0, 0.0, ((k == row.Slots.Count - 1) ? 0.0 : plan.Gap), 0.0);
-			grid.Children.Add(card);
+			AttachCard(grid, card);
 		}
 		return grid;
 	}
@@ -1287,6 +1416,7 @@ public sealed class LayoutEditor
 			return;
 		}
 		_list.Children.Remove(card);
+		DetachFromParent(card);
 		_list.Children.Insert(Math.Min(index, _list.Children.Count), card);
 		card.SetEdit(_edit);
 	}
@@ -1604,7 +1734,7 @@ public sealed class LayoutEditor
 		{
 			return;
 		}
-		_box.CompactCells(pinned, false);
+		_box.CompactCells(pinned, false, LayoutEditPrefs.AutoPack);
 		int cols = LayoutGrid.Columns(_state.Page);
 		foreach (LayoutCell cell in _box.Cells)
 		{
@@ -1660,16 +1790,18 @@ public sealed class LayoutEditor
 		if (primary != null && rect.HasValue)
 		{
 			LayoutGuideResult guides = LayoutGuides.Align(rect.Value, OtherRects(primary, true), LayoutGuides.Threshold);
+			// 「自动靠拢」关:只画对齐辅助线,不做磁性吸附(不再"自动靠到旁边的块上")
+			bool magnet = LayoutEditPrefs.AutoPack && _gesture == "move" && guides.HasSnap;
 			// 磁性吸附"吸上 / 松开 / 换线"的那一下:不硬跳,被拖块用 90ms 短动画从上一帧的位置滑过去
-			double snapDx = ((_gesture == "move" && guides.HasSnap) ? guides.Dx : 0.0);
-			double snapDy = ((_gesture == "move" && guides.HasSnap) ? guides.Dy : 0.0);
+			double snapDx = (magnet ? guides.Dx : 0.0);
+			double snapDy = (magnet ? guides.Dy : 0.0);
 			if (LayoutMotion.SnapChanged(_snapDx, _snapDy, snapDx, snapDy))
 			{
 				_box.RequestFlip(new List<string>(_gestureCells.Keys), LayoutMotion.SnapMs);
 			}
 			_snapDx = snapDx;
 			_snapDy = snapDy;
-			if (_gesture == "move" && guides.HasSnap)
+			if (magnet)
 			{
 				// 磁性吸附:整组跟着一起吸(差量对所有选中块相同)
 				foreach (KeyValuePair<string, LayoutCell> kv2 in _gestureCells)
@@ -1756,13 +1888,41 @@ public sealed class LayoutEditor
 		}
 		(int targetX, int targetY) = LayoutMotion.GridDropTarget(_gestureAnchor, dx, dy, columnStep, _gestureRows, _box.Gap, cols, from.W);
 		_box.MoveFloat(dx, dy);
-		if (targetX == _lastDropX && targetY == _lastDropY)
+		bool multi0 = _gestureCells.Count > 1;
+		// 并排落位:被拖块太宽、放在目标行会和别的块打架,但指针落在该行的一段空列上 →
+		// 收窄到那段空列,与那一行的块并排(录屏:「版本列表」拖到「筛选」右边,松手应与筛选并排,原来会弹回整行)
+		int fitX = -1;
+		int fitW = 0;
+		if (!multi0)
+		{
+			int rawX = (int)Math.Round((_gestureAnchor.X + dx) / columnStep);
+			(fitX, fitW) = SideBySideSlot(primary, rawX, targetY, from.W, from.H, cols);
+			if (fitX >= 0)
+			{
+				targetX = fitX;
+			}
+		}
+		int dropKey = ((fitX >= 0) ? (targetX * 100 + fitW) : targetX);
+		if (dropKey == _lastDropX && targetY == _lastDropY)
 		{
 			return; // 落点没变:这一帧只有被拖卡片在动
 		}
-		_lastDropX = targetX;
+		_lastDropX = dropKey;
 		_lastDropY = targetY;
 		RestoreGestureSnapshot();
+		if (fitX >= 0)
+		{
+			LayoutCell? lead0 = _box.CellOf(primary);
+			if (lead0 != null)
+			{
+				lead0.X = fitX;
+				lead0.Y = targetY;
+				lead0.W = fitW;
+				_box.SetPlaceholderRect(primary, null);
+				CompactAroundGesture(primary, false);
+				return;
+			}
+		}
 		int stepX2 = targetX - from.X;
 		int stepY2 = targetY - from.Y;
 		bool multi = _gestureCells.Count > 1;
@@ -1789,6 +1949,106 @@ public sealed class LayoutEditor
 			}
 		}
 		CompactAroundGesture(primary, !multi);
+	}
+
+	/// <summary>
+	/// 并排落位判定(纯格子运算,用手势开始时的快照):目标行 <paramref name="row"/> 上,
+	/// 被拖块按原宽 <paramref name="w"/> 放不下(与其它块重叠或越界),但 <paramref name="rawX"/>(被拖块左边所在列)
+	/// 落在一段 ≥ 2 列的空列区间里 → 返回 (起始列, 宽度),让它收窄后与该行的块并排;否则返回 (-1, 0)。
+	/// </summary>
+	private (int X, int W) SideBySideSlot(string primary, int rawX, int row, int w, int h, int cols)
+	{
+		if (cols < 2 || row < 0)
+		{
+			return (-1, 0);
+		}
+		int height = Math.Max(1, h);
+		bool[] busy = new bool[cols];
+		bool anyOther = false;
+		foreach (KeyValuePair<string, LayoutCell> kv in _gestureSnapshot)
+		{
+			if (string.Equals(kv.Key, primary, StringComparison.Ordinal))
+			{
+				continue;
+			}
+			LayoutCell c = kv.Value;
+			int top = c.Y;
+			int bottom = c.Y + Math.Max(1, c.H);
+			// 与被拖块将占的行区间 [row, row + height) 有交集的块都算"这一行的块"
+			if (bottom <= row || top >= row + height)
+			{
+				continue;
+			}
+			anyOther = true;
+			for (int x = Math.Max(0, c.X); x < Math.Min(cols, c.X + Math.Max(1, c.W)); x++)
+			{
+				busy[x] = true;
+			}
+		}
+		if (!anyOther)
+		{
+			return (-1, 0);
+		}
+		int px = Math.Max(0, Math.Min(cols - 1, rawX));
+		// 原宽本来就放得下(不重叠):不用收窄,走原逻辑
+		int clampX = Math.Max(0, Math.Min(cols - Math.Max(1, w), px));
+		bool fits = true;
+		for (int x = clampX; x < clampX + Math.Max(1, w) && x < cols; x++)
+		{
+			if (busy[x])
+			{
+				fits = false;
+				break;
+			}
+		}
+		if (fits)
+		{
+			return (-1, 0);
+		}
+		if (busy[px])
+		{
+			// 左边落在别的块上:只有越过那块的一半,才算"想放到它右边"(纯上下拖动时左边停在第 0 列,不触发)
+			int segStart = px;
+			while (segStart > 0 && busy[segStart - 1])
+			{
+				segStart--;
+			}
+			int segEnd = px;
+			while (segEnd < cols && busy[segEnd])
+			{
+				segEnd++;
+			}
+			if ((px - segStart) * 2 < (segEnd - segStart))
+			{
+				return (-1, 0);
+			}
+			int next = px;
+			while (next < cols && busy[next])
+			{
+				next++;
+			}
+			if (next >= cols)
+			{
+				return (-1, 0);
+			}
+			px = next;
+		}
+		int start = px;
+		while (start > 0 && !busy[start - 1])
+		{
+			start--;
+		}
+		int end = px;
+		while (end < cols && !busy[end])
+		{
+			end++;
+		}
+		int span = end - start;
+		if (span < 2)
+		{
+			return (-1, 0);
+		}
+		return (start, Math.Min(span, Math.Max(2, w)));
 	}
 
 	// 每次重算都从手势开始时的全量快照出发(避免在"当前值"上累加,越拖越乱)
@@ -1825,7 +2085,7 @@ public sealed class LayoutEditor
 			pinned.Add(primary);
 		}
 		_box.RequestFlip();
-		_box.CompactCells(pinned, swapX);
+		_box.CompactCells(pinned, swapX, LayoutEditPrefs.AutoPack);
 	}
 
 	// 最小宽度:12 列网格下不小于 2 列(1 列宽会把标题挤成竖排)
