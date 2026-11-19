@@ -376,6 +376,7 @@ public partial class MainWindow : Window
 			await Wallpaper.ReloadAsync();
 			await ReconcileTasksAsync();
 			await ReloadCurrentAsync();
+			await StartFromShortcutAsync();
 			await SyncAccountChipAsync();
 			_bridgeSettled.TrySetResult(null);
 			if (!Smoke.Active)
@@ -563,6 +564,24 @@ public partial class MainWindow : Window
 		{
 			SyncTasks();
 			SyncDock();
+		}
+	}
+
+	// 桌面快捷方式(-i <实例> launch <版本>)带过来的启动请求:后端一连上、启动页就绪就立刻拉起那个版本。
+	// 之前 Windows 侧没人消费这组参数,双击 .lnk 只会把启动器打开(Linux 侧由 CommandLine.cs 消费,是通的)。
+	private async Task StartFromShortcutAsync()
+	{
+		if (!App.TakeStartArgs(out string? instance, out string? version))
+		{
+			return;
+		}
+		if (Smoke.Active)
+		{
+			return;
+		}
+		if (_current is LaunchPage launchPage)
+		{
+			await launchPage.LaunchNowAsync(instance!, version);
 		}
 	}
 

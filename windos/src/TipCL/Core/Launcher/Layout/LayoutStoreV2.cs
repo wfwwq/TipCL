@@ -215,10 +215,10 @@ public static class LayoutStoreV2
 		return written;
 	}
 
-	// L1 接线须知(本包不改 PageLayoutStore):它按目录在进程内只读一次,没有 Reload()
-	// (PageLayoutStore.cs:197-206)。所以写通 v1 文件后,同进程里再走 PageLayoutStore.Load 拿到的是
-	// 它自己的旧快照 —— 新版必须把 LayoutStoreV2 当真源读取;若确实要让 v1 路径立刻看到新值,
-	// 需要 L1 按设计 §5.2 给 PageLayoutStore 加 Reload()(清缓存),本包已提供 WriteThroughV1() 供其调用。
+	// L1 接线须知:PageLayoutStore 按目录在进程内只读一次,但它已经提供 Reload() 清缓存。
+	// 写通 v1 文件后,同进程里再走 PageLayoutStore.Load 拿到的仍是它自己的旧快照 ——
+	// 所以新版必须把 LayoutStoreV2 当真源读取;确实要让 v1 路径立刻看到新值,调用方写完调
+	// RefreshV1Cache()(转发给注入缝,内部会 Reload),或直接调 WriteThroughV1() 强制同步。
 
 	/// <summary>把当前真源(v2 缓存/磁盘)重新写通一遍 v1;外部改过 v2 文件后可用它强制同步。</summary>
 	public static void WriteThroughV1()
