@@ -26,6 +26,10 @@ namespace TipCL.App.Pages.Layout;
 internal static class PluginBlocks
 {
     // 每个块 id 一个常驻外壳:插件重载 / 禁用只换外壳里的内容,拖动重排期间不重建
+    // [audit/B] 键必须带 pageId:同一个 plugin:<plugin>:<blockId> 出现在两页时(布局 JSON 手编、
+    // 或插件把块写进多页),只按 blockId 缓存会把**同一个 Shell 控件**交给两张卡 ——
+    // LayoutCard 的 `_body.Content = shell` 第二次赋值时,该 Shell 还挂在另一张卡的 ContentPresenter 上,
+    // Avalonia 会抛 "already has a visual parent"(极端情况是第二页空白)。分页缓存后各页各一份。
     private static readonly Dictionary<string, Shell> _shells = new Dictionary<string, Shell>(StringComparer.Ordinal);
 
     private static bool _hooked;
@@ -38,10 +42,12 @@ internal static class PluginBlocks
             return null;
         }
         Hook();
-        if (!_shells.TryGetValue(blockId, out Shell? shell))
+        // [audit/B] 键 = pageId + blockId(见 _shells 的注释:同一个块在两页时不能共用一个控件实例)
+        string key = (pageId ?? "") + "\u0001" + blockId;
+        if (!_shells.TryGetValue(key, out Shell? shell))
         {
             shell = new Shell(plugin, id);
-            _shells[blockId] = shell;
+            _shells[key] = shell;
         }
         shell.Sync();
         return shell;
