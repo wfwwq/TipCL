@@ -815,6 +815,28 @@ public static class Crash
 		long value = num.Value;
 		long key = value & 0xFFFFFFFFu;
 		string text = "0x" + key.ToString("x8");
+		// Linux/macOS:被信号杀掉时 .NET 给的退出码是 128+signum。137(OOM 强杀)与 139(段错误)
+		// 是 Linux 上最常见的两种崩溃码,不翻译成人话玩家根本看不懂「退出码 139」。
+		if (!Utils.IS_WINDOWS && value > 128L && value <= 159L)
+		{
+			string sigName = (value - 128L) switch
+			{
+				1L => "SIGHUP(终端断开)",
+				2L => "SIGINT(被中断 / Ctrl+C)",
+				4L => "SIGILL(非法指令)",
+				6L => "SIGABRT(进程主动中止,常见于 JVM 致命错误)",
+				8L => "SIGFPE(算术异常)",
+				9L => "SIGKILL(被系统强杀,常见于内存不足被 OOM Killer 杀掉)",
+				11L => "SIGSEGV(段错误,多与 JVM / 显卡驱动 / 本地库有关)",
+				13L => "SIGPIPE",
+				15L => "SIGTERM(被要求退出)",
+				_ => "",
+			};
+			if (sigName.Length > 0)
+			{
+				return "退出码 " + value + "(" + text + "):" + sigName;
+			}
+		}
 		if (_NT.TryGetValue(key, out string value2))
 		{
 			return "退出码 " + value + "（" + text + "）：" + value2;
