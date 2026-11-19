@@ -11,11 +11,18 @@ public class SmokeTests
     [Fact]
     public void CoreVersion_MatchesTheUnifiedProductVersion()
     {
-        // 2026-11-14 起移植侧产品版本统一为 1.1.0,2026-11-15 抬到 1.2.0:两个 csproj 的 <Version> + CoreInfo.Version
-        // (启动横幅 / HTTP UA / 插件宿主默认版本)都必须与 AppInfo.APP_VERSION 一致
-        // (三处一致的约定见 docs/README.md)。
-        Assert.Equal("1.2.0", CoreInfo.Version);
-        // 顺带盯住"两个常量不许再打架"——这正是本次修的那个不一致
+        // 约定:两个 csproj 的 <Version> + CoreInfo.Version + AppInfo.APP_VERSION 必须是同一个产品版本
+        // (启动横幅 / HTTP UA / 插件宿主默认版本都读这几个)。
+        //
+        // audit/D(2026-11-20):这里以前写死了 "1.2.0"。版本一抬,这条断言就**必然**红 ——
+        // 于是每次发版都得改测试,而"改测试让它绿"正是最容易被改成假绿的地方。
+        // 现在只钉「两处常量不许打架」;版本号的**数值**与另外三处(csproj / update.json /
+        // update-linux.json)的一致性由 tests/TipCL.Tests/Repo/RepoConsistencyTests.cs 兜。
         Assert.Equal(TipCL.Core.Launcher.AppInfo.APP_VERSION, CoreInfo.Version);
+        Assert.False(string.IsNullOrWhiteSpace(CoreInfo.Version));
+
+        // 形状也看一眼:至少是 major.minor.patch,防止有人把它改成 "1.2.0-beta" 之类让
+        // .deb 文件名 / 更新比较失配的写法(deb.sh 直接用这个值拼文件名)。
+        Assert.Matches("^[0-9]+\\.[0-9]+\\.[0-9]+$", CoreInfo.Version);
     }
 }

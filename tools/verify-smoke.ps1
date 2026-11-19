@@ -175,7 +175,7 @@ function Invoke-OneFrame {
         Ms       = $sw.ElapsedMilliseconds
         Png      = $png
         Stderr   = $stderr.Trim()
-        Ok       = ($proc.ExitCode -eq 0 -and $bytes -gt 0 -and $warn -eq 0 -and $err -eq 0)
+        Ok       = ($proc.ExitCode -eq 0 -and $bytes -gt 10240 -and $warn -eq 0 -and $err -eq 0)
     }
 }
 

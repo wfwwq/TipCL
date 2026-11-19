@@ -1,4 +1,4 @@
-﻿# tools/package.ps1 — TipCL Linux 版一键双端打包（M3-C2，Windows 上跑）
+# tools/package.ps1 — TipCL Linux 版一键双端打包（M3-C2，Windows 上跑）
 # 用法:
 #   powershell -ExecutionPolicy Bypass -File tools/package.ps1                # 双端发布到 dist/
 #   powershell -ExecutionPolicy Bypass -File tools/package.ps1 -SkipLinux     # 只出 win-x64
@@ -63,8 +63,10 @@ if (-not $SkipWin) {
     Write-Host "`n===== win-x64 冒烟 (--smoke) =====" -ForegroundColor Cyan
     if (Test-Path "smoke.png") { Remove-Item "smoke.png" -Force }
     & "dist/TipCL-win-x64/TipCL.App.exe" --smoke
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path "smoke.png") -or (Get-Item "smoke.png").Length -lt 1KB) {
-        Write-Error "win-x64 单文件冒烟失败。"; exit 1
+    # 阈值与 CI 的 verify-linux 判据一致(> 10 KB):1 KB 的老口径连"窗口根本没画出来"都能过。
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path "smoke.png") -or (Get-Item "smoke.png").Length -lt 10KB) {
+        Write-Error "win-x64 单文件冒烟失败(退出码 $LASTEXITCODE,smoke.png $((Get-Item 'smoke.png' -ErrorAction SilentlyContinue).Length) B)。"
+        exit 1
     }
     Write-Host "win-x64 冒烟通过: smoke.png ($((Get-Item 'smoke.png').Length) B)"
 }

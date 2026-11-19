@@ -19,6 +19,13 @@
 # (src/TipCL.Core/TipCL.Core.csproj:39-40),守卫 tests/TipCL.Tests/Core/I18nCoreLocalesTests.cs:76-82
 # 只断言非空 / 体积 / 能解析 JSON,不做逐字节比对 ⇒ 与 EOL 无关,加了反而是无谓的越界。
 
+# —— shell 脚本:一律 LF ——
+# 本仓主体在 Windows 上开发(core.autocrlf 常见为 true),而 tools/*.sh 是 Linux/CI 上**直接执行**的:
+# 一旦按 CRLF 结帐,bash 会以 `$'\r': command not found` 失败(脚本一个字都没改,却是红的)。
+# 守卫:tests/TipCL.Tests/Repo/RepoConsistencyTests.cs:AllShellScriptsAreLfOnlyWithoutBom
+#      逐字节检查 tools/**/*.sh 与 windos/tools/**/*.sh(无 CR、无 BOM、有 shebang)。
+*.sh text eol=lf
+
 # —— 被打成 .gz 且逐字节比对的源文件:固定 LF ——
 windos/src/TipCL/Resources/locales/*.json    text eol=lf
 windos/src/TipCL/Resources/ai/*.json         text eol=lf
