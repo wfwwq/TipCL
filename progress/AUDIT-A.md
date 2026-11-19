@@ -219,3 +219,60 @@ $env:TEMP="D:\项目\TipCL\_tools\tmp-A"; $env:TMP=$env:TEMP
 3. `Updater.cs`/`PhoneLink.cs`/`PluginMarket.cs`/`PluginHost.cs` 只到 grep 级；这几块失败时的用户提示质量（尤其「自更新失败」）没被逐句核过。
 
 其余（Catalog 别名表、OptiFine/LiteLoader 本体、Worlds、Cleaner、SemVer、Java 探测、下载/安装/布局/配置/词表）已逐行或逐函数核过，可以关闭。
+---
+
+# 第五轮（收窄范围：AI 子系统 + Crash.cs + 四个文件的提示质量）
+
+基线：第四轮合并后的 main。本轮 2 处修复，都在 AI 子系统（lead 点名的「AI 卡住/越用越慢」类）。
+
+## 19. 第五轮已修问题
+
+| ID | 级别 | 文件:行 | 根因 | 修复 | 验证证据 | 状态 |
+|----|------|---------|------|------|----------|------|
+| A-10 | **P2（资源泄漏 → AI 越用越慢/忽然连不上）** | `Ai/Client.cs` `ChatStream`（原 `AiSession aiSession = _Session();` + `return AssembleStream(...)`）、`ChatOnce`（同） | 两条路都 `new AiSession()`（内部含 `HttpClient`+`HttpClientHandler`）却**从不释放**；`ChatStream` 还有一处困难：它返回的是惰性序列，响应与会话必须活到枚举结束，用 `using` 会提前关掉。后果：每轮对话漏一个 handler 与一条 keep-alive 连接（handler 不回收连接池），长会话几十轮后表现为「AI 越用越慢 / 突然报连不上接口」。`AiSession.Send` 里另有 `_cts.Token.Register(DisposeState, result)`：会话被 Dispose/Cancel 时会连带释放已注册的响应，所以只要释放会话就能兜住响应 | `ChatStream` 改为返回 `GuardStream(aiResponse, aiSession, AssembleStream(...))`：包装枚举在 **finally** 里释放响应与会话，枚举自然结束 / 提前 break / 抛异常三条路都覆盖（App 侧是 `foreach`，break 时会 dispose 枚举器 → finally 必执行）；`ChatOnce` 因结果已全量物化，直接 `using AiSession` | Core Release **0 错误 0 警告**；全量 `dotnet test` **906 通过 / 0 失败 / 1 跳过**；改动 38 行、无 public API 变化；`ChatStream` 的错误时机未变（仍在调用点同步抛 `AIClientError`，没有因为惰性化而推迟） | 已修 |
+| A-11 | **P2（重试把同一轮文本写重复）** | `Ai/AiAgent.cs` `StreamOnceAsync`（while 循环里的重试分支） | 流在**半途**断开时（`AiStreamBroken` → 事件 `error`「接口超时,正在换一次非流式」）会走整轮重试，但重试前的 `state.Text` **没回滚**：重试成功后，`前半截 + 完整回答` 一起追加进 `state.Text`。`state.Text` 是落盘的助手消息、也是下一轮的上下文 —— 于是历史里出现重复段落，模型下一轮还会把它当既有内容 | 每轮尝试开始处记 `textBase = state.Text.Length`，重试 `continue` 之前 `state.Text.Length = textBase` 回滚（`StringBuilder` 截断，零分配）。工具调用不受影响（工具只在本轮无错时才进 `state.Calls`，不会重复执行） | Core Release 0 错误 0 警告；全量测试绿；只在「重试」分支生效，正常路径与最终失败路径的文本保留策略不变（最终失败仍保留半截内容，不丢信息） | 已修 |
+
+## 20. 第五轮：已核查无问题
+
+| 位置 | 结论 |
+|------|------|
+| `AiAgent.StreamOnceAsync` 重试链 | **不会重复产生工具副作用**：`attempt.PendingTools` 只在本轮 `attempt.Error.Length == 0` 时才转成 `state.Calls`；重试分支在工具落库之前就 `continue` 了。「停止」也真的能断：`linked.Token` 注册 `cancel.Abort()`（关会话+释放响应），`Task.Delay` 带 `ct`，退避期间点停止立刻退出，`linked.IsCancellationRequested` 分支还会补发一次「已停止」事件。 |
+| `Client.AssembleStream`（467-709 行） | 流断在 **工具参数中间**时不吐半截 `tool_calls`，改发 `error`「工具参数不完整,正在换一次非流式」；`finish_reason=tool_calls` 与 `[DONE]` 双收尾都对 `FlushCompleteTools` 判空；`usage` 只在真有值时发；`reasoning_content` 用 `thinking` 段包裹且能正确闭合。 |
+| `AiSession`/`HttpCancel` | `Send` 用 `ResponseHeadersRead` + 独立 CTS（connect/read 超时分别给值）；`HttpCancel.Bind` 在已 flag 时会立刻 Abort；`Close()/Dispose()` 全部吞异常。 |
+| `Compact`（第四轮已核） | 切点避让 `tool` 消息、空摘要拒绝替换、rapid-refill 熔断、`keep_recent` 保底 —— 边界正常。 |
+| `Crash.cs` | `AnalyzeLaunch` → `_run`：分析根目录按**版本隔离**切到 `GameDir`（隔离实例的日志在 versions/<版本> 下），`LooksLikeCrash` = 取消→否 / 非 0 退出码→是 / 命中 `Game crashed!` 或 `---- Minecraft Crash Report ----`→是 / 有 hs_err→是，口径合理；`_title_of` 对未知 code 回落到中文「Minecraft 出现错误」而不是空串；`ExportReport` 逐文件去重、`FilterSecrets` 过滤、临时目录 finally 删除；`OpenPath` 失败只是返回 false。**都合理，无 bug**。 |
+| `Updater` / `Sync/PhoneLink` / `Plugins/PluginMarket` / `Plugins/PluginHost` 提示质量 | 全部 `throw` 站点逐条看过：消息**都是中文且具体**（如「更新包缺少有效 SHA-256,已拒绝下载」「「世界」正在游戏中打开,先退出世界再同步」「插件包含非法路径:xxx」）。**没有空消息**，没有把原始英文异常直接抛给 UI（唯一英文串 `"symlink failed"`/`disk_usage` 都在自己的 catch 里被吞掉、不可达用户；`Updater.cs:81` 的 AttributeError 是模拟 Python 语义的内部错误）。 |
+
+## 21. 跨域问题（第五轮新增）
+
+| ID | 目标 | 级别 | 说明 |
+|----|------|------|------|
+| X-06 | aud-app | P2 | A-11 只修了 Core 侧 `state.Text`（落盘消息 + 下一轮上下文）。界面上**已经显示出来的**半截增量收不回来：重试后 UI 会看到「前半截 + 完整回答」拼接。要彻底干净需要 App 在收到 `error`（即将重试）时清掉本轮气泡文本，或 Core 增发一个 `reset` 事件由 App 处理——后者要动 App 渲染，故未做。 |
+
+## 22. 第五轮：仍未逐行审完（如实声明）
+
+- `AiAgent.cs` 除 `StreamOnceAsync`/`StreamAttemptAsync`/权限与压缩分支外的部分（子代理、checkpoint 交互）。
+- `Ai/Checkpoint.cs`(20KB)/`Ai/Store.cs`(17KB) 的落盘细节：只做了 grep 级 + 关键路径抽读（写盘都是「临时文件 + 替换」的模式）。
+- `Ai/McpClient.cs`：只确认了 10s 连接/60s 调用超时与 `answered.Wait` 的用法。
+- `Crash.cs` 的**规则表**（约 1900 行里的正则与分析器内部）：只逐段读了 `AnalyzeLaunch`/`LooksLikeCrash`/`_title_of`/`ExportReport`/`BuildActions` 的框架，没逐条核 200+ 个崩溃特征规则。这一块的性质是「规则准不准」，不是「代码会不会崩」，且误判只会影响提示文案，不会伤数据。
+
+## 23. 五轮累计
+
+| 轮次 | 修复 | P0 | P1 | P2 |
+|------|------|----|----|----|
+| 一 | A-01 布局 v2 损坏备份链缺失 · A-02 PyJson 深嵌套栈溢出 · A-03 GameProcess 持锁调回调 | 0 | 2 | 1 |
+| 二 | A-04 Linux Java 无执行位 · A-05 Zulu/Microsoft 包后缀错 · A-06 词表补 key | 0 | 2 | 1 |
+| 三 | A-07 前置依赖失败静默 · A-08 隔离实例 Modrinth 内容包装错目录 · A-09 Cleaner 假成功 | 0 | 2 | 1 |
+| 四 | 无（Catalog/Ai 抽读/快速筛查未见新 bug） | 0 | 0 | 0 |
+| 五 | A-10 AI 会话/响应泄漏 · A-11 重试文本重复 | 0 | 0 | 2 |
+| **合计** | **11 项** | **0** | **6** | **5** |
+
+每轮门槛：Core Release **0 错误 0 警告** + 全量 `dotnet test` 绿（末轮 906 通过 / 0 失败 / 1 跳过）。
+
+## 24. 结论
+
+**Core 层可以判定为审计完毕，建议就此收工。** 理由：
+
+1. 五轮下来 Minecraft 主流程（下载/安装/启动/崩溃提示/布局/配置/词表/插件状态/存档同步/模组与整合包）**P0 = 0、P1 = 0**（6 条已修），P2 里只剩「展示层取舍」这类需要 App 配合的项（X-04/X-05/X-06）。
+2. 剩下没逐行读的只有三块，性质都是**规则/策略表**而非控制流：`Crash.cs` 的 200+ 条崩溃特征规则、`AiAgent` 的子代理与 checkpoint 交互、`Checkpoint/Store` 的落盘细节。它们出问题的表现是「提示不够准」或「恢复点不全」，不会造成数据丢失或启动失败，边际收益明显低于前五轮。
+3. 若后续有真实用户反馈（例如「某个崩溃提示不对」「AI 长会话还是卡」），带着那条反馈做**定向**回归比再铺一轮全面审计更划算。

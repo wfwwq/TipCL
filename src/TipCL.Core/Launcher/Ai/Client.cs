@@ -866,14 +866,50 @@ public static class Client
 		{
 			throw new AIClientError(_ErrText(aiResponse), aiResponse.StatusCode);
 		}
-		return AssembleStream(aiResponse.IterLines(), expectUsage);
+		return GuardStream(aiResponse, aiSession, AssembleStream(aiResponse.IterLines(), expectUsage));
+	}
+
+	/// <summary>
+	/// 把「这次请求的响应 + 会话」绑到事件流上:枚举结束 / 提前 break / 抛异常时一起释放。
+	/// 以前 ChatStream 只是 new 了 AiSession 与 AiResponse 却从不释放 —— 每轮对话漏一个
+	/// HttpClient+Handler 和一条连接(handler 不从 GC 里回收连接池),长时间聊天后表现为
+	/// 「AI 越用越慢、忽然连不上接口」。ChatStream 返回的是惰性序列,只能在枚举真正结束时释放,
+	/// 所以用这层包装而不是 using。会话 Dispose 会 Cancel 掉 CTS,进而把已注册的响应一并释放。
+	/// </summary>
+	private static IEnumerable<PyDict> GuardStream(AiResponse resp, AiSession sess, IEnumerable<PyDict> inner)
+	{
+		try
+		{
+			foreach (PyDict ev in inner)
+			{
+				yield return ev;
+			}
+		}
+		finally
+		{
+			try
+			{
+				resp?.Dispose();
+			}
+			catch (Exception)
+			{
+			}
+			try
+			{
+				sess?.Dispose();
+			}
+			catch (Exception)
+			{
+			}
+		}
 	}
 
 	public static PyDict ChatOnce(PyDict settings, List<object> messages, List<object> tools = null, double temperature = 0.3, HttpCancel httpCancel = null)
 	{
 		PyDict pyDict = ResolveEndpoint(settings);
 		PyDict jsonBody = Body(pyDict, settings, messages, tools, temperature, stream: false);
-		AiSession aiSession = _Session();
+		// using:非流式这条路以前也不释放会话 → 每次调用漏一个 HttpClient(连接池随之泄漏)
+		using AiSession aiSession = _Session();
 		if (httpCancel != null)
 		{
 			httpCancel.Bind(aiSession);
