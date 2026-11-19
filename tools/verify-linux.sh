@@ -2,11 +2,17 @@
 # TipCL Linux 端真机自检（M3-C3 交付脚本）
 # 用法：在任意 x86_64 Linux 上执行
 #   chmod +x tools/verify-linux.sh && tools/verify-linux.sh [产物目录]
-# 默认产物目录：dist/linux-x64（相对仓库根），可传绝对路径。
+# 默认产物目录：dist/TipCL-linux-x64（相对仓库根），可传绝对路径。
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN_DIR="${1:-$ROOT/dist/linux-x64}"
+BIN_DIR="${1:-$ROOT/dist/TipCL-linux-x64}"
+# 兼容早期手工发布留下的旧目录名 dist/linux-x64(只作后备;默认值必须与真正出包的目录一致,
+# 否则「裸跑一次自检脚本」永远停在「找不到产物」并 exit 1,自检形同不存在)
+if [ $# -eq 0 ] && [ ! -d "$BIN_DIR" ] && [ -d "$ROOT/dist/linux-x64" ]; then
+  echo "提示: 默认目录 $BIN_DIR 不存在,退回旧目录 $ROOT/dist/linux-x64"
+  BIN_DIR="$ROOT/dist/linux-x64"
+fi
 BIN="$BIN_DIR/TipCL.App"
 OUT="${TMPDIR:-/tmp}/tipcl-verify"
 PASS=0; FAIL=0
@@ -40,6 +46,8 @@ mkdir -p "$OUT/frames"
 run_frame() { # $1=帧名 $2=SMOKE_PAGE(空=默认启动页) $3=SMOKE_DARK(1=深色)
   local name="$1" pg="$2" dark="$3" log="$OUT/frame-$name.log"
   local -a envs=()
+  # 先清掉上一帧的 smoke.png:否则「本帧进程返回 0 但根本没写出图」会被上一帧的残影判成通过(假绿)
+  rm -f "$OUT/smoke.png"
   [ -n "$pg" ] && envs+=("SMOKE_PAGE=$pg")
   [ "$dark" = "1" ] && envs+=("SMOKE_DARK=1")
   if (cd "$OUT" && env "${envs[@]+"${envs[@]}"}" timeout 120 "$BIN" --smoke >"$log" 2>&1) \

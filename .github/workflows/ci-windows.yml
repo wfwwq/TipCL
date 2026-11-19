@@ -10,6 +10,7 @@ on:
     paths:
       - "windos/**"
       - ".github/workflows/ci-windows.yml"
+  workflow_dispatch:
 
 jobs:
   test:
@@ -21,5 +22,10 @@ jobs:
           dotnet-version: 8.0.x
       - name: 构建
         run: dotnet build windos/src/TipCL/TipCL.csproj -c Release
+      # 刻意不进 windos/TipCL.sln 的驱动(net48 控制台 + 真 WPF,见该工程 csproj 头部注释),
+      # 所以 `dotnet build <sln>` 编不到它。这里按路径单独编一次:只加编译(不跑),成本几秒,
+      # 挡住「改坏了引用/HintPath 而 CI 全绿」(历史口径:它只在人工跑 E2E 时才会被编到)。
+      - name: 构建原生区块 E2E 驱动(不在 sln 里,单独编译防腐烂)
+        run: dotnet build windos/tests/TipCL.NativeBlockE2E/TipCL.NativeBlockE2E.csproj -c Release
       - name: 单元测试
         run: dotnet test windos/tests/TipCL.Tests -c Release --logger "console;verbosity=normal" --logger GitHubActions

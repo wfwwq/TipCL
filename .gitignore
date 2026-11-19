@@ -1,5 +1,8 @@
 bin/
 obj/
+# `dotnet test -l trx` 的默认落点(本机复跑/取证时很容易留下,别让它进仓库)
+TestResults/
+*.trx
 artifacts/
 smoke.png
 *.user

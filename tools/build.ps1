@@ -70,7 +70,9 @@ if ($Smoke) {
         exit 1
     }
     $bytes = (Get-Item $smokePng).Length
-    if ($bytes -lt 1024) {
+    # 阈值与 CI 的 verify-linux 判据一致(> 10 KB):老口径的 1 KB 门槛连「窗口根本没画出来」都能过
+    # (近空帧只有几百 B 到几 KB;本机实测正常帧约 570 KB)。
+    if ($bytes -lt 10240) {
         Write-Error "smoke.png 仅 $bytes B，疑似空白渲染，请人工核对。"
         exit 1
     }

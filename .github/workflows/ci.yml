@@ -62,8 +62,9 @@ jobs:
       # `The active test run was aborted. Reason: Test host process crashed`,dmesg 里是
       # `oom-kill ... task=dotnet ... anon-rss:4936736kB`。拆成两批后每批都在 10 秒内跑完,
       # 峰值各自只有约 0.43 GB。GitHub 的 ubuntu-latest 也是 7 GB 级,不为这 5 GB 的边界留隐患。
-      # 两批合起来覆盖全量。2026-11-18 复算(SDK 8.0.x / Debug):346(App)+ 404(其余)+ 1 跳过 = 751。
-      # 上面那句「440 条」是做 OOM 边界实测**当时**的规模,留作历史口径,不是现状。
+      # 两批合起来覆盖全量。2026-11-20 复算(SDK 8.0.428 / Debug):
+      # 355(App)+ 425(其余)+ 1 跳过 = 781。改动测试后请同步这行,别让它继续当历史口径。
+      # (上一版记录是 2026-11-18 的 346 + 404 + 1 = 751,留作对照。)
       # 注意:增长根因**没有**定位到具体代码(在测试宿主内部,性质上属 Avalonia 无头会话的每派发开销),
       # 如实记在 PROGRESS.md 里,没有当成已解决。
       - name: dotnet test (batch 1/2 — App 界面组)
