@@ -13,6 +13,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages;
 
@@ -41,7 +42,7 @@ public sealed class MultiplayerPage : PageBase
 
     private readonly StackPanel _players = UiClass.V(8);
 
-    private readonly TextBlock _playersTitle = UiClass.Txt("房间成员", 13, bold: true);
+    private readonly TextBlock _playersTitle = UiClass.Txt(I18nCore.Tr("房间成员"), 13, bold: true);
 
     private readonly Ellipse _dot = new() { Width = 10, Height = 10 };
 
@@ -59,11 +60,11 @@ public sealed class MultiplayerPage : PageBase
 
     private string _lastState = "";
 
-    public MultiplayerPage() : base("multiplayer", "联机")
+    public MultiplayerPage() : base("multiplayer", I18nCore.Tr("联机"))
     {
-        var allowFw = UiClass.Btn("允许访问", BtnKind.Primary, (_, _) => RunSafe(AllowFirewallAsync, ""));
-        var openFw = UiClass.Btn("打开设置", BtnKind.Chip, (_, _) => RunSafe(OpenFirewallAsync, ""));
-        var shutdown = UiClass.Btn("关闭内核", BtnKind.Ghost, (_, _) => RunSafe(async () =>
+        var allowFw = UiClass.Btn(I18nCore.Tr("允许访问"), BtnKind.Primary, (_, _) => RunSafe(AllowFirewallAsync, ""));
+        var openFw = UiClass.Btn(I18nCore.Tr("打开设置"), BtnKind.Chip, (_, _) => RunSafe(OpenFirewallAsync, ""));
+        var shutdown = UiClass.Btn(I18nCore.Tr("关闭内核"), BtnKind.Ghost, (_, _) => RunSafe(async () =>
         {
             await Api.CallAsync<object>("terracotta_shutdown");
             await ReloadAsync();
@@ -75,30 +76,30 @@ public sealed class MultiplayerPage : PageBase
             _detail,
             UiClass.H(8, allowFw, openFw, shutdown)), 18);
 
-        var copyRoom = UiClass.Btn("复制邀请码", BtnKind.Chip, async (_, _) =>
-            await CopyAsync(_room.Text ?? "", "已把邀请码复制到剪贴板"));
+        var copyRoom = UiClass.Btn(I18nCore.Tr("复制邀请码"), BtnKind.Chip, async (_, _) =>
+            await CopyAsync(_room.Text ?? "", I18nCore.Tr("已把邀请码复制到剪贴板")));
         _roomCard = UiClass.Card(UiClass.V(6,
-            UiClass.Small("邀请码"),
+            UiClass.Small(I18nCore.Tr("邀请码")),
             UiClass.H(10, _room.VCenter(), copyRoom.VCenter()),
             _roomHint));
         _roomCard.IsVisible = false;
         _playersTitle.IsVisible = false;
 
-        var homeBtn = UiClass.Btn("Terracotta 项目主页", BtnKind.Ghost, (_, _) => OpenUrl(ProjectHome));
+        var homeBtn = UiClass.Btn(I18nCore.Tr("Terracotta 项目主页"), BtnKind.Ghost, (_, _) => OpenUrl(ProjectHome));
         var footer = UiClass.H(10, homeBtn,
-            UiClass.Small("Terracotta | 陶瓦联机  © burningtnt  ·  基于 EasyTier").VCenter());
+            UiClass.Small(I18nCore.Tr("Terracotta | 陶瓦联机  © burningtnt  ·  基于 EasyTier")).VCenter());
 
-        var header = UiClass.Section("陶瓦联机",
+        var header = UiClass.Section(I18nCore.Tr("陶瓦联机"),
             "输入邀请码即可加入。陶瓦是 EasyTier P2P 打洞,不是 FRP 隧道;会与 HMCL 一样带上自定义会合节点。PCL 房间号不互通,局域网请用下面的地址。");
 
         Body = new BlockHost("multiplayer", new List<BlockSpec>
         {
-            new() { Id = "header", Title = "说明", Content = UiClass.V(10, header, _lan) },
-            new() { Id = "state", Title = "状态卡", Content = stateCard },
-            new() { Id = "room", Title = "房间卡", Content = _roomCard },
-            new() { Id = "actions", Title = "操作区", Content = _actions },
-            new() { Id = "players", Title = "玩家列表", Content = UiClass.V(10, _playersTitle, _players) },
-            new() { Id = "nodes", Title = "节点说明", Content = UiClass.V(10, _nodes, footer) },
+            new() { Id = "header", Title = I18nCore.Tr("说明"), Content = UiClass.V(10, header, _lan) },
+            new() { Id = "state", Title = I18nCore.Tr("状态卡"), Content = stateCard },
+            new() { Id = "room", Title = I18nCore.Tr("房间卡"), Content = _roomCard },
+            new() { Id = "actions", Title = I18nCore.Tr("操作区"), Content = _actions },
+            new() { Id = "players", Title = I18nCore.Tr("玩家列表"), Content = UiClass.V(10, _playersTitle, _players) },
+            new() { Id = "nodes", Title = I18nCore.Tr("节点说明"), Content = UiClass.V(10, _nodes, footer) },
         }).Root;
 
         _timer.Tick += (_, _) => RunSafe(ReloadAsync, "");
@@ -129,7 +130,7 @@ public sealed class MultiplayerPage : PageBase
         string hint = await Api.TryCallAsync("lan_hint", "", new PyDict { ["port"] = 25565L }) ?? "";
         var ips = await Api.TryCallAsync<List<object>>("local_ips", new List<object>()) ?? new List<object>();
         _lan.Text = ips.Count > 0
-            ? "本机局域网地址:" + string.Join("、", ips.Select(ip => Py.S(ip) + ":25565"))
+            ? "本机局域网地址:" + string.Join(I18nCore.Tr("、"), ips.Select(ip => Py.S(ip) + ":25565"))
             : hint;
     }
 
@@ -181,7 +182,7 @@ public sealed class MultiplayerPage : PageBase
         }
 
         string label = Py.S(s.Get("label"));
-        _state.Text = state is "exception" or "fatal" ? "加入失败" : (label.Length == 0 ? state : label);
+        _state.Text = state is "exception" or "fatal" ? I18nCore.Tr("加入失败") : (label.Length == 0 ? state : label);
         _dot.Dyn(Shape.FillProperty, DotBrush(state));
 
         string detailText = Py.S(s.Get("error"));
@@ -196,14 +197,14 @@ public sealed class MultiplayerPage : PageBase
 
         var bits = new List<string>();
         if (!Py.Truthy(s.Get("supported")))
-            bits.Add("当前系统架构不支持");
-        bits.Add(Py.Truthy(s.Get("installed")) ? "内核已安装" : "内核未安装");
-        bits.Add(Py.Truthy(s.Get("running")) ? "内核运行中" : "内核未运行");
+            bits.Add(I18nCore.Tr("当前系统架构不支持"));
+        bits.Add(Py.Truthy(s.Get("installed")) ? I18nCore.Tr("内核已安装") : I18nCore.Tr("内核未安装"));
+        bits.Add(Py.Truthy(s.Get("running")) ? I18nCore.Tr("内核运行中") : I18nCore.Tr("内核未运行"));
         string player = Py.S(s.Get("player"));
         if (player.Length > 0)
-            bits.Add("玩家 " + player);
+            bits.Add(I18nCore.Tr("玩家 ") + player);
         if (Py.Truthy(s.Get("game_running")))
-            bits.Add("游戏运行中");
+            bits.Add(I18nCore.Tr("游戏运行中"));
         _detail.Text = string.Join(" · ", bits) + (detailText.Length == 0 ? "" : "\n" + detailText);
 
         string room = Py.S(s.Get("room"));
@@ -212,10 +213,10 @@ public sealed class MultiplayerPage : PageBase
         _roomCard.IsVisible = hasRoom;
         if (hasRoom)
         {
-            _room.Text = room.Length == 0 ? "陶瓦联机大厅" : room;
+            _room.Text = room.Length == 0 ? I18nCore.Tr("陶瓦联机大厅") : room;
             _roomHint.Text = url.Length == 0
                 ? "让好友在联机页选「我想当房客」,填这串邀请码。"
-                : "启动游戏 → 多人游戏 → 双击「陶瓦联机大厅」。";
+                : I18nCore.Tr("启动游戏 → 多人游戏 → 双击「陶瓦联机大厅」。");
         }
 
         var nodes = Py.ListOr(s.Get("nodes")).Select(Py.S).ToList();
@@ -230,7 +231,7 @@ public sealed class MultiplayerPage : PageBase
         RenderPlayers(Py.ListOr(s.Get("profiles")));
 
         if (room.Length > 0 && state == "host-ok" && _lastState != "host-ok")
-            _ = CopyAsync(room, "已把邀请码复制到剪贴板");
+            _ = CopyAsync(room, I18nCore.Tr("已把邀请码复制到剪贴板"));
         _lastState = state;
     }
 
@@ -266,9 +267,9 @@ public sealed class MultiplayerPage : PageBase
             var grid = UiClass.G(null, "Auto,*,Auto");
             grid.Add(tile.Mk(0, 0, 12, 0), 0, 0);
             grid.Add(UiClass.V(1,
-                UiClass.Txt(name.Length == 0 ? "玩家" : name, 13, bold: true).Trim(),
-                UiClass.Small(vendor.Length == 0 ? (isHost ? "房主" : "成员") : vendor)).VCenter(), 0, 1);
-            grid.Add(UiClass.Tag(isHost ? "房主" : "成员", "B.OnAccentStrong", "B.AccentStrong").VCenter(), 0, 2);
+                UiClass.Txt(name.Length == 0 ? I18nCore.Tr("玩家") : name, 13, bold: true).Trim(),
+                UiClass.Small(vendor.Length == 0 ? (isHost ? I18nCore.Tr("房主") : I18nCore.Tr("成员")) : vendor)).VCenter(), 0, 1);
+            grid.Add(UiClass.Tag(isHost ? I18nCore.Tr("房主") : I18nCore.Tr("成员"), "B.OnAccentStrong", "B.AccentStrong").VCenter(), 0, 2);
             _players.Children.Add(UiClass.Card(grid, 12));
         }
         Motion.Stagger(_players, 18);
@@ -280,36 +281,36 @@ public sealed class MultiplayerPage : PageBase
         switch (state)
         {
             case "missing":
-                Action("下载陶瓦联机内核", "首次使用需要下载约 8 MB 的官方内核,之后可直接开房。", "下载", PrepareAsync, primary: true);
+                Action(I18nCore.Tr("下载陶瓦联机内核"), "首次使用需要下载约 8 MB 的官方内核,之后可直接开房。", I18nCore.Tr("下载"), PrepareAsync, primary: true);
                 return;
             case "idle":
-                Action("启动联机内核", "内核已安装,点一下即可开始联机。", "启动", PrepareAsync, primary: true);
+                Action(I18nCore.Tr("启动联机内核"), "内核已安装,点一下即可开始联机。", I18nCore.Tr("启动"), PrepareAsync, primary: true);
                 return;
             case "waiting":
-                Action("我想当房主", "创建房间并生成邀请码,与好友一起畅玩。", "创建", HostAsync, primary: true);
-                Action("我想当房客", "输入房主提供的邀请码加入游戏世界。", "加入", JoinAsync);
+                Action(I18nCore.Tr("我想当房主"), "创建房间并生成邀请码,与好友一起畅玩。", I18nCore.Tr("创建"), HostAsync, primary: true);
+                Action(I18nCore.Tr("我想当房客"), I18nCore.Tr("输入房主提供的邀请码加入游戏世界。"), I18nCore.Tr("加入"), JoinAsync);
                 return;
             case "host-scanning":
             case "host-starting":
-                Action("正在扫描局域网世界", "请启动游戏,进入单人世界,按 ESC,选择对局域网开放。", "退出", BackAsync);
+                Action(I18nCore.Tr("正在扫描局域网世界"), "请启动游戏,进入单人世界,按 ESC,选择对局域网开放。", I18nCore.Tr("退出"), BackAsync);
                 return;
             case "host-ok":
-                Action("复制邀请码", "好友在联机页选「我想当房客」并填这串邀请码即可加入。", "复制",
-                    () => CopyAsync(_room.Text ?? "", "已把邀请码复制到剪贴板"), primary: true);
-                Action("退出", "这会彻底关闭房间,其他房客将一并退出。", "退出", BackAsync);
+                Action(I18nCore.Tr("复制邀请码"), I18nCore.Tr("好友在联机页选「我想当房客」并填这串邀请码即可加入。"), I18nCore.Tr("复制"),
+                    () => CopyAsync(_room.Text ?? "", I18nCore.Tr("已把邀请码复制到剪贴板")), primary: true);
+                Action(I18nCore.Tr("退出"), "这会彻底关闭房间,其他房客将一并退出。", I18nCore.Tr("退出"), BackAsync);
                 return;
             case "guest-connecting":
             case "guest-starting":
-                Action("正在加入房间",
-                    Py.S(s.Get("difficulty_hint")).Length > 0 ? Py.S(s.Get("difficulty_hint")) : "正在与房主建立连接。",
-                    "退出", BackAsync);
+                Action(I18nCore.Tr("正在加入房间"),
+                    Py.S(s.Get("difficulty_hint")).Length > 0 ? Py.S(s.Get("difficulty_hint")) : I18nCore.Tr("正在与房主建立连接。"),
+                    I18nCore.Tr("退出"), BackAsync);
                 return;
             case "guest-ok":
-                Action("进入世界", "启动游戏后到多人游戏双击「陶瓦联机大厅」,或点这里直接进入。", "进入", EnterWorldAsync, primary: true);
-                Action("退出", "这不影响其他房客加入当前房间。", "退出", BackAsync);
+                Action(I18nCore.Tr("进入世界"), "启动游戏后到多人游戏双击「陶瓦联机大厅」,或点这里直接进入。", I18nCore.Tr("进入"), EnterWorldAsync, primary: true);
+                Action(I18nCore.Tr("退出"), I18nCore.Tr("这不影响其他房客加入当前房间。"), I18nCore.Tr("退出"), BackAsync);
                 return;
             case "unsupported":
-                Action("当前系统不支持", "陶瓦联机暂未提供此架构的官方内核。", "了解", () =>
+                Action(I18nCore.Tr("当前系统不支持"), I18nCore.Tr("陶瓦联机暂未提供此架构的官方内核。"), I18nCore.Tr("了解"), () =>
                 {
                     OpenUrl(ProjectHome);
                     return Task.CompletedTask;
@@ -318,17 +319,17 @@ public sealed class MultiplayerPage : PageBase
             case "installing":
             case "launching":
             case "unknown":
-                Action("请稍候",
-                    Py.S(s.Get("label")).Length > 0 ? Py.S(s.Get("label")) : "正在准备联机内核。",
-                    "刷新", ReloadAsync);
+                Action(I18nCore.Tr("请稍候"),
+                    Py.S(s.Get("label")).Length > 0 ? Py.S(s.Get("label")) : I18nCore.Tr("正在准备联机内核。"),
+                    I18nCore.Tr("刷新"), ReloadAsync);
                 return;
             default:
-                Action("联机失败",
+                Action(I18nCore.Tr("联机失败"),
                     Py.S(s.Get("error_hint")).Length > 0 ? Py.S(s.Get("error_hint"))
                         : (Py.S(s.Get("error")).Length > 0 ? Py.S(s.Get("error")) : "请返回后重试,或检查网络。"),
-                    "返回", BackAsync);
-                Action("朋友是公网就直连", "让他把单人世界对局域网开放,并在路由映射该端口,然后填他的公网 IP:端口。", "直连", DirectConnectAsync);
-                Action("重新启动内核", "若内核已退出,点此重新拉起。", "重启", PrepareAsync);
+                    I18nCore.Tr("返回"), BackAsync);
+                Action(I18nCore.Tr("朋友是公网就直连"), "让他把单人世界对局域网开放,并在路由映射该端口,然后填他的公网 IP:端口。", I18nCore.Tr("直连"), DirectConnectAsync);
+                Action(I18nCore.Tr("重新启动内核"), "若内核已退出,点此重新拉起。", I18nCore.Tr("重启"), PrepareAsync);
                 return;
         }
     }
@@ -355,7 +356,7 @@ public sealed class MultiplayerPage : PageBase
             return;
         _busy = true;
         await Api.CallAsync<string>("terracotta_prepare");
-        Toast("正在准备联机内核", "进度看下载任务");
+        Toast(I18nCore.Tr("正在准备联机内核"), I18nCore.Tr("进度看下载任务"));
         await ReloadAsync();
     }
 
@@ -366,14 +367,14 @@ public sealed class MultiplayerPage : PageBase
         bool gameRunning = snap != null && Py.Truthy(snap.Get("game_running"));
         if (!gameRunning)
         {
-            if (!await Dlg.Confirm("您似乎忘记启动游戏了",
+            if (!await Dlg.Confirm(I18nCore.Tr("您似乎忘记启动游戏了"),
                     $"将以「{player}」的身份开房。\n请先启动游戏,进入单人世界,按 ESC,选择「对局域网开放」。",
-                    "游戏已启动", "取消"))
+                    I18nCore.Tr("游戏已启动"), I18nCore.Tr("取消")))
                 return;
         }
         else
         {
-            Toast("正在开房", $"以「{player}」的身份创建房间");
+            Toast(I18nCore.Tr("正在开房"), $"以「{player}」的身份创建房间");
         }
         await Api.CallAsync<object>("terracotta_host");
         await ReloadAsync();
@@ -381,7 +382,7 @@ public sealed class MultiplayerPage : PageBase
 
     private async Task JoinAsync()
     {
-        string? code = await Dlg.Prompt("我想当房客", "请输入房主提供的邀请码", "", "U/XXXX-XXXX-XXXX-XXXX");
+        string? code = await Dlg.Prompt(I18nCore.Tr("我想当房客"), I18nCore.Tr("请输入房主提供的邀请码"), "", "U/XXXX-XXXX-XXXX-XXXX");
         if (string.IsNullOrWhiteSpace(code))
             return;
         await Api.CallAsync<object>("terracotta_join", new PyDict { ["room"] = code.Trim() });
@@ -390,13 +391,13 @@ public sealed class MultiplayerPage : PageBase
 
     private async Task DirectConnectAsync()
     {
-        string? addr = await Dlg.Prompt("公网直连",
+        string? addr = await Dlg.Prompt(I18nCore.Tr("公网直连"),
             "朋友需先对局域网开放世界,并在路由器映射该端口,然后填他的公网地址。",
-            "", "例如 1.2.3.4:25565");
+            "", I18nCore.Tr("例如 1.2.3.4:25565"));
         if (string.IsNullOrWhiteSpace(addr))
             return;
         string hint = await Api.CallAsync<string>("terracotta_direct_connect", new PyDict { ["address"] = addr.Trim() }) ?? "";
-        Toast("正在直连", hint.Length == 0 ? "启动后会进入该服务器。" : hint, ToastKind.Success);
+        Toast(I18nCore.Tr("正在直连"), hint.Length == 0 ? I18nCore.Tr("启动后会进入该服务器。") : hint, ToastKind.Success);
         await ReloadAsync();
     }
 
@@ -404,9 +405,9 @@ public sealed class MultiplayerPage : PageBase
     {
         string text = await Api.CallAsync<string>("terracotta_enter_world") ?? "";
         if (text.StartsWith("task-", StringComparison.Ordinal))
-            Toast("正在启动游戏", "启动后会直接进入陶瓦联机大厅", ToastKind.Success);
+            Toast(I18nCore.Tr("正在启动游戏"), I18nCore.Tr("启动后会直接进入陶瓦联机大厅"), ToastKind.Success);
         else
-            Toast("已加入房间", text.Length == 0 ? "请到多人游戏双击「陶瓦联机大厅」。" : text, ToastKind.Success);
+            Toast(I18nCore.Tr("已加入房间"), text.Length == 0 ? I18nCore.Tr("请到多人游戏双击「陶瓦联机大厅」。") : text, ToastKind.Success);
         await ReloadAsync();
     }
 
@@ -419,7 +420,7 @@ public sealed class MultiplayerPage : PageBase
     private async Task AllowFirewallAsync()
     {
         string text = await Api.CallAsync<string>("terracotta_allow_firewall") ?? "";
-        Toast("防火墙", text.Length == 0 ? "已提交规则" : text, ToastKind.Success);
+        Toast(I18nCore.Tr("防火墙"), text.Length == 0 ? I18nCore.Tr("已提交规则") : text, ToastKind.Success);
     }
 
     private async Task OpenFirewallAsync()
@@ -431,7 +432,7 @@ public sealed class MultiplayerPage : PageBase
         catch (Exception)
         {
             // Linux 无「防火墙设置页」这种单入口:退回提示(Windows 走 ms-settings:)
-            Toast("防火墙", "请在系统设置里放行陶瓦内核的网络访问", ToastKind.Info);
+            Toast(I18nCore.Tr("防火墙"), "请在系统设置里放行陶瓦内核的网络访问", ToastKind.Info);
         }
     }
 
@@ -442,7 +443,7 @@ public sealed class MultiplayerPage : PageBase
         var clip = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clip != null)
             await clip.SetTextAsync(text);
-        Toast("已复制", toast, ToastKind.Success);
+        Toast(I18nCore.Tr("已复制"), toast, ToastKind.Success);
     }
 
     private static void OpenUrl(string url)

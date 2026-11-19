@@ -70,7 +70,7 @@ public sealed partial class PluginsPage
         var values = (PluginRuntime.Host.StateStore.Get(p.Id)?.Config ?? new PyDict()).Copy();
         var defaults = m.ConfigDefaults();
         var rows = new List<FieldRow>();
-        var card = U.V(2, U.Section("配置", "值保存在 plugins.json;插件运行时(Core 侧)读同一份"));
+        var card = U.V(2, U.Section(I18nCore.Tr("配置"), "值保存在 plugins.json;插件运行时(Core 侧)读同一份"));
         int shown = 0;
         foreach (var kv in m.Config)
         {
@@ -87,7 +87,7 @@ public sealed partial class PluginsPage
         }
         if (shown == 0)
         {
-            card.Children.Add(U.Muted("这个插件没有可以配置的项。"));
+            card.Children.Add(U.Muted(I18nCore.Tr("这个插件没有可以配置的项。")));
         }
         host.Children.Add(U.Card(card));
 
@@ -95,15 +95,15 @@ public sealed partial class PluginsPage
         if (secretKeys.Count > 0 || m.Credentials.Count > 0)
         {
             host.Children.Add(U.Card(U.V(2,
-                U.Section("凭据", "API Key 之类"),
+                U.Section(I18nCore.Tr("凭据"), "API Key 之类"),
                 U.Muted("凭据要交给插件宿主保管并只在插件进程里读取。Linux 版没有插件运行时,"
                         + "这里不呈现输入框,也不会把密钥写进任何文件。").Wrap())));
         }
 
         if (shown > 0)
         {
-            var save = U.Btn("保存", BtnKind.Primary, delegate { SaveAutoForm(p, m, rows, defaults); });
-            var reset = U.Btn("重新读取", BtnKind.Normal, delegate { ShowSettings(p); });
+            var save = U.Btn(I18nCore.Tr("保存"), BtnKind.Primary, delegate { SaveAutoForm(p, m, rows, defaults); });
+            var reset = U.Btn(I18nCore.Tr("重新读取"), BtnKind.Normal, delegate { ShowSettings(p); });
             host.Children.Add(U.H(8, save, reset));
         }
     }
@@ -182,12 +182,12 @@ public sealed partial class PluginsPage
                 if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double d)
                     || (r.Type == "integer" && Math.Abs(d - Math.Round(d)) > 1e-9))
                 {
-                    ToastHost.Show("填写有误", $"「{r.Label}」要填{(r.Type == "integer" ? "整数" : "数字")}", ToastKind.Warning);
+                    ToastHost.Show(I18nCore.Tr("填写有误"), $"「{r.Label}」要填{(r.Type == "integer" ? "整数" : "数字")}", ToastKind.Warning);
                     return;
                 }
                 if ((r.Min.HasValue && d < r.Min.Value) || (r.Max.HasValue && d > r.Max.Value))
                 {
-                    ToastHost.Show("填写有误", $"「{r.Label}」超出范围", ToastKind.Warning);
+                    ToastHost.Show(I18nCore.Tr("填写有误"), $"「{r.Label}」超出范围", ToastKind.Warning);
                     return;
                 }
                 changes.Add((r.Key, r.Type == "integer" ? (object)(long)Math.Round(d) : d));
@@ -199,7 +199,7 @@ public sealed partial class PluginsPage
         }
         if (changes.Count == 0)
         {
-            ToastHost.Show("没有改动", p.DisplayName);
+            ToastHost.Show(I18nCore.Tr("没有改动"), p.DisplayName);
             return;
         }
         try
@@ -217,17 +217,17 @@ public sealed partial class PluginsPage
         }
         catch (Exception ex)
         {
-            ToastHost.Show("保存失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(I18nCore.Tr("保存失败"), ex.Message, ToastKind.Error);
             return;
         }
-        ToastHost.Show("已保存", $"{changes.Count} 项设置", ToastKind.Success);
+        ToastHost.Show(I18nCore.Tr("已保存"), $"{changes.Count} 项设置", ToastKind.Success);
         ShowSettings(p);
     }
 
     /// <summary>页面内子视图:顶部带返回。</summary>
     private void ShowSubView(string title, Control content)
     {
-        var back = U.IconBtn(BackGlyph, "返回", delegate { SelectTab(_tab); });
+        var back = U.IconBtn(BackGlyph, I18nCore.Tr("返回"), delegate { SelectTab(_tab); });
         var head = U.G(null, "Auto,*,Auto");
         head.Add(back.VCenter(), 0);
         head.Add(U.H2(title).VCenter().Mk(6, 0, 0, 0), 0, 1);

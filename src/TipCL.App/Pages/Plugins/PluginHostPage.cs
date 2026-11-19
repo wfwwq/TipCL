@@ -12,6 +12,7 @@ using Avalonia.Controls.Primitives;
 using TipCL.App.Common;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Plugins;
 
@@ -50,11 +51,11 @@ public sealed class PluginHostPage : PageBase
     {
         if (_gone) return;
         _gone = true;
-        var manage = U.Btn("管理插件", BtnKind.Soft, delegate
+        var manage = U.Btn(I18nCore.Tr("管理插件"), BtnKind.Soft, delegate
         {
             (TopLevel.GetTopLevel(this) as TipCL.App.Shell.MainWindow)?.Navigate("plugins");
         });
-        var empty = U.Empty("◇", "这个插件页面已经不可用", "插件可能被禁用、卸载,或者它的文件已经被删掉。");
+        var empty = U.Empty("◇", I18nCore.Tr("这个插件页面已经不可用"), "插件可能被禁用、卸载,或者它的文件已经被删掉。");
         empty.Children.Add(U.H(0, manage));
         _frame.Child = empty;
     }
@@ -109,7 +110,7 @@ public sealed class PluginHostPage : PageBase
         }
         catch (Exception ex)
         {
-            ToastHost.Show("打不开链接", ex.Message, ToastKind.Warning);
+            ToastHost.Show(I18nCore.Tr("打不开链接"), ex.Message, ToastKind.Warning);
         }
     }
 }

@@ -33,10 +33,10 @@ public sealed partial class PluginsPage
 
     private void BuildMarketChrome()
     {
-        _search = U.Input("搜索插件名、作者、简介", "", 300);
+        _search = U.Input(I18nCore.Tr("搜索插件名、作者、简介"), "", 300);
         _search.TextChanged += delegate { RenderMarket(); };
-        var refresh = U.Btn("刷新市场", BtnKind.Chip, delegate { _ = LoadMarketAsync(refresh: true); }, RefreshGlyph);
-        var sources = U.Btn("市场地址", BtnKind.Chip, async delegate
+        var refresh = U.Btn(I18nCore.Tr("刷新市场"), BtnKind.Chip, delegate { _ = LoadMarketAsync(refresh: true); }, RefreshGlyph);
+        var sources = U.Btn(I18nCore.Tr("市场地址"), BtnKind.Chip, async delegate
         {
             var next = await PluginSettingsCard.EditIndexesDialogAsync(PluginSettingsCard.ParseIndexes(Config.CONFIG.Get(PluginMarket.SettingIndexes)));
             if (next != null) await LoadMarketAsync(refresh: true);
@@ -133,7 +133,7 @@ public sealed partial class PluginsPage
             await Dispatcher.UIThread.InvokeAsync(delegate
             {
                 _marketHost.Children.Clear();
-                _marketHost.Children.Add(U.Empty("◇", "插件市场打不开", ex.Message));
+                _marketHost.Children.Add(U.Empty("◇", I18nCore.Tr("插件市场打不开"), ex.Message));
             });
             return;
         }
@@ -159,7 +159,7 @@ public sealed partial class PluginsPage
             .Select(g => g.Key).Take(24).ToList();
         _tagBar.IsVisible = tags.Count > 0;
         if (_tag.Length > 0 && !tags.Contains(_tag)) _tag = "";
-        AddTag("", "全部");
+        AddTag("", I18nCore.Tr("全部"));
         foreach (string t in tags) AddTag(t, t);
 
         void AddTag(string key, string text)
@@ -182,7 +182,7 @@ public sealed partial class PluginsPage
         _marketHost.Children.Clear();
         if (_market.Count == 0)
         {
-            var empty = U.Empty("◇", "还没有配置插件市场", "填一个或多个插件市场的索引地址（index.json），就能在这里浏览和安装插件。");
+            var empty = U.Empty("◇", I18nCore.Tr("还没有配置插件市场"), I18nCore.Tr("填一个或多个插件市场的索引地址（index.json），就能在这里浏览和安装插件。"));
             empty.Children.Add(U.Btn("编辑市场地址", BtnKind.Primary, async delegate
             {
                 var next = await PluginSettingsCard.EditIndexesDialogAsync(PluginSettingsCard.ParseIndexes(Config.CONFIG.Get(PluginMarket.SettingIndexes)));
@@ -200,7 +200,7 @@ public sealed partial class PluginsPage
             .ToList();
         if (shown.Count == 0)
         {
-            _marketHost.Children.Add(U.Empty("⌕", _market.Count == 0 ? "市场里还没有插件" : "没有找到匹配的插件"));
+            _marketHost.Children.Add(U.Empty("⌕", _market.Count == 0 ? I18nCore.Tr("市场里还没有插件") : I18nCore.Tr("没有找到匹配的插件")));
             return;
         }
         foreach (MarketItem m in shown)
@@ -217,19 +217,19 @@ public sealed partial class PluginsPage
     private static Border VerifiedTag(bool verified)
     {
         return verified
-            ? U.Tag("已审核", "B.Ok", "B.AccentSoft")
-            : U.Tag("未审核", "B.Danger", "B.DangerSoft");
+            ? U.Tag(I18nCore.Tr("已审核"), "B.Ok", "B.AccentSoft")
+            : U.Tag(I18nCore.Tr("未审核"), "B.Danger", "B.DangerSoft");
     }
 
     private Button InstallButton(MarketItem m)
     {
         if (m.Installed && !m.Updatable)
         {
-            var done = U.Btn("已安装", BtnKind.Ghost);
+            var done = U.Btn(I18nCore.Tr("已安装"), BtnKind.Ghost);
             done.IsEnabled = false;
             return done;
         }
-        var b = U.Btn(m.Updatable ? "更新" : "安装", m.Updatable ? BtnKind.Soft : BtnKind.Primary);
+        var b = U.Btn(m.Updatable ? I18nCore.Tr("更新") : I18nCore.Tr("安装"), m.Updatable ? BtnKind.Soft : BtnKind.Primary);
         b.Click += delegate { _ = InstallFromMarketAsync(m); };
         if (m.Updatable && m.InstalledVersion.Length > 0)
         {
@@ -270,7 +270,7 @@ public sealed partial class PluginsPage
             m.Description.Length > 0 ? desc : null,
             tags.Children.Count > 0 ? tags : null);
         var install = InstallButton(m);
-        var detail = U.IconBtn("≡", "详情", delegate { ShowMarketDetail(m); });
+        var detail = U.IconBtn("≡", I18nCore.Tr("详情"), delegate { ShowMarketDetail(m); });
         var g = U.G(null, "Auto,*,Auto");
         g.Add(icon.VTop(), 0);
         g.Add(info.Mk(14, 0, 12, 0), 0, 1);
@@ -305,21 +305,21 @@ public sealed partial class PluginsPage
         }
         if (m.Screenshots.Count > 0)
         {
-            body.Children.Add(U.H3("截图"));
+            body.Children.Add(U.H3(I18nCore.Tr("截图")));
             body.Children.Add(BuildScreenshots(m.Screenshots));
         }
-        body.Children.Add(U.H3("需要的权限"));
+        body.Children.Add(U.H3(I18nCore.Tr("需要的权限")));
         body.Children.Add(PluginPermsView.List(m.Permissions));
         if (m.Changelog.Length > 0)
         {
-            body.Children.Add(U.H3("更新日志"));
+            body.Children.Add(U.H3(I18nCore.Tr("更新日志")));
             body.Children.Add(U.Txt(m.Changelog, 12.5, bold: false, "B.InkSoft").Wrap());
         }
         var install = InstallButton(m);
         var actions = U.H(8, install);
         if (m.Homepage.Length > 0)
         {
-            actions.Children.Insert(0, U.Btn("插件主页", BtnKind.Normal, delegate { OpenUrl(m.Homepage); }, "⌘"));
+            actions.Children.Insert(0, U.Btn(I18nCore.Tr("插件主页"), BtnKind.Normal, delegate { OpenUrl(m.Homepage); }, "⌘"));
         }
         // 操作按钮行放滚动区外，钉在弹窗底部（WP-S11 语义）
         var dlg = new Window
@@ -394,7 +394,7 @@ public sealed partial class PluginsPage
                     Source = bmp,
                     Stretch = Stretch.UniformToFill,
                 };
-                ToolTip.SetTip(frame, "点击在浏览器里看大图");
+                ToolTip.SetTip(frame, I18nCore.Tr("点击在浏览器里看大图"));
                 return;
             }
             // 加载失败(网络/防盗链):如实说明并给浏览器入口,不显示破图
@@ -414,13 +414,13 @@ public sealed partial class PluginsPage
         PyDict? entry = _entries.TryGetValue(m.Id, out var e) ? e : null;
         if (entry == null)
         {
-            ToastHost.Show("安装失败", "市场条目已经过期,请刷新后重试。", ToastKind.Warning);
+            ToastHost.Show(I18nCore.Tr("安装失败"), "市场条目已经过期,请刷新后重试。", ToastKind.Warning);
             return;
         }
         bool verified = Py.Truthy(entry.Get("verified"));
         if (!verified && !PluginMarket.AllowUnverified())
         {
-            bool go = await Dlg.Confirm("未审核的插件",
+            bool go = await Dlg.Confirm(I18nCore.Tr("未审核的插件"),
                 $"「{m.DisplayName}」没有经过市场审核。安装未审核插件需要先打开「允许安装未审核插件」。" +
                 "\n\n现在打开并继续安装?");
             if (!go) return;
@@ -445,10 +445,10 @@ public sealed partial class PluginsPage
         }
         if (err.Length > 0)
         {
-            ToastHost.Show(m.Updatable ? "更新失败" : "安装失败", err, ToastKind.Error);
+            ToastHost.Show(m.Updatable ? I18nCore.Tr("更新失败") : I18nCore.Tr("安装失败"), err, ToastKind.Error);
             return;
         }
-        ToastHost.Show(m.Updatable ? "已更新" : "已安装", m.DisplayName + " v" + m.Version, ToastKind.Success);
+        ToastHost.Show(m.Updatable ? I18nCore.Tr("已更新") : I18nCore.Tr("已安装"), m.DisplayName + " v" + m.Version, ToastKind.Success);
         PluginUiRefresh();
         await LoadInstalledAsync();
         await LoadMarketAsync(refresh: false);
@@ -475,7 +475,7 @@ public sealed partial class PluginsPage
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         });
         body.MinWidth = 420;
-        return await Dlg.Ask("安装插件", body, "允许并安装", "取消", danger: perms.Contains(PluginPermissions.System) && !verified, width: 560);
+        return await Dlg.Ask(I18nCore.Tr("安装插件"), body, I18nCore.Tr("允许并安装"), I18nCore.Tr("取消"), danger: perms.Contains(PluginPermissions.System) && !verified, width: 560);
     }
 
     /// <summary>Node 插件自动带 system(参考版 PluginPerms.Effective 的语义)。</summary>

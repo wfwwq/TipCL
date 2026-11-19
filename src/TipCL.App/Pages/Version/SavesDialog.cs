@@ -17,13 +17,14 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Version;
 
 /// <summary>存档管理对话框(照 Windows 版 SavesDialog)。</summary>
 public static class SavesDialog
 {
-    private static readonly string[] MediaLabels = { "截图", "崩溃报告", "日志" };
+    private static readonly string[] MediaLabels = { I18nCore.Tr("截图"), I18nCore.Tr("崩溃报告"), I18nCore.Tr("日志") };
 
     public static async Task ShowAsync(string instance, string version)
     {
@@ -31,7 +32,7 @@ public static class SavesDialog
         var list = UiClass.V(8);
         var backups = UiClass.V(6);
         var media = UiClass.V(6);
-        var kind = UiClass.Combo(MediaLabels, "截图", 130);
+        var kind = UiClass.Combo(MediaLabels, I18nCore.Tr("截图"), 130);
         var mediaCount = UiClass.Small("");
 
         async Task ReloadAsync()
@@ -40,7 +41,7 @@ public static class SavesDialog
             backups.Children.Clear();
             var saves = await api.TryCallAsync<List<object?>>("list_saves", null, new { instance, version }) ?? new();
             if (saves.Count == 0)
-                list.Children.Add(UiClass.Empty("World", "这个版本还没有存档", "进游戏创建世界后会出现在这里"));
+                list.Children.Add(UiClass.Empty("World", I18nCore.Tr("这个版本还没有存档"), I18nCore.Tr("进游戏创建世界后会出现在这里")));
             foreach (var item in saves)
             {
                 if (item is not PyDict d) continue;
@@ -50,30 +51,30 @@ public static class SavesDialog
                     UiClass.Small(JoinMeta(GlobalModsDialog.SizeText(Py.Int(d.Get("bytes"))), TimeText(Py.Int(d.Get("mtime"))))));
 
                 var acts = UiClass.H(6);
-                acts.Children.Add(Chip("备份", async () =>
+                acts.Children.Add(Chip(I18nCore.Tr("备份"), async () =>
                 {
                     await api.CallAsync<string>("backup_save", new { instance, name, version });
-                    ToastHost.Show("已开始备份", name);
+                    ToastHost.Show(I18nCore.Tr("已开始备份"), name);
                     await ReloadAsync();
-                }, "备份失败"));
-                acts.Children.Add(Chip("导出", async () =>
+                }, I18nCore.Tr("备份失败")));
+                acts.Children.Add(Chip(I18nCore.Tr("导出"), async () =>
                 {
-                    string? dest = await Dlg.SaveFile("导出存档", name + ".zip");
+                    string? dest = await Dlg.SaveFile(I18nCore.Tr("导出存档"), name + ".zip");
                     if (dest == null) return;
                     await api.CallAsync<string>("export_save", new { instance, name, dest, version });
-                    ToastHost.Show("已导出", dest, ToastKind.Success);
-                }, "导出失败"));
-                acts.Children.Add(Chip("打开", async () => { await api.CallAsync<string>("open_save", new { instance, name, version }); }));
-                acts.Children.Add(Chip("装数据包", () => InstallDatapackAsync(instance, version, name), "安装失败"));
-                var del = UiClass.Btn("删除", BtnKind.Danger, null);
+                    ToastHost.Show(I18nCore.Tr("已导出"), dest, ToastKind.Success);
+                }, I18nCore.Tr("导出失败")));
+                acts.Children.Add(Chip(I18nCore.Tr("打开"), async () => { await api.CallAsync<string>("open_save", new { instance, name, version }); }));
+                acts.Children.Add(Chip(I18nCore.Tr("装数据包"), () => InstallDatapackAsync(instance, version, name), I18nCore.Tr("安装失败")));
+                var del = UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Danger, null);
                 del.Click += (_, _) => _ = Run(async () =>
                 {
-                    if (await Dlg.Confirm("删除存档", $"「{name}」会被永久删除,其中的建筑与进度都无法恢复。", "永久删除", "取消", danger: true))
+                    if (await Dlg.Confirm(I18nCore.Tr("删除存档"), $"「{name}」会被永久删除,其中的建筑与进度都无法恢复。", I18nCore.Tr("永久删除"), I18nCore.Tr("取消"), danger: true))
                     {
                         await api.CallAsync<object>("delete_save", new { instance, name, version });
                         await ReloadAsync();
                     }
-                }, "删除失败");
+                }, I18nCore.Tr("删除失败"));
                 acts.Children.Add(del);
 
                 var grid = UiClass.G(null, "*,Auto");
@@ -95,20 +96,20 @@ public static class SavesDialog
                     UiClass.Txt(bn, 12).Trim(),
                     UiClass.Small(JoinMeta(GlobalModsDialog.SizeText(Py.Int(d.Get("bytes"))), TimeText(Py.Int(d.Get("mtime"))))));
                 var acts = UiClass.H(6);
-                acts.Children.Add(Chip("还原", async () =>
+                acts.Children.Add(Chip(I18nCore.Tr("还原"), async () =>
                 {
-                    if (await Dlg.Confirm("还原备份", $"用「{bn}」覆盖现有存档?", "还原"))
+                    if (await Dlg.Confirm(I18nCore.Tr("还原备份"), $"用「{bn}」覆盖现有存档?", I18nCore.Tr("还原")))
                     {
                         await api.CallAsync<PyDict>("restore_save_backup", new { instance, backup_name = bn, version, overwrite = true });
-                        ToastHost.Show("已还原", bn, ToastKind.Success);
+                        ToastHost.Show(I18nCore.Tr("已还原"), bn, ToastKind.Success);
                         await ReloadAsync();
                     }
-                }, "还原失败"));
-                acts.Children.Add(Chip("删除", async () =>
+                }, I18nCore.Tr("还原失败")));
+                acts.Children.Add(Chip(I18nCore.Tr("删除"), async () =>
                 {
                     await api.CallAsync<object>("delete_save_backup", new { instance, backup_name = bn, version });
                     await ReloadAsync();
-                }, "删除失败"));
+                }, I18nCore.Tr("删除失败")));
                 var grid = UiClass.G(null, "*,Auto");
                 col.VCenter();
                 grid.Add(col, 0, 0);
@@ -121,13 +122,13 @@ public static class SavesDialog
         async Task ReloadMediaAsync()
         {
             media.Children.Clear();
-            string label = kind.SelectedItem as string ?? "截图";
-            string key = label == "崩溃报告" ? "crash-reports" : label == "日志" ? "logs" : "screenshots";
+            string label = kind.SelectedItem as string ?? I18nCore.Tr("截图");
+            string key = label == I18nCore.Tr("崩溃报告") ? "crash-reports" : label == I18nCore.Tr("日志") ? "logs" : "screenshots";
             var rows = await api.TryCallAsync<List<object?>>("list_media", null, new { instance, kind = key, version }) ?? new();
             mediaCount.Text = $"{rows.Count} 个文件";
             if (rows.Count == 0)
             {
-                media.Children.Add(UiClass.Muted("这个目录还是空的"));
+                media.Children.Add(UiClass.Muted(I18nCore.Tr("这个目录还是空的")));
                 return;
             }
             foreach (var item in rows.Take(60))
@@ -138,19 +139,19 @@ public static class SavesDialog
                     UiClass.Txt(Py.S(d.Get("name")), 12.5).Trim(),
                     UiClass.Small(GlobalModsDialog.SizeText(Py.Int(d.Get("bytes")))));
                 var acts = UiClass.H(6);
-                acts.Children.Add(Chip("打开", async () => { await api.TryCallAsync<bool>("open_media", false, new { path }); }));
-                acts.Children.Add(Chip("导出", async () =>
+                acts.Children.Add(Chip(I18nCore.Tr("打开"), async () => { await api.TryCallAsync<bool>("open_media", false, new { path }); }));
+                acts.Children.Add(Chip(I18nCore.Tr("导出"), async () =>
                 {
-                    string? dest = await Dlg.SaveFile("导出文件", Py.S(d.Get("name")));
+                    string? dest = await Dlg.SaveFile(I18nCore.Tr("导出文件"), Py.S(d.Get("name")));
                     if (dest == null) return;
                     try
                     {
                         File.Copy(path, dest, overwrite: true);
-                        ToastHost.Show("已导出", dest, ToastKind.Success);
+                        ToastHost.Show(I18nCore.Tr("已导出"), dest, ToastKind.Success);
                     }
                     catch (Exception ex)
                     {
-                        ToastHost.Show("导出失败", ex.Message, ToastKind.Error);
+                        ToastHost.Show(I18nCore.Tr("导出失败"), ex.Message, ToastKind.Error);
                     }
                 }));
                 var grid = UiClass.G(null, "*,Auto");
@@ -162,10 +163,10 @@ public static class SavesDialog
             }
         }
 
-        kind.SelectionChanged += (_, _) => _ = Run(ReloadMediaAsync, "读取失败");
+        kind.SelectionChanged += (_, _) => _ = Run(ReloadMediaAsync, I18nCore.Tr("读取失败"));
 
         var kindBar = UiClass.G(null, "Auto,Auto,*");
-        kindBar.Add(UiClass.Txt("截图 / 日志", 12.5, bold: true).VCenter(), 0, 0);
+        kindBar.Add(UiClass.Txt(I18nCore.Tr("截图 / 日志"), 12.5, bold: true).VCenter(), 0, 0);
         kind.Mk(10, 0, 10, 0).VCenter();
         kindBar.Add(kind, 0, 1);
         kindBar.Add(mediaCount.VCenter(), 0, 2);
@@ -205,11 +206,11 @@ public static class SavesDialog
         var files = await api.TryCallAsync<List<string>>("get_installed_datapacks", null, new { instance }) ?? new();
         if (files.Count == 0)
         {
-            await Dlg.Alert("没有数据包", "先到「下载 → 数据包」装一个,再回来装进存档。");
+            await Dlg.Alert(I18nCore.Tr("没有数据包"), "先到「下载 → 数据包」装一个,再回来装进存档。");
             return;
         }
         var pick = UiClass.Combo(files, files[0], 320);
-        if (!await Dlg.Ask($"装进存档 · {save}", UiClass.V(8, UiClass.Muted("选择要装进这个世界的数据包"), pick), "安装")) return;
+        if (!await Dlg.Ask($"装进存档 · {save}", UiClass.V(8, UiClass.Muted(I18nCore.Tr("选择要装进这个世界的数据包")), pick), I18nCore.Tr("安装"))) return;
         string file = pick.SelectedItem as string ?? files[0];
         string dest = await api.CallAsync<string>("install_datapack_into_save", new
         {
@@ -218,7 +219,7 @@ public static class SavesDialog
             save_name = save,
             version,
         }) ?? "";
-        ToastHost.Show("已安装", dest.Length > 0 ? dest : file, ToastKind.Success);
+        ToastHost.Show(I18nCore.Tr("已安装"), dest.Length > 0 ? dest : file, ToastKind.Success);
     }
 
     /// <summary>装进哪个存档目录(隔离版本各有自己的 saves;照 Windows PickSaveTargetAsync)。</summary>
@@ -228,7 +229,7 @@ public static class SavesDialog
         var rows = await api.TryCallAsync<List<ModsTarget>>("get_saves_targets", null, new { instance }) ?? new();
         if (rows.Count <= 1) return rows.Count == 1 ? rows[0].Value : "";
         var pick = UiClass.Combo(rows.Select(r => r.Label), rows[0].Label, 320);
-        if (!await Dlg.Ask(title, UiClass.V(8, UiClass.Muted("装进哪个版本的存档目录?"), pick), "继续")) return null;
+        if (!await Dlg.Ask(title, UiClass.V(8, UiClass.Muted("装进哪个版本的存档目录?"), pick), I18nCore.Tr("继续"))) return null;
         int i = Math.Max(0, pick.SelectedIndex);
         return i < rows.Count ? rows[i].Value : "";
     }

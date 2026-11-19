@@ -11,6 +11,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Version;
 
@@ -28,7 +29,7 @@ public static class GlobalModsDialog
             var rows = await api.TryCallAsync<List<object?>>("list_global_mods", null) ?? new();
             if (rows.Count == 0)
             {
-                list.Children.Add(UiClass.Empty("Box", "全局模组目录是空的", "放进去的模组会自动注入每个实例"));
+                list.Children.Add(UiClass.Empty("Box", I18nCore.Tr("全局模组目录是空的"), I18nCore.Tr("放进去的模组会自动注入每个实例")));
                 return;
             }
             foreach (var item in rows)
@@ -50,12 +51,12 @@ public static class GlobalModsDialog
             }
         }
 
-        var open = U.Btn("打开目录", BtnKind.Soft, (_, _) => _ = api.CallAsync<string>("open_global_mods"), "Folder");
-        var refresh = U.Btn("刷新", BtnKind.Chip, (_, _) => _ = Reload(), "Refresh");
+        var open = U.Btn(I18nCore.Tr("打开目录"), BtnKind.Soft, (_, _) => _ = api.CallAsync<string>("open_global_mods"), "Folder");
+        var refresh = U.Btn(I18nCore.Tr("刷新"), BtnKind.Chip, (_, _) => _ = Reload(), "Refresh");
         var body = UiClass.V(12, UiClass.H(8, open, refresh),
             new ScrollViewer { Content = list, MaxHeight = 380, MinWidth = 460, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         await Reload();
-        await Dlg.Panel("全局模组", body, 620);
+        await Dlg.Panel(I18nCore.Tr("全局模组"), body, 620);
     }
 
     internal static string SizeText(long bytes)

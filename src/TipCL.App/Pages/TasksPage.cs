@@ -8,6 +8,7 @@ using TipCL.App.Common;
 using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages;
 
@@ -52,19 +53,19 @@ public sealed class TasksPage : PageBase
 
     private bool _wired;
 
-    public TasksPage() : base("tasks", "下载任务")
+    public TasksPage() : base("tasks", I18nCore.Tr("下载任务"))
     {
-        var clear = UiClass.Btn("清除已完成", BtnKind.Chip, (_, _) =>
+        var clear = UiClass.Btn(I18nCore.Tr("清除已完成"), BtnKind.Chip, (_, _) =>
         {
             TaskStore.ClearFinished();
             Rebuild();
         });
-        var header = UiClass.Section("下载任务", "安装、下载、启动都在这里排队",
+        var header = UiClass.Section(I18nCore.Tr("下载任务"), I18nCore.Tr("安装、下载、启动都在这里排队"),
             UiClass.H(8, _summary.VCenter(), clear));
         Body = new BlockHost("tasks", new List<BlockSpec>
         {
-            new() { Id = "header", Title = "概览", Content = header },
-            new() { Id = "list", Title = "任务列表", Content = _list },
+            new() { Id = "header", Title = I18nCore.Tr("概览"), Content = header },
+            new() { Id = "list", Title = I18nCore.Tr("任务列表"), Content = _list },
         }).Root;
     }
 
@@ -91,7 +92,7 @@ public sealed class TasksPage : PageBase
         _summary.Text = rows.Count == 0 ? "" : $"进行中 {TaskStore.RunningCount} · 共 {rows.Count}";
         if (rows.Count == 0)
         {
-            _list.Children.Add(UiClass.Empty("\ue896", "还没有任务", "到「下载」页装个版本或模组试试"));
+            _list.Children.Add(UiClass.Empty("\ue896", I18nCore.Tr("还没有任务"), I18nCore.Tr("到「下载」页装个版本或模组试试")));
             return;
         }
         foreach (var row in rows)
@@ -110,8 +111,8 @@ public sealed class TasksPage : PageBase
         var status = UiClass.Muted("");
         var speed = UiClass.Small("");
         var bar = UiClass.Prog();
-        var cancel = UiClass.Btn("取消", BtnKind.Ghost);
-        var toggle = UiClass.Btn("日志", BtnKind.Chip);
+        var cancel = UiClass.Btn(I18nCore.Tr("取消"), BtnKind.Ghost);
+        var toggle = UiClass.Btn(I18nCore.Tr("日志"), BtnKind.Chip);
 
         var log = UiClass.LogBox();
         log.Height = 160;
@@ -191,7 +192,7 @@ public sealed class TasksPage : PageBase
         if (!card.Bar.IsIndeterminate)
             Motion.Progress(card.Bar, row.Progress);
         card.Cancel.IsEnabled = !row.Finished;
-        card.Cancel.Content = row.Finished ? "清除" : "取消";
+        card.Cancel.Content = row.Finished ? I18nCore.Tr("清除") : I18nCore.Tr("取消");
         card.Bar.Dyn(ProgressBar.ForegroundProperty, row.Finished && !row.Success ? "B.Danger" : "B.Accent");
         if (card.Expanded && (row.Finished || DateTime.UtcNow - card.LogPainted >= LogInterval))
         {

@@ -32,28 +32,28 @@ public sealed partial class PluginsPage
 
     private void BuildDev()
     {
-        var zip = U.Btn("从 zip 安装", BtnKind.Soft, async delegate
+        var zip = U.Btn(I18nCore.Tr("从 zip 安装"), BtnKind.Soft, async delegate
         {
-            string? path = await Dlg.PickFile("选择插件包", "*.zip");
+            string? path = await Dlg.PickFile(I18nCore.Tr("选择插件包"), "*.zip");
             if (path != null) await InstallLocalAsync(path, dev: false);
         });
-        var folder = U.Btn("从文件夹安装", BtnKind.Soft, async delegate
+        var folder = U.Btn(I18nCore.Tr("从文件夹安装"), BtnKind.Soft, async delegate
         {
             string? path = await Dlg.PickFolder("选择插件文件夹(里面有 tipcl-plugin.json)");
             if (path != null) await InstallLocalAsync(path, dev: false);
         });
-        var link = U.Btn("链接开发文件夹", BtnKind.Primary, async delegate
+        var link = U.Btn(I18nCore.Tr("链接开发文件夹"), BtnKind.Primary, async delegate
         {
             string? path = await Dlg.PickFolder("选择插件开发文件夹(不复制,只记录路径)");
             if (path != null) await InstallLocalAsync(path, dev: true);
         });
         var local = U.Card(U.V(8,
-            U.Section("本地安装", "zip / 文件夹会复制进 TipCL(先落暂存目录再原子替换);开发文件夹只链接,不复制"),
+            U.Section(I18nCore.Tr("本地安装"), "zip / 文件夹会复制进 TipCL(先落暂存目录再原子替换);开发文件夹只链接,不复制"),
             U.H(8, zip, folder, link),
-            U.Small("也可以直接把插件 zip 或文件夹拖进这个页面。")));
+            U.Small(I18nCore.Tr("也可以直接把插件 zip 或文件夹拖进这个页面。"))));
 
         var runtime = U.Card(U.V(6,
-            U.Section("运行环境", "Linux 版没有内置插件运行时,插件代码不会被执行"),
+            U.Section(I18nCore.Tr("运行环境"), "Linux 版没有内置插件运行时,插件代码不会被执行"),
             U.V(2,
                 U.Field("Node 插件", U.Muted("没有 Node 宿主:不内置 Node / npm,也不引入 CEF / WebKitGTK"), null, 140),
                 U.Field(".NET 插件", U.Muted("参考契约是 net48 的 TipCL 程序集 + WPF 界面类型,本进程加载不了"), null, 140),
@@ -62,16 +62,16 @@ public sealed partial class PluginsPage
             U.Small("也就是说:插件文件能装能卸,但不会有插件代码在本进程里跑。参考版这里显示的是 Node 宿主、页面令牌与 WebView2 状态。")));
 
         var providers = U.Card(U.V(8,
-            U.Section("模型供应商", "给插件直接调用模型用的 OpenAI 兼容端点(参考版由插件宿主消费)"),
+            U.Section(I18nCore.Tr("模型供应商"), "给插件直接调用模型用的 OpenAI 兼容端点(参考版由插件宿主消费)"),
             _providerHost,
             U.Small("没有插件运行时就没有消费者,所以这里不提供「添加供应商」入口;已存在的记录只做展示。")));
 
         _logBox.Height = 300;
         _logPick.SelectionChanged += delegate { _ = LoadLogAsync(); };
-        var logRefresh = U.Btn("刷新", BtnKind.Chip, delegate { _ = LoadLogAsync(); }, RefreshGlyph);
-        var logFolder = U.Btn("打开日志文件夹", BtnKind.Chip, delegate { OpenFolder(_dirs.LogsRoot); });
+        var logRefresh = U.Btn(I18nCore.Tr("刷新"), BtnKind.Chip, delegate { _ = LoadLogAsync(); }, RefreshGlyph);
+        var logFolder = U.Btn(I18nCore.Tr("打开日志文件夹"), BtnKind.Chip, delegate { OpenFolder(_dirs.LogsRoot); });
         var logs = U.Card(U.V(8,
-            U.Section("插件日志", "安装、启停、失败原因都写在这里(plugin-logs/<id>.log)"),
+            U.Section(I18nCore.Tr("插件日志"), "安装、启停、失败原因都写在这里(plugin-logs/<id>.log)"),
             U.H(8, _logPick, logRefresh, logFolder),
             _logBox));
         _devView = new ScrollViewer

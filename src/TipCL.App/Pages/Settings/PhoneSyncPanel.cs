@@ -21,6 +21,7 @@ using TipCL.App.Ui;
 using TipCL.Core;
 using TipCL.Core.Launcher.Sync;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Settings;
 
@@ -34,8 +35,8 @@ internal sealed class PhoneSyncPanel : Border
     private readonly StackPanel _rows = UiClass.V(6);
     private readonly TextBox _log = UiClass.LogBox();
     private readonly TextBlock _status = UiClass.Small("");
-    private readonly Button _refresh = UiClass.Btn("刷新对比", BtnKind.Normal);
-    private readonly Button _all = UiClass.Btn("一键同步", BtnKind.Primary);
+    private readonly Button _refresh = UiClass.Btn(I18nCore.Tr("刷新对比"), BtnKind.Normal);
+    private readonly Button _all = UiClass.Btn(I18nCore.Tr("一键同步"), BtnKind.Primary);
     private bool _busy;
 
     public PhoneSyncPanel()
@@ -56,11 +57,11 @@ internal sealed class PhoneSyncPanel : Border
         _phone.SelectionChanged += (_, _) => _ = RunAsync(ReloadAsync);
 
         var top = UiClass.G(null, "Auto,Auto,Auto,Auto,*,Auto,Auto");
-        top.Add(UiClass.Txt("电脑", 12.5, true).VCenter(), 0, 0);
+        top.Add(UiClass.Txt(I18nCore.Tr("电脑"), 12.5, true).VCenter(), 0, 0);
         var pcBox = _pc;
         pcBox.Margin = new Avalonia.Thickness(8, 0, 14, 0);
         top.Add(pcBox.VCenter(), 0, 1);
-        top.Add(UiClass.Txt("手机", 12.5, true).VCenter(), 0, 2);
+        top.Add(UiClass.Txt(I18nCore.Tr("手机"), 12.5, true).VCenter(), 0, 2);
         _phone.Margin = new Avalonia.Thickness(8, 0, 0, 0);
         top.Add(_phone.VCenter(), 0, 3);
         _refresh.Margin = new Avalonia.Thickness(0, 0, 6, 0);
@@ -77,7 +78,7 @@ internal sealed class PhoneSyncPanel : Border
         };
 
         Child = UiClass.V(10,
-            UiClass.Section("手机同步", "两边游戏版本要一致,用旧版本打开新存档会损坏"),
+            UiClass.Section(I18nCore.Tr("手机同步"), "两边游戏版本要一致,用旧版本打开新存档会损坏"),
             _status,
             top,
             scroll,
@@ -109,7 +110,7 @@ internal sealed class PhoneSyncPanel : Border
             _targets.AddRange(targets);
             if (_roots.Count == 0 && roots.Count == 0)
             {
-                roots.Add(new PhoneClient.Root { Id = "global", Label = "全局存档" });
+                roots.Add(new PhoneClient.Root { Id = "global", Label = I18nCore.Tr("全局存档") });
             }
             _roots.Clear();
             _roots.AddRange(roots);
@@ -178,7 +179,7 @@ internal sealed class PhoneSyncPanel : Border
         catch (Exception ex)
         {
             Log(ex.Message);
-            ToastHost.Show("同步失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(I18nCore.Tr("同步失败"), ex.Message, ToastKind.Error);
         }
         finally
         {
@@ -193,12 +194,12 @@ internal sealed class PhoneSyncPanel : Border
     /// <summary>裁决的中文标签(照 Windows 版 PhoneSyncPanel.Label;测试直接锁这套文案)。</summary>
     internal static string DecisionLabel(SyncDecision d) => d switch
     {
-        SyncDecision.Same => "一致",
-        SyncDecision.Push => "电脑较新",
-        SyncDecision.Pull => "手机较新",
-        SyncDecision.Conflict => "两边都改过",
-        SyncDecision.OnlyLocal => "只在电脑",
-        _ => "只在手机",
+        SyncDecision.Same => I18nCore.Tr("一致"),
+        SyncDecision.Push => I18nCore.Tr("电脑较新"),
+        SyncDecision.Pull => I18nCore.Tr("手机较新"),
+        SyncDecision.Conflict => I18nCore.Tr("两边都改过"),
+        SyncDecision.OnlyLocal => I18nCore.Tr("只在电脑"),
+        _ => I18nCore.Tr("只在手机"),
     };
 
     /// <summary>毫秒时间戳 → 本地时间(0 显示为「-」)。</summary>
@@ -222,7 +223,7 @@ internal sealed class PhoneSyncPanel : Border
         _rows.Children.Clear();
         if (rows.Count == 0)
         {
-            _rows.Children.Add(UiClass.Empty("World", "两边都还没有存档", "装了地图存档后再回来对比"));
+            _rows.Children.Add(UiClass.Empty("World", I18nCore.Tr("两边都还没有存档"), "装了地图存档后再回来对比"));
             return;
         }
         foreach (PhoneLink.Row row in rows)
@@ -231,7 +232,7 @@ internal sealed class PhoneSyncPanel : Border
             string sub = "电脑 " + (r.HasLocal ? Time(r.LocalMtime) : "-") +
                          " · 手机 " + (r.HasRemote ? Time(r.Remote.LastModified) : "-") +
                          (r.LocalLocked ? " · 游戏中" : "");
-            var push = UiClass.Btn("传到手机", BtnKind.Chip, (_, _) => _ = RunAsync(async () =>
+            var push = UiClass.Btn(I18nCore.Tr("传到手机"), BtnKind.Chip, (_, _) => _ = RunAsync(async () =>
             {
                 if (r.HasRemote)
                 {
@@ -245,7 +246,7 @@ internal sealed class PhoneSyncPanel : Border
                 Log("✓ " + r.Name + " → 手机");
                 await ReloadAsync();
             }));
-            var pull = UiClass.Btn("传到电脑", BtnKind.Chip, (_, _) => _ = RunAsync(async () =>
+            var pull = UiClass.Btn(I18nCore.Tr("传到电脑"), BtnKind.Chip, (_, _) => _ = RunAsync(async () =>
             {
                 if (r.HasLocal)
                 {
@@ -286,7 +287,7 @@ internal sealed class PhoneSyncPanel : Border
             int choice = await Dlg.Choose(
                 "「" + r.Name + "」两边都改过",
                 UiClass.Muted("电脑 " + Time(r.LocalMtime) + " · 手机 " + Time(r.Remote.LastModified) + "\n被覆盖的一边会先自动备份。"),
-                new[] { "跳过", "保留手机的", "保留电脑的" });
+                new[] { I18nCore.Tr("跳过"), I18nCore.Tr("保留手机的"), I18nCore.Tr("保留电脑的") });
             pick[r.Name] = choice switch
             {
                 1 => SyncDecision.Pull,
@@ -296,7 +297,7 @@ internal sealed class PhoneSyncPanel : Border
         }
         List<string> result = await Task.Run(() => PhoneLink.SyncAll(target, root, r =>
             pick.TryGetValue(r.Name, out SyncDecision d) ? d : SyncDecision.Same, Log));
-        Log(result.Count == 0 ? "两边已经一致" : string.Join("\n", result));
+        Log(result.Count == 0 ? I18nCore.Tr("两边已经一致") : string.Join("\n", result));
         await ReloadAsync();
     }
 }

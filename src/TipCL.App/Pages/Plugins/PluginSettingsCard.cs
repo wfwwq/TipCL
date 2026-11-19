@@ -112,7 +112,7 @@ public static class PluginSettingsCard
         void SaveMirrors()
         {
             Save(PluginMarket.SettingMirrors, mirrors.OrderBy(m => m.Priority).ThenBy(m => m.Id, StringComparer.Ordinal).Select(m => (object)MirrorDict(m)).ToList());
-            ToastHost.Show("已保存", "镜像设置已更新", ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("已保存"), I18nCore.Tr("镜像设置已更新"), ToastKind.Success);
         }
 
         void RenderMirrors()
@@ -125,8 +125,8 @@ public static class PluginSettingsCard
                 var sw = U.Switch(on);
                 var label = U.Txt(m.Label, 12.5, bold: true);
                 var sub = U.Muted("Raw: " + m.RawPrefix);
-                var up = U.IconBtn("↑", "上移");
-                var down = U.IconBtn("↓", "下移");
+                var up = U.IconBtn("↑", I18nCore.Tr("上移"));
+                var down = U.IconBtn("↓", I18nCore.Tr("下移"));
                 int index = mirrors.IndexOf(m);
                 up.IsEnabled = index > 0;
                 down.IsEnabled = index < mirrors.Count - 1;
@@ -152,7 +152,7 @@ public static class PluginSettingsCard
                 var actions = U.H(4, up, down);
                 if (m.Id.StartsWith(PluginMarket.CustomMirrorPrefix, StringComparison.Ordinal))
                 {
-                    var del = U.IconBtn("✕", "删除");
+                    var del = U.IconBtn("✕", I18nCore.Tr("删除"));
                     del.Click += delegate
                     {
                         mirrors.Remove(m);
@@ -170,28 +170,28 @@ public static class PluginSettingsCard
             }
         }
 
-        var mirrorReset = U.Btn("恢复默认", BtnKind.Ghost, delegate
+        var mirrorReset = U.Btn(I18nCore.Tr("恢复默认"), BtnKind.Ghost, delegate
         {
             mirrors = PluginMarket.DefaultMirrors();
             SaveMirrors();
             RenderMirrors();
         });
-        var mirrorAdd = U.Btn("添加自定义镜像", BtnKind.Soft, async delegate
+        var mirrorAdd = U.Btn(I18nCore.Tr("添加自定义镜像"), BtnKind.Soft, async delegate
         {
             var nameBox = U.Input("我的镜像");
             var rawBox = U.Input("https://example.com/https://raw.githubusercontent.com");
             var dlBox = U.Input("https://example.com/https://github.com");
             var body = U.V(8,
-                U.Field("名称", nameBox),
-                U.Field("Raw 前缀", rawBox, "完整前缀，含 https://raw.githubusercontent.com"),
-                U.Field("下载前缀", dlBox, "完整前缀，含 https://github.com"));
-            if (!await Dlg.Ask("添加自定义镜像", body)) return;
+                U.Field(I18nCore.Tr("名称"), nameBox),
+                U.Field(I18nCore.Tr("Raw 前缀"), rawBox, I18nCore.Tr("完整前缀，含 https://raw.githubusercontent.com")),
+                U.Field(I18nCore.Tr("下载前缀"), dlBox, I18nCore.Tr("完整前缀，含 https://github.com")));
+            if (!await Dlg.Ask(I18nCore.Tr("添加自定义镜像"), body)) return;
             string name = nameBox.Text!.Trim();
             string rawPrefix = rawBox.Text!.Trim().TrimEnd('/');
             string dlPrefix = dlBox.Text!.Trim().TrimEnd('/');
             if (name.Length == 0 || !rawPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || !dlPrefix.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                ToastHost.Show("填得不对", "名称必填；两个前缀都要以 https:// 开头", ToastKind.Warning);
+                ToastHost.Show("填得不对", I18nCore.Tr("名称必填；两个前缀都要以 https:// 开头"), ToastKind.Warning);
                 return;
             }
             int maxPriority = mirrors.Count > 0 ? mirrors.Max(m => m.Priority) : 0;
@@ -213,7 +213,7 @@ public static class PluginSettingsCard
         {
             if (syncing) return;
             bool on = unverified.IsChecked == true;
-            if (on && !await Dlg.Confirm("允许安装未审核插件？", "未审核的插件没人检查过来源和代码。插件拥有完整的电脑权限，只安装你信任的作者发布的插件。"))
+            if (on && !await Dlg.Confirm(I18nCore.Tr("允许安装未审核插件？"), "未审核的插件没人检查过来源和代码。插件拥有完整的电脑权限，只安装你信任的作者发布的插件。"))
             {
                 syncing = true;
                 unverified.IsChecked = false;
@@ -223,7 +223,7 @@ public static class PluginSettingsCard
             Save(PluginMarket.SettingAllowUnverified, on);
         };
 
-        var edit = U.Btn("编辑", BtnKind.Soft, async delegate
+        var edit = U.Btn(I18nCore.Tr("编辑"), BtnKind.Soft, async delegate
         {
             var next = await EditIndexesDialogAsync(indexes);
             if (next != null)
@@ -233,20 +233,20 @@ public static class PluginSettingsCard
             }
         }, "✎");
 
-        var manage = U.Btn("管理插件", BtnKind.Normal, delegate
+        var manage = U.Btn(I18nCore.Tr("管理插件"), BtnKind.Normal, delegate
         {
             LayoutFx.Navigate("plugins");
         }, "⬒");
 
         var card = U.Card(U.V(2,
-            U.Section("插件", "插件市场、加速镜像、未审核插件"),
-            U.Field("插件市场地址", U.H(10, edit, summary.VCenter()), "填写插件市场的索引地址，可以填多个"),
+            U.Section(I18nCore.Tr("插件"), "插件市场、加速镜像、未审核插件"),
+            U.Field(I18nCore.Tr("插件市场地址"), U.H(10, edit, summary.VCenter()), I18nCore.Tr("填写插件市场的索引地址，可以填多个")),
             U.Field("", U.V(6,
-                U.Txt("加速镜像", 13, bold: true),
+                U.Txt(I18nCore.Tr("加速镜像"), 13, bold: true),
                 U.Small("开关与顺序即优先级：排在前面的先尝试，全部失败才报错。").Mk(0, 0, 0, 0),
                 mirrorHost,
                 U.H(6, mirrorAdd, mirrorReset))),
-            U.Field("允许安装未审核插件", unverified, "关着时，市场里未审核的插件要先打开这里才能安装"),
+            U.Field(I18nCore.Tr("允许安装未审核插件"), unverified, I18nCore.Tr("关着时，市场里未审核的插件要先打开这里才能安装")),
             U.Field("", U.H(8, manage))));
 
         Sync();
@@ -255,7 +255,7 @@ public static class PluginSettingsCard
 
         void Sync()
         {
-            summary.Text = (indexes.Count == 0) ? "还没有填写" : ((indexes.Count == 1) ? indexes[0] : $"{indexes.Count} 个市场");
+            summary.Text = (indexes.Count == 0) ? I18nCore.Tr("还没有填写") : ((indexes.Count == 1) ? indexes[0] : $"{indexes.Count} 个市场");
             if (indexes.Count > 0) ToolTip.SetTip(summary, string.Join("\n", indexes));
         }
     }
@@ -265,17 +265,17 @@ public static class PluginSettingsCard
     {
         var box = U.Multi("https://example.com/tipcl-plugins/index.json", string.Join("\n", current), 140);
         box.MinWidth = 480;
-        var body = U.V(8, U.Muted("一行一个插件市场索引地址（index.json）。多个市场按插件 id 合并，排在前面的优先。").Wrap(), box);
-        if (!await Dlg.Ask("插件市场地址", body)) return null;
+        var body = U.V(8, U.Muted(I18nCore.Tr("一行一个插件市场索引地址（index.json）。多个市场按插件 id 合并，排在前面的优先。")).Wrap(), box);
+        if (!await Dlg.Ask(I18nCore.Tr("插件市场地址"), body)) return null;
         var raw = box.Text!.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
         var clean = Clean(raw);
         if (clean.Count != raw.Count)
         {
-            ToastHost.Show("填得不对", "地址要以 http:// 或 https:// 开头", ToastKind.Warning);
+            ToastHost.Show("填得不对", I18nCore.Tr("地址要以 http:// 或 https:// 开头"), ToastKind.Warning);
             return null;
         }
         Save(PluginMarket.SettingIndexes, clean.Cast<object>().ToList());
-        ToastHost.Show("已保存", $"{clean.Count} 个市场地址", ToastKind.Success);
+        ToastHost.Show(I18nCore.Tr("已保存"), $"{clean.Count} 个市场地址", ToastKind.Success);
         return clean;
     }
 }
