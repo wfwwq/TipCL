@@ -297,3 +297,131 @@ Linux 侧这个数**不是「词表脏」,而是「界面没接线」**:仓库�
 | `.gitignore` | 忽略 `logs/` |
 
 > 未 push、未改任何 `src/**`、`windos/src/**`、locales、`tests/**`、`tools/**`、`.github/**`、smali/二进制。
+---
+
+## 第 6 轮(2026-11-20):合入后的文档真相 + 发版检查单
+
+基线:`git rebase main` → `main@880deff`(我的两笔旧提交已被 lead fast-forward 合并,分支从 0 开始)。
+
+## 6.1 为什么这轮必须改文档:R2/R3 换了手感
+
+| 提交 | 改了什么 |
+|---|---|
+| `5aece65` audit/C R2 | 边缘自动滚动从"MouseMove 里推固定 18px"改成 **16ms `DispatcherTimer` + 按深度调速**,并把内容滚动折回指针内容坐标(`LayoutEditor.cs:157-172,2234`) |
+| `3000b61` audit/C R3 | stack 纵向拖拽丝滑化:**浮起跟手 + 6px 滞回换位 + 170ms FLIP 让位 + 170ms 落位收敛 + 两端自动滚动**;新增纯逻辑 `Pages/Layout/StackDragPlan.cs` + 12 例单测 `windos/tests/TipCL.Tests/StackDragPlanTests.cs` |
+| `ab3d49e` | Linux 侧:`Arrange 宽 ≠ 测量宽 → 按新宽重量行高`(`GridCanvasPanel.cs:667-679`) |
+
+**旧文档的问题**:两本手册写的是"按相邻块中点实时交换,松手落位"(既没有滞回、也没有浮起与自动滚动),而且 §3 手势表里的行号(`LayoutEditor.cs:834`(`StartGesture`)、`:772`(`EndDrag`)…)在 R2/R3 各插了上百行之后**整体失效** —— 照它去 `:834` 找的是别的东西。
+
+## 6.2 Windows 布局手册改了什么(数字全部来自代码)
+
+| 文档 | 改动 |
+|---|---|
+| `docs/布局使用指南.md` | §3 手势表「换顺序(stack)」一行重写;新增 **§3.1 拖动手感(2026-11-20 改版后的精确口径)** 6 行表;§3 三个踩点的出处改成常量/方法名;§12 依据表:手势行改为**方法名定位**(不再给会漂的行号)+ 新增 3 行(StackDragPlan / LayoutMotion / 边缘滚动)+ 版本号口径行更新为"11-19 替换件 + 行号以 `880deff` 为准" |
+| `docs/布局快速上手.md` | 顶部平台范围注更新;30 秒版「换顺序」行;手势速查表 stack 行重写 + 新增「拖动中靠近上下边缘」行;**新增 FAQ 10**「拖到页面底部拖不动 / 块在手指边上抖,是 bug 吗?」(4 行现象表 + 指向 Linux 差异);依据表新增 2 行、v2 文件行补回 `Core/Launcher/Layout/` 路径 |
+
+数字口径(逐条都能对到代码):
+
+| 项 | 值 | 出处 |
+|---|---|---|
+| 换位滞回 | **±6px** | `StackDragPlan.cs:21`(`Hysteresis = 6.0`) |
+| 让位 / 落位动画 | **170ms / 170ms**,ease-out 三次 | `LayoutMotion.cs:16,19,34-39` |
+| 动画最小位移 | 0.5px | `LayoutMotion.cs:25` |
+| 边缘自动滚动 | **16ms** 一帧、边缘 **36px**(≤视口 1/3)、**≤18px/帧**、`(0.25+0.75×深度)` | `LayoutEditor.cs:162-165,1873`;`StackDragPlan.cs:73-99` |
+| 关掉动画 | 退回"交换即落位",与改版前逐像素一致 | `LayoutEditor.cs:1652-1658,1691-1697` |
+
+## 6.3 Linux 侧新增「四处差异 + height_px 等价」小节
+
+落点:`docs/README.md` 新增 **「Linux 编辑态与 Windows 的四处差异(2026-11-20 复核,别当 bug 修)」**。
+
+| # | 差异 | Linux 证据 | Windows 证据 |
+|---|---|---|---|
+| 1 | stack 页拖拽 | 进编辑态**临时折成 12 列 grid**,退出**保留网格**不还原:`Pages/Layout/LayoutEditor.cs:518-546`(`ConvertStackToGrid`→`LayoutEngine.StackToGrid`)、`:1154`、`:1278`;拖拽=grid 像素跟手 `:1969` | stack 保持一维流:`BeginDrag`/`MoveStackFloat`/`ApplyStackReorder` |
+| 2 | 换位防抖 | 靠格子落点,无滞回 | 显式滞回 6px(`StackDragPlan.cs:21`) |
+| 3 | 边缘滚动 | **30ms / 48px / ≤28px**(`(depth*0.6+4)`):`LayoutEditor.cs:2171-2215` | **16ms / 36px / 18px** |
+| 4 | 滚动条出现 | **按新宽重量行高**;仅"更窄且总高确实变化"时补一次 `InvalidateMeasure`,同宽度只补一次(`_remeasureWidths`):`GridCanvasPanel.cs:667-679`、`:111`、`:513-515` | 同口径 |
+
+**`height_px`(最容易被误判成 bug 的一条)**:
+
+- Windows 是 v2 模型上的**类型化字段** `LayoutBlockV2.HeightPx`(`windos/src/TipCL/Core/Launcher/Layout/LayoutDocV2.cs:977`,`:1032` 写、`:1088` 读、`:1116` 清);
+- Linux 住在区块的**通用 `extra` 字典**(`src/TipCL.App/Pages/Layout/LayoutEngine.cs:1201-1243` 的 `ReadHeightPx`/`WriteHeightPx`,键名同为 `height_px`);
+- 但 `LayoutJson.MergeExtra` 是**平铺**合并(`src/TipCL.Core/Launcher/Layout/LayoutJson.cs`:`target[kv.Key] = ...`,不加嵌套层)⇒ 磁盘上两侧都是区块对象的顶层 `"height_px": N`,互读互写都不丢。文档里写明"看到 extra vs 字段不要当存储格式不一致去统一"。
+
+## 6.4 README「功能」表逐条核对:3 处平台口径缺失(已补)
+
+| 能力 | 逐条结论 | 证据 |
+|---|---|---|
+| 版本安装 / 模组与整合包 / 实例与存档 / 账号 / 联机 / AI 助手 / 插件(逻辑) / 仪表盘 / 外观 | Linux 树**都已落地** | `src/TipCL.Core/Launcher/` 下 `Installer/LoaderMeta/Optifine/Mirrors/Mods/Modpack/ExportPack/Instances/Saves/Java/AccountManager/MicrosoftAuthenticator/Authlib/Nide8/SkinServer/Terracotta` + `Ai/*` + `Plugins/*`;UI 侧 `LaunchPage`、`Themes/*` |
+| **MCP Server**(`127.0.0.1:25585/mcp`) | **仅 Windows**。Linux 只有 MCP **客户端** | `windos/.../Ai/McpServer.cs:19`(`DefaultPort = 25585`)vs `src/` 里 `25585`/`McpServer` **零命中**,只有 `Ai/Mcp.cs`、`McpClient.cs` |
+| **插件网页界面**(页签/浮层/网页区块) | **仅 Windows 有 WebView2**;Linux 结构化没有网页宿主,恒走"浏览器打开"兜底 | `src/TipCL.App/Pages/Layout/Widgets/DangerousWidgets.cs:13-17`、`Pages/Layout/PluginBlocks.cs:6-15` 的降级说明 |
+| **手机同步** | **两端都只有"桌面半边"**;手机端服务端不在本仓、也不在 Android 仓 | `src/TipCL.Core/Launcher/Sync/PhoneClient.cs` + `Pages/Settings/PhoneSyncPanel.cs`;`TipCL-Android` 全库 `X-PyMCL-Token` / `/api/ping` / `deviceTimeMs` **0 命中** |
+
+处置:功能表三行加"仅 Windows / 待配套"标注;表后新增**平台差异三行表**;`## 🔗 MCP Server` 与 `## 📱 手机同步` 两节各加一段口径块(避免读者按 Windows 说明在 Linux 上找开关、或把手机同步当成"现在就能用")。
+
+## 6.5 新增 `docs/RELEASE-CHECKLIST.md`(给 1.2.1 用)
+
+| 节 | 内容要点 |
+|---|---|
+| §0 两条硬约束 | ① 新号必须**严格大于**客户端号(`Updater.Newer` 只认 `>`;1.2.0 同号换资产的教训写进去了)② 版本形状必须是三段 `X.Y.Z`(`SmokeTests.cs:21,26` 与 `VersionLandingPointsTests.cs:105` 两条守卫钉死) |
+| §1 六处版本落点 | 6 个文件 / 9 个值:`src/TipCL.Core/Launcher/AppInfo.cs:10,16,18`、`src/TipCL.Core/CoreInfo.cs:8`、`src/TipCL.App/TipCL.App.csproj:8`、`src/TipCL.Core/TipCL.Core.csproj:10`、`windos/src/TipCL/TipCL.csproj:17`、`windos/src/TipCL/Core/Launcher/AppInfo.cs:9,15,17`;每行写"谁在读它 / 漏改的后果" |
+| §1.1 自检 | `dotnet test`(两棵树)+ `git grep -n "1\.2\.0" -- src windos/src` 兜底 |
+| §2 出包 | Windows `dotnet build windos/src/TipCL/TipCL.csproj -c Release`(compact 红线 5,757,264 B);Linux `dotnet publish …` + `tools/package.sh --appimage-only --deb` |
+| §3 要重算的 4 个 sha256 | `TipCL.exe` / `TipCL-linux-x64.AppImage` / `TipCL.exe.sha256` 附件内容 / README 安全说明行;**必须先上传再算** |
+| §4 回填两份清单 | 四个字段名逐字(`version`/`notes`/`url`/`sha256`)、`\A[0-9a-fA-F]{64}\z`、tag 段与 url 一致、清单必须留仓库根 |
+| §5 发完复核 | `curl` 两份清单 + GitHub API 资产 `digest` 比对 + 客户端真值表 + tag |
+| §6 不在清单里的东西 | 安卓两条线(不同号)、mac(无此树)、布局档 `app` 派生、`-Dminecraft.launcher.version=1.0.10` 刻意保留、资产名逐字 |
+| §7 1.2.1 待填表 | 空模板(版本/两棵树测试数/三个资产大小+sha/两份清单勾选/README 勾选/tag) |
+
+同时在 `docs/README.md` 的「文档入口」里登记了这份检查单。
+
+## 6.6 Android 二轮
+
+仓库已由 lead fast-forward 合并过一次(我的 R1 提交 `146746e3` 现是 `main`),本轮从 `main` 新建 `audit/E-android2`。
+
+### 6.6.1 两条构建线:产物名 / 版本号 / 包名 三方一致(逐项核)
+
+| 项 | A 线(自研 Gradle) | B 线(apktool 重打包) |
+|---|---|---|
+| 包名 | `com.tipcl.android`(`android-app/app/build.gradle.kts:12`) | `com.pymcl.android`(`app/Android/AndroidManifest.xml` 的 `package=`) |
+| launcher activity | `com.tipcl.android.LauncherActivity`(`android-app/app/src/main/AndroidManifest.xml:11-18`) | `com.pymcl.android.MainActivity`(同 manifest 的 LAUNCHER 项) |
+| 版本 | `versionName 1.2.0` / `versionCode 1`(`build.gradle.kts:15-16`) | `versionName 0.9.3` / `versionCode 14`(`app/Android/apktool.yml:15-16`) |
+| 产物名 | `dist\TipCL-<versionName>-android.apk`(`scripts/build_rewrite_release.bat:155`;CI 同名:`android-ci.yml:218-232`) | `dist\TipCL-<versionName>.apk`(`scripts/build_release.bat:17,55`,版本取自 apktool.yml) |
+| 文档说法 | `README.md` 两条构建线表 + `android-app/README-android.md:118,236` | 同上 + `TipCL-触控改动说明.md` |
+
+实测(不需要 JDK 的两段解析逻辑):
+
+```
+A 线:findstr "versionName" build.gradle.kts → tokens=2 delims== → PARSED=[1.2.0] → TipCL-1.2.0-android.apk
+B 线:findstr /b "  versionName:" apktool.yml  → PARSED=[0.9.3] → TipCL-0.9.3.apk
+dex 目录:24 个(smali + smali_classes2..24)⇒ "补丁 3 个、其余 21 个保持原包字节"成立
+```
+
+### 6.6.2 `重建工具/SurgicalAssemble.java` 能否按文档编译:**静态核对通过,未真编译**
+
+- **本机没有任何 JDK**:`java` / `javac` 都不在 PATH、`JAVA_HOME` 为空、Android 仓库 `.tools/` 也不存在 ⇒ **`javac` 这一步本轮没做**(不是"编译失败",是"没有工具链")。
+- 能做的核对我做到了:把 `build_release.bat` 会下载的那个 jar 真下下来(阿里云镜像 `apktool-cli-2.10.0.jar`,**32,169,252 B**),按 zip 成员 + class 常量池核对编译前提:
+
+| 源码里的调用 | jar 里是否存在 | 证据 |
+|---|---|---|
+| `import brut.androlib.mod.SmaliMod` | ✅ | `brut/androlib/mod/SmaliMod.class` 存在 |
+| `SmaliMod.assembleSmaliFile(File, DexBuilder, int, boolean, boolean)` | ✅ | 类里有方法名 `assembleSmaliFile` + 描述符 `(Ljava/io/File;Lcom/android/tools/smali/dexlib2/writer/builder/DexBuilder;IZZ)Z` |
+| `new DexBuilder(Opcodes.forApi(api))` | ✅ | `Opcodes.forApi(I)Lcom/android/tools/smali/dexlib2/Opcodes;` 存在 |
+| `db.writeTo(new FileDataStore(out))` | ✅ | `DexBuilder extends DexWriter`,`DexWriter.writeTo(Lcom/.../io/DexDataStore;)V`;`FileDataStore implements DexDataStore`,`FileDataStore(File)` 构造存在 |
+
+- **同时修掉我自己 R1 写错的一步**:`javac -cp apktool.jar 重建工具\SurgicalAssemble.java` 会把 `SurgicalAssemble.class` 落在 `重建工具\` 里,而下一步 `java -cp "apktool;."` 从当前目录找主类 ⇒ **必然 ClassNotFoundException**。已加 `-d .` 并在文档里注明原因。
+
+### 6.6.3 只报告(未改)
+
+| 位置 | 现象 | 说明 |
+|---|---|---|
+| `android-app/app/build.gradle.kts:15` | `versionCode = 1` 而 `versionName` 已抬到 `1.2.0`(`30eb6790` 只改了 name) | 后续每次出 A 线包都要递增 versionCode,否则侧载"降级安装"会被拒;属发版纪律,不动代码 |
+| 桌面对外发行说明(不在本仓) | 1.2.0 的 release body 写"新线 `android-app` = `versionName 0.1.0`" | 仓库里早已是 `1.2.0`(`30eb6790`),发行说明那句已过期;改不了(不在仓库),记在这里免得下一轮又被当成"仓库与说明不一致" |
+
+## 6.7 本轮提交
+
+| 仓库 | 分支 | 提交 | 内容 |
+|---|---|---|---|
+| TipCL | `audit/E` | `0733a41` | 5 文件 +239/−15:两本布局手册(手感 + FAQ 10 + 依据表)、`docs/README.md`(Linux 四处差异 + height_px 等价 + 文档入口)、`README.md`(功能表平台核对 + MCP/手机同步口径)、新增 `docs/RELEASE-CHECKLIST.md` |
+| TipCL-Android | `audit/E-android2` | `ac6a8491` | `TipCL-触控改动说明.md`:重建命令加 `javac -d .` + apktool jar 符号静态核对结论 |
+
+> 未 push;未改 `src/**`、`windos/src/**`、词表、`tests/**`、`tools/**`、`.github/**`,也未动 Android 的 smali / 二进制 / apk。
