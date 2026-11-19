@@ -92,10 +92,11 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 [docs/DELIVERY.md](DELIVERY.md) 交付物清单、发布参数、冒烟矩阵 ·
 [`progress/`](../progress/) 各工作包收尾报告 ·
 [`docs/m2-recon/`](m2-recon/) M2 立项侦察报告 ·
+[`docs/RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md) **发版前的元数据检查单**（抬版本号要改哪 6 处 / 重算哪些 sha256 / 回填哪两份清单 / 发完怎么复核） ·
 [交接必读.md](../交接必读.md) 接手流程（立项阶段写成，现状以 PROGRESS.md 为准）。
 
 布局 v2 的 **Windows 版**手册(1.2.0):[docs/布局使用指南.md](布局使用指南.md) 完整手册(三个入口 / 手势 / 三种模式 / 分栏 / 整机方案导入导出 / 自建区块 / AI 排版回退 / 本版的坑)·
-[docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 9 条 FAQ。**这两份写的是 Windows 桌面版行为;Linux 树当前只落地了核心,见下一节。**
+[docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 10 条 FAQ。**这两份写的是 Windows 桌面版行为**;Linux 侧除「AI 排版」外的入口都在,但**编辑态手感有四处差异**(见下面「Linux 编辑态与 Windows 的四处差异」)。
 
 ### 布局 v2:Linux 移植版的真实进度(截至 `b86afe3`,2026-11-20 复核)
 
@@ -115,6 +116,24 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 | 页签与标题栏编辑 | `Pages/Layout/ShellTabs.cs` |
 
 **尚未落地**(别再按 Windows 手册去找这些入口):**AI 排版工具** —— `layout_apply` / `layout_get` 工具与「AI 备份 <时间>」方案的实现在 `windos/src/TipCL/Core/Launcher/Ai/LayoutTools.cs`,Linux 树 `src/` 里 `LayoutTools` 与字符串「AI 备份」**零命中**(`grep -r "LayoutTools\|AI 备份" src/` 无结果)。故 Windows 手册里「让 AI 改布局」「AI 改坏了用 AI 备份回退」两节对 Linux 版不适用。
+
+### Linux 编辑态与 Windows 的四处差异(2026-11-20 复核,别当 bug 修)
+
+Windows 侧 R3 把 stack 纵向拖拽改成了"浮起跟手 + 滞回换位 + FLIP + 摆锤式边缘滚动",**Linux 走的不是同一条路**。下面四条都是**刻意的**(各有代码依据),改之前先读这一节:
+
+| # | 差异 | Linux 的做法(证据) | Windows 的做法 | 后果 |
+|---|---|---|---|---|
+| 1 | stack 页怎么拖 | 进编辑态时**临时折成 12 列 grid**(按现状逐行折算坐标),退出后**保留网格、不还原成 stack**:`Pages/Layout/LayoutEditor.cs:518-546`(`ConvertStackToGrid` → `LayoutEngine.StackToGrid`)、`:1154`、`:1278` 的注释 | stack 保持一维纵向流,拖拽是专门的换序手势(`BeginDrag`/`MoveStackFloat`/`ApplyStackReorder`) | Linux **没有**"一维换序"这个概念:拖 stack 页的块 = 拖 grid 里的块(像素跟手、整格落位,`LayoutEditor.cs:1969`) |
+| 2 | 换位会不会"抖" | 靠 grid 的落点占位 + FLIP 让位;换位判定是格子运算,天然没有"中点附近来回翻"的问题 | 有**显式滞回**:越过相邻块中点 **±6px** 才换位(`StackDragPlan.cs:21` `Hysteresis = 6.0`) | 手感不同:Windows 是"轻推不换、推够才换";Linux 是"跟着鼠标走、到格就换" |
+| 3 | 边缘自动滚动 | **30ms** 一帧、边缘区 **48px**、每帧最多 **28px**(`(depth*0.6+4)`,越靠边越快):`LayoutEditor.cs:2171-2215` | **16ms** 一帧、边缘区 **36px**、每帧最多 **18px**(`0.25+0.75*depth`):`StackDragPlan.cs:77-99`、`LayoutEditor.cs:162-165,1858-1873` | 速度曲线不同;两边都是"指针停住也继续滚" |
+| 4 | 滚动条冒出来之后 | **按新宽度重量行高**:Arrange 宽 ≠ 测量宽 → 重跑第一趟测量;只在"更窄且总高确实变了"时补一次 `InvalidateMeasure`,同一宽度只补一次(`_remeasureWidths` 守卫):`Pages/Layout/GridCanvasPanel.cs:667-679`、`:111`、`:513-515` 注释 | 同口径(`_remeasureWidths` 守卫来自参考件) | 用户体感一致:**滚动条一出现,卡片内容不会被切一刀** |
+
+**`height_px` 的存储表示不同但语义等价(最容易误判成 bug 的一条)**:
+
+- **Windows**:它是 v2 模型上的**类型化字段** `LayoutBlockV2.HeightPx`(`windos/src/TipCL/Core/Launcher/Layout/LayoutDocV2.cs:977`,`:1032` 写出、`:1088` 读入、`:1116` 清掉);
+- **Linux**:它住在区块的**通用 `extra` 字典**里(`Pages/Layout/LayoutEngine.cs:1201-1243` 的 `ReadHeightPx` / `WriteHeightPx`,键名同为 `height_px`);
+- **两者落到 JSON 里是同一个位置**:`LayoutJson.MergeExtra` 把 `Extra` **平铺**合并进区块对象(`src/TipCL.Core/Launcher/Layout/LayoutJson.cs` 的 `MergeExtra`:`target[kv.Key] = ...`,不加嵌套层),所以磁盘上都是区块对象的顶层 `"height_px": 172`。
+- ⇒ 同一份 `ui_layout_v2.json` 两侧都能读、都能写、都不会丢这个值。**看到"Linux 里用 extra、Windows 里用字段"不要当存储格式不一致去"统一"**,那会白改一轮。
 
 ## 与 Windows 版的关系
 

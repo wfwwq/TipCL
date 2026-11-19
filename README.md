@@ -72,11 +72,19 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 | 🗂️ **实例与存档** | 多实例隔离、存档管理与备份回滚、Java 自动检测 |
 | 👤 **账号** | 微软正版、外置登录（authlib-injector）、离线皮肤 |
 | 🌐 **联机** | 内置 Terracotta 局域网联机 |
-| 📱 **手机同步** | 同一 Wi-Fi 或 USB 数据线和手机启动器互传存档，配对码连接，谁改了传谁，覆盖前自动备份 |
-| 🤖 **AI 助手** | 崩溃诊断、卡顿优化、看图、长期记忆、MCP Server，见[上文](#-ai-助手) |
-| 🔌 **插件系统** | 插件市场一键安装，插件可加页面、AI 工具、启动钩子和首页卡片，见[下文](#-插件系统) |
+| 📱 **手机同步** | 同一 Wi-Fi 或 USB 数据线和手机启动器互传存档，配对码连接，谁改了传谁，覆盖前自动备份（**桌面端已就绪，手机端待配套**，见下） |
+| 🤖 **AI 助手** | 崩溃诊断、卡顿优化、看图、长期记忆、MCP Server（**MCP Server 仅 Windows**，见下），见[上文](#-ai-助手) |
+| 🔌 **插件系统** | 插件市场一键安装，插件可加页面、AI 工具、启动钩子和首页卡片（**插件的网页界面仅 Windows**，见下），见[下文](#-插件系统) |
 | 🏠 **仪表盘首页** | 默认呈现启动横幅、启动配置、快捷入口和新闻；日志、时长、便签等卡片按需添加，布局随心拖拽，支持方案与导入导出 |
 | 🎨 **外观** | 浅色 / 深色主题，中英双语界面 |
+
+> **两条实现在这张表上的差异（2026-11-20 逐条核对）**：上表对 **Windows 桌面版**逐条成立；Linux / Avalonia 版（`src/`）除下面三处外也都已落地（启动链、Java 探测、模组/整合包、实例与存档、账号、Terracotta、AI 助手、插件市场与钩子、仪表盘、主题与双语）：
+>
+> | 能力 | Windows | Linux 树 | 事实 |
+> |---|---|---|---|
+> | **MCP Server**（`http://127.0.0.1:25585/mcp`） | ✅ `windos/src/TipCL/Core/Launcher/Ai/McpServer.cs`（`DefaultPort = 25585`） | ❌ 只有 MCP **客户端**（`src/TipCL.Core/Launcher/Ai/Mcp.cs`、`McpClient.cs`），`25585` / `McpServer` 在 `src/` **零命中** | Linux 版能连外部 MCP 服务，但**不能**被 Claude / Cursor 当 MCP Server 调用 |
+> | **插件网页界面**（插件页签 / 浮层 / 网页区块） | ✅ WebView2 内嵌；Win7 / 8.1 上自动改用浏览器 | ⚠️ **无网页宿主**：按既有先例恒走「当前系统不能内嵌网页 + 在浏览器中打开」的兜底分支（`src/TipCL.App/Pages/Layout/Widgets/DangerousWidgets.cs`、`Pages/Layout/PluginBlocks.cs` 文件头降级说明） | 插件的**逻辑**（AI 工具 / 钩子 / 首页卡片数据）在 Linux 可用，网页形态的 UI 面会外开浏览器 |
+> | **手机同步** | ✅ 桌面端（`Core/Launcher/Sync/PhoneClient.cs`） | ✅ 桌面端（`src/TipCL.Core/Launcher/Sync/`、设置页 `PhoneSyncPanel.cs`） | **两端都只是「桌面半边」**：手机端服务端在 `TipCL-Android` 仓库里找不到对应实现（`X-PyMCL-Token` / `/api/ping` / `deviceTimeMs` 全库 **0 命中**）⇒ 别把它当"现在就能互传存档" |
 
 > Win7 / 8.1 同样可用：图标用内置字体渲染、图片走纯托管解码，不依赖系统里不存在的新组件（插件的 Web 界面在 Win7 / 8.1 上会自动改用浏览器打开）。
 
@@ -154,6 +162,8 @@ windos/tools/iconfont/          内置图标字体的映射表与生成脚本
 
 ## 🔗 MCP Server
 
+> **平台口径(2026-11-20 核对)**:本节与 `25585` 这个端口**只在 Windows 桌面版成立**(`windos/src/TipCL/Core/Launcher/Ai/McpServer.cs`)。Linux / Avalonia 版只有 MCP **客户端**(能连外部 MCP 服务),`src/` 里 `25585` 与 `McpServer` 零命中 —— 别在 Linux 上找这个开关。
+
 TipCL 可以作为本机 MCP Server，让 Claude、Cursor 等外部 AI 直接调用启动器的工具：查实例、装版本 / 模组 / 整合包 / 光影、启动游戏、诊断崩溃和卡顿、备份存档。
 
 在 **设置 → AI 助手 → MCP Server** 打开开关即可，地址：`http://127.0.0.1:25585/mcp`（只监听本机）。
@@ -173,6 +183,8 @@ Cursor（`~/.cursor/mcp.json`）：
 Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http://127.0.0.1:25585/mcp` 接入。端口可以在数据目录的 `mcp_server.json` 里改。
 
 ## 📱 手机同步
+
+> **口径(2026-11-20 核对,别写成"现在就能用")**:本仓库与 Linux 树只有**桌面端**(客户端 + 设置页面板 + 同步面板);**手机端服务端不在本仓库**,在 `TipCL-Android` 里也**找不到对应实现**(`X-PyMCL-Token` / `/api/ping` / `/api/worlds` / `deviceTimeMs` 全库 0 命中)⇒ 现状是「桌面端协议与 UI 已就绪,手机端待配套」。
 
 先在手机启动器里打开 **存档管理 → 从 zip 导入 → 启动同步服务**，屏幕上会显示地址和 6 位配对码。然后在 TipCL 的 **设置 → 手机同步** 里填上地址（也可以点「扫描局域网」）和配对码，连接后打开同步面板，就能对比两边的世界、逐个互传或一键同步。也可以直接对 AI 说「把存档同步到手机」。
 
