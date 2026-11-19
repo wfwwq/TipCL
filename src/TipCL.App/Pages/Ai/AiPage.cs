@@ -246,6 +246,22 @@ public sealed class AiPage : PageBase
         return col;
     }
 
+    /// <summary>
+    /// [audit/B] 把空态放回消息区 —— **只放一次**。
+    /// Avalonia 的元素同一时刻只允许有一个父级:对已经挂在 <c>_messages</c> 上的空态再 <c>Add</c> 一次会抛
+    /// <c>InvalidOperationException("... already has a visual parent ...")</c>(UI 线程未捕获 ⇒ 进程崩)。
+    /// 「清空」与「新对话」原来都是无条件 Add,而空态从构造起就一直挂在消息区上、只在 <c>_bubbles</c> 里被移除时
+    /// 不会被摘 —— 于是点「清空」/「/new」必崩。这里先判存在再放。
+    /// </summary>
+    private void ShowEmptyState()
+    {
+        if (!_messages.Children.Contains(_empty))
+        {
+            _messages.Children.Add(_empty);
+        }
+        _empty.IsVisible = true;
+    }
+
     private void OpenPermissionPanel()
     {
         var panel = new AiPermissionPanel(InProcessApi.Instance, _runner.Instance);
@@ -439,8 +455,7 @@ public sealed class AiPage : PageBase
         _chatLoaded = true;
         _history.Clear();
         RenderHistory();
-        _messages.Children.Add(_empty);
-        _empty.IsVisible = true;
+        ShowEmptyState();
         Usage.Reset(_chatId);
         RefreshUsage(Usage.Get(_chatId), _history);
         ToastHost.Show("已开新对话", "上一段对话还在存档里", ToastKind.Success);
@@ -1013,8 +1028,7 @@ public sealed class AiPage : PageBase
             _messages.Children.Remove(b);
         }
         _bubbles.Clear();
-        _messages.Children.Add(_empty);
-        _empty.IsVisible = true;
+        ShowEmptyState();
         // 当前对话的消息一并清掉(存档里其它对话不受影响)
         if (_chatLoaded)
         {
