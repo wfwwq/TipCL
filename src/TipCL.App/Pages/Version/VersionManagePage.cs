@@ -77,16 +77,16 @@ public sealed class VersionManagePage : PageBase
 
     private static readonly (string Key, string Title, bool Open)[] Defs =
     {
-        ("fav", "收藏的版本", true),
-        ("fabric", "Fabric 版本", true),
-        ("forge", "Forge 版本", true),
-        ("quilt", "Quilt 版本", true),
-        ("neoforge", "NeoForge 版本", true),
-        ("optifine", "OptiFine 版本", true),
-        ("liteloader", "LiteLoader 版本", true),
-        ("vanilla", "原版版本", true),
-        ("uncommon", "不常用版本", false),
-        ("hidden", "隐藏的版本", false),
+        ("fav", I18nCore.Tr("收藏的版本"), true),
+        ("fabric", I18nCore.Tr("Fabric 版本"), true),
+        ("forge", I18nCore.Tr("Forge 版本"), true),
+        ("quilt", I18nCore.Tr("Quilt 版本"), true),
+        ("neoforge", I18nCore.Tr("NeoForge 版本"), true),
+        ("optifine", I18nCore.Tr("OptiFine 版本"), true),
+        ("liteloader", I18nCore.Tr("LiteLoader 版本"), true),
+        ("vanilla", I18nCore.Tr("原版版本"), true),
+        ("uncommon", I18nCore.Tr("不常用版本"), false),
+        ("hidden", I18nCore.Tr("隐藏的版本"), false),
     };
 
     // 折叠态与收藏(R15):落 UiPrefs -> config.json 的 ui_prefs 键(缺口 B 已补),
@@ -95,9 +95,9 @@ public sealed class VersionManagePage : PageBase
     private readonly StackPanel _folders = new();
     private readonly TextBlock _folderPath = UiClass.Small("");
     private readonly TextBlock _count = UiClass.Muted("");
-    private readonly TextBox _search = UiClass.Input("过滤版本名", "", 170);
+    private readonly TextBox _search = UiClass.Input(I18nCore.Tr("过滤版本名"), "", 170);
     private readonly StackPanel _groupsHost = new();
-    private readonly StackPanel _empty = UiClass.Empty("Folder", "这个文件夹还没有版本", "点左侧「添加或导入」,或到「下载」页装一个");
+    private readonly StackPanel _empty = UiClass.Empty("Folder", I18nCore.Tr("这个文件夹还没有版本"), "点左侧「添加或导入」,或到「下载」页装一个");
     private readonly List<FolderRow> _folderRows = new();
 
     private List<(string Name, int Versions, string Path)> _instances = new();
@@ -120,26 +120,26 @@ public sealed class VersionManagePage : PageBase
     public string LayoutId { get; }
 
     /// <param name="embedded">true = 嵌在实例详情里(布局用 <see cref="EmbeddedLayoutPageId"/> 单独存)。</param>
-    public VersionManagePage(bool embedded = false) : base("instance", "版本管理")
+    public VersionManagePage(bool embedded = false) : base("instance", I18nCore.Tr("版本管理"))
     {
         LayoutId = embedded ? EmbeddedLayoutPageId : LayoutPageId;
         // ── 左栏:文件夹列表卡 ──
-        var add = U.Btn("添加已有文件夹", BtnKind.Soft, (_, _) => Run(AddFolderAsync, "导入失败"), "Folder");
-        var pack = U.Btn("导入整合包", BtnKind.Soft, (_, _) => Run(ImportPackAsync), "Box");
-        var create = U.Btn("新建实例", BtnKind.Soft, (_, _) => Run(CreateAsync, "创建失败"), "Add");
-        var migrate = U.Btn("导入官方启动器", BtnKind.Chip, (_, _) => Run(MigrateAsync), "Import");
+        var add = U.Btn(I18nCore.Tr("添加已有文件夹"), BtnKind.Soft, (_, _) => Run(AddFolderAsync, I18nCore.Tr("导入失败")), "Folder");
+        var pack = U.Btn(I18nCore.Tr("导入整合包"), BtnKind.Soft, (_, _) => Run(ImportPackAsync), "Box");
+        var create = U.Btn(I18nCore.Tr("新建实例"), BtnKind.Soft, (_, _) => Run(CreateAsync, I18nCore.Tr("创建失败")), "Add");
+        var migrate = U.Btn(I18nCore.Tr("导入官方启动器"), BtnKind.Chip, (_, _) => Run(MigrateAsync), "Import");
         foreach (var b in new[] { add, pack, create, migrate }) b.HorizontalAlignment = HorizontalAlignment.Stretch;
-        var h = UiClass.H3("文件夹列表");
+        var h = UiClass.H3(I18nCore.Tr("文件夹列表"));
         _folderPath.Mk(0, 0, 0, 0).Dyn(TextBlock.ForegroundProperty, "B.InkMuted");
         var folderCard = UiClass.Card(UiClass.V(10, h, _folderPath, _folders, UiClass.Sep(),
-            UiClass.Txt("添加或导入", 13, bold: true), add, pack, create, migrate), 14);
+            UiClass.Txt(I18nCore.Tr("添加或导入"), 13, bold: true), add, pack, create, migrate), 14);
         folderCard.VerticalAlignment = VerticalAlignment.Top;
         folderCard.MaxWidth = 272;
 
         // ── 右栏:版本选择 ──
-        var refresh = U.Btn("刷新", BtnKind.Chip, (_, _) => Run(LoadAsync), "Refresh");
+        var refresh = U.Btn(I18nCore.Tr("刷新"), BtnKind.Chip, (_, _) => Run(LoadAsync), "Refresh");
         _search.TextChanged += (_, _) => RenderGroups();
-        var head = UiClass.Section("版本选择", "双击版本直接启动;卡片右侧:收藏 / 卸载 / 设置",
+        var head = UiClass.Section(I18nCore.Tr("版本选择"), "双击版本直接启动;卡片右侧:收藏 / 卸载 / 设置",
             UiClass.H(8, _count.VCenter(), _search.VCenter(), refresh));
         var list = UiClass.V(12, _groupsHost, _empty);
         list.VerticalAlignment = VerticalAlignment.Top;
@@ -293,7 +293,7 @@ public sealed class VersionManagePage : PageBase
     private void UpdateFolderPath()
     {
         string path = FolderPathFor(_folder);
-        _folderPath.Text = path.Length > 0 ? "当前文件夹 " + path : "当前文件夹";
+        _folderPath.Text = path.Length > 0 ? I18nCore.Tr("当前文件夹 ") + path : I18nCore.Tr("当前文件夹");
         _folderPath.TextTrimming = TextTrimming.CharacterEllipsis;
         ToolTip.SetTip(_folderPath, path.Length > 0 ? path : null);
     }
@@ -312,8 +312,8 @@ public sealed class VersionManagePage : PageBase
         var chips = UiClass.H(4) as StackPanel;
         chips.VerticalAlignment = VerticalAlignment.Center;
         if (name == _defaultInstance)
-            chips.Children.Add(UiClass.Tag("默认", "B.OnAccentStrong", "B.AccentStrong"));
-        var more = UiClass.IconBtn("More", "实例操作", null, 13);
+            chips.Children.Add(UiClass.Tag(I18nCore.Tr("默认"), "B.OnAccentStrong", "B.AccentStrong"));
+        var more = UiClass.IconBtn("More", I18nCore.Tr("实例操作"), null, 13);
         more.Click += (_, _) => FolderMenu(more, name);
         chips.Children.Add(more);
 
@@ -452,12 +452,12 @@ public sealed class VersionManagePage : PageBase
             IsChecked = fav,
             Content = IconLib.Make("Star", fav ? "B.Accent" : "B.InkMuted", 13),
         };
-        ToolTip.SetTip(star, fav ? "取消收藏" : "收藏");
+        ToolTip.SetTip(star, fav ? "取消收藏" : I18nCore.Tr("收藏"));
         star.Click += (_, _) => ToggleFav(v);
 
-        var uninstall = UiClass.IconBtn("Trash", "卸载这个版本", null, 13);
-        uninstall.Click += (_, _) => Run(() => UninstallAsync(inst, id), "卸载失败");
-        var setup = UiClass.IconBtn("Gear", "版本设置", null, 13);
+        var uninstall = UiClass.IconBtn("Trash", I18nCore.Tr("卸载这个版本"), null, 13);
+        uninstall.Click += (_, _) => Run(() => UninstallAsync(inst, id), I18nCore.Tr("卸载失败"));
+        var setup = UiClass.IconBtn("Gear", I18nCore.Tr("版本设置"), null, 13);
         setup.Click += (_, _) => Run(async () =>
         {
             await VersionSetupDialog.ShowAsync(inst, id);
@@ -467,7 +467,7 @@ public sealed class VersionManagePage : PageBase
         var isoTag = IsolationTag(v);
         var isoSwitch = UiClass.Switch(v.Isolated);
         ToolTip.SetTip(isoSwitch, "开:这个版本用自己的 mods / config;关:与实例里其它版本共用那一份");
-        isoSwitch.IsCheckedChanged += (_, _) => Run(() => ToggleIsolationAsync(id, isoSwitch.IsChecked == true), "切换失败");
+        isoSwitch.IsCheckedChanged += (_, _) => Run(() => ToggleIsolationAsync(id, isoSwitch.IsChecked == true), I18nCore.Tr("切换失败"));
 
         var actions = UiClass.H(6, isoTag.VCenter(), isoSwitch, star, uninstall, setup);
         actions.VerticalAlignment = VerticalAlignment.Center;
@@ -510,7 +510,7 @@ public sealed class VersionManagePage : PageBase
 
     private static Border IsolationTag(Ver v)
         => v.Isolated
-            ? UiClass.Tag(v.IsolationLabel.Length > 0 ? v.IsolationLabel : "完全独立", "B.AccentDeep", "B.AccentSoft")
+            ? UiClass.Tag(v.IsolationLabel.Length > 0 ? v.IsolationLabel : I18nCore.Tr("完全独立"), "B.AccentDeep", "B.AccentSoft")
             : UiClass.Tag("大锅饭(与其他版本共用)");
 
     /// <summary>切换版本隔离(照 Windows ToggleIsolationVerAsync:开隔离时问要不要复制现有模组)。</summary>
@@ -519,12 +519,12 @@ public sealed class VersionManagePage : PageBase
         bool seed = false;
         if (isolated)
         {
-            int pick = await Dlg.Choose("转为独立模组",
+            int pick = await Dlg.Choose(I18nCore.Tr("转为独立模组"),
                 UiClass.V(6,
                     UiClass.Muted($"「{version}」将拥有自己的 mods / config 目录。"),
                     UiClass.Muted("要把游戏目录里现有的共享模组复制一份过去吗?"),
                     UiClass.Muted("选「复制一份」保持现在能玩的样子;选「留空」从零开始装。")),
-                new[] { "取消", "留空", "复制一份" }, 540);
+                new[] { I18nCore.Tr("取消"), I18nCore.Tr("留空"), I18nCore.Tr("复制一份") }, 540);
             if (pick <= 0)
             {
                 await LoadAsync();
@@ -533,7 +533,7 @@ public sealed class VersionManagePage : PageBase
             seed = pick == 2;
         }
         await Api.CallAsync<PyDict>("toggle_version_isolation", new { version, isolated, seed });
-        Toast(isolated ? "已转为独立模组" : "已改回共用",
+        Toast(isolated ? I18nCore.Tr("已转为独立模组") : I18nCore.Tr("已改回共用"),
             isolated
                 ? $"「{version}」以后用自己的 mods / config" + (seed ? ",已复制一份现有模组" : "")
                 : $"「{version}」与实例里其它版本共用 mods",
@@ -545,10 +545,10 @@ public sealed class VersionManagePage : PageBase
     {
         string type = v.Type switch
         {
-            "release" => "正式版",
-            "snapshot" => "快照",
-            "old_beta" => "旧测试",
-            "old_alpha" => "旧阿尔法",
+            "release" => I18nCore.Tr("正式版"),
+            "snapshot" => I18nCore.Tr("快照"),
+            "old_beta" => I18nCore.Tr("旧测试"),
+            "old_alpha" => I18nCore.Tr("旧阿尔法"),
             _ => "",
         };
         string s = type.Length > 0 ? type + " " + v.Mc : v.Mc;
@@ -621,12 +621,12 @@ public sealed class VersionManagePage : PageBase
 
     private async Task UninstallAsync(string inst, string version)
     {
-        if (!await Dlg.Confirm("卸载版本",
-                $"确定卸载「{version}」?该版本目录下的独立模组与存档会一并删除。", "卸载", "取消", danger: true))
+        if (!await Dlg.Confirm(I18nCore.Tr("卸载版本"),
+                $"确定卸载「{version}」?该版本目录下的独立模组与存档会一并删除。", I18nCore.Tr("卸载"), I18nCore.Tr("取消"), danger: true))
             return;
         await Api.CallAsync<object>("uninstall_version", new { spec = inst + " / " + version });
         await LoadAsync();
-        Toast("已卸载", version, ToastKind.Success);
+        Toast(I18nCore.Tr("已卸载"), version, ToastKind.Success);
     }
 
     private void VerMenu(Control anchor, Ver v)
@@ -635,45 +635,45 @@ public sealed class VersionManagePage : PageBase
         string id = v.Id;
         var menu = new List<MenuItemFx>
         {
-            new MenuItemFx("打开版本文件夹", async () => { await Api.CallAsync<string>("open_version_folder", new { instance = inst, version = id, which = "root" }); }),
-            new MenuItemFx("打开游戏文件夹", async () => { await Api.CallAsync<string>("open_version_folder", new { instance = inst, version = id, which = "game" }); }),
+            new MenuItemFx(I18nCore.Tr("打开版本文件夹"), async () => { await Api.CallAsync<string>("open_version_folder", new { instance = inst, version = id, which = "root" }); }),
+            new MenuItemFx(I18nCore.Tr("打开游戏文件夹"), async () => { await Api.CallAsync<string>("open_version_folder", new { instance = inst, version = id, which = "game" }); }),
             new MenuItemFx("存档管理...", () => SavesDialog.ShowAsync(inst, id)),
-            new MenuItemFx("重命名", async () =>
+            new MenuItemFx(I18nCore.Tr("重命名"), async () =>
             {
-                string? name = await Dlg.Prompt("重命名版本", "新版本 ID", id);
+                string? name = await Dlg.Prompt(I18nCore.Tr("重命名版本"), I18nCore.Tr("新版本 ID"), id);
                 if (string.IsNullOrWhiteSpace(name) || name == id) return;
                 await Api.CallAsync<string>("rename_version", new { instance = inst, version = id, new_id = name });
                 await LoadAsync();
             }),
-            new MenuItemFx("复制一份", async () =>
+            new MenuItemFx(I18nCore.Tr("复制一份"), async () =>
             {
-                string? name = await Dlg.Prompt("复制版本", "新版本 ID", id + "-copy");
+                string? name = await Dlg.Prompt(I18nCore.Tr("复制版本"), I18nCore.Tr("新版本 ID"), id + "-copy");
                 if (string.IsNullOrWhiteSpace(name)) return;
                 await Api.CallAsync<string>("copy_version", new { instance = inst, version = id, new_id = name });
                 await LoadAsync();
             }),
-            new MenuItemFx(v.Hidden ? "取消隐藏" : "在列表中隐藏", async () =>
+            new MenuItemFx(v.Hidden ? I18nCore.Tr("取消隐藏") : I18nCore.Tr("在列表中隐藏"), async () =>
             {
                 await Api.CallAsync<PyDict>("hide_version", new { instance = inst, version = id, hidden = !v.Hidden });
                 await LoadAsync();
-                Toast(v.Hidden ? "已取消隐藏" : "已隐藏", id, ToastKind.Success);
+                Toast(v.Hidden ? I18nCore.Tr("已取消隐藏") : I18nCore.Tr("已隐藏"), id, ToastKind.Success);
             }),
-            new MenuItemFx(Shortcut.Exists(inst, id) ? "删除桌面快捷方式" : "创建桌面快捷方式",
+            new MenuItemFx(Shortcut.Exists(inst, id) ? "删除桌面快捷方式" : I18nCore.Tr("创建桌面快捷方式"),
                 () => ShortcutAsync(inst, id)),
-            new MenuItemFx("导出启动脚本", async () =>
+            new MenuItemFx(I18nCore.Tr("导出启动脚本"), async () =>
             {
-                string? dest = await Dlg.SaveFile("导出启动脚本", $"launch-{inst}-{id}.sh");
+                string? dest = await Dlg.SaveFile(I18nCore.Tr("导出启动脚本"), $"launch-{inst}-{id}.sh");
                 if (dest == null) return;
                 await Api.CallAsync<string>("export_launch_script", new { instance = inst, version = id, dest });
-                ToastHost.Show("已导出", dest, ToastKind.Success);
+                ToastHost.Show(I18nCore.Tr("已导出"), dest, ToastKind.Success);
             }),
             new MenuItemFx("修复(补全缺失文件)", async () =>
             {
                 await Api.CallAsync<string>("repair_version", new { instance = inst, version = id });
-                ToastHost.Show("已开始修复", id);
+                ToastHost.Show(I18nCore.Tr("已开始修复"), id);
                 if (this.GetVisualRoot() is MainWindow w) w.Navigate("tasks");
             }),
-            new MenuItemFx("卸载这个版本", () => UninstallAsync(inst, id)),
+            new MenuItemFx(I18nCore.Tr("卸载这个版本"), () => UninstallAsync(inst, id)),
         };
         ContextMenuFx.Show(anchor, menu, 7);
     }
@@ -682,19 +682,19 @@ public sealed class VersionManagePage : PageBase
     {
         var menu = new List<MenuItemFx>
         {
-            new MenuItemFx("打开实例文件夹", async () => { await Api.CallAsync<string>("open_instance_folder", new { name = instance }); }),
-            new MenuItemFx("设为默认实例", async () =>
+            new MenuItemFx(I18nCore.Tr("打开实例文件夹"), async () => { await Api.CallAsync<string>("open_instance_folder", new { name = instance }); }),
+            new MenuItemFx(I18nCore.Tr("设为默认实例"), async () =>
             {
                 _folder = instance;
                 await LoadAsync();
-                Toast("默认实例", $"之后的启动将默认使用「{instance}」", ToastKind.Success);
+                Toast(I18nCore.Tr("默认实例"), $"之后的启动将默认使用「{instance}」", ToastKind.Success);
             }),
             new MenuItemFx("选择 Java...", () => PickJavaAsync(instance)),
-            new MenuItemFx("管理模组", () => ModsDialog.ShowAsync(instance)),
+            new MenuItemFx(I18nCore.Tr("管理模组"), () => ModsDialog.ShowAsync(instance)),
             new MenuItemFx("存档管理...", () => SavesDialog.ShowAsync(instance, "")),
-            new MenuItemFx("导出为整合包", async () =>
+            new MenuItemFx(I18nCore.Tr("导出为整合包"), async () =>
             {
-                string? dest = await Dlg.SaveFile("导出整合包", instance + ".mrpack");
+                string? dest = await Dlg.SaveFile(I18nCore.Tr("导出整合包"), instance + ".mrpack");
                 if (dest == null) return;
                 await Api.CallAsync<string>("export_modpack", new { instance, dest });
                 ToastHost.Show("已开始导出", instance);
@@ -702,19 +702,19 @@ public sealed class VersionManagePage : PageBase
             }),
             new MenuItemFx("重命名...", async () =>
             {
-                string? name = await Dlg.Prompt("重命名实例", "新名称", instance);
+                string? name = await Dlg.Prompt(I18nCore.Tr("重命名实例"), I18nCore.Tr("新名称"), instance);
                 if (string.IsNullOrWhiteSpace(name) || name == instance) return;
                 await Api.CallAsync<object>("rename_instance", new { name = instance, new_name = name });
                 await LoadAsync();
             }),
-            new MenuItemFx("删除实例", async () =>
+            new MenuItemFx(I18nCore.Tr("删除实例"), async () =>
             {
-                if (!await Dlg.Confirm("删除实例",
-                        $"「{instance}」下的版本、模组、存档都会被删除,且不可恢复。", "永久删除", "取消", danger: true))
+                if (!await Dlg.Confirm(I18nCore.Tr("删除实例"),
+                        $"「{instance}」下的版本、模组、存档都会被删除,且不可恢复。", I18nCore.Tr("永久删除"), I18nCore.Tr("取消"), danger: true))
                     return;
                 await Api.CallAsync<object>("delete_instance", new { name = instance });
                 await LoadAsync();
-                Toast("已删除", instance, ToastKind.Success);
+                Toast(I18nCore.Tr("已删除"), instance, ToastKind.Success);
             }),
         };
         ContextMenuFx.Show(anchor, menu, 7);
@@ -730,10 +730,10 @@ public sealed class VersionManagePage : PageBase
         string name = Shortcut.ShortcutName(inst, ver);
         if (Shortcut.Exists(inst, ver))
         {
-            if (!await Dlg.Confirm("删除桌面快捷方式", $"确定删除「{name}」?", "删除", "取消", danger: true)) return;
+            if (!await Dlg.Confirm("删除桌面快捷方式", $"确定删除「{name}」?", I18nCore.Tr("删除"), I18nCore.Tr("取消"), danger: true)) return;
             var r = await Api.CallAsync<PyDict>("delete_desktop_shortcut", new { name });
             if (r != null && Py.Truthy(r.Get("ok")))
-                Toast("已删除", Py.S(r.Get("path")), ToastKind.Success);
+                Toast(I18nCore.Tr("已删除"), Py.S(r.Get("path")), ToastKind.Success);
             else
                 Toast("没找到快捷方式", name, ToastKind.Warning);
             return;
@@ -741,11 +741,11 @@ public sealed class VersionManagePage : PageBase
         try
         {
             string path = await Api.CallAsync<string>("create_desktop_shortcut", new { instance = inst, version = ver }) ?? "";
-            await Dlg.Alert("已创建", $"桌面快捷方式:\n{path}\n\n双击即可直接启动该版本。");
+            await Dlg.Alert(I18nCore.Tr("已创建"), $"桌面快捷方式:\n{path}\n\n双击即可直接启动该版本。");
         }
         catch (ShortcutError ex)
         {
-            Toast("创建失败", ex.Message, ToastKind.Warning);
+            Toast(I18nCore.Tr("创建失败"), ex.Message, ToastKind.Warning);
         }
     }
 
@@ -755,20 +755,20 @@ public sealed class VersionManagePage : PageBase
         var opts = rawOpts.OfType<PyDict>().ToList();
         if (opts.Count == 0)
         {
-            Toast("没找到 Java", "去「设置 → Java」下载一个", ToastKind.Warning);
+            Toast(I18nCore.Tr("没找到 Java"), "去「设置 → Java」下载一个", ToastKind.Warning);
             return;
         }
         var labels = opts.Select(o => Py.S(o.Get("label"))).ToList();
-        string selected = await Api.TryCallAsync<string>("java_combo_label_for", "自动选择", new { instance, options = opts }) ?? "自动选择";
+        string selected = await Api.TryCallAsync<string>("java_combo_label_for", I18nCore.Tr("自动选择"), new { instance, options = opts }) ?? I18nCore.Tr("自动选择");
         var combo = UiClass.Combo(labels, selected, 320);
         string current = await Api.TryCallAsync<string>("instance_java_label", "", new { name = instance }) ?? "";
         var body = UiClass.V(8,
-            UiClass.Muted("留「自动选择」由启动器按版本匹配"),
+            UiClass.Muted(I18nCore.Tr("留「自动选择」由启动器按版本匹配")),
             current.Length > 0 ? UiClass.Small("当前记录:" + current) : null,
             combo);
-        if (!await Dlg.Ask($"为「{instance}」选择 Java", body, "保存")) return;
+        if (!await Dlg.Ask($"为「{instance}」选择 Java", body, I18nCore.Tr("保存"))) return;
         int i = Math.Max(0, combo.SelectedIndex);
-        await Api.CallAsync<string>("set_instance_java", new { name = instance, java = i < opts.Count ? Py.S(opts[i].Get("value")) : "自动选择" });
+        await Api.CallAsync<string>("set_instance_java", new { name = instance, java = i < opts.Count ? Py.S(opts[i].Get("value")) : I18nCore.Tr("自动选择") });
         await LoadAsync();
     }
 
@@ -779,35 +779,35 @@ public sealed class VersionManagePage : PageBase
         string? path = await Dlg.PickFolder("选择一个已有的游戏文件夹(含 versions 的 .minecraft)");
         if (string.IsNullOrWhiteSpace(path)) return;
         string fileName = Path.GetFileName(path.TrimEnd('\\', '/'));
-        string? name = await Dlg.Prompt("导入为文件夹", "显示名称", fileName);
+        string? name = await Dlg.Prompt(I18nCore.Tr("导入为文件夹"), I18nCore.Tr("显示名称"), fileName);
         if (string.IsNullOrWhiteSpace(name)) return;
         await Api.CallAsync<PyDict>("import_existing_folder", new { path, name });
-        ToastHost.Show("已开始导入", "导入进度看「下载任务」", ToastKind.Success);
+        ToastHost.Show(I18nCore.Tr("已开始导入"), I18nCore.Tr("导入进度看「下载任务」"), ToastKind.Success);
         await LoadAsync();
         if (this.GetVisualRoot() is MainWindow w) w.Navigate("tasks");
     }
 
     private async Task ImportPackAsync()
     {
-        string? path = await Dlg.PickFile("导入整合包", "*.mrpack", "*.zip");
+        string? path = await Dlg.PickFile(I18nCore.Tr("导入整合包"), "*.mrpack", "*.zip");
         if (string.IsNullOrWhiteSpace(path)) return;
         await Api.CallAsync<string>("install_modpack", new
         {
             name = Path.GetFileName(path),
-            source = "本地",
-            extra = new { path, instance = _folder, name = Path.GetFileName(path), source = "本地" },
+            source = I18nCore.Tr("本地"),
+            extra = new { path, instance = _folder, name = Path.GetFileName(path), source = I18nCore.Tr("本地") },
         });
-        ToastHost.Show("已加入队列", Path.GetFileName(path), ToastKind.Success);
+        ToastHost.Show(I18nCore.Tr("已加入队列"), Path.GetFileName(path), ToastKind.Success);
         if (this.GetVisualRoot() is MainWindow w) w.Navigate("tasks");
     }
 
     private async Task CreateAsync()
     {
-        string? name = await Dlg.Prompt("新建实例", "实例名称(会创建独立的 .minecraft)", "", "例如:1.20.1 生存");
+        string? name = await Dlg.Prompt(I18nCore.Tr("新建实例"), "实例名称(会创建独立的 .minecraft)", "", "例如:1.20.1 生存");
         if (string.IsNullOrWhiteSpace(name)) return;
         await Api.CallAsync<object>("create_instance", new { name });
         await LoadAsync();
-        Toast("已创建", name, ToastKind.Success);
+        Toast(I18nCore.Tr("已创建"), name, ToastKind.Success);
     }
 
     private async Task MigrateAsync()
@@ -815,7 +815,7 @@ public sealed class VersionManagePage : PageBase
         bool found = await Api.TryCallAsync<bool>("detect_official_launcher", false);
         if (!found)
         {
-            Toast("没找到官方启动器", "未检测到 .minecraft 目录", ToastKind.Warning);
+            Toast(I18nCore.Tr("没找到官方启动器"), I18nCore.Tr("未检测到 .minecraft 目录"), ToastKind.Warning);
             return;
         }
         string dir = await Api.TryCallAsync<string>("official_launcher_dir", "") ?? "";
@@ -824,11 +824,11 @@ public sealed class VersionManagePage : PageBase
         var body = UiClass.V(8,
             UiClass.Muted($"检测到:{dir}"),
             UiClass.Muted($"可导入 {versions.Count} 个版本:{string.Join("、", versions.Take(8))}" + (versions.Count > 8 ? " ..." : "")),
-            UiClass.Txt("导入到实例", 12, fg: "B.InkMuted"),
+            UiClass.Txt(I18nCore.Tr("导入到实例"), 12, fg: "B.InkMuted"),
             target);
-        if (!await Dlg.Ask("导入官方启动器", body, "开始导入")) return;
+        if (!await Dlg.Ask(I18nCore.Tr("导入官方启动器"), body, I18nCore.Tr("开始导入"))) return;
         await Api.CallAsync<string>("migrate_official_launcher", new { instance = target.Text?.Trim() ?? "default" });
-        Toast("已开始导入", "进度看下载任务");
+        Toast(I18nCore.Tr("已开始导入"), I18nCore.Tr("进度看下载任务"));
         if (this.GetVisualRoot() is MainWindow w) w.Navigate("tasks");
     }
 
@@ -852,8 +852,9 @@ public sealed class VersionManagePage : PageBase
         }
         catch (Exception ex)
         {
-            if (errTitle != null) ToastHost.Show(errTitle, ex.Message, ToastKind.Warning);
-            else AppLog.Warn("版本管理操作失败: " + ex.Message);
+            // [audit/B] 静默失败统一:没给 errTitle 也要有一次可见反馈(原来只写 AppLog,用户点了毫无反应)
+            AppLog.Warn("版本管理操作失败: " + ex.Message);
+            ToastHost.Show(errTitle ?? I18nCore.Tr("操作没有完成"), ex.Message, ToastKind.Warning);
         }
     }
 

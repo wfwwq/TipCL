@@ -15,6 +15,7 @@ using TipCL.App.Pages.Layout;
 using TipCL.App.Ui;
 using TipCL.Core;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Version;
 
@@ -31,29 +32,29 @@ public static class ModsDialog
         bool syncTarget = false;
         string status = "";
 
-        var importBtn = U.Btn("导入 jar", BtnKind.Soft, null, "Import");
+        var importBtn = U.Btn(I18nCore.Tr("导入 jar"), BtnKind.Soft, null, "Import");
         importBtn.Click += (_, _) => _ = ImportAsync();
-        var updateBtn = U.Btn("检查更新", BtnKind.Chip, null, "Refresh");
+        var updateBtn = U.Btn(I18nCore.Tr("检查更新"), BtnKind.Chip, null, "Refresh");
         updateBtn.Click += (_, _) => _ = Run(async () =>
         {
             await CheckUpdatesAsync(instance);
             await Reload();
-        }, "检查更新失败");
-        var openBtn = U.Btn("打开目录", BtnKind.Chip, null, "Folder");
+        }, I18nCore.Tr("检查更新失败"));
+        var openBtn = U.Btn(I18nCore.Tr("打开目录"), BtnKind.Chip, null, "Folder");
         openBtn.Click += (_, _) => _ = Run(async () =>
         {
             string dir = await api.CallAsync<string>("open_mods_folder", new { instance, version = CurrentVersion() }) ?? "";
-            ToastHost.Show("已打开", dir, ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("已打开"), dir, ToastKind.Success);
         });
-        var globalBtn = U.Btn("全局模组", BtnKind.Chip, null, "Box");
+        var globalBtn = U.Btn(I18nCore.Tr("全局模组"), BtnKind.Chip, null, "Box");
         globalBtn.Click += (_, _) => _ = GlobalModsDialog.ShowAsync();
-        var refreshBtn = U.Btn("刷新", BtnKind.Chip, null, "Refresh");
-        refreshBtn.Click += (_, _) => _ = Run(Reload, "读取失败");
+        var refreshBtn = U.Btn(I18nCore.Tr("刷新"), BtnKind.Chip, null, "Refresh");
+        refreshBtn.Click += (_, _) => _ = Run(Reload, I18nCore.Tr("读取失败"));
 
-        target.SelectionChanged += (_, _) => { if (!syncTarget) _ = Run(Reload, "读取失败"); };
+        target.SelectionChanged += (_, _) => { if (!syncTarget) _ = Run(Reload, I18nCore.Tr("读取失败")); };
 
         var bar = UiClass.G(null, "Auto,Auto,*");
-        bar.Add(UiClass.Txt("目标", 12, fg: "B.InkMuted").VCenter(), 0, 0);
+        bar.Add(UiClass.Txt(I18nCore.Tr("目标"), 12, fg: "B.InkMuted").VCenter(), 0, 0);
         target.Mk(8, 0, 12, 0).VCenter();
         bar.Add(target, 0, 1);
         bar.Add(count.VCenter(), 0, 2);
@@ -75,7 +76,7 @@ public static class ModsDialog
 
         void OnEvent(ApiEvent ev)
         {
-            if (ev.Event == "finished" && ev.Success) _ = Run(Reload, "读取失败");
+            if (ev.Event == "finished" && ev.Success) _ = Run(Reload, I18nCore.Tr("读取失败"));
         }
 
         async Task Reload()
@@ -86,7 +87,7 @@ public static class ModsDialog
                 new { instance, version = ver }) ?? new();
             count.Text = $"共 {rows.Count} 个模组" + (status.Length > 0 ? " · " + status : "");
             if (rows.Count == 0)
-                list.Children.Add(UiClass.Empty("Puzzle", "还没有模组", "到「下载 → Mod」搜索安装,或直接导入 jar"));
+                list.Children.Add(UiClass.Empty("Puzzle", I18nCore.Tr("还没有模组"), "到「下载 → Mod」搜索安装,或直接导入 jar"));
             foreach (var item in rows)
             {
                 if (item is not PyDict d) continue;
@@ -99,15 +100,15 @@ public static class ModsDialog
                         new { instance, filename = file, version = ver });
                     await Reload();
                 });
-                var del = UiClass.Btn("删除", BtnKind.Ghost, null);
+                var del = UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Ghost, null);
                 del.Click += (_, _) => _ = Run(async () =>
                 {
-                    if (await Dlg.Confirm("删除模组", file, "删除", "取消", danger: true))
+                    if (await Dlg.Confirm(I18nCore.Tr("删除模组"), file, I18nCore.Tr("删除"), I18nCore.Tr("取消"), danger: true))
                     {
                         await api.CallAsync<object>("delete_mod", new { instance, filename = file, version = ver });
                         await Reload();
                     }
-                }, "删除失败");
+                }, I18nCore.Tr("删除失败"));
 
                 var text = UiClass.V(1,
                     UiClass.Txt(Py.S(d.Get("name")) is { Length: > 0 } n ? n : file).Trim(),
@@ -126,7 +127,7 @@ public static class ModsDialog
         async Task ReloadTargets()
         {
             targets = await api.TryCallAsync<List<ModsTarget>>("get_mods_targets", null, new { instance }) ?? new();
-            if (targets.Count == 0) targets.Add(new ModsTarget { Label = "实例共享 mods 目录", Value = "" });
+            if (targets.Count == 0) targets.Add(new ModsTarget { Label = I18nCore.Tr("实例共享 mods 目录"), Value = "" });
             syncTarget = true;
             int sel = Math.Max(0, targets.FindIndex(t => t.Value == version));
             target.Items.Clear();
@@ -145,18 +146,18 @@ public static class ModsDialog
                 if (batch.AnyFailed)
                 {
                     // 单个文件失败:与改动前一致 —— 只提示,不改状态、不重载(原先异常直接冒到外层 Run)
-                    ToastHost.Show("导入失败", batch.Failures[0].Reason, ToastKind.Warning);
+                    ToastHost.Show(I18nCore.Tr("导入失败"), batch.Failures[0].Reason, ToastKind.Warning);
                     return;
                 }
-                status = "已加入队列";
-                ToastHost.Show("已加入队列", batch.Ok[0], ToastKind.Success);
+                status = I18nCore.Tr("已加入队列");
+                ToastHost.Show(I18nCore.Tr("已加入队列"), batch.Ok[0], ToastKind.Success);
             }
             else
             {
                 status = batch.AnyFailed
                     ? $"已加入队列 {batch.OkCount} 个(失败 {batch.FailedCount} 个)"
                     : $"已加入队列 {batch.OkCount} 个";
-                ToastHost.Show(batch.AnyFailed ? "导入失败" : "已加入队列", batch.SummaryText(),
+                ToastHost.Show(batch.AnyFailed ? I18nCore.Tr("导入失败") : I18nCore.Tr("已加入队列"), batch.SummaryText(),
                     batch.AnyFailed ? ToastKind.Warning : ToastKind.Success);
             }
             await Reload();
@@ -169,7 +170,7 @@ public static class ModsDialog
     /// </summary>
     public static async Task<ImportBatch> ImportJarsFromPickerAsync(IApi api, string instance)
     {
-        var files = await Dlg.PickFiles("导入模组", "*.jar");
+        var files = await Dlg.PickFiles(I18nCore.Tr("导入模组"), "*.jar");
         return await ImportJarsAsync(api, instance, files);
     }
 
@@ -209,7 +210,7 @@ public static class ModsDialog
         var rows = await api.TryCallAsync<List<object?>>("check_mod_updates", null, new { instance }) ?? new();
         if (rows.Count == 0)
         {
-            ToastHost.Show("都是最新的", "没有找到可更新的模组", ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("都是最新的"), I18nCore.Tr("没有找到可更新的模组"), ToastKind.Success);
             return;
         }
         var picks = new List<(CheckBox Box, PyDict Row)>();
@@ -233,7 +234,7 @@ public static class ModsDialog
         }
         var scroll = new ScrollViewer { Content = host, MaxHeight = 240, MinWidth = 520, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         if (!await Dlg.Ask($"{rows.Count} 个模组有更新",
-                UiClass.V(10, UiClass.Muted("勾上要更新的,旧文件会在新包校验通过后才删除。"), scroll), "更新所选"))
+                UiClass.V(10, UiClass.Muted("勾上要更新的,旧文件会在新包校验通过后才删除。"), scroll), I18nCore.Tr("更新所选")))
             return;
         var chosen = picks.Where(p => p.Box.IsChecked == true).Select(p => p.Row).ToList();
         if (chosen.Count == 0) return;
@@ -251,8 +252,8 @@ public static class ModsDialog
                 failed.Add($"{Py.S(row.Get("filename"))}:{ex.Message}");
             }
         }
-        if (failed.Count == 0) ToastHost.Show("已更新", $"{done} 个模组", ToastKind.Success);
-        else await Dlg.Alert("部分模组没能更新", $"成功 {done} 个,失败 {failed.Count} 个:\n\n" + string.Join("\n", failed));
+        if (failed.Count == 0) ToastHost.Show(I18nCore.Tr("已更新"), $"{done} 个模组", ToastKind.Success);
+        else await Dlg.Alert(I18nCore.Tr("部分模组没能更新"), $"成功 {done} 个,失败 {failed.Count} 个:\n\n" + string.Join("\n", failed));
     }
 
     private static async Task Run(Func<Task> work, string? errTitle = null)

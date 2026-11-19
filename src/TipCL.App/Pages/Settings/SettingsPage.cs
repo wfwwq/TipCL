@@ -35,79 +35,79 @@ public sealed partial class SettingsPage : PageBase
 
     private static readonly (string Key, string Label)[] IsoOpts =
     {
-        ("none", "关闭（共用实例目录）"),
-        ("saves", "隔离存档"),
-        ("mods", "隔离 Mod 与配置"),
-        ("all", "隔离全部"),
+        ("none", I18nCore.Tr("关闭（共用实例目录）")),
+        ("saves", I18nCore.Tr("隔离存档")),
+        ("mods", I18nCore.Tr("隔离 Mod 与配置")),
+        ("all", I18nCore.Tr("隔离全部")),
     };
 
     private static readonly (string Key, string Label)[] GcOpts =
     {
-        ("auto", "G1（推荐）"),
+        ("auto", I18nCore.Tr("G1（推荐）")),
         ("g1", "G1"),
-        ("g1_tuned", "调优 G1"),
+        ("g1_tuned", I18nCore.Tr("调优 G1")),
         ("zgc", "ZGC"),
-        ("none", "不指定"),
+        ("none", I18nCore.Tr("不指定")),
     };
 
     private static readonly (string Key, string Label)[] VisOpts =
     {
-        ("keep", "保持显示"),
-        ("minimize", "最小化"),
-        ("hide", "隐藏"),
-        ("hide_reopen", "隐藏，退出后重开"),
-        ("close", "关闭启动器"),
+        ("keep", I18nCore.Tr("保持显示")),
+        ("minimize", I18nCore.Tr("最小化")),
+        ("hide", I18nCore.Tr("隐藏")),
+        ("hide_reopen", I18nCore.Tr("隐藏，退出后重开")),
+        ("close", I18nCore.Tr("关闭启动器")),
     };
 
     private static readonly (string Key, string Label)[] HomeOpts =
     {
-        ("news", "Minecraft 新闻"),
-        ("custom", "本地 HTML"),
-        ("blank", "空白"),
+        ("news", I18nCore.Tr("Minecraft 新闻")),
+        ("custom", I18nCore.Tr("本地 HTML")),
+        ("blank", I18nCore.Tr("空白")),
     };
 
     private static readonly (string Key, string Label)[] WinOpts =
     {
-        ("window", "窗口"),
-        ("maximize", "全屏"),
+        ("window", I18nCore.Tr("窗口")),
+        ("maximize", I18nCore.Tr("全屏")),
     };
 
     private static readonly (string Key, string Label)[] SrcOpts =
     {
-        ("auto", "自动（官方慢则走 BMCLAPI）"),
-        ("official", "仅官方"),
-        ("bmclapi", "仅 BMCLAPI"),
+        ("auto", I18nCore.Tr("自动（官方慢则走 BMCLAPI）")),
+        ("official", I18nCore.Tr("仅官方")),
+        ("bmclapi", I18nCore.Tr("仅 BMCLAPI")),
     };
 
     private static readonly (string Key, string Label)[] CommOpts =
     {
-        ("auto", "自动"),
-        ("official", "仅官方"),
-        ("mcim", "仅 MCIM"),
+        ("auto", I18nCore.Tr("自动")),
+        ("official", I18nCore.Tr("仅官方")),
+        ("mcim", I18nCore.Tr("仅 MCIM")),
     };
 
     private static readonly (string Key, string Label)[] BgOpts =
     {
-        ("default", "默认"),
-        ("eye", "护眼绿"),
-        ("warm", "暖米"),
-        ("mist", "雾蓝"),
+        ("default", I18nCore.Tr("默认")),
+        ("eye", I18nCore.Tr("护眼绿")),
+        ("warm", I18nCore.Tr("暖米")),
+        ("mist", I18nCore.Tr("雾蓝")),
     };
 
     private static readonly (string Key, string Label)[] AiModeOpts =
     {
-        ("builtin", "内置网关（免配置）"),
-        ("custom", "自定义 OpenAI 兼容端点"),
+        ("builtin", I18nCore.Tr("内置网关（免配置）")),
+        ("custom", I18nCore.Tr("自定义 OpenAI 兼容端点")),
     };
 
     private static readonly (string Name, string Hex)[] Palette =
     {
-        ("松绿", "#2E9B6B"),
-        ("湛蓝", "#2F72C4"),
-        ("紫罗兰", "#7C5CFC"),
-        ("暖橙", "#D68A17"),
-        ("绯红", "#D64545"),
-        ("青碧", "#149B9B"),
+        (I18nCore.Tr("松绿"), "#2E9B6B"),
+        (I18nCore.Tr("湛蓝"), "#2F72C4"),
+        (I18nCore.Tr("紫罗兰"), "#7C5CFC"),
+        (I18nCore.Tr("暖橙"), "#D68A17"),
+        (I18nCore.Tr("绯红"), "#D64545"),
+        (I18nCore.Tr("青碧"), "#149B9B"),
     };
 
     // ── 外观 ──
@@ -120,11 +120,11 @@ public sealed partial class SettingsPage : PageBase
     private readonly ComboBox _bg = KeyCombo(BgOpts);
 
     // ── 壁纸 ──
-    private readonly TextBox _bgPath = UiClass.Input("图片或视频路径，留空则不用壁纸");
-    private readonly TextBox _bgFolder = UiClass.Input("壁纸文件夹（设了就轮播，优先于上面那张）");
+    private readonly TextBox _bgPath = UiClass.Input(I18nCore.Tr("图片或视频路径，留空则不用壁纸"));
+    private readonly TextBox _bgFolder = UiClass.Input(I18nCore.Tr("壁纸文件夹（设了就轮播，优先于上面那张）"));
     private readonly CheckBox _bgShuffle = UiClass.Switch();
     private readonly Slider _bgInterval = UiClass.Sld(1, 120, 10);
-    private readonly TextBlock _bgIntervalLbl = UiClass.Txt("10 分钟", 12, bold: true);
+    private readonly TextBlock _bgIntervalLbl = UiClass.Txt(I18nCore.Tr("10 分钟"), 12, bold: true);
     private readonly Slider _bgBlur = UiClass.Sld(0, 40, 0);
     private readonly TextBlock _bgBlurLbl = UiClass.Txt("0 px", 12, bold: true);
     private readonly Slider _bgDim = UiClass.Sld(0, 80, 0);
@@ -145,7 +145,7 @@ public sealed partial class SettingsPage : PageBase
     private readonly ComboBox _comm = KeyCombo(CommOpts);
     private readonly CheckBox _proxy = UiClass.Switch(value: true);
     private readonly TextBox _limit = UiClass.Input("0", "0", 110);
-    private readonly TextBox _cfKey = UiClass.Input("CurseForge API Key（留空用内置）");
+    private readonly TextBox _cfKey = UiClass.Input(I18nCore.Tr("CurseForge API Key（留空用内置）"));
     private readonly Button _cfReset;
 
     // ── 游戏 ──
@@ -157,19 +157,19 @@ public sealed partial class SettingsPage : PageBase
     private readonly ComboBox _iso = KeyCombo(IsoOpts);
     private readonly ComboBox _gc = KeyCombo(GcOpts);
     private readonly ComboBox _win = KeyCombo(WinOpts);
-    private readonly TextBox _jvm = UiClass.Input("例如 -XX:+UseG1GC（可空）");
+    private readonly TextBox _jvm = UiClass.Input(I18nCore.Tr("例如 -XX:+UseG1GC（可空）"));
     private readonly CheckBox _shareLib = UiClass.Switch();
     private readonly CheckBox _shareAssets = UiClass.Switch();
     private readonly CheckBox _multi = UiClass.Switch();
-    private readonly TextBox _gameDir = UiClass.Input("游戏目录（.minecraft 的落脚处）");
-    private readonly TextBlock _cleanInfo = UiClass.Small("还没扫描");
+    private readonly TextBox _gameDir = UiClass.Input(I18nCore.Tr("游戏目录（.minecraft 的落脚处）"));
+    private readonly TextBlock _cleanInfo = UiClass.Small(I18nCore.Tr("还没扫描"));
     private readonly Button _clean;
     private readonly Button _rec;
 
     // ── 启动器 ──
     private readonly ComboBox _vis = KeyCombo(VisOpts);
     private readonly ComboBox _home = KeyCombo(HomeOpts);
-    private readonly TextBox _homePath = UiClass.Input("本地 .html 文件路径（主页选「本地 HTML」时生效）");
+    private readonly TextBox _homePath = UiClass.Input(I18nCore.Tr("本地 .html 文件路径（主页选「本地 HTML」时生效）"));
     private readonly CheckBox _autoUpdate = UiClass.Switch(value: true);
     private readonly ComboBox _lang = KeyCombo(Array.Empty<(string, string)>());
     private readonly TextBlock _langPreview = UiClass.Small("");
@@ -180,7 +180,7 @@ public sealed partial class SettingsPage : PageBase
     private readonly TextBox _aiKey = UiClass.Input("sk-…");
     private readonly ComboBox _aiModel = new ComboBox { Width = 220 };
     private readonly TextBox _aiCtx = UiClass.Input("131072");
-    private readonly TextBox _aiFallback = UiClass.Input("留空不启用");
+    private readonly TextBox _aiFallback = UiClass.Input(I18nCore.Tr("留空不启用"));
     private readonly Button _aiKeyReset;
     private readonly List<Control> _aiCustomRows = new();
 
@@ -213,11 +213,11 @@ public sealed partial class SettingsPage : PageBase
 
     // 页标题由基类 PageTitle（"设置"）承担
 
-    public SettingsPage() : base("settings", "设置")
+    public SettingsPage() : base("settings", I18nCore.Tr("设置"))
     {
-        _bgUndo = UiClass.Btn("撤销上一次", BtnKind.Chip, (_, _) => Toast("撤销失败", "壁纸历史后端 M3 接入", ToastKind.Warning));
-        _clean = UiClass.Btn("扫描并清理", BtnKind.Chip, (_, _) => Run(CleanAsync, "清理失败"));
-        _rec = UiClass.Btn("查看推荐", BtnKind.Chip, (_, _) => Run(RecommendAsync, "检测失败"));
+        _bgUndo = UiClass.Btn(I18nCore.Tr("撤销上一次"), BtnKind.Chip, (_, _) => Toast(I18nCore.Tr("撤销失败"), "壁纸历史后端 M3 接入", ToastKind.Warning));
+        _clean = UiClass.Btn(I18nCore.Tr("扫描并清理"), BtnKind.Chip, (_, _) => Run(CleanAsync, I18nCore.Tr("清理失败")));
+        _rec = UiClass.Btn(I18nCore.Tr("查看推荐"), BtnKind.Chip, (_, _) => Run(RecommendAsync, I18nCore.Tr("检测失败")));
 
         // 滑块联动标签
         _flyDur.PropertyChanged += (_, e) => { if (e.Property.Name == nameof(Slider.Value)) _flyDurLbl.Text = $"{(int)_flyDur.Value} ms"; };
@@ -226,7 +226,7 @@ public sealed partial class SettingsPage : PageBase
         {
             if (e.Property.Name != nameof(Slider.Value)) return;
             int n = (int)_segs.Value;
-            _segsLbl.Text = n <= 1 ? "关" : n.ToString();
+            _segsLbl.Text = n <= 1 ? I18nCore.Tr("关") : n.ToString();
         };
         _mem.PropertyChanged += (_, e) => { if (e.Property.Name == nameof(Slider.Value)) _memLbl.Text = $"{(int)_mem.Value} MB"; };
         _bgInterval.PropertyChanged += (_, e) => { if (e.Property.Name == nameof(Slider.Value)) _bgIntervalLbl.Text = $"{(int)_bgInterval.Value} 分钟"; };
@@ -250,14 +250,14 @@ public sealed partial class SettingsPage : PageBase
         ThemeService.VisualsChanged += SyncAppearanceControls;
 
         // 秘密行
-        _cfReset = UiClass.Btn("恢复内置", BtnKind.Chip, (_, _) =>
+        _cfReset = UiClass.Btn(I18nCore.Tr("恢复内置"), BtnKind.Chip, (_, _) =>
         {
             _cfClear = true;
             _cfKey.Text = "";
             SyncSecretBoxes();
             QueueSave();
         });
-        _aiKeyReset = UiClass.Btn("清除", BtnKind.Chip, (_, _) =>
+        _aiKeyReset = UiClass.Btn(I18nCore.Tr("清除"), BtnKind.Chip, (_, _) =>
         {
             _aiKeyClear = true;
             _aiKey.Text = "";
@@ -272,99 +272,99 @@ public sealed partial class SettingsPage : PageBase
 
         // ── 通用视图：9 区块 ──
         var appearanceCard = UiClass.Card(Rows(
-            UiClass.Field("深色模式", _dark, "立即生效"),
-            UiClass.Field("主题色", _swatches, "点一下就换"),
-            UiClass.Field("界面背景", _bg, "预设色调，立即生效"),
-            UiClass.Field("界面动画", _motion, "换页、进度条、悬浮动效"),
-            UiClass.Field("下载飞入动画", _fly, "安装时飞入底部任务条"),
-            UiClass.Field("飞入动画时长", SliderRow(_flyDur, _flyDurLbl), "毫秒，建议 400–800")));
+            UiClass.Field(I18nCore.Tr("深色模式"), _dark, I18nCore.Tr("立即生效")),
+            UiClass.Field(I18nCore.Tr("主题色"), _swatches, I18nCore.Tr("点一下就换")),
+            UiClass.Field(I18nCore.Tr("界面背景"), _bg, I18nCore.Tr("预设色调，立即生效")),
+            UiClass.Field(I18nCore.Tr("界面动画"), _motion, I18nCore.Tr("换页、进度条、悬浮动效")),
+            UiClass.Field(I18nCore.Tr("下载飞入动画"), _fly, I18nCore.Tr("安装时飞入底部任务条")),
+            UiClass.Field(I18nCore.Tr("飞入动画时长"), SliderRow(_flyDur, _flyDurLbl), I18nCore.Tr("毫秒，建议 400–800"))));
         BuildSwatches();
 
         var wallpaperCard = UiClass.Card(UiClass.V(4, UiClass.Small("图片或 mp4 动态壁纸（Linux 版 M2 只落设置项，渲染管线 M3 接入）").Wrap(),
             Rows(
-                UiClass.Field("壁纸文件", _bgPath, "留空就不用壁纸"),
-                UiClass.Field("轮播文件夹", _bgFolder, "设了文件夹就按间隔换图，优先于上面那张单图"),
-                UiClass.Field("随机顺序", _bgShuffle, "关掉则按文件名顺序轮"),
-                UiClass.Field("轮播间隔", SliderRow(_bgInterval, _bgIntervalLbl), "分钟"),
-                UiClass.Field("模糊", SliderRow(_bgBlur, _bgBlurLbl), "把壁纸推远一点，文字更好读"),
-                UiClass.Field("遮罩浓度", SliderRow(_bgDim, _bgDimLbl), "按当前主题压淡 / 压暗壁纸"),
+                UiClass.Field(I18nCore.Tr("壁纸文件"), _bgPath, "留空就不用壁纸"),
+                UiClass.Field(I18nCore.Tr("轮播文件夹"), _bgFolder, I18nCore.Tr("设了文件夹就按间隔换图，优先于上面那张单图")),
+                UiClass.Field(I18nCore.Tr("随机顺序"), _bgShuffle, I18nCore.Tr("关掉则按文件名顺序轮")),
+                UiClass.Field(I18nCore.Tr("轮播间隔"), SliderRow(_bgInterval, _bgIntervalLbl), I18nCore.Tr("分钟")),
+                UiClass.Field(I18nCore.Tr("模糊"), SliderRow(_bgBlur, _bgBlurLbl), "把壁纸推远一点，文字更好读"),
+                UiClass.Field(I18nCore.Tr("遮罩浓度"), SliderRow(_bgDim, _bgDimLbl), "按当前主题压淡 / 压暗壁纸"),
                 UiClass.Field("", UiClass.H(8, _bgUndo, _bgInfo.VCenter())))));
 
-        var themePackCard = UiClass.Card(UiClass.V(4, UiClass.Small("把当前配色、背景、窗口与主页设置整包存下来，随时切回").Wrap(),
+        var themePackCard = UiClass.Card(UiClass.V(4, UiClass.Small(I18nCore.Tr("和上面的「外观」用的是同一套配色与背景:这里把它连同窗口、主页设置整包存成多个方案,方便在不同风格之间来回切(只负责存 / 取,不改「外观」里的当前选择)")).Wrap(),
             Rows(
-                UiClass.Field("已保存", _themePack, "从这里挑一个加载或删除"),
+                UiClass.Field(I18nCore.Tr("已保存"), _themePack, I18nCore.Tr("从这里挑一个加载或删除")),
                 UiClass.Field("", UiClass.H(7,
-                    UiClass.Btn("保存为主题包", BtnKind.Soft, (_, _) => Run(ThemeOpAsync("save_theme"), "保存失败")),
-                    UiClass.Btn("加载", BtnKind.Chip, (_, _) => Run(ThemeOpAsync("load_theme"), "加载失败")),
-                    UiClass.Btn("删除", BtnKind.Ghost, (_, _) => Run(ThemeOpAsync("delete_theme"), "删除失败")),
-                    UiClass.Btn("导入", BtnKind.Chip, (_, _) => Run(ThemeOpAsync("import_theme"), "导入失败")),
-                    UiClass.Btn("导出", BtnKind.Chip, (_, _) => Run(ThemeOpAsync("export_theme"), "导出失败")))),
+                    UiClass.Btn(I18nCore.Tr("保存为主题包"), BtnKind.Soft, (_, _) => Run(ThemeOpAsync("save_theme"), I18nCore.Tr("保存失败"))),
+                    UiClass.Btn(I18nCore.Tr("加载"), BtnKind.Chip, (_, _) => Run(ThemeOpAsync("load_theme"), I18nCore.Tr("加载失败"))),
+                    UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Ghost, (_, _) => Run(ThemeOpAsync("delete_theme"), I18nCore.Tr("删除失败"))),
+                    UiClass.Btn(I18nCore.Tr("导入"), BtnKind.Chip, (_, _) => Run(ThemeOpAsync("import_theme"), I18nCore.Tr("导入失败"))),
+                    UiClass.Btn(I18nCore.Tr("导出"), BtnKind.Chip, (_, _) => Run(ThemeOpAsync("export_theme"), I18nCore.Tr("导出失败"))))),
                 _themeInfo)));
 
         var launcherCard = UiClass.Card(Rows(
-            UiClass.Field("启动器可见性", _vis, "游戏启动后启动器窗口怎么处理"),
-            UiClass.Field("启动页主页", _home, "新闻、自定义 HTML 或留空"),
-            UiClass.Field("自定义主页", _homePath, "本地 .html 文件路径"),
-            UiClass.Field("自动检查更新", UiClass.H(8, _autoUpdate, UiClass.Btn("检查更新", BtnKind.Chip, (_, _) => Run(CheckUpdateAsync, "检查更新失败"))), "启动时检查启动器更新"),
-            UiClass.Field("语言", _lang, "切换界面语言，重启后完全生效"),
+            UiClass.Field(I18nCore.Tr("启动器可见性"), _vis, I18nCore.Tr("游戏启动后启动器窗口怎么处理")),
+            UiClass.Field(I18nCore.Tr("启动页主页"), _home, I18nCore.Tr("新闻、自定义 HTML 或留空")),
+            UiClass.Field(I18nCore.Tr("自定义主页"), _homePath, I18nCore.Tr("本地 .html 文件路径")),
+            UiClass.Field(I18nCore.Tr("自动检查更新"), UiClass.H(8, _autoUpdate, UiClass.Btn(I18nCore.Tr("检查更新"), BtnKind.Chip, (_, _) => Run(CheckUpdateAsync, I18nCore.Tr("检查更新失败")))), I18nCore.Tr("启动时检查启动器更新")),
+            UiClass.Field(I18nCore.Tr("语言"), _lang, I18nCore.Tr("切换界面语言，重启后完全生效")),
             UiClass.Field("", _langPreview)));
 
         var gameCard = UiClass.Card(Rows(
-            UiClass.Field("游戏目录", GameDirRow(), "所有实例的落脚处；切换会校验可写性"),
-            UiClass.Field("默认内存", SliderRow(_mem, _memLbl), "新实例的默认 JVM 内存"),
-            UiClass.Field("", UiClass.H(8, _rec, UiClass.Small("按本机内存 / CPU 给一组推荐值").VCenter())),
-            UiClass.Field("默认分辨率", UiClass.H(6, _w, UiClass.Txt("×").VCenter(), _h), "游戏窗口的默认宽高"),
-            UiClass.Field("默认实例", _inst, "安装与启动缺省使用的实例"),
-            UiClass.Field("新版本默认隔离", _iso, "安装新版本时写入，可在版本设置里改"),
-            UiClass.Field("内存回收器", _gc, "启动时写入 JVM，版本设置可覆盖"),
-            UiClass.Field("默认游戏窗口", _win, "可被版本设置覆盖"),
-            UiClass.Field("默认 JVM 参数", _jvm, "所有版本都会带上，版本设置可再追加"),
-            UiClass.Field("允许多开", _multi, "关掉则游戏已在运行时不再启动第二个")));
+            UiClass.Field(I18nCore.Tr("游戏目录"), GameDirRow(), I18nCore.Tr("所有实例的落脚处；切换会校验可写性")),
+            UiClass.Field(I18nCore.Tr("默认内存"), SliderRow(_mem, _memLbl), I18nCore.Tr("新实例的默认 JVM 内存")),
+            UiClass.Field("", UiClass.H(8, _rec, UiClass.Small(I18nCore.Tr("按本机内存 / CPU 给一组推荐值")).VCenter())),
+            UiClass.Field(I18nCore.Tr("默认分辨率"), UiClass.H(6, _w, UiClass.Txt("×").VCenter(), _h), I18nCore.Tr("游戏窗口的默认宽高")),
+            UiClass.Field(I18nCore.Tr("默认实例"), _inst, I18nCore.Tr("安装与启动缺省使用的实例")),
+            UiClass.Field(I18nCore.Tr("新版本默认隔离"), _iso, I18nCore.Tr("安装新版本时写入，可在版本设置里改")),
+            UiClass.Field(I18nCore.Tr("内存回收器"), _gc, I18nCore.Tr("启动时写入 JVM，版本设置可覆盖")),
+            UiClass.Field(I18nCore.Tr("默认游戏窗口"), _win, I18nCore.Tr("可被版本设置覆盖")),
+            UiClass.Field(I18nCore.Tr("默认 JVM 参数"), _jvm, I18nCore.Tr("所有版本都会带上，版本设置可再追加")),
+            UiClass.Field(I18nCore.Tr("允许多开"), _multi, I18nCore.Tr("关掉则游戏已在运行时不再启动第二个"))));
 
         var storageCard = UiClass.Card(Rows(
-            UiClass.Field("共享 libraries", _shareLib, "所有实例共享依赖库（节省空间，降低隔离性）"),
-            UiClass.Field("共享 assets 资源", _shareAssets, "所有实例共享资源文件（节省空间，降低隔离性）"),
-            UiClass.Field("空间清理", UiClass.H(8, _clean, _cleanInfo.VCenter()), "扫描未引用的依赖库、残留 .part 与更新缓存，确认后再删")));
+            UiClass.Field(I18nCore.Tr("共享 libraries"), _shareLib, I18nCore.Tr("所有实例共享依赖库（节省空间，降低隔离性）")),
+            UiClass.Field(I18nCore.Tr("共享 assets 资源"), _shareAssets, I18nCore.Tr("所有实例共享资源文件（节省空间，降低隔离性）")),
+            UiClass.Field(I18nCore.Tr("空间清理"), UiClass.H(8, _clean, _cleanInfo.VCenter()), I18nCore.Tr("扫描未引用的依赖库、残留 .part 与更新缓存，确认后再删"))));
 
-        var aiBaseRow = UiClass.Field("端点地址", _aiBase, "OpenAI 兼容的 base_url，到 /v1 为止");
-        var aiKeyRow = UiClass.Field("API Key", SecretRow(_aiKey, _aiKeyReset), "留空不修改；本地端点不需要可不填");
-        var aiModelRow = UiClass.Field("模型", UiClass.H(8, _aiModel), "填好地址和令牌后到 AI 对话里测试；拉不到可直接手填");
-        var aiCtxRow = UiClass.Field("上下文窗口（token）", _aiCtx, "模型真实窗口未知时按 128k 保守压缩；实测后可改大");
-        var aiFallbackRow = UiClass.Field("备用模型（可选）", _aiFallback, "主模型连续 429/5xx 时本回合自动切到它；留空不启用");
+        var aiBaseRow = UiClass.Field(I18nCore.Tr("端点地址"), _aiBase, I18nCore.Tr("OpenAI 兼容的 base_url，到 /v1 为止"));
+        var aiKeyRow = UiClass.Field("API Key", SecretRow(_aiKey, _aiKeyReset), I18nCore.Tr("留空不修改；本地端点不需要可不填"));
+        var aiModelRow = UiClass.Field(I18nCore.Tr("模型"), UiClass.H(8, _aiModel), "填好地址和令牌后到 AI 对话里测试；拉不到可直接手填");
+        var aiCtxRow = UiClass.Field(I18nCore.Tr("上下文窗口（token）"), _aiCtx, I18nCore.Tr("模型真实窗口未知时按 128k 保守压缩；实测后可改大"));
+        var aiFallbackRow = UiClass.Field(I18nCore.Tr("备用模型（可选）"), _aiFallback, I18nCore.Tr("主模型连续 429/5xx 时本回合自动切到它；留空不启用"));
         _aiCustomRows.AddRange(new Control[] { aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow });
-        var aiCard = UiClass.Card(UiClass.V(4, UiClass.Small("对话里下游戏、装模组、读崩溃日志").Wrap(),
+        var aiCard = UiClass.Card(UiClass.V(4, UiClass.Small(I18nCore.Tr("对话里下游戏、装模组、读崩溃日志")).Wrap(),
             Rows(
-                UiClass.Field("接入方式", _aiMode),
+                UiClass.Field(I18nCore.Tr("接入方式"), _aiMode),
                 aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow,
-                UiClass.Field("权限", UiClass.Muted("在 AI 对话界面的输入框上方设置")),
-                UiClass.Field("", UiClass.Btn("测试 AI 连接", BtnKind.Chip, (_, _) => Run(TestAiAsync, "AI 连接失败")).Left()))));
+                UiClass.Field(I18nCore.Tr("权限"), UiClass.Muted(I18nCore.Tr("在 AI 对话界面的输入框上方设置"))),
+                UiClass.Field("", UiClass.Btn(I18nCore.Tr("测试 AI 连接"), BtnKind.Chip, (_, _) => Run(TestAiAsync, I18nCore.Tr("AI 连接失败"))).Left()))));
 
         // 「通用」= BlockHost("settings:general")，9 个区块（照 Windows 版 _views[0]）
         var general = new BlockHost("settings:general", new List<BlockSpec>
         {
-            new() { Id = "appearance", Title = "外观", Content = UiClass.V(10, PTitle("通用"), Gt("外观"), appearanceCard) },
-            new() { Id = "wallpaper", Title = "壁纸", Content = UiClass.V(10, Gt("壁纸"), wallpaperCard) },
-            new() { Id = "themePack", Title = "主题包", Content = UiClass.V(10, Gt("主题包"), themePackCard) },
-            new() { Id = "launcher", Title = "启动器", Content = UiClass.V(10, Gt("启动器"), launcherCard) },
-            new() { Id = "game", Title = "游戏", Content = UiClass.V(10, Gt("游戏"), gameCard) },
-            new() { Id = "storage", Title = "存储", Content = UiClass.V(10, Gt("存储"), storageCard) },
-            new() { Id = "ai", Title = "AI 助手", Content = UiClass.V(10, Gt("AI 助手"), aiCard) },
-            new() { Id = "memory", Title = "记忆", Content = UiClass.V(10, Gt("记忆"), BuildMemoryCard()) },
-            new() { Id = "phoneSync", Title = "手机同步", Content = UiClass.V(10, Gt("手机同步"), BuildPhoneSyncCard()) },
+            new() { Id = "appearance", Title = I18nCore.Tr("外观"), Content = UiClass.V(10, PTitle(I18nCore.Tr("通用")), Gt(I18nCore.Tr("外观")), appearanceCard) },
+            new() { Id = "wallpaper", Title = I18nCore.Tr("壁纸"), Content = UiClass.V(10, Gt(I18nCore.Tr("壁纸")), wallpaperCard) },
+            new() { Id = "themePack", Title = I18nCore.Tr("主题包"), Content = UiClass.V(10, Gt(I18nCore.Tr("主题包")), themePackCard) },
+            new() { Id = "launcher", Title = I18nCore.Tr("启动器"), Content = UiClass.V(10, Gt(I18nCore.Tr("启动器")), launcherCard) },
+            new() { Id = "game", Title = I18nCore.Tr("游戏"), Content = UiClass.V(10, Gt(I18nCore.Tr("游戏")), gameCard) },
+            new() { Id = "storage", Title = I18nCore.Tr("存储"), Content = UiClass.V(10, Gt(I18nCore.Tr("存储")), storageCard) },
+            new() { Id = "ai", Title = I18nCore.Tr("AI 助手"), Content = UiClass.V(10, Gt(I18nCore.Tr("AI 助手")), aiCard) },
+            new() { Id = "memory", Title = I18nCore.Tr("记忆"), Content = UiClass.V(10, Gt(I18nCore.Tr("记忆")), BuildMemoryCard()) },
+            new() { Id = "phoneSync", Title = I18nCore.Tr("手机同步"), Content = UiClass.V(10, Gt(I18nCore.Tr("手机同步")), BuildPhoneSyncCard()) },
         }).Root;
 
         // 「下载与网络」= BlockHost("settings:network") 单块
         var networkCard = UiClass.Card(Rows(
-            UiClass.Field("下载并发线程数", SliderRow(_threads, _threadsLbl), "同时下载的文件数量"),
-            UiClass.Field("单文件分片数", SliderRow(_segs, _segsLbl), "8MB 以上的大文件拆成几段同时下；1 为关闭"),
-            UiClass.Field("文件下载源", _src, "自动测速，官方慢于 4 秒改走 BMCLAPI"),
-            UiClass.Field("社区资源源", _comm, "模组 / 整合包：MCIM 国内镜像，挂了可改官方"),
-            UiClass.Field("跟随系统代理", _proxy, "默认开。关掉才强制直连"),
-            UiClass.Field("下载限速 (KB/s)", _limit.Left(), "0 表示不限制"),
-            UiClass.Field("CurseForge Key", SecretRow(_cfKey, _cfReset), "留空不修改；不填用内置 Key")));
+            UiClass.Field(I18nCore.Tr("下载并发线程数"), SliderRow(_threads, _threadsLbl), I18nCore.Tr("同时下载的文件数量")),
+            UiClass.Field(I18nCore.Tr("单文件分片数"), SliderRow(_segs, _segsLbl), I18nCore.Tr("8MB 以上的大文件拆成几段同时下；1 为关闭")),
+            UiClass.Field(I18nCore.Tr("文件下载源"), _src, I18nCore.Tr("自动测速，官方慢于 4 秒改走 BMCLAPI")),
+            UiClass.Field(I18nCore.Tr("社区资源源"), _comm, I18nCore.Tr("模组 / 整合包：MCIM 国内镜像，挂了可改官方")),
+            UiClass.Field(I18nCore.Tr("跟随系统代理"), _proxy, I18nCore.Tr("默认开。关掉才强制直连")),
+            UiClass.Field(I18nCore.Tr("下载限速 (KB/s)"), _limit.Left(), I18nCore.Tr("0 表示不限制")),
+            UiClass.Field("CurseForge Key", SecretRow(_cfKey, _cfReset), I18nCore.Tr("留空不修改；不填用内置 Key"))));
         var network = new BlockHost("settings:network", new List<BlockSpec>
         {
-            new() { Id = "network", Title = "下载与网络", Content = UiClass.V(10, PTitle("下载与网络"), Gt("下载"), networkCard) },
+            new() { Id = "network", Title = I18nCore.Tr("下载与网络"), Content = UiClass.V(10, PTitle(I18nCore.Tr("下载与网络")), Gt(I18nCore.Tr("下载")), networkCard) },
         }).Root;
 
         // 「反馈与关于」= Windows FeedbackPage(2026-11-12 M4-H P4 由内联卡片换成真页:
@@ -376,8 +376,8 @@ public sealed partial class SettingsPage : PageBase
 
         // 左导航:0 通用 / 1 账号 / 2 Java / 3 下载与网络 / 4 服务器 / 5 游戏时长 / 6 反馈与关于 / 7 布局
         var nav = UiClass.V(2,
-            NavBtn(0, "通用"), NavBtn(1, "账号"), NavBtn(2, "Java"), NavBtn(3, "下载与网络"),
-            NavBtn(4, "服务器"), NavBtn(5, "游戏时长"), NavBtn(6, "反馈与关于"), NavBtn(LayoutView, "布局"),
+            NavBtn(0, I18nCore.Tr("通用")), NavBtn(1, I18nCore.Tr("账号")), NavBtn(2, "Java"), NavBtn(3, I18nCore.Tr("下载与网络")),
+            NavBtn(4, I18nCore.Tr("服务器")), NavBtn(5, I18nCore.Tr("游戏时长")), NavBtn(6, I18nCore.Tr("反馈与关于")), NavBtn(LayoutView, I18nCore.Tr("布局")),
             _saveState.M(12, 10, 0, 0));
         nav.Margin = new Thickness(12, 16, 0, 12);
 
@@ -541,7 +541,7 @@ public sealed partial class SettingsPage : PageBase
 
     private Control GameDirRow()
     {
-        var browse = UiClass.Btn("浏览…", BtnKind.Chip, (_, _) => Run(BrowseGameDirAsync, "切换失败"));
+        var browse = UiClass.Btn(I18nCore.Tr("浏览…"), BtnKind.Chip, (_, _) => Run(BrowseGameDirAsync, I18nCore.Tr("切换失败")));
         var g = UiClass.G(null, "*,Auto");
         g.Add(_gameDir, 0);
         browse.Margin = new Thickness(8, 0, 0, 0);

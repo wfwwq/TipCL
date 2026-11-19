@@ -11,15 +11,16 @@ using TipCL.App.Common;
 using TipCL.App.Ui;
 using TipCL.Core;
 using UiClass = TipCL.App.Ui.Ui;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Version;
 
 /// <summary>版本设置对话框(照 Windows 版 VersionSetupDialog)。</summary>
 public static class VersionSetupDialog
 {
-    private static readonly string[] IsoLabels = { "跟随全局", "关闭(共用实例目录)", "隔离存档", "隔离全部" };
+    private static readonly string[] IsoLabels = { I18nCore.Tr("跟随全局"), "关闭(共用实例目录)", I18nCore.Tr("隔离存档"), I18nCore.Tr("隔离全部") };
     private static readonly string[] IsoValues = { "", "none", "saves", "all" };
-    private static readonly string[] GcLabels = { "自动", "G1(通用)", "ZGC(大内存)", "Serial(老电脑)", "不指定" };
+    private static readonly string[] GcLabels = { I18nCore.Tr("自动"), "G1(通用)", "ZGC(大内存)", "Serial(老电脑)", I18nCore.Tr("不指定") };
     private static readonly string[] GcValues = { "auto", "g1", "zgc", "serial", "none" };
 
     public static async Task ShowAsync(string instance, string version)
@@ -30,46 +31,46 @@ public static class VersionSetupDialog
         accounts.Insert(0, "(不绑定)");
 
         var iso = UiClass.Combo(IsoLabels, IsoLabels[Math.Max(0, Array.IndexOf(IsoValues, Py.S(data.Get("isolation"))))]);
-        var mem = UiClass.Input("留空则用全局设置", Py.Truthy(data.Get("memory_mb")) ? Py.Str(data.Get("memory_mb")) : "");
+        var mem = UiClass.Input(I18nCore.Tr("留空则用全局设置"), Py.Truthy(data.Get("memory_mb")) ? Py.Str(data.Get("memory_mb")) : "");
         var jvm = UiClass.Input("-XX:+UseG1GC ...", Py.S(data.Get("jvm_args")));
         string gcVal = Py.S(data.Get("gc")) is { Length: > 0 } g ? g : "auto";
         var gc = UiClass.Combo(GcLabels, GcLabels[Math.Max(0, Array.IndexOf(GcValues, gcVal))]);
-        var server = UiClass.Input("进游戏直连的服务器", Py.S(data.Get("server")));
+        var server = UiClass.Input(I18nCore.Tr("进游戏直连的服务器"), Py.S(data.Get("server")));
         var port = UiClass.Input("25565", Py.S(data.Get("port")));
-        var pre = UiClass.Input("启动前执行的命令", Py.S(data.Get("pre_launch")));
-        var preWait = UiClass.Check("等待启动前命令结束", Py.Truthy(data.Get("pre_launch_wait")));
-        var post = UiClass.Input("退出后执行的命令", Py.S(data.Get("post_launch")));
-        var title = UiClass.Input("自定义游戏窗口标题", Py.S(data.Get("window_title")));
+        var pre = UiClass.Input(I18nCore.Tr("启动前执行的命令"), Py.S(data.Get("pre_launch")));
+        var preWait = UiClass.Check(I18nCore.Tr("等待启动前命令结束"), Py.Truthy(data.Get("pre_launch_wait")));
+        var post = UiClass.Input(I18nCore.Tr("退出后执行的命令"), Py.S(data.Get("post_launch")));
+        var title = UiClass.Input(I18nCore.Tr("自定义游戏窗口标题"), Py.S(data.Get("window_title")));
         string mode = Py.S(data.Get("window_mode"));
-        var winMode = UiClass.Combo(new[] { "窗口", "全屏", "最大化" },
-            mode == "fullscreen" ? "全屏" : mode == "maximized" ? "最大化" : "窗口");
+        var winMode = UiClass.Combo(new[] { I18nCore.Tr("窗口"), I18nCore.Tr("全屏"), I18nCore.Tr("最大化") },
+            mode == "fullscreen" ? I18nCore.Tr("全屏") : mode == "maximized" ? I18nCore.Tr("最大化") : I18nCore.Tr("窗口"));
         var acc = UiClass.Combo(accounts, Py.S(data.Get("login_account")) is { Length: > 0 } la ? la : "(不绑定)");
         var nide8 = UiClass.Input("统一通行证 ServerId(可空)", Py.S(data.Get("nide8_id")));
-        var hidden = UiClass.Check("在版本列表中隐藏", Py.Truthy(data.Get("hidden")));
+        var hidden = UiClass.Check(I18nCore.Tr("在版本列表中隐藏"), Py.Truthy(data.Get("hidden")));
 
         var body = new ScrollViewer
         {
             Content = UiClass.V(4,
-                UiClass.Field("版本隔离", iso, "存档 / 配置是否与实例其它版本分开"),
-                UiClass.Field("独占内存", mem, "单位 MB"),
-                UiClass.Field("JVM 参数", jvm),
-                UiClass.Field("垃圾回收器", gc),
-                UiClass.Field("直连服务器", server),
-                UiClass.Field("端口", port),
-                UiClass.Field("启动前命令", pre),
+                UiClass.Field(I18nCore.Tr("版本隔离"), iso, "存档 / 配置是否与实例其它版本分开"),
+                UiClass.Field(I18nCore.Tr("独占内存"), mem, I18nCore.Tr("单位 MB")),
+                UiClass.Field(I18nCore.Tr("JVM 参数"), jvm),
+                UiClass.Field(I18nCore.Tr("垃圾回收器"), gc),
+                UiClass.Field(I18nCore.Tr("直连服务器"), server),
+                UiClass.Field(I18nCore.Tr("端口"), port),
+                UiClass.Field(I18nCore.Tr("启动前命令"), pre),
                 UiClass.Field("", preWait),
-                UiClass.Field("退出后命令", post),
-                UiClass.Field("窗口标题", title),
-                UiClass.Field("窗口模式", winMode),
-                UiClass.Field("绑定账号", acc, "启动这个版本时强制用该账号"),
-                UiClass.Field("统一通行证", nide8),
+                UiClass.Field(I18nCore.Tr("退出后命令"), post),
+                UiClass.Field(I18nCore.Tr("窗口标题"), title),
+                UiClass.Field(I18nCore.Tr("窗口模式"), winMode),
+                UiClass.Field(I18nCore.Tr("绑定账号"), acc, I18nCore.Tr("启动这个版本时强制用该账号")),
+                UiClass.Field(I18nCore.Tr("统一通行证"), nide8),
                 UiClass.Field("", hidden)),
             MaxHeight = 380,
             MinWidth = 520,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
 
-        if (!await Dlg.Ask("版本设置 · " + version, body, "保存")) return;
+        if (!await Dlg.Ask(I18nCore.Tr("版本设置 · ") + version, body, I18nCore.Tr("保存"))) return;
 
         var payload = new Dictionary<string, object?>
         {
@@ -96,11 +97,11 @@ public static class VersionSetupDialog
         try
         {
             await api.CallAsync<object>("save_version_settings", new { instance, version, data = payload });
-            ToastHost.Show("已保存", "版本设置已写入", ToastKind.Success);
+            ToastHost.Show(I18nCore.Tr("已保存"), I18nCore.Tr("版本设置已写入"), ToastKind.Success);
         }
         catch (Exception ex)
         {
-            ToastHost.Show("保存失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(I18nCore.Tr("保存失败"), ex.Message, ToastKind.Error);
         }
     }
 

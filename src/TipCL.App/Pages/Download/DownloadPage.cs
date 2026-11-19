@@ -19,6 +19,7 @@ using TipCL.App.Shell;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher.Layout;
 using UiClass = TipCL.App.Ui.Ui; // 命名空间 TipCL.App.Pages.* 下 `Ui` 会被解析成命名空间而非类（B0/B2 同款约定）
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Download;
 
@@ -31,7 +32,7 @@ public sealed class DownloadPage : PageBase
     /// <summary>远程版本列表拉取超时（对齐 Windows 版 FetchTimeoutMs=9000）。</summary>
     public static int FetchTimeoutMs = 9000;
 
-    private static readonly string[] Segs = { "原版", "Mod", "整合包", "数据包", "资源包", "光影", "世界" };
+    private static readonly string[] Segs = { I18nCore.Tr("原版"), "Mod", I18nCore.Tr("整合包"), I18nCore.Tr("数据包"), I18nCore.Tr("资源包"), I18nCore.Tr("光影"), I18nCore.Tr("世界") };
 
     /// <summary>分段 → 目录类别(下标 0 = 原版,无目录页;照 Windows 版 DownloadPage.Kinds)。</summary>
     private static readonly CatalogKind?[] Kinds =
@@ -40,7 +41,7 @@ public sealed class DownloadPage : PageBase
         CatalogKind.ResourcePack, CatalogKind.Shader, CatalogKind.World,
     };
 
-    private static readonly string[] FilterNames = { "正式版", "快照", "远古" };
+    private static readonly string[] FilterNames = { I18nCore.Tr("正式版"), I18nCore.Tr("快照"), I18nCore.Tr("远古") };
 
     private readonly ToggleButton[] _segBtns = new ToggleButton[7];
 
@@ -74,7 +75,7 @@ public sealed class DownloadPage : PageBase
 
     private bool _loaded;
 
-    public DownloadPage() : base("download", "下载")
+    public DownloadPage() : base("download", I18nCore.Tr("下载"))
     {
         _taskN = new TextBlock
         {
@@ -84,7 +85,7 @@ public sealed class DownloadPage : PageBase
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         }.Dyn(TextBlock.ForegroundProperty, "B.OnAccentStrong");
-        _search = UiClass.Input("搜索版本");
+        _search = UiClass.Input(I18nCore.Tr("搜索版本"));
 
         // ── 顶行：分段轨道 + 任务按钮 ──
         var rail = UiClass.H(0);
@@ -100,7 +101,7 @@ public sealed class DownloadPage : PageBase
         var badge = UiClass.Pane(_taskN, "B.AccentStrong", 8, 0);
         badge.Padding = new Thickness(6, 0, 6, 1);
         var task = UiClass.Btn("", BtnKind.Normal, (_, _) => (this.GetVisualRoot() as MainWindow)?.Navigate("tasks"));
-        task.Content = UiClass.H(6, IconLib.Make("Download", "B.Ink", 13), UiClass.Txt("任务", 13, bold: true), badge);
+        task.Content = UiClass.H(6, IconLib.Make("Download", "B.Ink", 13), UiClass.Txt(I18nCore.Tr("任务"), 13, bold: true), badge);
         task.BorderThickness = new Thickness(0);
         var top = UiClass.G(null, "*,Auto");
         top.Margin = new Thickness(22, 16, 22, 12);
@@ -136,8 +137,8 @@ public sealed class DownloadPage : PageBase
         // 区间距 = 默认档 10 ⇒ bar 的下外边距 2 + 10 = 12,正是旧版「旧筛选行下间距 12」的来历。
         _vanillaView = new BlockHost("download", new List<BlockSpec>
         {
-            new BlockSpec { Id = "filters", Title = "筛选", Content = bar },
-            new BlockSpec { Id = "list", Title = "版本列表", Content = card },
+            new BlockSpec { Id = "filters", Title = I18nCore.Tr("筛选"), Content = bar },
+            new BlockSpec { Id = "list", Title = I18nCore.Tr("版本列表"), Content = card },
         }, new Thickness(0), DownloadDefaultPage());
 
         _shell = UiClass.G("Auto,*");
@@ -198,7 +199,7 @@ public sealed class DownloadPage : PageBase
     // 行控件直接构建（对齐 Windows 版 RowUi：首行无顶分隔线、行 hover 换按钮样式），ListBox 容器虚拟化保留。
     private Control RowUi(VersionRow r, bool isFirst)
     {
-        var b = new Button { Theme = UiClass.Theme("Btn.Soft"), Content = UiClass.H(6, IconLib.Make("Download", "B.Ink", 13), UiClass.Txt("安装", 13)) };
+        var b = new Button { Theme = UiClass.Theme("Btn.Soft"), Content = UiClass.H(6, IconLib.Make("Download", "B.Ink", 13), UiClass.Txt(I18nCore.Tr("安装"), 13)) };
         b.Click += (_, _) => OpenInstall(r);
 
         var g = UiClass.G(null, "130,*,110,Auto");
@@ -348,7 +349,7 @@ public sealed class DownloadPage : PageBase
         {
             Common.AppLog.Warn("版本清单刷新失败: " + ex.Message);
             if (_all.Count == 0)
-                Toast("版本清单刷新失败", ex.Message, ToastKind.Warning);
+                Toast(I18nCore.Tr("版本清单刷新失败"), ex.Message, ToastKind.Warning);
         }
     }
 
@@ -401,10 +402,10 @@ public sealed class DownloadPage : PageBase
         public string Date { get; init; } = "";
         public string TypeLabel => Type switch
         {
-            "release" => "正式版",
-            "snapshot" => "快照",
-            "old_alpha" => "远古 Alpha",
-            "old_beta" => "远古 Beta",
+            "release" => I18nCore.Tr("正式版"),
+            "snapshot" => I18nCore.Tr("快照"),
+            "old_alpha" => I18nCore.Tr("远古 Alpha"),
+            "old_beta" => I18nCore.Tr("远古 Beta"),
             _ => Type,
         };
     }

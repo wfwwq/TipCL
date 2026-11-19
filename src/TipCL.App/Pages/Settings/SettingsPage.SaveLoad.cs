@@ -202,7 +202,7 @@ public sealed partial class SettingsPage
         else
         {
             // 后端语言服务 M3 才接：给中文兜底项
-            _lang.Items.Add(new Opt("zh-Hans", "简体中文"));
+            _lang.Items.Add(new Opt("zh-Hans", I18nCore.Tr("简体中文")));
         }
         _lang0 = await Api.TryCallAsync("get_language", "") ?? "";
         SelectKey(_lang, string.IsNullOrEmpty(_lang0) ? null : _lang0);
@@ -247,12 +247,12 @@ public sealed partial class SettingsPage
             _saveTimer.Tick += (_, _) =>
             {
                 _saveTimer.Stop();
-                Run(AutoSaveAsync, "保存失败");
+                Run(AutoSaveAsync, I18nCore.Tr("保存失败"));
             };
         }
         _saveTimer.Stop();
         _saveTimer.Start();
-        _saveState.Text = "保存中…";
+        _saveState.Text = I18nCore.Tr("保存中…");
     }
 
     /// <summary>离开设置页时把还没落盘的改动立刻存掉。</summary>
@@ -261,7 +261,7 @@ public sealed partial class SettingsPage
         if (_saveTimer is { IsEnabled: true })
         {
             _saveTimer.Stop();
-            Run(AutoSaveAsync, "保存失败");
+            Run(AutoSaveAsync, I18nCore.Tr("保存失败"));
         }
     }
 
@@ -280,11 +280,11 @@ public sealed partial class SettingsPage
                 _savePending = false;
                 await SaveAsync(auto: true);
             } while (_savePending);
-            _saveState.Text = "已自动保存";
+            _saveState.Text = I18nCore.Tr("已自动保存");
         }
         catch (Exception)
         {
-            _saveState.Text = "保存失败";
+            _saveState.Text = I18nCore.Tr("保存失败");
             throw;
         }
         finally
@@ -312,7 +312,7 @@ public sealed partial class SettingsPage
             catch (Exception ex)
             {
                 _gameDir.Text = _gameDir0;
-                Toast("游戏目录无效", ex.Message, ToastKind.Error);
+                Toast(I18nCore.Tr("游戏目录无效"), ex.Message, ToastKind.Error);
                 return;
             }
         }
@@ -389,7 +389,7 @@ public sealed partial class SettingsPage
         ApplyVisuals();
 
         if (langChanged)
-            Toast("语言已切换", "下次启动启动器后界面才会变成新语言", ToastKind.Info);
+            Toast(I18nCore.Tr("语言已切换"), I18nCore.Tr("下次启动启动器后界面才会变成新语言"), ToastKind.Info);
     }
 
     private static int IntOr(string? s, int fallback)
@@ -427,7 +427,7 @@ public sealed partial class SettingsPage
             UiClass.ApplyTheme(dark);
             ThemeService.Replay();
         }
-        _saveState.Text = _loaded ? "已自动保存" : _saveState.Text;
+        _saveState.Text = _loaded ? I18nCore.Tr("已自动保存") : _saveState.Text;
     }
 
     private void ApplyVisuals()
@@ -503,10 +503,10 @@ public sealed partial class SettingsPage
     private void SyncSecretBoxes()
     {
         _cfKey.Tag = _cfClear
-            ? "已恢复为内置 Key"
-            : _cfSet ? $"已保存自己的 Key（{_cfHint}），留空不修改" : "CurseForge API Key（留空用内置）";
+            ? I18nCore.Tr("已恢复为内置 Key")
+            : _cfSet ? $"已保存自己的 Key（{_cfHint}），留空不修改" : I18nCore.Tr("CurseForge API Key（留空用内置）");
         _aiKey.Tag = _aiKeyClear
-            ? "令牌已清除"
+            ? I18nCore.Tr("令牌已清除")
             : _aiKeySet ? $"已保存自己的令牌（{_aiKeyHint}），留空不修改" : "sk-…";
         _cfReset.IsVisible = _cfSet && !_cfClear;
         _aiKeyReset.IsVisible = _aiKeySet && !_aiKeyClear;
@@ -516,8 +516,8 @@ public sealed partial class SettingsPage
     {
         string folder = (_bgFolder.Text ?? "").Trim();
         string path = (_bgPath.Text ?? "").Trim();
-        _bgInfo.Text = folder.Length > 0 ? "正在轮播文件夹里的图片"
-            : path.Length == 0 ? "当前没有壁纸，界面走主题底色"
+        _bgInfo.Text = folder.Length > 0 ? I18nCore.Tr("正在轮播文件夹里的图片")
+            : path.Length == 0 ? I18nCore.Tr("当前没有壁纸，界面走主题底色")
             : "壁纸设置已保存（渲染管线 M3 接入）";
         _bgUndo.IsVisible = false; // background_history 后端 M3 接
     }
@@ -526,14 +526,14 @@ public sealed partial class SettingsPage
 
     private async Task BrowseGameDirAsync()
     {
-        string? path = await Dlg.PickFolder("选择游戏目录");
+        string? path = await Dlg.PickFolder(I18nCore.Tr("选择游戏目录"));
         if (string.IsNullOrEmpty(path)) return;
         try
         {
             Directory.CreateDirectory(path);
             _gameDir0 = path;
             _gameDir.Text = path;
-            Toast("已切换目录", path, ToastKind.Success);
+            Toast(I18nCore.Tr("已切换目录"), path, ToastKind.Success);
         }
         catch (Exception ex)
         {
@@ -555,9 +555,9 @@ public sealed partial class SettingsPage
         if (text == null)
             // [audit/B] test_ai_connection 是**已实现**的(Client.TestConnection):失败说明地址 / 密钥 /
             // 网络有问题,不是"后端还没接"。原来那句「后端 AI 网关 M3 接入」把可诊断的失败说成了不可用。
-            Toast("AI 连接失败", "没有拿到回复:请检查接入地址 / 密钥 / 网络后重试", ToastKind.Warning);
+            Toast(I18nCore.Tr("AI 连接失败"), I18nCore.Tr("没有拿到回复:请检查接入地址 / 密钥 / 网络后重试"), ToastKind.Warning);
         else
-            Toast("AI 连接成功", text, ToastKind.Success);
+            Toast(I18nCore.Tr("AI 连接成功"), text, ToastKind.Success);
     }
 
     private Func<Task> ThemeOpAsync(string op) => async () =>
@@ -565,7 +565,7 @@ public sealed partial class SettingsPage
         string? name = (_themePack.SelectedItem as string) ?? "";
         if (op == "save_theme")
         {
-            name = await Dlg.Prompt("保存为主题包", "主题包名称", $"我的主题 {_themePack.Items.Count + 1}");
+            name = await Dlg.Prompt(I18nCore.Tr("保存为主题包"), I18nCore.Tr("主题包名称"), $"我的主题 {_themePack.Items.Count + 1}");
             if (string.IsNullOrWhiteSpace(name)) return;
         }
         // [audit/B] 导入 / 导出要的是**文件路径**(IApi: import_theme(path) / export_theme(name, dest)),
@@ -574,17 +574,17 @@ public sealed partial class SettingsPage
         {
             if (op == "import_theme")
             {
-                string? from = await Dlg.PickFile("导入主题包", "*.json");
+                string? from = await Dlg.PickFile(I18nCore.Tr("导入主题包"), "*.json");
                 if (from == null) return;
                 string imported = await Api.CallAsync<string>("import_theme", new { path = from }) ?? "";
-                Toast("已导入主题包", imported, ToastKind.Success);
+                Toast(I18nCore.Tr("已导入主题包"), imported, ToastKind.Success);
                 await ReloadThemePacksAsync();
                 return;
             }
-            string? to = await Dlg.SaveFile("导出主题包", (name.Length > 0 ? name : "theme") + ".json");
+            string? to = await Dlg.SaveFile(I18nCore.Tr("导出主题包"), (name.Length > 0 ? name : "theme") + ".json");
             if (to == null) return;
             string written = await Api.CallAsync<string>("export_theme", new { name, dest = to }) ?? "";
-            Toast("已导出主题包", written, ToastKind.Success);
+            Toast(I18nCore.Tr("已导出主题包"), written, ToastKind.Success);
             return;
         }
         else if (string.IsNullOrEmpty(name))
@@ -605,7 +605,7 @@ public sealed partial class SettingsPage
         {
             // [audit/B] 主题包这几个操作(save/load/delete)后端都是**已实现**的;走到这里说明真的失败了
             // (文件坏了 / 目录不可写),如实说失败,不再谎报"后端还没接"。
-            Toast("操作失败", $"主题包{op}没能完成,看日志里的原因", ToastKind.Warning);
+            Toast(I18nCore.Tr("操作失败"), $"主题包{op}没能完成,看日志里的原因", ToastKind.Warning);
             return;
         }
         Toast("主题包已保存", name, ToastKind.Success);
@@ -621,11 +621,11 @@ public sealed partial class SettingsPage
             return;
         }
         var samples = new List<string>();
-        foreach (string k in new[] { "设置", "启动游戏", "下载任务" })
+        foreach (string k in new[] { I18nCore.Tr("设置"), I18nCore.Tr("启动游戏"), I18nCore.Tr("下载任务") })
             samples.Add(await Api.TryCallAsync("translate", k, new { key = k, lang }) ?? k);
         _langPreview.Text = lang == _lang0
-            ? "预览：" + string.Join(" · ", samples)
-            : "切换后界面会变成：" + string.Join(" · ", samples) + "（重启后全量生效）";
+            ? I18nCore.Tr("预览：") + string.Join(" · ", samples)
+            : I18nCore.Tr("切换后界面会变成：") + string.Join(" · ", samples) + I18nCore.Tr("（重启后全量生效）");
     }
 
     /// <summary>异步动作统一入口：异常转 Toast 不崩 UI（照 Windows 版 PageBase.Run）。</summary>
@@ -637,7 +637,7 @@ public sealed partial class SettingsPage
         }
         catch (Exception ex)
         {
-            ToastHost.Show(failTitle ?? "操作失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(failTitle ?? I18nCore.Tr("操作失败"), ex.Message, ToastKind.Error);
         }
     }
 }

@@ -32,7 +32,7 @@ public sealed partial class SettingsPage
             list.Children.Clear();
             List<string> entries = FileMemory.Entries();
             count.Text = entries.Count == 0
-                ? "还没有记忆。对话里说出偏好或修好问题后，助手会自己记下"
+                ? I18nCore.Tr("还没有记忆。对话里说出偏好或修好问题后，助手会自己记下")
                 : $"共 {entries.Count} 条，新对话开始时会带给助手";
             clear.IsEnabled = entries.Count > 0;
             for (int i = 0; i < entries.Count; i++)
@@ -45,14 +45,14 @@ public sealed partial class SettingsPage
                 var row = UiClass.G(null, "Auto,*,Auto,Auto");
                 row.Add(UiClass.Txt(date, 11.5, fg: "B.InkFaint").M(0, 0, 10, 0).VCenter(), 0);
                 row.Add(text.VCenter(), 0, 1);
-                row.Add(UiClass.Btn("编辑", BtnKind.Chip, async (_, _) =>
+                row.Add(UiClass.Btn(I18nCore.Tr("编辑"), BtnKind.Chip, async (_, _) =>
                 {
-                    string? edited = await Dlg.Prompt("编辑记忆", "内容", body);
+                    string? edited = await Dlg.Prompt(I18nCore.Tr("编辑记忆"), I18nCore.Tr("内容"), body);
                     if (edited != null && Same(index, entry))
                         FileMemory.Update(index, edited);
                     Render();
                 }).M(8, 0, 0, 0).VCenter(), 0, 2);
-                row.Add(UiClass.Btn("删除", BtnKind.Ghost, (_, _) =>
+                row.Add(UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Ghost, (_, _) =>
                 {
                     if (Same(index, entry))
                         FileMemory.RemoveAt(index);
@@ -65,23 +65,23 @@ public sealed partial class SettingsPage
         {
             var now = FileMemory.Entries();
             if (index < now.Count && now[index] == entry) return true;
-            ToastHost.Show("记忆已变化", "文件刚被改过，已刷新列表", ToastKind.Warning);
+            ToastHost.Show(I18nCore.Tr("记忆已变化"), I18nCore.Tr("文件刚被改过，已刷新列表"), ToastKind.Warning);
             return false;
         }
-        clear = UiClass.Btn("清空全部", BtnKind.Danger, async (_, _) =>
+        clear = UiClass.Btn(I18nCore.Tr("清空全部"), BtnKind.Danger, async (_, _) =>
         {
-            if (await Dlg.Confirm("清空全部记忆？", "助手记下的偏好、配置和修好过的问题都会删除，无法恢复。", "清空", null, danger: true))
+            if (await Dlg.Confirm(I18nCore.Tr("清空全部记忆？"), I18nCore.Tr("助手记下的偏好、配置和修好过的问题都会删除，无法恢复。"), I18nCore.Tr("清空"), null, danger: true))
             {
                 int n = FileMemory.Clear();
-                ToastHost.Show("已清空记忆", $"删除了 {n} 条", ToastKind.Success);
+                ToastHost.Show(I18nCore.Tr("已清空记忆"), $"删除了 {n} 条", ToastKind.Success);
             }
             Render();
         });
-        var refresh = U.Btn("刷新", BtnKind.Chip, (_, _) => Render(), "Refresh");
+        var refresh = U.Btn(I18nCore.Tr("刷新"), BtnKind.Chip, (_, _) => Render(), "Refresh");
         Render();
         AttachedToVisualTree += (_, _) => Render();
         return UiClass.Card(Rows(
-            UiClass.Field("记忆", UiClass.H(8, refresh, clear), "AI 助手跨对话记住的偏好和配置（数据目录 ai_memory.md，一行一条）"),
+            UiClass.Field(I18nCore.Tr("记忆"), UiClass.H(8, refresh, clear), I18nCore.Tr("AI 助手跨对话记住的偏好和配置（数据目录 ai_memory.md，一行一条）")),
             count, list));
     }
 
@@ -90,14 +90,14 @@ public sealed partial class SettingsPage
     {
         var status = UiClass.Small("");
         var ip = UiClass.Input("手机上显示的地址，例如 192.168.1.5:8765", "", 240);
-        var token = UiClass.Input("配对码", "", 120);
+        var token = UiClass.Input(I18nCore.Tr("配对码"), "", 120);
 void SetStatus(string text)
         {
             // PhoneLink 的进度回调来自后台线程,控件更新必须回 UI 线程
             if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) status.Text = text;
             else Avalonia.Threading.Dispatcher.UIThread.Post(() => status.Text = text);
         }
-        var connect = UiClass.Btn("连接", BtnKind.Soft, (_, _) => Run(async () =>
+        var connect = UiClass.Btn(I18nCore.Tr("连接"), BtnKind.Soft, (_, _) => Run(async () =>
         {
             SetStatus("连接中...");
             // 控件取值留在 UI 线程;Task.Run 里只碰纯字符串
@@ -107,7 +107,7 @@ void SetStatus(string text)
             SetStatus($"已连接:{info.Device}");
             Toast("已连接手机", info.Device ?? "", ToastKind.Success);
         }, "连接失败"));
-        var usb = UiClass.Btn("USB 自动连接", BtnKind.Chip, (_, _) => Run(async () =>
+        var usb = UiClass.Btn(I18nCore.Tr("USB 自动连接"), BtnKind.Chip, (_, _) => Run(async () =>
         {
             SetStatus("USB 连接中...");
             string tokenText = token.Text!.Trim();
@@ -144,16 +144,16 @@ void SetStatus(string text)
             ToastHost.Show("还没连接手机", "先点上面的「连接」或「USB 自动连接」", ToastKind.Warning);
             return;
         }
-        Dlg.OpenPanel("手机同步", new PhoneSyncPanel(), 880);
+        Dlg.OpenPanel(I18nCore.Tr("手机同步"), new PhoneSyncPanel(), 880);
     }
 
     private static Border BuildAboutCard()
     {
         var thanks = UiClass.Muted("@368****168 — 帮忙测试了正版（微软）验证").Wrap();
         return UiClass.Card(UiClass.V(2,
-            UiClass.Section("关于", "TipCL 启动器"),
-            UiClass.Field("版本", UiClass.Muted(AppInfo.APP_VERSION + "（Linux 移植版）")),
-            UiClass.Field("致谢", thanks, "感谢每一位帮忙测试的朋友")));
+            UiClass.Section(I18nCore.Tr("关于"), I18nCore.Tr("TipCL 启动器")),
+            UiClass.Field(I18nCore.Tr("版本"), UiClass.Muted(AppInfo.APP_VERSION + "（Linux 移植版）")),
+            UiClass.Field(I18nCore.Tr("致谢"), thanks, I18nCore.Tr("感谢每一位帮忙测试的朋友"))));
     }
 
     /// <summary>反馈卡（Windows 版是独立 FeedbackPage；M2 先落提交卡，完整反馈流 M3 补）。</summary>
@@ -167,10 +167,10 @@ void SetStatus(string text)
     private Border BuildFeedbackCard()
     {
         var body = UiClass.Multi("说说你的使用体验、遇到的问题或想要的功能...", "", 110);
-        var kind = UiClass.Combo(new[] { "问题反馈", "功能建议", "其他" });
+        var kind = UiClass.Combo(new[] { I18nCore.Tr("问题反馈"), I18nCore.Tr("功能建议"), I18nCore.Tr("其他") });
         var info = UiClass.Small("");
         Button? send = null;
-        send = UiClass.Btn("发送反馈", BtnKind.Primary, (_, _) => Run(async () =>
+        send = UiClass.Btn(I18nCore.Tr("发送反馈"), BtnKind.Primary, (_, _) => Run(async () =>
         {
             if (string.IsNullOrWhiteSpace(body.Text))
             {
@@ -184,12 +184,12 @@ void SetStatus(string text)
             info.Text = "发送中...";
             try
             {
-                string category = (kind.SelectedItem as string) switch
-                {
-                    "功能建议" => "suggest",
-                    "其他" => "other",
-                    _ => "bug",
-                };
+                // [audit/B i18n] 这三项既是下拉框文案、又要拿选中的文本做等值比较:
+                // 常量模式写不了方法调用,所以比较这一侧也用 Tr(...) 现取 —— en 下才对得上,
+                // 否则三种都会落到 bug。下拉框那三项同口径处理(见上面 kind 的构造)。
+                string picked = kind.SelectedItem as string ?? "";
+                string category = picked == I18nCore.Tr("功能建议") ? "suggest"
+                    : (picked == I18nCore.Tr("其他") ? "other" : "bug");
                 var result = await Api.CallAsync<PyDict>("feedback_submit", new PyDict
                 {
                     ["category"] = category,
@@ -199,25 +199,25 @@ void SetStatus(string text)
                 body.Text = "";
                 string id = result != null ? Py.S(result.Get("id")) : "";
                 info.Text = id.Length > 0 ? $"已发送(编号 {id}),谢谢!" : "已发送,谢谢你的反馈!";
-                Toast("已发送", "感谢你的反馈", ToastKind.Success);
+                Toast(I18nCore.Tr("已发送"), "感谢你的反馈", ToastKind.Success);
             }
             catch (Exception ex)
             {
                 // 服务器拒绝的原因要原样呈现(缺客户端标识是 403、字段不合法是 400)
                 info.Text = "发送失败:" + ex.Message;
-                Toast("发送失败", ex.Message, ToastKind.Error);
+                Toast(I18nCore.Tr("发送失败"), ex.Message, ToastKind.Error);
             }
             finally
             {
                 send!.IsEnabled = true;
             }
-        }, "发送失败"));
+        }, I18nCore.Tr("发送失败")));
 
         var gh = UiClass.Btn("去 GitHub 提 issue", BtnKind.Chip, (_, _) => OpenExternal("https://github.com/burningtnt/Terracotta"));
         return UiClass.Card(UiClass.V(6,
-            UiClass.Section("反馈", "问题与建议直通车"),
+            UiClass.Section(I18nCore.Tr("反馈"), "问题与建议直通车"),
             body,
-            UiClass.Field("类型", kind, null, 58),
+            UiClass.Field(I18nCore.Tr("类型"), kind, null, 58),
             UiClass.H(8, send, gh, info.VCenter())).M(18, 8, 18, 16));
     }
 
@@ -230,7 +230,7 @@ void SetStatus(string text)
         bool ok = await Dlg.Confirm("发送反馈需要同意上传诊断数据",
             "会随反馈一起上传:随机设备标识、启动器版本、系统与硬件摘要、已装 Java 摘要。\n" +
             "不包含账号密码、存档内容与聊天记录。",
-            "同意并发送", "取消");
+            "同意并发送", I18nCore.Tr("取消"));
         if (!ok)
             return false;
         await Api.CallAsync<object?>("feedback_consent", new PyDict { ["allow"] = true });
@@ -257,22 +257,32 @@ void SetStatus(string text)
     private async Task CleanAsync()
     {
         _clean.IsEnabled = false;
-        _clean.Content = UiClass.Txt("扫描中…");
+        _clean.Content = UiClass.Txt(I18nCore.Tr("扫描中..."));
         var preview = await Api.TryCallAsync<CleanerPreviewStub>("cleaner_preview");
-        _clean.IsEnabled = true;
-        _clean.Content = UiClass.Txt("扫描并清理");
+        _clean.Content = UiClass.Txt(I18nCore.Tr("扫描并清理"));
         if (preview == null || preview.Count == 0)
         {
-            _cleanInfo.Text = "没有可清理的文件";
-            Toast("很干净", "没有找到可清理的文件", ToastKind.Success);
+            // [audit/B] 必然 0 结果时不要把按钮留在可点状态(用户点了只会觉得"没反应"):
+            // 置灰 + 旁边一行说明;下次扫出东西时会重新启用(见下面).
+            _clean.IsEnabled = false;
+            ToolTip.SetTip(_clean, I18nCore.Tr("当前没有可清理的缓存;装过版本、下过东西之后再来"));
+            _cleanInfo.Text = preview == null
+                ? I18nCore.Tr("扫描失败:读不到可清理列表")
+                : I18nCore.Tr("当前没有可清理的缓存");
+            Toast(I18nCore.Tr("很干净"), I18nCore.Tr("没有找到可清理的文件"), ToastKind.Success);
             return;
         }
+        _clean.IsEnabled = true;
+        ToolTip.SetTip(_clean, null);
         _cleanInfo.Text = $"可清理 {preview.Count} 个文件";
-        if (await Dlg.Confirm("清理文件", $"共 {preview.Count} 个文件。删掉的文件下次用到会自动重新下载。", "开始清理", "取消", danger: true))
+        if (await Dlg.Confirm(I18nCore.Tr("清理文件"), $"共 {preview.Count} 个文件。删掉的文件下次用到会自动重新下载。", I18nCore.Tr("开始清理"), I18nCore.Tr("取消"), danger: true))
         {
             var result = await Api.TryCallAsync<CleanerResultStub>("cleaner_apply", null, new { kinds = Py.L("unused_libraries", "parts", "cache") });
-            _cleanInfo.Text = result == null ? "清理后端 M3 接入" : $"已清理 {result.Removed} 个文件";
-            Toast("清理完成", _cleanInfo.Text, ToastKind.Success);
+            // [audit/B] cleaner_apply 是已实现的(IApi -> Core Cleaner.Apply),失败如实说失败
+            _cleanInfo.Text = result == null
+                ? I18nCore.Tr("清理没有完成:看看日志里的原因")
+                : $"已清理 {result.Removed} 个文件";
+            Toast(I18nCore.Tr("清理完成"), _cleanInfo.Text, result == null ? ToastKind.Warning : ToastKind.Success);
         }
     }
 
@@ -283,20 +293,20 @@ void SetStatus(string text)
         _rec.IsEnabled = true;
         if (rec == null)
         {
-            Toast("智能推荐", "推荐后端 M3 接入，暂不可用", ToastKind.Warning);
+            Toast(I18nCore.Tr("智能推荐"), I18nCore.Tr("读不到本机信息"), ToastKind.Warning);
             return;
         }
         var body = UiClass.V(6,
             UiClass.Muted($"本机：{rec.TotalRamGb} GB 内存 / {rec.CpuCount} 核 CPU"),
             UiClass.Txt($"推荐内存 {rec.MemoryMb} MB", 14, bold: true),
             UiClass.Small($"推荐 Java {rec.JavaMajor} · 窗口 {rec.WindowWidth}×{rec.WindowHeight} · 回收器 {rec.GcPreset}"));
-        if (await Dlg.Ask("智能推荐", body, "应用推荐"))
+        if (await Dlg.Ask(I18nCore.Tr("智能推荐"), body, I18nCore.Tr("应用推荐")))
         {
             _mem.Value = Math.Clamp(rec.MemoryMb, 512, 32768);
             if (rec.WindowWidth > 0) _w.Text = rec.WindowWidth.ToString();
             if (rec.WindowHeight > 0) _h.Text = rec.WindowHeight.ToString();
             SelectKey(_gc, string.IsNullOrEmpty(rec.GcPreset) ? "auto" : rec.GcPreset);
-            Toast("已应用", $"内存已设为 {rec.MemoryMb} MB，保存设置后生效", ToastKind.Success);
+            Toast(I18nCore.Tr("已应用"), $"内存已设为 {rec.MemoryMb} MB，保存设置后生效", ToastKind.Success);
         }
     }
 

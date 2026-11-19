@@ -25,7 +25,7 @@ namespace TipCL.App.Pages.Library;
 // 「更多管理」入口暂缺，数据列表即精简版管理；「设置」分段为只读版本列表 + 打开文件夹。
 public sealed class InstanceDetailPage : PageBase
 {
-    private static readonly string[] Segs = { "模组", "存档", "资源包", "光影", "设置" };
+    private static readonly string[] Segs = { I18nCore.Tr("模组"), I18nCore.Tr("存档"), I18nCore.Tr("资源包"), I18nCore.Tr("光影"), I18nCore.Tr("设置") };
 
     private readonly string _inst;
     private readonly Action _back;
@@ -59,11 +59,11 @@ public sealed class InstanceDetailPage : PageBase
         _back = back;
         _focusVer = focusVer ?? "";
 
-        var backBtn = UiClass.IconBtn("ChevronLeft", "返回", (_, _) => _back(), 16);
+        var backBtn = UiClass.IconBtn("ChevronLeft", I18nCore.Tr("返回"), (_, _) => _back(), 16);
         var title = UiClass.Txt(_inst, 21, bold: true);
         title.TextTrimming = TextTrimming.CharacterEllipsis;
         _meta.Text = $"{info.Versions} 个版本";
-        var launch = UiClass.Btn("启动", BtnKind.Primary, (_, _) => Run(LaunchNowAsync));
+        var launch = UiClass.Btn(I18nCore.Tr("启动"), BtnKind.Primary, (_, _) => Run(LaunchNowAsync, I18nCore.Tr("启动失败")));
 
         var head = UiClass.G(null, "Auto,*,Auto");
         head.Margin = new Thickness(22, 16, 22, 12);
@@ -220,7 +220,7 @@ public sealed class InstanceDetailPage : PageBase
         for (int i = 0; i < 5; i++)
             _segBtns[i].IsChecked = i == k;
         // 不在这里重建容器:容器是 _rowsHost(见字段注释),_rows 始终只属于它
-        Run(LoadSegAsync, "读取失败");
+        Run(LoadSegAsync, I18nCore.Tr("读取失败"));
     }
 
     private async Task LoadSegAsync()
@@ -239,7 +239,7 @@ public sealed class InstanceDetailPage : PageBase
                 {
                     bool on = sw.IsChecked == true;
                     Run(() => Api.TryCallAsync<object>(on ? "enable_mod" : "disable_mod", null,
-                        new { instance = _inst, filename = file }));
+                        new { instance = _inst, filename = file }), I18nCore.Tr("切换模组状态失败"));
                 };
                 rows.Add(Row(string.IsNullOrWhiteSpace(m.Name) ? file : m.Name, file, sw));
             }
@@ -248,8 +248,8 @@ public sealed class InstanceDetailPage : PageBase
         {
             foreach (var s in await FetchSavesAsync())
             {
-                var open = UiClass.Btn("打开", BtnKind.Chip, (_, _) =>
-                    LibraryPage.OpenInFileManager(s.Path, "打开失败"));
+                var open = UiClass.Btn(I18nCore.Tr("打开"), BtnKind.Chip, (_, _) =>
+                    LibraryPage.OpenInFileManager(s.Path, I18nCore.Tr("打开失败")));
                 rows.Add(Row(s.Name, s.SizeText, open));
             }
         }
@@ -258,9 +258,9 @@ public sealed class InstanceDetailPage : PageBase
             string kind = seg == 2 ? "resourcepacks" : "shaderpacks";
             foreach (var f in await FetchMediaAsync(kind))
             {
-                var del = UiClass.Btn("删除", BtnKind.Ghost, (_, _) => Run(async () =>
+                var del = UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Ghost, (_, _) => Run(async () =>
                 {
-                    if (await Dlg.Confirm("删除", f, "删除", "取消", danger: true))
+                    if (await Dlg.Confirm(I18nCore.Tr("删除"), f, I18nCore.Tr("删除"), I18nCore.Tr("取消"), danger: true))
                     {
                         await Task.Run(() =>
                         {
@@ -269,7 +269,7 @@ public sealed class InstanceDetailPage : PageBase
                         });
                         await LoadSegAsync();
                     }
-                }, "删除失败"));
+                }, I18nCore.Tr("删除失败")));
                 rows.Add(Row(Path.GetFileName(f.TrimEnd(Path.DirectorySeparatorChar)), null, del));
             }
         }
@@ -280,10 +280,10 @@ public sealed class InstanceDetailPage : PageBase
             try { java = new Instance(_inst).JavaPref(); } catch (Exception) { }
             foreach (var id in _vers)
             {
-                var open = UiClass.IconBtn("Open", "打开版本文件夹", (_, _) =>
+                var open = UiClass.IconBtn("Open", I18nCore.Tr("打开版本文件夹"), (_, _) =>
                 {
                     string dir = VersionDir(id);
-                    LibraryPage.OpenInFileManager(Directory.Exists(dir) ? dir : InstancePath(), "打开失败");
+                    LibraryPage.OpenInFileManager(Directory.Exists(dir) ? dir : InstancePath(), I18nCore.Tr("打开失败"));
                 }, 16);
                 string sub = JoinParts(IsolationLabelOf(id) is { Length: > 0 } lb ? lb : "共享（大锅饭）",
                     string.IsNullOrWhiteSpace(java) ? "" : "Java " + java);
@@ -295,7 +295,7 @@ public sealed class InstanceDetailPage : PageBase
         _rows.Children.Clear();
         if (rows.Count == 0)
         {
-            var empty = UiClass.Empty("○", "这里还是空的", "到「下载」页搜索安装");
+            var empty = UiClass.Empty("○", I18nCore.Tr("这里还是空的"), I18nCore.Tr("到「下载」页搜索安装"));
             empty.Margin = new Thickness(0, 18, 0, 18);
             _rows.Children.Add(empty);
             return;
@@ -446,7 +446,7 @@ public sealed class InstanceDetailPage : PageBase
     {
         await LibraryPage.SetDefaultInstanceAsync(_inst);
         LibraryPage.NavRequested?.Invoke("launch");
-        Toast("启动", "启动链路（preflight/launch_game）在 M3 落地", ToastKind.Info);
+        Toast(I18nCore.Tr("启动"), "启动链路（preflight/launch_game）在 M3 落地", ToastKind.Info);
     }
 
     // ———————————————— 小工具 ————————————————
@@ -500,7 +500,7 @@ public sealed class InstanceDetailPage : PageBase
         try { await work(); }
         catch (Exception ex)
         {
-            ToastHost.Show(errTitle ?? "操作失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(errTitle ?? I18nCore.Tr("操作失败"), ex.Message, ToastKind.Error);
         }
     }
 }

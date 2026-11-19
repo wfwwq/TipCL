@@ -8,6 +8,7 @@ using System;
 using System.Threading.Tasks;
 using TipCL.App.Common;
 using TipCL.Core;
+using TipCL.Core.Launcher;
 
 namespace TipCL.App.Pages.Settings;
 
@@ -20,7 +21,7 @@ public sealed partial class SettingsPage
         PyDict? info = await Api.TryCallAsync<PyDict>("check_update");
         if (info == null)
         {
-            Toast("检查更新失败", "拿不到更新清单,检查网络后再试", ToastKind.Warning);
+            Toast(I18nCore.Tr("检查更新失败"), "拿不到更新清单,检查网络后再试", ToastKind.Warning);
             return;
         }
         string current = Py.S(info["current"]);
@@ -34,11 +35,11 @@ public sealed partial class SettingsPage
                 Toast("更新被拒绝", Py.S(info["message"]), ToastKind.Warning);
                 return;
             }
-            Toast("已是最新版本", current + (latest.Length > 0 && latest != current ? " (清单:" + latest + ")" : ""), ToastKind.Success);
+            Toast(I18nCore.Tr("已是最新版本"), current + (latest.Length > 0 && latest != current ? " (清单:" + latest + ")" : ""), ToastKind.Success);
             return;
         }
         string body = ("TipCL " + latest + " 已发布。\n" + Py.S(info["notes"])).Trim();
-        if (await Dlg.Confirm("发现新版本", body + "\n\n现在下载更新?下载完会提示你重启。", "下载更新", "以后再说"))
+        if (await Dlg.Confirm(I18nCore.Tr("发现新版本"), body + "\n\n现在下载更新?下载完会提示你重启。", I18nCore.Tr("下载更新"), I18nCore.Tr("以后再说")))
             await SelfUpdate.StartAsync(Api, Toast);   // 发起 + 盯失败(下载/校验失败要在界面上说出来)
     }
 }

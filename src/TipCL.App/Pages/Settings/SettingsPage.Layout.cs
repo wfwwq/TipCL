@@ -69,14 +69,14 @@ public sealed partial class SettingsPage
             // ⇒ 没有存档时逐行位置不变。
             var specs = new List<BlockSpec>
             {
-                new BlockSpec { Id = "header", Title = I18nCore.Tr("标题"), Content = UiClass.V(10, PTitle("布局"),
-                    UiClass.Muted("默认布局 = 各页现状;这里的改动即时写进 ui_layout_v2.json,老版本程序照旧读得懂").M(0, 0, 0, 4)) },
-                new BlockSpec { Id = "appearance", Title = I18nCore.Tr("外观与密度"), Content = LayoutSection("外观与密度", LayoutAppearanceRows()) },
-                new BlockSpec { Id = "shell", Title = I18nCore.Tr("页签与标题栏"), Content = LayoutSection("页签与标题栏", LayoutShellRows()) },
-                new BlockSpec { Id = "blocks", Title = I18nCore.Tr("页面区块"), Content = LayoutSection("页面区块", LayoutBlockRows()) },
-                new BlockSpec { Id = "splits", Title = I18nCore.Tr("分栏比例"), Content = LayoutSection("分栏比例", LayoutSplitRows()) },
-                new BlockSpec { Id = "widgets", Title = I18nCore.Tr("自建区块"), Content = LayoutSection("自建区块", LayoutWidgetRows()) },
-                new BlockSpec { Id = "profiles", Title = I18nCore.Tr("布局方案"), Content = LayoutSection("布局方案", LayoutProfileRows()) },
+                new BlockSpec { Id = "header", Title = I18nCore.Tr("标题"), Content = UiClass.V(10, PTitle(I18nCore.Tr("布局")),
+                    UiClass.Muted(I18nCore.Tr("默认布局 = 各页现状;这里的改动即时写进 ui_layout_v2.json,老版本程序照旧读得懂")).M(0, 0, 0, 4)) },
+                new BlockSpec { Id = "appearance", Title = I18nCore.Tr("外观与密度"), Content = LayoutSection(I18nCore.Tr("外观与密度"), LayoutAppearanceRows()) },
+                new BlockSpec { Id = "shell", Title = I18nCore.Tr("页签与标题栏"), Content = LayoutSection(I18nCore.Tr("页签与标题栏"), LayoutShellRows()) },
+                new BlockSpec { Id = "blocks", Title = I18nCore.Tr("页面区块"), Content = LayoutSection(I18nCore.Tr("页面区块"), LayoutBlockRows()) },
+                new BlockSpec { Id = "splits", Title = I18nCore.Tr("分栏比例"), Content = LayoutSection(I18nCore.Tr("分栏比例"), LayoutSplitRows()) },
+                new BlockSpec { Id = "widgets", Title = I18nCore.Tr("自建区块"), Content = LayoutSection(I18nCore.Tr("自建区块"), LayoutWidgetRows()) },
+                new BlockSpec { Id = "profiles", Title = I18nCore.Tr("布局方案"), Content = LayoutSection(I18nCore.Tr("布局方案"), LayoutProfileRows()) },
                 new BlockSpec { Id = "json", Title = I18nCore.Tr("布局 JSON"), Content = LayoutJsonCard() },
             };
             PageLayoutV2 page = new()
@@ -144,7 +144,7 @@ public sealed partial class SettingsPage
     private Control[] LayoutAppearanceRows()
     {
         ShellLayout shell = ShellTabs.CurrentShell();
-        ComboBox density = UiClass.Combo(new string[3] { "紧凑", "标准", "宽松" }, DensityLabel(shell.Density), 150);
+        ComboBox density = UiClass.Combo(new string[3] { I18nCore.Tr("紧凑"), I18nCore.Tr("标准"), I18nCore.Tr("宽松") }, DensityLabel(shell.Density), 150);
         density.SelectionChanged += delegate
         {
             if (_layoutRebuilding)
@@ -154,12 +154,12 @@ public sealed partial class SettingsPage
             WriteLayout(delegate(LayoutV2 doc)
             {
                 doc.Layout.Shell.Density = DensityKey(density.SelectedIndex);
-            }, "布局已保存");
+            }, I18nCore.Tr("布局已保存"));
             RefreshLayoutView();
         };
         return new Control[1]
         {
-            UiClass.Field("密度", density, "只影响区块间距档(紧凑 6 / 标准 10 / 宽松 14)")
+            UiClass.Field(I18nCore.Tr("密度"), density, I18nCore.Tr("只影响区块间距档(紧凑 6 / 标准 10 / 宽松 14)"))
         };
     }
 
@@ -177,9 +177,9 @@ public sealed partial class SettingsPage
     {
         return density switch
         {
-            LayoutSchema.DensityCompact => "紧凑",
-            LayoutSchema.DensityLoose => "宽松",
-            _ => "标准"
+            LayoutSchema.DensityCompact => I18nCore.Tr("紧凑"),
+            LayoutSchema.DensityLoose => I18nCore.Tr("宽松"),
+            _ => I18nCore.Tr("标准")
         };
     }
 
@@ -210,8 +210,8 @@ public sealed partial class SettingsPage
                     RefreshLayoutView();
                 }
             };
-            Button up = UiClass.IconBtn("↑", "上移");
-            Button down = UiClass.IconBtn("↓", "下移");
+            Button up = UiClass.IconBtn("↑", I18nCore.Tr("上移"));
+            Button down = UiClass.IconBtn("↓", I18nCore.Tr("下移"));
             Avalonia.Automation.AutomationProperties.SetName(up, "上移页签:" + ShellTabs.Label(tab));
             Avalonia.Automation.AutomationProperties.SetName(down, "下移页签:" + ShellTabs.Label(tab));
             up.IsEnabled = index > 0;
@@ -224,25 +224,25 @@ public sealed partial class SettingsPage
             {
                 MoveTab(order, tab, 1);
             };
-            rows.Add(UiClass.Field(ShellTabs.Label(tab), UiClass.H(8, visible, up, down), "页签顺序与显隐"));
+            rows.Add(UiClass.Field(ShellTabs.Label(tab), UiClass.H(8, visible, up, down), I18nCore.Tr("页签顺序与显隐")));
         }
         TitlebarLayout bar = shell.Titlebar ?? new TitlebarLayout();
-        rows.Add(TitlebarRow("桥接", bar.Bridge, delegate(bool on)
+        rows.Add(TitlebarRow(I18nCore.Tr("桥接"), bar.Bridge, delegate(bool on)
         {
             ShellTabs.SetTitlebar(bridge: on);
         }, "Linux 标题栏没有桥接药丸钮:开关会写入文档,但本树无宿主可显隐"));
         rows.Add(TitlebarRow("AI", bar.Ai, delegate(bool on)
         {
             ShellTabs.SetTitlebar(ai: on);
-        }, "只隐藏 / 显示,不改形态"));
-        rows.Add(TitlebarRow("主题", bar.Theme, delegate(bool on)
+        }, I18nCore.Tr("只隐藏 / 显示,不改形态")));
+        rows.Add(TitlebarRow(I18nCore.Tr("主题"), bar.Theme, delegate(bool on)
         {
             ShellTabs.SetTitlebar(theme: on);
-        }, "只隐藏 / 显示,不改形态"));
-        rows.Add(TitlebarRow("账号", bar.Account, delegate(bool on)
+        }, I18nCore.Tr("只隐藏 / 显示,不改形态")));
+        rows.Add(TitlebarRow(I18nCore.Tr("账号"), bar.Account, delegate(bool on)
         {
             ShellTabs.SetTitlebar(account: on);
-        }, "只隐藏 / 显示,不改形态"));
+        }, I18nCore.Tr("只隐藏 / 显示,不改形态")));
         return rows.ToArray();
     }
 
@@ -258,7 +258,7 @@ public sealed partial class SettingsPage
                 RefreshShell();
             }
         };
-        if (label == "桥接")
+        if (label == I18nCore.Tr("桥接"))
         {
             box.IsEnabled = false;
         }
@@ -289,14 +289,14 @@ public sealed partial class SettingsPage
         foreach (LayoutBlockEntryCatalog.Entry entry in LayoutBlockEntryCatalog.All)
         {
             LayoutBlockEntryCatalog.Entry item = entry;
-            Button open = UiClass.Btn("自定义布局...", BtnKind.Chip, delegate
+            Button open = UiClass.Btn(I18nCore.Tr("自定义布局..."), BtnKind.Chip, delegate
             {
                 OpenBlockEditor(item);
             });
             Avalonia.Automation.AutomationProperties.SetName(open, "自定义布局:" + item.Label);
-            rows.Add(UiClass.Field(item.Label, open, "跳到该页并进入区块编辑(完成编辑后自动保存)"));
+            rows.Add(UiClass.Field(item.Label, open, I18nCore.Tr("跳到该页并进入区块编辑(完成编辑后自动保存)")));
         }
-        rows.Add(UiClass.Field("单块页", UiClass.Muted("单块页(下载与网络)也能进编辑态:可以调外观、标题或先隐藏"), ""));
+        rows.Add(UiClass.Field(I18nCore.Tr("单块页"), UiClass.Muted("单块页(下载与网络)也能进编辑态:可以调外观、标题或先隐藏"), ""));
         return rows.ToArray();
     }
 
@@ -337,11 +337,11 @@ public sealed partial class SettingsPage
         if (host != null && host.Editor.CanEdit)
         {
             host.EnterEdit();
-            PageBase.Toast("已进入自定义布局", "完成编辑后自动保存", ToastKind.Success);
+            PageBase.Toast(I18nCore.Tr("已进入自定义布局"), I18nCore.Tr("完成编辑后自动保存"), ToastKind.Success);
             return;
         }
         // [layout-fix 第三批] 要先打开具体对象才有的页(版本安装):告诉用户先去哪儿,而不是笼统的"没找到"
-        PageBase.Toast("没找到可编辑的区块", needsContext.Length > 0 ? needsContext : "可以在页面上右键「自定义布局...」", ToastKind.Warning);
+        PageBase.Toast(I18nCore.Tr("没找到可编辑的区块"), needsContext.Length > 0 ? needsContext : I18nCore.Tr("可以在页面上右键「自定义布局...」"), ToastKind.Warning);
     }
 
     // 视觉树里按 pageId 找区块宿主(页面已渲染的常见路径)
@@ -406,27 +406,27 @@ public sealed partial class SettingsPage
                 rows.Add(plain);
                 continue;
             }
-            Button reset = UiClass.Btn("恢复默认", BtnKind.Chip, delegate
+            Button reset = UiClass.Btn(I18nCore.Tr("恢复默认"), BtnKind.Chip, delegate
             {
                 if (SplitRatioStore.Clear(current.PageId, current.SplitId))
                 {
-                    PageBase.Toast("已恢复默认", "", ToastKind.Success);
+                    PageBase.Toast(I18nCore.Tr("已恢复默认"), "", ToastKind.Success);
                     RefreshLayoutView();
                 }
             });
             Avalonia.Automation.AutomationProperties.SetName(reset, "恢复默认分栏:" + current.PageId + "/" + current.SplitId);
             reset.IsEnabled = stored.HasValue;
-            string cur = (stored.HasValue ? ("当前 " + Math.Round(stored.Value * 100.0) + "%") : "当前 = 现状");
+            string cur = (stored.HasValue ? ("当前 " + Math.Round(stored.Value * 100.0) + "%") : I18nCore.Tr("当前 = 现状"));
             Control row = UiClass.Field(where, UiClass.H(8, UiClass.Small(now).VCenter(), UiClass.Small(cur).VCenter(), reset), SplitKindLabel(site.Kind));
             ToolTip.SetTip(row, site.Note);
             rows.Add(row);
         }
-        Button resetAll = UiClass.Btn("全部复位", BtnKind.Normal, delegate
+        Button resetAll = UiClass.Btn(I18nCore.Tr("全部复位"), BtnKind.Normal, delegate
         {
             ResetAllSplits();
         });
         Avalonia.Automation.AutomationProperties.SetName(resetAll, "全部复位分栏");
-        rows.Add(UiClass.Field("分栏比例", resetAll, "复位只删掉存储比例,回到各页现状列定义"));
+        rows.Add(UiClass.Field(I18nCore.Tr("分栏比例"), resetAll, I18nCore.Tr("复位只删掉存储比例,回到各页现状列定义")));
         return rows.ToArray();
     }
 
@@ -440,7 +440,7 @@ public sealed partial class SettingsPage
                 count++;
             }
         }
-        PageBase.Toast((count > 0) ? "已恢复默认" : "没有需要复位的分栏", (count > 0) ? ("已复位 " + count + " 处") : "", ToastKind.Success);
+        PageBase.Toast((count > 0) ? I18nCore.Tr("已恢复默认") : I18nCore.Tr("没有需要复位的分栏"), (count > 0) ? ("已复位 " + count + " 处") : "", ToastKind.Success);
         RefreshLayoutView();
     }
 
@@ -449,10 +449,10 @@ public sealed partial class SettingsPage
     {
         if (!site.IsTwoColumn)
         {
-            return "没有左右分栏";
+            return I18nCore.Tr("没有左右分栏");
         }
         string size = ((site.DefaultPixels > 0.0) ? (site.DefaultPixels + "px") : ("星号 " + Math.Round(site.DefaultRatio * 100.0) + "%"));
-        string side = ((site.PixelsSide == "right") ? "右栏" : "左栏");
+        string side = ((site.PixelsSide == "right") ? I18nCore.Tr("右栏") : I18nCore.Tr("左栏"));
         return "现状:" + side + " " + size + " · 留白 " + site.Gap + "px";
     }
 
@@ -460,12 +460,12 @@ public sealed partial class SettingsPage
     {
         return kind switch
         {
-            SplitKind.TwoColumn => "左右两栏",
-            SplitKind.Rows => "纵向分行",
-            SplitKind.ListRow => "列表行内列宽",
-            SplitKind.GridCols => "网格列数",
-            SplitKind.HeightClamp => "限宽限高",
-            _ => "单列"
+            SplitKind.TwoColumn => I18nCore.Tr("左右两栏"),
+            SplitKind.Rows => I18nCore.Tr("纵向分行"),
+            SplitKind.ListRow => I18nCore.Tr("列表行内列宽"),
+            SplitKind.GridCols => I18nCore.Tr("网格列数"),
+            SplitKind.HeightClamp => I18nCore.Tr("限宽限高"),
+            _ => I18nCore.Tr("单列")
         };
     }
 
@@ -496,7 +496,7 @@ public sealed partial class SettingsPage
         {
             string widgetType = type;
             string label = WidgetUI.TypeLabel(type);
-            Button add = UiClass.Btn("添加", BtnKind.Soft, delegate
+            Button add = UiClass.Btn(I18nCore.Tr("添加"), BtnKind.Soft, delegate
             {
                 int index = pageCombo.SelectedIndex >= 0 ? pageCombo.SelectedIndex : 0;
                 LayoutBlockEntryCatalog.Entry target = pages[index];
@@ -510,7 +510,7 @@ public sealed partial class SettingsPage
         // 3) 已保存的自建区块(带删除入口 —— WidgetUI 的占位文案承诺「删除入口在设置页」)
         if (widgets.Count == 0)
         {
-            rows.Add(UiClass.Field("已保存", UiClass.Muted("还没有自建区块:上面任意一行点「添加」即可"), ""));
+            rows.Add(UiClass.Field(I18nCore.Tr("已保存"), UiClass.Muted("还没有自建区块:上面任意一行点「添加」即可"), ""));
         }
         else
         {
@@ -518,14 +518,14 @@ public sealed partial class SettingsPage
             {
                 WidgetDef item = widget;
                 string title = WidgetUI.TitleOf(item);
-                Button del = UiClass.Btn("删除", BtnKind.Ghost, delegate
+                Button del = UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Ghost, delegate
                 {
                     DeleteWidget(item.Id);
                 });
                 Avalonia.Automation.AutomationProperties.SetName(del, "删除部件:" + title);
                 Control right = UiClass.H(10, UiClass.Txt(title, 13, bold: true).VCenter(),
                     UiClass.Small(item.Type + " · " + item.Id).VCenter(), del);
-                rows.Add(UiClass.Field("已保存", right, ""));
+                rows.Add(UiClass.Field(I18nCore.Tr("已保存"), right, ""));
             }
         }
         return rows.ToArray();
@@ -547,7 +547,7 @@ public sealed partial class SettingsPage
         }
         if (!LayoutStoreV2.Save(doc))
         {
-            PageBase.Toast("布局未能保存", "写盘失败", ToastKind.Error);
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), "写盘失败", ToastKind.Error);
             return;
         }
         string blockId = LayoutWidgetOps.BlockIdOf(widgetId);
@@ -581,14 +581,14 @@ public sealed partial class SettingsPage
             {
                 // 兜底:页面还没进可视树(懒建/隐藏分段)—— 直接写文档;引擎会把该页缺失的内置块补在它后面
                 AppendBlockToDoc(target.PageId, blockId);
-                PageBase.Toast("已添加" + WidgetUI.TypeLabel(type), "区块已写入布局文档,下次打开该页生效", ToastKind.Success);
+                PageBase.Toast(I18nCore.Tr("已添加") + WidgetUI.TypeLabel(type), "区块已写入布局文档,下次打开该页生效", ToastKind.Success);
                 return;
             }
             host.Editor.MutatePage(delegate(PageLayoutV2 page)
             {
                 LayoutWidgetOps.AppendBlock(page, blockId);
             });
-            PageBase.Toast("已添加" + WidgetUI.TypeLabel(type), "区块已出现在当前页,可在右键「自定义布局...」里拖动", ToastKind.Success);
+            PageBase.Toast(I18nCore.Tr("已添加") + WidgetUI.TypeLabel(type), "区块已出现在当前页,可在右键「自定义布局...」里拖动", ToastKind.Success);
         }, DispatcherPriority.Loaded);
     }
 
@@ -620,7 +620,7 @@ public sealed partial class SettingsPage
         LayoutWidgetOps.RemoveWidget(doc, widgetId);
         if (!LayoutStoreV2.Save(doc))
         {
-            PageBase.Toast("布局未能保存", "写盘失败", ToastKind.Error);
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), "写盘失败", ToastKind.Error);
             return;
         }
         PageBase.Toast("已删除自建区块", widgetId, ToastKind.Success);
@@ -632,28 +632,28 @@ public sealed partial class SettingsPage
     private Control[] LayoutProfileRows()
     {
         List<Control> rows = new();
-        Button create = UiClass.Btn("新建布局方案", BtnKind.Primary, delegate
+        Button create = UiClass.Btn(I18nCore.Tr("新建布局方案"), BtnKind.Primary, delegate
         {
-            Run(NewProfileAsync, "布局未能保存");
+            Run(NewProfileAsync, I18nCore.Tr("布局未能保存"));
         });
-        Button import = UiClass.Btn("导入布局", BtnKind.Chip, delegate
+        Button import = UiClass.Btn(I18nCore.Tr("导入布局"), BtnKind.Chip, delegate
         {
-            Run(ImportLayoutFileAsync, "导入失败");
+            Run(ImportLayoutFileAsync, I18nCore.Tr("导入失败"));
         });
-        Button export = UiClass.Btn("导出布局", BtnKind.Chip, delegate
+        Button export = UiClass.Btn(I18nCore.Tr("导出布局"), BtnKind.Chip, delegate
         {
-            Run(ExportLayoutAsync, "导出失败");
+            Run(ExportLayoutAsync, I18nCore.Tr("导出失败"));
         });
-        Avalonia.Automation.AutomationProperties.SetName(create, "新建布局方案");
+        Avalonia.Automation.AutomationProperties.SetName(create, I18nCore.Tr("新建布局方案"));
         Avalonia.Automation.AutomationProperties.SetName(import, "导入布局文件");
         Avalonia.Automation.AutomationProperties.SetName(export, "导出布局文件");
         string active = LayoutProfiles.ActiveName();
-        string activeText = ((active.Length > 0) ? ("当前方案:" + active) : "当前是直接编辑态");
-        rows.Add(UiClass.Field("布局方案", UiClass.H(8, create, import, export), activeText));
+        string activeText = ((active.Length > 0) ? ("当前方案:" + active) : I18nCore.Tr("当前是直接编辑态"));
+        rows.Add(UiClass.Field(I18nCore.Tr("布局方案"), UiClass.H(8, create, import, export), activeText));
         List<string> names = LayoutProfiles.Names();
         if (names.Count == 0)
         {
-            rows.Add(UiClass.Field("还没有方案", UiClass.Muted("点「新建布局方案」把当前这套布局存下来"), ""));
+            rows.Add(UiClass.Field(I18nCore.Tr("还没有方案"), UiClass.Muted(I18nCore.Tr("点「新建布局方案」把当前这套布局存下来")), ""));
             return rows.ToArray();
         }
         foreach (string name in names)
@@ -668,23 +668,23 @@ public sealed partial class SettingsPage
         StackPanel title = UiClass.H(8, UiClass.Txt(name, 13.5, true).VCenter());
         if (active)
         {
-            title.Children.Add(UiClass.Tag("当前", "B.OnAccentStrong", "B.AccentStrong").VCenter());
+            title.Children.Add(UiClass.Tag(I18nCore.Tr("当前"), "B.OnAccentStrong", "B.AccentStrong").VCenter());
         }
-        Button apply = UiClass.Btn("应用", BtnKind.Soft, delegate
+        Button apply = UiClass.Btn(I18nCore.Tr("应用"), BtnKind.Soft, delegate
         {
             ApplyProfile(name);
         });
-        Button rename = UiClass.Btn("重命名", BtnKind.Chip, delegate
+        Button rename = UiClass.Btn(I18nCore.Tr("重命名"), BtnKind.Chip, delegate
         {
-            Run(() => RenameProfileAsync(name), "布局未能保存");
+            Run(() => RenameProfileAsync(name), I18nCore.Tr("布局未能保存"));
         });
-        Button copy = UiClass.Btn("复制一份", BtnKind.Chip, delegate
+        Button copy = UiClass.Btn(I18nCore.Tr("复制一份"), BtnKind.Chip, delegate
         {
-            Run(() => DuplicateProfileAsync(name), "布局未能保存");
+            Run(() => DuplicateProfileAsync(name), I18nCore.Tr("布局未能保存"));
         });
-        Button del = UiClass.Btn("删除", BtnKind.Ghost, delegate
+        Button del = UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Ghost, delegate
         {
-            Run(() => DeleteProfileAsync(name), "布局未能保存");
+            Run(() => DeleteProfileAsync(name), I18nCore.Tr("布局未能保存"));
         });
         Avalonia.Automation.AutomationProperties.SetName(apply, "应用方案:" + name);
         Grid row = UiClass.G(null, "*,Auto");
@@ -695,7 +695,7 @@ public sealed partial class SettingsPage
 
     private async System.Threading.Tasks.Task NewProfileAsync()
     {
-        string? name = await Dlg.Prompt("新建布局方案", "方案名", "我的布局 " + DateTime.Now.ToString("MM-dd HH:mm"));
+        string? name = await Dlg.Prompt(I18nCore.Tr("新建布局方案"), I18nCore.Tr("方案名"), "我的布局 " + DateTime.Now.ToString("MM-dd HH:mm"));
         if (name == null)
         {
             return;
@@ -703,10 +703,10 @@ public sealed partial class SettingsPage
         string error = LayoutProfiles.Create(name, fromCurrent: true);
         if (error.Length > 0)
         {
-            PageBase.Toast("布局未能保存", error, ToastKind.Warning);
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), error, ToastKind.Warning);
             return;
         }
-        PageBase.Toast("布局方案「" + name + "」已保存", "以当前布局为基线", ToastKind.Success);
+        PageBase.Toast("布局方案「" + name + "」已保存", I18nCore.Tr("以当前布局为基线"), ToastKind.Success);
         RefreshLayoutView();
     }
 
@@ -715,7 +715,7 @@ public sealed partial class SettingsPage
         string error = LayoutProfiles.Apply(name, out string kept);
         if (error.Length > 0)
         {
-            PageBase.Toast("布局未能保存", error, ToastKind.Warning);
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), error, ToastKind.Warning);
             return;
         }
         PageBase.Toast("布局方案「" + name + "」已应用", (kept.Length > 0) ? ("原来的布局已存为方案「" + kept + "」,可随时切回") : "", ToastKind.Success);
@@ -724,7 +724,7 @@ public sealed partial class SettingsPage
 
     private async System.Threading.Tasks.Task RenameProfileAsync(string name)
     {
-        string? next = await Dlg.Prompt("重命名", "方案名", name);
+        string? next = await Dlg.Prompt(I18nCore.Tr("重命名"), I18nCore.Tr("方案名"), name);
         if (next == null || next == name)
         {
             return;
@@ -732,7 +732,7 @@ public sealed partial class SettingsPage
         string error = LayoutProfiles.Rename(name, next);
         if (error.Length > 0)
         {
-            PageBase.Toast("布局未能保存", error, ToastKind.Warning);
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), error, ToastKind.Warning);
             return;
         }
         RefreshLayoutView();
@@ -740,7 +740,7 @@ public sealed partial class SettingsPage
 
     private async System.Threading.Tasks.Task DuplicateProfileAsync(string name)
     {
-        string? next = await Dlg.Prompt("复制一份", "方案名", name + " 副本");
+        string? next = await Dlg.Prompt(I18nCore.Tr("复制一份"), I18nCore.Tr("方案名"), name + " 副本");
         if (next == null)
         {
             return;
@@ -748,7 +748,7 @@ public sealed partial class SettingsPage
         string error = LayoutProfiles.Duplicate(name, next);
         if (error.Length > 0)
         {
-            PageBase.Toast("布局未能保存", error, ToastKind.Warning);
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), error, ToastKind.Warning);
             return;
         }
         RefreshLayoutView();
@@ -756,14 +756,14 @@ public sealed partial class SettingsPage
 
     private async System.Threading.Tasks.Task DeleteProfileAsync(string name)
     {
-        if (!await Dlg.Confirm("删除", "删除布局方案「" + name + "」?", "删除", "取消", danger: true))
+        if (!await Dlg.Confirm(I18nCore.Tr("删除"), "删除布局方案「" + name + "」?", I18nCore.Tr("删除"), I18nCore.Tr("取消"), danger: true))
         {
             return;
         }
         string error = LayoutProfiles.Delete(name);
         if (error.Length > 0)
         {
-            PageBase.Toast("布局未能保存", error, ToastKind.Warning);
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), error, ToastKind.Warning);
             return;
         }
         PageBase.Toast("布局方案「" + name + "」已删除", "", ToastKind.Success);
@@ -774,36 +774,36 @@ public sealed partial class SettingsPage
 
     private async System.Threading.Tasks.Task ExportLayoutAsync()
     {
-        int choice = await Dlg.Choose("导出布局", UiClass.Muted("整机方案含页签 / 区块 / 分栏比例 / 自建区块;兼容 v1 的页面布局只含每页区块的顺序与显隐"), new string[3]
+        int choice = await Dlg.Choose(I18nCore.Tr("导出布局"), UiClass.Muted(I18nCore.Tr("整机方案含页签 / 区块 / 分栏比例 / 自建区块;兼容 v1 的页面布局只含每页区块的顺序与显隐")), new string[3]
         {
-            "取消",
-            "导出整机方案(v2)",
-            "导出兼容 v1 的页面布局"
+            I18nCore.Tr("取消"),
+            I18nCore.Tr("导出整机方案(v2)"),
+            I18nCore.Tr("导出兼容 v1 的页面布局")
         }, 560);
         if (choice == 1)
         {
             string text = LayoutStoreV2.ExportJson(LayoutStoreV2.Load());
-            string? path = await Dlg.SaveFile("导出整机方案", "tipcl-layout-v2.json");
+            string? path = await Dlg.SaveFile(I18nCore.Tr("导出整机方案"), "tipcl-layout-v2.json");
             if (path != null && WriteTextFile(path, text))
             {
-                PageBase.Toast("导出布局", path, ToastKind.Success);
+                PageBase.Toast(I18nCore.Tr("导出布局"), path, ToastKind.Success);
             }
             return;
         }
         if (choice == 2)
         {
             string text = PageLayoutStore.ExportJson(LayoutV1Projection.ProjectV1(LayoutStoreV2.Load()));
-            string? path2 = await Dlg.SaveFile("导出兼容 v1 的页面布局", "tipcl-page-layout.json");
+            string? path2 = await Dlg.SaveFile(I18nCore.Tr("导出兼容 v1 的页面布局"), "tipcl-page-layout.json");
             if (path2 != null && WriteTextFile(path2, text))
             {
-                PageBase.Toast("导出布局", path2, ToastKind.Success);
+                PageBase.Toast(I18nCore.Tr("导出布局"), path2, ToastKind.Success);
             }
         }
     }
 
     private async System.Threading.Tasks.Task ImportLayoutFileAsync()
     {
-        string? path = await Dlg.PickFile("导入布局", "*.json");
+        string? path = await Dlg.PickFile(I18nCore.Tr("导入布局"), "*.json");
         if (path == null)
         {
             return;
@@ -815,24 +815,24 @@ public sealed partial class SettingsPage
         }
         catch (Exception ex)
         {
-            PageBase.Toast("布局读取失败", ex.Message, ToastKind.Error);
+            PageBase.Toast(I18nCore.Tr("布局读取失败"), ex.Message, ToastKind.Error);
             return;
         }
         LayoutV2? whole = LayoutV2.FromJsonText(text);
         if (whole != null)
         {
-            int choice = await Dlg.Choose("导入布局", UiClass.Muted("这是一份整机方案(含页签 / 区块 / 分栏比例)"), new string[3]
+            int choice = await Dlg.Choose(I18nCore.Tr("导入布局"), UiClass.Muted(I18nCore.Tr("这是一份整机方案(含页签 / 区块 / 分栏比例)")), new string[3]
             {
-                "取消",
-                "应用为当前布局",
-                "存为方案"
+                I18nCore.Tr("取消"),
+                I18nCore.Tr("应用为当前布局"),
+                I18nCore.Tr("存为方案")
             }, 560);
             if (choice == 1)
             {
                 string error = LayoutProfiles.ApplySnapshot(whole.Layout, out string kept);
                 if (error.Length > 0)
                 {
-                    PageBase.Toast("布局未能保存", error, ToastKind.Warning);
+                    PageBase.Toast(I18nCore.Tr("布局未能保存"), error, ToastKind.Warning);
                     return;
                 }
                 PageBase.Toast("布局已应用", (kept.Length > 0) ? ("原来的布局已存为方案「" + kept + "」,可随时切回") : Path.GetFileName(path), ToastKind.Success);
@@ -840,7 +840,7 @@ public sealed partial class SettingsPage
             }
             else if (choice == 2)
             {
-                string? name = await Dlg.Prompt("存为方案", "方案名", Path.GetFileNameWithoutExtension(path));
+                string? name = await Dlg.Prompt(I18nCore.Tr("存为方案"), I18nCore.Tr("方案名"), Path.GetFileNameWithoutExtension(path));
                 if (name == null)
                 {
                     return;
@@ -848,7 +848,7 @@ public sealed partial class SettingsPage
                 string error2 = LayoutProfiles.CreateFrom(name, whole.Layout);
                 if (error2.Length > 0)
                 {
-                    PageBase.Toast("布局未能保存", error2, ToastKind.Warning);
+                    PageBase.Toast(I18nCore.Tr("布局未能保存"), error2, ToastKind.Warning);
                     return;
                 }
                 PageBase.Toast("布局方案「" + name + "」已保存", "", ToastKind.Success);
@@ -868,7 +868,7 @@ public sealed partial class SettingsPage
         }
         catch (Exception ex2)
         {
-            PageBase.Toast("不是有效的布局文件", ex2.Message, ToastKind.Error);
+            PageBase.Toast(I18nCore.Tr("不是有效的布局文件"), ex2.Message, ToastKind.Error);
         }
     }
 
@@ -881,7 +881,7 @@ public sealed partial class SettingsPage
         }
         catch (Exception ex)
         {
-            PageBase.Toast("布局未能保存", ex.Message, ToastKind.Error);
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), ex.Message, ToastKind.Error);
             return false;
         }
     }
@@ -900,15 +900,15 @@ public sealed partial class SettingsPage
             _layoutJsonText = box.Text ?? "";
         };
         _layoutJsonIssues = UiClass.V(4);
-        Button check = UiClass.Btn("校验", BtnKind.Normal, delegate
+        Button check = UiClass.Btn(I18nCore.Tr("校验"), BtnKind.Normal, delegate
         {
             InspectJson(box, apply: false);
         });
-        Button apply = UiClass.Btn("应用", BtnKind.Primary, delegate
+        Button apply = UiClass.Btn(I18nCore.Tr("应用"), BtnKind.Primary, delegate
         {
             InspectJson(box, apply: true);
         });
-        Button reload = UiClass.Btn("刷新", BtnKind.Chip, delegate
+        Button reload = UiClass.Btn(I18nCore.Tr("刷新"), BtnKind.Chip, delegate
         {
             _layoutJsonText = "";
             box.Text = LayoutJsonEditor.Text(LayoutStoreV2.Load());
@@ -917,9 +917,9 @@ public sealed partial class SettingsPage
         Avalonia.Automation.AutomationProperties.SetName(check, "校验布局 JSON");
         Avalonia.Automation.AutomationProperties.SetName(apply, "应用布局 JSON");
         Avalonia.Automation.AutomationProperties.SetName(reload, "刷新布局 JSON");
-        reload.Content = "刷新";
-        ToolTip.SetTip(reload, "重新载入当前布局");
-        return UiClass.Card(UiClass.V(8, UiClass.Field("布局 JSON", UiClass.V(8, box, UiClass.H(8, check, apply, reload)), "可以直接编辑 / 粘贴;点「校验」看结果,校验通过才会落盘"), _layoutJsonIssues));
+        reload.Content = I18nCore.Tr("刷新");
+        ToolTip.SetTip(reload, I18nCore.Tr("重新载入当前布局"));
+        return UiClass.Card(UiClass.V(8, UiClass.Field(I18nCore.Tr("布局 JSON"), UiClass.V(8, box, UiClass.H(8, check, apply, reload)), "可以直接编辑 / 粘贴;点「校验」看结果,校验通过才会落盘"), _layoutJsonIssues));
     }
 
     private void InspectJson(TextBox box, bool apply)
@@ -931,19 +931,19 @@ public sealed partial class SettingsPage
         bool failed = issues.Any((LayoutJsonIssue i) => i.Error);
         if (failed)
         {
-            PageBase.Toast("布局 JSON 有错误", "看下面的具体字段", ToastKind.Error);
+            PageBase.Toast(I18nCore.Tr("布局 JSON 有错误"), I18nCore.Tr("看下面的具体字段"), ToastKind.Error);
             return;
         }
         if (apply)
         {
             _layoutJsonText = "";
-            PageBase.Toast("布局已保存", (issues.Count > 0) ? ("有 " + issues.Count + " 处按契约钳位 / 忽略") : "", ToastKind.Success);
+            PageBase.Toast(I18nCore.Tr("布局已保存"), (issues.Count > 0) ? ("有 " + issues.Count + " 处按契约钳位 / 忽略") : "", ToastKind.Success);
             RefreshShell();
             RefreshLayoutView();
         }
         else
         {
-            PageBase.Toast("校验通过", (issues.Count > 0) ? ("有 " + issues.Count + " 处按契约钳位 / 忽略") : "", ToastKind.Success);
+            PageBase.Toast(I18nCore.Tr("校验通过"), (issues.Count > 0) ? ("有 " + issues.Count + " 处按契约钳位 / 忽略") : "", ToastKind.Success);
         }
     }
 
@@ -976,7 +976,7 @@ public sealed partial class SettingsPage
         }
         catch (Exception ex)
         {
-            PageBase.Toast("布局未能保存", ex.Message, ToastKind.Error);
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), ex.Message, ToastKind.Error);
         }
     }
 }

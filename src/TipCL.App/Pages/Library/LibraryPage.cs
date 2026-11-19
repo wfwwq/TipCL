@@ -73,13 +73,13 @@ public sealed class LibraryPage : PageBase
     private static readonly string[] LoaderNames = { "Fabric", "Forge", "Quilt", "NeoForge", "OptiFine", "LiteLoader" };
     private static readonly (string Key, string Title, bool Open)[] Defs =
     {
-        ("fabric", "Fabric 版本", true),
-        ("forge", "Forge 版本", true),
-        ("quilt", "Quilt 版本", true),
-        ("neoforge", "NeoForge 版本", true),
-        ("optifine", "OptiFine 版本", true),
-        ("liteloader", "LiteLoader 版本", true),
-        ("vanilla", "原版版本", true),
+        ("fabric", I18nCore.Tr("Fabric 版本"), true),
+        ("forge", I18nCore.Tr("Forge 版本"), true),
+        ("quilt", I18nCore.Tr("Quilt 版本"), true),
+        ("neoforge", I18nCore.Tr("NeoForge 版本"), true),
+        ("optifine", I18nCore.Tr("OptiFine 版本"), true),
+        ("liteloader", I18nCore.Tr("LiteLoader 版本"), true),
+        ("vanilla", I18nCore.Tr("原版版本"), true),
     };
 
     /// <summary>页面发起跳转请求（双击版本 → 启动页等）。外壳接线，见 progress/M2-B2.md 依赖申请。</summary>
@@ -92,9 +92,9 @@ public sealed class LibraryPage : PageBase
     private readonly StackPanel _folders = new();
     private readonly TextBlock _folderPath = UiClass.Small("");
     private readonly TextBlock _count = UiClass.Muted("");
-    private readonly TextBox _search = UiClass.Input("过滤版本名", "", 170);
+    private readonly TextBox _search = UiClass.Input(I18nCore.Tr("过滤版本名"), "", 170);
     private readonly StackPanel _groupsHost = new();
-    private readonly StackPanel _empty = UiClass.Empty("○", "这个文件夹还没有版本", "点左侧「添加或导入」，或到「下载」页装一个");
+    private readonly StackPanel _empty = UiClass.Empty("○", I18nCore.Tr("这个文件夹还没有版本"), I18nCore.Tr("点左侧「添加或导入」，或到「下载」页装一个"));
     private readonly List<FolderRowView> _folderRows = new();
 
     private List<InstRow> _instances = new();
@@ -116,29 +116,29 @@ public sealed class LibraryPage : PageBase
 
     private readonly StackPanel _rightCol;
 
-    public LibraryPage() : base("library", "实例库")
+    public LibraryPage() : base("library", I18nCore.Tr("实例库"))
     {
         // —— 左栏：文件夹列表卡 ——
-        var add = U.Btn("添加已有文件夹", BtnKind.Chip, (_, _) => Run(AddFolderAsync, "导入失败"), "Folder");
-        var pack = U.Btn("导入整合包", BtnKind.Chip, (_, _) => Run(ImportPackAsync), "Box");
-        var create = U.Btn("新建实例", BtnKind.Soft, (_, _) => Run(CreateAsync, "创建失败"), "Add");
-        var migrate = U.Btn("导入官方启动器", BtnKind.Chip, (_, _) => Run(MigrateAsync), "Import");
+        var add = U.Btn(I18nCore.Tr("添加已有文件夹"), BtnKind.Chip, (_, _) => Run(AddFolderAsync, I18nCore.Tr("导入失败")), "Folder");
+        var pack = U.Btn(I18nCore.Tr("导入整合包"), BtnKind.Chip, (_, _) => Run(ImportPackAsync, I18nCore.Tr("导入整合包失败")), "Box");
+        var create = U.Btn(I18nCore.Tr("新建实例"), BtnKind.Soft, (_, _) => Run(CreateAsync, I18nCore.Tr("创建失败")), "Add");
+        var migrate = U.Btn(I18nCore.Tr("导入官方启动器"), BtnKind.Chip, (_, _) => Run(MigrateAsync, I18nCore.Tr("导入官方启动器失败")), "Import");
         _folderPath[!TextBlock.ForegroundProperty] = _folderPath.GetResourceObservable("B.InkMuted").ToBinding();
-        var h = UiClass.Txt("文件夹列表", 18, bold: true);
+        var h = UiClass.Txt(I18nCore.Tr("文件夹列表"), 18, bold: true);
         h.FontWeight = FontWeight.ExtraBold;
-        var left = UiClass.Card(UiClass.V(10, h, _folderPath, _folders, UiClass.Sep(), UiClass.Txt("添加或导入", 13, bold: true), add, pack, create, migrate), 14);
+        var left = UiClass.Card(UiClass.V(10, h, _folderPath, _folders, UiClass.Sep(), UiClass.Txt(I18nCore.Tr("添加或导入"), 13, bold: true), add, pack, create, migrate), 14);
         // [layout-fix] 规格 §3-问题1:去掉 MaxWidth,宽度完全由 4/12 列决定(对齐 Windows 冻结件的同款改动)
         left.HorizontalAlignment = HorizontalAlignment.Stretch;
         left.VerticalAlignment = VerticalAlignment.Top;
 
         // —— 右栏头部：标题 + 计数 + 搜索 + 实例详情 + 刷新 ——
-        var h2 = UiClass.Txt("版本选择", 21, bold: true);
+        var h2 = UiClass.Txt(I18nCore.Tr("版本选择"), 21, bold: true);
         h2.FontWeight = FontWeight.ExtraBold;
-        var refresh = U.Btn("刷新", BtnKind.Chip, (_, _) => Run(LoadAsync), "Refresh");
-        var detail = U.Btn("实例详情", BtnKind.Chip, (_, _) => Run(() => OpenDetailAsync(), "打开失败"), "Info");
+        var refresh = U.Btn(I18nCore.Tr("刷新"), BtnKind.Chip, (_, _) => Run(LoadAsync), "Refresh");
+        var detail = U.Btn(I18nCore.Tr("实例详情"), BtnKind.Chip, (_, _) => Run(() => OpenDetailAsync(), I18nCore.Tr("打开失败")), "Info");
         _search.TextChanged += (_, _) => RenderGroups();
         var head = UiClass.G("Auto,Auto", "Auto,Auto,*,Auto,Auto,Auto");
-        var subHead = UiClass.Txt("双击版本直接启动；行尾可收藏/删除/设置", 12.5, fg: "B.InkMuted");
+        var subHead = UiClass.Txt(I18nCore.Tr("双击版本直接启动；行尾可收藏/删除/设置"), 12.5, fg: "B.InkMuted");
         subHead.TextWrapping = TextWrapping.Wrap;
         head.Add(h2, 0, 0).Children.OfType<Control>().Last().VerticalAlignment = VerticalAlignment.Center;
         _count.Margin = new Thickness(10, 0, 10, 0);
@@ -389,7 +389,7 @@ public sealed class LibraryPage : PageBase
     private void UpdateFolderPath()
     {
         string text = FolderPathFor(_folder);
-        _folderPath.Text = text.Length > 0 ? text : "当前文件夹";
+        _folderPath.Text = text.Length > 0 ? text : I18nCore.Tr("当前文件夹");
         ToolTip.SetTip(_folderPath, text.Length > 0 ? text : null);
     }
 
@@ -410,8 +410,8 @@ public sealed class LibraryPage : PageBase
         var tail = UiClass.H(6);
         tail.VerticalAlignment = VerticalAlignment.Center;
         if (instName == _defaultInstance)
-            tail.Children.Add(UiClass.Tag("默认", "B.OnAccentStrong", "B.AccentStrong"));
-        var moreBtn = UiClass.IconBtn("More", "实例操作", null, 13);
+            tail.Children.Add(UiClass.Tag(I18nCore.Tr("默认"), "B.OnAccentStrong", "B.AccentStrong"));
+        var moreBtn = UiClass.IconBtn("More", I18nCore.Tr("实例操作"), null, 13);
         moreBtn.Click += (_, _) => FolderMenu(moreBtn, instName);
         tail.Children.Add(moreBtn);
 
@@ -521,7 +521,7 @@ public sealed class LibraryPage : PageBase
         string loaderKey = Array.IndexOf(LoaderKeys, key) >= 0 ? key : "";
         var icon = TipCL.App.Pages.Download.LoaderIcons.Tile(loaderKey, title, 22);
         var chev = IconLib.Make("ChevronDown", "B.InkMuted", 12);
-        var folded = UiClass.Small("已折叠");
+        var folded = UiClass.Small(I18nCore.Tr("已折叠"));
         folded[!TextBlock.ForegroundProperty] = folded.GetResourceObservable("B.InkFaint").ToBinding();
         var bar = UiClass.H(8, icon, head, UiClass.Spring(), folded, chev);
         bar.VerticalAlignment = VerticalAlignment.Center;
@@ -567,7 +567,7 @@ public sealed class LibraryPage : PageBase
         bool fav = IsFav(id);
         var tags = UiClass.H(6);
         if (v.Type == "snapshot")
-            tags.Children.Add(UiClass.Tag("快照"));
+            tags.Children.Add(UiClass.Tag(I18nCore.Tr("快照")));
         if (v.Mods > 0)
             tags.Children.Add(UiClass.Tag($"模组 {v.Mods}"));
         if (v.Isolated && !string.IsNullOrEmpty(v.IsolationLabel))
@@ -580,7 +580,7 @@ public sealed class LibraryPage : PageBase
         subTb.TextTrimming = TextTrimming.CharacterEllipsis;
         var mid = UiClass.V(2, nameRow, subTb);
 
-        var star = UiClass.IconBtn("Star", fav ? "取消收藏" : "收藏", null, 13);
+        var star = UiClass.IconBtn("Star", fav ? "取消收藏" : I18nCore.Tr("收藏"), null, 13);
         if (fav)
         {
             var filled = IconLib.Make("Star", "B.Accent", 13);
@@ -588,12 +588,12 @@ public sealed class LibraryPage : PageBase
             star.Content = filled;
         }
         star.Click += (_, _) => { ToggleFav(v); };
-        var del = UiClass.IconBtn("Trash", "卸载这个版本", null, 13);
-        del.Click += (_, _) => Run(() => UninstallAsync(inst, id), "卸载失败");
+        var del = UiClass.IconBtn("Trash", I18nCore.Tr("卸载这个版本"), null, 13);
+        del.Click += (_, _) => Run(() => UninstallAsync(inst, id), I18nCore.Tr("卸载失败"));
         // M4-H R12 缺陷 2:与 Windows 对位(`windos/.../Pages/LibraryPage.cs:713-720`)——齿轮打开版本设置
         // 对话框,关掉后刷新列表;以前这里误挂 OpenDetailAsync,把用户送进「实例详情」页。
         // 实例详情仍由标题栏「实例详情」chip 与文件夹右键菜单进入(见上方 detail 与 FolderMenu)。
-        var gear = UiClass.IconBtn("Gear", "版本设置", null, 13);
+        var gear = UiClass.IconBtn("Gear", I18nCore.Tr("版本设置"), null, 13);
         gear.Click += (_, _) => Run(async () =>
         {
             await TipCL.App.Pages.Version.VersionSetupDialog.ShowAsync(inst, id);
@@ -645,10 +645,10 @@ public sealed class LibraryPage : PageBase
     {
         string type = v.Type switch
         {
-            "release" => "正式版",
-            "snapshot" => "快照",
-            "old_beta" => "旧测试",
-            "old_alpha" => "旧阿尔法",
+            "release" => I18nCore.Tr("正式版"),
+            "snapshot" => I18nCore.Tr("快照"),
+            "old_beta" => I18nCore.Tr("旧测试"),
+            "old_alpha" => I18nCore.Tr("旧阿尔法"),
             _ => "",
         };
         string s = type.Length > 0 ? $"{type} {v.Id}" : v.Id;
@@ -674,7 +674,7 @@ public sealed class LibraryPage : PageBase
         await SetDefaultInstanceAsync(inst);
         _defaultInstance = inst;
         NavRequested?.Invoke("launch");
-        Toast("已设为默认", $"{inst} · {ver}（启动逻辑 M3 落地）", ToastKind.Info);
+        Toast(I18nCore.Tr("已设为默认"), $"{inst} · {ver}（启动逻辑 M3 落地）", ToastKind.Info);
     }
 
     // ———————————————— 页内切换：实例详情 ————————————————
@@ -705,7 +705,7 @@ public sealed class LibraryPage : PageBase
 
     private async Task UninstallAsync(string inst, string ver)
     {
-        if (!await Dlg.Confirm("卸载版本", $"确定卸载「{ver}」？该版本目录下的独立模组与存档会一并删除。", "卸载", "取消", danger: true))
+        if (!await Dlg.Confirm(I18nCore.Tr("卸载版本"), $"确定卸载「{ver}」？该版本目录下的独立模组与存档会一并删除。", I18nCore.Tr("卸载"), I18nCore.Tr("取消"), danger: true))
             return;
         var done = await Api.TryCallAsync("uninstall_version", false, new { spec = $"{inst} / {ver}" });
         if (!done)
@@ -718,7 +718,7 @@ public sealed class LibraryPage : PageBase
             });
         }
         await LoadAsync();
-        Toast("已卸载", ver, ToastKind.Success);
+        Toast(I18nCore.Tr("已卸载"), ver, ToastKind.Success);
     }
 
     private void FolderMenu(Control anchor, string instance)
@@ -730,32 +730,32 @@ public sealed class LibraryPage : PageBase
             mi.Click += (_, _) => Run(() => { act(); return Task.CompletedTask; });
             menu.Items.Add(mi);
         }
-        Item("打开文件夹", () => OpenInFileManager(FolderPathFor(instance), "打开失败"));
-        Item("设为默认实例", () => Run(async () =>
+        Item(I18nCore.Tr("打开文件夹"), () => OpenInFileManager(FolderPathFor(instance), I18nCore.Tr("打开失败")));
+        Item(I18nCore.Tr("设为默认实例"), () => Run(async () =>
         {
             _folder = instance;
             await EnsureCurrentAsync();
             await LoadAsync();
-            Toast("默认实例", $"之后的启动将默认使用「{instance}」", ToastKind.Success);
+            Toast(I18nCore.Tr("默认实例"), $"之后的启动将默认使用「{instance}」", ToastKind.Success);
         }));
-        Item("实例详情", () => Run(() => OpenDetailAsync()));
+        Item(I18nCore.Tr("实例详情"), () => Run(() => OpenDetailAsync()));
         menu.Items.Add(new Separator());
-        Item("重命名…", () => Run(async () =>
+        Item(I18nCore.Tr("重命名…"), () => Run(async () =>
         {
-            string? text = await Dlg.Prompt("重命名实例", "新名称", instance);
+            string? text = await Dlg.Prompt(I18nCore.Tr("重命名实例"), I18nCore.Tr("新名称"), instance);
             if (!string.IsNullOrWhiteSpace(text) && text != instance)
             {
                 await Api.CallAsync<object>("rename_instance", new { name = instance, new_name = text });
                 await LoadAsync();
             }
         }));
-        Item("删除实例", () => Run(async () =>
+        Item(I18nCore.Tr("删除实例"), () => Run(async () =>
         {
-            if (!await Dlg.Confirm("删除实例", $"「{instance}」下的版本、模组、存档都会被删除，且不可恢复。", "永久删除", "取消", danger: true))
+            if (!await Dlg.Confirm(I18nCore.Tr("删除实例"), $"「{instance}」下的版本、模组、存档都会被删除，且不可恢复。", I18nCore.Tr("永久删除"), I18nCore.Tr("取消"), danger: true))
                 return;
             await Api.CallAsync<object>("delete_instance", new { name = instance });
             await LoadAsync();
-            Toast("已删除", instance, ToastKind.Success);
+            Toast(I18nCore.Tr("已删除"), instance, ToastKind.Success);
         }));
         menu.PlacementTarget = anchor;
         menu.Placement = PlacementMode.Bottom;
@@ -764,16 +764,16 @@ public sealed class LibraryPage : PageBase
 
     private async Task AddFolderAsync()
     {
-        string? path = await Dlg.PickFolder("选择一个已有的游戏文件夹（含 versions 的 .minecraft）");
+        string? path = await Dlg.PickFolder(I18nCore.Tr("选择一个已有的游戏文件夹（含 versions 的 .minecraft）"));
         if (string.IsNullOrWhiteSpace(path)) return;
         string fileName = Path.GetFileName(path.TrimEnd('\\', '/'));
-        string? name = await Dlg.Prompt("导入为文件夹", "显示名称", fileName);
+        string? name = await Dlg.Prompt(I18nCore.Tr("导入为文件夹"), I18nCore.Tr("显示名称"), fileName);
         if (!string.IsNullOrWhiteSpace(name))
         {
             // IApi 未实现 import_existing_folder（M3 任务化）→ 本地登记：建同名实例元数据
             await Task.Run(() =>
             {
-                var inst = Instances.CreateUniqueInstance(name, "游戏");
+                var inst = Instances.CreateUniqueInstance(name, I18nCore.Tr("游戏"));
                 try { inst.SetMeta("source_path", path); } catch (Exception) { /* 元数据可选 */ }
             });
             await LoadAsync();
@@ -783,7 +783,7 @@ public sealed class LibraryPage : PageBase
 
     private async Task ImportPackAsync()
     {
-        string? file = await Dlg.PickFile("导入整合包", "*.mrpack", "*.zip");
+        string? file = await Dlg.PickFile(I18nCore.Tr("导入整合包"), "*.mrpack", "*.zip");
         if (file == null) return;
         // 整合包安装器属 M3（Catalog/Modpack 未入 IApi）
         Toast("整合包导入", "安装器将在 M3 落地", ToastKind.Warning);
@@ -792,12 +792,12 @@ public sealed class LibraryPage : PageBase
 
     private async Task CreateAsync()
     {
-        string? name = await Dlg.Prompt("新建实例", "实例名称（会创建独立的 .minecraft）", "", "例如：1.20.1 生存");
+        string? name = await Dlg.Prompt(I18nCore.Tr("新建实例"), I18nCore.Tr("实例名称（会创建独立的 .minecraft）"), "", I18nCore.Tr("例如：1.20.1 生存"));
         if (!string.IsNullOrWhiteSpace(name))
         {
             await Api.CallAsync<object>("create_instance", new { name });
             await LoadAsync();
-            Toast("已创建", name, ToastKind.Success);
+            Toast(I18nCore.Tr("已创建"), name, ToastKind.Success);
         }
     }
 
@@ -818,7 +818,7 @@ public sealed class LibraryPage : PageBase
         string dir = await Task.Run(() => DetectOfficialDir() ?? "");
         if (dir.Length == 0)
         {
-            Toast("没找到官方启动器", "未检测到 .minecraft 目录", ToastKind.Warning);
+            Toast(I18nCore.Tr("没找到官方启动器"), I18nCore.Tr("未检测到 .minecraft 目录"), ToastKind.Warning);
             return;
         }
         Toast("检测到官方启动器", "版本迁移在 M3 任务化：" + dir, ToastKind.Info);
@@ -828,6 +828,8 @@ public sealed class LibraryPage : PageBase
     // ———————————————— 跨平台工具 ————————————————
 
     /// <summary>跨平台打开文件夹：Windows explorer / macOS open / Linux xdg-open。</summary>
+    // [audit/B i18n] 形参默认值必须是编译期常量,不能写 Tr(...);这个标题只在内部提示里用,
+    // 实际调用方都显式传了已翻译的标题。
     public static void OpenInFileManager(string path, string errTitle = "打开失败")
     {
         if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
@@ -860,7 +862,7 @@ public sealed class LibraryPage : PageBase
         }
         catch (Exception ex)
         {
-            ToastHost.Show(errTitle ?? "操作失败", ex.Message, ToastKind.Error);
+            ToastHost.Show(errTitle ?? I18nCore.Tr("操作失败"), ex.Message, ToastKind.Error);
         }
     }
 
