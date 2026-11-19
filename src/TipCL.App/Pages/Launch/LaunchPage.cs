@@ -973,7 +973,27 @@ public sealed partial class LaunchPage : PageBase
 
     // ————— 启动流程 —————
 
+    // [audit/B] 重复点击守卫:按钮是「先等账号闸门(真异步)回来、再切成运行态」的,
+    // 这段时间里连点两次会两次走进 StartTaskAsync —— 两个启动任务并行,弹出两个游戏进程。
+    // 这里在进入时占住(同步赋值,先于第一个 await),离开时放开;按钮态的切换仍由 LaunchCoreAsync 负责。
+    private bool _launching;
+
     private async Task LaunchAsync()
+    {
+        if (_launching)
+            return;
+        _launching = true;
+        try
+        {
+            await LaunchCoreAsync();
+        }
+        finally
+        {
+            _launching = false;
+        }
+    }
+
+    private async Task LaunchCoreAsync()
     {
         string version = CurVer();
         if (version.Length == 0)
