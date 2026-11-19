@@ -553,6 +553,44 @@ public sealed class LayoutPageState
 		RebuildPage();
 	}
 
+	/// <summary>
+	/// 把某块移到可视顺序的第 <paramref name="targetIndex"/> 位(纯顺序调整,复用相邻交换原语)。
+	/// 语义与 <see cref="DragReorder"/> 完全一致 —— 只动 Order/Page.Blocks 的先后,
+	/// span / 坐标 / 外观一个字都不碰;供 stack 拖拽的"浮起跟手 + 实时换位"逐格调用。
+	/// 与 Windows 参考件 LayoutEngine.MoveVisibleTo 逐行同源。
+	/// 返回是否真的动过。
+	/// </summary>
+	public bool MoveVisibleTo(string id, int targetIndex)
+	{
+		if (string.IsNullOrEmpty(id))
+		{
+			return false;
+		}
+		List<string> visible = VisibleIds();
+		int from = visible.IndexOf(id);
+		if (from < 0)
+		{
+			return false;
+		}
+		int to = Math.Max(0, Math.Min(visible.Count - 1, targetIndex));
+		if (from == to)
+		{
+			return false;
+		}
+		while (from < to)
+		{
+			MoveVisible(visible, from, 1);
+			from++;
+		}
+		while (from > to)
+		{
+			MoveVisible(visible, from, -1);
+			from--;
+		}
+		RebuildPage();
+		return true;
+	}
+
 	/// <summary>可视序号 k 的块中点 Y(相对列表顶部,含 gap;高度取缓存,缺省 120)。</summary>
 	public static double MidpointY(IReadOnlyList<string> visible, IReadOnlyDictionary<string, double>? heights, double gap, int k, double fallbackHeight = 120.0)
 	{
