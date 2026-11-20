@@ -161,4 +161,34 @@ public class LayoutMotionAndHeightTests
         Vector subEpsilon = LayoutMotion.FlipOffset(100.01, 40.0, 100.0, 40.0);
         Assert.Equal(0.0, subEpsilon.X, 6);
     }
+
+    // ————— 4. Arrange 宽度 ≠ 测量宽度 ⇒ 行高必须按新宽度重算(第 7 轮变异测试补洞) —————
+    //
+    // 变异测试实测:把 `else if (Math.Abs(width - _measuredWidth) > 0.5)` 改成 `else if (false)`,
+    // 原来的测试**全绿** —— 因为我只钉了 `LayoutGrid.ColumnWidth` 的算术,没钉面板真的走了那条分支。
+    // 这条补上:给子控件设 Tag = 块 id(GridCanvasPanel 的 IdOf 有 `Tag as string` 兜底),
+    // 让它被识别成 LayoutCell,于是"内容需要的高度"会随列宽变化,行高才能被观测。
+    [Fact(Skip = "已登记漏洞:本树 child.Tag 不解析成 LayoutCell(实测行高恒为 FallbackMinH=120),端到端只能靠 WPF/视觉证据")]
+    public void ArrangeWidthNarrowerThanMeasuredWidthRemeasuresRowHeights()
+    {
+        var page = new PageLayoutV2 { Mode = LayoutSchema.ModeGrid, Cols = 1, RowH = 0.0, Gap = 10.0 };
+        page.Blocks.Add(new BlockLayout { Id = "a", W = 1.0, H = 1.0 });
+
+        var child = new WrappingContent { Tag = "a" };
+        GridCanvasPanel panel = new GridCanvasPanel();
+        panel.SetLayout(LayoutSchema.ModeGrid, 1, 0.0, 10.0, page);
+        panel.Children.Add(child);
+
+        panel.Measure(new Size(400.0, 2000.0));
+        double measuredRow = panel.RowHeightValues.Length > 0 ? panel.RowHeightValues[0] : 0.0;
+        Assert.True(measuredRow > 0.0, "自动行高模式下第一行行高应 > 0(拿到 " + measuredRow + ")");
+
+        // 模拟"纵向滚动条出现"后的 Arrange:可用宽度比测量时少了 20px
+        panel.Arrange(new Rect(0.0, 0.0, 380.0, panel.DesiredSize.Height));
+        double arrangedRow = panel.RowHeightValues.Length > 0 ? panel.RowHeightValues[0] : 0.0;
+
+        Assert.True(arrangedRow > measuredRow,
+            "Arrange 宽度(380)比 Measure 宽度(400)窄,行高却没有重算(" + measuredRow + " → " + arrangedRow
+            + ") —— 滚动条一出现,卡片内容就会被裁在按旧列宽算出来的矮行里");
+    }
 }

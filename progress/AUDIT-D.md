@@ -576,3 +576,67 @@ $env:TIPCL_WPF_SMOKE_REPORT="<run>\report.json"; dotnet test windos\tests\TipCL.
 | artifact 路径 | 上传 `dist/smoke-matrix`(`--out dist/smoke-matrix` 同路径),`if-no-files-found: warn`;矩阵结论写 `$GITHUB_STEP_SUMMARY`,失败也能看到 |
 | LF/BOM 守卫覆盖 | 新增的 `.sh`/`.ps1` 全在 `tools/**` 或 `windos/tools/**`:`AllShellScriptsAreLfOnlyWithoutBom` 扫这两处的 `*.sh`,`PowerShellScriptsWithNonAsciiTextCarryAUtf8Bom` 扫**全仓** `*.ps1`。本轮 B/C 只新增 `.cs`,不在守卫范围(也不需要);若以后新增 `.sh`/`.ps1` 会被自动纳入 |
 | 本轮新增文件 | 全部 `.cs`,无新增脚本 ⇒ 守卫无需扩展 |
+---
+
+# 第 7 轮:变异测试(证明测试真的能抓 bug)+ 真实 CLI 链路冒烟
+
+分支 `audit/D` = `main`(`97eae96`)之上。工具:`tools/mutation-check.ps1`(改回 bug 形态 → 跑测试 → 必须变红 → `git checkout` 还原;跑前后都校验工作区)。
+
+## 7.1 变异测试结果(13 个修复点)
+
+| # | 变异点(改回 bug 形态) | 结果 | 抓到它的测试 |
+| --- | --- | --- | --- |
+| 1 | `PyJson` `MaxDepth = 512` → `int.MaxValue` | **抓到** | `CoreHardeningTests.PyJson_RejectsPathologicalNesting…`(600 层必须抛可捕获异常) |
+| 2 | `PyJson.Match` 改回 `_s.Substring(i, w.Length)`(截断即抛越界) | **抓到**(补测后) | `PyJsonTruncatedKeywordTests`(32 条,新增) |
+| 3 | `Mods.ContentDir` 忽略版本隔离 | **抓到** | `CoreHardeningTests.Mods_ContentDirFollowsPerVersionGameDir…` |
+| 4 | `Cleaner.Apply` 只返回 removed/bytes(丢 failed/error) | **抓到** | `CoreHardeningTests.Cleaner_ApplyAlwaysReportsTheFourContractKeys` |
+| 5 | `LayoutStoreV2` 不记待备份(→ 直接覆盖损坏文件) | **抓到** | `CoreHardeningTests.LayoutStoreV2_BacksUpCorruptFile…` |
+| 6 | `AiAgent` 不回滚 `state.Text` | **未抓到** | 现有 `AiRetryTests` 不覆盖"半截文本重复进上下文"(需假模型服务端,本轮登记为漏洞) |
+| 7 | `AiPage` 空态无条件 `Add` | **未抓到** | `AiPageTests` 里没有"清空/新对话连点两次"(原 P0 崩溃点无回归) → 登记为漏洞 |
+| 8 | Linux 启动按钮去掉 `_launching` 守卫 | **抓到** | App 批次(连点启动用例) |
+| 9 | `GridCanvasPanel` 去掉"宽≠测量宽就重量" | **未抓到(已登记漏洞)** | 补的真测量用例在本树里 child.Tag 不解析成 LayoutCell(行高恒 120)→ 用例自身是红的,已标 Skip;端到端只能靠 WPF/视觉 |
+| 10 | `Java.Chmod755` 改回空方法 | **未抓到(环境限制)** | Windows 上该方法第一行就 `IsWindows()` 早退,行为不可观测;需 Linux CI 覆盖 |
+| 11 | `BridgeClient.MutateAsync` 改回"吞掉失败返回 true" | **未抓到(环境限制)** | 失败分支要调 WPF `Toast` → net8 测试宿主载不了 `PresentationFramework`;已补"快速失败"契约 + 源码契约,WPF 侧由 `--smoke` 的 15 次点击覆盖 |
+| 12 | `StackDragPlan` 滞回 6.0 → 0.0 | **抓到** | `StackDragPlanTests`(aud-wpf 的 12 例) |
+| 13 | Windows 启动按钮去掉 `_launching` 守卫 | **抓到**(补测后) | `BridgeMutationAndLaunchGuardTests.WindowsLaunchButtonKeepsItsReentrancyGuard`(新增源码契约) |
+
+**8/13 抓到、5 条未抓到并全部定性**;补测新增 4 个测试文件/用例群(`PyJsonTruncatedKeywordTests` 32 条、`BridgeMutationAndLaunchGuardTests` 4 条、GridCanvasPanel 真测量用例、`CliSmokeTests`)。
+
+### 抓到的真实覆盖漏洞(本轮最有价值的产出)
+
+1. **PyJson 对被截断的关键字完全没有兜底**(`nul` / `tru` / `fals`):`LoadsOr` 只 catch `PyException`,而这条路径会抛 `ArgumentOutOfRangeException` ⇒ **配置文件被截断一次 = 启动器崩**,不是回落默认值。已补 32 条用例(含 `{"first_run": tru` 这种真实半截文档)。
+2. **`AiPage` 空态重复 `Add`(原 P0 `InvalidOperationException`)** 至今没有回归用例 —— 变异把 `Contains` 判断去掉,测试全绿。
+3. **`AiAgent` 重试不回滚半截文本**同样无覆盖。
+4. **Windows/Linux 两处启动重入守卫**原先没有任何测试看着(Windows 补了源码契约,Linux 已有用例能抓)。\n5. **`GridCanvasPanel` 的"Arrange 宽≠测量宽 → 重算行高"分支**在纯单测里够不到(需要宿主把子控件登记成 LayoutCell),补的用例自己就是红的,已标 Skip 并登记。
+
+### 未抓到但已定性的两条(环境限制,已如实登记)
+
+- `Java.Chmod755`:Windows 早退 ⇒ 本机**不可能**观测;要么上 Linux CI,要么接受"看不见"。
+- `BridgeClient.MutateAsync` 失败路径:net8 宿主载不了 WPF `Toast`。**建议**(跨域):给 Toast 抽一个 `IPlatformToast` 接口/WPF 侧单独跑 —— 否则"失败可见"这条永远只能靠人工点。
+
+## 7.2 真实 CLI 链路冒烟
+
+`tests/TipCL.Tests/App/CliSmokeTests.cs`(真实进程 + 每例独立 `TIPCL_HOME` + 120 s 超时)覆盖:
+`--smoke`(exit 0 + png > 10 KB)、`--ai-selftest`(exit ∈ {0,4} 且打出汇总)、
+`-i <实例> launch <版本> --print-command`(不存在实例 → 明确提示;有效假实例 → 参数链路通)、
+畸形参数(未知 flag / 缺值 / 缺版本 / 多余参数 → 不崩)。
+
+**实测发现(诚实记录)**:
+- 未知 flag / 缺参数**不保证非 0 退出**(可能照常进 GUI)⇒ 断言只钉"不崩 + 有提示"。
+- 有效实例 + `--print-command` 走的是"环境问题"分支(缺 java),输出中文提示。
+- **这批用例已标 `Skip` 并退出常规批次**:它们在 App 批次里会与无头 UI 会话互相干扰(实测连带 `DlgCloseTests` 两条变红)。后续应做成 `tools/cli-smoke.ps1` 单独跑(本轮未完成,见 7.3)。
+
+## 7.3 本轮未完成的(如实交代)
+
+1. `tools/cli-smoke.ps1` 脚本本体没落地(CLI 用例先落在测试里,又因干扰被 Skip)—— 下一步把它抽成独立脚本 + CI 单步。
+2. WPF 侧 CLI(`--design-sheet` / `--ai-ui-selftest` / 快捷方式参数)本轮**没跑**:需要交互桌面,且 net48 侧没有等价测试宿主。
+3. `AiPage` 空态、`AiAgent` 回滚两条漏洞**只登记未补测**(前者需要能驱动 AiPage 的"清空/新对话"按钮,后者需要假模型服务端)。
+
+## 7.4 本轮测试计数
+
+| 批次 | 结果 |
+| --- | --- |
+| Linux 批次 1(App) | 376(371 通过 + 5 跳过)/ **0 失败** |
+| Linux 批次 2(其余) | 598(596 通过 + 2 跳过)/ **0 失败** |
+| Windows | 580 / **0 失败** |
+| 逐页冒烟矩阵 | **10/10 全绿**(exit 0 / png > 10 KB / 0 WARN / 0 ERROR) |
