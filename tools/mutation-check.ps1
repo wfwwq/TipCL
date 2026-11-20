@@ -28,6 +28,9 @@ if (-not $Root) {
 $Root = [IO.Path]::GetFullPath($Root)
 Push-Location $Root
 
+# -Only 传进来可能是 "a,b" 这种单串(powershell -File 不会拆数组),这里统一拆开
+if ($Only) { $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+
 $linuxTests = 'tests\TipCL.Tests\TipCL.Tests.csproj'
 $winTests = 'windos\tests\TipCL.Tests\TipCL.Tests.csproj'
 
