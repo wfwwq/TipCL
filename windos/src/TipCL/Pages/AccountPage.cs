@@ -84,11 +84,11 @@ public sealed class AccountPage : PageBase
 		PageLayoutHost grid3 = new PageLayoutHost("account", "hero", GridLength.Auto, new GridLength(1.0, GridUnitType.Star));
 		grid3.SetLeft(border.VTop());
 		grid3.SetRight(_list);
-		// 布局自定义：账号操作与账号卡各成一个区块，默认顺序与可见性和旧版完全一致
+		// 布局自定义：账号操作与账号列表各成一个区块，默认顺序与可见性和旧版完全一致
 		base.Content = new BlockHost("account", new List<BlockSpec>
 		{
 			new BlockSpec { Id = "header", Title = I18n.L("账号操作"), Content = grid },
-			new BlockSpec { Id = "list", Title = I18n.L("账号卡"), Content = grid3 }
+			new BlockSpec { Id = "list", Title = I18n.L("账号列表"), Content = grid3 }
 		}).Root;
 	}
 
