@@ -89,6 +89,8 @@ public static class Tools
                 }
                 object parsed = PyJson.Loads(sb.ToString());
                 cached = Py.ListOr(parsed);
+                // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版 7 条(表数据在 AcctLayoutMpTools)
+                cached.AddRange(AcctLayoutMpTools.Schemas());
                 _schemas = cached;
             }
             return cached;
@@ -170,6 +172,11 @@ public static class Tools
     public static string Label(string name, PyDict? args = null)
     {
         string key = name ?? "";
+        // AI-acct-layout-mp:本包工具的标签与模板在 AcctLayoutMpTools
+        if (AcctLayoutMpTools.Label(key, args) is { } extraLabel)
+        {
+            return extraLabel;
+        }
         if (args != null && Formats.TryGetValue(key, out string? fmt))
         {
             string filled = FillTemplate(fmt, args);
@@ -245,7 +252,7 @@ public static class Tools
     {
         var allowed = new HashSet<string>(AiData.CORE_TOOLS);
         string text = userText ?? LastUserText(messages);
-        foreach ((string[] keys, string[] extra) in AiData.KEYWORD_TOOLS)
+        foreach ((string[] keys, string[] extra) in AiData.KEYWORD_TOOLS.Concat(AcctLayoutMpTools.Keywords))
         {
             foreach (string key in keys)
             {
@@ -647,6 +654,11 @@ public static class Tools
     public static List<string> AffectedPaths(string name, PyDict? args, string instance)
     {
         args ??= new PyDict();
+        // AI-acct-layout-mp:布局写工具的快照路径与实例无关,先于下面的实例解析处理
+        if (AcctLayoutMpTools.Handles(name))
+        {
+            return AcctLayoutMpTools.AffectedPaths(name, args);
+        }
         string instName = Py.S(Py.Or(args.Get("instance"), instance));
         string root;
         try

@@ -617,6 +617,8 @@ public sealed class InProcessApi : IApi
                     acc.Remove("skin_model");
                 }
                 am.Save();
+                // AI-acct-layout-mp:换皮肤也广播 ui_changed(AI 的 set_skin 也走这里;标题栏账号钮的头像要跟着变)
+                RaiseEvent(new ApiEvent { Event = "ui_changed" });
                 return PyDict.Of("ok", true);
             }
 

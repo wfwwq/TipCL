@@ -20,7 +20,7 @@ namespace TipCL.Core.Launcher.Ai;
 /// <summary>
 /// 工具执行器。宿主(页面)通过回调提供三件事:权限确认、ask_user 结构化选择、进度事件。
 /// </summary>
-public sealed class ToolRunner
+public sealed partial class ToolRunner
 {
     /// <summary>调用 IApi 的门面(接口保持最小:只用到 CallAsync)。</summary>
     public interface IBackend
@@ -586,6 +586,11 @@ public sealed class ToolRunner
             }
 
             default:
+                // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版(执行体见 ToolRunner.AcctLayoutMp.cs)
+                if (AcctLayoutMpTools.Handles(call.name))
+                {
+                    return await RunAcctLayoutMpAsync(call.name, args, ct).ConfigureAwait(false);
+                }
                 // 兜底:MCP 工具（mcp_<server>_<tool>）路由到对应的外部 server
                 if (Mcp.IsMcpTool(call.name))
                 {
