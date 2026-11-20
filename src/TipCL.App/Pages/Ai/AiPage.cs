@@ -650,13 +650,18 @@ public sealed class AiPage : PageBase
         }
         catch (OperationCanceledException)
         {
-            Dispatcher.UIThread.Post(() => FinishRun(I18nCore.Tr("已停止")));
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (AppGone) return;
+                FinishRun(I18nCore.Tr("已停止"));
+            });
         }
         catch (Exception ex)
         {
             string message = ex is PyException ? ex.Message : ex.ToString();
             Dispatcher.UIThread.Post(() =>
             {
+                if (AppGone) return;
                 Append("assistant", "对话失败:" + message);
                 ToastHost.Show("AI 对话失败", message, ToastKind.Warning);
                 FinishRun("");
@@ -664,8 +669,19 @@ public sealed class AiPage : PageBase
         }
     }
 
+    /// <summary>
+    /// R35 lin-int:Application 已不在(无头测试会话被重置:上一个用例里发起的对话,其回调在下一个用例的
+    /// Dispatcher.ResetForUnitTests 里才执行)时,迟到的会话回调直接丢弃 —— 否则新建气泡会因为没有
+    /// 渲染接口 / 资源宿主而抛异常,把**下一个**用例(DlgCloseTests 等)弄红。正常运行时 Application 总在,行为不变。
+    /// </summary>
+    private static bool AppGone => Application.Current == null;
+
     private void OnAgentEvent(AiAgentEvent ev)
     {
+        if (AppGone)
+        {
+            return;
+        }
         switch (ev.Kind)
         {
             case "delta":

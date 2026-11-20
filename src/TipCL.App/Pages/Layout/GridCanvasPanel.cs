@@ -124,6 +124,12 @@ public sealed class GridCanvasPanel : Decorator
 
 	private Color _penAccent;
 
+	private bool _penDark;
+
+	private Color _penFill;
+
+	private Color _penStroke;
+
 	private Pen? _gridPen;
 
 	private SolidColorBrush? _placeFill;
@@ -140,6 +146,18 @@ public sealed class GridCanvasPanel : Decorator
 	/// 文档里该页仍是 canvas(原样不动);<see cref="ApplyTo"/> 提交时才把整页写成 grid。
 	/// </summary>
 	public bool DerivedFromCanvas { get; private set; }
+
+	/// <summary>
+	/// R35 lin-int(L12←L3):canvas 页推导成网格时每块的最小列数(编辑器按 BlockSpec.MinCols 换算后给);
+	/// null = 只按全局 2 列兜底。
+	/// </summary>
+	public Func<string, int>? MinColsOf { get; set; }
+
+	/// <summary>
+	/// R35 lin-int:深色表面(启动页编辑态,编辑器按 pageId == "launch" 设)。落点框 / 网格线改用白色半透明
+	/// (pages3 `.win.edit.dark`),其余页仍是主题色。
+	/// </summary>
+	public bool DarkSurface { get; set; }
 
 	/// <summary>grid 列数。</summary>
 	public int Cols { get; private set; } = LayoutSchema.ColsDefault;
@@ -616,16 +634,29 @@ public sealed class GridCanvasPanel : Decorator
 
 	private void EnsurePens(Color accent)
 	{
-		if (_gridPen != null && _penAccent == accent)
+		// R35 lin-int(L3 + L0 令牌):落点框 = Layout.DropBox 的取值(B.EditDropFill 浅底 + 1.5px 主题色 3,2 虚线);
+		// 启动页深色表面(DarkSurface)= Layout.DropBox.OnDark(白 12% 浅底 + 白色虚线),网格线也换白色半透明。
+		// 颜色经 LayoutVisualTokens.ColorOr 取(找不到用兜底,不抛);明暗切换后颜色变了就重建
+		Color fillColor = (DarkSurface
+			? LayoutVisualTokens.ColorOr(LayoutVisualTokens.BrushKeys.EditDropFillOnDark, Color.FromArgb(31, 255, 255, 255))
+			: LayoutVisualTokens.ColorOr(LayoutVisualTokens.BrushKeys.EditDropFill, Color.FromArgb(28, accent.R, accent.G, accent.B)));
+		Color strokeColor = (DarkSurface
+			? LayoutVisualTokens.ColorOr(LayoutVisualTokens.BrushKeys.OnEditGlass, Colors.White)
+			: accent);
+		if (_gridPen != null && _penAccent == accent && _penDark == DarkSurface && _penFill == fillColor && _penStroke == strokeColor)
 		{
 			return;
 		}
 		_penAccent = accent;
-		_gridPen = new Pen(new SolidColorBrush(Color.FromArgb(38, accent.R, accent.G, accent.B)), 0.6);
-		_placeFill = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
-		_placePen = new Pen(new SolidColorBrush(Color.FromArgb(200, accent.R, accent.G, accent.B)), 1.5)
+		_penDark = DarkSurface;
+		_penFill = fillColor;
+		_penStroke = strokeColor;
+		_gridPen = new Pen(new SolidColorBrush(DarkSurface ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(38, accent.R, accent.G, accent.B)), 0.6);
+		_placeFill = new SolidColorBrush(fillColor);
+		_placePen = new Pen(new SolidColorBrush(strokeColor), LayoutVisualTokens.OutlineThickness)
 		{
-			DashStyle = new DashStyle(new double[2] { 4.0, 3.0 }, 0.0)
+			// Avalonia 的虚线长度按线宽倍数计:3,2(效果图 .ph)
+			DashStyle = new DashStyle(new double[2] { 3.0, 2.0 }, 0.0)
 		};
 	}
 

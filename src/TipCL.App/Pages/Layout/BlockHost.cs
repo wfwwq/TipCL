@@ -219,7 +219,8 @@ public sealed class BlockHost : UserControl
     {
         _ui = Dispatcher.UIThread;
         _specCount = specs?.Count ?? 0;
-        _editor = new LayoutEditor(pageId, specs, contentMargin, defaultPage);
+        // R35 lin-int:L5 带来的第 5 条警告(CS8604,specs 可能为 null)—— 显式给空表,行为不变(编辑器本来就判 null)
+        _editor = new LayoutEditor(pageId, specs ?? System.Array.Empty<BlockSpec>(), contentMargin, defaultPage);
         _themeRefresh = _editor.RefreshThemeVisuals;
         _storeRefresh = OnLayoutStoreChanged;
         _editor.Changed += delegate

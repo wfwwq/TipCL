@@ -55,6 +55,8 @@ public class ClickSweepTests
         // R35:会调系统浏览器的链接按钮。Linux CI 上 xdg-open 没有浏览器、看不出来;
         // 在 Windows 开发机上跑这条遍历,每跑一次就弹一次 github.com/burningtnt/Terracotta(用户 2026-11-20 报告)。
         "主页", "GitHub", "issue", "网页", "浏览器", "官网", "链接", "文档",
+        // R35 lin-int:设置 → 布局 → 高级「打开所在文件夹」(会调系统文件管理器)/「在编辑器中打开…」(会开独立窗口)
+        "文件夹", "在编辑器中打开",
     };
 
     private sealed class Row

@@ -187,25 +187,51 @@ internal static class LayoutEditChrome
 	/// <summary>
 	/// 浮在卡片左上 / 右上的白色小底板(块名、操作按钮共用的外观)。
 	/// [R35] 底色读 L0 的 B.EditBarBg(兜底 B.Paper);L0 的 Layout.EditLabel ControlTheme 存在时整套换成它。
+	/// [R35 lin-int] 套上主题后**不再写**圆角 / 边框 / 内距 / 阴影 / 底色这些本地值(本地值优先级高于主题,会把主题盖掉);
+	/// <paramref name="themeKey"/> = null 时只走兜底外观。
 	/// </summary>
-	public static Border Chip(Control child, Thickness padding)
+	public static Border Chip(Control child, Thickness padding, string? themeKey = LayoutVisualTokens.ThemeKeys.EditLabel)
 	{
-		Border chip = new Border
+		Border chip = new Border { Child = child };
+		if (themeKey != null && LayoutVisualTokens.ApplyTheme(chip, themeKey))
 		{
-			CornerRadius = new CornerRadius(8.0),
-			BorderThickness = new Thickness(1.0),
-			Padding = padding,
-			Child = child,
-			BoxShadow = new BoxShadows(new BoxShadow
-			{
-				Blur = 8.0,
-				OffsetY = 2.0,
-				Color = Color.FromArgb(30, 0, 0, 0)
-			})
-		};
+			return chip;
+		}
+		chip.CornerRadius = new CornerRadius(8.0);
+		chip.BorderThickness = new Thickness(1.0);
+		chip.Padding = padding;
+		chip.BoxShadow = new BoxShadows(new BoxShadow
+		{
+			Blur = 8.0,
+			OffsetY = 2.0,
+			Color = Color.FromArgb(30, 0, 0, 0)
+		});
 		chip.Dyn(Border.BackgroundProperty, KeyOr("B.EditBarBg", "B.Paper"));
 		chip.Dyn(Border.BorderBrushProperty, "B.Line");
-		TryApplyTheme(chip, "Layout.EditLabel");
 		return chip;
+	}
+
+	/// <summary>
+	/// [R35 lin-int] 文字套 L0 的 TextBlock 主题(Layout.EditLabelText / EditHint / DrawerTitle …):
+	/// 主题在就只设 Text + Theme(字号 / 字重 / 颜色全交给主题),不在就退回 <c>U.Txt(text, size, bold, fg)</c>。
+	/// </summary>
+	public static TextBlock ThemedText(string text, string themeKey, double size, bool bold = false, string? fg = null, bool onDark = false)
+	{
+		TextBlock block = new TextBlock { Text = text };
+		if (LayoutVisualTokens.ApplyTheme(block, themeKey, onDark))
+		{
+			return block;
+		}
+		return U.Txt(text, size, bold, fg);
+	}
+
+	/// <summary>[R35 lin-int] 编辑条 / 抽屉里的描边图标:有 L0 几何就用 <see cref="LayoutVisualTokens.Glyph"/>(线宽按效果图 1.6×size/16),否则旧路径。</summary>
+	public static Path GlyphFor(Button owner, string geoKey, string data, double size)
+	{
+		if (HasResource(geoKey))
+		{
+			return LayoutVisualTokens.Glyph(geoKey, size, owner);
+		}
+		return BoundIcon(owner, data, size);
 	}
 }

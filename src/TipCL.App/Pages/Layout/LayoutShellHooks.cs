@@ -304,7 +304,8 @@ public static class LayoutShellHooks
             BlockHost? live = FindHostByPage(root, pageKey, 0);
             if (live != null)
             {
-                return live.Editor.CanEdit;
+                // R35 lin-int(L12←L5):与右键菜单 / BlockHost.EnterEdit 同一把关
+                return live.OffersLayoutMenu && live.Editor.CanEdit;
             }
         }
         int? known = LayoutEditor.KnownBlockCount(pageKey);
@@ -445,7 +446,9 @@ public static class LayoutShellHooks
         {
             return;
         }
-        if (node is BlockHost host && host.Editor.CanEdit)
+        // R35 lin-int(L12←L5):「自定义布局…」只给 BlockHost 自己也认可的宿主(BlockHostRules:内置块 ≥ 2、非单块页),
+        // 菜单与 EnterEdit 完全一致
+        if (node is BlockHost host && host.OffersLayoutMenu && host.Editor.CanEdit)
         {
             list.Add(host);
         }

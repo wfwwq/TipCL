@@ -120,14 +120,18 @@ public sealed class GuideLayer : Control
 		Color accent = LayoutVisualTokens.AccentColor();
 		if (_sizeText.Length != 0)
 		{
-			// 主题色小胶囊 + 白字,贴在卡片右下角内侧(放不下就往里收,不出画布)
-			FormattedText text = new FormattedText(_sizeText, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 11.0, Brushes.White);
-			double w = text.Width + 12.0;
-			double h = text.Height + 6.0;
+			// 「N / 列数」气泡,贴在卡片右下角内侧(放不下就往里收,不出画布)。
+			// R35 lin-int(L12←L0):= Layout.EditTip —— B.Ink 底、B.Paper 字、字号 12、圆角 8(效果图 .tip);
+			// 自绘层用 ColorOr 取色(找不到用兜底,不抛)
+			Color tipBg = LayoutVisualTokens.ColorOr("B.Ink", Color.FromArgb(230, 31, 31, 31));
+			Color tipFg = LayoutVisualTokens.ColorOr("B.Paper", Colors.White);
+			FormattedText text = new FormattedText(_sizeText, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 12.0, new SolidColorBrush(tipFg));
+			double w = text.Width + 16.0;
+			double h = text.Height + 8.0;
 			double x = Clamp(_sizeAnchor.X - w - 6.0, 0.0, Math.Max(0.0, Bounds.Width - w));
 			double y = Clamp(_sizeAnchor.Y - h - 6.0, 0.0, Math.Max(0.0, Bounds.Height - h));
-			context.DrawRectangle(new SolidColorBrush(Color.FromArgb(230, accent.R, accent.G, accent.B)), null, new RoundedRect(new Rect(x, y, w, h), h / 2.0));
-			context.DrawText(text, new Point(x + 6.0, y + 3.0));
+			context.DrawRectangle(new SolidColorBrush(tipBg), null, new RoundedRect(new Rect(x, y, w, h), LayoutVisualTokens.RadiusCtl));
+			context.DrawText(text, new Point(x + 8.0, y + 4.0));
 		}
 		if (_lines.Count != 0)
 		{

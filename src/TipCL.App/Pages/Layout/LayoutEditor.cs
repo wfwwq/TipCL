@@ -250,26 +250,29 @@ public sealed partial class LayoutEditor
 		_trayHost.Child = _tray;
 		// [v3] §1.A.3:底部 7 个文字按钮 → 顶部一条编辑条(标题 · 列表|网格 · 撤销/重做图标 · 添加 · 重置本页 · 完成 · ⋯)。
 		// 「吸附 N」去掉(网格按整数列对齐);「全部折叠」去掉;「自动靠拢」开关搬进 ⋯ 菜单。
-		_barHost.CornerRadius = new CornerRadius(12.0);
-		_barHost.Padding = new Thickness(14.0, 0.0, 8.0, 0.0);
-		_barHost.MinHeight = 46.0;
 		_barHost.IsVisible = false;
-		// [R35] 底色读 L0 的 B.EditBarBg(兜底 B.Paper);L0 的 Layout.EditBar ControlTheme 存在就套上
-		_barHost.Dyn(Border.BackgroundProperty, LayoutEditChrome.KeyOr("B.EditBarBg", "B.Paper"));
-		_barHost.Dyn(Border.BorderBrushProperty, "B.Line");
-		LayoutEditChrome.TryApplyTheme(_barHost, "Layout.EditBar");
-		_barHost.BorderThickness = new Thickness(1.0);
-		_barHost.Child = BuildEditBar();
-		// [Avalonia] Windows 的 Motion.Shadow(_barHost, 16, 0.07, 3) 在 Linux 树没有等价门面(Common/Motion
-		// 只有 FadeIn/FadeOut/Stagger/Progress/HoverLift)⇒ 用 Avalonia 原生 Border.BoxShadow 表达同一个意图
-		// (v3:贴近效果图的 0 1 3 rgba(0,0,0,.06))。这是视觉近似,不进任何回归判定。
-		_barHost.BoxShadow = new BoxShadows(new BoxShadow
+		// [R35] 底色读 L0 的 B.EditBarBg(兜底 B.Paper);L0 的 Layout.EditBar ControlTheme 存在就套上。
+		// [R35 lin-int] 套上主题后不再写圆角 / 内距 / 高度 / 底色 / 边框 / 阴影的本地值(否则本地值盖过主题,
+		// 明暗切换时 Fx.EditBar / B.EditBarLine 也跟不上);深色表面仍用白底编辑条(pages3:只有虚线框与底纹换白色)。
+		if (!LayoutVisualTokens.ApplyTheme(_barHost, LayoutVisualTokens.ThemeKeys.EditBar))
 		{
-			Blur = 3.0,
-			OffsetY = 1.0,
-			Color = Color.FromArgb(16, 0, 0, 0)
-		});
-		_barHost.Margin = new Thickness(_list.Margin.Left, 12.0, _list.Margin.Right, 0.0);
+			_barHost.CornerRadius = new CornerRadius(12.0);
+			_barHost.Padding = new Thickness(14.0, 0.0, 8.0, 0.0);
+			_barHost.MinHeight = 46.0;
+			_barHost.Dyn(Border.BackgroundProperty, LayoutEditChrome.KeyOr("B.EditBarBg", "B.Paper"));
+			_barHost.Dyn(Border.BorderBrushProperty, "B.Line");
+			_barHost.BorderThickness = new Thickness(1.0);
+			// [Avalonia] Windows 的 Motion.Shadow(_barHost, 16, 0.07, 3) 在 Linux 树没有等价门面 ⇒ 原生 Border.BoxShadow
+			// (v3:贴近效果图的 0 1 3 rgba(0,0,0,.06))。这是视觉近似,不进任何回归判定。
+			_barHost.BoxShadow = new BoxShadows(new BoxShadow
+			{
+				Blur = 3.0,
+				OffsetY = 1.0,
+				Color = Color.FromArgb(16, 0, 0, 0)
+			});
+		}
+		_barHost.Child = BuildEditBar();
+		_barHost.Margin = new Thickness(_list.Margin.Left, LayoutVisualTokens.EditBarGap, _list.Margin.Right, 0.0);
 		// 根结构:上编辑条(仅编辑态),中滚动内容区,下空带(托盘外壳);「添加」抽屉叠在内容区右侧
 		StackPanel bottom = U.V(8.0, _trayHost);
 		bottom.Margin = new Thickness(_list.Margin.Left, 8.0, _list.Margin.Right, _list.Margin.Bottom);
@@ -606,7 +609,9 @@ public sealed partial class LayoutEditor
 		// 在编辑态真的动过之后才按 grid 落盘。
 		if (working != null && working.Mode == LayoutSchema.ModeCanvas)
 		{
-			LayoutEngine.CanvasToGrid(working);
+			// R35 lin-int(L12←L3):推导时就认块自己的 BlockSpec.MinCols(换算到本页列数),不再只按全局 2 列兜底
+			int deriveCols = LayoutSchema.SnapCols(working.Cols);
+			LayoutEngine.CanvasToGrid(working, id => Math.Max(2, MinColsOf(id, deriveCols)));
 		}
 		_state = LayoutEngine.LoadState(_pageId, working, _refs, existed);
 		RememberBlockCount();
@@ -732,12 +737,18 @@ public sealed partial class LayoutEditor
 		ShowBoxHost();
 		PageLayoutV2 page = _state.Page;
 		double gap = LayoutAppearance.EffectiveGap(_density, page.Gap);
+		// R35 lin-int(L12←L3):canvas 页由面板按网格推导;推导时也认块自己的 MinCols
+		_box.MinColsOf = id => Math.Max(2, MinColsOf(id, LayoutSchema.SnapCols(page.Cols)));
 		_box.SetLayout(page.Mode, LayoutGrid.Columns(page), page.RowH, gap, page);
 		SanitizeCellWidths();
 		_box.SnapStep = _snapStep;
 		_box.EditMode = _edit;
+		// R35 lin-int(L3):启动页深色表面上落点框 / 网格线用白色半透明
+		_box.DarkSurface = IsDarkSurface;
 		// [layout-fix 第三批] grid 自动行高下的「吃满视口」块:外层纵向滚动关掉,画布拿到有限高度,该块所在行吃剩余高度
-		string? boxFill = ((page.Mode == LayoutSchema.ModeGrid && page.RowH <= 0.0) ? ViewportFillId(_state.VisibleIds()) : null);
+		// R35 lin-int:模式 / 行高一律读面板的实际值(canvas 页在面板里已是 grid、行高 0),canvas 页在编辑器里也按网格处理
+		bool boxGrid = string.Equals(_box.Mode, LayoutSchema.ModeGrid, StringComparison.Ordinal);
+		string? boxFill = ((boxGrid && _box.RowH <= 0.0) ? ViewportFillId(_state.VisibleIds()) : null);
 		_box.FillId = boxFill;
 		_boxScroll.VerticalScrollBarVisibility = ((boxFill != null) ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
 		Thickness boxMargin = (_marginOverride ?? PadOf(_state.Plan()));
@@ -751,12 +762,12 @@ public sealed partial class LayoutEditor
 		foreach (LayoutCell cell in LayoutCanvas.StackedOrder(_box.Cells))
 		{
 			LayoutCard card = CardFor(cell.Id);
-			card.SetBoxMode(page.Mode);
+			card.SetBoxMode(_box.Mode);
 			card.SetEdit(_edit);
 			// [v3] 列表排法下宽度固定为整行:不给右边缘改宽度
 			card.SetWidthLocked(_edit && _listKind);
 			// [layout-fix] 参考件v2-对齐:只有"grid + 自动行高 + 有固定像素高"的块才进块内滚动
-			card.SetFixedHeight(page.Mode == LayoutSchema.ModeGrid && page.RowH <= 0.0 && cell.HeightPx > 0.0);
+			card.SetFixedHeight(boxGrid && _box.RowH <= 0.0 && cell.HeightPx > 0.0);
 			card.SetSelected(_edit && _session.IsSelected(cell.Id));
 			ApplyLook(card);
 			_box.Children.Add(Detach(card));
@@ -2965,8 +2976,8 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 		Control dragIcon = IconLib.Make("Grip", "B.InkMuted", 12);
 		if (LayoutEditChrome.HasResource("Geo.Grip"))
 		{
-			// [R35] L0 的六点拖拽图标(Geo.Grip)存在就用它,否则沿用 IconLib 的 Grip
-			dragIcon = LayoutEditChrome.Icon(LayoutEditChrome.LineData, "B.InkMuted", 12.0, "Geo.Grip");
+			// [R35] L0 的六点拖拽图标(Geo.Grip)存在就用它(lin-int:走 L0 门面 Glyph,线宽 2.2×size/16),否则沿用 IconLib 的 Grip
+			dragIcon = LayoutVisualTokens.Glyph(LayoutVisualTokens.GeoKeys.Grip, LayoutVisualTokens.GlyphSizeGrip, null, "B.InkMuted");
 		}
 		ToolTip.SetTip(dragIcon, I18nCore.Tr("按住区块拖动移动"));
 		dragIcon.IsHitTestVisible = false;
@@ -2982,8 +2993,16 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 			{
 				_host.HideBlock(Spec);
 			}, 13.0, "Geo.EyeOff"));
-		LayoutEditChrome.TryApplyTheme(button, "Layout.IconAct");
-		TextBlock textBlock = U.Txt(spec.Title, 12.0, bold: true);
+		// R35 lin-int(L12←L0):块上图标按钮套 Layout.IconAct(垃圾桶用 .Danger:悬停整块变红由主题负责)。
+		// 主题模板自己画白底细边 + 阴影,所以套上后不再外包 Chip、不再写本地宽高 / 悬停底色(本地值会盖过主题)。
+		bool actThemed = LayoutVisualTokens.ApplyTheme(button, _custom ? LayoutVisualTokens.ThemeKeys.IconActDanger : LayoutVisualTokens.ThemeKeys.IconAct);
+		if (actThemed && !_custom)
+		{
+			// 眼睛划线:L0 门面 Glyph(14,线宽 1.6×size/16,描边跟随按钮前景 = 悬停加深)
+			button.Content = LayoutVisualTokens.Glyph(LayoutVisualTokens.GeoKeys.EyeOff, LayoutVisualTokens.GlyphSizeIconAct, button);
+		}
+		// R35 lin-int:标签文字 = Layout.EditLabelText(12 粗体 B.Ink);套不上时退回 U.Txt(12, 粗体)
+		TextBlock textBlock = LayoutEditChrome.ThemedText(spec.Title, LayoutVisualTokens.ThemeKeys.EditLabelText, 12.0, bold: true);
 		textBlock.VerticalAlignment = VerticalAlignment.Center;
 		textBlock.TextTrimming = TextTrimming.CharacterEllipsis;
 		textBlock.MaxWidth = 260.0;
@@ -2997,29 +3016,39 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 		string suffix = LayoutBlockTitles.LabelSuffix(spec.Id);
 		if (suffix.Length != 0)
 		{
-			TextBlock kind = U.Txt(suffix, 12.0, bold: false, "B.InkMuted");
+			TextBlock kind = LayoutEditChrome.ThemedText(suffix, LayoutVisualTokens.ThemeKeys.EditLabelNote, 12.0, bold: false, "B.InkMuted");
 			kind.VerticalAlignment = VerticalAlignment.Center;
 			labelRow.Children.Add(kind);
 		}
 		Border label = LayoutEditChrome.Chip(labelRow, new Thickness(6.0, 0.0, 10.0, 0.0));
-		label.Height = 24.0;
-		label.HorizontalAlignment = HorizontalAlignment.Left;
-		button.Width = 26.0;
-		button.Height = 24.0;
-		Border acts = LayoutEditChrome.Chip(button, new Thickness(0.0));
-		acts.HorizontalAlignment = HorizontalAlignment.Right;
-		if (_custom)
+		// Layout.EditLabel 自带 Margin 8,-14(相对卡片);这里标签已放在同样偏移的 _bar 里,只把外边距归零
+		label.Margin = new Thickness(0.0);
+		if (label.Theme == null)
 		{
-			// 垃圾桶悬停变红(效果图 .acts button.del:hover)
-			button.PointerEntered += delegate
-			{
-				acts.Dyn(Border.BackgroundProperty, "B.DangerSoft");
-			};
-			button.PointerExited += delegate
-			{
-				acts.Dyn(Border.BackgroundProperty, "B.Paper");
-			};
+			label.Height = 24.0;
 		}
+		label.HorizontalAlignment = HorizontalAlignment.Left;
+		Control acts;
+		if (actThemed)
+		{
+			acts = button;
+		}
+		else
+		{
+			// 兜底外观(L0 主题不在):沿用 C 的白色小底板 + 本地悬停色
+			button.Width = 26.0;
+			button.Height = 24.0;
+			Border chip = LayoutEditChrome.Chip(button, new Thickness(0.0), themeKey: null);
+			if (_custom)
+			{
+				// 垃圾桶悬停变红(效果图 .acts button.del:hover)
+				button.PointerEntered += delegate { chip.Dyn(Border.BackgroundProperty, "B.DangerSoft"); };
+				button.PointerExited += delegate { chip.Dyn(Border.BackgroundProperty, "B.Paper"); };
+			}
+			acts = chip;
+		}
+		acts.HorizontalAlignment = HorizontalAlignment.Right;
+		acts.VerticalAlignment = VerticalAlignment.Top;
 		_bar = new Grid
 		{
 			VerticalAlignment = VerticalAlignment.Top,
@@ -3087,27 +3116,24 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 			IsHitTestVisible = false
 		};
 		grip.Dyn(Border.BackgroundProperty, "B.InkMuted");
+		// R35 lin-int(L12←L0):右 / 下边缘把手的外观读令牌 —— 底 B.EditBarBg、边 B.EditOutline、阴影 Fx.ResizeGrip、外伸 ResizeGripOutset;
+		// 仍用 Border(换成 Layout.ResizeGrip 的 Thumb 要改整套按下 → BeginBoxResize 的事件链,不在集成里动)
 		_pill = new Border
 		{
-			Width = 10.0,
-			Height = 36.0,
+			Width = LayoutVisualTokens.ResizeGripWidth,
+			Height = LayoutVisualTokens.ResizeGripHeight,
 			CornerRadius = new CornerRadius(8.0),
 			BorderThickness = new Thickness(1.0),
 			HorizontalAlignment = HorizontalAlignment.Right,
 			VerticalAlignment = VerticalAlignment.Center,
-			Margin = new Thickness(0.0, 0.0, -9.0, 0.0),
+			Margin = new Thickness(0.0, 0.0, -LayoutVisualTokens.ResizeGripOutset, 0.0),
 			Cursor = new Cursor(StandardCursorType.SizeWestEast),
 			Child = grip,
 			IsVisible = false,
-			BoxShadow = new BoxShadows(new BoxShadow
-			{
-				Blur = 4.0,
-				OffsetY = 1.0,
-				Color = Color.FromArgb(50, 0, 0, 0)
-			})
+			BoxShadow = LayoutVisualTokens.ShadowOr(LayoutVisualTokens.ShadowKeys.ResizeGrip)
 		};
-		_pill.Dyn(Border.BackgroundProperty, "B.Paper");
-		_pill.Dyn(Border.BorderBrushProperty, "B.Line");
+		_pill.Dyn(Border.BackgroundProperty, LayoutEditChrome.KeyOr(LayoutVisualTokens.BrushKeys.EditBarBg, "B.Paper"));
+		_pill.Dyn(Border.BorderBrushProperty, LayoutEditChrome.KeyOr(LayoutVisualTokens.BrushKeys.EditOutline, "B.Line"));
 		ToolTip.SetTip(_pill, I18nCore.Tr("拖动改宽度"));
 		_pill.AddHandler(InputElement.PointerPressedEvent, delegate(object? s, PointerPressedEventArgs e)
 		{
@@ -3127,26 +3153,22 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 		gripS.Dyn(Border.BackgroundProperty, "B.InkMuted");
 		_pillS = new Border
 		{
-			Width = 36.0,
-			Height = 10.0,
+			Width = LayoutVisualTokens.ResizeGripHeight,
+			Height = LayoutVisualTokens.ResizeGripWidth,
 			CornerRadius = new CornerRadius(8.0),
 			BorderThickness = new Thickness(1.0),
 			HorizontalAlignment = HorizontalAlignment.Center,
 			VerticalAlignment = VerticalAlignment.Bottom,
-			Margin = new Thickness(0.0, 0.0, 0.0, -9.0),
+			Margin = new Thickness(0.0, 0.0, 0.0, -LayoutVisualTokens.ResizeGripOutset),
 			Cursor = new Cursor(StandardCursorType.SizeNorthSouth),
 			Child = gripS,
 			IsVisible = false,
-			BoxShadow = new BoxShadows(new BoxShadow
-			{
-				Blur = 4.0,
-				OffsetY = 1.0,
-				Color = Color.FromArgb(50, 0, 0, 0)
-			})
+			BoxShadow = LayoutVisualTokens.ShadowOr(LayoutVisualTokens.ShadowKeys.ResizeGrip)
 		};
-		_pillS.Dyn(Border.BackgroundProperty, "B.Paper");
-		_pillS.Dyn(Border.BorderBrushProperty, "B.Line");
-		// 不加新的提示文案(新词条要合并时统一入词表;光标已是上下箭头)。双击行为与下边缘热区一致。
+		_pillS.Dyn(Border.BackgroundProperty, LayoutEditChrome.KeyOr(LayoutVisualTokens.BrushKeys.EditBarBg, "B.Paper"));
+		_pillS.Dyn(Border.BorderBrushProperty, LayoutEditChrome.KeyOr(LayoutVisualTokens.BrushKeys.EditOutline, "B.Line"));
+		// R35 lin-int:合并时补上提示文案(词条已入表)。双击行为与下边缘热区一致。
+		ToolTip.SetTip(_pillS, I18nCore.Tr("拖动改高度 · 双击恢复自动高度"));
 		_pillS.AddHandler(InputElement.PointerPressedEvent, delegate(object? s, PointerPressedEventArgs e)
 		{
 			if (e.ClickCount >= 2)
@@ -3185,7 +3207,9 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 	/// <summary>切画布模式(grid / canvas;stack = 缺省,手柄层折叠)。</summary>
 	public void SetBoxMode(string mode)
 	{
-		_boxMode = ((mode == LayoutSchema.ModeGrid || mode == LayoutSchema.ModeCanvas) ? mode : LayoutSchema.ModeStack);
+		// R35 lin-int(L12←L3):canvas 只会以「面板推导出的网格」出现在编辑器里 —— 卡片一律按 grid 处理,
+		// 8 向手柄(只给 canvas)因此不可达(GOAL §5.3「删不干净的留着不可达」)
+		_boxMode = ((mode == LayoutSchema.ModeGrid || mode == LayoutSchema.ModeCanvas) ? LayoutSchema.ModeGrid : LayoutSchema.ModeStack);
 		// [layout-fix] 参考件v2-对齐:窄宽自适应只在画布模式开(stack 的默认渲染一个像素都不经过它)
 		// [layout-fix 第三批]「吃满视口」的内容(自带滚动条)不参与等比缩放:FitBox 会用无限高去量它的"自然尺寸",
 		// 对话区一旦被判成"矮内容"就会被整体缩小

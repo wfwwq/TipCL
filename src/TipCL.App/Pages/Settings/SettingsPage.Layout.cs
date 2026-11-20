@@ -784,10 +784,16 @@ public sealed partial class SettingsPage
         return new List<(int Span, double H, string Kind)> { (6, 22.0, ""), (6, 22.0, ""), (6, 22.0, "") };
     }
 
-    // 已自定义的页:按存档里的块画(隐藏的不画;网格按列换算到 6 列;老的画布存档按宽度比例换算成整数列)
+    // 已自定义的页:按存档里的块画(隐藏的不画;网格按列换算到 6 列)。
+    // R35 lin-int(L4←L3):老的画布存档先用 LayoutEngine.CanvasGridView 推导成网格副本再画 ——
+    // 与页面实际渲染同一套「先 y 后 x、span = clamp(round(w×cols))」口径;存档本身不动。
     private static List<(int Span, double H, string Kind)> ThumbFromPage(PageLayoutV2 page)
     {
         List<(int Span, double H, string Kind)> list = new();
+        if (page.Mode == LayoutSchema.ModeCanvas)
+        {
+            page = LayoutEngine.CanvasGridView(page) ?? page;
+        }
         int cols = page.Cols > 0 ? page.Cols : LayoutSchema.ColsDefault;
         int index = 0;
         foreach (BlockLayout block in page.Blocks)
@@ -800,10 +806,6 @@ public sealed partial class SettingsPage
             if (page.Mode == LayoutSchema.ModeGrid)
             {
                 span = (int)Math.Round(Math.Max(1, block.Span) * 6.0 / cols);
-            }
-            else if (page.Mode == LayoutSchema.ModeCanvas)
-            {
-                span = (int)Math.Round(Math.Max(0.04, block.W) * 6.0);
             }
             span = Math.Max(1, Math.Min(6, span));
             string kind = IsExtraBlock(block.Id) ? "w" : "";

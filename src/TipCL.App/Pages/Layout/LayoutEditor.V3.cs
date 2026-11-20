@@ -54,7 +54,9 @@ public sealed partial class LayoutEditor
 		{
 			return;
 		}
-		int count = _state?.Order.Count ?? _specs.Count;
+		// R35 lin-int(L12←L5):与 BlockHostRules 同口径 —— 只数页面交给宿主的内置块(含默认隐藏),
+		// 不数文档里的自建 / 插件块(否则 1 个内置块 + 1 个导入组件的页会被当成可编辑,而 BlockHost.EnterEdit 拒绝)
+		int count = _specs.Count;
 		lock (_knownGate)
 		{
 			_knownCounts[_pageId] = count;
@@ -69,8 +71,8 @@ public sealed partial class LayoutEditor
 		{
 			return true;
 		}
-		int count = _state?.Order.Count ?? _specs.Count;
-		return count < 2;
+		// R35 lin-int(L12←L5):计数口径 = BlockHostRules.OffersLayoutMenu(内置块含默认隐藏 ≥ 2)
+		return !BlockHostRules.OffersLayoutMenu(_specs.Count);
 	}
 
 	// ————————————— 顶部编辑条(§1.A.3) —————————————
@@ -123,61 +125,74 @@ public sealed partial class LayoutEditor
 		{
 			SetLayoutKind(list: false);
 		});
-		Border seg = new Border
+		// R35 lin-int(L12←L0):分段轨道 = Layout.SegRail(B.EditSegRail、圆角 12、内距 3),项 = Layout.SegItem(ToggleButton)
+		Border seg = new Border { Child = U.H(2.0, _segList, _segGrid) };
+		if (!LayoutVisualTokens.ApplyTheme(seg, LayoutVisualTokens.ThemeKeys.SegRail))
 		{
-			CornerRadius = new CornerRadius(8.0),
-			Padding = new Thickness(3.0),
-			VerticalAlignment = VerticalAlignment.Center,
-			Child = U.H(2.0, _segList, _segGrid)
-		};
-		seg.Dyn(Border.BackgroundProperty, "B.SegRail");
-		_hintText = U.Txt(HintFor(_listKind), 12.0, bold: false, "B.InkMuted");
-		_hintText.TextTrimming = TextTrimming.CharacterEllipsis;
-		_hintText.VerticalAlignment = VerticalAlignment.Center;
+			seg.CornerRadius = new CornerRadius(8.0);
+			seg.Padding = new Thickness(3.0);
+			seg.VerticalAlignment = VerticalAlignment.Center;
+			seg.Dyn(Border.BackgroundProperty, "B.SegRail");
+		}
+		// 提示 = Layout.EditHint(12 B.InkMuted、省略号)
+		_hintText = LayoutEditChrome.ThemedText(HintFor(_listKind), LayoutVisualTokens.ThemeKeys.EditHint, 12.0, bold: false, "B.InkMuted");
+		if (_hintText.Theme == null)
+		{
+			_hintText.TextTrimming = TextTrimming.CharacterEllipsis;
+			_hintText.VerticalAlignment = VerticalAlignment.Center;
+		}
 		_hintText.Margin = new Thickness(4.0, 0.0, 4.0, 0.0);
 		ToolTip.SetTip(_hintText, FullHint());
 		_undoBtn = LayoutEditChrome.IconButton(LayoutEditChrome.UndoData, I18nCore.Tr("撤销 (Ctrl+Z)"), delegate
 		{
 			UndoEdit();
 		}, 15.0, "Geo.Undo");
+		// 撤销 / 重做图标走 L0 门面 Glyph(15,线宽 1.5,描边跟随按钮前景 → 置灰自动变色)
+		_undoBtn.Content = LayoutEditChrome.GlyphFor(_undoBtn, LayoutVisualTokens.GeoKeys.Undo, LayoutEditChrome.UndoData, LayoutVisualTokens.GlyphSizeUndoRedo);
 		_undoBtn.IsEnabled = false;
 		_redoBtn = LayoutEditChrome.IconButton(LayoutEditChrome.RedoData, I18nCore.Tr("重做 (Ctrl+Y)"), delegate
 		{
 			RedoEdit();
 		}, 15.0, "Geo.Redo");
+		_redoBtn.Content = LayoutEditChrome.GlyphFor(_redoBtn, LayoutVisualTokens.GeoKeys.Redo, LayoutEditChrome.RedoData, LayoutVisualTokens.GlyphSizeUndoRedo);
 		_redoBtn.IsEnabled = false;
-		Border sep = new Border
+		// 竖分隔线 = Layout.EditBarSep(1×18、B.EditOutline)
+		Border sep = new Border();
+		if (!LayoutVisualTokens.ApplyTheme(sep, LayoutVisualTokens.ThemeKeys.EditBarSep))
 		{
-			Width = 1.0,
-			Height = 18.0,
-			Margin = new Thickness(2.0, 0.0, 2.0, 0.0),
-			VerticalAlignment = VerticalAlignment.Center
-		};
-		sep.Dyn(Border.BackgroundProperty, "B.Line");
+			sep.Width = 1.0;
+			sep.Height = 18.0;
+			sep.Margin = new Thickness(2.0, 0.0, 2.0, 0.0);
+			sep.VerticalAlignment = VerticalAlignment.Center;
+			sep.Dyn(Border.BackgroundProperty, "B.Line");
+		}
 		_addBtn = U.Btn(I18nCore.Tr("添加"), BtnKind.Soft, delegate
 		{
 			ShowDrawer(!IsDrawerOpen);
 		}, "Add");
 		ToolTip.SetTip(_addBtn, I18nCore.Tr("添加组件,或者找回隐藏的内容"));
-		_addBadgeText = new TextBlock
+		// 「添加」角标 = Layout.Count + Layout.CountText(字号 12、圆角 8,效果图 .cnt)
+		_addBadgeText = new TextBlock();
+		if (!LayoutVisualTokens.ApplyTheme(_addBadgeText, LayoutVisualTokens.ThemeKeys.CountText))
 		{
-			FontSize = 11.0,
-			FontWeight = FontWeight.Bold,
-			HorizontalAlignment = HorizontalAlignment.Center,
-			VerticalAlignment = VerticalAlignment.Center
-		};
-		_addBadgeText.Dyn(TextBlock.ForegroundProperty, "B.OnAccent");
-		_addBadge = new Border
+			_addBadgeText.FontSize = 11.0;
+			_addBadgeText.FontWeight = FontWeight.Bold;
+			_addBadgeText.HorizontalAlignment = HorizontalAlignment.Center;
+			_addBadgeText.VerticalAlignment = VerticalAlignment.Center;
+			_addBadgeText.Dyn(TextBlock.ForegroundProperty, "B.OnAccent");
+		}
+		_addBadge = new Border { Child = _addBadgeText, IsVisible = false };
+		if (!LayoutVisualTokens.ApplyTheme(_addBadge, LayoutVisualTokens.ThemeKeys.Count))
 		{
-			CornerRadius = new CornerRadius(999.0),
-			MinWidth = 16.0,
-			Height = 16.0,
-			Padding = new Thickness(4.0, 0.0, 4.0, 0.0),
-			VerticalAlignment = VerticalAlignment.Center,
-			Child = _addBadgeText,
-			IsVisible = false
-		};
-		_addBadge.Dyn(Border.BackgroundProperty, "B.Accent");
+			_addBadge.CornerRadius = new CornerRadius(999.0);
+			_addBadge.MinWidth = 16.0;
+			_addBadge.Height = 16.0;
+			_addBadge.Padding = new Thickness(4.0, 0.0, 4.0, 0.0);
+			_addBadge.Dyn(Border.BackgroundProperty, "B.Accent");
+		}
+		// 角标跟在「添加」文字后面(按钮内容是横排 StackPanel),竖直居中 —— 主题的 Right/Top 是给叠放用的
+		_addBadge.HorizontalAlignment = HorizontalAlignment.Left;
+		_addBadge.VerticalAlignment = VerticalAlignment.Center;
 		if (_addBtn.Content is Panel addContent)
 		{
 			addContent.Children.Add(_addBadge);
@@ -212,6 +227,17 @@ public sealed partial class LayoutEditor
 
 	private static Button SegButton(string text, string iconData, EventHandler<RoutedEventArgs> click)
 	{
+		// R35 lin-int(L12←L0):Layout.SegItem 的目标类型是 ToggleButton(Avalonia 11 里 ToggleButton : Button,字段类型不变);
+		// 选中态改由 IsChecked 表达(RefreshEditBar),不再换 Btn.Normal / Btn.Ghost 两套主题。
+		ToggleButton toggle = new ToggleButton();
+		if (LayoutVisualTokens.ApplyTheme(toggle, LayoutVisualTokens.ThemeKeys.SegItem))
+		{
+			string geoKey = ReferenceEquals(iconData, LayoutEditChrome.ListModeData) ? LayoutVisualTokens.GeoKeys.ListMode : LayoutVisualTokens.GeoKeys.GridMode;
+			toggle.Content = U.H(6.0, LayoutEditChrome.GlyphFor(toggle, geoKey, iconData, LayoutVisualTokens.GlyphSizeSeg), new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
+			// 点击时 ToggleButton 会自己翻 IsChecked;真正的选中态由 SetLayoutKind → RefreshEditBar 回写
+			toggle.Click += click;
+			return toggle;
+		}
 		Button button = U.Btn(text, BtnKind.Ghost, click);
 		button.Content = U.H(6.0, LayoutEditChrome.BoundIcon(button, iconData, 13.0), U.Txt(text, 12.5));
 		button.Padding = new Thickness(10.0, 2.0, 10.0, 2.0);
@@ -228,8 +254,16 @@ public sealed partial class LayoutEditor
 		}
 		if (_segList != null && _segGrid != null)
 		{
-			_segList.Theme = U.Theme(_listKind ? "Btn.Normal" : "Btn.Ghost");
-			_segGrid.Theme = U.Theme(_listKind ? "Btn.Ghost" : "Btn.Normal");
+			if (_segList is ToggleButton listToggle && _segGrid is ToggleButton gridToggle)
+			{
+				listToggle.IsChecked = _listKind;
+				gridToggle.IsChecked = !_listKind;
+			}
+			else
+			{
+				_segList.Theme = U.Theme(_listKind ? "Btn.Normal" : "Btn.Ghost");
+				_segGrid.Theme = U.Theme(_listKind ? "Btn.Ghost" : "Btn.Normal");
+			}
 		}
 		if (_hintText != null)
 		{
@@ -449,11 +483,50 @@ public sealed partial class LayoutEditor
 	/// <summary>[R35] 「添加」抽屉是否开着(测试 / 宿主用)。</summary>
 	internal bool DrawerOpen => IsDrawerOpen;
 
+	/// <summary>
+	/// [R35 lin-int] 正式入口:选中某块(截图开关 <c>--select &lt;blockId&gt;</c> 经 SmokeRunner.SelectBlockHook 调用)。
+	/// 只在编辑态、且该块在本页时生效;返回是否选中成功。
+	/// </summary>
+	internal bool SelectBlock(string blockId)
+	{
+		if (!_edit || string.IsNullOrEmpty(blockId))
+		{
+			return false;
+		}
+		bool onPage = false;
+		foreach (string id in _state.Order)
+		{
+			if (string.Equals(id, blockId, StringComparison.Ordinal))
+			{
+				onPage = true;
+				break;
+			}
+		}
+		if (!onPage)
+		{
+			return false;
+		}
+		_session.Select(blockId, false);
+		UpdateSelectionVisual();
+		return true;
+	}
+
+	/// <summary>[R35 lin-int] 正式入口:打开「添加」抽屉(截图开关 <c>--pop layout-drawer</c> 经 SmokeRunner.OpenAddDrawerHook 调用)。</summary>
+	internal bool OpenAddDrawer()
+	{
+		ShowDrawer(true);
+		return IsDrawerOpen;
+	}
+
 	private Control BuildDrawer()
 	{
-		_drawerTitle = U.Txt(LayoutEditChrome.DrawerTitle(_pageId), 15.0, bold: true);
-		_drawerTitle.TextTrimming = TextTrimming.CharacterEllipsis;
-		_drawerTitle.VerticalAlignment = VerticalAlignment.Center;
+		// R35 lin-int:抽屉标题 = Layout.DrawerTitle(15 ExtraBold)
+		_drawerTitle = LayoutEditChrome.ThemedText(LayoutEditChrome.DrawerTitle(_pageId), LayoutVisualTokens.ThemeKeys.DrawerTitle, 15.0, bold: true);
+		if (_drawerTitle.Theme == null)
+		{
+			_drawerTitle.TextTrimming = TextTrimming.CharacterEllipsis;
+			_drawerTitle.VerticalAlignment = VerticalAlignment.Center;
+		}
 		Button close = U.IconBtn("Close", I18nCore.Tr("关闭 (Esc)"), delegate
 		{
 			ShowDrawer(false);
@@ -499,33 +572,41 @@ public sealed partial class LayoutEditor
 		};
 		_drawer = new Border
 		{
-			Width = LayoutAddDrawer.DrawerWidth,
-			HorizontalAlignment = HorizontalAlignment.Right,
-			VerticalAlignment = VerticalAlignment.Stretch,
-			CornerRadius = new CornerRadius(12.0, 0.0, 0.0, 12.0),
-			BorderThickness = new Thickness(1.0, 1.0, 0.0, 1.0),
 			Child = root,
 			IsVisible = false,
 			ZIndex = 100,
-			RenderTransform = _drawerSlide,
-			BoxShadow = new BoxShadows(new BoxShadow
+			RenderTransform = _drawerSlide
+		};
+		// [R35] 底色读 L0 的 B.EditBarBg(兜底 B.Paper);L0 的 Layout.Drawer ControlTheme 存在就套上。
+		// [R35 lin-int] 主题 = 宽 316、贴右、左 1px 细线、Fx.Drawer 阴影、无圆角(效果图 .drawer 贴边);
+		// 套上后不再写同名本地属性(会盖过主题)。套不上时沿用 C 的兜底外观。
+		if (!LayoutVisualTokens.ApplyTheme(_drawer, LayoutVisualTokens.ThemeKeys.Drawer))
+		{
+			_drawer.Width = LayoutAddDrawer.DrawerWidth;
+			_drawer.HorizontalAlignment = HorizontalAlignment.Right;
+			_drawer.VerticalAlignment = VerticalAlignment.Stretch;
+			_drawer.CornerRadius = new CornerRadius(12.0, 0.0, 0.0, 12.0);
+			_drawer.BorderThickness = new Thickness(1.0, 1.0, 0.0, 1.0);
+			_drawer.BoxShadow = new BoxShadows(new BoxShadow
 			{
 				Blur = 32.0,
 				OffsetX = -12.0,
 				Color = Color.FromArgb(36, 0, 0, 0)
-			})
-		};
-		// [R35] 底色读 L0 的 B.EditBarBg(兜底 B.Paper);L0 的 Layout.Drawer ControlTheme 存在就套上
-		_drawer.Dyn(Border.BackgroundProperty, LayoutEditChrome.KeyOr("B.EditBarBg", "B.Paper"));
-		_drawer.Dyn(Border.BorderBrushProperty, "B.Line");
-		LayoutEditChrome.TryApplyTheme(_drawer, "Layout.Drawer");
+			});
+			_drawer.Dyn(Border.BackgroundProperty, LayoutEditChrome.KeyOr("B.EditBarBg", "B.Paper"));
+			_drawer.Dyn(Border.BorderBrushProperty, "B.Line");
+		}
 		return _drawer;
 	}
 
 	private static TextBlock SectionLabel(string text)
 	{
-		TextBlock label = U.Txt(text, 12.0, bold: false, "B.InkMuted");
-		label.Margin = new Thickness(0.0, 10.0, 0.0, 0.0);
+		// R35 lin-int:分节小字 = Layout.DrawerSection(12 B.InkMuted、上 10 下 6)
+		TextBlock label = LayoutEditChrome.ThemedText(text, LayoutVisualTokens.ThemeKeys.DrawerSection, 12.0, bold: false, "B.InkMuted");
+		if (label.Theme == null)
+		{
+			label.Margin = new Thickness(0.0, 10.0, 0.0, 0.0);
+		}
 		return label;
 	}
 
@@ -616,18 +697,20 @@ public sealed partial class LayoutEditor
 	// [R35 lin-l12] §5.2「没有隐藏项时显示一个虚线空状态框」(效果图 .dempty:1px dashed、圆角 12、居中灰字)
 	private static Control EmptyBox(string text)
 	{
-		TextBlock label = U.Txt(text, 12.0, bold: false, "B.InkMuted");
+		TextBlock label = LayoutEditChrome.ThemedText(text, LayoutVisualTokens.ThemeKeys.DrawerSection, 12.0, bold: false, "B.InkMuted");
 		label.HorizontalAlignment = HorizontalAlignment.Center;
 		label.Margin = new Thickness(10.0);
-		Avalonia.Controls.Shapes.Rectangle dash = new Avalonia.Controls.Shapes.Rectangle
+		// R35 lin-int(L12←L0):虚线框 = Layout.DrawerEmpty(1px 4,3 虚线 B.EditOutline、圆角 12);套不上时沿用本地写法
+		Avalonia.Controls.Shapes.Rectangle dash = new Avalonia.Controls.Shapes.Rectangle();
+		if (!LayoutVisualTokens.ApplyTheme(dash, LayoutVisualTokens.ThemeKeys.DrawerEmpty))
 		{
-			RadiusX = 12.0,
-			RadiusY = 12.0,
-			StrokeThickness = 1.0,
-			StrokeDashArray = new Avalonia.Collections.AvaloniaList<double> { 4.0, 3.0 },
-			IsHitTestVisible = false
-		};
-		dash.Dyn(Avalonia.Controls.Shapes.Shape.StrokeProperty, LayoutEditChrome.KeyOr("B.EditOutline", "B.Line"));
+			dash.RadiusX = 12.0;
+			dash.RadiusY = 12.0;
+			dash.StrokeThickness = 1.0;
+			dash.StrokeDashArray = new Avalonia.Collections.AvaloniaList<double> { 4.0, 3.0 };
+			dash.IsHitTestVisible = false;
+			dash.Dyn(Avalonia.Controls.Shapes.Shape.StrokeProperty, LayoutEditChrome.KeyOr("B.EditOutline", "B.Line"));
+		}
 		Grid box = new Grid();
 		box.Children.Add(dash);
 		box.Children.Add(label);
@@ -663,14 +746,15 @@ public sealed partial class LayoutEditor
 	// 抽屉里的一行:整行是一个按钮(点哪儿都行),右边一个小药丸写「显示 / 添加」
 	private static Button DrawerRow(Control icon, string title, string desc, string action, bool enabled, EventHandler<RoutedEventArgs> click)
 	{
-		Border iconBox = new Border
+		// R35 lin-int(L12←L0):图标框 = Layout.DrawerIcon(40×40、圆角 8、B.EditBarBg);整行底板 = Layout.DrawerItem(内距 8、圆角 12、B.EditItemBg)
+		Border iconBox = new Border { Child = icon.Center() };
+		if (!LayoutVisualTokens.ApplyTheme(iconBox, LayoutVisualTokens.ThemeKeys.DrawerIcon))
 		{
-			Width = 40.0,
-			Height = 40.0,
-			CornerRadius = new CornerRadius(8.0),
-			Child = icon.Center()
-		};
-		iconBox.Dyn(Border.BackgroundProperty, "B.Paper");
+			iconBox.Width = 40.0;
+			iconBox.Height = 40.0;
+			iconBox.CornerRadius = new CornerRadius(8.0);
+			iconBox.Dyn(Border.BackgroundProperty, "B.Paper");
+		}
 		TextBlock titleText = U.Txt(title, 13.0, bold: true);
 		titleText.TextTrimming = TextTrimming.CharacterEllipsis;
 		TextBlock descText = U.Txt(desc, 12.0, bold: false, "B.InkMuted");
@@ -690,13 +774,18 @@ public sealed partial class LayoutEditor
 		grid.Add(texts, 0, 1);
 		grid.Add(pill, 0, 2);
 		texts.Margin = new Thickness(10.0, 0.0, 10.0, 0.0);
-		Border row = new Border
+		Border row = new Border { Child = grid };
+		if (LayoutVisualTokens.ApplyTheme(row, LayoutVisualTokens.ThemeKeys.DrawerItem))
 		{
-			CornerRadius = new CornerRadius(12.0),
-			Padding = new Thickness(8.0),
-			Child = grid
-		};
-		row.Dyn(Border.BackgroundProperty, "B.Paper2");
+			// 行间距由外层 StackPanel(Spacing 6)给,主题里的下边距 6 归零免得翻倍
+			row.Margin = new Thickness(0.0);
+		}
+		else
+		{
+			row.CornerRadius = new CornerRadius(12.0);
+			row.Padding = new Thickness(8.0);
+			row.Dyn(Border.BackgroundProperty, "B.Paper2");
+		}
 		Button button = new Button
 		{
 			Theme = U.Theme("Btn.Ghost"),

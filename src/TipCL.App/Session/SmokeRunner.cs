@@ -180,11 +180,13 @@ internal static class SmokeRunner
     // 选中 / 抽屉的正式入口归 lin-l12(LayoutEditor / 新建的 LayoutAddDrawer.cs):这里不直接引用它们可能改名的成员,
     // 先看下面两个钩子(合并时由主 agent 接到正式入口),没接就按名字反射找现有成员;都找不到只打印 NOTE,不让冒烟失败。
 
-    /// <summary>合并后接线:模拟选中某块(返回是否选中成功)。缺省 null = 走反射兜底。</summary>
-    internal static Func<TipCL.App.Pages.Layout.LayoutEditor, string, bool>? SelectBlockHook;
+    /// <summary>合并后接线:模拟选中某块(返回是否选中成功)。置 null = 走反射兜底。
+    /// [R35 lin-int] 已接到 lin-l12 的正式入口 <c>LayoutEditor.SelectBlock(string)</c>。</summary>
+    internal static Func<TipCL.App.Pages.Layout.LayoutEditor, string, bool>? SelectBlockHook = (editor, id) => editor.SelectBlock(id);
 
-    /// <summary>合并后接线:打开「添加」抽屉(返回是否打开成功)。缺省 null = 走反射兜底。</summary>
-    internal static Func<TipCL.App.Pages.Layout.LayoutEditor, bool>? OpenAddDrawerHook;
+    /// <summary>合并后接线:打开「添加」抽屉(返回是否打开成功)。置 null = 走反射兜底。
+    /// [R35 lin-int] 已接到 lin-l12 的正式入口 <c>LayoutEditor.OpenAddDrawer()</c>。</summary>
+    internal static Func<TipCL.App.Pages.Layout.LayoutEditor, bool>? OpenAddDrawerHook = editor => editor.OpenAddDrawer();
 
     /// <summary>反射兜底时依次尝试的「选中」方法名(参数 string)。</summary>
     internal static readonly string[] SelectMethodNames = { "SelectBlock", "SelectForShot", "Select" };
