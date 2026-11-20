@@ -13,6 +13,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using TipCL.App.Ui;
 using TipCL.Core.Launcher;
+using UiF = TipCL.App.Ui.Ui;
 
 namespace TipCL.App.Pages.Layout;
 
@@ -31,10 +32,72 @@ internal static class LayoutEditChrome
 
 	public const string LineData = "M2,8 H14";
 
-	/// <summary>按 16 单位视窗画一枚描边图标(颜色由调用方绑定 Stroke)。</summary>
-	public static Path MakePath(string data, double size)
+	// —————————— [R35 lin-l12] L0 的资源键(R35-BRIEF §3 第 1 条):查得到就用,查不到用兜底,绝不抛异常 ——————————
+
+	/// <summary>资源是否存在(L0 并行在加 B.Edit* / Geo.* / Layout.* 这些键,合并前多半查不到)。</summary>
+	public static bool HasResource(string key)
 	{
-		Geometry geometry = Geometry.Parse(data);
+		try
+		{
+			return UiF.Res(key) != null;
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+	}
+
+	/// <summary>挑一个存在的资源键:<paramref name="key"/> 在就用它,否则用 <paramref name="fallbackKey"/>。</summary>
+	public static string KeyOr(string key, string fallbackKey)
+	{
+		return HasResource(key) ? key : fallbackKey;
+	}
+
+	/// <summary>按当前主题解析一把画刷:键 → 兜底键 → 兜底颜色(给频繁切换的状态色用,不挂订阅)。</summary>
+	public static IBrush BrushOr(string key, string? fallbackKey, Color fallback)
+	{
+		try
+		{
+			if (UiF.Res(key) is IBrush brush)
+			{
+				return brush;
+			}
+			if (fallbackKey != null && UiF.Res(fallbackKey) is IBrush second)
+			{
+				return second;
+			}
+		}
+		catch (Exception)
+		{
+			// 资源字典正在换主题:落到兜底颜色
+		}
+		return new SolidColorBrush(fallback);
+	}
+
+	/// <summary>L0 的 ControlTheme(Layout.EditBar / Layout.EditLabel / Layout.Drawer / Layout.IconAct …)存在就套上。</summary>
+	public static bool TryApplyTheme(StyledElement target, string key)
+	{
+		try
+		{
+			if (UiF.Res(key) is Avalonia.Styling.ControlTheme theme && theme.TargetType != null && theme.TargetType.IsInstanceOfType(target))
+			{
+				target.Theme = theme;
+				return true;
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return false;
+	}
+
+	/// <summary>
+	/// 按 16 单位视窗画一枚描边图标(颜色由调用方绑定 Stroke)。
+	/// [R35] <paramref name="geoKey"/> = L0 的 Geo.* 几何资源键;查得到就用它的副本(资源本身不改),查不到用 <paramref name="data"/>。
+	/// </summary>
+	public static Path MakePath(string data, double size, string? geoKey = null)
+	{
+		Geometry geometry = ResolveGeometry(geoKey) ?? Geometry.Parse(data);
 		if (Math.Abs(size - 16.0) > 0.01)
 		{
 			geometry.Transform = new ScaleTransform(size / 16.0, size / 16.0);
@@ -51,10 +114,26 @@ internal static class LayoutEditChrome
 		};
 	}
 
-	/// <summary>一枚跟随主题色键的描边图标(不在按钮里用时)。</summary>
-	public static Path Icon(string data, string colorKey, double size)
+	private static Geometry? ResolveGeometry(string? geoKey)
 	{
-		Path path = MakePath(data, size);
+		if (string.IsNullOrEmpty(geoKey))
+		{
+			return null;
+		}
+		try
+		{
+			return (UiF.Res(geoKey!) as Geometry)?.Clone();
+		}
+		catch (Exception)
+		{
+			return null;
+		}
+	}
+
+	/// <summary>一枚跟随主题色键的描边图标(不在按钮里用时)。</summary>
+	public static Path Icon(string data, string colorKey, double size, string? geoKey = null)
+	{
+		Path path = MakePath(data, size, geoKey);
 		path.Dyn(Shape.StrokeProperty, colorKey);
 		return path;
 	}
@@ -63,17 +142,17 @@ internal static class LayoutEditChrome
 	/// 图标按钮:外形沿用 U.IconBtn(Btn.Icon 主题、ToolTip、无障碍名),内容换成本文件画的图标,
 	/// 描边跟随按钮前景色(hover / 禁用态自动变色,与 UiHelpers.IconBtn 同一写法)。
 	/// </summary>
-	public static Button IconButton(string data, string tip, EventHandler<RoutedEventArgs>? click, double size = 15.0)
+	public static Button IconButton(string data, string tip, EventHandler<RoutedEventArgs>? click, double size = 15.0, string? geoKey = null)
 	{
 		Button button = U.IconBtn("Info", tip, click, size);
-		button.Content = BoundIcon(button, data, size);
+		button.Content = BoundIcon(button, data, size, geoKey);
 		return button;
 	}
 
 	/// <summary>放进某个按钮里的图标:描边跟随该按钮的前景色。</summary>
-	public static Path BoundIcon(Button owner, string data, double size)
+	public static Path BoundIcon(Button owner, string data, double size, string? geoKey = null)
 	{
-		Path path = MakePath(data, size);
+		Path path = MakePath(data, size, geoKey);
 		path[!Shape.StrokeProperty] = owner.GetObservable(Button.ForegroundProperty).ToBinding();
 		return path;
 	}
@@ -105,7 +184,10 @@ internal static class LayoutEditChrome
 		return (name == null) ? I18nCore.Tr("添加到本页") : string.Format(I18nCore.Tr("添加到「{0}」页"), name);
 	}
 
-	/// <summary>浮在卡片左上 / 右上的白色小底板(块名、操作按钮共用的外观)。</summary>
+	/// <summary>
+	/// 浮在卡片左上 / 右上的白色小底板(块名、操作按钮共用的外观)。
+	/// [R35] 底色读 L0 的 B.EditBarBg(兜底 B.Paper);L0 的 Layout.EditLabel ControlTheme 存在时整套换成它。
+	/// </summary>
 	public static Border Chip(Control child, Thickness padding)
 	{
 		Border chip = new Border
@@ -121,8 +203,9 @@ internal static class LayoutEditChrome
 				Color = Color.FromArgb(30, 0, 0, 0)
 			})
 		};
-		chip.Dyn(Border.BackgroundProperty, "B.Paper");
+		chip.Dyn(Border.BackgroundProperty, KeyOr("B.EditBarBg", "B.Paper"));
 		chip.Dyn(Border.BorderBrushProperty, "B.Line");
+		TryApplyTheme(chip, "Layout.EditLabel");
 		return chip;
 	}
 }

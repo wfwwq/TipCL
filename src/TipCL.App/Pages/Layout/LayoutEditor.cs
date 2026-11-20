@@ -122,6 +122,9 @@ public sealed partial class LayoutEditor
 
 	private readonly GuideLayer _guide = new GuideLayer();
 
+	// [R35 lin-l12] §5.1 拖动时的淡色列底纹(画在画布之下,只在拖动 / 改宽度期间显示)
+	private readonly EditColumnShade _shade = new EditColumnShade();
+
 	private readonly Grid _stage = U.G();
 
 	// 两个可视宿主:stack 用 FillPanel 纵向流,grid/canvas 用画布 Panel;按模式切换,不并存
@@ -251,8 +254,10 @@ public sealed partial class LayoutEditor
 		_barHost.Padding = new Thickness(14.0, 0.0, 8.0, 0.0);
 		_barHost.MinHeight = 46.0;
 		_barHost.IsVisible = false;
-		_barHost.Dyn(Border.BackgroundProperty, "B.Paper");
+		// [R35] 底色读 L0 的 B.EditBarBg(兜底 B.Paper);L0 的 Layout.EditBar ControlTheme 存在就套上
+		_barHost.Dyn(Border.BackgroundProperty, LayoutEditChrome.KeyOr("B.EditBarBg", "B.Paper"));
 		_barHost.Dyn(Border.BorderBrushProperty, "B.Line");
+		LayoutEditChrome.TryApplyTheme(_barHost, "Layout.EditBar");
 		_barHost.BorderThickness = new Thickness(1.0);
 		_barHost.Child = BuildEditBar();
 		// [Avalonia] Windows 的 Motion.Shadow(_barHost, 16, 0.07, 3) 在 Linux 树没有等价门面(Common/Motion
@@ -290,6 +295,7 @@ public sealed partial class LayoutEditor
 		Grid.SetRowSpan(drawer, 2);
 		// grid/canvas 模式的可视宿主:自绘画布 Panel + 其上的对齐辅助线/框选覆盖层(同一格叠放)。
 		// 注意:stack(缺省)时这个宿主根本不进可视树 —— 默认渲染与改动前逐像素一致由这一点保证。
+		_stage.Children.Add(_shade);
 		_stage.Children.Add(_box);
 		_stage.Children.Add(_guide);
 		_boxScroll = new ScrollViewer
@@ -870,16 +876,9 @@ public sealed partial class LayoutEditor
 		RefreshEditBar();
 	}
 
-	// 「自动靠拢」开关:全局偏好(所有页面共用),即时生效;关掉后不再自动上浮 / 互换 / 磁性吸附
-	private void ToggleAutoPack()
-	{
-		LayoutEditPrefs.AutoPack = !LayoutEditPrefs.AutoPack;
-		RefreshToolbar();
-		LayoutFx.ShowToast(
-			I18nCore.Tr(LayoutEditPrefs.AutoPack ? I18nCore.Tr("自动靠拢已开启") : I18nCore.Tr("自动靠拢已关闭")),
-			I18nCore.Tr(LayoutEditPrefs.AutoPack ? I18nCore.Tr("区块松手后会自动靠拢相邻区块") : I18nCore.Tr("区块会停在你放下的位置")),
-			ToastKind.Success);
-	}
+	// [R35 lin-l12] GOAL §5.2:「自动靠拢」界面整体删除(C 曾挪进 ⋯ 菜单,本包去掉),编辑器固定按「开」处理;
+	// LayoutEditPrefs.AutoPack 本身仍可读写(归 L4),界面上不再提供修改入口。
+	private static readonly bool AutoPackOn = true;
 
 	// 区块外观参数(§4.B)落到卡上:style / 常态标题 / 每块边距;缺省(plain + false + null)= 现状零装饰
 	private void ApplyLook(LayoutCard card)
@@ -995,29 +994,26 @@ public sealed partial class LayoutEditor
 		return card;
 	}
 
-	// 页面 spec 优先;布局文档里的 custom: / plugin: 块可能没有对应 spec(§4.F),用 id 兜一个标题
+	// 页面 spec 优先;布局文档里的 custom: / plugin: 块可能没有对应 spec(§4.F),兜一个标题。
+	// [R35 lin-l12] GOAL §5.1「永远不显示 id」:兜底标题走 LayoutBlockTitles.Resolve —— 自建块取 widgets[] 的 title →
+	// 类型名;插件块取插件给的标题(界面贡献 label)→「插件区块」;其它 →「区块」。原来的 Title = id /「plugin · inner」不再出现。
 	private BlockSpec SpecOf(string id)
 	{
 		if (_byId.TryGetValue(id, out BlockSpec? spec))
 		{
 			return spec;
 		}
-		BlockSpec synthetic = new BlockSpec
+		return new BlockSpec
 		{
 			Id = id,
-			Title = id
+			Title = SyntheticTitle(id)
 		};
-		string? widget = LayoutEngine.WidgetIdOf(id);
-		if (widget != null)
-		{
-			// [v3] §1.A.2:自建组件显示组件自己的标题(如「联机便签」),不再露出 w_note1 这种内部 id
-			synthetic.Title = WidgetTitle(id);
-		}
-		else if (LayoutEngine.TryParsePluginId(id, out string plugin, out string inner))
-		{
-			synthetic.Title = plugin + " · " + inner;
-		}
-		return synthetic;
+	}
+
+	/// <summary>[R35] 没有页面 spec 的块的显示标题(纯规则见 LayoutBlockTitles.Resolve)。</summary>
+	internal static string SyntheticTitle(string id)
+	{
+		return LayoutBlockTitles.Resolve(id, null, WidgetRegistry.FindWidget, PluginBlocks.TitleOf);
 	}
 
 	// 内容解析:内置块保持旧行为(没给内容就是没内容);custom:/plugin: 查注册表,查不到给「不可用」占位
@@ -1088,6 +1084,8 @@ public sealed partial class LayoutEditor
 		Render();
 		Persist();
 		// 抽屉开着就跟着刷新(Render 已刷过一遍;这里再补一句提示)
+		// [R35 lin-l12] §5.2:抽屉里点「显示」之后滚到这块并闪一下主题色光晕(效果图 flash(id))
+		FlashBlock(spec.Id);
 		LayoutFx.ShowToast(string.Format(I18nCore.Tr("已恢复「{0}」"), spec.Title), "", ToastKind.Success);
 	}
 
@@ -1909,6 +1907,7 @@ public sealed partial class LayoutEditor
 					_box.SetFloating(kv.Key, kv.Value);
 				}
 				_box.ShowPlaceholder = true;
+				ShowColumnShade(true);
 			}
 			if (_gesture == "move")
 			{
@@ -1964,6 +1963,7 @@ public sealed partial class LayoutEditor
 		Dictionary<string, LayoutRect> floats = new Dictionary<string, LayoutRect>(_box.Floating, StringComparer.Ordinal);
 		_box.HoldHeights(false);
 		_box.ShowPlaceholder = false;
+		ShowColumnShade(false);
 		// [v3] 网格底纹只在拖动中画:松手立刻擦掉
 		_box.InvalidateVisual();
 		_box.ClearFloating();
@@ -2088,7 +2088,7 @@ public sealed partial class LayoutEditor
 		{
 			LayoutGuideResult guides = LayoutGuides.Align(rect.Value, OtherRects(primary, true), LayoutGuides.Threshold);
 			// [2026-11-19 修复 #3] 「自动靠拢」关:只画对齐辅助线,不做磁性吸附(不再"自动靠到旁边的块上")
-			bool magnet = LayoutEditPrefs.AutoPack && _gesture == "move" && guides.HasSnap;
+			bool magnet = AutoPackOn && _gesture == "move" && guides.HasSnap;
 			// [任务 B] 磁性吸附"吸住 / 松开 / 换吸附位"的那一帧:用短动画过渡这一下跳变,而不是瞬移
 			bool snapping = magnet;
 			if (LayoutMotion.SnapChanged(_snapHad, _snapDx, _snapDy, snapping, guides.Dx, guides.Dy))
@@ -2141,6 +2141,7 @@ public sealed partial class LayoutEditor
 				_box.SetFloating(kv.Key, kv.Value);
 			}
 			_box.ShowPlaceholder = true;
+			ShowColumnShade(true);
 			_box.InvalidateVisual();
 		}
 		Dictionary<string, int>? swap = null;
@@ -2153,7 +2154,8 @@ public sealed partial class LayoutEditor
 			bool autoRows = _state.Page.RowH <= 0.0;
 			int dr = (autoRows ? 0 : (int)Math.Round(dy / Math.Max(1.0, _state.Page.RowH + _box.Gap)));
 			int dc = (int)Math.Round(dx / columnStep);
-			int minCols = Math.Min(cols, MinCols(cols));
+			// [R35 lin-l12] §5.1:拖右边缘按整列变化,并受该块自己的 MinCols 限制(之前只看全局 2 列下限)
+			int minCols = Math.Min(cols, Math.Max(MinCols(cols), MinColsOf(primary, cols)));
 			// [任务 B] 卡片按**像素**跟手改大小(只重排这一张);占位框 = 吸附后的槽位尺寸
 			double minW = _box.ColumnWidthValue * minCols + _box.Gap * Math.Max(0, minCols - 1);
 			double full = _box.ColumnWidthValue * cols + _box.Gap * Math.Max(0, cols - 1);
@@ -2275,7 +2277,7 @@ public sealed partial class LayoutEditor
 					_guide.Clear();
 					_gestureTarget = target;
 					_box.ArmFlip();
-					_box.CompactCells(new HashSet<string>(_gestureCells.Keys, StringComparer.Ordinal), null, LayoutEditPrefs.AutoPack);
+					_box.CompactCells(new HashSet<string>(_gestureCells.Keys, StringComparer.Ordinal), null, AutoPackOn);
 					return;
 				}
 			}
@@ -2304,7 +2306,7 @@ public sealed partial class LayoutEditor
 		_gestureTarget = target;
 		// 钉住被拖 / 缩放中的块,其余块实时让位(重力上浮 + 左右互换);让位的块走 FLIP 滑过去
 		_box.ArmFlip();
-		_box.CompactCells(new HashSet<string>(_gestureCells.Keys, StringComparer.Ordinal), swap, LayoutEditPrefs.AutoPack);
+		_box.CompactCells(new HashSet<string>(_gestureCells.Keys, StringComparer.Ordinal), swap, AutoPackOn);
 	}
 
 	/// <summary>
@@ -2863,6 +2865,12 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 	// [v3] §1.A.4:网格模式右边缘的改宽度把手(效果图 .rz);整条右边热区仍是 _strips["e"]
 	private readonly Border _pill;
 
+	// [R35 lin-l12] Q3:网格模式下边缘的改高度把手(与右边缘把手同款,横放;悬停 / 选中时出现;双击 = 恢复跟随内容高度)
+	private readonly Border _pillS;
+
+	// [R35 lin-l12] §5.2 新块 / 找回的块闪一下主题色光晕(效果图 .blk.flash:0 0 0 4px glow → 0,0.9s)
+	private DispatcherTimer? _flashTimer;
+
 	private bool _hover;
 
 	// [v3] 列表排法下宽度固定(不给右边缘把手)
@@ -2955,6 +2963,11 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 		// [layout-fix] 规格2-问题7 / 规格 §3-问题14(Linux 补修):原先这里仍是 "Sort"(⇅ 排序箭头),
 		// 让人以为要点它;换成拖动手柄 "Grip"(两道横杠,对应 Windows 的 \ue76f)。
 		Control dragIcon = IconLib.Make("Grip", "B.InkMuted", 12);
+		if (LayoutEditChrome.HasResource("Geo.Grip"))
+		{
+			// [R35] L0 的六点拖拽图标(Geo.Grip)存在就用它,否则沿用 IconLib 的 Grip
+			dragIcon = LayoutEditChrome.Icon(LayoutEditChrome.LineData, "B.InkMuted", 12.0, "Geo.Grip");
+		}
 		ToolTip.SetTip(dragIcon, I18nCore.Tr("按住区块拖动移动"));
 		dragIcon.IsHitTestVisible = false;
 		dragIcon.VerticalAlignment = VerticalAlignment.Center;
@@ -2968,7 +2981,8 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 			: LayoutEditChrome.IconButton(LayoutEditChrome.EyeOffData, I18nCore.Tr("隐藏"), delegate
 			{
 				_host.HideBlock(Spec);
-			}, 13.0));
+			}, 13.0, "Geo.EyeOff"));
+		LayoutEditChrome.TryApplyTheme(button, "Layout.IconAct");
 		TextBlock textBlock = U.Txt(spec.Title, 12.0, bold: true);
 		textBlock.VerticalAlignment = VerticalAlignment.Center;
 		textBlock.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -2980,9 +2994,10 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 			_host.OnCardFoldChanged();
 		}, 11.0);
 		StackPanel labelRow = U.H(6.0, dragIcon, textBlock);
-		if (_custom)
+		string suffix = LayoutBlockTitles.LabelSuffix(spec.Id);
+		if (suffix.Length != 0)
 		{
-			TextBlock kind = U.Txt(I18nCore.Tr("· 组件"), 12.0, bold: false, "B.InkMuted");
+			TextBlock kind = U.Txt(suffix, 12.0, bold: false, "B.InkMuted");
 			kind.VerticalAlignment = VerticalAlignment.Center;
 			labelRow.Children.Add(kind);
 		}
@@ -3100,6 +3115,50 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 		}, RoutingStrategies.Tunnel);
 		grid.Children.Add(_pill);
 		Grid.SetRowSpan(_pill, 3);
+		// [R35 lin-l12] Q3:下边缘把手(横放的同款小白条),按下 = 拖下边缘改高度;双击 = 恢复跟随内容高度
+		Border gripS = new Border
+		{
+			Height = 2.0,
+			CornerRadius = new CornerRadius(1.0),
+			Margin = new Thickness(10.0, 0.0, 10.0, 0.0),
+			VerticalAlignment = VerticalAlignment.Center,
+			IsHitTestVisible = false
+		};
+		gripS.Dyn(Border.BackgroundProperty, "B.InkMuted");
+		_pillS = new Border
+		{
+			Width = 36.0,
+			Height = 10.0,
+			CornerRadius = new CornerRadius(8.0),
+			BorderThickness = new Thickness(1.0),
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Bottom,
+			Margin = new Thickness(0.0, 0.0, 0.0, -9.0),
+			Cursor = new Cursor(StandardCursorType.SizeNorthSouth),
+			Child = gripS,
+			IsVisible = false,
+			BoxShadow = new BoxShadows(new BoxShadow
+			{
+				Blur = 4.0,
+				OffsetY = 1.0,
+				Color = Color.FromArgb(50, 0, 0, 0)
+			})
+		};
+		_pillS.Dyn(Border.BackgroundProperty, "B.Paper");
+		_pillS.Dyn(Border.BorderBrushProperty, "B.Line");
+		// 不加新的提示文案(新词条要合并时统一入词表;光标已是上下箭头)。双击行为与下边缘热区一致。
+		_pillS.AddHandler(InputElement.PointerPressedEvent, delegate(object? s, PointerPressedEventArgs e)
+		{
+			if (e.ClickCount >= 2)
+			{
+				_host.ClearFixedHeight(this);
+				e.Handled = true;
+				return;
+			}
+			_host.BeginBoxResize(this, "s", e);
+		}, RoutingStrategies.Tunnel);
+		grid.Children.Add(_pillS);
+		Grid.SetRowSpan(_pillS, 3);
 		// 块名 / 操作按钮叠在最上层,跨三行(不参与 Auto 行的高度计算 → 出现 / 消失时内容不跳)
 		grid.Children.Add(_bar);
 		Grid.SetRowSpan(_bar, 3);
@@ -3197,7 +3256,10 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 	{
 		bool raised = IsRaised;
 		_bar.IsVisible = raised;
-		_pill.IsVisible = raised && !_widthLocked && !_folded && string.Equals(_boxMode, LayoutSchema.ModeGrid, StringComparison.Ordinal);
+		bool grid = string.Equals(_boxMode, LayoutSchema.ModeGrid, StringComparison.Ordinal);
+		_pill.IsVisible = raised && !_widthLocked && !_folded && grid;
+		// [R35] Q3:网格的右边缘 + 下边缘两个把手都只在悬停或选中时出现(右下角那个已去掉)
+		_pillS.IsVisible = raised && !_folded && grid;
 		if (ZIndex < 1000)
 		{
 			ZIndex = (raised ? 10 : 0);
@@ -3445,20 +3507,73 @@ internal sealed class LayoutCard : Border, ILayoutCanvasChild
 			Background = Brushes.Transparent;
 		}
 		_outline.IsVisible = true;
+		// [R35 lin-l12] §5.1:常态 1.5px 灰色虚线(B.EditOutline)、悬停加深(B.EditOutlineHover)、选中 2px 主题色实线;
+		// 启动页这类深色背景(pageId == "launch")用白色半透明(B.EditOutlineOnDark;悬停 .7、选中纯白,pages3 .win.edit.dark)。
+		// 画刷直接按当前主题解析后赋值(不挂资源订阅:悬停时这里会被反复调用),主题切换走 RefreshTint → ApplyLook 重算。
+		bool dark = _host.IsDarkSurface;
 		if (_selected)
 		{
 			_outline.StrokeDashArray = null;
 			_outline.StrokeThickness = 2.0;
-			_outline.Dyn(Avalonia.Controls.Shapes.Shape.StrokeProperty, "B.Accent");
+			_outline.Stroke = dark ? new SolidColorBrush(Colors.White) : LayoutEditChrome.BrushOr("B.Accent", null, LayoutVisualTokens.AccentColor());
 		}
 		else
 		{
 			_outline.StrokeDashArray = new Avalonia.Collections.AvaloniaList<double> { 3.0, 2.0 };
 			_outline.StrokeThickness = 1.5;
-			_outline.Dyn(Avalonia.Controls.Shapes.Shape.StrokeProperty, _hover ? "B.InkMuted" : "B.InkFaint");
+			_outline.Stroke = OutlineBrush(dark, _hover);
 		}
 		UpdateChrome();
 	}
+
+	/// <summary>[R35] 未选中时的虚线颜色(L0 键 → 旧键 → 效果图数值)。</summary>
+	internal static IBrush OutlineBrush(bool dark, bool hover)
+	{
+		if (dark)
+		{
+			return hover
+				? new SolidColorBrush(Color.FromArgb(179, 255, 255, 255))
+				: LayoutEditChrome.BrushOr("B.EditOutlineOnDark", null, Color.FromArgb(89, 255, 255, 255));
+		}
+		return hover
+			? LayoutEditChrome.BrushOr("B.EditOutlineHover", "B.InkMuted", Color.FromArgb(87, 0, 0, 0))
+			: LayoutEditChrome.BrushOr("B.EditOutline", "B.InkFaint", Color.FromArgb(41, 0, 0, 0));
+	}
+
+	/// <summary>[R35 lin-l12] 闪一下主题色光晕(0 0 0 4px glow → 透明,0.9s 缓出;效果图 .blk.flash)。</summary>
+	public void Flash()
+	{
+		_flashTimer?.Stop();
+		Color accent = LayoutVisualTokens.AccentColor();
+		DateTime start = DateTime.UtcNow;
+		const double durationMs = 900.0;
+		void Paint(double t)
+		{
+			double k = 1.0 - Math.Min(1.0, Math.Max(0.0, t));
+			k = k * k;
+			byte alpha = (byte)Math.Round(71.0 * k);
+			BoxShadow = (alpha == 0) ? default(BoxShadows) : new BoxShadows(new BoxShadow
+			{
+				Spread = 4.0 * k,
+				Color = Color.FromArgb(alpha, accent.R, accent.G, accent.B)
+			});
+		}
+		Paint(0.0);
+		_flashTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(30.0), DispatcherPriority.Render, delegate
+		{
+			double t = (DateTime.UtcNow - start).TotalMilliseconds / durationMs;
+			Paint(t);
+			if (t >= 1.0)
+			{
+				_flashTimer?.Stop();
+				_flashTimer = null;
+			}
+		});
+		_flashTimer.Start();
+	}
+
+	/// <summary>[R35] 光晕动画是否还在播(测试用)。</summary>
+	internal bool IsFlashing => _flashTimer != null;
 
 	private Thickness BlockPad()
 	{

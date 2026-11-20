@@ -172,3 +172,81 @@ public sealed class GuideLayer : Control
 		return value;
 	}
 }
+
+/// <summary>
+/// [R35 lin-l12] GOAL §5.1「拖动时显示淡色列底纹」(效果图 #winA.edit.grid.busy .cols:每列一条 8px 圆角、
+/// rgba(0,0,0,.035) 的淡色竖条)。画在画布**之下**(LayoutEditor 把它放在 _stage 的第 0 层),只在拖动 / 改宽度期间显示。
+/// 颜色读 L0 的 B.EditColShade;查不到用效果图的数值。启动页这类深色表面用白色 6%(pages3 .dark .colsbg i)。
+/// 列宽 / 间距 / 列数由宿主在手势开始时从画布读来塞进来(画布 GridCanvasPanel 归 L3,这里不碰它)。
+/// </summary>
+public sealed class EditColumnShade : Control
+{
+	private int _cols;
+
+	private double _columnWidth;
+
+	private double _gap;
+
+	private bool _dark;
+
+	/// <summary>构造:不吃指针事件,默认不显示。</summary>
+	public EditColumnShade()
+	{
+		IsHitTestVisible = false;
+		IsVisible = false;
+		UseLayoutRounding = true;
+	}
+
+	/// <summary>当前列数(测试用)。</summary>
+	public int Columns => _cols;
+
+	/// <summary>显示:按画布当前的列数 / 列宽 / 间距画淡色列。</summary>
+	public void Show(int cols, double columnWidth, double gap, bool dark)
+	{
+		_cols = Math.Max(0, cols);
+		_columnWidth = Math.Max(0.0, columnWidth);
+		_gap = Math.Max(0.0, gap);
+		_dark = dark;
+		IsVisible = _cols > 0 && _columnWidth > 0.5;
+		InvalidateVisual();
+	}
+
+	/// <summary>收起。</summary>
+	public void Hide()
+	{
+		if (IsVisible)
+		{
+			IsVisible = false;
+		}
+	}
+
+	/// <summary>当前用的列底纹画刷(L0 键 → 兜底)。</summary>
+	internal IBrush ShadeBrush()
+	{
+		if (_dark)
+		{
+			return LayoutEditChrome.BrushOr("B.EditColShadeOnDark", null, Color.FromArgb(15, 255, 255, 255));
+		}
+		return LayoutEditChrome.BrushOr("B.EditColShade", null, Color.FromArgb(9, 0, 0, 0));
+	}
+
+	public override void Render(DrawingContext context)
+	{
+		base.Render(context);
+		if (_cols <= 0 || _columnWidth <= 0.5)
+		{
+			return;
+		}
+		double height = Math.Max(0.0, Bounds.Height);
+		if (height <= 1.0)
+		{
+			return;
+		}
+		IBrush brush = ShadeBrush();
+		for (int i = 0; i < _cols; i++)
+		{
+			double x = i * (_columnWidth + _gap);
+			context.DrawRectangle(brush, null, new RoundedRect(new Rect(x, 0.0, _columnWidth, height), 8.0));
+		}
+	}
+}
