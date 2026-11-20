@@ -56,7 +56,7 @@ public class LayoutEditorTests
 		return page;
 	}
 
-	private static PageLayoutV2 CanvasPage(params string[] ids)
+	internal static PageLayoutV2 CanvasPage(params string[] ids)
 	{
 		PageLayoutV2 page = Page(ids);
 		page.Mode = LayoutSchema.ModeCanvas;
@@ -1168,7 +1168,7 @@ public class LayoutEditorUiTests
 		TestApp.Run(() =>
 		{
 			const string Id = "led:v3canvas";
-			PageLayoutV2 saved = CanvasPage("a", "b");
+			PageLayoutV2 saved = LayoutEditorTests.CanvasPage("a", "b");
 			saved.Blocks[1].X = 0.5;
 			LayoutV2 doc = LayoutStoreV2.Load();
 			LayoutEngine.ApplyPage(doc, Id, saved);
