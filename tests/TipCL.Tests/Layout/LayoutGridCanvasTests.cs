@@ -35,6 +35,14 @@ using Xunit;
 /// </summary>
 public class LayoutGridCanvasTests
 {
+	/// <summary>
+	/// R35 lin-l3(GOAL-layout-v3 §5.3 / D-81 Q1):canvas 自由画布退出界面,GridCanvasPanel 收到 mode=canvas 时
+	/// 按网格推导(LayoutEngine.CanvasGridView),不再按归一化矩形 / z 序 / 画布参考高 / 吸附方格底纹排布。
+	/// 下面钉这些 canvas 排布行为的用例改为 Skip;推导本身的用例在 LayoutCanvasMigrationTests。
+	/// canvas 排布代码因编辑器仍引用而暂留(R35-BRIEF §3 第 5 条),合并后连同代码一起删。
+	/// </summary>
+	private const string SkipRetiredCanvasUi = "R35 lin-l3(D-81 Q1):canvas 自由画布已退出界面,GridCanvasPanel 收到 canvas 页时按网格推导;本用例钉的是退役的 canvas 排布 / 底纹行为,代码暂留待合并后删除";
+
 	// ————— 测试替身与夹具 —————
 
 	/// <summary>块卡片替身:实现 <see cref="ILayoutCanvasChild"/>(块 id + 折叠态),测量结果固定。</summary>
@@ -443,19 +451,23 @@ public class LayoutGridCanvasTests
 			Assert.Equal(0, panel.Cells[1].Y);   // 上浮回第 0 行
 			Assert.Equal(0.0, b.Bounds.Y, 9);
 
-			// canvas 模式不参与压实(源:IsCanvas 直接返回)
+			// R35 lin-l3:canvas 页不再以 canvas 排布 —— 推导成网格(先 y 后 x),于是同样参与网格压实;
+			// 推导只作用在副本上,入参页原样不动
 			PageLayoutV2 canvasPage = Canvas("x");
 			canvasPage.Blocks[0].Y = 0.5;
 			GridCanvasPanel canvasPanel = new GridCanvasPanel();
 			canvasPanel.SetLayout(LayoutSchema.ModeCanvas, 12, 0.0, 10.0, canvasPage);
+			Assert.False(canvasPanel.IsCanvas);
+			Assert.True(canvasPanel.DerivedFromCanvas);
 			canvasPanel.CompactCells(new HashSet<string>(StringComparer.Ordinal), null);
-			Assert.Equal(0.5, canvasPanel.Cells[0].NY, 9);
+			Assert.Equal(0, canvasPanel.Cells[0].Y);
+			Assert.Equal(0.5, canvasPage.Blocks[0].Y, 9);
 		});
 	}
 
 	// ————— canvas:归一化矩形 / z 序 / 画布高 —————
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void CanvasModeMapsNormalizedRectsAndUsesHostHeight()
 	{
 		Ui(delegate
@@ -482,7 +494,7 @@ public class LayoutGridCanvasTests
 		});
 	}
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void CanvasModeWithInfiniteHeightFallsBackToReferenceHeight()
 	{
 		Ui(delegate
@@ -509,7 +521,7 @@ public class LayoutGridCanvasTests
 		});
 	}
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void CanvasModeDeliversChildrenInZOrderAndMatchesById()
 	{
 		Ui(delegate
@@ -574,7 +586,7 @@ public class LayoutGridCanvasTests
 		});
 	}
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void CanvasHatchFollowsSnapStepAndSkipsWhenStepIsZero()
 	{
 		Ui(delegate
