@@ -29,7 +29,7 @@ using TipCL.Core.Launcher;
 namespace TipCL.App.Pages.Ai;
 
 /// <summary>AI 助手页(对话 + 工具调用)。</summary>
-public sealed class AiPage : PageBase
+public sealed partial class AiPage : PageBase
 {
     private static readonly string[] Suggestions =
     {
@@ -87,6 +87,7 @@ public sealed class AiPage : PageBase
             PlanChanged = plan => Dispatcher.UIThread.Post(() => ShowPlan(plan)),
             TaskStarted = (taskId, label, tool) => Dispatcher.UIThread.Post(() => AddTaskCard(taskId, label, tool, null)),
             Log = line => Dispatcher.UIThread.Post(() => _status.Text = AiUiText.Trim(line, 48)),
+            ConversationProvider = SnapshotHistory, // AI-new-features:导出诊断报告要带上对话摘要
         };
 
         var permBtn = U.Btn(I18nCore.Tr("权限"), BtnKind.Chip, (_, _) => OpenPermissionPanel(), "Shield");
@@ -100,7 +101,7 @@ public sealed class AiPage : PageBase
         ToolTip.SetTip(_usageLabel, "上下文占用:按本会话每轮平均输入估算");
         _ringHost.Child = AiIcons.Ring(0);
         var head = UiClass.Section(I18nCore.Tr("AI 助手"), "问启动、模组、崩溃都行;输入 / 看命令",
-            UiClass.H(8, _model.VCenter(), _permLabel.VCenter(), _ringHost, _usageLabel.VCenter(), memoryBtn, permBtn, settings, clear));
+            UiClass.H(8, _model.VCenter(), _permLabel.VCenter(), _ringHost, _usageLabel.VCenter(), memoryBtn, permBtn, ExportReportButton(), settings, clear));
         _scroll = new ScrollViewer
         {
             Content = _messages,
@@ -188,6 +189,7 @@ public sealed class AiPage : PageBase
         // 回到 AI 页时把存档里的对话读回来(换页/重启后对话还在),并把占用环刷新一下
         LoadChatHistory();
         RefreshUsage(Usage.Get(_chatId.Length > 0 ? _chatId : "active"), _history);
+        ConsumePendingPrompt(); // AI-new-features:启动页「交给 AI 一键修复」带过来的预检上下文
     }
 
     /// <summary>端点探测:解析失败 = 还没配置好,页面显示引导而不是点了没反应。</summary>
@@ -951,7 +953,7 @@ public sealed class AiPage : PageBase
             _dock.Children.Clear();
             ConfirmCard? card = null;
             card = new ConfirmCard(call.name, label, reason, Preview.Flatten(preview),
-                ConfirmCard.AllowAlways(call.name),
+                ConfirmCard.AllowAlways(call.name) && ToolRunner.AllowsAlways(call.name),
                 (ok, always, _) =>
                 {
                     _pendingConfirm = null;

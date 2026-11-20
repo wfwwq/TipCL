@@ -14,6 +14,23 @@ namespace TipCL.Core.Launcher.Ai;
 /// <summary>启动前预检(只读)。</summary>
 public static class AiPreflight
 {
+    /// <summary>设置开关「启动前 AI 预检」的配置键(缺省 = 开)。</summary>
+    public const string ENABLED_KEY = "ai_preflight_enabled";
+
+    /// <summary>启动页点启动时要不要先跑一遍预检(默认开;用户在「设置 → AI 助手」里关)。</summary>
+    public static bool IsEnabled()
+    {
+        object? raw = Config.CONFIG.Get(ENABLED_KEY);
+        return raw == null || Py.Truthy(raw);
+    }
+
+    /// <summary>写开关并落盘。</summary>
+    public static void SetEnabled(bool on)
+    {
+        Config.CONFIG.Set(ENABLED_KEY, on);
+        Config.CONFIG.Save();
+    }
+
     /// <summary>测试注入点:已装 Java 列表(每项 {major, exe});为空时读 Java.CachedAllJavas(不扫盘)。</summary>
     internal static Func<List<object>>? JavaListHook;
 

@@ -1019,6 +1019,9 @@ public sealed partial class LaunchPage : PageBase
             return;
         if ((_user.SelectedItem as string) != account)
             FillCombo(_user, await AccountGate.ListAsync(), account);
+        // AI-new-features:启动前 AI 预检(设置开关默认开;发现 error 时这次不启动,提示条给「交给 AI 一键修复」)
+        if (!await AiPreflightGateAsync(instance, version, (long)_mem.Value))
+            return;
         _prog.Value = 0;
         _prog.IsVisible = true;
         _progGen++;

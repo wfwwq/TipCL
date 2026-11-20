@@ -3059,5 +3059,20 @@
  "添加离线账号先玩起来；微软 / 皮肤站登录在「账号」页": "Add an offline account to get started; Microsoft / skin-site sign-in is on the Account page",
  "读不到时长统计(playtime.json 可能损坏)，暂无数据": "Couldn't read playtime stats (playtime.json may be damaged)",
  "服务器列表读不出来(servers.dat 可能损坏或还没生成)，当前为空态展示": "Couldn't read the server list (servers.dat may be damaged or not created yet)",
- "部分没能清理": "Some items couldn't be cleaned"
+ "部分没能清理": "Some items couldn't be cleaned",
+ "导出诊断报告": "Export diagnostic report",
+ "把这次排查的对话摘要、日志关键片段、模组清单和硬件摘要导出成 zip(账号令牌与用户名会打码)": "Export this troubleshooting session (chat summary, key log excerpts, mod list, hardware summary) as a zip; account tokens and user names are masked",
+ "选择诊断报告的保存位置": "Choose where to save the diagnostic report",
+ "诊断报告已导出": "Diagnostic report exported",
+ "预检结果已放进输入框": "Pre-launch check results are in the input box",
+ "配置好 AI 接入后点发送即可": "Set up AI access, then press Send",
+ "启动前 AI 预检:发现会导致启动失败的问题,这次先不启动": "AI pre-launch check: found problems that would make the launch fail, so the game was not started",
+ "启动前 AI 预检:有几条提醒,游戏照常启动": "AI pre-launch check: a few warnings, launching anyway",
+ "还有 {n} 条,交给 AI 一起看": "{n} more; hand them to AI to review together",
+ "交给 AI 一键修复": "Let AI fix it",
+ "仍然启动": "Launch anyway",
+ "预检结果已交给 AI": "Check results handed to AI",
+ "打开「AI 助手」页即可继续": "Open the AI Assistant page to continue",
+ "启动前 AI 预检": "AI pre-launch check",
+ "点「启动游戏」时先检查 Java、前置模组、加载器、内存与磁盘;发现问题会显示提示条,可一键交给 AI 修复": "When you press Launch, first check Java, required mods, loader, memory and disk; problems show a banner you can hand to AI to fix"
 }
