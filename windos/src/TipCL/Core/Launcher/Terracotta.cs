@@ -1132,6 +1132,32 @@ public static class Terracotta
 		}
 	}
 
+	// 联机内核进程自己退出时的收尾(见 Start 里的 Exited 订阅):
+	// 只清"当前进程"的账 —— Stop() 会先把 _proc 置空再 Kill,那种情况这里直接跳过,不会误删新实例的状态。
+	private static void OnKernelExited(Process p)
+	{
+		lock (_lock)
+		{
+			if (!ReferenceEquals(_proc, p))
+			{
+				return;
+			}
+			_proc = null;
+			_port = 0L;
+			try
+			{
+				string path = Utils.AbsPath(_runtime_file());
+				if (File.Exists(path))
+				{
+					File.Delete(path);
+				}
+			}
+			catch (Exception)
+			{
+			}
+		}
+	}
+
 	private static bool Exited(Process p, out int code)
 	{
 		code = 0;
@@ -1201,6 +1227,21 @@ public static class Terracotta
 				};
 				process.BeginOutputReadLine();
 				process.BeginErrorReadLine();
+				// 内核自己退出(崩溃 / 被任务管理器杀掉 / OOM)时把"端口 + runtime 文件 + _proc"一起清掉:
+				// 以前只有 Stop() 会清,内核自己没了的话 _port 还留着旧值、runtime json 还指向死端口,
+				// 联机页会继续显示「已就绪(127.0.0.1:旧端口)」,「停止」按钮也去连一个不存在的端口。
+				try
+				{
+					process.EnableRaisingEvents = true;
+					process.Exited += delegate
+					{
+						OnKernelExited(process);
+					};
+				}
+				catch (Exception)
+				{
+					// 拿不到 Exited(极少见):退化成"下次 Start/Stop 时自愈",不影响主流程
+				}
 				_proc = process;
 				double num2 = Py.Time() + 40.0;
 				long num3 = 0L;

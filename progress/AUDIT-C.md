@@ -466,3 +466,77 @@ R2 里的边缘自动滚动只覆盖 grid/canvas(`_boxScroll`)。stack 长列表
 - **通读**:`Pages/**` 事件与持久化面、`Services/**`、`MainWindow/App/Shortcut/Utils/DownloadManager/Manifest/McLauncher/Java/Installer(natives)/Saves/BridgeServer/RpcDispatcher`、`Ai/Agent|Tools|ExtraTools|Client|Artifacts|AiResponse`、`Plugins` 加载/隔离/卸载/权限、`Crash.cs` 的 IO 与报告出口、**本轮:`Terracotta` 进程与房间号、`JsonRpcPeer` 挂起表、`Modpack` 内嵌包解出**
 - **grep 级(结构性检查通过)**:`Mods`/`Modpack` 除上述路径以外的业务分支、`Catalog`、`Sysinfo`、`NodeRuntime`/`NodeHostProcess`/`PluginLlm`、`Ai/Compact|Checkpoint|Rewind|Permission|Conflict|Preview|Mcp*`、`Crash.cs` 的规则匹配表、`BackendApi` 的 AI 段以外
 - 再往下就是"逐行读 200KB 业务分支"的量,已无已知可疑点可追。
+
+---
+
+# 第七轮(R7)— 复审我们自己的修复(自审)
+
+基线:`audit/C` rebase 到 main `97eae96`;全量 diff `b86afe3..HEAD -- windos/src` 共 25 文件 / +1487−−45(其中**我这条线**的改动 = 20 个源文件 + 2 个词表(+2 个 `.gz`)+ 2 个新文件)。
+验证:`dotnet build … -c Release` **0 警告 0 错误**、`dotnet test windos/tests/TipCL.Tests` **582/582**。
+
+## R7.0 复审统计
+
+| 项 | 数 |
+|---|---|
+| 逐行复审的改动面 | 5(stack 手势 / `MutateAsync` 13 处 / 快捷方式参数 / WebView2 生命周期 / 词表) |
+| 逐条核对的风险点 | 12 |
+| **自伤(本轮发现并修掉的、我自己引入的问题)** | **4** |
+| 非我引入、本轮顺带修掉的既有缺口 | 1(Terracotta 内核自杀后的状态残留) |
+| 复审结论"没问题"的风险点 | 8(见 R7.5) |
+| 新增/加强的断言 | 6 例(`StartArgsTests`) |
+
+## R7.1 自伤 #1:快速连拖同一块会跳一下(已修)
+
+- 现场:`EndDrag` → `StartStackSettle` 挂上 `settle` 平移动画(170ms 收敛);用户在动画没走完时又抓起**同一块**,`BeginStackFloat` 里 `card.RenderTransform = new TranslateTransform()` 从 **0** 起步 → 丢掉 settle 剩余位移,视觉上"啪"跳一下。
+- 修:`BeginStackFloat` 读旧 transform 的 `Y` 当基准(`LayoutEditor.cs`,注释写明"从眼睛看到的位置接着走"):
+  `double resume = card.RenderTransform is TranslateTransform leftover ? leftover.Y : 0.0; _stackFloatBase = resume; new TranslateTransform(0.0, resume);`
+- 与 `GridCanvasPanel.StartFlip` 的 `LayoutMotion.FlipOffset(old, currentOffset, new)` 是同一个思路(用"还在走的动画当前值"接续),这次把它补齐到 stack 侧。
+- 断言:UI 动画本身断言不了(需 WPF 渲染);**纯逻辑侧**的等价保证在既有 `StackDragPlanTests` 的抖动/单调用例里,此处如实标注"只能实机看"。
+
+## R7.2 自伤 #2:快捷方式参数解析脆弱且不可测(已修 + 6 例断言)
+
+- 现场:解析逻辑内联在 `App.ParseStartArgs`,两个隐患 —— ①`args[i+1].Length > 0` 用的是**未 Trim** 的原始串,`-i "   " launch x` 会被当成合法实例名;②无法单测,畸形输入(`-i` 在末尾、`launch` 大小写写错、`--i18n-check` 里的 `-i` 片段)只能靠人工。
+- 修:抽出纯函数 `Services/StartArgs.TryParse`(Trim + 逐项 `Ordinal` + 只认 `-i <non-empty> launch <ver>` 四连),`App.ParseStartArgs` 只落状态。
+- 断言:`windos/tests/TipCL.Tests/StartArgsTests.cs` 6 例 —— 标准形状、前后夹其它参数、五种不完整序列、**6 个自检参数绝不触发**(含 `--i18n-check`)、Trim + 空版本、畸形 `-i` 被跳过继续找下一个完整序列。
+
+## R7.3 自伤 #3:连点两次「重新加载」会漏一个 WebView2(已修)
+
+- 现场:`Reload()` → `DisposeWeb()`(`_web` 可能还是 null,因为上一轮 `StartAsync` 还在 `await EnsureCoreWebView2Async`)→ 新的 `StartAsync` 各建一个 `WebView2`,`_web` 只记得后一个;前一个既不在 `_web`、也没人 Dispose → **漏一个 `msedgewebview2.exe` + HwndHost**。R1 我只修了"初始化期间 Dispose"那一条路径,这一条(重入)漏了。
+- 修:`StartAsync` 加代数号 `_startGen`,两个 `await` 回来都检查 `gen != _startGen`;被顶掉的那一趟走新增的 `DiscardWeb(web)`(只收掉"不属于 `_web` 的那个",`ReferenceEquals(_web, web)` 时退化成 `DisposeWeb`)。`Dispose()`/`Unregister` 路径不变。
+- 断言:需要真 WebView2 运行时,`windos/tests` 里无法构造 → 只能代码审 + 实机点(见清单第 8 条)。
+
+## R7.4 自伤 #4 + 既有缺口 #1
+
+**自伤 #4:快捷方式会跟"已经在跑的游戏"打架(已修)**
+- 现场:启动器**没有单实例守卫**(全仓无 `Mutex`)→ 已经开着一个启动器时双击 `.lnk` 会起**第二个启动器**,两边都自动 `LaunchNowAsync`;第一局还没进入"运行中"状态时,第二个窗口的 `CheckMultiInstanceAsync` 挡不住 → 可能同时拉两个游戏进程。改前双击 `.lnk` 只开窗口是无害的,这个风险是我这条线引进来的。
+- 修:`StartFromShortcutAsync` 先 `is_game_running`,为真就只提示「游戏已经在运行 / 快捷方式只把启动器打开了」并返回(顺带避免了一次模态"多开询问")。
+- 断言:依赖后端状态,UI 层无法单测 → 实机清单第 5 条。
+
+**既有缺口 #1:Terracotta 内核自己退出后状态残留(已修)**
+- 现场:`_port` 与 runtime json(`_runtime_file()`)只在 `Stop()` 里清;内核崩溃/被杀时没人清 → 联机页继续显示「已就绪(127.0.0.1:旧端口)」,「停止」按钮去连一个已死端口。`Running()` 虽会自愈成 false,但残留状态会一直挂在界面上。
+- 修:拉起内核后 `EnableRaisingEvents = true` + `Exited` 订阅 → `OnKernelExited(process)`:`lock` 下确认"还是当前进程"再清 `_proc`/`_port`/runtime 文件(`Stop()` 先把 `_proc` 置空再 Kill,所以正常停止不会误清新实例)。
+- 断言:需要真实内核进程,不写单测。
+
+## R7.5 复审为"无问题"的风险点(8 条)
+
+1. **鼠标捕获在拖出窗口/失焦/Alt+Tab**:`LostMouseCapture` → `OnDragLost` → `EndDrag(animateSettle:false)` 全收(解绑 `MouseMove/MouseLeftButtonUp/LostMouseCapture`、释放捕获、清 translate/占位/自动滚动),已把本次改动持久化(与改前一致)。
+2. **拖动中页面被切走**:`BlockHost.Unloaded` → `ExitEdit()` → `CancelDrag` → `StopStackFloat`,不会留残影;`_layoutTouched` 语义没变,`RestoreStackAfterEdit`/`Persist` 的分支与改前同构。
+3. **`Motion.Enabled == false` 回退路径**:`BeginStackFloat` 直接 return → `_stackFloat=false` → `OnDragMove` 走**原封不动**的 `_state.DragReorder + InsertVisual`;`StopStackFloat` 返回 0、`StartStackSettle` 因 `|0| < MinOffset` 直接返回。即关掉动画时与改前逐像素一致(逻辑上等价,非目测)。
+4. **`StartStackSettle` 的 `Completed` 回调误清新 transform**:`ReferenceEquals(card.RenderTransform, settle)` 守卫,且 `StackFlipOnce` 同样有守卫 → 快速连拖不会清掉别人的动画。
+5. **`MutateAsync` 换掉后的按钮态/忙标志**:13 处全部核对 —— `TasksPage` 取消失败恢复 `cancel.IsEnabled`(且 `Sync` 会按 `!row.Finished` 重算)、`LaunchPage` 停止失败恢复 `_stopBtn`、其余调用点没有依赖返回值或 `_busy` 的地方。
+6. **失败弹窗是否重复**:`MutateAsync` 自己 catch 后返回 false、**不重抛**,外层 `PageBase.Run` 的 catch 不会二次弹 → 不会双弹。
+7. **`TakeStartArgs` 的"取一次就清"**:只在真实 UI 分支解析(`--smoke/--shot/--design-sheet/--ai-ui-selftest` 都在更早的 `OnStartup` 分支 `Shutdown` 掉了),`StartFromShortcutAsync` 又对 `Smoke.Active` 早退,重连/换窗口不会二次触发。畸形输入由 R7.2 的 6 例断言兜住。
+8. **`MoveVisibleTo` 的模型语义**:复用同一 `MoveVisible` 交换原语 + 单次 `RebuildPage`,与 `DragReorder` 到达同一下标的结果一致(既有 `RepeatedSwapsMatchTheModelDragReorderSemantics` 断言);span/坐标/外观不动(`MoveVisibleToReordersWithoutTouchingGeometry`)。
+
+## R7.6 任务二:`Terracotta` / `Mods` / `Modpack` / `Catalog` 通读补充
+
+| 关注点 | 结论 |
+|---|---|
+| **进程退出后的端口/runtime 清理** | 缺口已修(R7.4);`Stop()` 顺序正确(先 `/panic?peaceful=true` 优雅停 → `Kill` + `WaitForExit(3000)` → 清 `_port`/`_proc`/runtime 文件),`Start()` 里端口超时/版本不符两条失败路径都会先 `Kill` 再重试或抛出 |
+| **导入导出覆盖行为** | 导入:内嵌包解到 `%TEMP%/<stem>_inner_<guid8>`(`stem` 取自文件名,Windows 文件名不含 `\`/`:`,无穿越)、单条目 300MB 上限、`overwrite:true` 只作用于 guid 临时文件;导出:菜单「导出布局/导出整合包」一律走 `Dlg.SaveFile` 让用户确认目标,覆盖是用户在保存框里点的,不在代码里静默覆盖 |
+| **版本匹配在"版本号带后缀"时** | 干净:`_mc_version_from_text` 用 `(?<![\d.])…(?![\d])` 边界 + NeoForge 四段取前三段 + 年份版本(`26.3`),`1.20.1-forge` / `fabric-1.20.1` 都能取到 `1.20.1`;上层匹配(`McIn`/Modrinth `versions:` facet)是**归一化后的精确匹配**,不做前缀包含,因此不会把 `1.20.10` 误配成 `1.20.1` |
+| `Catalog` | 搜索结果 → 安装入口只透传 `slug/id + game_version + loader`,版本决策仍在 `Mods/Modpack` 侧(单一事实源),未发现重复/分叉判定 |
+
+## R7.7 第七轮提交
+
+`audit/C` 上的 R7 提交(标题):「R7 自审:stack 连拖接续 / StartArgs 纯函数+6 例断言 / WebView2 代数号防重入漏进程 / 快捷方式避让运行中的游戏 / Terracotta 内核退出清态」。精确哈希 `git log -1 --format=%h`。

@@ -31,6 +31,9 @@ public sealed class PluginWebView : Grid, IDisposable
 
 	private bool _disposed;
 
+	// StartAsync 的代数号:await 回来发现号变了 = 期间又有人发起了新一轮,这一趟要自己收尾退出。
+	private int _startGen;
+
 	private bool _covered;
 
 	private string _origin = "";
@@ -91,6 +94,10 @@ public sealed class PluginWebView : Grid, IDisposable
 
 	private async Task StartAsync()
 	{
+		// 代数号:每一次 StartAsync 领一个号,await 回来发现号变了 = 期间又有人调了 Reload/StartAsync,
+		// 这一趟必须自己收拾干净退出。没有它时连点两次「重新加载」会各建一个 WebView2,
+		// _web 只记得后一个,前一个既没被 DisposeWeb 摘掉也没人 Dispose(漏一个 msedgewebview2.exe + HwndHost)。
+		int gen = ++_startGen;
 		base.Children.Clear();
 		if (string.IsNullOrEmpty(_url))
 		{
@@ -112,7 +119,7 @@ public sealed class PluginWebView : Grid, IDisposable
 			base.Children.Add(bar);
 		}
 		CoreWebView2Environment env = await WebViewHost.EnvironmentAsync();
-		if (_disposed)
+		if (_disposed || gen != _startGen)
 		{
 			return;
 		}
@@ -127,12 +134,13 @@ public sealed class PluginWebView : Grid, IDisposable
 		_web = web;
 		base.Children.Add(web);
 		await web.EnsureCoreWebView2Async(env);
-		if (_disposed)
+		if (_disposed || gen != _startGen)
 		{
-			// 初始化期间视图被 Dispose(切页关插件页 / 插件被卸载):此时 Dispose() 早跑过,
-			// 它看到的是 _web == null,不会管这个刚落地的 WebView2。这里必须自己收掉,
-			// 否则浏览器进程 + HwndHost 就永久泄漏了(DisposeWeb 会把它从 Children 摘掉再 Dispose)。
-			DisposeWeb();
+			// 初始化期间视图被 Dispose(切页关插件页 / 插件被卸载)—— 此时 Dispose() 早跑过,
+			// 它看到的是 _web == null,不会管这个刚落地的 WebView2;
+			// 或者期间又发起了新一轮 StartAsync —— 那时 _web 已经指向新实例,这个旧的没人认领。
+			// 两种都必须当场收掉,否则浏览器进程 + HwndHost 就永久泄漏了。
+			DiscardWeb(web);
 			return;
 		}
 		base.Children.Remove(bar);
@@ -399,6 +407,34 @@ public sealed class PluginWebView : Grid, IDisposable
 		_web = null;
 		if (web == null)
 		{
+			return;
+		}
+		try
+		{
+			base.Children.Remove(web);
+		}
+		catch
+		{
+		}
+		try
+		{
+			web.Dispose();
+		}
+		catch
+		{
+		}
+	}
+
+	/// <summary>收掉一个"不属于 _web 的"WebView2(被新一轮 StartAsync 顶掉的旧实例)。</summary>
+	private void DiscardWeb(WebView2 web)
+	{
+		if (web == null)
+		{
+			return;
+		}
+		if (ReferenceEquals(_web, web))
+		{
+			DisposeWeb();
 			return;
 		}
 		try

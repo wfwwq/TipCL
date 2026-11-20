@@ -579,6 +579,14 @@ public partial class MainWindow : Window
 		{
 			return;
 		}
+		// 启动器没有单实例守卫:已经开着一个窗口时再双击 .lnk 会起第二个启动器,
+		// 两边都自动 launch 就可能同时拉起两个游戏进程(第二个窗口的"多开询问"来不及挡)。
+		// 这里先问一句后端:有游戏在跑就只把窗口带到前台,不再自动启动。
+		if (await AppServices.Client.TryCallAsync("is_game_running", null, fallback: false))
+		{
+			Toast(I18n.L("游戏已经在运行"), I18n.L("快捷方式只把启动器打开了,没有再启动一个实例"), ToastKind.Info);
+			return;
+		}
 		if (_current is LaunchPage launchPage)
 		{
 			await launchPage.LaunchNowAsync(instance!, version);
