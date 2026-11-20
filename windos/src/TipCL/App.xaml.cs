@@ -53,7 +53,7 @@ public partial class App : Application
 
 	private static string? _startVersion;
 
-	/// <summary>取走(并清空)快捷方式带来的启动参数;没有就返回 false。</summary>
+	/// <summary>取走(并清空)快捷方式带来的启动参数;没有就返回 false(取一次就清,重连/换窗口都不会再触发一次启动)。</summary>
 	internal static bool TakeStartArgs(out string? instance, out string? version)
 	{
 		instance = _startInstance;
@@ -63,16 +63,13 @@ public partial class App : Application
 		return !string.IsNullOrEmpty(instance);
 	}
 
+	// 解析规则挪进 Services/StartArgs(纯函数 + 单测覆盖畸形输入);这里只落状态。
 	private static void ParseStartArgs(string[] args)
 	{
-		for (int i = 0; i + 3 < args.Length; i++)
+		if (TipCL.Services.StartArgs.TryParse(args, out string instance, out string version))
 		{
-			if (args[i] == "-i" && args[i + 2] == "launch" && args[i + 1].Length > 0)
-			{
-				_startInstance = args[i + 1];
-				_startVersion = args[i + 3];
-				return;
-			}
+			_startInstance = instance;
+			_startVersion = version;
 		}
 	}
 

@@ -1698,8 +1698,15 @@ public sealed class LayoutEditor
 		_stackFloat = true;
 		_stackPointerY = e.GetPosition(_list).Y;
 		_stackPointerYLive = _stackPointerY;
-		_stackFloatBase = 0.0;
-		TranslateTransform tt = new TranslateTransform();
+		// 上一次落位动画(StartStackSettle)还没走完就又抓起同一块:从"眼睛看到的位置"接着走,
+		// 否则把 transform 换成 0 起步会瞬移 settle 剩余的那一段(快速连拖两次会看到跳一下)。
+		double resume = 0.0;
+		if (card.RenderTransform is TranslateTransform leftover)
+		{
+			resume = leftover.Y;
+		}
+		_stackFloatBase = resume;
+		TranslateTransform tt = new TranslateTransform(0.0, resume);
 		card.RenderTransform = tt;
 		_stackFloatTt = tt;
 		Panel.SetZIndex(card, 1000);
