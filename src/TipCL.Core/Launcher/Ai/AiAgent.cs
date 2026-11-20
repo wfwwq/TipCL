@@ -69,6 +69,9 @@ public sealed class AiAgent
     /// <summary>最多几轮工具调用(防止模型来回刷;照 Windows 版 Agent 的轮数上限口径)。</summary>
     public int MaxRounds { get; set; } = 12;
 
+    /// <summary>组内并行上限(照参考版 Scheduler 的 maxConcurrency=4;设成 1 就退回完全串行)。</summary>
+    public int MaxToolConcurrency { get; set; } = Scheduler.DefaultMaxConcurrency;
+
     /// <summary>是否把工具表带给模型(false 时退化成纯对话)。</summary>
     public bool ToolsEnabled { get; set; } = true;
 
@@ -206,33 +209,43 @@ public sealed class AiAgent
                     return;
                 }
 
-                foreach (ToolInvocation invocation in state.Calls)
+                // AI-engine-mcp:同一轮的工具调用按 Scheduler 分组 —— 相邻的只读调用并行,写/删/启动/ask_user 单独串行。
+                // 事件与对话回填都在本线程按原 tool_call 顺序做:组内先依次发 tool,全部跑完再依次发 tool_done
+                // 并追加 tool 消息,所以界面与模型看到的顺序和串行时一样(只是更快)。
+                foreach (List<ToolInvocation> group in Scheduler.Group(state.Calls, i => i.Call, MaxToolConcurrency))
                 {
                     ct.ThrowIfCancellationRequested();
-                    _emit(new AiAgentEvent { Kind = "tool", Name = invocation.Call.name, Text = Tools.Label(invocation.Call.name, invocation.Call.args), Call = invocation.Call, Round = round });
-                    Store.LogEvent(ChatId, "ToolStarted", PyDict.Of("turn_id", TurnId, "round", (long)round, "tool", invocation.Call.name, "tool_call_id", invocation.Call.id));
-                    SnapshotForTool(invocation.Call);
-                    string result = await _runner.RunAsync(invocation.Call, ct).ConfigureAwait(false);
-                    Store.LogEvent(ChatId, "ToolCompleted", PyDict.Of(
-                        "turn_id", TurnId,
-                        "round", (long)round,
-                        "tool", invocation.Call.name,
-                        "tool_call_id", invocation.Call.id,
-                        "result_len", (long)(result ?? "").Length,
-                        "ok", invocation.Call.status == ToolCallStatus.COMPLETED));
-                    _emit(new AiAgentEvent
+                    foreach (ToolInvocation invocation in group)
                     {
-                        Kind = "tool_done",
-                        Name = invocation.Call.name,
-                        Text = Tools.Label(invocation.Call.name, invocation.Call.args),
-                        Call = invocation.Call,
-                        Round = round,
-                    });
-                    messages.Add(PyDict.Of(
-                        "role", "tool",
-                        "tool_call_id", invocation.Call.id,
-                        "name", invocation.Call.name,
-                        "content", result));
+                        _emit(new AiAgentEvent { Kind = "tool", Name = invocation.Call.name, Text = Tools.Label(invocation.Call.name, invocation.Call.args), Call = invocation.Call, Round = round });
+                        Store.LogEvent(ChatId, "ToolStarted", PyDict.Of("turn_id", TurnId, "round", (long)round, "tool", invocation.Call.name, "tool_call_id", invocation.Call.id));
+                    }
+                    string[] results = await Scheduler.RunGroupAsync(group.Select(i => i.Call).ToList(), call => ExecuteOneAsync(call, ct), MaxToolConcurrency, ct).ConfigureAwait(false);
+                    for (int k = 0; k < group.Count; k++)
+                    {
+                        ToolInvocation invocation = group[k];
+                        string result = results[k];
+                        Store.LogEvent(ChatId, "ToolCompleted", PyDict.Of(
+                            "turn_id", TurnId,
+                            "round", (long)round,
+                            "tool", invocation.Call.name,
+                            "tool_call_id", invocation.Call.id,
+                            "result_len", (long)(result ?? "").Length,
+                            "ok", invocation.Call.status == ToolCallStatus.COMPLETED));
+                        _emit(new AiAgentEvent
+                        {
+                            Kind = "tool_done",
+                            Name = invocation.Call.name,
+                            Text = Tools.Label(invocation.Call.name, invocation.Call.args),
+                            Call = invocation.Call,
+                            Round = round,
+                        });
+                        messages.Add(PyDict.Of(
+                            "role", "tool",
+                            "tool_call_id", invocation.Call.id,
+                            "name", invocation.Call.name,
+                            "content", result));
+                    }
                 }
                 CompactState.tool_turns_since_compact++;
 
@@ -278,9 +291,6 @@ public sealed class AiAgent
             }
         }
     }
-
-
-
     private static int LastUserLength(List<object> messages)
     {
         for (int i = messages.Count - 1; i >= 0; i--)
@@ -291,6 +301,22 @@ public sealed class AiAgent
             }
         }
         return 0;
+    }
+
+    /// <summary>
+    /// 执行一次工具调用(调度器的执行体;只读组里会被并发调用)。
+    /// 参数解析失败的调用不执行,直接回 bad_arguments 让模型重发(照参考版 Agent._execute 的 parseErrors 分支;
+    /// 此前 Linux 会拿空参数照跑一遍)。写操作永远单独成组,快照不会与别的调用并发。
+    /// </summary>
+    private async Task<string> ExecuteOneAsync(ToolCall call, CancellationToken ct)
+    {
+        if (call.status == ToolCallStatus.FAILED && call.error.Length > 0 && call.started_at == 0)
+        {
+            Trace.Record("tool_bad_args", null, "", call.name, null, null, null, "detail", Py.Slice(call.error, null, 200));
+            return Tools.ErrorPayload(new ValueError(call.error), call.name, "bad_arguments");
+        }
+        SnapshotForTool(call);
+        return await _runner.RunAsync(call, ct).ConfigureAwait(false);
     }
 
     /// <summary>写操作之前做检查点快照(认不出受影响路径的工具不做,见 Tools.AffectedPaths)。</summary>
