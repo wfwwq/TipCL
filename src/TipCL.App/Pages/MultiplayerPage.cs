@@ -92,15 +92,18 @@ public sealed class MultiplayerPage : PageBase
         var header = UiClass.Section(I18nCore.Tr("陶瓦联机"),
             "输入邀请码即可加入。陶瓦是 EasyTier P2P 打洞,不是 FRP 隧道;会与 HMCL 一样带上自定义会合节点。PCL 房间号不互通,局域网请用下面的地址。");
 
+        // [R35 lin-l5] §5.5:块名改成用户看得懂的说法(id 不变);文档里还没有这一页时默认就是 12 列网格:
+        // 说明整行 / 联机状态 + 房间各半 / 快捷操作整行 / 玩家 + 节点说明 8:4(PageDefaultLayouts.Multiplayer)。
+        // 已经存过这一页的用户完全照文档,不受影响。
         Body = new BlockHost("multiplayer", new List<BlockSpec>
         {
             new() { Id = "header", Title = I18nCore.Tr("说明"), Content = UiClass.V(10, header, _lan) },
-            new() { Id = "state", Title = I18nCore.Tr("状态卡"), Content = stateCard },
-            new() { Id = "room", Title = I18nCore.Tr("房间卡"), Content = _roomCard },
-            new() { Id = "actions", Title = I18nCore.Tr("操作区"), Content = _actions },
-            new() { Id = "players", Title = I18nCore.Tr("玩家列表"), Content = UiClass.V(10, _playersTitle, _players) },
+            new() { Id = "state", Title = I18nCore.Tr("联机状态"), Content = stateCard },
+            new() { Id = "room", Title = I18nCore.Tr("房间"), Content = _roomCard },
+            new() { Id = "actions", Title = I18nCore.Tr("快捷操作"), Content = _actions },
+            new() { Id = "players", Title = I18nCore.Tr("玩家"), Content = UiClass.V(10, _playersTitle, _players) },
             new() { Id = "nodes", Title = I18nCore.Tr("节点说明"), Content = UiClass.V(10, _nodes, footer) },
-        }).Root;
+        }, null, PageDefaultLayouts.Multiplayer()).Root;
 
         _timer.Tick += (_, _) => RunSafe(ReloadAsync, "");
     }
