@@ -76,7 +76,12 @@
 - `AiPermissionContentTests` 9
 - `McpServerTests` 8(含集成:`Start(0)` 随机空闲端口 → HTTP initialize / 通知 202 / tools/list / 调只读 `list_instances` / 外部写被拒 & 确认后才执行 & 「以后都允许」不生效 / 外站 Origin 403 / 本机 Origin 200 / GET 405 / 路径 404 → `Stop` 后连不上;偏好文件形状与门面起停)
 - `AiEngineMcpAppTests` 2
-(数字以 `dotnet test` 实测为准,见 complete 汇报。)
+(数字以 `dotnet test` 实测为准:本包 6 个类单独跑 39/39 通过;全量 1015 = 基线 976 + 39。)
+
+### 实测(2026-11-20,本机 Windows,SDK 8.0.428)
+- Debug 构建(`--no-incremental`):0 错误,3 个警告,全部是基线就有的 `tests/.../Layout/LayoutMotionAndHeightTests.cs` xUnit1013×2 / xUnit2000×1(基线同样 3 个),无新增。
+- `dotnet test` 全量:通过 1008 / 跳过 7 / 失败 0(总 1015);另有三次全量各见一条既有时序 flaky,见 §5 第 8 条。
+- `--ai-selftest`(临时 TIPCL_HOME):通过 62 / 失败 0 / 跳过 0,exit=0;临时根下没有生成 `cache/ai_hooks`(审计日志已指到 temp 并清掉)。
 
 ## 5. 遗留问题与风险
 1. **外部确认框是模态 `Dlg.Ask`**:主窗口不在前台时用户可能看不到,外部客户端会一直等到用户点(或客户端自己超时)。参考版没有这个问题是因为它根本不确认。后续可以考虑加 Toast/托盘提醒。
@@ -85,6 +90,11 @@
 4. **并行范围**:只读并行的收益主要在 `search_*`(联网)与读日志/扫冲突;`search_*` 走同一个 `InProcessApi`,若某个搜索源内部有非线程安全的缓存,并行可能暴露出来 —— 本轮单测用假门面覆盖,真源没有压测。
 5. **规则作用实例按「目标实例」**算,与参考版「按会话实例取 per_instance 规则」不同(更严);从 Windows 迁来的 per_instance 规则 Linux 本来就不读(存储结构不同,Linux 是平铺列表 + `instance` 键),这一点未变。
 6. 钩子目前只有进程内注册口与内置审计;没有用户可见的「钩子管理」界面(参考版也没有)。
+7. **`ClickSweepTests` 会点到设置页新加的 MCP 开关**(它遍历每页前 80 个 Button/ToggleButton,开关没有文字不在副作用词表里):无头会话里 `McpServerHost.Init` 不会被调用(没有执行器工厂,tools/call 只会回「未就绪」),但若真点到,测试进程会在 25585 上监听到进程结束、并把隔离根里的 mcp_server.json 写成 enabled。本包测试对此已稳健(自己的用例都用随机端口,门面用例先删偏好、结束 Stop);是否把「MCP」加进 ClickSweep 的跳过词表留给主线定(不是本包文件)。
+8. **全量测试里观察到两条既有的时序型 flaky**(本机同时有其它 4 个代理在编译,CPU 吃紧):
+   - `DlgCloseTests.Confirm_WindowClosed_ReturnsFalse`:栈是 `AiPage.RunAgentAsync` 发出的 Post(`OnAgentEvent` → `AiBubble` 构造 → `Res.Bind` 拿不到资源)在**下一个用例**的 `ResetForUnitTests` 里才落地 —— 前面有用例(`ClickSweepTests` 遍历 AI 页,会点到「点一下直接发」的建议按钮)在默认内置网关下真的发了一次对话,网络回包时机决定它炸在哪个后续用例上。AiPage 本包未改;这是既有的测试间泄漏。
+   - `LayoutSmoothDragUiTests.EscapeDuringSmoothDragSlidesBackAndPersistsNothing`:300ms 动画的时序断言,与本包无关。
+   同一提交连跑 4 次全量:两次各红 DlgClose 一条、一次红 LayoutSmoothDrag 一条、一次全绿;基线 `4277a02` 在同机跑 1 次全绿。单独跑 `DlgCloseTests` / `ClickSweepTests+DlgCloseTests` 均绿。建议主线给 ClickSweep 的 AI 页跳过建议按钮,或在 AiPage 的事件 Post 里判断页面已卸载。
 
 ## 6. 合并注意(冲突点)
 - `ToolRunner.cs`:类声明改成 `public sealed partial class ToolRunner`。其他包按任务书也会加 partial —— **同一处同一改法**,合并时取一份即可。`RunAsync` 开头(未知工具检查之后)插了钩子段、权限段把 `Decide(call.name)` 改成 `ExternalWriteGate(... Decide(call.name, call.args))`、执行段 `Clip(AsText(result))` 改成 `Clip(RunAfterHooks(call, AsText(result)))`。别的包若也改 `RunAsync`,请保留这三处。
