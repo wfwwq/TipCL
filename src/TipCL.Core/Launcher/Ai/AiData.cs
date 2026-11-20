@@ -41,6 +41,9 @@ public static class AiData
         "- 一次不要连装超过 8 个模组;先 ask_user 让用户勾选再装。\n" +
         "- 工具失败:把报错翻译成小白能懂的话,并给出下一步(换源、换版本、先装加载器等)。\n" +
         "- 不要让用户去改 JVM 参数或手动下 jar,除非工具都失败了。\n\n" +
+        "# 卡顿与存档\n" + // i18n:ignore(AI-perf-saves;提示词是给模型看的,照 Windows 版「你能做的事」第 9/10 条)
+        "- 卡顿诊断、按电脑配置调内存和 GC（diagnose_lag / tune_jvm）:用户说卡、掉帧时先 get_system_info + diagnose_lag,一句话说原因;要改就先 tune_jvm(apply=false)给建议,用户同意后再 apply=true 写进该实例。\n" + // i18n:ignore
+        "- 存档备份与回滚（改模组、升级前先 backup_save）:回滚先 list_save_backups 找备份再 restore_save_backup,回滚前会自动先备份当前存档。游戏运行中不能备份/回滚,先请用户退出游戏。\n\n" + // i18n:ignore
         "# 排错流程\n" +
         "1. get_launcher_state\n" +
         "2. diagnose_launch(必要时再 get_latest_log / get_crash_report)\n" +
@@ -90,6 +93,11 @@ public static class AiData
         (new[] { "删除", "删掉", "卸载", "移除", "delete", "uninstall", "remove" },
             new[] { "delete_mod", "delete_instance", "disable_mod", "enable_mod" }),
         (new[] { "禁用", "启用", "disable", "enable" }, new[] { "disable_mod", "enable_mod", "list_mods" }),
+        // AI-perf-saves:卡顿优化 + 存档备份(关键词照 Windows 版 ExtraTools.Keywords)
+        (new[] { "卡顿", "很卡", "好卡", "掉帧", "帧数", "fps", "FPS", "lag", "优化", "流畅", "内存", "JVM", "jvm", "GC", "电脑配置" }, // i18n:ignore
+            new[] { "get_system_info", "diagnose_lag", "tune_jvm" }),
+        (new[] { "备份", "回滚", "还原", "恢复", "存档", "坏档", "世界", "save", "backup" }, // i18n:ignore
+            new[] { "list_saves", "backup_save", "list_save_backups", "restore_save_backup" }),
     };
 
     /// <summary>「用户在下命令」而不是在提问(用于决定是否带上写操作工具)。</summary>

@@ -252,6 +252,10 @@ public static class Preview
 
             default:
             {
+                if (PerfSavesPreview.ChangePreview(name, args, instance) is { } perfSaves)
+                {
+                    return perfSaves; // AI-perf-saves:tune_jvm / backup_save / restore_save_backup
+                }
                 if (InstallTargets.Contains(name))
                 {
                     string head = Tr("安装目标: ");

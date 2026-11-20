@@ -253,7 +253,7 @@ internal sealed class ConfirmCard : Border
     /// <summary>这个工具是否给「本对话都允许」(删除类不给;照 Windows 版 AllowAlways)。</summary>
     public static bool AllowAlways(string tool) => tool switch
     {
-        "delete_instance" or "delete_mod" => false,
+        "delete_instance" or "delete_mod" or "restore_save_backup" => false,
         _ => true,
     };
 }

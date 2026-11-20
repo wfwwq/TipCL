@@ -20,7 +20,7 @@ namespace TipCL.Core.Launcher.Ai;
 /// <summary>
 /// 工具执行器。宿主(页面)通过回调提供三件事:权限确认、ask_user 结构化选择、进度事件。
 /// </summary>
-public sealed class ToolRunner
+public sealed partial class ToolRunner
 {
     /// <summary>调用 IApi 的门面(接口保持最小:只用到 CallAsync)。</summary>
     public interface IBackend
@@ -301,7 +301,7 @@ public sealed class ToolRunner
                     preview = null;
                 }
                 (bool ok, bool always) = await Confirm(call, label, verdict.reason, preview).ConfigureAwait(false);
-                if (always) _alwaysAllowed.Add(call.name);
+                if (always && !NeverAlwaysAllow(call.name)) _alwaysAllowed.Add(call.name);
                 if (!ok)
                 {
                     call.Mark(ToolCallStatus.DENIED, error: "用户拒绝");
@@ -584,6 +584,16 @@ public sealed class ToolRunner
                 }
                 return await Subagent(args, ct).ConfigureAwait(false);
             }
+
+            // ── 卡顿优化 + 存档备份(AI-perf-saves,实现见 ToolRunner.PerfSaves.cs)──
+            case "get_system_info":
+            case "diagnose_lag":
+            case "tune_jvm":
+            case "list_saves":
+            case "backup_save":
+            case "list_save_backups":
+            case "restore_save_backup":
+                return await PerfSavesAsync(call.name, args, ct).ConfigureAwait(false);
 
             default:
                 // 兜底:MCP 工具（mcp_<server>_<tool>）路由到对应的外部 server

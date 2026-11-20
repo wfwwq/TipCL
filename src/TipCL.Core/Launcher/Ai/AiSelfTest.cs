@@ -168,6 +168,9 @@ public static class AiSelfTest
         // 10. AI 服务层:检查点 / 压缩 / 令牌与用量 / 会话存档 / 产物回读 / MCP 配置
         VerifyServices((name, ok) => Check(name, ok));
 
+        // 11. 卡顿优化 + 存档备份(AI-perf-saves;不碰用户数据,见 PerfSavesTools.SelfCheckAsync)
+        await PerfSavesTools.SelfCheckAsync((name, ok) => Check(name, ok)).ConfigureAwait(false);
+
         return result;
     }
 

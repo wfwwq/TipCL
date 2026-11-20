@@ -89,6 +89,7 @@ public static class Tools
                 }
                 object parsed = PyJson.Loads(sb.ToString());
                 cached = Py.ListOr(parsed);
+                cached.AddRange(PerfSavesTools.Schemas()); // AI-perf-saves:卡顿优化 + 存档备份的 7 个工具
                 _schemas = cached;
             }
             return cached;
@@ -170,6 +171,10 @@ public static class Tools
     public static string Label(string name, PyDict? args = null)
     {
         string key = name ?? "";
+        if (PerfSavesPreview.Label(key, args) is { } perfSavesLabel)
+        {
+            return perfSavesLabel; // AI-perf-saves:这几个工具的标签走词表(I18nCore.Tr)
+        }
         if (args != null && Formats.TryGetValue(key, out string? fmt))
         {
             string filled = FillTemplate(fmt, args);
@@ -647,6 +652,10 @@ public static class Tools
     public static List<string> AffectedPaths(string name, PyDict? args, string instance)
     {
         args ??= new PyDict();
+        if (PerfSavesTools.AffectedPaths(name, args, instance) is { } perfSavesPaths)
+        {
+            return perfSavesPaths; // AI-perf-saves:取舍理由见 PerfSavesTools.AffectedPaths
+        }
         string instName = Py.S(Py.Or(args.Get("instance"), instance));
         string root;
         try
