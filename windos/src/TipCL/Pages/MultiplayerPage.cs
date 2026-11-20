@@ -99,7 +99,7 @@ public sealed class MultiplayerPage : PageBase
 		_playersTitle.Visibility = Visibility.Collapsed;
 		SPanel sPanel = Ui.H(10.0, Ui.Btn(I18n.L("Terracotta 项目主页"), BtnKind.Ghost, delegate
 		{
-			Ui.OpenUrl("https://github.com/burningtnt/Terracotta");
+			Ui.OpenUrl(ProjectHome, "multiplayer.home");
 		}, "\ue71b"), Ui.Small(I18n.L("Terracotta | 陶瓦联机  © burningtnt  ·  基于 EasyTier")).VCenter());
 		Grid head = Ui.Section(I18n.L("陶瓦联机"), I18n.L("输入邀请码即可加入。陶瓦是 EasyTier P2P 打洞，不是 FRP 隧道；") + I18n.L("会与 HMCL 一样带上自定义会合节点。PCL 房间号不互通，局域网请用下面的地址。"));
 		// 页面布局自定义（WP-U3）：块内组合沿用旧 ScrollBody 的 10 间距包一层；默认全可见、顺序同旧 ScrollBody 实参
@@ -246,9 +246,14 @@ public sealed class MultiplayerPage : PageBase
 			_roomHint.Text = (string.IsNullOrWhiteSpace(s.Url) ? I18n.L("让好友在联机页选「我想当房客」，填这串邀请码。") : I18n.L("启动游戏 → 多人游戏 → 双击「陶瓦联机大厅」。"));
 		}
 		_nodes.Text = ((s.Nodes.Count == 0) ? "" : I18n.L("会合节点 {0} 个：{1}", s.Nodes.Count, string.Join("  ", s.Nodes.Take(3))));
-		if (text != _uiState)
+		// 只在"卡片内容真的会变"时重建操作区:状态 + 卡片上会显示的那几段文字。
+		// ① 形状没变就不重建 —— 原来只看 state,state 在 unsupported/installing 之间抖动(轮询 + _busy)
+		//    时每 1.2s 重建一次,鼠标底下的按钮会被换掉,用户点空、再点 → 反复触发;
+		// ② 但 state 不变、Label/ErrorHint 变了时以前又**不**刷新(卡片停在旧文案),所以把它们也进 key。
+		string actionsKey = string.Concat(text, "\u0001", s.Label ?? "", "\u0001", s.Error ?? "", "\u0001", s.ErrorHint ?? "", "\u0001", s.DifficultyHint ?? "");
+		if (actionsKey != _uiState)
 		{
-			_uiState = text;
+			_uiState = actionsKey;
 			FillActions(text, s);
 		}
 		RenderPlayers(s.Profiles);
@@ -390,9 +395,13 @@ public sealed class MultiplayerPage : PageBase
 		case 11:
 			if (state == "unsupported")
 			{
-				Action("!", I18n.L("当前系统不支持"), I18n.L("陶瓦联机暂未提供此架构的官方内核。"), I18n.L("了解"), delegate
+				// 这里**不打开浏览器**:它是一张"告诉你为什么不行"的说明卡,用户点按钮的心态是"确认提示",
+				// 浏览器一起来、界面没变化,就会被当成没反应反复点(现场 bug:老是有人拿浏览器打开
+				// github.com/burningtnt/Terracotta)。改成复制项目地址,想看的自己去浏览器粘贴;
+				// 真要跳转,页脚本来就有「Terracotta 项目主页」按钮(用户明确点了才开)。
+				Action("!", I18n.L("当前系统不支持"), I18n.L("陶瓦联机暂未提供此架构的官方内核;项目地址可以直接复制。"), I18n.L("复制项目地址"), delegate
 				{
-					Ui.OpenUrl("https://github.com/burningtnt/Terracotta");
+					Copy(ProjectHome, I18n.L("已复制项目地址"));
 					return Task.CompletedTask;
 				});
 			}
@@ -565,7 +574,7 @@ public sealed class MultiplayerPage : PageBase
 		}
 		catch (BridgeCallException)
 		{
-			Ui.OpenUrl("ms-settings:windowsdefender");
+			Ui.OpenUrl("ms-settings:windowsdefender", "multiplayer.defender");
 		}
 	}
 

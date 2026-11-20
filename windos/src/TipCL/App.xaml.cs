@@ -190,10 +190,9 @@ public partial class App : Application
 			Crash.ShellOpenHook = ShellOpen;
 			Auth.OpenBrowserHook = delegate(string url)
 			{
-				Process.Start(new ProcessStartInfo(url)
-				{
-					UseShellExecute = true
-				})?.Dispose();
+				// 统一走 Ui.OpenUrl(节流 + 落日志),别再自己 Process.Start:
+				// 登录链接被"连点重试"时同样会开出多个浏览器标签。
+				Ui.OpenUrl(url, "auth.browser");
 			};
 		}
 		catch (Exception ex)

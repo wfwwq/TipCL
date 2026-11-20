@@ -678,18 +678,57 @@ public static class Ui
 		return border;
 	}
 
-	public static void OpenUrl(string url)
+	/// <summary>
+	/// 打开外部链接 / 系统设置页的**唯一入口**(全仓不要再直接 Process.Start(url) + UseShellExecute)。
+	/// 两条纪律:
+	///   1) 同一 URL 3 秒内只真正打开一次(<see cref="OpenUrlGate"/>):现场 bug 就是「了解」按钮
+	///      在说明卡上,点了浏览器起来、启动器界面没变化,用户以为没反应连点 → 反复打开同一个 GitHub 页;
+	///   2) 每次真正打开都落一条日志(URL + 来源),以后再出现"老是有人打开某站"能直接查日志定位,
+	///      而不是靠读代码猜。
+	/// </summary>
+	/// <param name="source">触发来源(短标签,如 <c>multiplayer.home</c> / <c>auth.browser</c>),只用于日志</param>
+	/// <returns>是否真的调起了系统默认程序(被节流拦下时为 false)</returns>
+	public static bool OpenUrl(string url, string? source = null)
 	{
+		string target = (url ?? "").Trim();
+		if (target.Length == 0)
+		{
+			return false;
+		}
+		long now = _openUrlClock.ElapsedMilliseconds;
+		if (!OpenUrlGate.TryAcquire(target, now))
+		{
+			// 被节流拦下也要留痕:这正是定位"又弹浏览器了"的证据
+			SafeLog("open_url 节流忽略(" + (source ?? "?") + "): " + target);
+			return false;
+		}
+		SafeLog("open_url(" + (source ?? "?") + "): " + target);
 		try
 		{
-			Process.Start(new ProcessStartInfo(url)
+			Process.Start(new ProcessStartInfo(target)
 			{
 				UseShellExecute = true
 			});
+			return true;
 		}
 		catch (Exception ex)
 		{
 			AppServices.Toast(I18n.L("打不开链接"), ex.Message, ToastKind.Warning);
+			return false;
+		}
+	}
+
+	// 单调时钟:节流窗口不能受系统时间调整影响
+	private static readonly System.Diagnostics.Stopwatch _openUrlClock = System.Diagnostics.Stopwatch.StartNew();
+
+	private static void SafeLog(string line)
+	{
+		try
+		{
+			TipCL.Core.Launcher.Utils.log.Info("%s", line);
+		}
+		catch (Exception)
+		{
 		}
 	}
 }

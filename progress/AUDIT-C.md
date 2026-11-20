@@ -540,3 +540,44 @@ R2 里的边缘自动滚动只覆盖 grid/canvas(`_boxScroll`)。stack 长列表
 ## R7.7 第七轮提交
 
 `audit/C` 上的 R7 提交(标题):「R7 自审:stack 连拖接续 / StartArgs 纯函数+6 例断言 / WebView2 代数号防重入漏进程 / 快捷方式避让运行中的游戏 / Terracotta 内核退出清态」。精确哈希 `git log -1 --format=%h`。
+
+---
+
+# 第八轮 — 现场 bug:「老是有人拿浏览器打开 Terracotta 的 GitHub」(插队,优先修)
+
+## R8.0 现场核实(先说结论:根因三条,其中一条与 lead 的判断不同)
+
+用户看到的现象:反复有人用浏览器打开 `https://github.com/burningtnt/Terracotta`。
+
+核实结果:
+1. **全仓只有两处会开这个 URL**,都在 `Pages/MultiplayerPage.cs`:`:102` 页脚「Terracotta 项目主页」按钮(用户明确点击)、`FillActions` 的 `unsupported` 分支(`:393-397`,「了解」按钮直接 `Ui.OpenUrl`)。**没有自动打开路径**,不是后台偷偷开。
+2. **`Ui.OpenUrl`(`Services/Ui.cs:681`)原本没有任何节流**:连点十下就开十个标签页。这是"反复打开"的直接放大器。
+3. **`unsupported` 那张卡是"说明卡"**:浏览器一起来、启动器界面毫无变化 → 用户以为没反应 → 再点。按钮放在"确认提示"的位置本身就是设计错。
+4. ⚠️ **与 lead 判断不同的一点**:`FillActions` 不是每 1.2s 全量重建 —— `Render` 里原本就有 `if (text != _uiState)`(`:249-252`)按**状态**去抖。所以"每 1.2s 重建卡片"这条不成立;真实会重建的场景是 ①状态在 `unsupported/installing/idle` 之间抖动(`_busy` 参与换算 + 1.2s 轮询)、②state 不变但 `Label/ErrorHint` 变了(这种情况以前**反而不会刷新**,卡片停在旧文案)。本轮把 key 从"状态"扩到"状态 + 卡片上会显示的文字",同时解决"抖动时换掉鼠标下的按钮"和"文案不刷新"。
+
+## R8.1 修复
+
+| # | 改动 | 文件 |
+|---|---|---|
+| 1 | **`Ui.OpenUrl` 加 3 秒同 URL 节流 + 每次真开/被拦都落日志**(URL + 来源标签),并把它收敛成全仓 URL 打开的唯一入口。节流判定抽成纯逻辑 `OpenUrlGate.TryAcquire(url, nowMs, windowMs)`(单调时钟,不受改系统时间影响;>64 条自动清过期) | `Services/Ui.cs:681-740`、新增 `Services/OpenUrlGate.cs` |
+| 2 | **`unsupported` 说明卡不再开浏览器**:改成纯说明 + 「复制项目地址」按钮(`Copy(ProjectHome, …)`),想看的自己粘贴;真要跳转页脚本来就有「Terracotta 项目主页」 | `Pages/MultiplayerPage.cs:390-403` |
+| 3 | **`_actions` 重建去抖**:key = `state + Label + Error + ErrorHint + DifficultyHint`,与上次相同就不重建(按钮不会在鼠标底下被换掉);文字变了才重建(修掉"卡片停在旧文案") | `Pages/MultiplayerPage.cs:249-259` |
+| 4 | **打开外链落日志**:`open_url(source): url` / `open_url 节流忽略(source): url`,走既有 `Utils.log` | `Services/Ui.cs`、`App.xaml.cs:195`(登录回调改走 `Ui.OpenUrl(url, "auth.browser")`) |
+
+**入口收敛核对**(grep `Process.Start(new ProcessStartInfo`):剩下的都不是"开 URL" —— `Auth.cs:313` 是 Core 在 `OpenBrowserHook` 为空时的兜底(App 启动即注入钩子,实际不走;Core 不能反向依赖 `Services.Ui`,保留)、`SettingsPage:1722` 是重启启动器自身、`PluginsPage:333` 是 explorer 打开目录、其余是 powershell/taskkill/control/游戏进程/Node 宿主。
+
+## R8.2 断言(新增 7 例,能失败)
+
+`windos/tests/TipCL.Tests/OpenUrlGateTests.cs`:
+- `SameUrlIsOnlyOpenedOnceInsideTheWindow` —— 连点一次、1.5s 后、差 1ms 到期都必须被拦;
+- `WindowIsExclusiveAtTheBoundary` —— 恰好满 3000ms 放行(否则 1.2s 轮询+重试会永远打不开);
+- `DifferentUrlsAreIndependent`、`EmptyOrNullUrlIsNeverOpened`、`UrlIsTrimmedBeforeComparing`、`ResetLetsTheSameUrlOpenAgain`、`ZeroWindowMeansAlwaysAllowed`。
+
+验证:`dotnet build … -c Release` **0 警告 0 错误**;`dotnet test` **589/589**(582 + 7)。
+
+## R8.3 实机确认项
+
+1. 造一个 `unsupported` 状态(非 x64/arm64 架构,或临时把 `terracotta_snapshot` 的 state 改成 unsupported):卡片上应是「复制项目地址」,点了**不开浏览器**,只弹「已复制项目地址」。
+2. 页脚「Terracotta 项目主页」连点 5 下:只应打开 1 个标签页(3 秒内其余静默丢弃)。
+3. 日志(`%LOCALAPPDATA%\TipCL\...` 的 TipCL 日志)里能看到 `open_url(multiplayer.home): https://github.com/...` 与 `open_url 节流忽略(multiplayer.home): ...` —— 以后再出这类问题直接看日志。
+4. 联机页停留 30 秒:操作区按钮不应在鼠标底下反复重建(可观察 hover 态是否被重置)。
