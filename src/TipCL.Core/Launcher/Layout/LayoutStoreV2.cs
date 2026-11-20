@@ -536,6 +536,17 @@ public static class LayoutStoreV2
 		{
 			return true;
 		}
+		if (File.Exists(pending))
+		{
+			// 复审补充(第七轮):待办是「读的时候坏的」,但从读到写之间**别的进程可能已经把它写好**。
+			// 那种情况下再改名搬走就是把一份好文件变成 .corrupt-*,所以先重判一次还坏不坏。
+			ReadV2File(pending, out bool stillDamaged);
+			if (!stillDamaged)
+			{
+				_pendingCorruptBackup = "";
+				return true;
+			}
+		}
 		BackupCorruptV2(pending, out string backup);
 		if (backup.Length != 0)
 		{

@@ -332,3 +332,77 @@ $env:TEMP="D:\项目\TipCL\_tools\tmp-A"; $env:TMP=$env:TEMP
 3. 真正还可能藏 P1 的地方已经不在 Core，而在**跨域配合**：X-04（清理结果的失败提示）、X-05（Modrinth 返回值展示）、X-06（重试时 UI 半截文本）。这三条都是 App 侧一行到十几行的接线，用户可见收益比继续挖 Core 大得多。
 
 **判定：Core 层审计完毕。** 建议把资源转向：①App 侧 X-04/X-05/X-06 接线；②攒一批真实崩溃日志做 `Crash` 规则回归；③真机冒烟矩阵复核（尤其容器/无 GUI/权限受限场景）。
+---
+
+# 第七轮（复审自有修复 + Crash 规则表静态审）
+
+基线：main 97eae96（含六轮合并）。本轮**没有开新领域**，只审自己前六轮加的代码，以及 Crash.cs 规则表的"能不能跑/会不会误伤"。
+
+## 30. 复审范围与结论
+
+复审对象：我的 7 个提交（c0551f7 87fc4c2 d1a8754 7313db9 ad6e72 e750ba8 44eb617），涉及 **15 个文件（13 个 Core 源文件 + en/zh_CN 各 1 条词条）、约 60 处改动**。逐处按 lead 给的三问过了一遍。
+
+**结论：找出 4 处"修复自身引入的问题"，全部已修。** 另有 8 处 lead 点名的疑点，逐一验证后**确认不是问题**（见 §32）。
+
+| ID | 级别 | 位置（我的改动） | 我引入的问题 | 修复 |
+|----|------|------------------|--------------|------|
+| **A-16** | **P1（可能永久卡住 AI 回合）** | `Ai/McpClient.cs` `Recv` 超时看门狗（第六轮 A-13 改的） | A-13 把 `proc.Kill()` 换成 `proc.Kill(entireProcessTree: true)` 并把异常一口吞掉。可 `Kill(bool)` 在 /proc 受限、进程恰好退出、无权限时会**抛异常**——抛了就**一个进程都没杀**，而 `Recv` 正阻塞在 `StandardOutput.ReadLine()` 上（deadline 检查只在一行读完之后），于是**整轮对话永久挂死**。改之前至少普通 `Kill()` 能把它弄死。即"修孤儿进程"顺手造了个"超时变成永久卡住"，比原问题更糟 | 抽出 `KillTree(proc)`：先 `Kill(entireProcessTree:true)`，**失败再退一步普通 `Kill()`**；`Recv` 看门狗与 `Close` 都只调它，不再就地 `Kill` |
+| A-17 | P2（"前置失败不阻断"被我自己弄成会阻断） | `Mods.cs` 两处 `catch` 里新加的 `on_progress?.Invoke(...)`（第三轮 A-07） | A-07 的价值是让前置失败可见，但那两个 `on_progress` 是宿主回调（App 侧一路走到 UI）。**回调自己抛异常**时，异常会从这个 catch 里逃出去，把"前置失败不阻断主流程"变成整次安装失败——比原来的"只写日志"更糟 | 两处都包 try/catch：提示尽力而为，绝不改变"不阻断"的语义 |
+| A-18 | P2（会把好文件改名搬走） | `Layout/LayoutStoreV2.cs` `EnsureCorruptBackedUp`（第一轮 A-01 新增） | `_pendingCorruptBackup` 是"读的时候坏的"，但**读与写之间别的进程可能已经把它写好了**。我的实现无条件 `File.Move` 改名——把一份刚被写好的**好文件**变成 `.corrupt-*`，再被我们的新文档覆盖（文件没丢，但对方那次写入凭空消失） | 写前先 `ReadV2File(pending, out stillDamaged)` 重判：**不再损坏就清掉待办、照常写**（此时覆盖属正常 Save 语义，不是"毁掉损坏原件"） |
+| A-19 | P2（ailed 计数被"已删"污染） | `Cleaner.cs` `Apply` 的失败计数（第三轮 A-09） | 预览到执行之间文件被别的进程/上一次清理删掉，`FileInfo.Length` 会抛 `FileNotFoundException`，被我算成一次 `failed`。App 侧要按 `failed` 弹警告（X-04），这种幂等场景会让它刷一堆假失败 | 单独 `catch (...) when (e is FileNotFoundException || e is DirectoryNotFoundException)` 视为成功，不算 `failed` |
+
+## 31. 复审项的可失败测试（红灯验证）
+
+按 lead 要求给每条补断言，并把"改回旧实现"跑一遍确认真的会红。断言放在我的探针工程 `_tools/tmp-A/audit-harness`（`r7` 子命令）—— **`tests/**` 按分工不归我**，若要把它们落进 `tests/TipCL.Tests` 请指派 D 线或授权我动那个目录。
+
+| 复审项 | 断言 | 改回旧实现时 |
+|--------|------|--------------|
+| A-18 | 损坏→Load（记待办）→外部写好→Save：断言 `*.corrupt-*` **不存在**、新文档已落盘 | **实测红**：`git stash` 掉本轮改动后跑，`FAIL A-18 已经变好的文件不会被改名成 .corrupt-*`（exit=1），stash pop 回来变绿 |
+| A-19 | 预览后删掉缓存文件再 `Apply(["cache"])`：断言 `failed == 0` | **无法构造确定性红灯**：`Apply` 内部会重新 `Preview()`，要从"它的预览"到"它的删除"之间插进删除，只能靠并发另一进程——是真实存在但非确定性的 TOCTOU 窗口。如实记为"行为细化，无可控红灯用例" |
+| A-17 | 需要真实 Modrinth 依赖失败 + 抛异常的 `on_progress` 才能触发 | 离线构造不出；靠代码审查 + 全量测试绿兜底，如实记录 |
+| A-16 | 需要真实 MCP 子进程且树杀失败 | 同上（无法人为让 `Kill(true)` 失败） |
+| 回归保护 | 全量跑探针默认用例：第一轮的"损坏→Save 必须先备份再写"仍 **ALL PASS**（A-18 的重判没有破坏主流程） | — |
+
+## 32. lead 点名的疑点：逐个验证（结论：都不是问题）
+
+| 疑点 | 验证结论 |
+|------|----------|
+| `PyJson._depth` 在抛异常路径上是否都回退 | 平衡：超限分支先 `_depth--` 再抛，正常分支走 `try/finally` 回退；`Parser` 每个 `Loads` 新建，不跨调用累积。 |
+| `LayoutStoreV2._pendingCorruptBackup` 在 dir 变化/多实例时会不会串 | 所有读写都在 `_gate` 内；dir 变化时最坏结果是"备份了另一个目录里那份本来就损坏的文件"，**不会覆盖任何原件**；`ResetCache` 会清空三件套。A-18 的重判进一步把"已经不是损坏文件"的情况挡掉。 |
+| `Java.Chmod755` 会不会给 zip 里的 symlink 条目误加权限 | 不会：`Chmod755` 只被 `InstallMojangRuntime` 调用，且只对运行时清单里 `executable: true` 的**普通文件**（逐文件下载，不是解压）；`SafeExtractZip` 那条路会先 `continue` 掉 symlink 条目（`0xA000`）与目录条目，轮不到 `ApplyUnixMode`。 |
+| `Utils.ApplyUnixMode` 对 Windows 打的 zip | Windows 打的 zip 高 16 位通常是 0 → `mode & 0x49 == 0` → 直接返回，不动权限。 |
+| `Mods.InstallModrinthContent` 新增 `dest_dir` 对既有调用点 | 唯一调用点已更新；`dest_dir == null` 时内部回落 `ContentDir(instance, subdir)`，而 `ContentDir` 在 `version_id == null` 时**逐字等于**旧的 `PPath.Join(instance.path, subdir)`——默认行为不变。 |
+| `Cleaner.Apply` 返回值新增两键 | 只增不改：`removed`/`bytes` 语义未动；App 的 `CleanerResultStub` 只取 `Removed`，多余键在反序列化时被忽略。 |
+| `.corrupt` 备份在文件被独占/只读时 | `File.Copy` 只需读源文件（只读源可复制）；目录不可写时 `IOException` 被吞，走原来的"重建"路径——不比改之前更差。 |
+| `Kill(entireProcessTree:true)` 在 `npx` 没装时 | 走不到：`Connect` 里 `Process.Start` 先抛 `Win32Exception` → 转 `FileNotFoundError("No such file or directory: npx")`，与改动前一致。 |
+
+## 33. Crash.cs 规则表静态审（不判"准不准"，只判"能不能跑/会不会误伤"）
+
+| 检查项 | 结果 |
+|--------|------|
+| 规则被触发但缺文案 → `_fmt_reason` 会不会抛 | **不会**。机器对比：分析器实际发出 **40 个 reason code**；`_TABLE` 覆盖 23 个、`switch` 的 `case` 20 个、`code ==` 2 个，剩下 `pixel_format`/`intel_av`/`amd_av`/`nvidia_av`/`no_opengl` 由 `default:` 分支按"显卡/驱动"一组统一兜住。**每个 code 都有文案，无 KeyError 路径**。 |
+| 字典重复键（会在静态构造时抛 `TypeInitializationException`，让"崩溃分析"自己崩掉） | `_NT`(7 条)、`_TABLE`(23 条) 用集合初始化器，重复键会**抛**——机器比对无重复；`_TITLES` 是 `PyDict.Of`，重复键会**静默覆盖**——17 条也无重复。 |
+| 大小写 / locale 敏感（土耳其 i） | 文件内**没有** `.ToLower()` / `.ToUpper()` / `string.Compare` 的文化敏感用法；`Rx()` 统一追加 `RegexOptions.CultureInvariant`，两处内联 `(?i)` 的 token 正则也带 `CultureInvariant`。 |
+| 正则灾难性回溯 | 只有一处嵌套量词 `(?:[\n\r]+\t.*)+`（mod_missing 的依赖列表），每轮迭代必须吃掉换行+制表符，**不存在空匹配循环**；其余规则都是线性 `[^\n]+` 类。规则正则未设 MatchTimeout，但输入是用户自己的崩溃日志、且单条正则复杂度为线性——不构成真 bug。 |
+| `null` / 超长行 | `Analyzer` 全程用 `Py.Slice`/`Tail`/`ReadText(max_bytes)` 截断；`CollectFiles` 只收集已知日志文件。未发现把整份日志无界拼进正则的地方。 |
+| `_title_of` 未知码回落 | 有回落：未知 code → 中文「Minecraft 出现错误」，不会返回空串。 |
+| **结论** | **未发现真 bug**，规则表可安全运行。 |
+
+## 34. 本轮过程事故（透明记录）
+
+- 复审期间我又一次用 PowerShell 改源码：先把 `Client.cs` 写坏过一次（已 `git checkout` 还原并改用 `edit` 逐处修改），又在修 A-19 时把 `Cleaner.cs` 的 `catch` 结构弄断（构建立刻报 12 个错误，按行号手术修复，并顺手把整文件的行尾从 CRLF 归一为 LF，避免出现"整文件重写"的假 diff）。**最终 diff 是 Cleaner 7 行、LayoutStoreV2 11 行、McpClient 54 行、Mods 21 行**，无整文件重写。
+- 教训（写进结论提醒后续）：`read` 工具在显示时会**把全角括号/冒号折成半角**，按显示内容写 `old_string` 必然匹配失败；改中文源码时要么用只含 ASCII 的锚点，要么按行号手术。
+
+## 35. 本轮门槛
+
+Core Release **0 错误 0 警告**；全量 `dotnet test` **936 通过 / 0 失败 / 1 跳过**；探针默认用例与 `r7` 用例全 PASS。
+
+## 36. 七轮累计
+
+| 轮次 | 修复 | P0 | P1 | P2 | 备注 |
+|------|------|----|----|----|------|
+| 一~三 | A-01…A-09 | 0 | 6 | 3 | 主流程真 bug |
+| 四 | 无 | 0 | 0 | 0 | 抽读/筛查 |
+| 五~六 | A-10…A-15 | 0 | 0 | 6 | 资源/临时文件/提示 |
+| **七** | **A-16…A-19（全部是"修复自身引入"）** | 0 | **1** | 3 | 复审自有改动 |
+| **合计** | **19 项** | **0** | **7** | **12** | |
