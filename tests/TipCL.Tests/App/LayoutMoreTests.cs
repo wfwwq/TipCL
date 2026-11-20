@@ -302,7 +302,21 @@ public class LayoutBlockEntryCatalogTests
     {
         HashSet<string> set = LayoutBlockEntryCatalog.SingleBlockPageIds();
         Assert.Contains("settings:network", set);
+        Assert.Contains("feedback", set);
         Assert.DoesNotContain("settings:general", set);
+    }
+
+    /// <summary>
+    /// [R35 lin-l4] GOAL §6.3 WP-L4:入口表含实例库 library:main(Windows 17 → 18 的那一条,Linux 早已在表里)。
+    /// Linux 入口表共 24 条 = 设置内层 6 + 顶层 7(启动 / 下载 / 账号 / 联机 / 下载任务 / 实例库 / 插件)+ 插件市场
+    /// + 资源目录 6 + AI / 版本安装 / 版本管理 / 设置·布局;改动入口表时这里跟着改。
+    /// </summary>
+    [Fact]
+    public void Catalog_Has24Entries_IncludingLibraryMain()
+    {
+        Assert.Equal(24, LayoutBlockEntryCatalog.All.Length);
+        Assert.Equal("library", LayoutBlockEntryCatalog.Find("library:main")!.NavId);
+        Assert.False(LayoutBlockEntryCatalog.Find("library:main")!.SingleBlock);
     }
 }
 

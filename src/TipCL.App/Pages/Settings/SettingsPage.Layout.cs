@@ -24,6 +24,14 @@
 //   T-06 「编辑」按钮走 LayoutShellHooks.BeginEditPage / CanEditPage(lin-edit 代理按 v3 约定签名提供,
 //        见 tmp/v3_handoff.md「Linux 设置」小节);单块页面不出卡片,只在说明里点名。
 //   T-07 JSON 编辑器不再常驻页面:改成独立窗口 LayoutJsonWindow(校验/应用仍是 LayoutJsonEditor)。
+//
+// [R35 lin-l4 2026-11-20] 按 GOAL-layout-v3 §5.4 逐条补齐(报告 progress/R35-lin-l4.md):
+//   页面卡片改为纯按入口表(去 SingleBlock 与 settings:layout,含 library:main),默认 6 张 = 启动/下载/实例库/联机/账号/AI 助手;
+//   「已自定义」= LayoutStoreV2 里有该页条目(IsPageCustomized);方案卡片显示名 / 一行信息 / 排序走 LayoutProfiles,
+//   正在使用的方案不能删除;「高级」恢复组件管理(已创建 N 个组件 · 管理…,内联改名 / 删除);
+//   琥珀提示用 B.WarnInk / B.WarnSoft(找不到退回 B.Warn / 固定色);「设置」页签显示锁形图标(Geo.Lock 兜底内置);
+//   标题栏勾选项「账号名称」→「账号」(该开关控制整个账号芯片)。
+//   T-04 部分撤回:设置页仍不提供「加组件」(在编辑态抽屉里加),但已建组件的管理面板按 GOAL 回到「高级」。
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -56,14 +64,20 @@ public sealed partial class SettingsPage
     /// <summary>「高级」折叠态在 ui_prefs.expanded 里的键(默认折叠)。</summary>
     private const string LayoutAdvancedPrefKey = "settings.layout.advanced";
 
-    /// <summary>「页面」默认只显示的常用几页(顺序即卡片顺序);其余点「显示全部 N 个页面」展开。</summary>
-    private static readonly string[] LayoutCommonPages = { "launch", "download", "account", "settings:general", "playtime", "multiplayer" };
+    /// <summary>
+    /// [R35 lin-l4] GOAL §5.4-3:「页面」默认只显示这 6 张(启动、下载、实例库、联机、账号、AI 助手,顺序即卡片顺序);
+    /// 其余点「显示全部 N 个页面」展开。
+    /// </summary>
+    internal static readonly string[] LayoutDefaultCardPages = { "launch", "download", "library:main", "multiplayer", "account", "ai" };
 
     /// <summary>缩略图的「出厂样子」(6 列网格:跨列数 / 高度 / 种类);只是示意,没有的页面用通用三条。</summary>
     private static readonly Dictionary<string, (int Span, double H, string Kind)[]> LayoutDefaultThumbs = new(StringComparer.Ordinal)
     {
         ["launch"] = new[] { (6, 44.0, "hero"), (3, 14.0, ""), (3, 14.0, "") },
         ["download"] = new[] { (6, 14.0, ""), (6, 52.0, "") },
+        // 实例库:12 列网格 4+8(文件夹列表 / 版本选择),实例状态默认隐藏
+        ["library:main"] = new[] { (2, 70.0, ""), (4, 70.0, "") },
+        ["ai"] = new[] { (6, 12.0, ""), (6, 46.0, ""), (6, 12.0, "") },
         ["account"] = new[] { (2, 40.0, ""), (4, 40.0, ""), (6, 22.0, "") },
         ["settings:general"] = new[] { (6, 16.0, ""), (6, 16.0, ""), (6, 16.0, ""), (6, 16.0, "") },
         ["playtime"] = new[] { (6, 30.0, ""), (6, 38.0, "") },
@@ -78,6 +92,9 @@ public sealed partial class SettingsPage
 
     // 「显示全部 N 个页面」展开态:视图每次重建都读它,所以放实例字段
     private bool _layoutShowAllPages;
+
+    // 「高级 → 组件管理」内联面板展开态(只在本次会话内记住)
+    private bool _layoutWidgetPanelOpen;
 
     // ————— 视图装配 —————
 
@@ -289,7 +306,7 @@ public sealed partial class SettingsPage
         StackPanel opts = UiClass.H(8,
             TitlebarOption(I18nCore.Tr("AI 按钮"), bar.Ai, delegate (bool on) { ShellTabs.SetTitlebar(ai: on); }),
             TitlebarOption(I18nCore.Tr("主题切换"), bar.Theme, delegate (bool on) { ShellTabs.SetTitlebar(theme: on); }),
-            TitlebarOption(I18nCore.Tr("账号名称"), bar.Account, delegate (bool on) { ShellTabs.SetTitlebar(account: on); }));
+            TitlebarOption(I18nCore.Tr("账号"), bar.Account, delegate (bool on) { ShellTabs.SetTitlebar(account: on); }));
         Control titlebar = LayoutRow(I18nCore.Tr("标题栏"), I18nCore.Tr("隐藏 AI 按钮后仍可按 Ctrl+K 打开"), opts);
         return LayoutSection(I18nCore.Tr("导航"), null, tabs, titlebar);
     }
@@ -349,7 +366,7 @@ public sealed partial class SettingsPage
         Button eye = new Button
         {
             Theme = UiClass.Theme("Btn.Icon"),
-            Content = EyeIcon(shown),
+            Content = locked ? LockIcon() : EyeIcon(shown),
             Width = 24,
             Height = 24,
             Padding = new Thickness(0),
@@ -386,11 +403,32 @@ public sealed partial class SettingsPage
         return chip;
     }
 
-    // 眼睛图标:IconLib 没有眼睛,这里按 IconLib 的 16 单位描边口径画一个(闭眼 = 加一道斜线)
+    // 眼睛图标:优先用 lin-l0 的 Geo.Eye / Geo.EyeOff(16×16 描边),找不到就按同口径自己画(闭眼 = 加一道斜线)
     private static Control EyeIcon(bool open)
     {
         const string eye = "M1.5,8 C3.4,4.6 5.6,3.2 8,3.2 C10.4,3.2 12.6,4.6 14.5,8 C12.6,11.4 10.4,12.8 8,12.8 C5.6,12.8 3.4,11.4 1.5,8 Z M8,5.9 A2.1,2.1 0 1 1 8,10.1 A2.1,2.1 0 1 1 8,5.9 Z";
-        Geometry geometry = Geometry.Parse(open ? eye : eye + " M2.5,2.5 L13.5,13.5");
+        return StrokeIcon(open ? "Geo.Eye" : "Geo.EyeOff", open ? eye : eye + " M2.5,2.5 L13.5,13.5");
+    }
+
+    // 锁形图标(「设置」页签不能隐藏):优先 Geo.Lock,找不到用内置描边
+    private static Control LockIcon()
+    {
+        return StrokeIcon("Geo.Lock", "M4,7.5 L12,7.5 L12,13.5 L4,13.5 Z M5.6,7.5 L5.6,5.2 A2.4,2.4 0 0 1 10.4,5.2 L10.4,7.5");
+    }
+
+    // 16 单位描边图标:资源键里有 Geometry 就用资源(L0 令牌),否则解析内置路径 —— 找不到资源绝不抛异常
+    private static Control StrokeIcon(string resourceKey, string fallbackPath)
+    {
+        object? res = null;
+        try
+        {
+            Application.Current?.TryGetResource(resourceKey, null, out res);
+        }
+        catch (Exception)
+        {
+            res = null;
+        }
+        Geometry geometry = (res is Geometry found) ? found.Clone() : Geometry.Parse(fallbackPath);
         geometry.Transform = new ScaleTransform(14.0 / 16.0, 14.0 / 16.0);
         var path = new Avalonia.Controls.Shapes.Path
         {
@@ -528,21 +566,25 @@ public sealed partial class SettingsPage
 
     // ————— 页面:缩略图卡片 —————
 
-    // 卡片顺序 = 常用几页在前,其余按入口清单顺序;「设置 · 布局」自己不列
-    private static List<LayoutBlockEntryCatalog.Entry> OrderedPageEntries()
+    /// <summary>
+    /// [R35 lin-l4] GOAL §5.4-3「页面」卡片的数据(纯函数,单测钉住):入口表 <see cref="LayoutBlockEntryCatalog.All"/>
+    /// 去掉 <c>SingleBlock</c> 的页和「设置 · 布局」自己(<c>settings:layout</c>);默认 6 张在前(按
+    /// <see cref="LayoutDefaultCardPages"/> 的顺序),其余按入口表顺序。实例库 <c>library:main</c> 已在入口表里。
+    /// </summary>
+    internal static List<LayoutBlockEntryCatalog.Entry> LayoutPageCardEntries()
     {
         List<LayoutBlockEntryCatalog.Entry> list = new();
-        foreach (string id in LayoutCommonPages)
+        foreach (string id in LayoutDefaultCardPages)
         {
             LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(id);
-            if (entry != null)
+            if (entry != null && IsPageCardEntry(entry))
             {
                 list.Add(entry);
             }
         }
         foreach (LayoutBlockEntryCatalog.Entry entry in LayoutBlockEntryCatalog.All)
         {
-            if (!list.Contains(entry) && !string.Equals(entry.PageId, LayoutViewPageId, StringComparison.Ordinal))
+            if (!list.Contains(entry) && IsPageCardEntry(entry))
             {
                 list.Add(entry);
             }
@@ -550,25 +592,37 @@ public sealed partial class SettingsPage
         return list;
     }
 
+    /// <summary>入口表里只有一块内容的页(不出卡片,只在下方用一行文字点名)。</summary>
+    internal static List<LayoutBlockEntryCatalog.Entry> LayoutSingleBlockEntries()
+    {
+        return LayoutBlockEntryCatalog.All.Where(e => e.SingleBlock).ToList();
+    }
+
+    private static bool IsPageCardEntry(LayoutBlockEntryCatalog.Entry entry)
+    {
+        return !entry.SingleBlock && !string.Equals(entry.PageId, LayoutViewPageId, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 「已自定义」判定 = 布局文档里有这一页的条目(与 <see cref="LayoutStoreV2"/> 存档一致;单测钉住)。
+    /// </summary>
+    internal static bool IsPageCustomized(LayoutV2? doc, string? pageId)
+    {
+        if (doc?.Layout?.Pages == null || string.IsNullOrEmpty(pageId))
+        {
+            return false;
+        }
+        return doc.Layout.Pages.TryGetValue(pageId, out PageLayoutV2? page) && page != null;
+    }
+
     private Control LayoutPagesSection()
     {
         LayoutV2 doc = LayoutStoreV2.Load();
         double gap = DensityGap(doc.Layout.Shell?.Density);
-        List<LayoutBlockEntryCatalog.Entry> editable = new();
-        List<string> single = new();
-        foreach (LayoutBlockEntryCatalog.Entry entry in OrderedPageEntries())
-        {
-            // 单块页面(下载与网络 / 反馈与关于 / 只有一个块的页)不提供编辑入口,只在说明里点名
-            if (CanEditLayoutPage(entry))
-            {
-                editable.Add(entry);
-            }
-            else
-            {
-                single.Add(entry.Label);
-            }
-        }
-        List<LayoutBlockEntryCatalog.Entry> common = editable.Where(e => LayoutCommonPages.Contains(e.PageId)).ToList();
+        // 卡片集合按入口表的 SingleBlock 标记判断(GOAL Q5),不随页面是否已上屏变化
+        List<LayoutBlockEntryCatalog.Entry> editable = LayoutPageCardEntries();
+        List<string> single = LayoutSingleBlockEntries().Select(e => e.Label).ToList();
+        List<LayoutBlockEntryCatalog.Entry> common = editable.Where(e => LayoutDefaultCardPages.Contains(e.PageId)).ToList();
         List<LayoutBlockEntryCatalog.Entry> shown = (_layoutShowAllPages || common.Count == 0) ? editable : common;
 
         var grid = new Avalonia.Controls.Primitives.UniformGrid { Columns = 3, Margin = new Thickness(0, 0, -12, 0) };
@@ -582,7 +636,7 @@ public sealed partial class SettingsPage
             Run(ResetAllPagesAsync, I18nCore.Tr("布局未能保存"));
         });
         LayoutA11y(resetAll, I18nCore.Tr("所有页面恢复默认"));
-        resetAll.IsEnabled = editable.Any(e => doc.Layout.Pages.ContainsKey(e.PageId));
+        resetAll.IsEnabled = editable.Any(e => IsPageCustomized(doc, e.PageId));
 
         Grid foot = UiClass.G(null, "*,Auto");
         foot.Margin = new Thickness(0, -2, 0, 0);
@@ -605,7 +659,8 @@ public sealed partial class SettingsPage
 
     private Control PageCard(LayoutV2 doc, LayoutBlockEntryCatalog.Entry entry, double gap)
     {
-        bool custom = doc.Layout.Pages.TryGetValue(entry.PageId, out PageLayoutV2? page) && page != null;
+        bool custom = IsPageCustomized(doc, entry.PageId);
+        PageLayoutV2? page = custom ? doc.Layout.Pages[entry.PageId] : null;
         List<(int Span, double H, string Kind)> blocks = (custom && page != null) ? ThumbFromPage(page) : ThumbDefault(entry.PageId);
 
         TextBlock name = UiClass.Txt(entry.Label, 13, bold: true);
@@ -622,9 +677,10 @@ public sealed partial class SettingsPage
 
         Button edit = UiClass.Btn(I18nCore.Tr("编辑"), BtnKind.Soft, delegate
         {
-            // 跳到该页并直接进入编辑态(lin-edit 代理提供的约定入口)
+            // 跳到该页并直接进入编辑态(约定入口 LayoutShellHooks.BeginEditPage;单块 / 找不到页时它自己给提示)
             BeginLayoutPageEdit(entry);
         });
+        edit.IsEnabled = CanEditLayoutPage(entry);
         edit.HorizontalAlignment = HorizontalAlignment.Stretch;
         edit.HorizontalContentAlignment = HorizontalAlignment.Center;
         LayoutA11y(edit, Py.Fmt(I18nCore.Tr("编辑页面布局:{0}"), entry.Label));
@@ -648,7 +704,7 @@ public sealed partial class SettingsPage
         return card;
     }
 
-    // 单块页面返回 false(不出卡片);判断本身抛错时按「入口表的单块标记」兜底 —— 不让整块「页面」消失
+    // 「编辑」按钮可不可点(约定入口 CanEditPage);判断本身抛错时按「入口表的单块标记」兜底 —— 不让设置页崩
     private static bool CanEditLayoutPage(LayoutBlockEntryCatalog.Entry entry)
     {
         try
@@ -890,9 +946,9 @@ public sealed partial class SettingsPage
             // 直接编辑态(没有激活方案):给「现在这套」一张描边卡,提示可以存成方案
             grid.Children.Add(CurrentLayoutCard(doc.Layout));
         }
-        foreach (KeyValuePair<string, LayoutBody> kv in doc.Profiles)
+        foreach (string profileName in LayoutProfiles.OrderForCards(doc.Profiles.Keys))
         {
-            grid.Children.Add(ProfileCard(kv.Key, kv.Value, string.Equals(kv.Key, active, StringComparison.Ordinal)));
+            grid.Children.Add(ProfileCard(profileName, doc.Profiles[profileName], string.Equals(profileName, active, StringComparison.Ordinal)));
         }
         return UiClass.V(10, LayoutGroupHead(I18nCore.Tr("方案"), UiClass.H(6, import, export, save)), grid);
     }
@@ -932,10 +988,11 @@ public sealed partial class SettingsPage
         string tagText = active ? I18nCore.Tr("正在使用") : (ai ? I18nCore.Tr("AI 备份") : I18nCore.Tr("方案"));
         Border tag = active ? UiClass.Tag(tagText, "B.AccentText", "B.AccentSoft") : UiClass.Tag(tagText);
         tag.HorizontalAlignment = HorizontalAlignment.Left;
-        TextBlock title = UiClass.Txt(name, 13, bold: true);
+        // AI 备份(名字前缀「AI 备份 」)显示成「AI 改布局前 + 时间」,悬停仍能看到原名
+        TextBlock title = UiClass.Txt(LayoutProfiles.DisplayName(name), 13, bold: true);
         title.TextTrimming = TextTrimming.CharacterEllipsis;
         ToolTip.SetTip(title, name);
-        TextBlock meta = UiClass.Small(LayoutProfiles.Describe(body)).Wrap();
+        TextBlock meta = UiClass.Small(LayoutProfiles.CardInfo(name, body)).Wrap();
         meta.MinHeight = 34;
 
         Button apply = UiClass.Btn(active ? I18nCore.Tr("当前方案") : I18nCore.Tr("应用"), active ? BtnKind.Ghost : BtnKind.Soft, delegate
@@ -953,7 +1010,7 @@ public sealed partial class SettingsPage
         LayoutA11y(more, Py.Fmt(I18nCore.Tr("方案菜单:{0}"), name));
         more.Click += delegate
         {
-            OpenProfileMenu(more, name);
+            OpenProfileMenu(more, name, active);
         };
         Grid actions = UiClass.G(null, "*,Auto");
         actions.Margin = new Thickness(0, 6, 0, 0);
@@ -962,8 +1019,8 @@ public sealed partial class SettingsPage
         return SchemeCardShell(UiClass.V(4, tag, title, meta, actions), active);
     }
 
-    // 卡片菜单:重命名 / 复制一份 / —— / 删除
-    private void OpenProfileMenu(Control anchor, string name)
+    // 卡片菜单:重命名 / 复制一份 / —— / 删除(正在使用的方案不能删:菜单项置灰并说明)
+    private void OpenProfileMenu(Control anchor, string name, bool active)
     {
         ContextMenu menu = new ContextMenu();
         MenuItem rename = new MenuItem { Header = I18nCore.Tr("重命名") };
@@ -977,6 +1034,11 @@ public sealed partial class SettingsPage
             Run(() => DuplicateProfileAsync(name), I18nCore.Tr("布局未能保存"));
         };
         MenuItem del = new MenuItem { Header = I18nCore.Tr("删除") };
+        if (active)
+        {
+            del.IsEnabled = false;
+            ToolTip.SetTip(del, I18nCore.Tr("正在使用的方案不能删除，先切到别的方案"));
+        }
         del.Click += delegate
         {
             Run(() => DeleteProfileAsync(name), I18nCore.Tr("布局未能保存"));
@@ -1054,6 +1116,12 @@ public sealed partial class SettingsPage
 
     private async System.Threading.Tasks.Task DeleteProfileAsync(string name)
     {
+        // GOAL §5.4-4:正在使用的方案不能删除(菜单已置灰;这里再守一道,防键盘 / 无障碍路径绕过)
+        if (!LayoutProfiles.CanDelete(name, LayoutProfiles.ActiveName()))
+        {
+            PageBase.Toast(I18nCore.Tr("正在使用的方案不能删除，先切到别的方案"), "", ToastKind.Warning);
+            return;
+        }
         if (!await Dlg.Confirm(I18nCore.Tr("删除"), Py.Fmt(I18nCore.Tr("删除布局方案「{0}」?"), name), I18nCore.Tr("删除"), I18nCore.Tr("取消"), danger: true))
         {
             return;
@@ -1215,7 +1283,7 @@ public sealed partial class SettingsPage
     private Control LayoutAdvancedSection()
     {
         bool open = ReadAdvancedOpen();
-        Control body = Rows(LayoutSplitRow(), LayoutDangerRow(), LayoutFileRow());
+        Control body = Rows(LayoutSplitRow(), LayoutDangerRow(), LayoutWidgetManageRow(), LayoutFileRow());
         body.IsVisible = open;
         body.Margin = new Thickness(0, 8, 0, 0);
 
@@ -1298,7 +1366,8 @@ public sealed partial class SettingsPage
     {
         CheckBox toggle = UiClass.Switch(LayoutProfiles.DangerousWidgetsEnabled);
         LayoutA11y(toggle, I18nCore.Tr("网页和按钮组件"));
-        TextBlock warnText = UiClass.Txt(I18nCore.Tr("导入的布局里如果带网页或按钮组件，仍然默认关闭，需要你逐个打开。"), 12, false, "B.Warn").Wrap();
+        // 琥珀色提示:字色 / 底色用 lin-l0 的 B.WarnInk / B.WarnSoft,键不在时退回本树已有的 B.Warn / 固定色(不抛异常)
+        TextBlock warnText = UiClass.Txt(I18nCore.Tr("导入的布局里如果带网页或按钮组件，仍然默认关闭，需要你逐个打开。"), 12, false, LayoutBrushKey("B.WarnInk", "B.Warn")).Wrap();
         Border warn = new Border
         {
             CornerRadius = new CornerRadius(8),
@@ -1307,7 +1376,7 @@ public sealed partial class SettingsPage
             Child = warnText,
             IsVisible = toggle.IsChecked == true,
         };
-        warn.Dyn(Border.BackgroundProperty, "B.WarnSoft");
+        SetWarnSoft(warn);
         toggle.IsCheckedChanged += delegate
         {
             if (_layoutRebuilding)
@@ -1320,6 +1389,148 @@ public sealed partial class SettingsPage
             PageBase.Toast(on ? I18nCore.Tr("已开启：「添加」抽屉里多了网页和按钮") : I18nCore.Tr("已关闭网页和按钮组件"), "", ToastKind.Success);
         };
         return UiClass.V(0, LayoutRow(I18nCore.Tr("网页和按钮组件"), I18nCore.Tr("开启后可以添加嵌入网页（只接受 https）和执行动作的按钮"), toggle), warn);
+    }
+
+    // 资源键在不在(L0 新增的令牌在别的分支,合并前可能缺):在就用它,不在用兜底键
+    private static string LayoutBrushKey(string primary, string fallback)
+    {
+        try
+        {
+            if (Application.Current != null && Application.Current.TryGetResource(primary, null, out object? value) && value is IBrush)
+            {
+                return primary;
+            }
+        }
+        catch (Exception)
+        {
+            // 查资源失败就当没有
+        }
+        return fallback;
+    }
+
+    // 琥珀浅底:B.WarnSoft 在就动态绑定(明暗切换跟随),不在给固定浅琥珀
+    private static void SetWarnSoft(Border border)
+    {
+        if (LayoutBrushKey("B.WarnSoft", "") == "B.WarnSoft")
+        {
+            border.Dyn(Border.BackgroundProperty, "B.WarnSoft");
+        }
+        else
+        {
+            border.Background = new SolidColorBrush(Color.FromRgb(0xFD, 0xF3, 0xE2));
+        }
+    }
+
+    // —— 组件管理:「已创建 N 个组件 · 管理…」+ 内联面板(改名 / 删除;新组件在编辑态「添加」抽屉里建) ——
+
+    private Control LayoutWidgetManageRow()
+    {
+        LayoutV2 doc = LayoutStoreV2.Load();
+        List<WidgetDef> widgets = (doc.Layout.Widgets ?? new List<WidgetDef>()).Where(w => w != null).ToList();
+        Button manage = UiClass.Btn(_layoutWidgetPanelOpen ? I18nCore.Tr("收起") : I18nCore.Tr("管理…"), BtnKind.Normal, delegate
+        {
+            _layoutWidgetPanelOpen = !_layoutWidgetPanelOpen;
+            RefreshLayoutView();
+        });
+        LayoutA11y(manage, I18nCore.Tr("管理已创建的组件"));
+        Control head = LayoutRow(I18nCore.Tr("组件管理"), Py.Fmt(I18nCore.Tr("已创建 {0} 个组件"), widgets.Count), manage);
+        if (!_layoutWidgetPanelOpen)
+        {
+            return head;
+        }
+        StackPanel panel = UiClass.V(6);
+        panel.Margin = new Thickness(0, 10, 0, 0);
+        if (widgets.Count == 0)
+        {
+            panel.Children.Add(UiClass.Small(I18nCore.Tr("还没有组件。在页面的编辑态里点「添加」就能放便签、时钟等组件。")).Wrap());
+        }
+        else
+        {
+            foreach (WidgetDef widget in widgets)
+            {
+                panel.Children.Add(WidgetAdminRow(doc, widget));
+            }
+            panel.Children.Add(UiClass.Small(I18nCore.Tr("删除组件会把它从所有页面上移走；要新加组件，在页面的编辑态里点「添加」。")).Wrap());
+        }
+        return UiClass.V(0, head, panel);
+    }
+
+    // 一行组件:标题(没有就用类型名)+ 类型 · 用在几个页面 + 改名 / 删除;永远不显示内部 id
+    private Control WidgetAdminRow(LayoutV2 doc, WidgetDef widget)
+    {
+        string title = WidgetUI.TitleOf(widget);
+        int used = LayoutWidgetUsage(doc, widget.Id);
+        string info = (used > 0)
+            ? Py.Fmt(I18nCore.Tr("{0} · 用在 {1} 个页面"), WidgetUI.TypeLabel(widget.Type), used)
+            : Py.Fmt(I18nCore.Tr("{0} · 还没放到页面上"), WidgetUI.TypeLabel(widget.Type));
+        string id = widget.Id;
+        Button rename = UiClass.Btn(I18nCore.Tr("重命名"), BtnKind.Ghost, delegate
+        {
+            Run(() => RenameWidgetAsync(id, title), I18nCore.Tr("布局未能保存"));
+        });
+        Button del = UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Ghost, delegate
+        {
+            Run(() => DeleteWidgetAsync(id, title), I18nCore.Tr("布局未能保存"));
+        });
+        LayoutA11y(rename, Py.Fmt(I18nCore.Tr("重命名组件:{0}"), title));
+        LayoutA11y(del, Py.Fmt(I18nCore.Tr("删除组件:{0}"), title));
+        TextBlock name = UiClass.Txt(title, 13, bold: true);
+        name.TextTrimming = TextTrimming.CharacterEllipsis;
+        Grid row = UiClass.G(null, "*,Auto");
+        row.Add(UiClass.V(2, name, UiClass.Small(info)).VCenter(), 0);
+        row.Add(UiClass.H(4, rename, del).VCenter(), 0, 1);
+        return row;
+    }
+
+    /// <summary>某个组件被几个页面引用(按 custom:&lt;id&gt; 块统计;纯函数,单测用)。</summary>
+    internal static int LayoutWidgetUsage(LayoutV2? doc, string? widgetId)
+    {
+        if (doc?.Layout?.Pages == null || string.IsNullOrEmpty(widgetId))
+        {
+            return 0;
+        }
+        string blockId = LayoutWidgetOps.BlockIdOf(widgetId);
+        return doc.Layout.Pages.Values.Count(p => p != null && p.Blocks.Any(b => b != null && string.Equals(b.Id, blockId, StringComparison.Ordinal)));
+    }
+
+    private async System.Threading.Tasks.Task RenameWidgetAsync(string widgetId, string current)
+    {
+        string? next = await Dlg.Prompt(I18nCore.Tr("重命名"), I18nCore.Tr("组件名"), current);
+        if (next == null || next.Trim().Length == 0 || next.Trim() == current)
+        {
+            return;
+        }
+        LayoutV2 doc = LayoutStoreV2.Load();
+        WidgetDef? def = doc.Layout.Widgets?.FirstOrDefault(w => w != null && string.Equals(w.Id, widgetId, StringComparison.Ordinal));
+        if (def == null)
+        {
+            return;
+        }
+        def.Title = next.Trim();
+        if (!LayoutStoreV2.Save(doc))
+        {
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), I18nCore.Tr("写盘失败"), ToastKind.Error);
+            return;
+        }
+        RefreshLayoutView();
+    }
+
+    // 删除 = 定义 + 所有页面 / 方案里对它的引用一起退场(LayoutWidgetOps.RemoveWidget 原有语义)
+    private async System.Threading.Tasks.Task DeleteWidgetAsync(string widgetId, string title)
+    {
+        if (!await Dlg.Confirm(I18nCore.Tr("删除"), Py.Fmt(I18nCore.Tr("删除组件「{0}」？它会从所有页面上移走。"), title), I18nCore.Tr("删除"), I18nCore.Tr("取消"), danger: true))
+        {
+            return;
+        }
+        LayoutV2 doc = LayoutStoreV2.Load();
+        LayoutWidgetOps.RemoveWidget(doc, widgetId);
+        if (!LayoutStoreV2.Save(doc))
+        {
+            PageBase.Toast(I18nCore.Tr("布局未能保存"), I18nCore.Tr("写盘失败"), ToastKind.Error);
+            return;
+        }
+        PageBase.Toast(Py.Fmt(I18nCore.Tr("已删除「{0}」"), title), "", ToastKind.Success);
+        RefreshLayoutView();
     }
 
     // —— 布局文件:打开所在文件夹 / 在编辑器中打开…(独立窗口) ——
