@@ -40,14 +40,14 @@ $Mutations = @(
     @{ Name = 'PyJson_MaxDepth'
        File = 'src/TipCL.Core/PyJson.cs'; Kind = 'text'
        Old = 'private const int MaxDepth = 512;'; New = 'private const int MaxDepth = int.MaxValue;'
-       Suite = 'linux'; Filter = 'FullyQualifiedName~PyJsonMalformedTests'
+       Suite = 'linux'; Filter = 'FullyQualifiedName~PyJson'
        Expect = 'PyJson_RejectsPathologicalNestingWithACatchableError / DepthLimitAlsoGuardsMixedNesting' }
 
     @{ Name = 'PyJson_MatchTruncated'
        File = 'src/TipCL.Core/PyJson.cs'; Kind = 'text'
        Old = 'if (string.CompareOrdinal(_s, i, w, 0, w.Length) == 0)'
        New = 'if (string.CompareOrdinal(_s.Substring(i, w.Length), w) == 0)'
-       Suite = 'linux'; Filter = 'FullyQualifiedName~PyJsonMalformedTests'
+       Suite = 'linux'; Filter = 'FullyQualifiedName~PyJson'
        Expect = 'LoadsOr 对截断关键字(nul/tru/fals)回落默认值' }
 
     @{ Name = 'Mods_ContentDirIgnoresIsolation'
