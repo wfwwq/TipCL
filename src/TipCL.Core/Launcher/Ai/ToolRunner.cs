@@ -20,7 +20,7 @@ namespace TipCL.Core.Launcher.Ai;
 /// <summary>
 /// 工具执行器。宿主(页面)通过回调提供三件事:权限确认、ask_user 结构化选择、进度事件。
 /// </summary>
-public sealed class ToolRunner
+public sealed partial class ToolRunner
 {
     /// <summary>调用 IApi 的门面(接口保持最小:只用到 CallAsync)。</summary>
     public interface IBackend
@@ -301,7 +301,7 @@ public sealed class ToolRunner
                     preview = null;
                 }
                 (bool ok, bool always) = await Confirm(call, label, verdict.reason, preview).ConfigureAwait(false);
-                if (always) _alwaysAllowed.Add(call.name);
+                if (always && AllowsAlways(call.name)) _alwaysAllowed.Add(call.name);
                 if (!ok)
                 {
                     call.Mark(ToolCallStatus.DENIED, error: "用户拒绝");
@@ -584,6 +584,18 @@ public sealed class ToolRunner
                 }
                 return await Subagent(args, ct).ConfigureAwait(false);
             }
+
+            // ── AI-new-features:升级 / 预检 / 服务器 / 光影推荐 / 诊断报告(实现见 ToolRunner.NewFeatures.cs)──
+            case "plan_instance_upgrade":
+            case "apply_instance_upgrade":
+            case "preflight_check":
+            case "list_servers":
+            case "add_server":
+            case "remove_server":
+            case "ping_server":
+            case "recommend_shaders":
+            case "export_diagnostic_report":
+                return await ExecuteNewFeaturesAsync(call, args, ct).ConfigureAwait(false);
 
             default:
                 // 兜底:MCP 工具（mcp_<server>_<tool>）路由到对应的外部 server

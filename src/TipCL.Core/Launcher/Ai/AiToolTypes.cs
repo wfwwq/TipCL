@@ -84,6 +84,16 @@ public static class ToolMeta
         new("delete_mod", false, "delete", "high", false),
         new("delete_instance", false, "delete", "high", false),
         new("launch_game", false, "launch", "high", false),
+        // AI-new-features:升级 / 预检 / 服务器 / 光影推荐 / 诊断报告
+        new("plan_instance_upgrade", true, "network", "low", false),
+        new("preflight_check", true, "read", "low", false),
+        new("list_servers", true, "read", "low", false),
+        new("ping_server", true, "network", "low", false),
+        new("recommend_shaders", true, "network", "low", false),
+        new("add_server", false, "write_local", "medium", false),
+        new("export_diagnostic_report", false, "write_local", "medium", false),
+        new("apply_instance_upgrade", false, "write_local", "high", true),
+        new("remove_server", false, "delete", "high", false),
     };
 
     public static Dictionary<string, ToolMetaInfo> Map

@@ -56,6 +56,18 @@ public static class Tools
         {"type":"function","function":{"name":"download_java","description":"下载 Adoptium Java","parameters":{"type":"object","properties":{"major":{"type":"string","description":"8 / 11 / 17 / 21"}},"required":["major"]}}},
         {"type":"function","function":{"name":"launch_game","description":"启动游戏。不填则用默认实例和已装版本","parameters":{"type":"object","properties":{"instance":{"type":"string"},"version":{"type":"string"},"username":{"type":"string"},"memory_mb":{"type":"integer"}}}}},
         """,
+        // AI-new-features:实例升级 / 启动前预检 / 服务器管理 / 按硬件推荐光影 / 导出诊断报告(实现见 ToolRunner.NewFeatures.cs)
+        """
+        {"type":"function","function":{"name":"plan_instance_upgrade","description":"升级整合包/实例前先出计划(只读,联网):逐个检查已装模组在 Modrinth/CurseForge 上有没有目标 MC 版本+加载器的版本,列出可升级/缺失/替代建议/前置变化。用户说「升级到 1.21」时先调它","parameters":{"type":"object","properties":{"instance":{"type":"string"},"target_version":{"type":"string","description":"目标 MC 版本,如 1.21.1"},"loader":{"type":"string","description":"目标加载器 fabric / forge / neoforge / quilt,空则沿用当前"}},"required":["target_version"]}}},
+        {"type":"function","function":{"name":"apply_instance_upgrade","description":"按升级计划执行升级。默认复制为新实例再升级(原实例与存档不动):复制 config/存档/资源包/光影 → 装目标版本与加载器 → 下载升级后的模组,跳过目标版本没有的。先 plan_instance_upgrade 给用户看清单再调","parameters":{"type":"object","properties":{"instance":{"type":"string"},"target_version":{"type":"string"},"loader":{"type":"string"},"new_name":{"type":"string","description":"新实例名,空则用「原名-目标版本」"},"in_place":{"type":"boolean","description":"原地升级(危险,只在用户明确要求时用),默认 false"},"skip":{"type":"array","items":{"type":"string"},"description":"不处理的模组文件名"}},"required":["target_version"]}}},
+        {"type":"function","function":{"name":"preflight_check","description":"启动前预检(只读):Java 版本与 MC 是否匹配、缺前置模组、加载器不匹配、分配内存超过物理内存、磁盘空间、依赖库缺失。启动前或修完问题后复核用","parameters":{"type":"object","properties":{"instance":{"type":"string"},"version":{"type":"string","description":"要启动的版本 id,空则自动挑"},"memory_mb":{"type":"integer"},"java":{"type":"string","description":"java 可执行文件,空则自动选择"}}}}},
+        {"type":"function","function":{"name":"list_servers","description":"列出实例游戏内「多人游戏」里的服务器(servers.dat)","parameters":{"type":"object","properties":{"instance":{"type":"string"}}}}},
+        {"type":"function","function":{"name":"add_server","description":"把服务器加到实例的多人游戏列表(写 servers.dat)","parameters":{"type":"object","properties":{"instance":{"type":"string"},"name":{"type":"string","description":"显示名"},"address":{"type":"string","description":"地址,可带端口,如 mc.example.com:25565"},"port":{"type":"integer"}},"required":["address"]}}},
+        {"type":"function","function":{"name":"remove_server","description":"从多人游戏列表里删掉一台服务器(按 list_servers 的 index,或按地址)","parameters":{"type":"object","properties":{"instance":{"type":"string"},"index":{"type":"integer"},"address":{"type":"string"}}}}},
+        {"type":"function","function":{"name":"ping_server","description":"查询 Minecraft 服务器状态(联网只读):延迟、在线人数、版本、MOTD。可传地址,或传 instance+index 查列表里的服务器","parameters":{"type":"object","properties":{"address":{"type":"string"},"port":{"type":"integer"},"instance":{"type":"string"},"index":{"type":"integer"},"timeout_ms":{"type":"integer","description":"超时,默认 5000"}}}}},
+        {"type":"function","function":{"name":"recommend_shaders","description":"按本机显卡/内存和实例的光影加载器(Iris/Oculus/OptiFine)给光影或资源包分低/中/高配推荐(只读,联网)。用户问「我的电脑适合什么光影」时用","parameters":{"type":"object","properties":{"kind":{"type":"string","description":"shader / resourcepack,默认 shader"},"query":{"type":"string","description":"搜索词,可空"},"instance":{"type":"string"},"source":{"type":"string"}}}}},
+        {"type":"function","function":{"name":"export_diagnostic_report","description":"把本次崩溃排查的摘要、日志关键片段、实例/模组清单、硬件摘要导出成 zip 或 markdown(敏感信息自动打码),方便发给别人求助","parameters":{"type":"object","properties":{"instance":{"type":"string"},"dest_dir":{"type":"string","description":"导出目录,空则放数据目录下 diagnostics/"},"format":{"type":"string","description":"zip / md,默认 zip"}}}}},
+        """,
         """
         {"type":"function","function":{"name":"diagnose_launch","description":"分析启动失败:规则扫 latest.log 和崩溃报告","parameters":{"type":"object","properties":{"instance":{"type":"string"}}}}},
         {"type":"function","function":{"name":"scan_mod_conflicts","description":"扫描模组冲突、缺依赖、加载器不匹配","parameters":{"type":"object","properties":{"instance":{"type":"string"}}}}},
@@ -134,6 +146,16 @@ public static class Tools
         { "forget", "忘掉" },
         { "read_artifact", "读文件" },
         { "dispatch_subagent", "派发子任务" },
+        // AI-new-features
+        { "plan_instance_upgrade", "查升级计划" },
+        { "apply_instance_upgrade", "升级实例" },
+        { "preflight_check", "启动前预检" },
+        { "list_servers", "查服务器列表" },
+        { "add_server", "添加服务器" },
+        { "remove_server", "删除服务器" },
+        { "ping_server", "查服务器状态" },
+        { "recommend_shaders", "按硬件推荐光影" },
+        { "export_diagnostic_report", "导出诊断报告" },
     };
 
     /// <summary>带参数时更好读的标签模板(照 Windows 版 Tools._FMT)。</summary>
@@ -161,6 +183,13 @@ public static class Tools
         { "search_versions", "搜版本「{query}」" },
         { "inspect_mod", "检查模组 {filename}" },
         { "read_mod_config", "读配置 {path}" },
+        // AI-new-features
+        { "plan_instance_upgrade", "查升级计划 {instance} → {target_version}" },
+        { "apply_instance_upgrade", "升级实例 {instance} → {target_version}" },
+        { "add_server", "添加服务器 {address}" },
+        { "remove_server", "删除服务器 #{index}" },
+        { "ping_server", "查服务器 {address}" },
+        { "export_diagnostic_report", "导出诊断报告 → {dest_dir}" },
     };
 
     /// <summary>是否写操作(风险分级非只读)。</summary>
@@ -702,6 +731,12 @@ public static class Tools
                 return new List<string> { root };
             case "install_game":
                 return new List<string> { new Instance(instName.Length > 0 ? instName : null).VersionsDir() };
+            // AI-new-features:新写工具的检查点路径(见 NewFeatureEffects.AffectedPaths)
+            case "apply_instance_upgrade":
+            case "add_server":
+            case "remove_server":
+            case "export_diagnostic_report":
+                return NewFeatureEffects.AffectedPaths(name, args, instance);
             case "download_java":
                 try
                 {

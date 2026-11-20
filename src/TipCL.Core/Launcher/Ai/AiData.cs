@@ -59,7 +59,14 @@ public static class AiData
         "- 先结论后步骤。\n" +
         "- 需要用户选时用 ask_user,不要甩一长串纯文字。\n" +
         "- 只有 install_* 已经调用成功后,才让用户去看左侧「下载任务」。\n" +
-        "- 用户只是打招呼:简短自我介绍,并举 3 个例子(下一款游戏、装钠、启动闪退帮我看)。";
+        "- 用户只是打招呼:简短自我介绍,并举 3 个例子(下一款游戏、装钠、启动闪退帮我看)。" +
+        // AI-new-features:以下一段是 Linux 侧新增工具的使用指引(Windows 版没有对应段落)
+        "\n\n# 升级 / 预检 / 服务器 / 光影推荐 / 诊断报告\n" +
+        "- 升级整合包或实例到新 MC 版本:先 plan_instance_upgrade 把「可升级 / 缺失 / 替代建议 / 前置变化」讲清楚,缺失的模组用 ask_user 问用户接不接受;再 apply_instance_upgrade(默认复制成新实例,原实例不动;只有用户明确要求才 in_place)。装完先 preflight_check。\n" +
+        "- 用户问「能不能启动 / 启动前帮我检查」或收到启动页预检结果:先 preflight_check,按 error → warn 的顺序修,修完再跑一次确认。\n" +
+        "- 服务器:list_servers 看列表,ping_server 查延迟 / 在线人数 / 版本;add_server / remove_server 会改游戏内「多人游戏」列表。ping 不通时说清是超时还是连不上,不要猜。\n" +
+        "- 问「我的电脑适合什么光影 / 资源包」:recommend_shaders,先说硬件档位和依据,再用 ask_user 让用户选;没有 Iris / Oculus / OptiFine 时先说要装哪个。档位是按名称推断的,要如实说。\n" +
+        "- 崩溃排查告一段落、用户想发给别人求助时:export_diagnostic_report 导出报告(自动打码账号令牌与用户名),告诉用户文件位置。";
 
     /// <summary>把 `__LANG_RULE__` 换成当前语言的规矩(照 Windows 版 BackendApi 的取用方式)。</summary>
     public static string SystemPrompt(string? langRule = null)
@@ -90,6 +97,12 @@ public static class AiData
         (new[] { "删除", "删掉", "卸载", "移除", "delete", "uninstall", "remove" },
             new[] { "delete_mod", "delete_instance", "disable_mod", "enable_mod" }),
         (new[] { "禁用", "启用", "disable", "enable" }, new[] { "disable_mod", "enable_mod", "list_mods" }),
+        // AI-new-features
+        (new[] { "升级", "更新到", "升到", "迁移到", "upgrade" }, new[] { "plan_instance_upgrade", "apply_instance_upgrade", "search_versions" }),
+        (new[] { "预检", "启动前", "能不能启动", "检查一下", "体检", "preflight" }, new[] { "preflight_check" }),
+        (new[] { "服务器", "server", "ping", "延迟", "多人游戏", "在线人数" }, new[] { "list_servers", "add_server", "remove_server", "ping_server" }),
+        (new[] { "光影", "shader", "资源包", "材质", "适合什么", "配置低", "显卡" }, new[] { "recommend_shaders" }),
+        (new[] { "诊断报告", "导出报告", "导出日志", "发给别人", "求助", "report" }, new[] { "export_diagnostic_report" }),
     };
 
     /// <summary>「用户在下命令」而不是在提问(用于决定是否带上写操作工具)。</summary>

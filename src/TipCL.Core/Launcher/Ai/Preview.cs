@@ -250,6 +250,13 @@ public static class Preview
                 return Row("summary", Tr("将被删除："), lines, tooLarge: false);
             }
 
+            // AI-new-features:新写工具的预览(见 NewFeatureEffects.Preview)
+            case "apply_instance_upgrade":
+            case "add_server":
+            case "remove_server":
+            case "export_diagnostic_report":
+                return NewFeatureEffects.Preview(name, args, instance);
+
             default:
             {
                 if (InstallTargets.Contains(name))

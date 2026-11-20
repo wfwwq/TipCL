@@ -168,6 +168,9 @@ public static class AiSelfTest
         // 10. AI 服务层:检查点 / 压缩 / 令牌与用量 / 会话存档 / 产物回读 / MCP 配置
         VerifyServices((name, ok) => Check(name, ok));
 
+        // 11. AI-new-features:升级 / 预检 / 服务器 / 光影推荐 / 诊断报告(纯逻辑)
+        NewFeaturesSelfTest.Verify(Check);
+
         return result;
     }
 
