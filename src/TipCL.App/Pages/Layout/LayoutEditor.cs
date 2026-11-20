@@ -351,7 +351,8 @@ public sealed class LayoutEditor
 			Background = Brushes.Transparent,
 			Content = _list,
 			HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-			VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+			VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+			IsScrollInertiaEnabled = true
 		};
 		_root.Add(_scroll, 0);
 		_root.Add(bottom, 1);
@@ -365,7 +366,8 @@ public sealed class LayoutEditor
 			Background = Brushes.Transparent,
 			Content = _stage,
 			HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-			VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+			VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+			IsScrollInertiaEnabled = true
 		};
 		// 键盘(§4.G):整个编辑器根元素接管按键 —— Esc / Delete / 方向键 / Ctrl+Z/Y/C/V
 		_root.Focusable = true;
@@ -1918,6 +1920,25 @@ public sealed class LayoutEditor
 	}
 
 	// [layout-fix] 参考件v2-对齐:手势位移 → 意图 → 重排(自动滚动也用同一入口按当前指针重算一次)
+	private string CanvasGestureSig()
+	{
+		System.Text.StringBuilder sb = new System.Text.StringBuilder();
+		foreach (string id in _gestureCells.Keys)
+		{
+			LayoutCell? cell = _box.CellOf(id);
+			if (cell == null)
+			{
+				continue;
+			}
+			sb.Append(id).Append(':');
+			sb.Append(cell.NX.ToString("0.####")).Append(',');
+			sb.Append(cell.NY.ToString("0.####")).Append(',');
+			sb.Append(cell.NW.ToString("0.####")).Append(',');
+			sb.Append(cell.NH.ToString("0.####")).Append(';');
+		}
+		return sb.ToString();
+	}
+
 	private void ApplyPointer(Point point)
 	{
 		if (_gesture.Length == 0 || _gesture == "marquee")
@@ -1936,11 +1957,38 @@ public sealed class LayoutEditor
 			}
 			_gestureMoved = true;
 			_session.PushUndo(_gestureBefore);
+			_box.HoldHeights(true);
 		}
 		if (_box.IsCanvas)
 		{
+			// 自由画布按像素跟手:卡片停在起手矩形上,再用平移跟指针。
+			// 吸附后的格子仍写进模型,给辅助线和松手落位用,不再让卡片本身一格一格跳。
+			if (_gesture == "move" && _box.Floating.Count == 0)
+			{
+				foreach (KeyValuePair<string, LayoutRect> kv in _gestureRects)
+				{
+					_box.SetFloating(kv.Key, kv.Value);
+				}
+				_box.ShowPlaceholder = true;
+			}
+			if (_gesture == "move")
+			{
+				foreach (string id in _gestureCells.Keys)
+				{
+					if (_cards.TryGetValue(id, out LayoutCard? moving))
+					{
+						LayoutMotion.SetOffset(moving, dx, dy);
+					}
+				}
+			}
+			string before = CanvasGestureSig();
 			ApplyCanvasGesture(dx, dy);
-			_box.Reflow();
+			_box.CancelFlipArm();
+			// 吸附格子没变就不重排、不重画底纹。卡片只靠上面的平移跟手。
+			if (before != CanvasGestureSig())
+			{
+				_box.Reflow();
+			}
 		}
 		else
 		{
@@ -1967,9 +2015,15 @@ public sealed class LayoutEditor
 		// 框选、没越过拖动距离的单击只改了选择:布局没动,撤销栈里也没压东西,不提交也不重画。
 		bool movedSomething = _gestureMoved && (_gesture == "move" || _gesture == "resize");
 		List<string> touchedIds = new List<string>(_gestureCells.Keys);
+		// 先登记滑动，再撤掉浮起。顺序反了的话，撤浮起触发的排布会在平移还在时把卡片放到吸附点上，卡片被甩出去。
+		if (movedSomething)
+		{
+			_box.ArmFlip();
+		}
 		// [任务 B] 收尾前记下浮起状态:改大小的块要从"手里的像素矩形"落位到吸附尺寸
 		bool wasResize = _gesture == "resize";
 		Dictionary<string, LayoutRect> floats = new Dictionary<string, LayoutRect>(_box.Floating, StringComparer.Ordinal);
+		_box.HoldHeights(false);
 		_box.ShowPlaceholder = false;
 		_box.ClearFloating();
 		_gestureRects.Clear();
@@ -2008,12 +2062,6 @@ public sealed class LayoutEditor
 				}
 			}
 			return;
-		}
-		// [任务 B] 取消 / 松手都从"现在看起来的位置"滑到最终位置:被拖块带着手里的平移做 FLIP,
-		// 让过位的块同样 FLIP;改大小的块另走落位(像素矩形 → 吸附后的槽位矩形)
-		if (!_box.IsCanvas)
-		{
-			_box.ArmFlip();
 		}
 		if (rollback || !persist)
 		{

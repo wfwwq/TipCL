@@ -80,16 +80,17 @@ internal static class DangerousWidgets
         {
             return WidgetUI.Placeholder(I18nCore.Tr("按钮动作不合法"), reason);
         }
-        Button button = U.Btn(WidgetUI.TitleOf(widget), BtnKind.Normal, delegate
+        Button button = null!;
+        button = U.Btn(WidgetUI.TitleOf(widget), BtnKind.Normal, delegate
         {
-            Run(kind, arg1, arg2);
+            Run(button, kind, arg1, arg2);
         }, "Play");
         StackPanel panel = U.V(6.0, U.Small(WidgetUI.TypeLabel(LayoutSchema.WidgetButton)), U.H(8.0, button, U.Spring()), U.Small(kind + ":" + arg1));
         return U.Card(panel, 10.0);
     }
 
     // 白名单动作执行:全部走启动器自己的入口,不开任何外部命令
-    private static void Run(string kind, string arg1, string arg2)
+    private static void Run(Button button, string kind, string arg1, string arg2)
     {
         switch (kind)
         {
@@ -101,15 +102,25 @@ internal static class DangerousWidgets
             OpenUrl(Utils.ROOT);
             break;
         case "launch":
-            _ = LaunchAsync(arg1, arg2);
+            if (!button.IsEnabled)
+            {
+                break;
+            }
+            button.IsEnabled = false;
+            _ = LaunchAsync(button, arg1, arg2);
             break;
         case "rpc":
-            _ = CallRpcAsync(arg1);
+            if (!button.IsEnabled)
+            {
+                break;
+            }
+            button.IsEnabled = false;
+            _ = CallRpcAsync(button, arg1);
             break;
         }
     }
 
-    private static async Task LaunchAsync(string instance, string version)
+    private static async Task LaunchAsync(Button button, string instance, string version)
     {
         try
         {
@@ -128,10 +139,14 @@ internal static class DangerousWidgets
         {
             ToastHost.Show(I18nCore.Tr("启动失败"), ex.Message, ToastKind.Error);
         }
+        finally
+        {
+            button.IsEnabled = true;
+        }
     }
 
     // 只读 RPC:结果截断成一行 Toast(按钮不该弹大段内容)
-    private static async Task CallRpcAsync(string name)
+    private static async Task CallRpcAsync(Button button, string name)
     {
         try
         {
@@ -146,6 +161,10 @@ internal static class DangerousWidgets
         catch (Exception ex)
         {
             ToastHost.Show(I18nCore.Tr("这个动作没能执行"), ex.Message, ToastKind.Error);
+        }
+        finally
+        {
+            button.IsEnabled = true;
         }
     }
 

@@ -388,6 +388,73 @@ public class LayoutWidgetOpsTests
     }
 
     [Fact]
+    public void RemoveWidget_AlsoDropsProfileAndVariantReferences()
+    {
+        LayoutV2 doc = LayoutV2.CreateDefault();
+        string id = LayoutWidgetOps.AddWidget(doc, LayoutSchema.WidgetNote);
+        string blockId = LayoutWidgetOps.BlockIdOf(id);
+
+        PageLayoutV2 page = new PageLayoutV2();
+        LayoutWidgetOps.AppendBlock(page, blockId);
+        doc.Layout.Pages["library:main"] = page;
+
+        LayoutBody variant = new LayoutBody();
+        PageLayoutV2 variantPage = new PageLayoutV2();
+        LayoutWidgetOps.AppendBlock(variantPage, blockId);
+        LayoutWidgetOps.AppendBlock(variantPage, "header");
+        variant.Pages["library:main"] = variantPage;
+        variant.Widgets.Add(new WidgetDef { Id = id, Type = LayoutSchema.WidgetNote });
+        doc.Layout.Variants["narrow"] = variant;
+
+        LayoutBody profile = new LayoutBody();
+        PageLayoutV2 profilePage = new PageLayoutV2();
+        LayoutWidgetOps.AppendBlock(profilePage, blockId);
+        profile.Pages["plugins"] = profilePage;
+        profile.Widgets.Add(new WidgetDef { Id = id, Type = LayoutSchema.WidgetNote });
+        doc.Profiles["mine"] = profile;
+
+        int removed = LayoutWidgetOps.RemoveWidget(doc, id);
+        Assert.Equal(3, removed);
+        Assert.DoesNotContain(doc.Layout.Widgets, w => w.Id == id);
+        Assert.Empty(doc.Layout.Variants["narrow"].Widgets);
+        Assert.DoesNotContain(doc.Layout.Variants["narrow"].Pages["library:main"].Blocks, b => b.Id == blockId);
+        Assert.Contains(doc.Layout.Variants["narrow"].Pages["library:main"].Blocks, b => b.Id == "header");
+        Assert.Empty(doc.Profiles["mine"].Widgets);
+        Assert.Empty(doc.Profiles["mine"].Pages["plugins"].Blocks);
+    }
+
+    [Fact]
+    public void MergeImport_DisarmsNewDangerousWidgets_AndKeepsExistingSwitch()
+    {
+        LayoutV2 current = LayoutV2.CreateDefault();
+        WidgetDef kept = new WidgetDef { Id = "keep-web", Type = LayoutSchema.WidgetWeb, Title = "old" };
+        kept.Settings["enabled"] = true;
+        current.Layout.Widgets.Add(kept);
+
+        LayoutV2 incoming = LayoutV2.CreateDefault();
+        PageLayoutV2 importedPage = new PageLayoutV2();
+        importedPage.Blocks.Add(new BlockLayout { Id = "custom:keep-web" });
+        importedPage.Blocks.Add(new BlockLayout { Id = "custom:new-btn" });
+        importedPage.Blocks.Add(new BlockLayout { Id = "custom:new-note" });
+        incoming.Layout.Pages["library:main"] = importedPage;
+
+        WidgetDef same = new WidgetDef { Id = "keep-web", Type = LayoutSchema.WidgetWeb };
+        same.Settings["enabled"] = false;
+        incoming.Layout.Widgets.Add(same);
+        WidgetDef button = new WidgetDef { Id = "new-btn", Type = LayoutSchema.WidgetButton, Title = "go" };
+        button.Settings["enabled"] = true;
+        button.Settings["action"] = "page:launch";
+        incoming.Layout.Widgets.Add(button);
+        incoming.Layout.Widgets.Add(new WidgetDef { Id = "new-note", Type = LayoutSchema.WidgetNote, Title = "n" });
+
+        int count = PageLayoutIO.MergeImport(current, incoming.ToJson());
+        Assert.Equal(1, count);
+        Assert.Equal(true, Assert.Single(current.Layout.Widgets, w => w.Id == "keep-web").Settings["enabled"]);
+        Assert.Equal(false, Assert.Single(current.Layout.Widgets, w => w.Id == "new-btn").Settings["enabled"]);
+        Assert.Contains(current.Layout.Widgets, w => w.Id == "new-note" && w.Type == LayoutSchema.WidgetNote);
+    }
+
+    [Fact]
     public void AddThenSaveThenLoad_KeepsWidgetAndBlock()
     {
         using LayoutStoreDir dir = new LayoutStoreDir("widgets");

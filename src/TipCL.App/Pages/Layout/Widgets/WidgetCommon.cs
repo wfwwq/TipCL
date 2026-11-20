@@ -165,6 +165,11 @@ public static class WidgetCommon
         switch (head)
         {
         case "page":
+            if (!IsKnownPageTarget(rest))
+            {
+                reason = I18nCore.Tr("按钮不能打开这个页面");
+                return false;
+            }
             kind = head;
             arg1 = rest;
             return true;
@@ -207,6 +212,27 @@ public static class WidgetCommon
             }
             return true;
         }
+        }
+    }
+
+    // 和 MainWindow.GetPage 能打开的页面一致。plugin: 后面必须还有内容，避免空跳转。
+    private static bool IsKnownPageTarget(string id)
+    {
+        switch (id)
+        {
+        case "launch":
+        case "library":
+        case "instance":
+        case "download":
+        case "plugins":
+        case "settings":
+        case "multiplayer":
+        case "ai":
+        case "account":
+        case "tasks":
+            return true;
+        default:
+            return id.StartsWith("plugin:", StringComparison.Ordinal) && id.Length > "plugin:".Length;
         }
     }
 }

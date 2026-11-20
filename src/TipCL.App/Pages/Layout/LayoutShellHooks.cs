@@ -31,7 +31,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
+using TipCL.App.Common;
 using TipCL.Core.Launcher;
 using ToastKind = TipCL.Core.Layout.ToastKind;
 
@@ -51,6 +53,14 @@ public static class LayoutShellHooks
     private static EventHandler<PointerReleasedEventArgs>? _windowHandler;
 
     private static EventHandler<PointerWheelEventArgs>? _wheelHandler;
+
+    // 接管滚轮时的目标偏移。一次跳 48 像素会发顿，这里让它在大约 100ms 内滑过去。
+    private static readonly Dictionary<ScrollViewer, double> _wheelTarget = new();
+
+    // 上一拍写进去的偏移。读回来的值差得多，说明用户拖了滚动条，动画必须松手。
+    private static readonly Dictionary<ScrollViewer, double> _wheelSeen = new();
+
+    private static DispatcherTimer? _wheelTimer;
 
     /// <summary>是否已挂上(幂等保护)。</summary>
     public static bool Attached => _win != null;
@@ -83,6 +93,9 @@ public static class LayoutShellHooks
     {
         Shell.MainWindow? win = _win;
         _win = null;
+        _wheelTarget.Clear();
+        _wheelSeen.Clear();
+        _wheelTimer?.Stop();
         if (win == null)
         {
             return;
@@ -422,7 +435,8 @@ public static class LayoutShellHooks
     private static void ScrollBy(ScrollViewer viewer, double delta)
     {
         double max = viewer.ScrollBarMaximum.Y;
-        double target = viewer.Offset.Y - delta * 48.0;
+        double origin = _wheelTarget.TryGetValue(viewer, out double pending) ? pending : viewer.Offset.Y;
+        double target = origin - delta * 48.0;
         if (target < 0.0)
         {
             target = 0.0;
@@ -431,7 +445,77 @@ public static class LayoutShellHooks
         {
             target = max;
         }
-        viewer.Offset = new Avalonia.Vector(viewer.Offset.X, target);
+        if (!Motion.Enabled)
+        {
+            _wheelTarget.Remove(viewer);
+            _wheelSeen.Remove(viewer);
+            viewer.Offset = new Avalonia.Vector(viewer.Offset.X, target);
+            return;
+        }
+        _wheelSeen[viewer] = viewer.Offset.Y;
+        _wheelTarget[viewer] = target;
+        if (_wheelTimer == null)
+        {
+            _wheelTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16.0) };
+            _wheelTimer.Tick += OnWheelTick;
+        }
+        if (!_wheelTimer.IsEnabled)
+        {
+            _wheelTimer.Start();
+        }
+    }
+
+    private static void OnWheelTick(object? sender, EventArgs e)
+    {
+        if (_wheelTarget.Count == 0)
+        {
+            _wheelTimer?.Stop();
+            return;
+        }
+        List<ScrollViewer> done = new();
+        List<ScrollViewer> viewers = new(_wheelTarget.Keys);
+        foreach (ScrollViewer viewer in viewers)
+        {
+            if (!_wheelTarget.TryGetValue(viewer, out double goal))
+            {
+                continue;
+            }
+            try
+            {
+                double max = viewer.ScrollBarMaximum.Y;
+                if (goal > max)
+                {
+                    goal = max;
+                }
+                double current = viewer.Offset.Y;
+                if (_wheelSeen.TryGetValue(viewer, out double seen) && Math.Abs(current - seen) > 2.0)
+                {
+                    done.Add(viewer);
+                    continue;
+                }
+                double next = current + (goal - current) * 0.42;
+                if (Math.Abs(goal - next) < 0.6)
+                {
+                    next = goal;
+                    done.Add(viewer);
+                }
+                viewer.Offset = new Avalonia.Vector(viewer.Offset.X, next);
+                _wheelSeen[viewer] = next;
+            }
+            catch
+            {
+                done.Add(viewer);
+            }
+        }
+        foreach (ScrollViewer viewer in done)
+        {
+            _wheelTarget.Remove(viewer);
+            _wheelSeen.Remove(viewer);
+        }
+        if (_wheelTarget.Count == 0)
+        {
+            _wheelTimer?.Stop();
+        }
     }
 
     private static ScrollViewer? FindMainScroller(Visual root, double delta)

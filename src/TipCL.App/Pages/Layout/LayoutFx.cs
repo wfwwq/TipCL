@@ -34,11 +34,32 @@ public static class LayoutFx
     {
         if (_wired) return;
         _wired = true;
-        PageLayoutIO.SaveFileDialog = (filter, suggestedName) => Dlg.SaveFile(ExportDialogTitle(), suggestedName).GetAwaiter().GetResult();
-        PageLayoutIO.PickFileDialog = filter => Dlg.PickFile(ImportDialogTitle(), "*.json").GetAwaiter().GetResult();
+        PageLayoutIO.SaveFileDialog = (filter, suggestedName) => WaitDialog(Dlg.SaveFile(ExportDialogTitle(), suggestedName));
+        PageLayoutIO.PickFileDialog = filter => WaitDialog(Dlg.PickFile(ImportDialogTitle(), "*.json"));
         PageLayoutIO.Toast = (title, detail, kind) => Dispatcher.UIThread.Post(() => ToastHost.Show(title, detail, ToCommon(kind)));
         // 数据目录定位：对齐 Core 侧 PluginDirs 的默认根（Utils.ROOT，可用 TIPCL_HOME 覆盖）
         PageLayoutStore.RootProvider = () => TipCL.Core.Launcher.Utils.ROOT;
+    }
+
+    // 文件框是异步的，但导入导出接口是同步的。在 UI 线程上直接 GetResult 会把消息循环堵死，
+    // 文件框永远等不到自己的回调。已经在 UI 线程时改用嵌套消息循环，等框关掉再继续。
+    private static string? WaitDialog(Task<string?> task)
+    {
+        if (task.IsCompleted || !Dispatcher.UIThread.CheckAccess())
+        {
+            return task.GetAwaiter().GetResult();
+        }
+        DispatcherFrame frame = new DispatcherFrame();
+        // 不走 SynchronizationContext：测试线程或还没装上同步上下文时，FromCurrentSynchronizationContext 会直接抛，导入导出还没弹框就失败。
+        task.ContinueWith(delegate
+        {
+            Dispatcher.UIThread.Post(delegate
+            {
+                frame.Continue = false;
+            });
+        });
+        Dispatcher.UIThread.PushFrame(frame);
+        return task.GetAwaiter().GetResult();
     }
 
     private static Common.ToastKind ToCommon(TipCL.Core.Layout.ToastKind kind) => kind switch

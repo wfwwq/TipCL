@@ -198,8 +198,8 @@ public static class LayoutMotion
 }
 
 /// <summary>
-/// 极简补间驱动:一个只在有动画时运行的调度器计时器(间隔 1ms、Render 优先级)逐拍推进 ——
-/// **不设帧率上限**(不是 16/30ms 那种固定节拍,实际画面频率由合成器的刷新决定)。
+/// 极简补间驱动:只在有动画时跑的调度器计时器,间隔 16ms(Render 优先级),跟显示器一帧一次。
+/// 更密的节拍不会更顺:每一拍都在界面线程上改位移或重排,会把鼠标移动挤到后面。
 /// 为什么不用 <see cref="TopLevel.RequestAnimationFrame"/>:实测(无头会话)窗口在动画途中关闭时,
 /// 挂着的帧请求会让之后新建窗口的合成 / 命中测试再也出不了帧(拖动手势全部落空);计时器不碰合成器,没有这个风险。
 /// 同一个 key 再开动画会先**取消**旧的那个(旧动画不再推进、也不回调 done)—— "新动画开始前取消同一个块上的旧动画"。
@@ -316,7 +316,7 @@ internal static class LayoutTween
 		{
 			_timer = new Avalonia.Threading.DispatcherTimer(Avalonia.Threading.DispatcherPriority.Render)
 			{
-				Interval = TimeSpan.FromMilliseconds(1.0)
+				Interval = TimeSpan.FromMilliseconds(16.0)
 			};
 			_timer.Tick += delegate
 			{

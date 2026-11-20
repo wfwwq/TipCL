@@ -114,6 +114,19 @@ public sealed class GridCanvasPanel : Decorator
 
 	private readonly HashSet<double> _remeasureWidths = new HashSet<double>();
 
+	// 拖动期间列宽没变就不再按无限高度重测每张卡。按下时记下已经量过的高度，落点变了只重算行高。
+	private bool _holdHeights;
+
+	private readonly Dictionary<string, (double W, double H, double Desired)> _held = new Dictionary<string, (double W, double H, double Desired)>(StringComparer.Ordinal);
+
+	private Color _penAccent;
+
+	private Pen? _gridPen;
+
+	private SolidColorBrush? _placeFill;
+
+	private Pen? _placePen;
+
 	private int _rows;
 
 	/// <summary>页面模式(grid | canvas;stack 时本 Panel 不被使用)。</summary>
@@ -204,6 +217,12 @@ public sealed class GridCanvasPanel : Decorator
 	{
 		_flipArmed = true;
 		_flipMs = durationMs;
+	}
+
+	/// <summary>这一拍的吸附动画不要盖住正在跟手的平移。</summary>
+	public void CancelFlipArm()
+	{
+		_flipArmed = false;
 	}
 
 	/// <summary>改大小松手:该块从像素矩形 <paramref name="from"/> 补间到它的槽位矩形(位置 + 尺寸)。</summary>
@@ -487,6 +506,109 @@ public sealed class GridCanvasPanel : Decorator
 	// [layout-fix] 参考件v2-对齐:自动行高的行高下限从 120 降到 40(折叠块 / 固定高度块要能压到很矮)
 	private const double RowFallback = 40.0;
 
+	/// <summary>拖动期间复用已经量过的卡片高度。列宽或尺寸变了才重测那一张。</summary>
+	public void HoldHeights(bool hold)
+	{
+		_holdHeights = hold;
+		if (!hold)
+		{
+			_held.Clear();
+			return;
+		}
+		if (_held.Count > 0)
+		{
+			return;
+		}
+		foreach (Control child in Children)
+		{
+			string id = IdOf(child);
+			if (id.Length == 0)
+			{
+				continue;
+			}
+			double width;
+			double height;
+			if (IsCanvas)
+			{
+				width = Math.Max(1.0, child.Bounds.Width);
+				height = Math.Max(1.0, child.Bounds.Height);
+			}
+			else
+			{
+				LayoutCell? cell = CellOf(id);
+				width = ((cell == null) ? Math.Max(1.0, child.Bounds.Width) : (_columnWidth * cell.W + Gap * Math.Max(0, cell.W - 1)));
+				height = double.PositiveInfinity;
+			}
+			double desired = child.DesiredSize.Height;
+			if (desired < 1.0)
+			{
+				continue;
+			}
+			_held[id] = (width, height, desired);
+		}
+	}
+
+	private static bool SameAxis(double a, double b)
+	{
+		if (double.IsInfinity(a) && double.IsInfinity(b))
+		{
+			return true;
+		}
+		return Math.Abs(a - b) < 0.5;
+	}
+
+	private bool TryHeld(string id, double width, double height, out double desired)
+	{
+		desired = 0.0;
+		if (!_holdHeights || id.Length == 0 || !_held.TryGetValue(id, out (double W, double H, double Desired) hit))
+		{
+			return false;
+		}
+		if (!SameAxis(hit.W, width) || !SameAxis(hit.H, height))
+		{
+			return false;
+		}
+		if (hit.Desired < 1.0)
+		{
+			return false;
+		}
+		desired = hit.Desired;
+		return true;
+	}
+
+	private void Remember(string id, double width, double height, double desired)
+	{
+		if (_holdHeights && id.Length > 0)
+		{
+			_held[id] = (width, height, desired);
+		}
+	}
+
+	private void MeasureHeld(Control child, string id, double width, double height)
+	{
+		if (TryHeld(id, width, height, out _))
+		{
+			return;
+		}
+		child.Measure(new Size(Math.Max(0.0, width), height));
+		Remember(id, width, height, child.DesiredSize.Height);
+	}
+
+	private void EnsurePens(Color accent)
+	{
+		if (_gridPen != null && _penAccent == accent)
+		{
+			return;
+		}
+		_penAccent = accent;
+		_gridPen = new Pen(new SolidColorBrush(Color.FromArgb(38, accent.R, accent.G, accent.B)), 0.6);
+		_placeFill = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
+		_placePen = new Pen(new SolidColorBrush(Color.FromArgb(200, accent.R, accent.G, accent.B)), 1.5)
+		{
+			DashStyle = new DashStyle(new double[2] { 4.0, 3.0 }, 0.0)
+		};
+	}
+
 	protected override Size MeasureOverride(Size available)
 	{
 		double width = ((double.IsInfinity(available.Width) || available.Width <= 0.0) ? 900.0 : available.Width);
@@ -498,8 +620,16 @@ public sealed class GridCanvasPanel : Decorator
 			RebuildCanvasRects(width, height);
 			foreach (Control child in Children)
 			{
-				LayoutRect? rect = RectOf(IdOf(child));
-				child.Measure((rect.HasValue ? new Size(rect.Value.W, rect.Value.H) : new Size(width, LayoutCanvas.RefHeight)));
+				string id = IdOf(child);
+				LayoutRect? rect = RectOf(id);
+				if (rect.HasValue)
+				{
+					MeasureHeld(child, id, rect.Value.W, rect.Value.H);
+				}
+				else
+				{
+					MeasureHeld(child, id, width, LayoutCanvas.RefHeight);
+				}
 			}
 			return new Size(((double.IsInfinity(available.Width) || available.Width <= 0.0) ? width : available.Width), height);
 		}
@@ -554,8 +684,17 @@ public sealed class GridCanvasPanel : Decorator
 				noMin.Add(cell.Id);
 				continue;
 			}
-			child.Measure(new Size(Math.Max(1.0, cellWidth), double.PositiveInfinity));
-			desired[id] = child.DesiredSize.Height;
+			double measureWidth = Math.Max(1.0, cellWidth);
+			if (TryHeld(id, measureWidth, double.PositiveInfinity, out double held))
+			{
+				desired[id] = held;
+			}
+			else
+			{
+				child.Measure(new Size(measureWidth, double.PositiveInfinity));
+				desired[id] = child.DesiredSize.Height;
+				Remember(id, measureWidth, double.PositiveInfinity, desired[id]);
+			}
 			if (folded)
 			{
 				noMin.Add(cell.Id);
@@ -733,7 +872,7 @@ public sealed class GridCanvasPanel : Decorator
 			// 老宽度里,松手才跳成新版式"。尺寸没变时 Measure 走缓存(空操作),动画期间不会让整张画布重量。
 			if (freeSize || IsCanvas)
 			{
-				child.Measure(new Size(Math.Max(0.0, target.Width), MeasureHeightFor(id, target.Height)));
+				MeasureHeld(child, id, Math.Max(0.0, target.Width), MeasureHeightFor(id, target.Height));
 			}
 			child.Arrange(target);
 			_lastArranged[id] = target;
@@ -758,12 +897,13 @@ public sealed class GridCanvasPanel : Decorator
 		}
 		Color accent = LayoutVisualTokens.AccentColor();
 		// WPF 版在这里 brush.Freeze() / pen.Freeze();Avalonia 的笔刷与画笔没有 Freeze(不冻结也不变形)
-		SolidColorBrush brush = new SolidColorBrush(Color.FromArgb(38, accent.R, accent.G, accent.B));
-		Pen pen = new Pen(brush, 0.6);
+		EnsurePens(accent);
+		Pen pen = _gridPen!;
 		double width = Math.Max(0.0, Bounds.Width);
 		double height = Math.Max(0.0, Bounds.Height);
 		if (IsCanvas)
 		{
+			DrawPlaceholders(context, accent);
 			double step = LayoutCanvas.StepOf(SnapStep);
 			if (step <= 0.0 || width <= 1.0 || height <= 1.0)
 			{
@@ -815,11 +955,9 @@ public sealed class GridCanvasPanel : Decorator
 		{
 			return;
 		}
-		SolidColorBrush fill = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
-		Pen stroke = new Pen(new SolidColorBrush(Color.FromArgb(200, accent.R, accent.G, accent.B)), 1.5)
-		{
-			DashStyle = new DashStyle(new double[2] { 4.0, 3.0 }, 0.0)
-		};
+		EnsurePens(accent);
+		SolidColorBrush fill = _placeFill!;
+		Pen stroke = _placePen!;
 		foreach (string id in _floating.Keys)
 		{
 			LayoutRect? rect = RectOf(id);

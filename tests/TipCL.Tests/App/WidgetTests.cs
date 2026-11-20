@@ -309,6 +309,8 @@ public class WidgetTests : IDisposable
         Assert.True(WidgetCommon.TryParseAction("  page:launch  ", out string kind, out string arg1, out string arg2, out string reason));
         Assert.Equal("page", kind);
         Assert.Equal("launch", arg1);
+        Assert.True(WidgetCommon.TryParseAction("page:plugin:demo:panel", out kind, out arg1, out _, out _));
+        Assert.Equal("plugin:demo:panel", arg1);
         Assert.Equal("", arg2);
         Assert.Equal("", reason);
 
@@ -364,6 +366,8 @@ public class WidgetTests : IDisposable
 
         AssertRejected("page:", T("按钮动作缺少参数"));
         AssertRejected("page:   ", T("按钮动作缺少参数"));
+        AssertRejected("page:not-a-page", T("按钮不能打开这个页面"));
+        AssertRejected("page:plugin:", T("按钮不能打开这个页面"));
         AssertRejected("rpc:", T("按钮动作缺少参数"));
 
         // folder 只允许 data,任意路径一律拒绝

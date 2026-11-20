@@ -63,7 +63,9 @@ internal static class PluginBlocks
         _hooked = true;
         PluginUi.Changed += delegate
         {
-            foreach (Shell shell in _shells.Values)
+            // Sync 期间壳可能被摘掉并从字典里删掉。直接遍历 Values 会抛集合已修改。
+            List<Shell> shells = new List<Shell>(_shells.Values);
+            foreach (Shell shell in shells)
             {
                 shell.Sync();
             }
@@ -123,6 +125,21 @@ internal static class PluginBlocks
             _current = null;
             object? content = Content;
             Content = null;
+            List<string>? drop = null;
+            foreach (KeyValuePair<string, Shell> kv in _shells)
+            {
+                if (ReferenceEquals(kv.Value, this))
+                {
+                    (drop ??= new List<string>()).Add(kv.Key);
+                }
+            }
+            if (drop != null)
+            {
+                foreach (string key in drop)
+                {
+                    _shells.Remove(key);
+                }
+            }
             try
             {
                 (content as IDisposable)?.Dispose();

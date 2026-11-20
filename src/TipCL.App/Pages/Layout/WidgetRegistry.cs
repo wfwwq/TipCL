@@ -14,8 +14,7 @@ namespace TipCL.App.Pages.Layout;
 //   块 id = custom:<widgetId>            → 五类首期类型(note / shortcut / clock / divider / playtime)+ 危险类型 web / button
 //   块 id = plugin:<plugin>:<blockId>    → 插件贡献 kind = block
 // 查不到定义 / 插件卸载 → 显示占位,**绝不删用户数据**(删除入口在设置页,归 L5)。
-// 注意:Linux 侧目前没有任何生产代码调 EnsureRegistered()(Windows 在 App.xaml.cs:94 调),
-// 调用点归宿主接线,见报告「遗留与风险」。
+// 启动时由 App.axaml.cs 调用 EnsureRegistered()。--smoke 由 SmokeRunner 再调一次，重复调用没有副作用。
 public sealed class WidgetRegistry : ILayoutContentProvider
 {
     /// <summary>插件界面贡献的 kind(与 PluginManifest / PluginHostApi / PluginManager 三处白名单一致)。</summary>

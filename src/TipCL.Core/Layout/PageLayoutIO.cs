@@ -192,7 +192,9 @@ public static class PageLayoutIO
 		{
 			if (def != null && widgets.Contains(def.Id) && !to.Widgets.Exists((WidgetDef w) => w != null && w.Id == def.Id))
 			{
-				to.Widgets.Add(def.Clone());
+				WidgetDef copy = def.Clone();
+				DisarmImportedWidget(copy);
+				to.Widgets.Add(copy);
 			}
 		}
 		return count;
@@ -245,6 +247,18 @@ public static class PageLayoutIO
 		}
 		string id = blockId.Substring(CustomBlockPrefix.Length);
 		return (id.Length > 0) ? id : null;
+	}
+
+	// 导入文件里的 web / button 即使写了 enabled:true 也先关掉。
+	// 用户自己的布局仍可以在 JSON 编辑器里再开；这里只处理「从别人文件并进来的新定义」。
+	private static void DisarmImportedWidget(WidgetDef def)
+	{
+		if (!LayoutSchema.IsDangerousWidgetType(def.Type))
+		{
+			return;
+		}
+		def.Settings ??= LayoutJson.Map();
+		def.Settings["enabled"] = false;
 	}
 
 	private static void CollectWidgetIds(PageLayoutV2 page, HashSet<string> into)

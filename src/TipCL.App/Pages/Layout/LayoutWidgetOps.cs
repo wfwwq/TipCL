@@ -76,12 +76,58 @@ public static class LayoutWidgetOps
 		{
 			return 0;
 		}
-		doc.Layout.Widgets.RemoveAll(w => w == null || string.Equals(w.Id, widgetId, StringComparison.Ordinal));
 		string blockId = BlockIdOf(widgetId);
-		int removed = 0;
-		foreach (KeyValuePair<string, PageLayoutV2> kv in doc.Layout.Pages)
+		int removed = StripBody(doc.Layout, widgetId, blockId);
+		if (doc.Profiles != null)
 		{
-			PageLayoutV2 page = kv.Value;
+			foreach (LayoutBody profile in doc.Profiles.Values)
+			{
+				removed += StripBody(profile, widgetId, blockId);
+			}
+		}
+		return removed;
+	}
+
+	// 当前布局、方案、响应式变体都可能引用同一个自建块。只扫当前 pages 会把方案里的引用留下。
+	// 返回值仍是删掉的块引用数（不计定义本身），与原来的测试口径一致。
+	private static int StripBody(LayoutBody? body, string widgetId, string blockId)
+	{
+		if (body == null)
+		{
+			return 0;
+		}
+		if (body.Widgets != null)
+		{
+			body.Widgets.RemoveAll(w => w == null || string.Equals(w.Id, widgetId, StringComparison.Ordinal));
+		}
+		int removed = StripPages(body.Pages, blockId);
+		if (body.Variants != null)
+		{
+			foreach (LayoutBody variant in body.Variants.Values)
+			{
+				if (variant == null)
+				{
+					continue;
+				}
+				if (variant.Widgets != null)
+				{
+					variant.Widgets.RemoveAll(w => w == null || string.Equals(w.Id, widgetId, StringComparison.Ordinal));
+				}
+				removed += StripPages(variant.Pages, blockId);
+			}
+		}
+		return removed;
+	}
+
+	private static int StripPages(Dictionary<string, PageLayoutV2>? pages, string blockId)
+	{
+		if (pages == null)
+		{
+			return 0;
+		}
+		int removed = 0;
+		foreach (PageLayoutV2 page in pages.Values)
+		{
 			if (page == null || page.Blocks == null)
 			{
 				continue;

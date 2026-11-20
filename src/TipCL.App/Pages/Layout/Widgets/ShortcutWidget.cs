@@ -38,9 +38,15 @@ internal static class ShortcutWidget
         {
             return WidgetUI.Placeholder(I18nCore.Tr("快捷启动配置太长"), I18nCore.Tr("实例名 / 版本号都不应超过 128 个字符。"));
         }
-        Button button = U.Btn(label, BtnKind.Primary, delegate
+        Button button = null!;
+        button = U.Btn(label, BtnKind.Primary, delegate
         {
-            _ = LaunchAsync(instance, version);
+            if (!button.IsEnabled)
+            {
+                return;
+            }
+            button.IsEnabled = false;
+            _ = LaunchAsync(button, instance, version);
         }, "Play");
         TextBlock hint = U.Small((version.Length > 0) ? instance + " · " + version : instance);
         StackPanel panel = U.V(8.0, U.Small(WidgetUI.TypeLabel(LayoutSchema.WidgetShortcut)), U.H(8.0, button, U.Spring()), hint.Wrap());
@@ -48,7 +54,7 @@ internal static class ShortcutWidget
     }
 
     // 启动走既有任务入口:参数只给实例与版本,其余(账号 / 内存 / Java)由后端按当前配置补默认
-    private static async Task LaunchAsync(string instance, string version)
+    private static async Task LaunchAsync(Button button, string instance, string version)
     {
         try
         {
@@ -66,6 +72,10 @@ internal static class ShortcutWidget
         catch (Exception ex)
         {
             ToastHost.Show(I18nCore.Tr("启动失败"), ex.Message, ToastKind.Error);
+        }
+        finally
+        {
+            button.IsEnabled = true;
         }
     }
 }
