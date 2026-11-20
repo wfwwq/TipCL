@@ -1,0 +1,847 @@
+// v3(自定义布局 v3 效果图 · 编辑态,Linux 对等落地,代理 C):LayoutEditor 的 v3 编辑外壳部分。
+// 拆成 partial 是为了不整文件重写 110KB 的 LayoutEditor.cs —— 主文件只改了几处挂接点,
+// 新增的 UI / 动作都在这里:
+//   1) 顶部单条编辑条:标题「编辑「<页名>」页」· 列表|网格分段 · 撤销/重做图标 · 添加(数字=隐藏了几项)·
+//      重置本页 · 完成 · ⋯(导出本页… / 导入到本页… / 整套布局与方案… / 松手后自动靠拢);
+//   2) 「添加」抽屉(替代原来底部一整条「已隐藏的区块」托盘):已隐藏的内容 + 组件 + 去高级设置的提示;
+//   3) 列表 / 网格两种排法(不再提供自由画布):Linux 的 stack 页进编辑态仍临时折成 12 列网格
+//      (docs/README.md「Linux 编辑态与 Windows 的四处差异」#1,刻意保留),「列表」= 每块占满一整行的网格;
+//   4) 自建组件用垃圾桶删除(可撤销),内置内容用眼睛隐藏;
+//   5) 单块页面不提供编辑入口(CanEdit / LayoutShellHooks.CanEditPage)。
+using System;
+using System.Collections.Generic;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Threading;
+using TipCL.App.Common;
+using TipCL.App.Ui;
+using TipCL.Core.Launcher;
+using TipCL.Core.Layout;
+using TipCL.Core.Launcher.Layout;
+using ToastKind = TipCL.Core.Layout.ToastKind;
+
+namespace TipCL.App.Pages.Layout;
+
+public sealed partial class LayoutEditor
+{
+	// ————————————— 单块页面判定(§1.A.8) —————————————
+
+	// 每个页面最近一次装载时的块数(含隐藏块、自建块),供 LayoutShellHooks.CanEditPage 在页面还没上屏时回答。
+	private static readonly Dictionary<string, int> _knownCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+	private static readonly object _knownGate = new object();
+
+	/// <summary>[v3] 某页最近一次装载时有几块(没装载过返回 null)。</summary>
+	internal static int? KnownBlockCount(string? pageId)
+	{
+		if (string.IsNullOrEmpty(pageId))
+		{
+			return null;
+		}
+		lock (_knownGate)
+		{
+			return _knownCounts.TryGetValue(pageId, out int count) ? count : null;
+		}
+	}
+
+	private void RememberBlockCount()
+	{
+		if (string.IsNullOrEmpty(_pageId))
+		{
+			return;
+		}
+		int count = _state?.Order.Count ?? _specs.Count;
+		lock (_knownGate)
+		{
+			_knownCounts[_pageId] = count;
+		}
+	}
+
+	// 入口清单里标了「单块」的页(下载与网络 / 反馈与关于),或者实际只有一块的页
+	private bool IsSingleBlockPage()
+	{
+		LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(_pageId);
+		if (entry != null && entry.SingleBlock)
+		{
+			return true;
+		}
+		int count = _state?.Order.Count ?? _specs.Count;
+		return count < 2;
+	}
+
+	// ————————————— 顶部编辑条(§1.A.3) —————————————
+
+	private TextBlock? _titleText;
+
+	private TextBlock? _hintText;
+
+	private Button? _segList;
+
+	private Button? _segGrid;
+
+	private Button? _addBtn;
+
+	private Border? _addBadge;
+
+	private TextBlock? _addBadgeText;
+
+	private Button? _moreBtn;
+
+	// 当前排法:true = 列表(每块占满一整行),false = 网格
+	private bool _listKind;
+
+	// 切到「列表」前每块的列位 / 列宽,切回「网格」时还给它(只在本次编辑会话里有效)
+	private readonly Dictionary<string, int[]> _gridWidths = new Dictionary<string, int[]>(StringComparer.Ordinal);
+
+	private static string HintFor(bool list)
+	{
+		return list ? I18nCore.Tr("拖动调整上下顺序") : I18nCore.Tr("拖动换位置 · 拖右边缘改宽度");
+	}
+
+	/// <summary>§1.A.10 的完整提示文案(编辑条提示的悬停全文 / 进入编辑时的 Toast 正文)。</summary>
+	internal static string FullHint()
+	{
+		return I18nCore.Tr("拖动块调整顺序；网格模式下拖块的右边缘改宽度；悬停能看到块名和隐藏 / 删除按钮。");
+	}
+
+	// 一条横排:标题 · 列表|网格 · 提示(可截断)· 撤销 · 重做 | 添加 · 重置本页 · 完成 · ⋯
+	private Control BuildEditBar()
+	{
+		_titleText = U.Txt(LayoutEditChrome.EditTitle(_pageId), 13.0, bold: true);
+		_titleText.TextTrimming = TextTrimming.CharacterEllipsis;
+		_titleText.MaxWidth = 240.0;
+		_titleText.VerticalAlignment = VerticalAlignment.Center;
+		_segList = SegButton(I18nCore.Tr("列表"), LayoutEditChrome.ListModeData, delegate
+		{
+			SetLayoutKind(list: true);
+		});
+		_segGrid = SegButton(I18nCore.Tr("网格"), LayoutEditChrome.GridModeData, delegate
+		{
+			SetLayoutKind(list: false);
+		});
+		Border seg = new Border
+		{
+			CornerRadius = new CornerRadius(8.0),
+			Padding = new Thickness(3.0),
+			VerticalAlignment = VerticalAlignment.Center,
+			Child = U.H(2.0, _segList, _segGrid)
+		};
+		seg.Dyn(Border.BackgroundProperty, "B.SegRail");
+		_hintText = U.Txt(HintFor(_listKind), 12.0, bold: false, "B.InkMuted");
+		_hintText.TextTrimming = TextTrimming.CharacterEllipsis;
+		_hintText.VerticalAlignment = VerticalAlignment.Center;
+		_hintText.Margin = new Thickness(4.0, 0.0, 4.0, 0.0);
+		ToolTip.SetTip(_hintText, FullHint());
+		_undoBtn = LayoutEditChrome.IconButton(LayoutEditChrome.UndoData, I18nCore.Tr("撤销 (Ctrl+Z)"), delegate
+		{
+			UndoEdit();
+		});
+		_undoBtn.IsEnabled = false;
+		_redoBtn = LayoutEditChrome.IconButton(LayoutEditChrome.RedoData, I18nCore.Tr("重做 (Ctrl+Y)"), delegate
+		{
+			RedoEdit();
+		});
+		_redoBtn.IsEnabled = false;
+		Border sep = new Border
+		{
+			Width = 1.0,
+			Height = 18.0,
+			Margin = new Thickness(2.0, 0.0, 2.0, 0.0),
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		sep.Dyn(Border.BackgroundProperty, "B.Line");
+		_addBtn = U.Btn(I18nCore.Tr("添加"), BtnKind.Soft, delegate
+		{
+			ShowDrawer(!IsDrawerOpen);
+		}, "Add");
+		ToolTip.SetTip(_addBtn, I18nCore.Tr("添加组件,或者找回隐藏的内容"));
+		_addBadgeText = new TextBlock
+		{
+			FontSize = 11.0,
+			FontWeight = FontWeight.Bold,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		_addBadgeText.Dyn(TextBlock.ForegroundProperty, "B.OnAccent");
+		_addBadge = new Border
+		{
+			CornerRadius = new CornerRadius(999.0),
+			MinWidth = 16.0,
+			Height = 16.0,
+			Padding = new Thickness(4.0, 0.0, 4.0, 0.0),
+			VerticalAlignment = VerticalAlignment.Center,
+			Child = _addBadgeText,
+			IsVisible = false
+		};
+		_addBadge.Dyn(Border.BackgroundProperty, "B.Accent");
+		if (_addBtn.Content is Panel addContent)
+		{
+			addContent.Children.Add(_addBadge);
+		}
+		Button reset = U.Btn(I18nCore.Tr("重置本页"), BtnKind.Normal, delegate
+		{
+			ResetPage();
+		});
+		Button done = U.Btn(I18nCore.Tr("完成"), BtnKind.Primary, delegate
+		{
+			ExitEdit();
+		});
+		ToolTip.SetTip(done, I18nCore.Tr("完成编辑并保存 (Esc)"));
+		_moreBtn = U.IconBtn("More", I18nCore.Tr("更多"), delegate
+		{
+			OpenMoreMenu();
+		});
+		Grid bar = U.G(null, "Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto");
+		Control[] items = new Control[10] { _titleText, seg, _hintText, _undoBtn, _redoBtn, sep, _addBtn, reset, done, _moreBtn };
+		for (int i = 0; i < items.Length; i++)
+		{
+			items[i].VerticalAlignment = VerticalAlignment.Center;
+			if (i > 0)
+			{
+				items[i].Margin = new Thickness((i == 2) ? 6.0 : ((i == 4) ? 2.0 : 8.0), 0.0, 0.0, 0.0);
+			}
+			bar.Add(items[i], 0, i);
+		}
+		_hintText.Margin = new Thickness(8.0, 0.0, 4.0, 0.0);
+		return bar;
+	}
+
+	private static Button SegButton(string text, string iconData, EventHandler<RoutedEventArgs> click)
+	{
+		Button button = U.Btn(text, BtnKind.Ghost, click);
+		button.Content = U.H(6.0, LayoutEditChrome.BoundIcon(button, iconData, 13.0), U.Txt(text, 12.5));
+		button.Padding = new Thickness(10.0, 2.0, 10.0, 2.0);
+		button.MinHeight = 24.0;
+		return button;
+	}
+
+	// 工具条状态:分段选中态 / 提示 / 「添加」上的数字
+	private void RefreshEditBar()
+	{
+		if (_titleText != null)
+		{
+			_titleText.Text = LayoutEditChrome.EditTitle(_pageId);
+		}
+		if (_segList != null && _segGrid != null)
+		{
+			_segList.Theme = U.Theme(_listKind ? "Btn.Normal" : "Btn.Ghost");
+			_segGrid.Theme = U.Theme(_listKind ? "Btn.Ghost" : "Btn.Normal");
+		}
+		if (_hintText != null)
+		{
+			_hintText.Text = HintFor(_listKind);
+		}
+		int hidden = HiddenCount();
+		if (_addBadge != null && _addBadgeText != null)
+		{
+			_addBadge.IsVisible = hidden > 0;
+			_addBadgeText.Text = hidden.ToString();
+		}
+	}
+
+	private int HiddenCount()
+	{
+		int count = 0;
+		foreach (string id in _state.Order)
+		{
+			if (_state.Hidden.Contains(id))
+			{
+				count++;
+			}
+		}
+		return count;
+	}
+
+	// ⋯ 更多:导出本页… / 导入到本页… / 整套布局与方案…(跳 设置 → 布局)/ 松手后自动靠拢(原工具条上的开关搬到这里)
+	private void OpenMoreMenu()
+	{
+		if (_moreBtn == null)
+		{
+			return;
+		}
+		ContextMenu menu = new ContextMenu();
+		MenuItem export = new MenuItem { Header = I18nCore.Tr("导出本页…") };
+		export.Click += delegate
+		{
+			PageLayoutIO.ExportToFileDialog(_pageId);
+		};
+		menu.Items.Add(export);
+		MenuItem import = new MenuItem { Header = I18nCore.Tr("导入到本页…") };
+		import.Click += delegate
+		{
+			ImportLayout();
+		};
+		menu.Items.Add(import);
+		menu.Items.Add(new Separator());
+		MenuItem whole = new MenuItem { Header = I18nCore.Tr("整套布局与方案…") };
+		whole.Click += delegate
+		{
+			OpenLayoutSettingsFromEditor();
+		};
+		menu.Items.Add(whole);
+		menu.Items.Add(new Separator());
+		MenuItem pack = new MenuItem { Header = I18nCore.Tr("松手后自动靠拢") };
+		if (LayoutEditPrefs.AutoPack)
+		{
+			pack.Icon = IconLib.Make("Check", "B.Ink", 14);
+		}
+		ToolTip.SetTip(pack, I18nCore.Tr("开:松手后区块自动向上靠拢、与相邻区块互换位置、靠近时磁性吸附;关:区块停在你放下的位置"));
+		pack.Click += delegate
+		{
+			ToggleAutoPack();
+		};
+		menu.Items.Add(pack);
+		menu.PlacementTarget = _moreBtn;
+		menu.Placement = Avalonia.Controls.PlacementMode.Bottom;
+		menu.Open(_moreBtn);
+	}
+
+	// 「整套布局与方案…」/ 抽屉底部提示:跳到 设置 → 布局(沿用 LayoutShellHooks.OpenLayoutSettings →
+	// SettingsPage.OpenLayoutView())。切走页面时 BlockHost.Unloaded 会自动收尾编辑态并保存。
+	private void OpenLayoutSettingsFromEditor()
+	{
+		if (TopLevel.GetTopLevel(_root) is TipCL.App.Shell.MainWindow win)
+		{
+			ShowDrawer(false);
+			LayoutShellHooks.OpenLayoutSettings(win);
+		}
+	}
+
+	// 抽屉底部「…可在 设置 → 布局 → 高级 里开启」:跳到 设置 → 布局 并展开「高级」
+	// (SettingsPage.OpenLayoutAdvanced() 由设置代理 D 新增,见 tmp/v3_handoff.md「D → C」)
+	private void OpenLayoutAdvancedFromEditor()
+	{
+		if (TopLevel.GetTopLevel(_root) is not TipCL.App.Shell.MainWindow win)
+		{
+			return;
+		}
+		ShowDrawer(false);
+		win.Navigate("settings");
+		if (win.PageHostControl?.Content is TipCL.App.Pages.Settings.SettingsPage page)
+		{
+			page.OpenLayoutAdvanced();
+		}
+	}
+
+	// ————————————— 列表 / 网格(§1.A.7) —————————————
+
+	// 当前可见块是不是"每块占满一整行"的样子(stack 单列页进编辑态折出来就是这样)
+	private bool IsListShape()
+	{
+		PageLayoutV2? page = _state?.Page;
+		if (page == null || page.Mode != LayoutSchema.ModeGrid)
+		{
+			return page != null && page.Mode == LayoutSchema.ModeStack && LayoutEngine.StackColumns(page) <= 1;
+		}
+		int cols = LayoutGrid.Columns(page);
+		foreach (LayoutCell cell in LayoutGrid.Pack(page))
+		{
+			if (cell.W < cols)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/// <summary>[v3] 切换列表 / 网格(编辑态的分段按钮)。列表 = 每块一整行;网格 = 一行可以并排几块。</summary>
+	internal void SetLayoutKind(bool list)
+	{
+		if (!_edit || list == _listKind || _state?.Page == null)
+		{
+			return;
+		}
+		if (_state.Page.Mode != LayoutSchema.ModeGrid)
+		{
+			// 极端情况(折算失败仍是 stack):只换标记,排布由 stack 自己的纵向流负责
+			_listKind = list;
+			RefreshEditBar();
+			return;
+		}
+		if (_gesture.Length != 0)
+		{
+			EndBoxGesture(false, false);
+		}
+		PageLayoutV2 before = _state.ToPage();
+		PageLayoutV2 page = _state.ToPage();
+		int cols = LayoutGrid.Columns(page);
+		List<LayoutCell> cells = LayoutGrid.Pack(page);
+		cells.Sort(delegate(LayoutCell a, LayoutCell b)
+		{
+			int byRow = a.Y.CompareTo(b.Y);
+			return (byRow != 0) ? byRow : a.X.CompareTo(b.X);
+		});
+		if (list)
+		{
+			_gridWidths.Clear();
+			int row = 0;
+			foreach (LayoutCell cell in cells)
+			{
+				_gridWidths[cell.Id] = new int[2] { cell.X, cell.W };
+				cell.X = 0;
+				cell.W = cols;
+				cell.Y = row;
+				row += Math.Max(1, cell.H);
+			}
+		}
+		else
+		{
+			foreach (LayoutCell cell in cells)
+			{
+				if (_gridWidths.TryGetValue(cell.Id, out int[]? xw))
+				{
+					cell.W = LayoutSchema.ClampInt(xw[1], 1, cols);
+					cell.X = LayoutSchema.ClampInt(xw[0], 0, Math.Max(0, cols - cell.W));
+				}
+			}
+			LayoutGrid.Compact(cells, cols, null, null);
+		}
+		LayoutGrid.Apply(page, cells);
+		_session.PushUndo(before);
+		_box.ArmFlip();
+		_listKind = list;
+		_state = LayoutEngine.LoadState(_pageId, page, _refs, _state.ExistedInDoc);
+		_session.Retain(_state.Order);
+		Persist();
+		Render();
+		LayoutFx.ShowToast(list ? I18nCore.Tr("已切换到列表") : I18nCore.Tr("已切换到网格"), list ? I18nCore.Tr("每块占满一整行") : I18nCore.Tr("一行可以并排放几块,拖右边缘改宽度"), ToastKind.Info);
+	}
+
+	// 撤销 / 重做之后排法以实际形状为准:列表态下撤销出了并排的块 → 回到网格
+	private void SyncLayoutKindAfterSnapshot()
+	{
+		if (_listKind && !IsListShape())
+		{
+			_listKind = false;
+		}
+	}
+
+	// 新组件默认占几列(按 12 列制给,换算到本页列数;列表排法下一律整行)
+	private int DefaultWidgetCols(string type, int cols)
+	{
+		if (_listKind)
+		{
+			return cols;
+		}
+		int of12 = type switch
+		{
+			LayoutSchema.WidgetDivider => 12,
+			LayoutSchema.WidgetPlaytime => 6,
+			LayoutSchema.WidgetWeb => 8,
+			_ => 4
+		};
+		return LayoutSchema.ClampInt((int)Math.Round(of12 * (cols / 12.0)), Math.Min(cols, 2), cols);
+	}
+
+	// ————————————— 「添加」抽屉(§1.A.5) —————————————
+
+	private Border? _drawer;
+
+	private TextBlock? _drawerTitle;
+
+	private readonly StackPanel _drawerHidden = new StackPanel { Spacing = 6.0 };
+
+	private readonly StackPanel _drawerWidgets = new StackPanel { Spacing = 6.0 };
+
+	private bool IsDrawerOpen => _drawer != null && _drawer.IsVisible;
+
+	private Control BuildDrawer()
+	{
+		_drawerTitle = U.Txt(LayoutEditChrome.DrawerTitle(_pageId), 15.0, bold: true);
+		_drawerTitle.TextTrimming = TextTrimming.CharacterEllipsis;
+		_drawerTitle.VerticalAlignment = VerticalAlignment.Center;
+		Button close = U.IconBtn("Close", I18nCore.Tr("关闭 (Esc)"), delegate
+		{
+			ShowDrawer(false);
+		}, 12.0);
+		Grid head = U.G(null, "*,Auto");
+		head.Add(_drawerTitle, 0);
+		head.Add(close, 0, 1);
+		head.Margin = new Thickness(16.0, 14.0, 12.0, 10.0);
+		TextBlock note = U.Txt(I18nCore.Tr("网页、按钮组件默认关闭，可在 设置 → 布局 → 高级 里开启。"), 12.0, bold: false, "B.InkSoft");
+		note.TextWrapping = TextWrapping.Wrap;
+		Grid noteRow = U.G(null, "*,Auto");
+		noteRow.Add(note, 0);
+		Control chevron = IconLib.Make("ChevronRight", "B.AccentText", 12);
+		chevron.VerticalAlignment = VerticalAlignment.Center;
+		chevron.Margin = new Thickness(6.0, 0.0, 0.0, 0.0);
+		noteRow.Add(chevron, 0, 1);
+		Border noteCard = U.RowCard(noteRow, delegate
+		{
+			OpenLayoutAdvancedFromEditor();
+		}, 10.0);
+		ToolTip.SetTip(noteCard, I18nCore.Tr("跳到 设置 → 布局 → 高级"));
+		noteCard.Margin = new Thickness(0.0, 12.0, 0.0, 0.0);
+		StackPanel body = U.V(6.0, SectionLabel(I18nCore.Tr("已隐藏的内容")), _drawerHidden, SectionLabel(I18nCore.Tr("组件")), _drawerWidgets, noteCard);
+		body.Margin = new Thickness(16.0, 0.0, 16.0, 16.0);
+		ScrollViewer list = new ScrollViewer
+		{
+			Content = body,
+			HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+			VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+		};
+		Grid root = U.G("Auto,*");
+		root.Add(head, 0);
+		root.Add(list, 1);
+		_drawer = new Border
+		{
+			Width = 316.0,
+			HorizontalAlignment = HorizontalAlignment.Right,
+			VerticalAlignment = VerticalAlignment.Stretch,
+			CornerRadius = new CornerRadius(12.0, 0.0, 0.0, 12.0),
+			BorderThickness = new Thickness(1.0, 1.0, 0.0, 1.0),
+			Child = root,
+			IsVisible = false,
+			ZIndex = 100,
+			BoxShadow = new BoxShadows(new BoxShadow
+			{
+				Blur = 32.0,
+				OffsetX = -12.0,
+				Color = Color.FromArgb(36, 0, 0, 0)
+			})
+		};
+		_drawer.Dyn(Border.BackgroundProperty, "B.Paper");
+		_drawer.Dyn(Border.BorderBrushProperty, "B.Line");
+		return _drawer;
+	}
+
+	private static TextBlock SectionLabel(string text)
+	{
+		TextBlock label = U.Txt(text, 12.0, bold: false, "B.InkMuted");
+		label.Margin = new Thickness(0.0, 10.0, 0.0, 0.0);
+		return label;
+	}
+
+	/// <summary>[v3] 打开 / 关上「添加」抽屉(只在编辑态有意义)。</summary>
+	internal void ShowDrawer(bool open)
+	{
+		if (_drawer == null)
+		{
+			return;
+		}
+		bool show = open && _edit;
+		if (show)
+		{
+			RefreshDrawer();
+		}
+		_drawer.IsVisible = show;
+	}
+
+	// 抽屉内容:已隐藏的内容(点一下放回原位)+ 组件(点一下加到页面末尾)。
+	// 「组件」一节要查 widgets[] 定义(读一次布局文档),只在抽屉开着时刷新;「已隐藏」一节很便宜,每次都刷。
+	private void RefreshDrawer(bool widgets = true)
+	{
+		if (_drawerTitle != null)
+		{
+			_drawerTitle.Text = LayoutEditChrome.DrawerTitle(_pageId);
+		}
+		_drawerHidden.Children.Clear();
+		foreach (string id in _state.Order)
+		{
+			if (!_state.Hidden.Contains(id))
+			{
+				continue;
+			}
+			BlockSpec spec = SpecOf(id);
+			_drawerHidden.Children.Add(DrawerRow(LayoutEditChrome.Icon(LayoutEditChrome.EyeOffData, "B.InkSoft", 18.0), spec.Title, I18nCore.Tr("点一下放回原来的位置"), I18nCore.Tr("显示"), enabled: true, delegate
+			{
+				Restore(spec);
+			}));
+		}
+		if (_drawerHidden.Children.Count == 0)
+		{
+			Border empty = new Border
+			{
+				CornerRadius = new CornerRadius(12.0),
+				BorderThickness = new Thickness(1.0),
+				Padding = new Thickness(10.0),
+				Child = U.Txt(I18nCore.Tr("没有隐藏的内容"), 12.0, bold: false, "B.InkMuted").HCenter()
+			};
+			empty.Dyn(Border.BorderBrushProperty, "B.Line");
+			_drawerHidden.Children.Add(empty);
+		}
+		if (!widgets)
+		{
+			return;
+		}
+		_drawerWidgets.Children.Clear();
+		foreach (string type in DrawerTypes())
+		{
+			string captured = type;
+			bool used = !IsMultiWidget(type) && PageHasWidget(type);
+			_drawerWidgets.Children.Add(DrawerRow(WidgetIcon(type), WidgetUI.TypeLabel(type), WidgetDesc(type), used ? I18nCore.Tr("已添加") : I18nCore.Tr("添加"), !used, delegate
+			{
+				AddWidgetToPage(captured);
+			}));
+		}
+	}
+
+	// 抽屉里列出的组件类型:首期五种安全类型;设置 → 布局 → 高级 打开「网页和按钮组件」后再加 web / button
+	// (开关由设置代理 D 提供:LayoutProfiles.DangerousWidgetsEnabled,抽屉每次打开时现读)
+	private static List<string> DrawerTypes()
+	{
+		List<string> types = new List<string>(WidgetRegistry.SafeTypes);
+		bool dangerous;
+		try
+		{
+			dangerous = LayoutProfiles.DangerousWidgetsEnabled;
+		}
+		catch (Exception)
+		{
+			dangerous = false;
+		}
+		if (dangerous)
+		{
+			types.Add(LayoutSchema.WidgetWeb);
+			types.Add(LayoutSchema.WidgetButton);
+		}
+		return types;
+	}
+
+	private static bool IsDangerousType(string type)
+	{
+		return type == LayoutSchema.WidgetWeb || type == LayoutSchema.WidgetButton;
+	}
+
+	// 抽屉里的一行:整行是一个按钮(点哪儿都行),右边一个小药丸写「显示 / 添加」
+	private static Button DrawerRow(Control icon, string title, string desc, string action, bool enabled, EventHandler<RoutedEventArgs> click)
+	{
+		Border iconBox = new Border
+		{
+			Width = 40.0,
+			Height = 40.0,
+			CornerRadius = new CornerRadius(8.0),
+			Child = icon.Center()
+		};
+		iconBox.Dyn(Border.BackgroundProperty, "B.Paper");
+		TextBlock titleText = U.Txt(title, 13.0, bold: true);
+		titleText.TextTrimming = TextTrimming.CharacterEllipsis;
+		TextBlock descText = U.Txt(desc, 12.0, bold: false, "B.InkMuted");
+		descText.TextTrimming = TextTrimming.CharacterEllipsis;
+		StackPanel texts = U.V(1.0, titleText, descText);
+		texts.VerticalAlignment = VerticalAlignment.Center;
+		Border pill = new Border
+		{
+			CornerRadius = new CornerRadius(8.0),
+			Padding = new Thickness(10.0, 4.0, 10.0, 4.0),
+			VerticalAlignment = VerticalAlignment.Center,
+			Child = U.Txt(action, 12.0, bold: true, enabled ? "B.AccentText" : "B.InkMuted")
+		};
+		pill.Dyn(Border.BackgroundProperty, enabled ? "B.AccentSoft" : "B.LineSoft");
+		Grid grid = U.G(null, "40,*,Auto");
+		grid.Add(iconBox, 0);
+		grid.Add(texts, 0, 1);
+		grid.Add(pill, 0, 2);
+		texts.Margin = new Thickness(10.0, 0.0, 10.0, 0.0);
+		Border row = new Border
+		{
+			CornerRadius = new CornerRadius(12.0),
+			Padding = new Thickness(8.0),
+			Child = grid
+		};
+		row.Dyn(Border.BackgroundProperty, "B.Paper2");
+		Button button = new Button
+		{
+			Theme = U.Theme("Btn.Ghost"),
+			Padding = new Thickness(0.0),
+			HorizontalAlignment = HorizontalAlignment.Stretch,
+			HorizontalContentAlignment = HorizontalAlignment.Stretch,
+			Content = row,
+			IsEnabled = enabled
+		};
+		Avalonia.Automation.AutomationProperties.SetName(button, action + " " + title);
+		button.Click += click;
+		return button;
+	}
+
+	private static bool IsMultiWidget(string type)
+	{
+		return type == LayoutSchema.WidgetNote || type == LayoutSchema.WidgetDivider || IsDangerousType(type);
+	}
+
+	private bool PageHasWidget(string type)
+	{
+		foreach (string id in _state.Order)
+		{
+			if (LayoutEngine.WidgetIdOf(id) == null)
+			{
+				continue;
+			}
+			WidgetDef? def = WidgetRegistry.FindWidget(id);
+			if (def != null && string.Equals(def.Type, type, StringComparison.Ordinal))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static Control WidgetIcon(string type)
+	{
+		return type switch
+		{
+			LayoutSchema.WidgetNote => IconLib.Make("Edit", "B.InkSoft", 18),
+			LayoutSchema.WidgetShortcut => IconLib.Make("Play", "B.InkSoft", 18),
+			LayoutSchema.WidgetClock => IconLib.Make("Clock", "B.InkSoft", 18),
+			LayoutSchema.WidgetPlaytime => IconLib.Make("Lightning", "B.InkSoft", 18),
+			LayoutSchema.WidgetWeb => IconLib.Make("World", "B.InkSoft", 18),
+			LayoutSchema.WidgetButton => IconLib.Make("Open", "B.InkSoft", 18),
+			_ => LayoutEditChrome.Icon(LayoutEditChrome.LineData, "B.InkSoft", 18.0)
+		};
+	}
+
+	private static string WidgetDesc(string type)
+	{
+		return type switch
+		{
+			LayoutSchema.WidgetNote => I18nCore.Tr("记一句话，可以加多张"),
+			LayoutSchema.WidgetShortcut => I18nCore.Tr("一键启动指定实例"),
+			LayoutSchema.WidgetClock => I18nCore.Tr("当前时间和日期"),
+			LayoutSchema.WidgetPlaytime => I18nCore.Tr("本周每天玩了多久"),
+			LayoutSchema.WidgetDivider => I18nCore.Tr("把页面分成两段"),
+			LayoutSchema.WidgetWeb => I18nCore.Tr("嵌入一个 https 网页"),
+			LayoutSchema.WidgetButton => I18nCore.Tr("点一下打开页面或启动实例"),
+			_ => ""
+		};
+	}
+
+	/// <summary>[v3] 从抽屉添加一个组件到本页末尾(定义写进 widgets[],块引用接到本页;能撤销)。</summary>
+	internal void AddWidgetToPage(string type)
+	{
+		if (!_edit || _state?.Page == null)
+		{
+			return;
+		}
+		if (!IsMultiWidget(type) && PageHasWidget(type))
+		{
+			return;
+		}
+		PageLayoutV2 before = _state.ToPage();
+		string widgetId;
+		_saving = true;
+		try
+		{
+			LayoutV2 doc = LayoutStoreV2.Load();
+			if (IsDangerousType(type))
+			{
+				// LayoutWidgetOps.AddWidget 只收安全类型;网页 / 按钮在这里自己建,settings.enabled 不写 = 默认关
+				// (设置 → 布局 → 高级 的警示:导入或新加的网页 / 按钮组件仍默认关闭,需要逐个打开)
+				WidgetDef def = new WidgetDef
+				{
+					Id = LayoutSchema.NewWidgetId(),
+					Type = type,
+					Title = WidgetUI.TypeLabel(type)
+				};
+				doc.Layout.Widgets.Add(def);
+				widgetId = def.Id;
+			}
+			else
+			{
+				widgetId = LayoutWidgetOps.AddWidget(doc, type);
+			}
+			LayoutStoreV2.Save(doc);
+		}
+		catch (Exception ex)
+		{
+			LayoutFx.ShowToast(I18nCore.Tr("添加失败"), ex.Message, ToastKind.Error);
+			return;
+		}
+		finally
+		{
+			_saving = false;
+		}
+		string blockId = LayoutWidgetOps.BlockIdOf(widgetId);
+		PageLayoutV2 page = _state.ToPage();
+		int bottomRow = LayoutGrid.RowCount(LayoutGrid.Pack(page));
+		if (!LayoutWidgetOps.AppendBlock(page, blockId))
+		{
+			return;
+		}
+		if (page.Mode == LayoutSchema.ModeGrid)
+		{
+			int cols = LayoutGrid.Columns(page);
+			foreach (BlockLayout block in page.Blocks)
+			{
+				if (block != null && string.Equals(block.Id, blockId, StringComparison.Ordinal))
+				{
+					int w = DefaultWidgetCols(type, cols);
+					block.X = 0.0;
+					block.Y = Math.Max(1, bottomRow);
+					block.W = w;
+					block.H = 1.0;
+					block.Span = w;
+					block.MinH = 1.0;
+				}
+			}
+		}
+		_session.PushUndo(before);
+		_box.ArmFlip();
+		_state = LayoutEngine.LoadState(_pageId, page, _refs, _state.ExistedInDoc);
+		_session.Select(blockId, false);
+		Persist();
+		Render();
+		RefreshDrawer();
+		ScrollBoxToEnd();
+		LayoutFx.ShowToast(string.Format(I18nCore.Tr("已添加「{0}」"), WidgetUI.TypeLabel(type)), I18nCore.Tr("放在了页面末尾"), ToastKind.Success);
+	}
+
+	private void ScrollBoxToEnd()
+	{
+		Dispatcher.UIThread.Post(delegate
+		{
+			try
+			{
+				_boxScroll.Offset = new Vector(_boxScroll.Offset.X, Math.Max(0.0, _boxScroll.ScrollBarMaximum.Y));
+			}
+			catch
+			{
+				// 页面正在销毁:滚不到也不影响
+			}
+		}, DispatcherPriority.Background);
+	}
+
+	// ————————————— 隐藏与删除分开(§1.A.6) —————————————
+
+	/// <summary>[v3] 删除自建组件(垃圾桶):只摘本页的块引用,组件定义留在 widgets[] 里,Ctrl+Z 能撤销。</summary>
+	internal void DeleteBlock(BlockSpec spec)
+	{
+		if (!_edit || spec == null || LayoutEngine.WidgetIdOf(spec.Id) == null)
+		{
+			return;
+		}
+		PageLayoutV2 before = _state.ToPage();
+		PageLayoutV2 page = _state.ToPage();
+		int removed = page.Blocks.RemoveAll((BlockLayout b) => b != null && string.Equals(b.Id, spec.Id, StringComparison.Ordinal));
+		if (removed == 0)
+		{
+			return;
+		}
+		_session.PushUndo(before);
+		_box.ArmFlip();
+		_state = LayoutEngine.LoadState(_pageId, page, _refs, _state.ExistedInDoc);
+		_session.Retain(_state.Order);
+		CompactState();
+		Persist();
+		Render();
+		LayoutFx.ShowToast(string.Format(I18nCore.Tr("已删除「{0}」"), spec.Title), I18nCore.Tr("按 Ctrl+Z 可以撤销"), ToastKind.Success);
+	}
+
+	// 自建组件的显示名:组件自己的标题(如「联机便签」),没写标题用类型名;定义找不到就叫「组件」(不露 custom:/w_xxx 内部 id)
+	private static string WidgetTitle(string blockId)
+	{
+		WidgetDef? def = WidgetRegistry.FindWidget(blockId);
+		if (def == null)
+		{
+			return I18nCore.Tr("组件");
+		}
+		if (!string.IsNullOrWhiteSpace(def.Title))
+		{
+			return def.Title;
+		}
+		return WidgetUI.TypeLabel(def.Type);
+	}
+}

@@ -1026,7 +1026,7 @@ public class LayoutEditorUiTests
 	// ————— 折叠 / 隐藏 / 托盘 —————
 
 	[Fact]
-	public void FoldAllCollapsesCardsWithoutWritingLayout()
+	public void FoldAllHasNoToolbarEntryInV3AndFoldingStillDoesNotWriteLayout()
 	{
 		using Store store = new Store();
 		TestApp.Run(() =>
@@ -1035,19 +1035,22 @@ public class LayoutEditorUiTests
 			using Host host = new Host("led:fold", page, Spec("a", "块甲"), Spec("b", "块乙"));
 			host.EnterEdit();
 
-			Button foldAll = ButtonWithText(host.Editor.Root, "全部折叠");
-			Action raiseClick = () => foldAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-			raiseClick();
+			// v3(效果图 §1.A.3):顶部编辑条上没有「全部折叠 / 全部展开」按钮
+			Assert.Null(Find<Button>(host.Editor.Root, (Button b) => Find<TextBlock>(b, (TextBlock t) => t.Text == "全部折叠" || t.Text == "全部展开") != null));
+
+			// 折叠逻辑仍保留(代理 C:无界面入口,字段与逻辑不删):它仍只是编辑时的临时视图,不写布局
+			System.Reflection.MethodInfo toggle = typeof(LayoutEditor).GetMethod("ToggleFoldAll",
+				System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+				?? throw new InvalidOperationException("找不到 LayoutEditor.ToggleFoldAll");
+			toggle.Invoke(host.Editor, null);
 
 			Assert.True(Card(host, "a").IsFolded);
 			Assert.True(Card(host, "b").IsFolded);
-			// 折叠只是编辑时的临时视图:不写布局
 			Assert.False(File.Exists(store.V2File));
 
-			// 按钮文案随状态翻转,再点一次全部展开
-			Assert.NotNull(Find<Button>(host.Editor.Root, (Button b) => Find<TextBlock>(b, (TextBlock t) => t.Text == "全部展开") != null));
-			RaiseClick(host, "全部展开");
+			toggle.Invoke(host.Editor, null);
 			Assert.False(Card(host, "a").IsFolded);
+			Assert.False(File.Exists(store.V2File));
 		});
 	}
 
@@ -1074,9 +1077,15 @@ public class LayoutEditorUiTests
 			host.Window.UpdateLayout();
 			Assert.Contains("b", host.Editor.State.Hidden);
 
-			// 底部托盘出现「块乙」chip,点它恢复 → 回到原来的槽位(不是排到末尾)
-			Button chip = ButtonWithText(host.Editor.Root, "块乙");
-			chip.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+			// v3(§1.A.5):底部不再有一整条「已隐藏的区块」托盘
+			Assert.Null(Find<TextBlock>(host.Editor.Root, (TextBlock t) => t.Text == "已隐藏的区块" && t.IsEffectivelyVisible));
+
+			// 恢复入口在「添加」抽屉 →「已隐藏的内容」:那一行(无障碍名「显示 块乙」)点一下 → 回到原来的槽位(不是排到末尾)
+			host.Editor.ShowDrawer(true);
+			host.Window.UpdateLayout();
+			Button row = Find<Button>(host.Editor.Root, (Button b) => (Avalonia.Automation.AutomationProperties.GetName(b) ?? "") == "显示 块乙")
+				?? throw new InvalidOperationException("「添加」抽屉里找不到「显示 块乙」这一行");
+			row.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 			host.Window.UpdateLayout();
 
 			Assert.DoesNotContain("b", host.Editor.State.Hidden);
@@ -1092,7 +1101,9 @@ public class LayoutEditorUiTests
 		using Store store = new Store();
 		TestApp.Run(() =>
 		{
-			const string Hint = "按住区块拖动移动 · 拖右/下边角缩放";
+			// v3:编辑条上的短提示按排法给(网格 = 「拖动换位置 · 拖右边缘改宽度」),悬停显示 §1.A.10 全文
+			const string Hint = "拖动换位置 · 拖右边缘改宽度";
+			const string FullHint = "拖动块调整顺序；网格模式下拖块的右边缘改宽度；悬停能看到块名和隐藏 / 删除按钮。";
 			using Host host = new Host("led:bar", GridPage(12, ("a", 0, 0, 4, 1)), Spec("a", "块甲"));
 			host.EnterEdit();
 
@@ -1100,12 +1111,91 @@ public class LayoutEditorUiTests
 			Assert.NotNull(hint);
 			// 宽度不够用省略号截断 + 指针悬停显示完整内容(规格2-问题6)
 			Assert.Equal(TextTrimming.CharacterEllipsis, hint!.TextTrimming);
-			Assert.Equal(Hint, ToolTip.GetTip(hint) as string);
-			// 工具条按钮组齐备
-			foreach (string label in new[] { "撤销", "重做", "吸附", "全部折叠", "完成编辑", "重置本页", "导出布局", "导入布局" })
+			Assert.Equal(FullHint, ToolTip.GetTip(hint) as string);
+			Assert.Equal(FullHint, LayoutEditor.FullHint());
+			// v3 顶部编辑条:撤销 / 重做是图标按钮(按 ToolTip 找)、「更多」⋯ 也是图标
+			foreach (string tip in new[] { "撤销 (Ctrl+Z)", "重做 (Ctrl+Y)", "更多" })
 			{
-				Assert.NotNull(Find<Button>(host.Editor.Root, (Button b) => Find<TextBlock>(b, (TextBlock t) => t.Text != null && t.Text!.StartsWith(label)) != null));
+				Assert.NotNull(Find<Button>(host.Editor.Root, (Button b) => ToolTip.GetTip(b) as string == tip));
 			}
+			// 文字按钮:添加 / 重置本页 / 完成
+			foreach (string label in new[] { "添加", "重置本页", "完成" })
+			{
+				Assert.NotNull(Find<Button>(host.Editor.Root, (Button b) => Find<TextBlock>(b, (TextBlock t) => t.Text == label) != null));
+			}
+			// v3 守卫:底部 7 个文字按钮那一套不能回来(「吸附 N」去掉;完成编辑 / 导出布局 / 导入布局 改名或挪进 ⋯ 菜单)
+			Assert.Null(Find<Button>(host.Editor.Root, (Button b) => Find<TextBlock>(b, (TextBlock t) => t.Text != null && t.Text!.StartsWith("吸附")) != null));
+			foreach (string gone in new[] { "完成编辑", "导出布局", "导入布局", "全部折叠" })
+			{
+				Assert.Null(Find<Button>(host.Editor.Root, (Button b) => Find<TextBlock>(b, (TextBlock t) => t.Text == gone) != null));
+			}
+		});
+	}
+
+	// ————— v3 守卫:单块页不给编辑入口 / 老 canvas 存档按网格呈现 —————
+
+	[Fact]
+	public void V3_SingleBlockPagesOfferNoEditEntry()
+	{
+		using Store store = new Store();
+		TestApp.Run(() =>
+		{
+			// 运行时只有一块 ⇒ 不提供编辑(右键菜单不出「自定义布局...」,设置页卡片不给「编辑」)
+			using (Host one = new Host("led:v3single", null, Spec("a", "块甲")))
+			{
+				Assert.False(one.Editor.CanEdit);
+			}
+			// 入口表标了单块的页(下载与网络):即使宿主给了两块也不提供
+			using (Host network = new Host("settings:network", null, Spec("a", "块甲"), Spec("b", "块乙")))
+			{
+				Assert.False(network.Editor.CanEdit);
+			}
+			using (Host two = new Host("led:v3two", null, Spec("a", "块甲"), Spec("b", "块乙")))
+			{
+				Assert.True(two.Editor.CanEdit);
+			}
+			// 设置 → 布局「页面」卡片用的约定入口
+			Assert.False(LayoutShellHooks.CanEditPage("settings:network"));
+			Assert.False(LayoutShellHooks.CanEditPage("feedback"));
+			Assert.False(LayoutShellHooks.CanEditPage(""));
+		});
+	}
+
+	[Fact]
+	public void V3_LegacyCanvasPageIsShownAsGridAndDiskStaysCanvasUntilEdited()
+	{
+		using Store store = new Store();
+		TestApp.Run(() =>
+		{
+			const string Id = "led:v3canvas";
+			PageLayoutV2 saved = CanvasPage("a", "b");
+			saved.Blocks[1].X = 0.5;
+			LayoutV2 doc = LayoutStoreV2.Load();
+			LayoutEngine.ApplyPage(doc, Id, saved);
+			LayoutStoreV2.Save(doc);
+			LayoutStoreV2.ResetCache();
+			Assert.Equal(LayoutSchema.ModeCanvas, LayoutStoreV2.Load().Layout.Pages[Id].Mode);
+
+			using Host host = new Host(Id, null, Spec("a", "块甲"), Spec("b", "块乙"));
+			// 读取时在内存里按网格呈现:整数列,不再有自由画布
+			Assert.Equal(LayoutSchema.ModeGrid, host.Editor.State.Page.Mode);
+			foreach (BlockLayout block in host.Editor.State.Page.Blocks)
+			{
+				Assert.True(block.W >= 1.0 && block.W <= 12.0 && Math.Abs(block.W - Math.Round(block.W)) < 1e-9, "块 " + block.Id + " 的宽度不是整数列:" + block.W);
+			}
+
+			// 只进编辑不改 ⇒ 磁盘上仍是 canvas(存档兼容:不因为"看了一眼"就改写)
+			host.EnterEdit();
+			host.Editor.ExitEdit();
+			LayoutStoreV2.ResetCache();
+			Assert.Equal(LayoutSchema.ModeCanvas, LayoutStoreV2.Load().Layout.Pages[Id].Mode);
+
+			// 编辑态真改过 ⇒ 按 grid 落盘
+			host.EnterEdit();
+			host.Editor.SetBlockHidden("b", true);
+			host.Editor.ExitEdit();
+			LayoutStoreV2.ResetCache();
+			Assert.Equal(LayoutSchema.ModeGrid, LayoutStoreV2.Load().Layout.Pages[Id].Mode);
 		});
 	}
 

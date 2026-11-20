@@ -219,6 +219,132 @@ public static class LayoutProfiles
 		return string.Equals(System.Text.Json.JsonSerializer.Serialize(a.ToDict()), System.Text.Json.JsonSerializer.Serialize(b.ToDict()), StringComparison.Ordinal);
 	}
 
+	// ————— [LAYOUT-V3-D] 设置 → 布局 v3 用到的小工具(纯逻辑,零界面依赖) —————
+
+	/// <summary>
+	/// 把当前布局留底成「上一次布局」并落盘(当前布局已原样存在激活方案里时不留底);返回留底的方案名,
+	/// 不必留底 / 失败时为 ""。「页面 → 全部恢复默认」之前调用,恢复错了可以从「方案」里切回。
+	/// </summary>
+	public static string KeepCurrentAsPrevious()
+	{
+		try
+		{
+			LayoutV2 doc = LayoutStoreV2.Load();
+			string kept = KeepPrevious(doc);
+			if (kept.Length > 0)
+			{
+				LayoutStoreV2.Save(doc);
+			}
+			return kept;
+		}
+		catch (Exception)
+		{
+			return "";
+		}
+	}
+
+	/// <summary>
+	/// 方案卡片上那一行说明:「N 个页面自定义 · 标准间距」;没有自定义页面时写「页面都是默认排列」。
+	/// </summary>
+	public static string Describe(LayoutBody? body)
+	{
+		if (body == null)
+		{
+			return "";
+		}
+		int pages = body.Pages?.Count ?? 0;
+		string density = (body.Shell?.Density) switch
+		{
+			LayoutSchema.DensityCompact => I18nCore.Tr("紧凑间距"),
+			LayoutSchema.DensityLoose => I18nCore.Tr("宽松间距"),
+			_ => I18nCore.Tr("标准间距")
+		};
+		string head = (pages > 0) ? Py.Fmt(I18nCore.Tr("{0} 个页面自定义"), pages) : I18nCore.Tr("页面都是默认排列");
+		return head + " · " + density;
+	}
+
+	/// <summary>
+	/// 是不是「AI 改布局前」自动留的备份。Linux 目前没有 AI 排版,所以只认两种标记:
+	/// 方案元数据 meta.ai_backup = true / meta.source = "ai",或方案名以 AI 备份的固定前缀开头;都没有就不是。
+	/// </summary>
+	public static bool IsAiBackup(string? name, LayoutBody? body)
+	{
+		if (body?.Meta != null)
+		{
+			if (body.Meta.TryGetValue("ai_backup", out object? flag) && IsTrue(flag))
+			{
+				return true;
+			}
+			if (body.Meta.TryGetValue("source", out object? source) && string.Equals(source?.ToString(), "ai", StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+		}
+		string trimmed = (name ?? "").Trim();
+		foreach (string prefix in AiBackupPrefixes)
+		{
+			if (trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// 方案名前缀只用于识别(与 Windows 的 AI 备份命名一致),不是界面文案
+	private static readonly string[] AiBackupPrefixes = new string[4]
+	{
+		"AI 备份", // i18n:ignore 识别用前缀,不是界面文案
+		"AI备份", // i18n:ignore 识别用前缀,不是界面文案
+		"AI 改布局前", // i18n:ignore 识别用前缀,不是界面文案
+		"AI backup"
+	};
+
+	private static bool IsTrue(object? value)
+	{
+		if (value is bool on)
+		{
+			return on;
+		}
+		return string.Equals(value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+	}
+
+	/// <summary>config.json 顶层键:网页 / 按钮这类危险组件是否允许添加(本机偏好,不进布局文件、不随方案走)。</summary>
+	public const string DangerousWidgetsKey = "layout_dangerous_widgets";
+
+	/// <summary>
+	/// 「设置 → 布局 → 高级 → 网页和按钮组件」总开关,默认关。只决定编辑态「添加」抽屉里给不给网页 / 按钮;
+	/// 每个已存在的危险组件仍要各自 settings.enabled = true 才渲染(导入进来的照旧默认关闭)。
+	/// 读写失败一律当「关」,不影响界面。
+	/// </summary>
+	public static bool DangerousWidgetsEnabled
+	{
+		get
+		{
+			try
+			{
+				return IsTrue(TipCL.Core.Launcher.Config.CONFIG.Get(DangerousWidgetsKey, false));
+			}
+			catch (Exception)
+			{
+				return false;
+			}
+		}
+		set
+		{
+			try
+			{
+				LauncherConfig cfg = TipCL.Core.Launcher.Config.CONFIG;
+				cfg.Set(DangerousWidgetsKey, value);
+				cfg.Save();
+			}
+			catch (Exception)
+			{
+				// 偏好写不进去只影响下次启动
+			}
+		}
+	}
+
 	/// <summary>重命名方案(被激活的方案跟着改 active_profile)。</summary>
 	public static string Rename(string? oldName, string? newName)
 	{

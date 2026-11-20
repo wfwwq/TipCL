@@ -192,12 +192,17 @@ public static class LayoutShellHooks
         ContextMenu menu = new();
         if (editing == null)
         {
-            MenuItem enter = new() { Header = I18nCore.Tr("自定义布局...") };
-            enter.Click += delegate
+            // [v3] §1.A.8 / §1.A.9:页面上有可编辑(≥2 块、非单块页)的宿主才给「自定义布局...」;
+            // 单块页面(下载与网络 / 反馈与关于 …)不出现这一项(FindHosts 已按 Editor.CanEdit 过滤)
+            if (hosts.Count > 0)
             {
-                EnterEditAt(win, page, source, point);
-            };
-            menu.Items.Add(enter);
+                MenuItem enter = new() { Header = I18nCore.Tr("自定义布局...") };
+                enter.Click += delegate
+                {
+                    EnterEditAt(win, page, source, point);
+                };
+                menu.Items.Add(enter);
+            }
         }
         else
         {
@@ -214,7 +219,10 @@ public static class LayoutShellHooks
             };
             menu.Items.Add(reset);
         }
-        menu.Items.Add(new Separator());
+        if (menu.Items.Count > 0)
+        {
+            menu.Items.Add(new Separator());
+        }
         MenuItem settings = new() { Header = I18nCore.Tr("布局设置...") };
         settings.Click += delegate
         {
@@ -270,6 +278,151 @@ public static class LayoutShellHooks
         {
             page.OpenLayoutView();
         }
+    }
+
+    // ───────────────────────────── v3:设置 → 布局 用的两个入口(约定签名,见 tmp/v3_handoff.md「Linux」) ─────────────────────────────
+
+    /// <summary>
+    /// [v3] §1.A.8:这一页提供不提供编辑入口。单块页面(入口清单里标了单块的「下载与网络」「反馈与关于」,
+    /// 以及任何只有一块的页)返回 false;空 pageKey 返回 false;没装载过 / 不在入口表里的页返回 true(不误判成单块)。
+    /// 判定顺序:清单的单块标记 → 当前屏幕上该页宿主的 <see cref="LayoutEditor.CanEdit"/> →
+    /// 该页最近一次装载时的块数(≥ 2 才算)→ 清单里有这一页就算可编辑(还没上屏过,按多块页处理)。
+    /// </summary>
+    public static bool CanEditPage(string pageKey)
+    {
+        if (string.IsNullOrEmpty(pageKey))
+        {
+            return false;
+        }
+        LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(pageKey);
+        if (entry != null && entry.SingleBlock)
+        {
+            return false;
+        }
+        if (_win?.PageHostControl?.Content is Visual root)
+        {
+            BlockHost? live = FindHostByPage(root, pageKey, 0);
+            if (live != null)
+            {
+                return live.Editor.CanEdit;
+            }
+        }
+        int? known = LayoutEditor.KnownBlockCount(pageKey);
+        if (known.HasValue)
+        {
+            return known.Value >= 2;
+        }
+        // 还没上屏过 / 不在入口表里的页:不误判成单块(D 的要求:页面还没构建过时返回 true)。
+        // 真进不去时由 BeginEditPage 的「没找到可编辑的区块」兜底提示。
+        return true;
+    }
+
+    /// <summary>
+    /// [v3] §1.B.3 / §1.B.8:跳到 <paramref name="pageKey"/> 那一页并进入编辑态(设置 → 布局「页面」卡片上的「编辑」走这里)。
+    /// pageKey = BlockHost 的 pageId(与 <see cref="LayoutBlockEntryCatalog"/> 的 PageId 一致,如 "download" / "settings:general")。
+    /// 返回 true = 已经进了编辑态,或者已发起跳转、等页面上屏后再进;false = 不提供编辑(单块页)/ 不认识这一页 / 主窗口没挂。
+    /// 跳过去之后找不到宿主(例如「版本安装」要先点一个版本)会给一句 Toast 告诉用户先去哪儿。
+    /// </summary>
+    public static bool BeginEditPage(string pageKey)
+    {
+        Shell.MainWindow? win = _win;
+        if (win == null || string.IsNullOrEmpty(pageKey))
+        {
+            return false;
+        }
+        if (!CanEditPage(pageKey))
+        {
+            LayoutFx.ShowToast(I18nCore.Tr("这个页面只有一块内容"), I18nCore.Tr("只有一块内容的页面不提供编辑"), ToastKind.Info);
+            return false;
+        }
+        LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(pageKey);
+        if (entry == null)
+        {
+            // 不在入口清单里的页:只能就地进(页面已在屏幕上时)
+            return TryEnterPage(win, pageKey);
+        }
+        win.Navigate(entry.NavId);
+        if (entry.NavId == "settings" && win.PageHostControl?.Content is Pages.Settings.SettingsPage settings)
+        {
+            if (entry.SettingsView == Pages.Settings.SettingsPage.LayoutView)
+            {
+                settings.OpenLayoutView();
+            }
+            else if (entry.SettingsView >= 0)
+            {
+                settings.SelectTab(entry.SettingsView);
+            }
+        }
+        else if (entry.NavId == "download" && entry.Segment >= 0)
+        {
+            (win.PageHostControl?.Content as Pages.Download.DownloadPage)?.SelectSegment(entry.Segment);
+        }
+        else if (entry.NavId == "plugins" && entry.Tab.Length > 0)
+        {
+            (win.PageHostControl?.Content as Pages.Plugins.PluginsPage)?.ShowTab(entry.Tab);
+        }
+        // 等页面挂进可视树再找宿主(Avalonia:Loaded 优先级 = 布局完成之后);懒建的页再多等两拍
+        Dispatcher.UIThread.Post(delegate
+        {
+            EnterWhenReady(win, entry, 0);
+        }, DispatcherPriority.Loaded);
+        return true;
+    }
+
+    private static void EnterWhenReady(Shell.MainWindow win, LayoutBlockEntryCatalog.Entry entry, int attempt)
+    {
+        if (TryEnterPage(win, entry.PageId))
+        {
+            return;
+        }
+        if (attempt < 2)
+        {
+            Dispatcher.UIThread.Post(delegate
+            {
+                EnterWhenReady(win, entry, attempt + 1);
+            }, DispatcherPriority.Background);
+            return;
+        }
+        LayoutFx.ShowToast(I18nCore.Tr("没找到可编辑的区块"), (entry.NeedsContext.Length > 0) ? entry.NeedsContext : I18nCore.Tr("可以在页面上右键「自定义布局...」"), ToastKind.Warning);
+    }
+
+    private static bool TryEnterPage(Shell.MainWindow win, string pageId)
+    {
+        if (win.PageHostControl?.Content is not Visual root)
+        {
+            return false;
+        }
+        BlockHost? host = FindHostByPage(root, pageId, 0);
+        return host != null && host.EnterEdit();
+    }
+
+    // 按 pageId 找**正在显示**的宿主(不可见的子树跳过:设置页没选中的子视图里的宿主不算)
+    private static BlockHost? FindHostByPage(Visual? node, string pageId, int depth)
+    {
+        if (node == null || depth > 60 || !node.IsVisible)
+        {
+            return null;
+        }
+        if (node is BlockHost host && string.Equals(host.PageId, pageId, StringComparison.Ordinal))
+        {
+            return host;
+        }
+        try
+        {
+            foreach (Visual child in node.GetVisualChildren())
+            {
+                BlockHost? found = FindHostByPage(child, pageId, depth + 1);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        catch
+        {
+            // 模板正在重建:这一层没走完就当没找到
+        }
+        return null;
     }
 
     // ───────────────────────────── 可视树小工具 ─────────────────────────────

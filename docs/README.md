@@ -95,8 +95,8 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 [`docs/RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md) **发版前的元数据检查单**（抬版本号要改哪 6 处 / 重算哪些 sha256 / 回填哪两份清单 / 发完怎么复核） ·
 [交接必读.md](../交接必读.md) 接手流程（立项阶段写成，现状以 PROGRESS.md 为准）。
 
-布局 v2 的 **Windows 版**手册(1.2.0):[docs/布局使用指南.md](布局使用指南.md) 完整手册(三个入口 / 手势 / 三种模式 / 分栏 / 整机方案导入导出 / 自建区块 / AI 排版回退 / 本版的坑)·
-[docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 10 条 FAQ。**这两份写的是 Windows 桌面版行为**;Linux 侧除「AI 排版」外的入口都在,但**编辑态手感有四处差异**(见下面「Linux 编辑态与 Windows 的四处差异」)。
+布局的 **Windows 版**手册:[docs/布局使用指南.md](布局使用指南.md) 完整手册(入口 / 手势 / 列表与网格 / 分栏 / 整套布局与方案 / 自建组件 / AI 排版回退 / 本版的坑)·
+[docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + FAQ。**这两份写的是 Windows 桌面版行为**,2026-11-20 起按「自定义布局 v3」的界面改写(见下面「布局 v3:界面呈现」);Linux 侧除「AI 排版」外的入口都在,但**编辑态手感有四处差异**(见下面「Linux 编辑态与 Windows 的四处差异」)。v3 效果图原件入库在 [`windos/docs/mockups-hark/v3/layout3.html`](../windos/docs/mockups-hark/v3/layout3.html)。
 
 ### 布局 v2:Linux 移植版的真实进度(截至 `b86afe3`,2026-11-20 复核)
 
@@ -109,13 +109,49 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 | 编辑器 + 区块宿主 + 右键「自定义布局...」全局钩子 | `Pages/Layout/LayoutEditor.cs`、`BlockHost.cs`、`LayoutShellHooks.cs` |
 | 自建区块内容工厂(5 个安全类型 + 2 个危险类型) | `Pages/Layout/WidgetRegistry.cs`、`Pages/Layout/Widgets/` |
 | 启动时注册部件(R32-LINT 实测真窗口上屏 5 个部件) | `App.axaml.cs` |
-| 设置页整页「布局」视图(7 小节:外观与密度 / 页签与标题栏 / 页面区块 / 分栏比例 / 自建区块 / 布局方案 / 布局 JSON) | `Pages/Settings/SettingsPage.Layout.cs`(`OpenLayoutView()`) |
+| 设置页整页「布局」视图(v2 时是 7 小节;**v3 起改为 5 组:外观 / 导航 / 页面 / 方案 / 高级**,见下节) | `Pages/Settings/SettingsPage.Layout.cs`(`OpenLayoutView()`) |
 | 分栏比例(`SplitCatalog` / `SplitRatioStore` / `PageLayoutHost`,13 条站点表) | `src/TipCL.App/Controls/PageLayoutHost.cs` |
 | 整机方案(增删改查 / 导入导出;v2 真源 + v1 兼容导出) | `Pages/Layout/LayoutProfiles.cs` |
 | 布局 JSON 卡片(校验 / 应用 / 刷新) | `Pages/Layout/LayoutJsonEditor.cs` |
 | 页签与标题栏编辑 | `Pages/Layout/ShellTabs.cs` |
 
 **尚未落地**(别再按 Windows 手册去找这些入口):**AI 排版工具** —— `layout_apply` / `layout_get` 工具与「AI 备份 <时间>」方案的实现在 `windos/src/TipCL/Core/Launcher/Ai/LayoutTools.cs`,Linux 树 `src/` 里 `LayoutTools` 与字符串「AI 备份」**零命中**(`grep -r "LayoutTools\|AI 备份" src/` 无结果)。故 Windows 手册里「让 AI 改布局」「AI 改坏了用 AI 备份回退」两节对 Linux 版不适用。
+
+### 布局 v3:界面呈现(2026-11-20,两棵树同步改)
+
+v3 **只改界面呈现,不改存档**:`ui_layout_v2.json` / v1 `ui_page_layouts.json` 的读写语义不变,Core 的 schema / 模型 / v1 兼容字段一个没删(包括 `mode: "canvas"`、`shell.titlebar.bridge`)。逐条落点与两侧对照见 [PARITY.md §9.19](PARITY.md),总报告见 [`progress/LAYOUT-V3.md`](../progress/LAYOUT-V3.md)。
+
+**编辑态(所有可编辑页面同理)**
+
+| 以前 | v3 |
+|---|---|
+| 底部一条 7 个文字按钮(撤销 / 重做 / 吸附 N / 完成编辑 / 重置本页 / 导出布局 / 导入布局) | **顶部一条**:「编辑「<页名>」页」· 列表 \| 网格 · 撤销 / 重做(图标)· 添加(N)· 重置本页 · 完成 · ⋯(导出本页… / 导入到本页… / 整套布局与方案…) |
+| 「吸附 N」切换画布吸附档 | **去掉**;网格按列对齐,宽度只能是整数列,网格模式下拖块**右边缘**改宽度 |
+| 底部一整条「已隐藏的区块」托盘 | 并进「添加」抽屉:「已隐藏的内容」+「组件」两组;按钮上的数字 = 隐藏了几项 |
+| 红色实线边框、操作条常驻、自建块显示 `w_note1` | 灰色虚线,只有选中的块用主题色;块名**悬停**才出现,自建组件显示自己的标题 |
+| 隐藏 `✕` 与删除混在一起 | 内置内容用**眼睛**隐藏;自建组件用**垃圾桶**删除(只摘本页引用、组件定义保留;走撤销,Ctrl+Z 撤回,不弹确认框) |
+| 模式只能改 JSON,有 stack / grid / canvas 三种 | 界面上「列表 / 网格」两档,**不再提供自由画布**;老存档里的 canvas 页按网格呈现(换算到整数列),编辑后存为 grid |
+| 单块页面(下载与网络 / 反馈与关于)也能进编辑态 | **不提供编辑入口**:右键菜单不出现「自定义布局…」,设置页也不给编辑按钮 |
+
+**设置 → 布局(从配置清单改成按要做的事分组)**
+
+| 组 | 内容 |
+|---|---|
+| 外观 | 区块间距「紧凑 / 标准 / 宽松」三档**分段按钮**(替换下拉框),所有可自定义的页面一起生效 |
+| 导航 | 顶部页签做成可**拖动排序**的 chip(替换上下箭头),点眼睛隐藏,「设置」不能隐藏;标题栏只留 AI / 主题 / 账号三个开关(「隐藏 AI 按钮后仍可按 Ctrl+K 打开」)。**不再有「桥接」开关和「标题栏:xxx」这类说法** |
+| 页面 | 12 个一样的「自定义布局...」按钮 → **缩略图卡片**,标「默认 / 已自定义」,卡片「编辑」直达那一页的编辑态;右上「全部恢复默认」 |
+| 方案 | 卡片;正在使用的有描边;「AI 备份」单独标出;「导入… / 导出整套布局… / 存为新方案」;卡片菜单「重命名 / 复制一份 / 删除」 |
+| 高级(默认折叠) | 分栏宽度一行汇总「已调整 N 处:… · 全部复位」(13 行表去掉);网页和按钮组件总开关;布局文件「打开所在文件夹 / 在编辑器中打开…」(**JSON 用独立编辑器窗口**,不再常驻页面) |
+
+两组导出改了名:编辑态里叫「导出本页」,设置里叫「导出整套布局」。下面「四处差异」**不受 v3 影响**,仍然是刻意的。
+
+v3 在两棵树上的**三处刻意不同**(都有原因,别"统一"):
+
+- 「列表」是什么:Windows = stack 一维换序(进编辑不再偷偷折成网格);Linux = 每块占满一行的 12 列网格(延续下面差异 #1)。
+- 「反馈与关于 / 反馈与帮助」:Windows 是 `settings:about` 单块页;Linux 没有独立 `settings:about` 宿主,本轮把 `feedback` 整页标为单块(不提供编辑)。
+- 设置 → 布局 → 高级:Windows 为保住测试钉住的 7 个区块 id,高级是三张相连卡片共用一个折叠开关,并保留「自建组件 · 管理…」;Linux 是一个 `advanced` 块,设置页不再有部件选择器(加组件只走编辑态「添加」抽屉)。
+
+逐条落点、降级项见 [PARITY.md §9.19](PARITY.md)。
 
 ### Linux 编辑态与 Windows 的四处差异(2026-11-20 复核,别当 bug 修)
 

@@ -556,6 +556,12 @@ public class LayoutGridCanvasTests
 
 			panel.EditMode = true;
 			panel.InvalidateVisual();
+			// v3(§1.A.1「编辑控件只在需要时出现」):编辑态平时**不画**底纹,只有拖动 / 改宽度过程中
+			// (ShowPlaceholder = true,效果图 .busy .cols)才画列分隔线;行分隔线不再画。
+			Assert.Equal(0, Painted(Render(panel, 200, 120)));
+
+			panel.ShowPlaceholder = true;
+			panel.InvalidateVisual();
 			Color[] on = Render(panel, 200, 120);
 			int painted = Painted(on);
 			// 底纹:主题色 38 透明度的线(0.6px)—— 2 列时唯一的列分隔线在 x=100.0

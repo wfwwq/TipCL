@@ -259,7 +259,10 @@ public class LayoutPagesSplitTests
 			try
 			{
 				BlockHost host = Host(page, "settings:layout");
-				Assert.Equal(new[] { "header", "appearance", "shell", "blocks", "splits", "widgets", "profiles", "json" }, BlockIds(host));
+				// v3(2026-11-20):设置 → 布局 改为「外观 / 导航 / 页面 / 方案 / 高级」五组;
+				// 分栏 / 自建组件 / 布局 JSON 三块并进默认折叠的「高级」(advanced),JSON 不再常驻页面。
+				Assert.Equal(new[] { "header", "appearance", "shell", "blocks", "profiles", "advanced" }, BlockIds(host));
+				Assert.DoesNotContain("json", BlockIds(host));
 				Assert.True(host.Editor.CanEdit);
 			}
 			finally

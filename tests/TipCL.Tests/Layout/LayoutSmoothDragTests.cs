@@ -359,10 +359,10 @@ public class LayoutSmoothDragUiTests
 			// 像素跟手:宽 = 起手宽 + 指针位移(不吸附)
 			Assert.Equal(startA.Width + step * 1.3, a.Bounds.Width, 1.0 /*tolerance: 1px layout rounding*/);
 			{
-				// 标签按未取整的槽位宽 + 指针位移算,和取整后的 Bounds 可能差 1px
-				string[] wh = host.Guide.SizeText.Split(" × ");
-				Assert.True(Math.Abs(double.Parse(wh[0]) - (startA.Width + step * 1.3)) <= 1.0, "尺寸标签 = " + host.Guide.SizeText);
-				Assert.True(Math.Abs(double.Parse(wh[1]) - startA.Height) <= 1.0, "尺寸标签 = " + host.Guide.SizeText);
+				// v3(§1.A.4):宽度只能是整数列 —— 拖右边缘时尺寸标签是「N / 12 列」(效果图 .rz b),不再是「宽 × 高」像素
+				// (只拖下边时仍显示像素尺寸,见 LayoutEditor 改大小分支)。1.3 列 → 取整 1 列 ⇒ 4 + 1 = 5。
+				Assert.Equal("5 / 12 列", host.Guide.SizeText);
+				Assert.DoesNotContain("×", host.Guide.SizeText);
 			}
 			// 占位框 = 吸附后的尺寸(1.3 列 → 1 列)
 			Assert.Equal(5, panel.CellOf("a")!.W);

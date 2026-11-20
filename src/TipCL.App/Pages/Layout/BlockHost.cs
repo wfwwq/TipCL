@@ -166,7 +166,8 @@ public sealed class BlockHost : UserControl
         if (!_editor.IsEditing)
         {
             _editor.EnterEdit();
-            LayoutFx.ShowToast(I18nCore.Tr("已进入自定义布局"), I18nCore.Tr("按住区块拖动即可移动,完成编辑后自动保存"), ToastKind.Success);
+            // [v3] §1.A.10:提示文案换成效果图那一句(拖动调顺序 / 网格拖右边缘改宽 / 悬停看块名与隐藏删除)
+            LayoutFx.ShowToast(I18nCore.Tr("已进入自定义布局"), LayoutEditor.FullHint(), ToastKind.Success);
         }
         return true;
     }

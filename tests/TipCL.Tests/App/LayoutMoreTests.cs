@@ -639,11 +639,11 @@ public class SubViewBlockHostWiringTests
         return specs.Cast<BlockSpec>().Select(s => s.Id).ToList();
     }
 
-    private static BlockHost AssertHost(UserControl view, string pageId, string[] blockIds)
+    private static BlockHost AssertHost(UserControl view, string pageId, string[] blockIds, bool canEdit = true)
     {
         var host = Assert.IsType<BlockHost>(view.Content);
         Assert.Equal(pageId, host.PageId);
-        Assert.True(host.Editor.CanEdit);
+        Assert.Equal(canEdit, host.Editor.CanEdit);
         Assert.Equal(blockIds, SpecIds(host));
         return host;
     }
@@ -658,7 +658,9 @@ public class SubViewBlockHostWiringTests
         AssertHost(new ServersView(), "servers", new[] { "header", "instance", "list" });
         AssertHost(new PlaytimeView(), "playtime", new[] { "header", "total", "range", "list" });
         // 方案 B(§2.1-10):「关于」卡留在 feedback 的 content 块里,没有独立 settings:about 宿主
-        AssertHost(new FeedbackView(), "feedback", new[] { "header", "content" });
+        // v3(§1.A.8):「反馈与帮助」在入口表里标为单块页(代理 C,LayoutBlockEntryCatalog.cs)⇒ 宿主仍在、块 id 不变,
+        // 但**不提供编辑入口**(CanEdit = false,右键没有「自定义布局...」)
+        AssertHost(new FeedbackView(), "feedback", new[] { "header", "content" }, canEdit: false);
 
         // 下载页原版分段:视图挂在页壳 Grid 的 ContentControl 里(不是直接当 Content)
         var page = new DownloadPage();
@@ -717,39 +719,40 @@ public class AddBlockToNewlyWiredPageHeadlessTests
             win.Navigate("settings");
             Pump();
             var page = Assert.IsType<SettingsPage>(win.PageHostControl!.Content);
-            page.OpenLayoutView();
-            Pump(win);
 
-            // 1) 目标页选 Java(入口表下标 = LayoutBlockEntryCatalog.All 里的位置)
-            int index = Array.FindIndex(LayoutBlockEntryCatalog.All, e => e.PageId == "java");
-            Assert.True(index >= 0);
-            ComboBox? combo = win.GetVisualDescendants().OfType<ComboBox>()
-                .FirstOrDefault(c => (Avalonia.Automation.AutomationProperties.GetName(c) ?? "") == "自建区块加到页面");
-            Assert.NotNull(combo);
-            combo!.SelectedIndex = index;
-            Pump();
+            // v3:加组件从「设置 → 布局」挪到了**编辑态「添加」抽屉**(设置页的「自建区块加到页面」下拉 + 「添加部件:」按钮已删)。
+            // 1) 切到 Java 子页(入口表给的设置内层下标),找到它的宿主进编辑态
+            LayoutBlockEntryCatalog.Entry java = LayoutBlockEntryCatalog.Find("java")!;
+            page.SelectTab(java.SettingsView);
+            LayoutThenJobs(win);
+            HeadlessPump.WaitFor(win, () => win.GetVisualDescendants().OfType<BlockHost>().Any(h => h.PageId == "java"));
+            BlockHost? host = win.GetVisualDescendants().OfType<BlockHost>().FirstOrDefault(h => h.PageId == "java");
+            Assert.NotNull(host);
+            Assert.True(LayoutShellHooks.CanEditPage("java"));
+            host!.Editor.EnterEdit();
+            host.Editor.ShowDrawer(true);
+            LayoutThenJobs(win);
 
-            // 2) 选部件:便签
-            Button? add = win.GetVisualDescendants().OfType<Button>()
-                .FirstOrDefault(b => (Avalonia.Automation.AutomationProperties.GetName(b) ?? "")
-                    .StartsWith("添加部件:便签(note)", StringComparison.Ordinal));
+            // 2) 抽屉「组件」组里点「便签」那一行(无障碍名 = 动作 + 空格 + 类型名)
+            string rowName = I18nCore.Tr("添加") + " " + WidgetUI.TypeLabel(LayoutSchema.WidgetNote);
+            Button? add = host.GetVisualDescendants().OfType<Button>()
+                .FirstOrDefault(b => (AutomationProperties.GetName(b) ?? "") == rowName);
             Assert.NotNull(add);
             add!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            host.Editor.ExitEdit();
             LayoutThenJobs(win);
 
             // 3) 数据层:块引用落在 java 这一页上(不是落回默认页)
             LayoutV2 doc = LayoutStoreV2.Load();
             WidgetDef widget = Assert.Single(doc.Layout.Widgets);
+            Assert.Equal(LayoutSchema.WidgetNote, widget.Type);
             string blockId = LayoutEngine.CustomPrefix + widget.Id;
             Assert.Contains(doc.Layout.Pages["java"].Blocks, b => b.Id == blockId);
 
-            // 4) 可视树:Java 页宿主在树里,且便签正文真的被构造出来(按文本断言,不是"没崩")
-            HeadlessPump.WaitFor(win, () => win.GetVisualDescendants().OfType<BlockHost>().Any(h => h.PageId == "java"));
-            BlockHost? host = win.GetVisualDescendants().OfType<BlockHost>().FirstOrDefault(h => h.PageId == "java");
-            Assert.NotNull(host);
+            // 4) 可视树:Java 页宿主里便签正文真的被构造出来(按文本断言,不是"没崩")
             HeadlessPump.RestoreWidgetFactories(win);
-            HeadlessPump.WaitFor(win, () => host!.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == guide));
-            Assert.Contains(host!.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == guide);
+            HeadlessPump.WaitFor(win, () => host.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == guide));
+            Assert.Contains(host.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == guide);
             // 收尾:关窗(Closed 会摘掉 LayoutShellHooks 的静态窗口引用;泄漏的窗口会让后续窗口类用例
             // 逐步丢掉无头平台服务 —— 实测丢了之后报 Unable to locate IFontManagerImpl)
             win.Close();
@@ -792,8 +795,21 @@ public class SettingsLayoutAddBlockHeadlessTests
         return page;
     }
 
+    private static BlockHost HostOf(Window win, string pageId)
+    {
+        HeadlessPump.WaitFor(win, () => win.GetVisualDescendants().OfType<BlockHost>().Any(h => h.PageId == pageId));
+        return win.GetVisualDescendants().OfType<BlockHost>().FirstOrDefault(h => h.PageId == pageId)
+            ?? throw new InvalidOperationException("可视树里找不到 BlockHost " + pageId);
+    }
+
+    private static List<string> DrawerRowNames(BlockHost host)
+        => host.GetVisualDescendants().OfType<Button>()
+            .Select(b => AutomationProperties.GetName(b) ?? "")
+            .Where(n => n.Length > 0)
+            .ToList();
+
     [Fact]
-    public void LayoutView_ListsAllFiveSafeWidgetTypes()
+    public void LayoutView_HasNoWidgetPicker_AndEditDrawerListsAllFiveSafeWidgetTypes()
     {
         using LayoutStoreDir dir = new LayoutStoreDir("addlist");
         HeadlessPump.ResetWidgetFactories();
@@ -801,16 +817,33 @@ public class SettingsLayoutAddBlockHeadlessTests
         {
             var win = new MainWindow();
             OpenLayoutView(win);
-            List<string> names = win.GetVisualDescendants().OfType<Button>()
-                .Select(b => Avalonia.Automation.AutomationProperties.GetName(b) ?? "")
-                .Where(n => n.StartsWith("添加部件:", StringComparison.Ordinal))
-                .ToList();
+
+            // v3 守卫:设置 → 布局 不再有「自建区块」部件选择器,也没有内部说法
+            Assert.DoesNotContain(win.GetVisualDescendants().OfType<Button>(),
+                b => (AutomationProperties.GetName(b) ?? "").StartsWith("添加部件:", StringComparison.Ordinal));
+            Assert.DoesNotContain(win.GetVisualDescendants().OfType<ComboBox>(),
+                c => (AutomationProperties.GetName(c) ?? "") == "自建区块加到页面");
+            BlockHost layout = HostOf(win, "settings:layout");
+            foreach (string internalWord in new[] { "桥接", "标题栏:", "ui_layout_v2.json", "(L6)" })
+            {
+                Assert.DoesNotContain(layout.GetVisualDescendants().OfType<TextBlock>(),
+                    t => t.IsEffectivelyVisible && (t.Text ?? "").Contains(internalWord, StringComparison.Ordinal));
+            }
+
+            // 加组件改在编辑态「添加」抽屉:「组件」组里恰好是 5 个安全类型(网页 / 按钮默认关闭,不列)
+            layout.Editor.EnterEdit();
+            layout.Editor.ShowDrawer(true);
+            Pump(win);
+            string add = I18nCore.Tr("添加") + " ";
+            List<string> names = DrawerRowNames(layout).Where(n => n.StartsWith(add, StringComparison.Ordinal)).ToList();
             Assert.Equal(5, names.Count);
             foreach (string type in WidgetRegistry.SafeTypes)
             {
-                Assert.Contains(names, n => n.Contains("(" + type + ")", StringComparison.Ordinal));
+                Assert.Contains(add + WidgetUI.TypeLabel(type), names);
             }
-            Assert.Contains(names, n => n.Contains("便签(note)", StringComparison.Ordinal));
+            Assert.DoesNotContain(add + WidgetUI.TypeLabel(LayoutSchema.WidgetWeb), names);
+            Assert.DoesNotContain(add + WidgetUI.TypeLabel(LayoutSchema.WidgetButton), names);
+            layout.Editor.ExitEdit();
             win.Close();
         });
     }
@@ -826,11 +859,22 @@ public class SettingsLayoutAddBlockHeadlessTests
         TestApp.Run(() =>
         {
             var win = new MainWindow();
-            OpenLayoutView(win);
-            Button? add = win.GetVisualDescendants().OfType<Button>()
-                .FirstOrDefault(b => (Avalonia.Automation.AutomationProperties.GetName(b) ?? "").StartsWith("添加部件:便签(note)", StringComparison.Ordinal));
+            win.Show();
+            Pump(win);
+            win.Navigate("settings");
+            Pump(win);
+
+            // v3:在「通用」页进编辑态 →「添加」抽屉 →「组件」→ 便签
+            BlockHost general = HostOf(win, "settings:general");
+            general.Editor.EnterEdit();
+            general.Editor.ShowDrawer(true);
+            Pump(win);
+            string rowName = I18nCore.Tr("添加") + " " + WidgetUI.TypeLabel(LayoutSchema.WidgetNote);
+            Button? add = general.GetVisualDescendants().OfType<Button>()
+                .FirstOrDefault(b => (AutomationProperties.GetName(b) ?? "") == rowName);
             Assert.NotNull(add);
             add!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            general.Editor.ExitEdit();
             Pump(win);
 
             // 1) 数据层:定义 + 页面块引用都落进文档

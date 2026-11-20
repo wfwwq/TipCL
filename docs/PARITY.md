@@ -778,3 +778,48 @@ $env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
 | 4 | 实例库新增「实例状态」区块 | **未移植**:Linux 的 `InstRow` 只有 `Name/Path/Versions`,`Ver` 只有 `Id/Loader/Type/Mods` —— 「游戏版本 / 整合包 / Java / 最近游玩」**没有数据源**。要补得先接 `get_instance_info` 契约并把 `LastPlayed` 补进 `Ver`,属数据层改动,不在本轮 | ❌ 待定 |
 
 **验证口径**(本机 Windows,`dotnet build TipCL.Linux.sln -c Release` + `dotnet test tests/TipCL.Tests`):构建 0 警告 0 错误;用例 **781 条 / 775 过 / 5 败 / 1 跳**,5 条失败与改动前**同一组**(写 `%TEMP%` 被拒的 `NewsTests` ×3 + `PhoneLinkProtocolTests` ×2,环境性);新增 `LayoutAutoPackTests` 3 条全过。**界面未在真窗跑过** —— 动画 / 滚轮转交 / 并排落位的手感仍需 Linux 真机验收。
+
+### 9.19 自定义布局 v3(2026-11-20)
+
+**背景**:用户给了 v3 效果图(原件入库 `windos/docs/mockups-hark/v3/layout3.html`),要求编辑态「内容是主角」、设置 → 布局「按要做的事分组」。两棵树**同一轮各自实现**(Windows:代理 A 编辑态 / B 设置页;Linux:C 编辑态 / D 设置页;E 词表 / 测试 / 文档),**只改界面呈现,不改存档**:`ui_layout_v2.json` 与 v1 `ui_page_layouts.json` 的读写语义不变,`mode: "canvas"`、`shell.titlebar.bridge` 等老字段照读照写,只是 UI 不再提供。`docs/README.md`「Linux 编辑态与 Windows 的四处差异」不受 v3 影响,仍是刻意的。
+
+**状态:代码已落地,两棵树都未编译、未跑测试**(本机限制),需按 `progress/LAYOUT-V3.md` 的命令在真机上编译 + 跑测试 + 点回归。行号取自各代理报告 `progress/LAYOUT-V3-{A,B,C,D}.md`。
+
+图例:✅ 已落地 / ⚠️ 落地但有降级(见备注)/ ❌ 未做。
+
+**A. 编辑态**
+
+| # | 效果图要求 | Windows(A) | Linux(C) | 备注 |
+|---|---|---|---|---|
+| A1 | 边框灰色虚线,只有选中块用主题色 | ✅ `LayoutEditorV3.cs:1083` `BuildV3Chrome` / `:1199` `ApplyV3Chrome`;`LayoutEditor.cs:3390` `ApplyLook` 去整卡主题色 | ✅ `LayoutEditor.cs:3031` `_outline`、`:3434` `ApplyEditOutline` | 两侧都用 `Rectangle.StrokeDashArray` 叠一层虚线;网格底纹:Windows 网格模式不再画,Linux 只在拖动中画 |
+| A2 | 块名悬停才出现;自建组件显示自己的标题 | ✅ `LayoutEditorV3.cs:408` `DisplayTitle` | ✅ `LayoutEditor.cs:2962`、`LayoutEditor.V3.cs:834` `WidgetTitle` | 不再露 `w_note1` / `custom:`;找不到定义时叫「组件」 |
+| A3 | 底部 7 个文字按钮 → 顶部一条 | ✅ `LayoutEditorV3.cs:123`,⋯ 菜单 `:457` | ✅ `LayoutEditor.V3.cs:112` `BuildEditBar`,⋯ `:260` | ⋯ = 导出本页… / 导入到本页… / 整套布局与方案…;Linux ⋯ 末尾多一项「松手后自动靠拢」(原开关不丢) |
+| A4 | 去掉「吸附 N」;整数列;网格下拖右边缘改宽 | ⚠️ 右边缘手柄 `LayoutEditorV3.cs:1083`;**没有**「N / 12 列」读数 | ✅ `_pill` `LayoutEditor.cs:3075`,读数「N / 12 列」`:2178` | 两侧下边整条热区(固定像素高 / 双击复位)保留但不画把手 |
+| A5 | 隐藏托盘并进「添加」抽屉 | ✅ `LayoutEditorV3.cs:598` `BuildV3Drawer` / `:744` | ✅ `LayoutEditor.V3.cs:452` `BuildDrawer` / `:536` | 危险组件只在「网页和按钮组件」总开关打开后列出(Windows `LayoutSettingsPrefs.DangerWidgetsEnabled`,Linux `LayoutProfiles.DangerousWidgetsEnabled`);抽屉无滑入动画(Linux) |
+| A6 | 内置内容眼睛隐藏,自建组件垃圾桶删除 | ✅ `LayoutEditorV3.cs:433` `DeleteCustomBlock` | ✅ `LayoutEditor.V3.cs:810` `DeleteBlock` | 只删本页引用、`widgets[]` 定义保留;走撤销(Ctrl+Z),**不弹确认框** |
+| A7 | 只留列表 / 网格;canvas 老存档按网格呈现,编辑后存 grid | ✅ `LayoutEditorV3.cs:313` `SetV3Mode`;`LayoutCanvasCompat.AsGrid` `:1287` | ✅ `LayoutEditor.V3.cs:352` `SetLayoutKind`;`LayoutEngine.CanvasToGrid` `LayoutEngine.cs:1000` | **刻意不同**:Windows「列表」= stack 一维换序(进编辑不再偷偷折网格);Linux「列表」= 每块占满一行的 12 列网格(四处差异 #1) |
+| A8 | 单块页面不提供编辑入口 | ✅ `LayoutEditor.cs:326` `CanEdit` = specs ≥ 2;`BlockHost.cs:103`;`LayoutShellHooks.cs:332` `CanEditPage` | ✅ `LayoutEditor.cs:375` → `LayoutEditor.V3.cs:65`;`LayoutShellHooks.cs:197/291` | Linux 本轮把 `feedback` 也标为单块(`LayoutBlockEntryCatalog.cs:63`;Linux 没有独立 `settings:about` 宿主) |
+| A9 | 右键空白处「自定义布局…」保留 | ✅ `BlockHost.cs:162` `RebuildContextMenu` | ✅ `LayoutShellHooks.cs:180-225` | 沿用既有键「自定义布局...」 |
+| A10 | 提示文案 | ✅ ToolTip 挂全文,短句随模式变 | ✅ `LayoutEditor.V3.cs:106` `FullHint()`;`BlockHost.cs:170` 进入编辑 Toast | 两侧短句一致:「拖动换位置 · 拖右边缘改宽度」/「拖动调整上下顺序」 |
+
+**B. 设置 → 布局**
+
+| # | 效果图要求 | Windows(B) | Linux(D) | 备注 |
+|---|---|---|---|---|
+| B0 | 页头 + 新说明,删 `ui_layout_v2.json…` | ✅ `SettingsLayoutPage.cs:142` | ✅ `SettingsPage.Layout.cs:95-96` | |
+| B1 | 区块间距三档分段按钮 + 缩略图跟着变 | ✅ `LayoutAppearanceRows` L277 | ✅ `LayoutAppearanceRows` :209 | 存储仍是 `shell.density` |
+| B2 | 页签拖动排序 chip + 眼睛;标题栏 AI / 主题 / 账号;去掉「桥接」 | ✅ L351 / `BuildTabChips` L430 / L385 | ⚠️ :274 / `TabChip` :338 / :297 | Linux 拖动时其它 chip 不实时让位(松手一次重排);Windows 第三项叫「账号」(隐藏整个账号按钮),Linux 叫「账号名称」;两侧 `ShowBridge`/`SetTitlebar(bridge:)` API 与字段保留 |
+| B3 | 页面缩略图卡片 + 编辑直达 + 全部恢复默认 + 显示全部 N 个 | ✅ `LayoutPagesSection` L697 / `PageCard` L753 | ✅ `LayoutPagesSection` :553 / `PageCard` :606 | N 由入口表 + `CanEditPage` 动态算,不是固定 10;「编辑」走 `LayoutShellHooks.BeginEditPage` |
+| B4 | 方案卡片、正在使用描边、AI 备份单独标出 | ✅ L1112 / `ProfileCard` L1182 | ⚠️ :867 / `ProfileCard` :929 | 无「保存时间」(存档无此字段);Windows 正在使用的方案不允许删,Linux 仍允许删(保留旧语义);Linux 无 AI 排版,AI 备份按 `meta`/名字前缀识别 |
+| B5 | 高级(默认折叠):分栏一行汇总、网页与按钮组件开关、布局文件独立窗口 | ⚠️ `LayoutAdvancedParts` L1473 | ✅ `LayoutAdvancedSection` :1215 | Windows 为保住 `LayoutPageSplitTests` 钉的 7 个块 id,「高级」是三张相连卡片共用一个折叠开关,并多一行「自建组件 · 管理…」(改名 / 改内容 / 删除定义);Linux 是一个 `advanced` 块,设置页的部件选择器已删 |
+| B6 | 内部说法全部去掉 | ✅ | ✅ | 守卫:`LayoutV3SourceTests.SettingsLayoutUiStringsCarryNoInternalJargon`(Win)、`LayoutView_HasNoWidgetPicker_AndEditDrawerListsAllFiveSafeWidgetTypes`(Linux) |
+| B7 | 导出改名(编辑态「导出本页」/ 设置「导出整套布局」) | ✅ L1352 | ✅ `ExportLayoutAsync` :1073 | Windows 编辑态的保存 / 打开对话框标题已是「导出本页 / 导入到本页」;Linux 编辑态沿用 `LayoutFx.ExportDialogTitle()`「导出布局 / 导入布局」(未改,`R32I18nFixLayoutTests` 钉着) |
+| B8 | 联动:改间距 / 页签即时反映;卡片「编辑」进编辑态 | ✅ | ✅ | 走 `LayoutStoreV2.LayoutChanged` |
+
+**词表 / 测试 / 文档(E)**
+
+| 项 | Windows | Linux | 备注 |
+|---|---|---|---|
+| 新字符串入词表 | ✅ +175 条(en / zh_CN 3033 → 3208),`.gz` 重压 | ✅ +179 条(3061 → 3240) | `.gz` 按 `tools/pack-core-resources.ps1` 同算法(raw deflate level 6、头 `1f8b0800000000000400`)逐字节可复现;漏网检查:布局面源码里所有中文 `I18n.L` / `I18nCore.Tr` 字面量两表都有键(Linux 另补 3 条漏网:应用布局 JSON / 校验布局 JSON / 按钮不能打开这个页面);已存在的 7 个 Linux 键保留原译文 |
+| 受影响测试 | ✅ 改 1 处注释;新增 `LayoutV3SourceTests`(源码守卫 + 词表守卫 + `LayoutCanvasCompat.AsGrid` 纯函数) | ✅ 改 9 条用例断言;新增 `LayoutEditorTests.V3_*` 2 条、`LayoutV3I18nTests` | 清单见 `progress/LAYOUT-V3.md` §3 |
+| i18n 基线 | n/a | ✅ 云端复算:wrapped 1623 → 2265、unwrapped 3605 → 3046,守卫通过,`missing_en/zh = 0` | 可选刷新:`python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md` |

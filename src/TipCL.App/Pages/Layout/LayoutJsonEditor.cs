@@ -174,6 +174,46 @@ public static class LayoutJsonEditor
 		return issues;
 	}
 
+	// ————— [LAYOUT-V3-D] 独立 JSON 编辑窗口(LayoutJsonWindow)用的两个小工具 —————
+
+	/// <summary>问题列表里有没有硬错误(有 = 不能应用)。</summary>
+	public static bool HasErrors(IEnumerable<LayoutJsonIssue>? issues)
+	{
+		return issues != null && issues.Any((LayoutJsonIssue i) => i.Error);
+	}
+
+	/// <summary>
+	/// 「保存前先预览」:把一份校验通过的文档概括成一行人话(页签 / 自定义页面 / 分栏 / 组件 / 方案各几个),
+	/// 应用前给用户确认用。doc 为空返回 ""。
+	/// </summary>
+	public static string Summary(LayoutV2? doc)
+	{
+		if (doc?.Layout == null)
+		{
+			return "";
+		}
+		LayoutBody body = doc.Layout;
+		int tabs = body.Shell?.Tabs?.Count ?? 0;
+		int pages = body.Pages?.Count ?? 0;
+		int splits = 0;
+		if (body.Splits != null)
+		{
+			foreach (KeyValuePair<string, SplitState> kv in body.Splits)
+			{
+				splits += kv.Value?.Ratios?.Count ?? 0;
+			}
+		}
+		int widgets = body.Widgets?.Count ?? 0;
+		int profiles = doc.Profiles?.Count ?? 0;
+		return Py.Fmt(I18nCore.Tr("{0} 个页签 · {1} 个页面自定义 · {2} 处分栏 · {3} 个组件 · {4} 个方案"), tabs, pages, splits, widgets, profiles);
+	}
+
+	/// <summary>一条问题的显示文本:有字段路径时「路径: 原因」,否则只有原因。</summary>
+	public static string Describe(LayoutJsonIssue issue)
+	{
+		return (issue.Path.Length > 0) ? (issue.Path + ": " + issue.Message) : issue.Message;
+	}
+
 	// ————— LAYOUT 对象逐字段检查 —————
 
 	private static void InspectBody(JsonElement body, string path, List<LayoutJsonIssue> issues)

@@ -877,7 +877,8 @@ public sealed class GridCanvasPanel : Decorator
 			child.Arrange(target);
 			_lastArranged[id] = target;
 			// 浮起的块盖在其它块上面
-			child.ZIndex = (_floating.ContainsKey(id) ? 1000 : 0);
+			// [v3] 编辑态悬停 / 选中的块也略微抬高:它的块名浮在卡片上沿外 14px,要盖住上一行的块
+			child.ZIndex = (_floating.ContainsKey(id) ? 1000 : ((child is LayoutCard raised && raised.IsRaised) ? 10 : 0));
 		}
 		return final;
 	}
@@ -928,21 +929,18 @@ public sealed class GridCanvasPanel : Decorator
 			return;
 		}
 		DrawPlaceholders(context, accent);
+		// [v3] §1.A.1「编辑控件只在需要时出现」:网格底纹(列分隔线)只在拖动 / 改宽度的过程中画
+		// (效果图 #winA.edit.grid.busy .cols);平时编辑态只有每块自己的灰色虚线框。行分隔线不再画。
+		if (!ShowPlaceholder)
+		{
+			return;
+		}
 		for (int k = 1; k < Cols; k++)
 		{
 			double x = k * (_columnWidth + Gap) - Gap / 2.0;
 			if (x > 0.0 && x < width)
 			{
 				context.DrawLine(pen, new Point(x, 0.0), new Point(x, height));
-			}
-		}
-		double y2 = 0.0;
-		for (int m = 0; m < _rowHeights.Length - 1; m++)
-		{
-			y2 += _rowHeights[m] + Gap;
-			if (y2 > 0.0 && y2 < height)
-			{
-				context.DrawLine(pen, new Point(0.0, y2 - Gap / 2.0), new Point(width, y2 - Gap / 2.0));
 			}
 		}
 	}

@@ -991,6 +991,89 @@ public static class LayoutEngine
 		return true;
 	}
 
+	/// <summary>
+	/// [v3] §1.A.7:不再提供自由画布 —— 老存档里 <c>mode = canvas</c> 的页读取时换算成 12 列网格(整数列)。
+	/// 规则:可见块按画布上的位置从上到下、从左到右排;列位 = round(x × 12),列宽 = round(w × 12)(至少 2 列、
+	/// 不越出右边);每块先各占一行,再交给网格压紧 —— 原来左右并排、放得下的块会浮回同一行。
+	/// 隐藏块排到最后(宽整行)。只改传入的这一份(调用方传克隆),不碰磁盘;不是 canvas 返回 false。
+	/// </summary>
+	public static bool CanvasToGrid(PageLayoutV2? page)
+	{
+		if (page == null || page.Mode != LayoutSchema.ModeCanvas || page.Blocks == null)
+		{
+			return false;
+		}
+		int cols = LayoutSchema.ColsDefault;
+		List<BlockLayout> visible = new List<BlockLayout>();
+		foreach (BlockLayout block in page.Blocks)
+		{
+			if (block != null && !string.IsNullOrEmpty(block.Id) && !block.Hidden)
+			{
+				visible.Add(block);
+			}
+		}
+		// 稳定排序(同坐标保持原顺序):先按 y,再按 x
+		List<KeyValuePair<int, BlockLayout>> indexed = new List<KeyValuePair<int, BlockLayout>>();
+		for (int i = 0; i < visible.Count; i++)
+		{
+			indexed.Add(new KeyValuePair<int, BlockLayout>(i, visible[i]));
+		}
+		indexed.Sort(delegate(KeyValuePair<int, BlockLayout> a, KeyValuePair<int, BlockLayout> b)
+		{
+			int byY = a.Value.Y.CompareTo(b.Value.Y);
+			if (byY != 0)
+			{
+				return byY;
+			}
+			int byX = a.Value.X.CompareTo(b.Value.X);
+			return (byX != 0) ? byX : a.Key.CompareTo(b.Key);
+		});
+		Dictionary<string, int[]> pos = new Dictionary<string, int[]>(StringComparer.Ordinal);
+		for (int r = 0; r < indexed.Count; r++)
+		{
+			BlockLayout block = indexed[r].Value;
+			double nx = LayoutSchema.Clamp(block.X, 0.0, 1.0, 0.0);
+			double nw = LayoutSchema.Clamp(block.W, LayoutSchema.CanvasMinSize, 1.0, 1.0);
+			int w = LayoutSchema.ClampInt((int)Math.Round(nw * cols), 2, cols);
+			int x = LayoutSchema.ClampInt((int)Math.Round(nx * cols), 0, cols - w);
+			pos[block.Id] = new int[3] { x, r, w };
+		}
+		int extraRow = indexed.Count;
+		foreach (BlockLayout block in page.Blocks)
+		{
+			if (block == null)
+			{
+				continue;
+			}
+			if (pos.TryGetValue(block.Id ?? "", out int[]? p))
+			{
+				block.X = p[0];
+				block.Y = p[1];
+				block.W = p[2];
+			}
+			else
+			{
+				block.X = 0.0;
+				block.Y = extraRow++;
+				block.W = cols;
+			}
+			block.H = 1.0;
+			block.Span = (int)block.W;
+			if (block.MinH <= 0.0)
+			{
+				block.MinH = 1.0;
+			}
+		}
+		page.Mode = LayoutSchema.ModeGrid;
+		page.Cols = cols;
+		page.RowH = 0.0;
+		// 每块各占一行之后压紧:左右放得下的块浮回同一行,空行消掉
+		List<LayoutCell> cells = LayoutGrid.Pack(page);
+		LayoutGrid.Compact(cells, cols, null, null);
+		LayoutGrid.Apply(page, cells);
+		return true;
+	}
+
 	/// <summary>把一页状态写回 v2 文档(没有该页就新建;不动别的页)。</summary>
 	public static void ApplyPage(LayoutV2 doc, string pageId, PageLayoutV2 page)
 	{
