@@ -309,6 +309,95 @@ public static class LayoutProfiles
 		return string.Equals(value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
 	}
 
+	// ————— [R35 lin-l4] GOAL §5.4-4 方案卡片:显示名 / 一行信息 / 删除守卫 / 排序(纯逻辑,单测钉住) —————
+
+	/// <summary>
+	/// AI 改布局前自动备份的方案名前缀(与 Windows <c>LayoutTools.BackupPrefix</c> 同值,后面跟时间)。
+	/// 卡片靠它把显示名改成「AI 改布局前 + 时间」。
+	/// </summary>
+	public const string AiBackupPrefix = "AI 备份 "; // i18n:ignore 识别用前缀,不是界面文案
+
+	/// <summary>方案卡片上的显示名:以 <see cref="AiBackupPrefix"/> 开头的写成「AI 改布局前 MM-dd HH:mm」,其余原样。</summary>
+	public static string DisplayName(string? name)
+	{
+		string text = name ?? "";
+		if (!text.StartsWith(AiBackupPrefix, StringComparison.Ordinal))
+		{
+			return text;
+		}
+		string suffix = text.Substring(AiBackupPrefix.Length).Trim();
+		if (DateTime.TryParseExact(suffix, new[] { "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyyMMdd-HHmmss" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime when))
+		{
+			suffix = when.ToString("MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+		}
+		return Py.Fmt(I18nCore.Tr("AI 改布局前 {0}"), suffix).Trim();
+	}
+
+	/// <summary>
+	/// 方案卡片上的一行信息。Linux 的方案(<see cref="LayoutBody"/>)没有「保存时间」字段 ⇒ 普通方案只写
+	/// 「N 个页面自定义过 · X间距」(降级,不编造时间);AI 备份 / 自动留底写来源(AI 备份的时间已在显示名里)。
+	/// </summary>
+	public static string CardInfo(string? name, LayoutBody? body)
+	{
+		if (IsAiBackup(name, body))
+		{
+			return I18nCore.Tr("AI 改布局之前自动存的一份");
+		}
+		if (string.Equals(name, PreviousName, StringComparison.Ordinal))
+		{
+			return I18nCore.Tr("切换方案或恢复默认之前自动留的底");
+		}
+		int pages = (body?.Pages != null) ? body.Pages.Count(kv => !string.IsNullOrEmpty(kv.Key) && kv.Value != null) : 0;
+		string first = (pages > 0) ? Py.Fmt(I18nCore.Tr("{0} 个页面自定义过"), pages) : I18nCore.Tr("各页面都是默认排列");
+		string density = (body?.Shell?.Density) switch
+		{
+			LayoutSchema.DensityCompact => I18nCore.Tr("紧凑间距"),
+			LayoutSchema.DensityLoose => I18nCore.Tr("宽松间距"),
+			_ => I18nCore.Tr("标准间距")
+		};
+		return first + " · " + density;
+	}
+
+	/// <summary>正在使用的方案(= active_profile)不能删除;<see cref="Delete"/> 本身语义不变,守卫在界面层调用。</summary>
+	public static bool CanDelete(string? name, string? activeName)
+	{
+		if (string.IsNullOrEmpty(name))
+		{
+			return false;
+		}
+		return !string.Equals(name, activeName ?? "", StringComparison.Ordinal);
+	}
+
+	/// <summary>
+	/// 方案卡片的显示顺序:普通方案(文档顺序)→「上一次布局」自动留底 → AI 备份(新的在前,名字里带时间可直接倒序)。
+	/// </summary>
+	public static List<string> OrderForCards(IEnumerable<string>? names)
+	{
+		List<string> all = (names ?? Array.Empty<string>()).Where(n => !string.IsNullOrEmpty(n)).ToList();
+		List<string> normal = new List<string>();
+		List<string> previous = new List<string>();
+		List<string> ai = new List<string>();
+		foreach (string n in all)
+		{
+			if (IsAiBackup(n, null))
+			{
+				ai.Add(n);
+			}
+			else if (string.Equals(n, PreviousName, StringComparison.Ordinal))
+			{
+				previous.Add(n);
+			}
+			else
+			{
+				normal.Add(n);
+			}
+		}
+		ai.Sort((a, b) => string.CompareOrdinal(b, a));
+		normal.AddRange(previous);
+		normal.AddRange(ai);
+		return normal;
+	}
+
 	/// <summary>config.json 顶层键:网页 / 按钮这类危险组件是否允许添加(本机偏好,不进布局文件、不随方案走)。</summary>
 	public const string DangerousWidgetsKey = "layout_dangerous_widgets";
 
