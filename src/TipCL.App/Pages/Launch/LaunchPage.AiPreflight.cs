@@ -34,6 +34,9 @@ public sealed partial class LaunchPage
     /// <summary>最近一次预检结果(测试 / 「交给 AI」用)。</summary>
     internal PyDict? LastPreflight { get; private set; }
 
+    /// <summary>提示条本身(测试用)。</summary>
+    internal Border? PreflightBar => _preflightBar;
+
     /// <summary>测试注入点:替换真正的预检(不碰真实实例目录与 Java)。</summary>
     internal static Func<string, string, long, PyDict>? PreflightOverride;
 

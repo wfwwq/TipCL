@@ -54,12 +54,13 @@ public static class DiagnosticReport
         {
             return "";
         }
-        string s = Crash.FilterSecrets(text);
+        // Bearer / JWT 先抹:Crash.FilterSecrets 对 Authorization 头只抹前半段,先处理整段令牌更稳
+        string s = Bearer.Replace(text, "$1***");
+        s = Jwt.Replace(s, "***");
+        s = Crash.FilterSecrets(s);
         s = KeyValueSecret.Replace(s, "$1***");
         s = CliSecret.Replace(s, "$1***");
         s = CliUser.Replace(s, "$1<player>");
-        s = Bearer.Replace(s, "$1***");
-        s = Jwt.Replace(s, "***");
         // 家目录:先按本机真实家目录整段替换成 ~,再兜底泛化规则(别人机器上的路径、大小写不一致的写法)
         foreach (string home in HomeDirs())
         {
