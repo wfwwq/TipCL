@@ -18,6 +18,10 @@ namespace TipCL.Pages.Layout;
 //                 row_h > 0 时直接用固定行高(内容超出按固定高裁,契约语义)。
 //   canvas 模式:按归一化矩形排布;画布高取宿主给的高,拿不到有限高(滚动区里最常见)时用
 //                 LayoutCanvas.RefHeight(600,对齐旧 DashHost 的兜底)。
+//   R34(D-81 Q1 / GOAL-layout-v3 §5.3):canvas 退出界面。SetLayout 收到 mode=canvas 时不再按归一化矩形排,
+//                 而是用 LayoutCanvasMigration.ToGridPage 推导成网格(先 y 后 x、span = clamp(round(w×cols)))——
+//                 文档不动;ApplyTo 提交时才经 LayoutGrid.CommitCanvasAsGrid 把整页写成 grid。
+//                 于是本 Panel 的 Mode 只会是 grid,下面所有 IsCanvas 分支都不可达(留着等合并后一起删)。
 //
 // 三条纪律:
 //   1) 几何全部来自纯模型(LayoutGrid / LayoutCanvas),本文件不写任何坐标公式,只做 Measure/Arrange;
@@ -53,8 +57,14 @@ public sealed class GridCanvasPanel : Panel
 		ClearDragVisuals();
 	}
 
-	/// <summary>页面模式(grid | canvas;stack 时本 Panel 不被使用)。</summary>
+	/// <summary>页面模式(R34 起只会是 grid;stack 时本 Panel 不被使用)。canvas 页看 <see cref="DerivedFromCanvas"/>。</summary>
 	public string Mode { get; private set; } = LayoutSchema.ModeStack;
+
+	/// <summary>
+	/// 当前槽位是不是从 canvas 页推导出来的网格(R34 / D-81 Q1)。
+	/// true 时文档里该页仍是 canvas;<see cref="ApplyTo"/> 提交时会把整页写成 grid。
+	/// </summary>
+	public bool DerivedFromCanvas { get; private set; }
 
 	/// <summary>grid 列数。</summary>
 	public int Cols { get; private set; } = LayoutSchema.ColsDefault;
@@ -183,7 +193,7 @@ public sealed class GridCanvasPanel : Panel
 		return (double[])_rowHeights.Clone();
 	}
 
-	/// <summary>是否 canvas 模式。</summary>
+	/// <summary>是否 canvas 模式。R34 起恒为 false(canvas 页按网格推导,见 <see cref="DerivedFromCanvas"/>);保留是因为 LayoutEditor 还在读它。</summary>
 	public bool IsCanvas
 	{
 		get
@@ -192,18 +202,19 @@ public sealed class GridCanvasPanel : Panel
 		}
 	}
 
-	/// <summary>按页面 v2 条目重建槽位(改上下文/换页时调)。</summary>
+	/// <summary>
+	/// 按页面 v2 条目重建槽位(改上下文/换页时调)。
+	/// mode=canvas(R34 起界面不再提供)按网格推导:槽位来自 <see cref="LayoutCanvasMigration.ToGridPage"/> 的副本,
+	/// <paramref name="page"/> 本身一个字节都不改。
+	/// </summary>
 	public void SetLayout(string mode, int cols, double rowH, double gap, PageLayoutV2? page)
 	{
-		Mode = ((mode == LayoutSchema.ModeGrid || mode == LayoutSchema.ModeCanvas) ? mode : LayoutSchema.ModeStack);
+		DerivedFromCanvas = string.Equals(mode, LayoutSchema.ModeCanvas, StringComparison.Ordinal);
+		Mode = ((mode == LayoutSchema.ModeGrid || DerivedFromCanvas) ? LayoutSchema.ModeGrid : LayoutSchema.ModeStack);
 		Cols = Math.Max(1, cols);
 		RowH = rowH;
 		Gap = ((gap >= 0.0) ? gap : 0.0);
-		_cells = (IsCanvas ? LayoutCanvas.Load(page) : LayoutGrid.Pack(page));
-		if (IsCanvas)
-		{
-			_cells = LayoutCanvas.StackedOrder(_cells);
-		}
+		_cells = LayoutGrid.Pack(DerivedFromCanvas ? LayoutCanvasMigration.ToGridPage(page) : page);
 		_rows = LayoutGrid.RowCount(_cells);
 		_remeasureWidths.Clear();
 		InvalidateMeasure();
@@ -319,12 +330,16 @@ public sealed class GridCanvasPanel : Panel
 		return list;
 	}
 
-	/// <summary>把槽位写回页面块(拖拽/缩放提交时调)。</summary>
+	/// <summary>
+	/// 把槽位写回页面块(拖拽/缩放提交时调)。
+	/// 槽位是从 canvas 页推导来的(或传进来的页仍是 canvas)时走 <see cref="LayoutGrid.CommitCanvasAsGrid"/>:
+	/// 这就是 Q1 的「编辑器里提交一次之后才写成 grid」。
+	/// </summary>
 	public void ApplyTo(PageLayoutV2? page)
 	{
-		if (IsCanvas)
+		if (DerivedFromCanvas || LayoutCanvasMigration.IsCanvas(page))
 		{
-			LayoutCanvas.Apply(page, _cells);
+			LayoutGrid.CommitCanvasAsGrid(page, _cells);
 		}
 		else
 		{
