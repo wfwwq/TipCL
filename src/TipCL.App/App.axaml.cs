@@ -44,6 +44,11 @@ public partial class App : Application
             // M4-H P4:首启向导 + 反馈同意门(照 Windows 启动顺序);--smoke 时不打扰无头截图。
             if (!Environment.GetCommandLineArgs().Contains("--smoke"))
                 _ = win.RunStartupPromptsAsync();
+            // AI-engine-mcp:本机 MCP Server(设置 → AI 助手 → MCP Server;默认关,上次开着就自动开)。
+            // --smoke 无头截图不开端口;退出时关掉监听。
+            if (!Environment.GetCommandLineArgs().Contains("--smoke"))
+                TipCL.App.Common.Ai.McpServerHost.Init();
+            desktop.Exit += (_, _) => TipCL.App.Common.Ai.McpServerHost.Shutdown();
         }
 
         base.OnFrameworkInitializationCompleted();
