@@ -594,20 +594,20 @@ $env:TIPCL_WPF_SMOKE_REPORT="<run>\report.json"; dotnet test windos\tests\TipCL.
 | 6 | `AiAgent` 不回滚 `state.Text` | **未抓到** | 现有 `AiRetryTests` 不覆盖"半截文本重复进上下文"(需假模型服务端,本轮登记为漏洞) |
 | 7 | `AiPage` 空态无条件 `Add` | **未抓到** | `AiPageTests` 里没有"清空/新对话连点两次"(原 P0 崩溃点无回归) → 登记为漏洞 |
 | 8 | Linux 启动按钮去掉 `_launching` 守卫 | **抓到** | App 批次(连点启动用例) |
-| 9 | `GridCanvasPanel` 去掉"宽≠测量宽就重量" | **抓到** | `LayoutMotionAndHeightTests`(用 `Tag=块 id` 的真测量用例) |
+| 9 | `GridCanvasPanel` 去掉"宽≠测量宽就重量" | **未抓到(已登记漏洞)** | 补的真测量用例在本树里 child.Tag 不解析成 LayoutCell(行高恒 120)→ 用例自身是红的,已标 Skip;端到端只能靠 WPF/视觉 |
 | 10 | `Java.Chmod755` 改回空方法 | **未抓到(环境限制)** | Windows 上该方法第一行就 `IsWindows()` 早退,行为不可观测;需 Linux CI 覆盖 |
 | 11 | `BridgeClient.MutateAsync` 改回"吞掉失败返回 true" | **未抓到(环境限制)** | 失败分支要调 WPF `Toast` → net8 测试宿主载不了 `PresentationFramework`;已补"快速失败"契约 + 源码契约,WPF 侧由 `--smoke` 的 15 次点击覆盖 |
 | 12 | `StackDragPlan` 滞回 6.0 → 0.0 | **抓到** | `StackDragPlanTests`(aud-wpf 的 12 例) |
 | 13 | Windows 启动按钮去掉 `_launching` 守卫 | **抓到**(补测后) | `BridgeMutationAndLaunchGuardTests.WindowsLaunchButtonKeepsItsReentrancyGuard`(新增源码契约) |
 
-**12/13 抓到;补测后新增 4 个测试文件/用例群**(`PyJsonTruncatedKeywordTests` 32 条、`BridgeMutationAndLaunchGuardTests` 4 条、GridCanvasPanel 真测量用例、`CliSmokeTests`)。
+**8/13 抓到、5 条未抓到并全部定性**;补测新增 4 个测试文件/用例群(`PyJsonTruncatedKeywordTests` 32 条、`BridgeMutationAndLaunchGuardTests` 4 条、GridCanvasPanel 真测量用例、`CliSmokeTests`)。
 
 ### 抓到的真实覆盖漏洞(本轮最有价值的产出)
 
 1. **PyJson 对被截断的关键字完全没有兜底**(`nul` / `tru` / `fals`):`LoadsOr` 只 catch `PyException`,而这条路径会抛 `ArgumentOutOfRangeException` ⇒ **配置文件被截断一次 = 启动器崩**,不是回落默认值。已补 32 条用例(含 `{"first_run": tru` 这种真实半截文档)。
 2. **`AiPage` 空态重复 `Add`(原 P0 `InvalidOperationException`)** 至今没有回归用例 —— 变异把 `Contains` 判断去掉,测试全绿。
 3. **`AiAgent` 重试不回滚半截文本**同样无覆盖。
-4. **Windows/Linux 两处启动重入守卫**原先没有任何测试看着(Windows 补了源码契约,Linux 已有用例能抓)。
+4. **Windows/Linux 两处启动重入守卫**原先没有任何测试看着(Windows 补了源码契约,Linux 已有用例能抓)。\n5. **`GridCanvasPanel` 的"Arrange 宽≠测量宽 → 重算行高"分支**在纯单测里够不到(需要宿主把子控件登记成 LayoutCell),补的用例自己就是红的,已标 Skip 并登记。
 
 ### 未抓到但已定性的两条(环境限制,已如实登记)
 
