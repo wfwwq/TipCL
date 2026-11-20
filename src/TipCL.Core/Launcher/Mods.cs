@@ -840,7 +840,15 @@ public static class Mods
 									// 进游戏才报缺少前置(NoClassDefFoundError / 依赖缺失) —— 典型的点了没反应。
 									string depName = Py.Str(Py.Or(Gt(item, "file_name"), obj3));
 									Utils.log.Warning("下载依赖 %s 失败: %s", depName, Py.ExcStr(e2));
-									on_progress?.Invoke("前置 " + depName + " 下载失败,请到模组列表手动补装", 0L, 1L);
+									// on_progress 是宿主的回调(App 侧一路走到 UI),它自己抛异常不能把
+									// 「前置失败不阻断主流程」变成整次安装失败 —— 这里必须自己兜住。
+									try
+									{
+										on_progress?.Invoke("前置 " + depName + " 下载失败,请到模组列表手动补装", 0L, 1L);
+									}
+									catch (Exception)
+									{
+									}
 								}
 							}
 						}
@@ -1024,8 +1032,15 @@ public static class Mods
 			catch (Exception e)
 			{
 				Utils.log.Warning("安装依赖 %s 失败（不阻断主流程）: %s", Py.Str(obj), Py.ExcStr(e));
-				// 同 InstallModrinthMod:前置失败不能只在日志里说,任务卡要给用户一句可读的话
-				on_progress?.Invoke("前置(addon " + Py.Str(obj) + ")安装失败,请到模组列表手动补装", 0L, 1L);
+				// 同 InstallModrinthMod:前置失败不能只在日志里说,任务卡要给用户一句可读的话。
+				// 回调自己要抛异常也无所谓 —— 这段就是「不阻断主流程」的兜底,不能反过来把安装搞挂。
+				try
+				{
+					on_progress?.Invoke("前置(addon " + Py.Str(obj) + ")安装失败,请到模组列表手动补装", 0L, 1L);
+				}
+				catch (Exception)
+				{
+				}
 			}
 		}
 		return list;

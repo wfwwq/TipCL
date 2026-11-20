@@ -69,17 +69,10 @@ public sealed class McpClient
                 return;
             }
             timedOut = true;
-            try
-            {
-                if (!proc.HasExited)
-                {
-                    // 超时也要连孙子进程一起收掉,否则 wrapper 崩了留下真身继续占着
-                    proc.Kill(entireProcessTree: true);
-                }
-            }
-            catch (Exception)
-            {
-            }
+            // 必须走 KillTree:直接 Kill(entireProcessTree:true) 在 /proc 受限、进程恰好退出、
+            // 无权限等情况下会抛,而这里 swallow 之后 ReadLine 会永远阻塞在管道上 —— 整轮 AI 就卡死。
+            // KillTree 内部保证「树杀失败再退一步单杀」,不留这种洞。
+            KillTree(proc);
         })
         {
             IsBackground = true,
@@ -213,6 +206,43 @@ public sealed class McpClient
     }
 
     /// <summary>关连接（先关 stdin，给它自己退出的机会）。</summary>
+    /// <summary>
+    /// 杀掉子进程**连同它的子进程树**,失败再退一步单杀。
+    /// MCP server 的命令常常是 wrapper(npx / uvx / cmd /c),只杀直接子进程会把真正的 node/python
+    /// 孙进程留成孤儿(Mcp.CloseAll 每轮都关,越聊孤儿越多);但 Kill(entireProcessTree:true)
+    /// 本身会抛(/proc 受限、进程刚好退出、无权限),所以必须留普通 Kill 的兜底 —— 否则调用方
+    /// swallow 之后管道永远不关,StandardOutput.ReadLine 就一直阻塞,整轮 AI 卡死。
+    /// </summary>
+    internal static void KillTree(Process? proc)
+    {
+        if (proc == null)
+        {
+            return;
+        }
+        try
+        {
+            if (!proc.HasExited)
+            {
+                proc.Kill(entireProcessTree: true);
+                return;
+            }
+        }
+        catch (Exception)
+        {
+        }
+        try
+        {
+            if (!proc.HasExited)
+            {
+                proc.Kill();
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    /// <summary>关连接(先关 stdin,给它自己退出的机会)。</summary>
     public void Close()
     {
         try
@@ -234,7 +264,7 @@ public sealed class McpClient
                         // 只杀直接子进程会把真正的 node/python 孙进程留成孤儿 —— Mcp.CloseAll 每轮都关,
                         // 越聊孤儿越多、内存越高(用户感知是「AI 用久了变卡」)。
                         // Kill(bool) 在已退出/无权限时会抛,交给下面的 catch(随后再兜一次普通 Kill)。
-                        _proc.Kill(entireProcessTree: true);
+                        KillTree(_proc);
                     }
                 }
                 catch (Exception)

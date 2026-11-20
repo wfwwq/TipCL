@@ -186,9 +186,14 @@ public static class Cleaner
 					num++;
 					num2 += length;
 				}
+				catch (Exception e) when (e is FileNotFoundException || e is DirectoryNotFoundException)
+				{
+					// 文件已经不在了(预览后被别的进程或上一次清理删掉):这是正常的幂等场景,
+					// 计进 failed 只会让 App 侧(报告 X-04)弹一堆无意义的「有 N 个没清掉」。
+				}
 				catch (Exception e)
 				{
-					// 删不掉(权限 / 被占用 / 已被别人删了)以前是彻底静默:界面照样弹绿字「清理完成」
+					// 删不掉(权限 / 被占用)以前是彻底静默:界面照样弹绿字「清理完成」
 					// 却显示「已清理 0 个文件」,用户完全不知道为什么没清掉。这里至少把失败数与首个原因
 					// 带回返回值并落日志,App 侧可以据此提示(见报告跨域表)。
 					num3++;
