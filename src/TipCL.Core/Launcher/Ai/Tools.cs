@@ -89,6 +89,8 @@ public static class Tools
                 }
                 object parsed = PyJson.Loads(sb.ToString());
                 cached = Py.ListOr(parsed);
+                // AI-logs-fs:日志 / 文件 / 打开文件夹几个工具的 schema 放在自己的文件里(AiFsTools.SchemaJson),这里只接上
+                cached.AddRange(AiFsTools.Schemas());
                 _schemas = cached;
             }
             return cached;
@@ -134,6 +136,13 @@ public static class Tools
         { "forget", "忘掉" },
         { "read_artifact", "读文件" },
         { "dispatch_subagent", "派发子任务" },
+        // AI-logs-fs(标签照 Windows 版 Tools._TOOL_LABELS / ExtraTools.Labels)
+        { "get_latest_log", "读最新日志" },
+        { "get_crash_report", "读崩溃报告" },
+        { "fs_list", "列文件" },
+        { "fs_read", "读文件" },
+        { "fs_write", "写文件" },
+        { "open_folder", "打开文件夹" },
     };
 
     /// <summary>带参数时更好读的标签模板(照 Windows 版 Tools._FMT)。</summary>
@@ -161,6 +170,11 @@ public static class Tools
         { "search_versions", "搜版本「{query}」" },
         { "inspect_mod", "检查模组 {filename}" },
         { "read_mod_config", "读配置 {path}" },
+        // AI-logs-fs
+        { "fs_list", "列文件 {path}" },
+        { "fs_read", "读文件 {path}" },
+        { "fs_write", "写文件 {path}" },
+        { "open_folder", "打开文件夹 {kind}" },
     };
 
     /// <summary>是否写操作(风险分级非只读)。</summary>
@@ -711,6 +725,9 @@ public static class Tools
                 {
                     return new List<string>();
                 }
+            // AI-logs-fs:fs_write 的目标按工具自己的路径守卫解析(与执行、预览是同一份真实路径)
+            case "fs_write":
+                return AiFsTools.AffectedPaths(args, instance);
             default:
                 return new List<string>();
         }

@@ -250,10 +250,11 @@ internal sealed class ConfirmCard : Border
         return host;
     }
 
-    /// <summary>这个工具是否给「本对话都允许」(删除类不给;照 Windows 版 AllowAlways)。</summary>
+    /// <summary>这个工具是否给「本对话都允许」(删除类不给;照 Windows 版 AllowAlways)。fs_write 能覆盖任意允许范围内的文件,按 D-24 危险类同样不给。</summary>
     public static bool AllowAlways(string tool) => tool switch
     {
         "delete_instance" or "delete_mod" => false,
+        "fs_write" => false,
         _ => true,
     };
 }

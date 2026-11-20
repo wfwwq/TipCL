@@ -2166,6 +2166,7 @@
  "只回退了对话。这一轮没有可还原的磁盘改动": "Only the conversation was rewound; no file changes to restore in this round",
  "将要写入的变更：": "Changes to be written:",
  "（新建文件）": "(new file)",
+ "（追加到文件末尾）": "(appended to the end of the file)",
  "变更过大，完整内容见 {path}": "Change too large; full content at {path}",
  "变更过大，仅显示前 {n} 行": "Change too large; showing first {n} lines",
  "将被删除：": "Will be deleted:",

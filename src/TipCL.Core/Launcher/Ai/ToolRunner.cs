@@ -20,7 +20,7 @@ namespace TipCL.Core.Launcher.Ai;
 /// <summary>
 /// 工具执行器。宿主(页面)通过回调提供三件事:权限确认、ask_user 结构化选择、进度事件。
 /// </summary>
-public sealed class ToolRunner
+public sealed partial class ToolRunner
 {
     /// <summary>调用 IApi 的门面(接口保持最小:只用到 CallAsync)。</summary>
     public interface IBackend
@@ -584,6 +584,15 @@ public sealed class ToolRunner
                 }
                 return await Subagent(args, ct).ConfigureAwait(false);
             }
+
+            // ── AI-logs-fs:日志 / 文件 / 打开文件夹(实现见 ToolRunner.LogsFs.cs 与 AiFsTools.cs)──
+            case "get_latest_log":
+            case "get_crash_report":
+            case "fs_list":
+            case "fs_read":
+            case "fs_write":
+            case "open_folder":
+                return RunLogsFs(call.name, args);
 
             default:
                 // 兜底:MCP 工具（mcp_<server>_<tool>）路由到对应的外部 server

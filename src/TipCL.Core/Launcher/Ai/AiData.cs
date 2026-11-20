@@ -59,7 +59,13 @@ public static class AiData
         "- 先结论后步骤。\n" +
         "- 需要用户选时用 ask_user,不要甩一长串纯文字。\n" +
         "- 只有 install_* 已经调用成功后,才让用户去看左侧「下载任务」。\n" +
-        "- 用户只是打招呼:简短自我介绍,并举 3 个例子(下一款游戏、装钠、启动闪退帮我看)。";
+        "- 用户只是打招呼:简短自我介绍,并举 3 个例子(下一款游戏、装钠、启动闪退帮我看)。" +
+        // AI-logs-fs:日志 / 文件 / 文件夹工具的用法(Windows 版把这些写在工具描述里;Linux 在提示末尾最小追加一节)
+        "\n\n# 日志与文件\n" +
+        "- 看日志用 get_latest_log / get_crash_report;太长时传 offset_line / max_lines 分段读,结果被存成文件时用 read_artifact 回读。\n" +
+        "- 其他文本文件先 fs_list 看目录再 fs_read;只能访问启动器数据目录和实例目录,账号和启动器配置文件读不了。\n" +
+        "- fs_write 默认覆盖整个文件(append=true 才是追加),先读懂再写;模组配置优先用 write_mod_config。\n" +
+        "- 用户要自己放文件(模组、存档、资源包)时,用 open_folder 打开对应文件夹。";
 
     /// <summary>把 `__LANG_RULE__` 换成当前语言的规矩(照 Windows 版 BackendApi 的取用方式)。</summary>
     public static string SystemPrompt(string? langRule = null)
@@ -72,6 +78,8 @@ public static class AiData
         "ask_user", "get_launcher_state", "list_instances", "list_mods", "search_mods", "install_mod",
         "install_modpack", "create_instance", "launch_game", "diagnose_launch",
         "list_mod_configs", "read_mod_config", "update_plan", "remember", "forget", "dispatch_subagent",
+        // AI-logs-fs:与 Windows 版 CORE_TOOLS 一致,读日志的两个工具常驻(排错流程与崩溃修复都点名要用)
+        "get_latest_log", "get_crash_report",
     };
 
     /// <summary>按用户用词追加的工具(与 Windows 版同一张表,去掉 Linux 侧没有的能力)。</summary>
@@ -90,6 +98,10 @@ public static class AiData
         (new[] { "删除", "删掉", "卸载", "移除", "delete", "uninstall", "remove" },
             new[] { "delete_mod", "delete_instance", "disable_mod", "enable_mod" }),
         (new[] { "禁用", "启用", "disable", "enable" }, new[] { "disable_mod", "enable_mod", "list_mods" }),
+        // AI-logs-fs(照 Windows 版 ExtraTools.Keywords 的文件夹 / 文件两行)
+        (new[] { "文件夹", "目录", "folder" }, new[] { "open_folder" }),
+        (new[] { "latest.log", "日志文件", "读文件", "写文件", "列目录", "文件内容", "这个文件", "debug.log" },
+            new[] { "fs_list", "fs_read", "fs_write" }),
     };
 
     /// <summary>「用户在下命令」而不是在提问(用于决定是否带上写操作工具)。</summary>
