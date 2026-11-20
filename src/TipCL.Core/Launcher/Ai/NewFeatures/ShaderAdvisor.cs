@@ -26,17 +26,9 @@ internal static class NfHardwareProbe
         {
             return hook();
         }
-        long ramMb = 0;
-        long availMb = 0;
-        try
-        {
-            PyDict mem = Sysinfo.MemoryInfo();
-            ramMb = Py.Int(Py.Or(mem.Get("total_mb"), 0L));
-            availMb = Py.Int(Py.Or(mem.Get("avail_mb"), 0L));
-        }
-        catch (Exception)
-        {
-        }
+        PyDict mem = ProbeMemory();
+        long ramMb = Py.Int(Py.Or(mem.Get("ram_mb"), 0L));
+        long availMb = Py.Int(Py.Or(mem.Get("ram_avail_mb"), 0L));
         string gpu = "";
         long vram = 0;
         var names = new List<object>();
@@ -67,6 +59,25 @@ internal static class NfHardwareProbe
         {
         }
         return PyDict.Of("ram_mb", ramMb, "ram_avail_mb", availMb, "gpu", gpu, "vram_mb", vram, "gpus", names, "summary", summary);
+    }
+
+    /// <summary>只探内存(快:不跑显卡 / 磁盘查询;启动前预检只要这个)。</summary>
+    internal static PyDict ProbeMemory()
+    {
+        Func<PyDict>? hook = Hook;
+        if (hook != null)
+        {
+            return hook();
+        }
+        try
+        {
+            PyDict mem = Sysinfo.MemoryInfo();
+            return PyDict.Of("ram_mb", Py.Int(Py.Or(mem.Get("total_mb"), 0L)), "ram_avail_mb", Py.Int(Py.Or(mem.Get("avail_mb"), 0L)));
+        }
+        catch (Exception)
+        {
+            return PyDict.Of("ram_mb", 0L, "ram_avail_mb", 0L);
+        }
     }
 }
 
