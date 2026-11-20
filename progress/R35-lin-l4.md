@@ -97,3 +97,7 @@
 - 待真机：设置 → 布局 明暗截图；高级展开截图；锁形图标和眼睛图标的视觉；琥珀提示的颜色；组件管理面板的排版；方案卡片的 AI 备份显示名；点眼睛和拖 chip 之后标题栏马上变（`RefreshShell` → `ApplyShellLayout`，无头测试只验证了落盘）。
 - 风险：组件管理用 `Dlg.Prompt` / `Dlg.Confirm`，无头测试没覆盖；`Geometry.Clone()` 只在 L0 资源存在时才会走到。
 - 带上 ClickSweep 修改之后的全量复跑结果写在下面的「附」里。
+
+## 附：带 ClickSweep 修改、完整编译后的全量复跑
+- 231534（先完整编译再测试，没有带 -NoBuild）：**通过 991 / 失败 1 / 跳过 7 / 合计 999**，耗时 47 s。唯一失败仍是 `LayoutV3I18nTests`（缺词表，见 §6）。
+- 中间那次 230638 跑到一半卡住，我杀掉了它，测试进程是 lin-l4 自己的。那次里 `InstanceDetailCrashTests.LibraryDetailChip_OpensDetail_FirstLayout_DoesNotCrash` 红过一次：报错 `Res.Bind` 的 `ArgumentNullException`，调用栈来自前一个用例残留的 `AiPage.RunAgentAsync` 派发任务，与本包改动无关。之后复跑通过，属于偶发，请合并时留意。
