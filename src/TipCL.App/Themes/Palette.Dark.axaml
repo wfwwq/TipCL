@@ -81,4 +81,34 @@
   <SolidColorBrush x:Key="SliderThumbBackground" Color="#3FB07C" />
   <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#3FB07C" />
   <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#3FB07C" />
+  <!-- R35 lin-l0 · 布局 v3 编辑态令牌(2026-11-20)。与 Palette.Light.axaml 成对;效果图只画了浅色,深色取值与 Windows r34/l0
+       Palette.Dark.xaml 同值(按本色板的卡片 / 分段层级推导)。…OnDark / B.EditGlass* / B.OnEditGlass* / B.EditDim 与浅色相同
+       (它们只用在永远是深色的启动页英雄图上)。B.WarnSoft 沿用上方已有的键。键表与用法见 docs/layout-v3-tokens.md。 -->
+  <SolidColorBrush x:Key="B.EditOutline" Color="#2EFFFFFF" />
+  <SolidColorBrush x:Key="B.EditOutlineHover" Color="#5CFFFFFF" />
+  <SolidColorBrush x:Key="B.EditOutlineOnDark" Color="#59FFFFFF" />
+  <SolidColorBrush x:Key="B.EditOutlineHoverOnDark" Color="#B3FFFFFF" />
+  <SolidColorBrush x:Key="B.EditDropFill" Color="#1B3A2C" />
+  <SolidColorBrush x:Key="B.EditDropFillOnDark" Color="#1FFFFFFF" />
+  <SolidColorBrush x:Key="B.EditColShade" Color="#0AFFFFFF" />
+  <SolidColorBrush x:Key="B.EditColShadeOnDark" Color="#0FFFFFFF" />
+  <SolidColorBrush x:Key="B.EditBarBg" Color="#2B2B2B" />
+  <SolidColorBrush x:Key="B.EditBarLine" Color="#1AFFFFFF" />
+  <SolidColorBrush x:Key="B.EditItemBg" Color="#313131" />
+  <SolidColorBrush x:Key="B.EditSegRail" Color="#1E1E1E" />
+  <SolidColorBrush x:Key="B.EditSegOn" Color="#3A3A3A" />
+  <SolidColorBrush x:Key="B.EditDim" Color="#800A0E16" />
+  <SolidColorBrush x:Key="B.EditGlass" Color="#B80E121B" />
+  <SolidColorBrush x:Key="B.EditGlassLine" Color="#24FFFFFF" />
+  <SolidColorBrush x:Key="B.EditGlassChip" Color="#24FFFFFF" />
+  <SolidColorBrush x:Key="B.EditGlassChipLine" Color="#38FFFFFF" />
+  <SolidColorBrush x:Key="B.OnEditGlass" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="B.OnEditGlassMuted" Color="#A8FFFFFF" />
+  <SolidColorBrush x:Key="B.WarnInk" Color="#EBB45E" />
+  <!-- 阴影:与浅色同形,深色底上加重不透明度(同 Windows Fx.* 深色档) -->
+  <BoxShadows x:Key="Fx.EditBar">0 2 10 0 #59000000</BoxShadows>
+  <BoxShadows x:Key="Fx.EditLabel">0 2 8 0 #66000000</BoxShadows>
+  <BoxShadows x:Key="Fx.Drawer">-12 0 32 0 #80000000</BoxShadows>
+  <BoxShadows x:Key="Fx.SegOn">0 1 2 0 #4D000000</BoxShadows>
+  <BoxShadows x:Key="Fx.ResizeGrip">0 1 4 0 #80000000</BoxShadows>
 </ResourceDictionary>
