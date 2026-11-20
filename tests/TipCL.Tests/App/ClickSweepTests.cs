@@ -52,6 +52,9 @@ public class ClickSweepTests
     {
         "启动游戏", "开始游戏", "安装", "下载", "删除", "卸载", "退出", "重启", "打开文件夹",
         "选择文件", "选择图片", "选择视频", "选择", "导入", "导出", "上传", "提交", "购买", "登录",
+        // R35:会调系统浏览器的链接按钮。Linux CI 上 xdg-open 没有浏览器、看不出来;
+        // 在 Windows 开发机上跑这条遍历,每跑一次就弹一次 github.com/burningtnt/Terracotta(用户 2026-11-20 报告)。
+        "主页", "GitHub", "issue", "网页", "浏览器", "官网", "链接", "文档",
     };
 
     private sealed class Row
