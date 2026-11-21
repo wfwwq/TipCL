@@ -45,9 +45,13 @@
 
 `--ai-selftest` +2 项(ContentTools.SelfCheck:KubeJS 绕过写法;ID 命名空间提醒)。
 
-## 验收(本机实测,2026-11-21)
+## 验收(本机实测,2026-11-21,提交 35d5fb9;之后只有本文档的一次提交)
 
-见文末「验收数字」(由 DONE 同步填写)。
+- Debug `--no-incremental` 构建 `TipCL.Linux.sln`:**0 错误**;警告只有基线那 3 条 `LayoutMotionAndHeightTests` 的 xUnit 警告(中间一次多出的测试里 CS8604 已修)。
+- 全量 `dotnet test`:**通过 1413 / 跳过 7 / 失败 0(共 1420)**;基线 1358 / 7 / 0(共 1365)→ 本包新增 **55** 个用例。两次全量都 0 失败(第二次因其他代理并行构建,耗时 5 分钟)。
+- `--ai-selftest`(临时 `TIPCL_HOME`):exit=0,**通过 110 / 失败 0**(基线 108 + 本包 2)。
+- i18n 守卫(`I18nBaselineTests`)在全量里通过:新增界面文案全部走 `Tr`,两份 locales 各 +6 键且键集合相等;未接线基线未改。
+- `git diff b6df4bb HEAD -- windos` 为空;git status 干净。
 
 ## 遗留问题与风险
 
