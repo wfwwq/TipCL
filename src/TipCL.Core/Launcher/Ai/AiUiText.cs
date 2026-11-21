@@ -32,8 +32,20 @@ public static class AiUiText
                 return body.Substring(prefix.Length).Trim();
             }
         }
+        // AI3-i18n:步骤行前缀走词表(StatePrefix)后,非中文界面拼出来的是译文前缀(Preparing: / Done: …),一并剥掉
+        foreach (string zh in StateKeys)
+        {
+            string prefix = I18nCore.Tr(zh);
+            if (prefix.Length > 0 && prefix != zh && body.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return body.Substring(prefix.Length).Trim();
+            }
+        }
         return body;
     }
+
+    /// <summary>步骤行状态前缀的词表键(半角冒号;界面拼步骤行时用 I18nCore.Tr("准备:") 这一组,中文界面下就是原文)。</summary>
+    private static readonly string[] StateKeys = { "准备:", "执行中:", "完成:", "已跳过:", "失败:" }; // i18n:runtime-tr(在 StripState 里逐个过 I18nCore.Tr)
 
     /// <summary>把「标签: 参数」拆开(标签不超过 16 字、不像 URL 才算)。</summary>
     public static (string Label, string Arg) SplitLabel(string? text)
@@ -161,17 +173,17 @@ public static class AiUiText
         return Math.Clamp(ratio, 0, 1);
     }
 
-    /// <summary>步骤组标题(照 Windows 版 StepSummary)。</summary>
+    /// <summary>步骤组标题(照 Windows 版 StepSummary)。AI3-i18n:走词表,中文界面下与改动前逐字相同。</summary>
     public static string StepSummary(int count, double seconds, bool running, string current)
     {
         if (running)
         {
-            return current.Length <= 0 ? "正在执行" : "正在" + Trim(current, 24);
+            return current.Length <= 0 ? I18nCore.Tr("正在执行") : I18nCore.Tr("正在{current}").Replace("{current}", Trim(current, 24));
         }
         string elapsed = seconds >= 0.1
-            ? " · 用时 " + (seconds < 60 ? seconds.ToString("0.0") + "s" : (int)(seconds / 60) + "m" + (int)(seconds % 60) + "s")
+            ? I18nCore.Tr(" · 用时 {time}").Replace("{time}", seconds < 60 ? seconds.ToString("0.0") + "s" : (int)(seconds / 60) + "m" + (int)(seconds % 60) + "s")
             : "";
-        return $"执行了 {count} 步{elapsed}";
+        return I18nCore.Tr("执行了 {count} 步{elapsed}").Replace("{count}", count.ToString()).Replace("{elapsed}", elapsed);
     }
 
     public static string Trim(string? s, int max)

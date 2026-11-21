@@ -137,7 +137,7 @@ internal sealed class StepGroup : Border
         bool busy = _running && running != null;
         _title.Text = AiUiText.StepSummary(lines.Length, _sw.Elapsed.TotalSeconds, busy, running?.LabelText ?? "");
         int failed = lines.Count(l => l.State == ToolState.Failed);
-        _count.Text = busy ? $"· {lines.Length} 步" : (failed > 0 ? $"· {failed} 步失败" : "");
+        _count.Text = busy ? I18nCore.Tr("· {n} 步").Replace("{n}", lines.Length.ToString()) : (failed > 0 ? I18nCore.Tr("· {n} 步失败").Replace("{n}", failed.ToString()) : ""); // AI3-i18n
         _count[!TextBlock.ForegroundProperty] = Res.Bind(failed > 0 && !busy ? "B.Danger" : "B.InkFaint");
     }
 

@@ -342,6 +342,18 @@ public static class Conflict
 		return Py.Lower(Py.S(o));
 	}
 
+	// AI3-i18n:issues[].message 会显示在启动页预检提示条(经 AiPreflight)与模组页,也是 scan_mod_conflicts 的工具结果 ——
+	// 与界面共用的文字跟界面语言走(D-82)。type / id / need / file 是数据,不翻译;中文界面下与改动前逐字相同。
+	private static string Tr(string key, params (string Name, object Value)[] fill)
+	{
+		string s = I18nCore.Tr(key);
+		foreach ((string name, object value) in fill)
+		{
+			s = s.Replace("{" + name + "}", value as string ?? Py.Str(value)); // Py.S 会把 0 变成空串
+		}
+		return s;
+	}
+
 	public static PyDict ScanConflicts(Instance instance)
 	{
 		string text = Mods.DetectLoader(instance);
@@ -368,7 +380,7 @@ public static class Conflict
 				select g).ToList();
 			if (list3.Count > 1)
 			{
-				list2.Add(PyDict.Of("type", "duplicate_id", "severity", "error", "id", item2.Key, "files", list3.Select((PyDict g) => g.Req("file")).ToList(), "message", "模组 " + item2.Key + " 装了 " + list3.Count + " 份"));
+				list2.Add(PyDict.Of("type", "duplicate_id", "severity", "error", "id", item2.Key, "files", list3.Select((PyDict g) => g.Req("file")).ToList(), "message", Tr("模组 {id} 装了 {n} 份", ("id", item2.Key), ("n", list3.Count))));
 			}
 		}
 		HashSet<string> hashSet = new HashSet<string>(pyDict.Keys);
@@ -381,7 +393,7 @@ public static class Conflict
 			string text4 = Py.Lower(Py.Str(Py.Or(item3.Get("loader"), "unknown")));
 			if (!string.IsNullOrEmpty(text) && text4 != "unknown" && text4 != "" && text4 != text && (!(text == "quilt") || !(text4 == "fabric")))
 			{
-				list2.Add(PyDict.Of("type", "loader_mismatch", "severity", "error", "id", item3.Get("id"), "file", item3.Get("file"), "message", Py.Str(item3.Get("file")) + " 是 " + text4 + " 模组，当前实例是 " + text));
+				list2.Add(PyDict.Of("type", "loader_mismatch", "severity", "error", "id", item3.Get("id"), "file", item3.Get("file"), "message", Tr("{file} 是 {loader} 模组，当前实例是 {current}", ("file", Py.Str(item3.Get("file"))), ("loader", text4), ("current", text))));
 			}
 			foreach (object item4 in Py.ListOr(Py.Or(item3.Get("depends"), new List<object>())))
 			{
@@ -397,13 +409,13 @@ public static class Conflict
 				case "fabric":
 					if (!hashSet.Contains("fabric-api") && !hashSet.Contains("fabricapi"))
 					{
-						list2.Add(PyDict.Of("type", "missing_dep", "severity", "error", "id", item3.Get("id"), "need", "fabric-api", "file", item3.Get("file"), "message", Py.Str(Py.Or(item3.Get("name"), item3.Get("file"))) + " 需要 Fabric API"));
+						list2.Add(PyDict.Of("type", "missing_dep", "severity", "error", "id", item3.Get("id"), "need", "fabric-api", "file", item3.Get("file"), "message", Tr("{mod} 需要 Fabric API", ("mod", Py.Str(Py.Or(item3.Get("name"), item3.Get("file")))))));
 					}
 					break;
 				default:
 					if (!hashSet.Contains(text5))
 					{
-						list2.Add(PyDict.Of("type", "missing_dep", "severity", "error", "id", item3.Get("id"), "need", text5, "file", item3.Get("file"), "message", Py.Str(Py.Or(item3.Get("name"), item3.Get("file"))) + " 缺少依赖 " + text5));
+						list2.Add(PyDict.Of("type", "missing_dep", "severity", "error", "id", item3.Get("id"), "need", text5, "file", item3.Get("file"), "message", Tr("{mod} 缺少依赖 {dep}", ("mod", Py.Str(Py.Or(item3.Get("name"), item3.Get("file")))), ("dep", text5))));
 					}
 					break;
 				}
@@ -413,7 +425,7 @@ public static class Conflict
 				string text6 = L(Tools.DGet(item5, "id"));
 				if (text6.Length > 0 && hashSet.Contains(text6))
 				{
-					list2.Add(PyDict.Of("type", "breaks", "severity", "error", "id", item3.Get("id"), "other", text6, "file", item3.Get("file"), "message", Py.Str(item3.Get("id")) + " 与 " + text6 + " 不兼容"));
+					list2.Add(PyDict.Of("type", "breaks", "severity", "error", "id", item3.Get("id"), "other", text6, "file", item3.Get("file"), "message", Tr("{id} 与 {other} 不兼容", ("id", Py.Str(item3.Get("id"))), ("other", text6))));
 				}
 			}
 		}

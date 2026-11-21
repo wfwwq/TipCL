@@ -24,7 +24,13 @@ namespace TipCL.App.Pages.Version;
 /// <summary>存档管理对话框(照 Windows 版 SavesDialog)。</summary>
 public static class SavesDialog
 {
-    private static readonly string[] MediaLabels = { I18nCore.Tr("截图"), I18nCore.Tr("崩溃报告"), I18nCore.Tr("日志") };
+    // AI3-i18n:下拉文案现查词表(以前的静态只读数组在类型初始化时定死语言);选中项按下标映射到目录,
+    // 不再拿文字和 Tr(...) 比 —— 以前下拉定在中文、界面切到 en 时,选「崩溃报告 / 日志」也会落到截图目录。
+    internal static string[] MediaLabels => new[] { I18nCore.Tr("截图"), I18nCore.Tr("崩溃报告"), I18nCore.Tr("日志") };
+    internal static readonly string[] MediaKinds = { "screenshots", "crash-reports", "logs" };
+
+    /// <summary>下拉下标 → list_media 的 kind(越界时回落截图)。</summary>
+    internal static string MediaKindAt(int index) => MediaKinds[index >= 0 && index < MediaKinds.Length ? index : 0];
 
     public static async Task ShowAsync(string instance, string version)
     {
@@ -32,7 +38,8 @@ public static class SavesDialog
         var list = UiClass.V(8);
         var backups = UiClass.V(6);
         var media = UiClass.V(6);
-        var kind = UiClass.Combo(MediaLabels, I18nCore.Tr("截图"), 130);
+        string[] mediaLabels = MediaLabels;
+        var kind = UiClass.Combo(mediaLabels, mediaLabels[0], 130);
         var mediaCount = UiClass.Small("");
 
         async Task ReloadAsync()
@@ -145,8 +152,7 @@ public static class SavesDialog
         async Task ReloadMediaAsync()
         {
             media.Children.Clear();
-            string label = kind.SelectedItem as string ?? I18nCore.Tr("截图");
-            string key = label == I18nCore.Tr("崩溃报告") ? "crash-reports" : label == I18nCore.Tr("日志") ? "logs" : "screenshots";
+            string key = MediaKindAt(kind.SelectedIndex);
             var rows = await api.TryCallAsync<List<object?>>("list_media", null, new { instance, kind = key, version }) ?? new();
             mediaCount.Text = I18nCore.Tr("{n} 个文件").Replace("{n}", rows.Count.ToString());
             if (rows.Count == 0)
