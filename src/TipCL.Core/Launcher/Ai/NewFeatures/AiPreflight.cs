@@ -48,10 +48,11 @@ public static class AiPreflight
         {
             version = PickVersion(inst);
         }
-        if (memoryMb <= 0)
-        {
-            memoryMb = Py.Int(Py.Or(Config.CONFIG.Get("memory_mb"), Config.CONFIG.Get("default_memory_mb"), 0L));
-        }
+        // AI2-stability:按实际生效值比(版本 → 实例 → 调用方 → 全局 → 4096,与 LaunchFlow.Prepare 同一份 EffectiveJvm.Resolve)。
+        // 以前调用方传了就用调用方的,实例 tune_jvm 过的内存在预检里看不见。
+        PyDict effective = EffectiveJvm.Resolve(inst, version, memoryMb > 0 ? memoryMb : null);
+        memoryMb = Py.Int(effective.Get("memory_mb"));
+        string memorySource = Py.S(effective.Get("memory_source"));
         string java = NormalizeJava(javaExe);
         if (java.Length == 0)
         {
@@ -159,6 +160,7 @@ public static class AiPreflight
             "instance", inst.name,
             "version", version,
             "memory_mb", memoryMb,
+            "memory_source", memorySource,
             "java", java.Length > 0 ? java : "自动选择",
             "items", items.Cast<object>().ToList(),
             "error_count", (long)errors,

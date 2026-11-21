@@ -29,7 +29,9 @@ public static class LaunchFlow
 		string text = VersionSettings.ApplyIsolation(instance, version_id, pyDict);
 		long num = GlobalMods.Apply(PPath.Join(text, "mods"));
 		// AI-perf-saves:版本设置 → 实例设置(.instance.json,tune_jvm 写的)→ 调用方传的 → 全局 default_memory_mb(见 JvmTuning)
-		object obj = Py.Or(Py.Or(pyDict.Get("memory_mb"), JvmTuning.InstanceMemory(instance)), Py.Or(memory_mb, Config.CONFIG.Get("default_memory_mb")));
+		// AI2-stability:顺序只写在 EffectiveJvm.Resolve 一处(Preflight / preflight_check 用同一份结果比物理内存)
+		PyDict effective = EffectiveJvm.Resolve(instance, version_id, memory_mb, pyDict);
+		object obj = effective["memory_mb"];
 		List<object> list = new List<object>();
 		foreach (object item in extra_game_args ?? new List<object>())
 		{
@@ -51,7 +53,7 @@ public static class LaunchFlow
 		{
 			list.Add("--fullscreen");
 		}
-		string text3 = Gc.Apply(Py.Or(Py.Or(pyDict.Get("gc"), JvmTuning.InstanceGc(instance)), Config.CONFIG.Get("gc_preset"), "auto"), Py.Or(pyDict.Get("jvm_args"), ""));
+		string text3 = Gc.Apply(effective["gc_preset"], Py.Or(pyDict.Get("jvm_args"), ""));
 		return PyDict.Of("settings", pyDict, "game_dir", text, "memory_mb", obj, "extra_game_args", list, "jvm_args", text3, "priority", Py.Or(pyDict.Get("process_priority"), Config.CONFIG.Get("default_priority"), "normal"), "global_mods", num, "pre_launch_wait", pyDict.Get("pre_launch_wait", true), "login_account", Py.Or(pyDict.Get("login_account"), ""), "nide8_id", Py.Or(pyDict.Get("nide8_id"), ""), "auth_server", Py.Or(pyDict.Get("auth_server"), ""), "window_mode", obj2, "window_width", _positive(pyDict.Get("window_width")), "window_height", _positive(pyDict.Get("window_height")), "window_title", Py.Strip(Py.AsStr(Py.Or(pyDict.Get("window_title"), ""), "strip")));
 	}
 
