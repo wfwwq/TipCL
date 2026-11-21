@@ -15,6 +15,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class UpdaterTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "tipcl-upd-" + Guid.NewGuid().ToString("N").Substring(0, 8));

@@ -11,6 +11,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class UiPrefsTests
 {
     // ————————————————— 版本收藏(VmFavorites)—————————————————

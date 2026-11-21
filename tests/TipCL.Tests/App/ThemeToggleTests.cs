@@ -12,6 +12,7 @@ namespace TipCL.Tests.App;
 /// 标题栏月牙钮切明暗必须写回 ui_dark(Windows 版 SetDark → PushDarkAsync → save_settings)。
 /// 设置页加载时以 get_settings 的 ui_dark 为准:不写回的话一打开设置页就被改回去,重启也记不住。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ThemeToggleTests
 {
     [Fact]

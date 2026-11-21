@@ -24,6 +24,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class R32I18nFixLayoutTests
 {
     /// <summary>

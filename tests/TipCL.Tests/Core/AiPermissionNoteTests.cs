@@ -22,6 +22,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiPermissionNoteTests
 {
     /// <summary>参考版 Permission.cs:256-276 的六句(逐字;由脚本从参考仓源码的字节直接注入)。</summary>

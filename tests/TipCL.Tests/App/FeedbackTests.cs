@@ -24,6 +24,7 @@ namespace TipCL.Tests.App;
 ///   · sysinfo 为「key: value」多行文本(服务器/Android 端约定)
 /// 另锁:没同意诊断数据上传前**不发送**;服务器拒绝时把状态码原样抛出(UI 要能显示)。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class FeedbackTests : IDisposable
 {
     private readonly IApi _api = InProcessApi.Instance;

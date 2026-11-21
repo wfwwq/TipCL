@@ -25,6 +25,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class EffectiveJvmTests : IDisposable
 {
     private readonly NfTempInstance _t = new("ai2jvm");
@@ -521,6 +522,7 @@ public class UpgradeCheckpointTests
 
 // ───────────────────────────── 联机等待 ─────────────────────────────
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class MultiplayerTimingTests
 {
     [Fact]
@@ -586,6 +588,7 @@ public class MultiplayerTimingTests
 
 // ───────────────────────────── 并行只读工具的线程安全 ─────────────────────────────
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ParallelReadToolsStressTests
 {
     private static HttpResponseMessage Json(string body)

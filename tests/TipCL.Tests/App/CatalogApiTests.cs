@@ -21,6 +21,7 @@ namespace TipCL.Tests.App;
 /// 走网络的方法(search_*)不在这里断言形状,只锁「不再落 NotImplementedException」的存在性由
 /// IApi 契约测试覆盖(离线环境下不发起真实搜索)。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class CatalogApiTests : IDisposable
 {
     private readonly IApi _api = InProcessApi.Instance;

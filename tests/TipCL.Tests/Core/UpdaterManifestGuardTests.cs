@@ -53,6 +53,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class UpdaterManifestGuardTests
 {
     /// <summary>R22 那个洞的形状:64 个 0。格式合法 ⇒ 会被 `ValidSha256` 放行 ⇒ 兜底失效。</summary>

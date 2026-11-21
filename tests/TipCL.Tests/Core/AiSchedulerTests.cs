@@ -192,6 +192,7 @@ public class AiSchedulerTests
 /// 会话循环端到端:假网关第一轮回 4 个只读 + 1 个写 + 1 个参数坏掉的调用,第二轮回一句话。
 /// 断言:只读那几个真的并发跑了;tool / tool_done 事件与对话里的 tool 消息都按原 tool_call 顺序、一个不丢。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiAgentParallelToolsTests : IDisposable
 {
     private readonly SequencedSseServer _server;

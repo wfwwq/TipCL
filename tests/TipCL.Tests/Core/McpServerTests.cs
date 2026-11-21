@@ -20,6 +20,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class McpServerTests
 {
     private sealed class FakeApi : ToolRunner.IBackend

@@ -87,6 +87,7 @@ internal static class I18nUxUiTexts
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiI18nUxEnglishUiTests
 {
     private static PyDict EnglishReport(string level) => PyDict.Of(
@@ -222,6 +223,7 @@ public class AiI18nUxProgressUiTests
     });
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiI18nUxInstanceJvmUiTests
 {
     [Fact]
@@ -309,6 +311,7 @@ public class AiI18nUxInstanceJvmUiTests
     });
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiI18nUxSavesRestoreTests
 {
     private static string MakeWorldWithBackup(NfTempInstance t)

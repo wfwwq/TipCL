@@ -19,6 +19,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class MultiPickImportTests : IDisposable
 {
     private readonly IApi _api = InProcessApi.Instance;

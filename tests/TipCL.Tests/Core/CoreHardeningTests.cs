@@ -22,6 +22,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class CoreHardeningTests
 {
     // ————— 1. PyJson 深度上限 —————

@@ -13,6 +13,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiHooksTests : IDisposable
 {
     private readonly List<string> _registered = new();

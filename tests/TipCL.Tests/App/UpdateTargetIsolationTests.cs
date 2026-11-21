@@ -28,6 +28,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class UpdateTargetIsolationTests
 {
     /// <summary>这条用例自己造的包内容(与 SelfUpdateFeedbackTests 那份区分开,断言才有指向性)。</summary>

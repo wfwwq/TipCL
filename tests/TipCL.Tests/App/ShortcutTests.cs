@@ -18,6 +18,7 @@ namespace TipCL.Tests.App;
 /// 在 Windows 工程里没有任何消费者(见 docs/PARITY.md §6),Linux 侧这里把它真的做通:
 /// 断言 .desktop 的键值、可执行位、以及 Program.cs 的 CLI 入口真能按这些参数把版本启动起来。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ShortcutTests : IDisposable
 {
     private readonly IApi _api = InProcessApi.Instance;

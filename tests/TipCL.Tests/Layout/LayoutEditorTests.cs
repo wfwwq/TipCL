@@ -32,6 +32,7 @@ using Xunit;
 /// A 组:L2 编辑体验测试(纯模型层)。编辑交互的"判定"全部在 LayoutEditSession / LayoutGuides 这些
 /// 零 UI 的纯类型里,UI 侧的 LayoutEditor 只是把鼠标/键盘事件翻译成对它们的调用 —— B 组负责那层。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class LayoutEditorTests
 {
 	private static PageLayoutV2 Page(params string[] ids)
@@ -587,6 +588,7 @@ public class LayoutEditorTests
 /// 走真实的命中测试 → PointerPressed/PointerMoved/PointerReleased(含指针捕获),于是**手势本身**可以被钉住。
 /// 所有用例都在 TestApp.Run 的无头 UI 线程上跑(仓库既有约定)。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class LayoutEditorUiTests
 {
 	// ————— 夹具 —————

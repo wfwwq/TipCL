@@ -26,6 +26,7 @@ using Xunit;
 using ToastKind = TipCL.Core.Layout.ToastKind;
 
 /// <summary>导出 = 整份 v2;导入 = v2 整条覆盖 / v1 只并顺序与显隐。</summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class PageLayoutIOV2Tests
 {
 	private readonly string _tmp = Path.Combine(Path.GetTempPath(), "tipcl_linio_" + Guid.NewGuid().ToString("N"));

@@ -18,6 +18,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiPermissionDontAskTests
 {
     private sealed class FakeApi : ToolRunner.IBackend

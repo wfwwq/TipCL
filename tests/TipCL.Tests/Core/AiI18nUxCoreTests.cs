@@ -66,6 +66,7 @@ internal static class I18nUxCjk
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiI18nUxLabelTests
 {
     /// <summary>覆盖各工具模板里出现过的全部参数名;值全是 ASCII,这样输出里出现的中文只可能来自没接线的文案。</summary>
@@ -191,6 +192,7 @@ public class AiI18nUxLabelTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiI18nUxUpgradeStageTests
 {
     /// <summary>空模组的假源(升级只走 核对 → 复制 → 安装 → 换模组 → 预检 这条骨架)。</summary>

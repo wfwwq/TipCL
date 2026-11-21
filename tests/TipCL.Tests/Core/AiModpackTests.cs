@@ -107,6 +107,7 @@ internal sealed class MpFixture : IDisposable
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiModpackTests : IDisposable
 {
     public AiModpackTests()

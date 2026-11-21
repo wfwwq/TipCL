@@ -18,6 +18,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class I18nLanguageWiringTests
 {
     // ————————————————————————— 夹具 —————————————————————————

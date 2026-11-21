@@ -30,6 +30,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class MdViewLinkTests
 {
     /// <summary>控件树里的全部 TextBlock(段落、列表项、引用块都在不同层)。</summary>
