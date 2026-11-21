@@ -293,11 +293,11 @@ public sealed partial class SettingsPage : PageBase
 
 	private CleanerPreview? _cleanPreview;
 
-	private static readonly string[] AccentKeys = new string[24]
+	private static readonly string[] AccentKeys = new string[25]
 	{
 		"C.Accent", "C.AccentStrong", "C.AccentText", "C.AccentDeep", "C.AccentLite", "B.Accent", "B.AccentStrong", "B.OnAccentStrong", "B.AccentText", "B.AccentTint",
 		"B.AccentDeep", "B.AccentLite", "B.AccentSoft", "B.AccentSoft2", "B.OnAccent", "B.Glass", "B.GlassStrong", "B.GlassBorder", "B.Ok", "B.OnOk",
-		"B.BannerFill", "B.OnBanner", "B.LogoFill", "B.OnLogo"
+		"B.BannerFill", "B.OnBanner", "B.LogoFill", "B.OnLogo", "B.EditDropFill"
 	};
 
 	private static readonly string[] BackgroundKeys = new string[3] { "C.Canvas", "B.Canvas", "B.PageWash" };

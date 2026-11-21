@@ -164,15 +164,25 @@ public static class LayoutShellHooks
 		{
 			return null;
 		}
+		// 兜底路径(鼠标不在任何宿主里)只在「能给自定义布局」的宿主里挑:单块宿主(D-81 Q5)跳过,
+		// 否则在设置「下载与网络」左侧导航空白处右键仍会挑中那个单块宿主(R34 WP-L5 合并事项 2)
+		List<BlockHost> editable = hosts.Where(delegate(BlockHost h)
+		{
+			return h.OffersLayoutMenu || h.IsEditing;
+		}).ToList();
+		if (editable.Count == 0)
+		{
+			return null;
+		}
 		Point point = Mouse.GetPosition(_win);
-		BlockHost? containing = hosts
+		BlockHost? containing = editable
 			.Where(delegate(BlockHost h)
 			{
 				return Contains(h, point);
 			})
 			.OrderBy(Area)
 			.FirstOrDefault();
-		return containing ?? hosts.OrderByDescending(Area).First();
+		return containing ?? editable.OrderByDescending(Area).First();
 	}
 
 	private static double Area(BlockHost host)
@@ -338,7 +348,7 @@ public static class LayoutShellHooks
 		int count = LayoutEditor.SpecCountOf(pageKey);
 		if (count >= 0)
 		{
-			return count >= 2;
+			return BlockHostRules.OffersLayoutMenu(count);
 		}
 		LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(pageKey);
 		return entry == null || !entry.SingleBlock;

@@ -122,7 +122,9 @@ public class LayoutV3SourceTests
 		Assert.Contains("public static bool CanEditPage(string pageKey)", hooks);
 		Assert.Contains("public static bool BeginEditPage(string pageKey)", hooks);
 		// 单块页不提供编辑入口:编辑器门槛回到「至少两块」(v2 时 D1 曾放宽到 ≥ 1)
-		Assert.Matches(new Regex("public bool CanEdit\\s*\\{\\s*get\\s*\\{\\s*return _specs\\.Count >= 2;", RegexOptions.Singleline), Src("src/TipCL/Pages/Layout/LayoutEditor.cs"));
+		// R35:门槛与右键菜单共用 BlockHostRules(R34 WP-L5,MinBlocksForLayoutMenu = 2)
+		Assert.Matches(new Regex("public bool CanEdit\\s*\\{\\s*get\\s*\\{[^}]*return BlockHostRules\\.OffersLayoutMenu\\(_specs\\.Count\\);", RegexOptions.Singleline), Src("src/TipCL/Pages/Layout/LayoutEditor.cs"));
+		Assert.Equal(2, TipCL.Pages.BlockHostRules.MinBlocksForLayoutMenu);
 		// 设置 → 布局「页面」卡片与编辑入口都走约定签名
 		string settings = Src("src/TipCL/Pages/SettingsLayoutPage.cs");
 		Assert.Contains("LayoutShellHooks.CanEditPage(", settings);

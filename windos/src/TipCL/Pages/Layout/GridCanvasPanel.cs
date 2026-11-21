@@ -66,6 +66,9 @@ public sealed class GridCanvasPanel : Panel
 	/// </summary>
 	public bool DerivedFromCanvas { get; private set; }
 
+	/// <summary>深色表面(启动页):落点占位框改用白色半透明(B.EditOutlineOnDark),由编辑器按 pageId == "launch" 设置。</summary>
+	public bool DarkSurface { get; set; }
+
 	/// <summary>grid 列数。</summary>
 	public int Cols { get; private set; } = LayoutSchema.ColsDefault;
 
@@ -606,7 +609,22 @@ public sealed class GridCanvasPanel : Panel
 			}
 			return;
 		}
-		// v3:网格模式不再铺主题色栅格底纹(效果图:内容是主角,只留灰色虚线框);对齐靠整数列吸附 + 落点占位框
+		// v3:网格模式常态编辑不再铺主题色栅格底纹(效果图:内容是主角,只留灰色虚线框);
+		// 只在拖动 / 改宽进行中(有浮起的卡片)铺一层淡色列底纹(GOAL §5.1「拖动时显示淡色列底纹」,B.EditColShade)
+		if (!HasFloating || width <= 1.0 || height <= 1.0 || Cols <= 1 || _columnWidth <= 1.0)
+		{
+			return;
+		}
+		Brush shade = TryFindResource("B.EditColShade") as Brush ?? brush;
+		for (int k = 0; k < Cols; k++)
+		{
+			double x = k * (_columnWidth + Gap);
+			if (x >= width)
+			{
+				break;
+			}
+			dc.DrawRoundedRectangle(shade, null, new Rect(x, 0.0, Math.Min(_columnWidth, width - x), height), 4.0, 4.0);
+		}
 	}
 
 	// canvas 画布高:优先宿主给的有限高,否则用参考高(滚动区里量到的高是 Infinity)
@@ -705,6 +723,7 @@ public sealed class GridCanvasPanel : Panel
 			}
 		}
 		InvalidateArrange();
+		InvalidateVisual();
 	}
 
 	/// <summary>拖动中:所有浮起卡片按像素平移(只改 RenderTransform,不触发布局)。</summary>
@@ -838,6 +857,7 @@ public sealed class GridCanvasPanel : Panel
 		_flipPending = false;
 		_flipOnly = null;
 		InvalidateArrange();
+		InvalidateVisual();
 	}
 
 	private void OnSettleFrame(object? sender, EventArgs e)
@@ -897,6 +917,7 @@ public sealed class GridCanvasPanel : Panel
 		_settleTo.Clear();
 		RemovePlaceholders();
 		InvalidateArrange();
+		InvalidateVisual();
 		Action? done = _settleDone;
 		_settleDone = null;
 		done?.Invoke();
@@ -922,7 +943,7 @@ public sealed class GridCanvasPanel : Panel
 		{
 			return;
 		}
-		DropPlaceholder placeholder = new DropPlaceholder(id);
+		DropPlaceholder placeholder = new DropPlaceholder(id, DarkSurface);
 		Panel.SetZIndex(placeholder, -1);
 		_placeholders[id] = placeholder;
 		base.Children.Insert(0, placeholder);
@@ -1046,13 +1067,27 @@ internal sealed class DropPlaceholder : Border
 	// 当前配色对应的主题色:主题切换后重取一次(颜色没变时 ApplyTheme 什么都不做)
 	private Color _accent;
 
-	public DropPlaceholder(string blockId)
+	private readonly bool _onDark;
+
+	// v3(GOAL §5.1):落点框 = 主题色浅底 + 虚线框;启动页这类深色表面用白色半透明
+	private readonly System.Windows.Shapes.Rectangle _dash = new System.Windows.Shapes.Rectangle
+	{
+		RadiusX = 10.0,
+		RadiusY = 10.0,
+		StrokeThickness = 1.5,
+		StrokeDashArray = new DoubleCollection { 4.0, 3.0 },
+		IsHitTestVisible = false
+	};
+
+	public DropPlaceholder(string blockId, bool onDark = false)
 	{
 		BlockId = blockId ?? "";
+		_onDark = onDark;
 		IsHitTestVisible = false;
 		Focusable = false;
 		CornerRadius = new CornerRadius(10.0);
-		BorderThickness = new Thickness(1.5);
+		BorderThickness = new Thickness(0.0);
+		Child = _dash;
 		ApplyTheme();
 		Tag = Prefix + BlockId;
 	}
@@ -1066,11 +1101,25 @@ internal sealed class DropPlaceholder : Border
 			return;
 		}
 		_accent = accent;
-		SolidColorBrush fill = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
-		fill.Freeze();
+		if (_onDark)
+		{
+			Brush? darkStroke = Application.Current?.TryFindResource("B.EditOutlineOnDark") as Brush;
+			SolidColorBrush darkFill = new SolidColorBrush(Color.FromArgb(26, 255, 255, 255));
+			darkFill.Freeze();
+			Background = darkFill;
+			_dash.Stroke = darkStroke ?? new SolidColorBrush(Color.FromArgb(150, 255, 255, 255));
+			return;
+		}
+		Brush? fill = Application.Current?.TryFindResource("B.EditDropFill") as Brush;
+		if (fill == null)
+		{
+			SolidColorBrush soft = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
+			soft.Freeze();
+			fill = soft;
+		}
 		SolidColorBrush stroke = new SolidColorBrush(Color.FromArgb(200, accent.R, accent.G, accent.B));
 		stroke.Freeze();
 		Background = fill;
-		BorderBrush = stroke;
+		_dash.Stroke = stroke;
 	}
 }

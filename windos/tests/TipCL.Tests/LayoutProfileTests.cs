@@ -568,8 +568,9 @@ public class LayoutProfileTests
 		// 入口表仍要登记这两页(SingleBlock = true):设置 → 布局「页面」卡片区靠它点名
 		// 「「下载与网络」「反馈与关于」只有一块内容，不提供编辑。」,LayoutShellHooks.CanEditPage 也靠它对未构建的页返回 false。
 		// (守卫见 LayoutV3SourceTests.ShellHooksExposeV3EntryPointsAndSingleBlockPagesAreNotEditable)
-		Assert.Equal(17, LayoutBlockEntryCatalog.All.Length);
-		Assert.Equal(17, LayoutBlockEntryCatalog.All.Select((LayoutBlockEntryCatalog.Entry e) => e.PageId).Distinct().Count());
+		// R35:按 GOAL §5.4 补上实例库 library:main(区块宿主但原来不在入口表里),17 → 18
+		Assert.Equal(18, LayoutBlockEntryCatalog.All.Length);
+		Assert.Equal(18, LayoutBlockEntryCatalog.All.Select((LayoutBlockEntryCatalog.Entry e) => e.PageId).Distinct().Count());
 		Assert.Equal(new string[2] { "settings:network", "settings:about" }, LayoutBlockEntryCatalog.SingleBlockPageIds().ToArray());
 
 		LayoutBlockEntryCatalog.Entry? network = LayoutBlockEntryCatalog.Find("settings:network");

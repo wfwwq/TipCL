@@ -149,11 +149,11 @@ public sealed partial class LayoutEditor
 		_undoBtn = IconButton(LayoutIcons.Undo, I18n.L("撤销 (Ctrl+Z)"), delegate
 		{
 			UndoEdit();
-		});
+		}, "Geo.Undo");
 		_redoBtn = IconButton(LayoutIcons.Redo, I18n.L("重做 (Ctrl+Y)"), delegate
 		{
 			RedoEdit();
-		});
+		}, "Geo.Redo");
 		Border vs = new Border
 		{
 			Width = 1.0,
@@ -231,12 +231,12 @@ public sealed partial class LayoutEditor
 		return item;
 	}
 
-	private static Button IconButton(string path, string tip, RoutedEventHandler? click)
+	private static Button IconButton(string path, string tip, RoutedEventHandler? click, string? geoKey = null)
 	{
 		Button button = new Button
 		{
 			Style = Ui.S("Btn.Icon"),
-			Content = Lucide.Icon(path, 15.0, "B.InkSoft"),
+			Content = (geoKey != null) ? LayoutIcons.Glyph(geoKey, path, 15.0, "B.InkSoft") : Lucide.Icon(path, 15.0, "B.InkSoft"),
 			ToolTip = tip,
 			VerticalAlignment = VerticalAlignment.Center
 		};
@@ -388,6 +388,7 @@ public sealed partial class LayoutEditor
 	{
 		_v3PendingType = "";
 		CloseV3Drawer();
+		ApplyV3BarSurface();
 		// 上一场留下的选中态(列表模式的 Render 不会逐卡复位)
 		foreach (LayoutCard card in _cards.Values)
 		{
@@ -400,6 +401,150 @@ public sealed partial class LayoutEditor
 	{
 		_v3PendingType = "";
 		CloseV3Drawer();
+	}
+
+	// ————— R35 win-int:跨包接线 / 深色表面 / 拖宽读数 / 新块定位 —————
+
+	/// <summary>进 / 出编辑态(true = 进入)。启动页用它压暗英雄区并显示「主区域固定」(GOAL §5.5;R34 WP-L5 越界需求)。</summary>
+	public event Action<bool>? EditingChanged;
+
+	private void RaiseEditingChanged(bool editing)
+	{
+		try
+		{
+			EditingChanged?.Invoke(editing);
+		}
+		catch
+		{
+			// 订阅方出错不能把编辑态卡在半路
+		}
+	}
+
+	/// <summary>深色表面(GOAL §6.4 第 2 条:只按 pageId == "launch" 判断):编辑控件用深色玻璃配色。</summary>
+	internal bool IsDarkSurface
+	{
+		get
+		{
+			return string.Equals(_pageId, "launch", StringComparison.Ordinal);
+		}
+	}
+
+	// 编辑条底色:普通页 = B.EditBarBg / B.EditBarLine(R34 WP-L0 令牌);启动页 = 深色玻璃
+	private void ApplyV3BarSurface()
+	{
+		bool dark = IsDarkSurface;
+		_barHost.SetResourceReference(Border.BackgroundProperty, dark ? "B.EditGlass" : "B.EditBarBg");
+		_barHost.SetResourceReference(Border.BorderBrushProperty, dark ? "B.EditGlassLine" : "B.EditBarLine");
+		_v3Title.SetResourceReference(TextBlock.ForegroundProperty, dark ? "B.OnEditGlass" : "B.Ink");
+		_v3Hint.SetResourceReference(TextBlock.ForegroundProperty, dark ? "B.OnEditGlassMuted" : "B.InkFaint");
+	}
+
+	/// <summary>打开「添加」抽屉(DevShot --pop layout-drawer 的正式入口)。</summary>
+	internal void OpenAddDrawer()
+	{
+		if (!_edit && CanEdit)
+		{
+			EnterEdit();
+		}
+		OpenV3Drawer();
+	}
+
+	/// <summary>模拟选中某块(DevShot --select 的正式入口):块不在本页返回 false。</summary>
+	internal bool DevSelect(string blockId)
+	{
+		if (string.IsNullOrEmpty(blockId) || !_cards.ContainsKey(blockId))
+		{
+			return false;
+		}
+		if (!_edit && CanEdit)
+		{
+			EnterEdit();
+		}
+		_session.Select(blockId, false);
+		UpdateSelectionVisual();
+		return true;
+	}
+
+	// 拖右边缘时的「N / 列数」读数(GOAL §5.1;样式 Layout.EditTip 由 R34 WP-L0 提供,找不到就用代码兜底)
+	private Border? _v3SpanTip;
+
+	private TextBlock? _v3SpanTipText;
+
+	private void ShowV3SpanTip(int span, int cols)
+	{
+		if (_gestureHandle.IndexOf('e') < 0 || cols <= 0)
+		{
+			return;
+		}
+		if (_v3SpanTip == null)
+		{
+			_v3SpanTipText = new TextBlock
+			{
+				FontSize = 12.0,
+				FontWeight = FontWeights.SemiBold
+			};
+			_v3SpanTip = new Border
+			{
+				Child = _v3SpanTipText,
+				HorizontalAlignment = HorizontalAlignment.Left,
+				VerticalAlignment = VerticalAlignment.Top,
+				IsHitTestVisible = false
+			};
+			if (Application.Current?.TryFindResource("Layout.EditTip") is Style tipStyle && tipStyle.TargetType.IsAssignableFrom(typeof(Border)))
+			{
+				_v3SpanTip.Style = tipStyle;
+			}
+			else
+			{
+				_v3SpanTip.CornerRadius = new CornerRadius(8.0);
+				_v3SpanTip.Padding = new Thickness(8.0, 2.0, 8.0, 2.0);
+				_v3SpanTip.SetResourceReference(Border.BackgroundProperty, "B.Ink");
+				_v3SpanTipText.SetResourceReference(TextBlock.ForegroundProperty, "B.Paper");
+			}
+			Panel.SetZIndex(_v3SpanTip, 2000);
+		}
+		if (_v3SpanTip.Parent == null)
+		{
+			_stage.Children.Add(_v3SpanTip);
+		}
+		_v3SpanTipText!.Text = I18n.L("{0} / {1} 列", span, cols);
+		Point at = Mouse.GetPosition(_stage);
+		_v3SpanTip.Margin = new Thickness(Math.Max(0.0, at.X + 14.0), Math.Max(0.0, at.Y - 30.0), 0.0, 0.0);
+		_v3SpanTip.Visibility = Visibility.Visible;
+	}
+
+	private void HideV3SpanTip()
+	{
+		if (_v3SpanTip != null)
+		{
+			_v3SpanTip.Visibility = Visibility.Collapsed;
+		}
+	}
+
+	// 新块(「显示」或「添加」之后):滚过去并闪一下主题色光晕(GOAL §5.2)
+	private void RevealBlock(string blockId)
+	{
+		if (string.IsNullOrEmpty(blockId) || !_cards.TryGetValue(blockId, out LayoutCard? card) || card == null)
+		{
+			return;
+		}
+		try
+		{
+			card.Dispatcher.BeginInvoke(new Action(delegate
+			{
+				try
+				{
+					card.BringIntoView();
+					card.FlashGlow();
+				}
+				catch
+				{
+				}
+			}), System.Windows.Threading.DispatcherPriority.Loaded);
+		}
+		catch
+		{
+		}
 	}
 
 	// ————— 块名 / 删除 —————
@@ -1069,6 +1214,9 @@ internal sealed partial class LayoutCard
 
 	private readonly Border _v3Grip = new Border();
 
+	// 下边缘把手(GOAL Q3:网格保留右边缘 + 下边缘,悬停或选中才出现)
+	private readonly Border _v3GripS = new Border();
+
 	private bool _v3Hover;
 
 	private static readonly DoubleCollection DashPattern = CreateDash();
@@ -1098,7 +1246,7 @@ internal sealed partial class LayoutCard
 		_v3LabelText.TextTrimming = TextTrimming.CharacterEllipsis;
 		_v3LabelText.MaxWidth = 260.0;
 		_v3LabelText.SetResourceReference(TextBlock.ForegroundProperty, "B.Ink");
-		SPanel labelRow = Ui.H(6.0, Lucide.Icon(LayoutIcons.Grip, 12.0, "B.InkFaint").VCenter(), _v3LabelText);
+		SPanel labelRow = Ui.H(6.0, LayoutIcons.Glyph("Geo.Grip", LayoutIcons.Grip, 12.0, "B.InkFaint").VCenter(), _v3LabelText);
 		if (LayoutEngine.IsImplicitRef(Spec.Id))
 		{
 			labelRow.Children.Add(Ui.Txt(I18n.L("· 组件"), 12.0, bold: false, "B.InkFaint").VCenter());
@@ -1111,8 +1259,12 @@ internal sealed partial class LayoutCard
 		_v3Label.HorizontalAlignment = HorizontalAlignment.Left;
 		_v3Label.VerticalAlignment = VerticalAlignment.Top;
 		_v3Label.Margin = new Thickness(8.0, -14.0, 0.0, 0.0);
-		_v3Label.SetResourceReference(Border.BackgroundProperty, "B.Paper");
-		_v3Label.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		_v3Label.SetResourceReference(Border.BackgroundProperty, _host.IsDarkSurface ? "B.EditGlassChip" : "B.EditBarBg");
+		_v3Label.SetResourceReference(Border.BorderBrushProperty, _host.IsDarkSurface ? "B.EditGlassChipLine" : "B.EditBarLine");
+		if (_host.IsDarkSurface)
+		{
+			_v3LabelText.SetResourceReference(TextBlock.ForegroundProperty, "B.OnEditGlass");
+		}
 		_v3Label.Visibility = Visibility.Collapsed;
 		Panel.SetZIndex(_v3Label, 50);
 		grid.Add(_v3Label, 0, 0, 3, 1);
@@ -1121,7 +1273,7 @@ internal sealed partial class LayoutCard
 		Button act = new Button
 		{
 			Style = Ui.S("Btn.Icon"),
-			Content = Lucide.Icon(custom ? LayoutIcons.Trash : LayoutIcons.EyeOff, 14.0, custom ? "B.Danger" : "B.InkSoft"),
+			Content = custom ? (UIElement)Lucide.Icon(LayoutIcons.Trash, 14.0, "B.Danger") : LayoutIcons.Glyph("Geo.EyeOff", LayoutIcons.EyeOff, 14.0, "B.InkSoft"),
 			ToolTip = custom ? I18n.L("删除这个组件") : I18n.L("隐藏（可在「添加」里找回）"),
 			Focusable = false
 		};
@@ -1143,8 +1295,8 @@ internal sealed partial class LayoutCard
 		_v3Acts.HorizontalAlignment = HorizontalAlignment.Right;
 		_v3Acts.VerticalAlignment = VerticalAlignment.Top;
 		_v3Acts.Margin = new Thickness(0.0, -14.0, 8.0, 0.0);
-		_v3Acts.SetResourceReference(Border.BackgroundProperty, "B.Paper");
-		_v3Acts.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		_v3Acts.SetResourceReference(Border.BackgroundProperty, _host.IsDarkSurface ? "B.EditGlassChip" : "B.EditBarBg");
+		_v3Acts.SetResourceReference(Border.BorderBrushProperty, _host.IsDarkSurface ? "B.EditGlassChipLine" : "B.EditBarLine");
 		_v3Acts.Visibility = Visibility.Collapsed;
 		Panel.SetZIndex(_v3Acts, 50);
 		grid.Add(_v3Acts, 0, 0, 3, 1);
@@ -1178,6 +1330,42 @@ internal sealed partial class LayoutCard
 		};
 		Panel.SetZIndex(_v3Grip, 60);
 		grid.Add(_v3Grip, 0, 0, 3, 1);
+		// 5) 下边缘把手:拖动改高度(像素高度,4px 吸附)· 双击恢复自动高度(走既有 s 向手势 / ClearFixedHeight)
+		Border barS = new Border
+		{
+			Width = 16.0,
+			Height = 2.0,
+			CornerRadius = new CornerRadius(1.0),
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center,
+			IsHitTestVisible = false
+		};
+		barS.SetResourceReference(Border.BackgroundProperty, "B.InkFaint");
+		_v3GripS.Child = barS;
+		_v3GripS.Width = 36.0;
+		_v3GripS.Height = 10.0;
+		_v3GripS.CornerRadius = new CornerRadius(5.0);
+		_v3GripS.BorderThickness = new Thickness(1.0);
+		_v3GripS.HorizontalAlignment = HorizontalAlignment.Center;
+		_v3GripS.VerticalAlignment = VerticalAlignment.Bottom;
+		_v3GripS.Margin = new Thickness(0.0, 0.0, 0.0, -9.0);
+		_v3GripS.Cursor = Cursors.SizeNS;
+		_v3GripS.ToolTip = I18n.L("拖动改高度 · 双击恢复自动高度");
+		_v3GripS.SetResourceReference(Border.BackgroundProperty, "B.Paper");
+		_v3GripS.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		_v3GripS.Visibility = Visibility.Collapsed;
+		_v3GripS.PreviewMouseLeftButtonDown += delegate(object _, MouseButtonEventArgs e)
+		{
+			if (e.ClickCount >= 2)
+			{
+				_host.ClearFixedHeight(Spec);
+				e.Handled = true;
+				return;
+			}
+			_host.BeginBoxResize(this, "s", e);
+		};
+		Panel.SetZIndex(_v3GripS, 60);
+		grid.Add(_v3GripS, 0, 0, 3, 1);
 		MouseEnter += delegate
 		{
 			_v3Hover = true;
@@ -1215,7 +1403,9 @@ internal sealed partial class LayoutCard
 		}
 		else
 		{
-			_v3Outline.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, _v3Hover ? "B.InkFaint" : "B.Line");
+			bool dark = _host.IsDarkSurface;
+			string key = _v3Hover ? (dark ? "B.EditOutlineHoverOnDark" : "B.EditOutlineHover") : (dark ? "B.EditOutlineOnDark" : "B.EditOutline");
+			_v3Outline.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, key);
 			_v3Outline.StrokeDashArray = DashPattern;
 			_v3Outline.StrokeThickness = 1.5;
 		}
@@ -1223,6 +1413,37 @@ internal sealed partial class LayoutCard
 		_v3Label.Visibility = chrome ? Visibility.Visible : Visibility.Collapsed;
 		_v3Acts.Visibility = chrome ? Visibility.Visible : Visibility.Collapsed;
 		_v3Grip.Visibility = (chrome && _boxMode == LayoutSchema.ModeGrid) ? Visibility.Visible : Visibility.Collapsed;
+		_v3GripS.Visibility = (chrome && _boxMode == LayoutSchema.ModeGrid) ? Visibility.Visible : Visibility.Collapsed;
+	}
+
+	/// <summary>新块落位后闪一下主题色光晕(约 0.9 秒淡出;关闭动效时只做滚动不闪)。</summary>
+	internal void FlashGlow()
+	{
+		if (!Motion.Enabled)
+		{
+			return;
+		}
+		Color accent = LayoutEditor.AccentColor();
+		System.Windows.Media.Effects.DropShadowEffect glow = new System.Windows.Media.Effects.DropShadowEffect
+		{
+			Color = accent,
+			BlurRadius = 22.0,
+			ShadowDepth = 0.0,
+			Opacity = 0.0
+		};
+		System.Windows.Media.Effects.Effect? before = Effect;
+		Effect = glow;
+		System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames anim = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames();
+		anim.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0.85, System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(160))));
+		anim.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0.0, System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(900))));
+		anim.Completed += delegate
+		{
+			if (ReferenceEquals(Effect, glow))
+			{
+				Effect = before;
+			}
+		};
+		glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, anim);
 	}
 }
 
@@ -1259,6 +1480,35 @@ internal static class LayoutIcons
 
 	public const string Block = "M4 4h16v16H4z";
 
+	/// <summary>
+	/// 优先用 R34 WP-L0 的矢量图标资源(<c>Geo.*</c>,16 视框描边);资源找不到时退回本类的 Lucide 路径(24 视框)。
+	/// 用 TryFindResource,找不到不抛异常(GOAL §6.4 第 1 条)。
+	/// </summary>
+	public static System.Windows.Shapes.Path Glyph(string geoKey, string lucideFallback, double size, string brushKey)
+	{
+		if (Application.Current?.TryFindResource(geoKey) is Geometry geo)
+		{
+			double k = size / 16.0;
+			System.Windows.Shapes.Path path = new System.Windows.Shapes.Path
+			{
+				Data = geo,
+				Width = 16.0,
+				Height = 16.0,
+				Stretch = Stretch.None,
+				StrokeThickness = 1.6,
+				StrokeStartLineCap = PenLineCap.Round,
+				StrokeEndLineCap = PenLineCap.Round,
+				StrokeLineJoin = PenLineJoin.Round,
+				LayoutTransform = new ScaleTransform(k, k),
+				SnapsToDevicePixels = false,
+				IsHitTestVisible = false
+			};
+			path.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, brushKey);
+			return path;
+		}
+		return Lucide.Icon(lucideFallback, size, brushKey);
+	}
+
 	public static string WidgetIcon(string type)
 	{
 		switch (type)
@@ -1280,77 +1530,15 @@ internal static class LayoutIcons
 }
 
 /// <summary>
-/// v3:界面只剩「列表 / 网格」。存档里 mode=canvas 的页面读取时按网格呈现(换算到 12 列整数列),
-/// 存档本身不动(Core 的 schema / 模型 / v1 兼容一个字段都不删);用户在编辑态动过之后才按 grid 落盘。
-/// 纯函数、零 WPF,net8 测试宿主可以直接断言。
+/// v3:界面只剩「列表 / 网格」。存档里 mode=canvas 的页面读取时按网格呈现 —— R35 合并后只保留一份推导实现:
+/// R34 WP-L3 的 <see cref="LayoutCanvasMigration.ToGridPage"/>(先 y 后 x、span = clamp(round(w×cols), max(2, MinCols), cols))。
+/// 本类只是给旧调用点留的薄壳。
 /// </summary>
 public static class LayoutCanvasCompat
 {
-	/// <summary>同一行的判定阈值(归一化纵坐标差):上沿相差不到 5% 的块排在同一行。</summary>
-	public const double RowTolerance = 0.05;
-
 	/// <summary>canvas 页 → 等价的 grid 页(返回副本);其它模式原样返回同一个对象。</summary>
 	public static PageLayoutV2? AsGrid(PageLayoutV2? page)
 	{
-		if (page == null || !string.Equals(page.Mode, LayoutSchema.ModeCanvas, StringComparison.Ordinal))
-		{
-			return page;
-		}
-		PageLayoutV2 grid = page.Clone();
-		int cols = LayoutSchema.ColsDefault;
-		grid.Mode = LayoutSchema.ModeGrid;
-		grid.Cols = cols;
-		grid.RowH = 0.0;
-		List<BlockLayout> visible = new List<BlockLayout>();
-		foreach (BlockLayout block in grid.Blocks)
-		{
-			if (block != null && !block.Hidden)
-			{
-				visible.Add(block);
-			}
-		}
-		List<BlockLayout> ordered = visible.OrderBy((BlockLayout b) => Unit(b.Y)).ThenBy((BlockLayout b) => Unit(b.X)).ToList();
-		int row = -1;
-		double rowTop = 0.0;
-		foreach (BlockLayout block in ordered)
-		{
-			double top = Unit(block.Y);
-			if (row < 0 || top - rowTop > RowTolerance)
-			{
-				row++;
-				rowTop = top;
-			}
-			double nw = Math.Max(LayoutSchema.CanvasMinSize, Math.Min(LayoutSchema.CanvasMaxSize, block.W));
-			int w = Math.Max(2, Math.Min(cols, (int)Math.Round(nw * cols)));
-			int x = Math.Max(0, Math.Min(cols - w, (int)Math.Round(Unit(block.X) * cols)));
-			block.X = x;
-			block.Y = Math.Max(0, row);
-			block.W = w;
-			block.H = 1.0;
-			block.Span = w;
-		}
-		int next = row + 1;
-		foreach (BlockLayout block in grid.Blocks)
-		{
-			if (block != null && block.Hidden)
-			{
-				// 隐藏块恢复时落到末尾一整行(否则归一化坐标会被当成第 0 列 / 第 0 行)
-				block.X = 0.0;
-				block.Y = next++;
-				block.W = cols;
-				block.H = 1.0;
-				block.Span = cols;
-			}
-		}
-		return grid;
-	}
-
-	private static double Unit(double v)
-	{
-		if (double.IsNaN(v) || double.IsInfinity(v))
-		{
-			return 0.0;
-		}
-		return Math.Max(0.0, Math.Min(1.0, v));
+		return LayoutCanvasMigration.IsCanvas(page) ? LayoutCanvasMigration.ToGridPage(page) : page;
 	}
 }

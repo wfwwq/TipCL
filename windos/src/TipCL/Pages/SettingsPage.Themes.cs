@@ -225,6 +225,8 @@ public sealed partial class SettingsPage
 		d["B.AccentDeep"] = new SolidColorBrush(color2);
 		d["B.AccentLite"] = new SolidColorBrush(color4);
 		d["B.AccentSoft"] = new SolidColorBrush(color5);
+		// 布局 v3 落点框浅底跟着主题色走(R34 WP-L0 合并事项 1:与 B.AccentSoft 同色)
+		d["B.EditDropFill"] = new SolidColorBrush(color5);
 		d["B.AccentSoft2"] = new SolidColorBrush(color6);
 		d["B.OnAccent"] = Brushes.White;
 		Color color7 = Mix(paper, color3, dark ? 0.1 : 0.07);

@@ -115,6 +115,9 @@ public sealed partial class LayoutEditor
 	// canvas 吸附档(px;编辑态可切 {0,4,8,16,24})
 	private double _snapStep = LayoutCanvas.DefaultStep;
 
+	// v3(GOAL §5.2):「自动靠拢」界面已删,固定为开(LayoutEditPrefs.AutoPack 仍可读,只是编辑器不再看它)
+	private static bool AutoPackOn => true;
+
 	// 一次画布手势:起手时的槽位快照 + 指针起点(用绝对值算位移,避免逐帧累积误差)
 	private string _gesture = "";
 
@@ -323,7 +326,8 @@ public sealed partial class LayoutEditor
 	{
 		get
 		{
-			return _specs.Count >= 2;
+			// 与右键菜单同一条规则(BlockHostRules.OffersLayoutMenu,D-81 Q5:≥ 2 块)
+			return BlockHostRules.OffersLayoutMenu(_specs.Count);
 		}
 	}
 
@@ -506,6 +510,7 @@ public sealed partial class LayoutEditor
 		OnV3EnterEdit();
 		Render();
 		_barHost.Visibility = Visibility.Visible;
+		RaiseEditingChanged(true);
 		// 键盘(§4.G)需要根元素拿到焦点;拿不到也不影响鼠标交互
 		try
 		{
@@ -558,6 +563,7 @@ public sealed partial class LayoutEditor
 		_trayHost.Visibility = Visibility.Collapsed;
 		_barHost.Visibility = Visibility.Collapsed;
 		_bottom.Visibility = Visibility.Collapsed;
+		RaiseEditingChanged(false);
 		Render();
 		_session.ClearSelection();
 		_session.ClearHistory();
@@ -605,8 +611,10 @@ public sealed partial class LayoutEditor
 		{
 			page = _defaultPage.Clone();
 		}
-		// v3:界面不再提供自由画布 —— 存档里的 canvas 页按网格呈现(换算到整数列);存档本身不动,编辑后才按 grid 落盘
-		page = LayoutCanvasCompat.AsGrid(page);
+		// v3:界面不再提供自由画布 —— 存档里的 canvas 页按网格呈现(R34 WP-L3 的 LayoutCanvasMigration:先 y 后 x、
+		// span = clamp(round(w×cols), max(2, MinCols), cols));存档本身不动,编辑后才按 grid 落盘
+		PageLayoutV2? canvasPage = page;
+		page = LayoutCanvasMigration.IsCanvas(canvasPage) ? LayoutCanvasMigration.ToGridPage(canvasPage, (string id) => MinColsOf(id, LayoutGrid.Columns(canvasPage!))) : page;
 		// 全局密度也来自 v2(缺省 standard → 间距档 10 = 现状)
 		_density = ((doc.Layout?.Shell != null && LayoutSchema.IsKnownDensity(doc.Layout.Shell.Density)) ? doc.Layout.Shell.Density : LayoutSchema.DensityStandard);
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
@@ -692,6 +700,7 @@ public sealed partial class LayoutEditor
 		_box.SetLayout(page.Mode, LayoutGrid.Columns(page), page.RowH, gap, page);
 		SanitizeCellWidths();
 		_box.SnapStep = _snapStep;
+		_box.DarkSurface = IsDarkSurface;
 		_box.EditMode = _edit;
 		_box.Margin = (_marginOverride ?? PadOf(_state.Plan()));
 		// 覆盖层与画布同坐标系:鼠标坐标取自 e.GetPosition(_box)(已扣掉 Margin),
@@ -703,7 +712,8 @@ public sealed partial class LayoutEditor
 		{
 			LayoutCard card = CardFor(cell.Id);
 			card.EnsureContent();
-			card.SetBoxMode(page.Mode);
+			// canvas 页由画布推导成网格(R34 WP-L3 合并事项 1):卡片按画布的实际模式出手柄,不再出 8 向手柄
+			card.SetBoxMode(_box.Mode);
 			card.SetEdit(_edit);
 			card.SetSelected(_edit && _session.IsSelected(cell.Id));
 			card.SetFixedHeight(PageHeightOf(cell.Id));
@@ -1250,6 +1260,7 @@ public sealed partial class LayoutEditor
 		_trayAddOpen = false;
 		Persist();
 		Render();
+		RevealBlock(blockId);
 		AppServices.Window?.Toast(I18n.L("已添加到本页"), WidgetRegistry.FindWidgetById(widgetId)?.Title ?? "", ToastKind.Success);
 	}
 
@@ -1279,6 +1290,7 @@ public sealed partial class LayoutEditor
 		_state.Restore(spec.Id);
 		Render();
 		Persist();
+		RevealBlock(spec.Id);
 	}
 
 	// 重置本页 = 回到白名单默认布局(等价 PageLayoutDoc.Default)并落盘
@@ -2267,6 +2279,7 @@ public sealed partial class LayoutEditor
 	// 手势收尾:解绑事件 → (取消?回滚:落盘)→ 重画
 	private void EndBoxGesture(bool persist, bool rollback)
 	{
+		HideV3SpanTip();
 		bool active = _gesture.Length != 0;
 		bool moved = _gestureMoved;
 		bool pixelHeight = _pixelHeightGesture;
@@ -2356,7 +2369,7 @@ public sealed partial class LayoutEditor
 		{
 			return;
 		}
-		_box.CompactCells(pinned, false, LayoutEditPrefs.AutoPack);
+		_box.CompactCells(pinned, false, AutoPackOn);
 		int cols = LayoutGrid.Columns(_state.Page);
 		foreach (LayoutCell cell in _box.Cells)
 		{
@@ -2415,7 +2428,7 @@ public sealed partial class LayoutEditor
 		{
 			LayoutGuideResult guides = LayoutGuides.Align(rect.Value, OtherRects(primary, true), LayoutGuides.Threshold);
 			// 「自动靠拢」关:只画对齐辅助线,不做磁性吸附(不再"自动靠到旁边的块上")
-			bool magnet = LayoutEditPrefs.AutoPack && _gesture == "move" && guides.HasSnap;
+			bool magnet = AutoPackOn && _gesture == "move" && guides.HasSnap;
 			// 磁性吸附"吸上 / 松开 / 换线"的那一下:不硬跳,被拖块用 90ms 短动画从上一帧的位置滑过去
 			double snapDx = (magnet ? guides.Dx : 0.0);
 			double snapDy = (magnet ? guides.Dy : 0.0);
@@ -2498,6 +2511,7 @@ public sealed partial class LayoutEditor
 			_lastSnapH = probe.H;
 			_lastDropX = probe.X;
 			_lastDropY = probe.Y;
+			ShowV3SpanTip(probe.W, cols);
 			RestoreGestureSnapshot();
 			LayoutCell? lead = _box.CellOf(primary);
 			if (lead != null)
@@ -2724,7 +2738,7 @@ public sealed partial class LayoutEditor
 			pinned.Add(primary);
 		}
 		_box.RequestFlip();
-		_box.CompactCells(pinned, swapX, LayoutEditPrefs.AutoPack);
+		_box.CompactCells(pinned, swapX, AutoPackOn);
 	}
 
 	// 最小宽度:12 列网格下不小于 2 列(1 列宽会把标题挤成竖排)
@@ -2877,9 +2891,13 @@ public sealed partial class LayoutEditor
 		{
 			return;
 		}
-		PageLayoutV2 page = _state.ToPage();
+		// GOAL §5.2:Delete 对组件(custom: / plugin:)是删除,对内置块是隐藏(可在「添加」里找回)。
+		// 先深拷贝:ToPage() 与 _state 共享块实例,就地改 Hidden 会把撤销快照也改掉
+		PageLayoutV2 page = _state.ToPage().Clone();
 		List<BlockLayout> keep = new List<BlockLayout>();
 		int removed = 0;
+		int hidden = 0;
+		string lastHidden = "";
 		foreach (BlockLayout block in page.Blocks)
 		{
 			if (block == null)
@@ -2891,19 +2909,30 @@ public sealed partial class LayoutEditor
 				removed++;
 				continue;
 			}
+			if (_session.IsSelected(block.Id) && !block.Hidden)
+			{
+				block.Hidden = true;
+				hidden++;
+				lastHidden = DisplayTitle(SpecOf(block.Id));
+			}
 			keep.Add(block);
 		}
-		if (removed == 0)
+		if (removed == 0 && hidden == 0)
 		{
-			AppServices.Window?.Toast(I18n.L("内置区块不能移除"), "", ToastKind.Warning);
 			return;
 		}
 		_session.PushUndo(_state.ToPage());
 		page.Blocks = keep;
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
 		_session.Retain(_state.Order);
+		_session.ClearSelection();
+		_layoutTouched = true;
 		Persist();
 		Render();
+		if (removed == 0 && hidden == 1)
+		{
+			AppServices.Window?.Toast(I18n.L("已隐藏「{0}」", lastHidden), I18n.L("在「添加」里可以找回"), ToastKind.Success);
+		}
 	}
 
 	// 方向键微调:grid 走"格",canvas 走"吸附格";Shift = 10px 档(§4.G)

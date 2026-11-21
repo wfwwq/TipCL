@@ -200,6 +200,53 @@ public sealed partial class LaunchPage : PageBase
 	// 内容区块宿主（WP-U3）：BuildHero 里构建并放进根 Grid 第 1 行；premium 沉浸搬背景不受影响
 	private BlockHost? _blocks;
 
+	// 编辑态英雄区的压暗层与「主区域固定」提示(R35 接 R34 WP-L5 越界需求)
+	private Border? _heroDim;
+
+	private Border? _heroLock;
+
+	private Border BuildHeroLockNote()
+	{
+		TextBlock text = new TextBlock { Text = I18n.L("主区域固定，不能拖动或隐藏"), FontSize = 12.0, VerticalAlignment = VerticalAlignment.Center };
+		text.SetResourceReference(TextBlock.ForegroundProperty, "B.OnEditGlass");
+		Border note = new Border
+		{
+			Child = Ui.H(6.0, TipCL.Pages.Layout.LayoutIcons.Glyph("Geo.Lock", "M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z M7 11V7a5 5 0 0 1 10 0v4", 12.0, "B.OnEditGlass"), text),
+			HorizontalAlignment = HorizontalAlignment.Right,
+			VerticalAlignment = VerticalAlignment.Top,
+			Margin = new Thickness(0.0, 14.0, 24.0, 0.0),
+			IsHitTestVisible = false,
+			Visibility = Visibility.Collapsed
+		};
+		if (Application.Current?.TryFindResource("Layout.LockNote") is Style style && style.TargetType.IsAssignableFrom(typeof(Border)))
+		{
+			note.Style = style;
+		}
+		else
+		{
+			note.Padding = new Thickness(10.0, 4.0, 10.0, 4.0);
+			note.CornerRadius = new CornerRadius(8.0);
+			note.SetResourceReference(Border.BackgroundProperty, "B.EditGlassChip");
+		}
+		return note;
+	}
+
+	private void OnLayoutEditingChanged(bool editing)
+	{
+		if (_hero != null)
+		{
+			_hero.Opacity = editing ? 0.45 : 1.0;
+		}
+		if (_heroDim != null)
+		{
+			_heroDim.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+		}
+		if (_heroLock != null)
+		{
+			_heroLock.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+		}
+	}
+
 	private readonly System.Windows.Media.Effects.DropShadowEffect _launchGlow = new System.Windows.Media.Effects.DropShadowEffect
 	{
 		BlurRadius = 20.0,
@@ -504,6 +551,16 @@ public sealed partial class LaunchPage : PageBase
 		root.Add(_bgShade, 0, 0, 2);
 		root.Add(_hero, 0);
 		root.Add(_blocks.Root, 1);
+		// R35(GOAL §5.5):编辑态英雄区降到 45% 不透明并压暗(WPF 没有去饱和滤镜,按 R34 WP-L0 决定 5 用 B.EditDim 近似),
+		// 右上角显示「主区域固定，不能拖动或隐藏」。英雄区仍不进布局系统;常态下这两层都折叠,外观不变。
+		_heroDim = new Border { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+		_heroDim.SetResourceReference(Border.BackgroundProperty, "B.EditDim");
+		root.Add(_heroDim, 0);
+		Panel.SetZIndex(_hero, 1);
+		_heroLock = BuildHeroLockNote();
+		Panel.SetZIndex(_heroLock, 2);
+		root.Add(_heroLock, 0);
+		_blocks.Editor.EditingChanged += OnLayoutEditingChanged;
 		base.Content = root;
 		// 非编辑态滚轮:鼠标在英雄区 / 背景图上(不在区块宿主里)时,把滚轮转交给自定义布局区 ——
 		// 区块多了被限高(62% 页高)之后,原来只有指针正好压在区块上才滑得动(录屏 2:30「非自定义布局模式下无法滑动」)。

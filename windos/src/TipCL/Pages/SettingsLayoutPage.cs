@@ -110,8 +110,8 @@ public sealed partial class SettingsPage
 
 	private bool _chipDragMoved;
 
-	/// <summary>「页面」小节默认只显示的常用几页(其余点「显示全部 N 个页面」展开)。</summary>
-	private static readonly string[] LayoutPrimaryPages = new string[6] { "launch", "download", "account", "settings:general", "playtime", "multiplayer" };
+	/// <summary>「页面」小节默认只显示的常用几页(GOAL §5.4:启动、下载、实例库、联机、账号、AI 助手;其余点「显示全部 N 个页面」展开)。</summary>
+	private static string[] LayoutPrimaryPages => LayoutBlockEntryCatalog.PrimaryCardPages;
 
 	// Lucide 图标(24 视框,描边):眼睛 / 划掉的眼睛 / 锁 / 拖动手柄 / 上下箭头
 	private const string IconEye = "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0 M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0";
@@ -659,39 +659,9 @@ public sealed partial class SettingsPage
 	/// </summary>
 	private static List<LayoutBlockEntryCatalog.Entry> LayoutCardEntries()
 	{
-		List<LayoutBlockEntryCatalog.Entry> list = new List<LayoutBlockEntryCatalog.Entry>();
-		foreach (string id in LayoutPrimaryPages)
-		{
-			LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(id);
-			if (entry != null && IsLayoutCardEntry(entry))
-			{
-				list.Add(entry);
-			}
-		}
-		foreach (LayoutBlockEntryCatalog.Entry entry in LayoutBlockEntryCatalog.All)
-		{
-			if (!list.Contains(entry) && IsLayoutCardEntry(entry))
-			{
-				list.Add(entry);
-			}
-		}
-		return list;
-	}
-
-	private static bool IsLayoutCardEntry(LayoutBlockEntryCatalog.Entry entry)
-	{
-		if (entry.SingleBlock || entry.Hint.Length > 0 || entry.PageId == LayoutViewPageId)
-		{
-			return false;
-		}
-		try
-		{
-			return LayoutShellHooks.CanEditPage(entry.PageId);
-		}
-		catch
-		{
-			return true;
-		}
+		// R35:按 GOAL §5.4 固定口径 = 入口表 − SingleBlock 两页 − 「布局」页自己(含 library:main 与两个子视图)= 15 张;
+		// 子视图(版本安装 / 实例详情 · 设置)点「编辑」找不到页面时沿用入口表的 Hint 提示怎么打开。纯函数见 LayoutBlockEntryCatalog.PageCardEntries。
+		return LayoutBlockEntryCatalog.PageCardEntries();
 	}
 
 	private UIElement LayoutPagesSection(LayoutV2 doc, ShellLayout shell)
@@ -767,6 +737,8 @@ public sealed partial class SettingsPage
 		{
 			BeginLayoutEdit(pageId);
 		});
+		// 编辑态那边认为不能编辑的页(已构建且只交来 1 块)按钮置灰;子视图 / 未构建的页照常可点(找不到时给 Hint)
+		edit.IsEnabled = SafeCanEditPage(pageId);
 		SPanel actions = Ui.H(6.0, edit);
 		if (custom)
 		{
@@ -778,6 +750,18 @@ public sealed partial class SettingsPage
 		Border card = Ui.Card(Ui.V(8.0, BuildThumb(plan, gap), name, sub, actions), 10.0);
 		card.Margin = new Thickness(0.0, 0.0, 10.0, 10.0);
 		return card;
+	}
+
+	private static bool SafeCanEditPage(string pageId)
+	{
+		try
+		{
+			return LayoutShellHooks.CanEditPage(pageId);
+		}
+		catch
+		{
+			return true;
+		}
 	}
 
 	// 「编辑」= 跳到那一页并直接进入编辑态(实现在编辑态那边:LayoutShellHooks.BeginEditPage)
@@ -883,8 +867,10 @@ public sealed partial class SettingsPage
 			}
 			filled = true;
 		}
-		else if (doc.Layout.Pages.TryGetValue(entry.PageId, out PageLayoutV2? page) && page != null && page.Blocks.Count > 0)
+		else if (doc.Layout.Pages.TryGetValue(entry.PageId, out PageLayoutV2? stored) && stored != null && stored.Blocks.Count > 0)
 		{
+			// canvas 页先按网格推导再画(R34 WP-L3 合并事项 5),摘要写「网格」,界面上不出现「自由画布」
+			PageLayoutV2 page = LayoutCanvasMigration.IsCanvas(stored) ? (LayoutCanvasMigration.ToGridPage(stored) ?? stored) : stored;
 			mode = page.Mode ?? LayoutSchema.ModeStack;
 			plan.Cols = (mode == LayoutSchema.ModeStack) ? 1 : Math.Max(1, page.Cols);
 			foreach (BlockLayout block in page.Blocks)
@@ -1133,9 +1119,10 @@ public sealed partial class SettingsPage
 		}
 		else
 		{
+			// GOAL §5.4:方案卡片每行 4 张
 			System.Windows.Controls.Primitives.UniformGrid grid = new System.Windows.Controls.Primitives.UniformGrid
 			{
-				Columns = 3,
+				Columns = 4,
 				Margin = new Thickness(0.0, 0.0, -10.0, -10.0)
 			};
 			foreach (string name in names)
@@ -1185,7 +1172,7 @@ public sealed partial class SettingsPage
 		bool previous = name == LayoutProfiles.PreviousName;
 		Border tag = (active ? Ui.Tag(I18n.L("正在使用"), "B.OnAccentStrong", "B.AccentStrong") : (ai ? Ui.Tag(I18n.L("AI 备份"), "B.Info", "B.InfoSoft") : (previous ? Ui.Tag(I18n.L("自动留底")) : Ui.Tag(I18n.L("方案")))));
 		string meta = (ai ? I18n.L("AI 改布局前自动保存，保留最近 {0} 份", TipCL.Core.Launcher.Ai.LayoutTools.MaxBackups) : ProfileMeta(doc.GetProfile(name)));
-		TextBlock title = Ui.Txt(name, 13.5, bold: true);
+		TextBlock title = Ui.Txt(LayoutProfiles.DisplayName(name), 13.5, bold: true);
 		title.TextTrimming = TextTrimming.CharacterEllipsis;
 		title.ToolTip = name;
 		TextBlock sub = Ui.Small(meta).Wrap();
@@ -1649,8 +1636,8 @@ public sealed partial class SettingsPage
 			}
 			RefreshLayoutView();
 		};
-		string count = ((widgets.Count > 0) ? I18n.L("已保存 {0} 个", widgets.Count) : I18n.L("还没有"));
-		rows.Add(LayoutRow(I18n.L("自建组件"), I18n.L("便签、快捷启动、时钟、分隔线、游戏时长。平时在页面编辑的「添加」里放进页面，这里改名字和内容。"), Ui.H(8.0, Ui.Small(count).VCenter(), manage)));
+		string count = ((widgets.Count > 0) ? I18n.L("已创建 {0} 个组件", widgets.Count) : I18n.L("还没有创建组件"));
+		rows.Add(LayoutRow(I18n.L("组件管理"), I18n.L("便签、快捷启动、时钟、分隔线、游戏时长。平时在页面编辑的「添加」里放进页面，这里改名字和内容。"), Ui.H(8.0, Ui.Small(count).VCenter(), manage)));
 		if (!_layoutWidgetPanelOpen)
 		{
 			return rows.ToArray();
@@ -1965,8 +1952,10 @@ public static class LayoutBlockEntryCatalog
 		public string Hint { get; set; } = "";
 	}
 
-	/// <summary>17 个宿主:设置页内 8 个 + 顶栏导航 7 个 + 子视图 2 个(安装页、实例详情里内嵌的版本管理)。</summary>
-	public static readonly Entry[] All = new Entry[17]
+	/// <summary>
+	/// 18 个宿主:设置页内 8 个 + 顶栏导航 8 个(R35 按 GOAL §5.4 补上实例库 library:main)+ 子视图 2 个(安装页、实例详情里内嵌的版本管理)。
+	/// </summary>
+	public static readonly Entry[] All = new Entry[18]
 	{
 		new Entry
 		{
@@ -2051,6 +2040,12 @@ public static class LayoutBlockEntryCatalog
 		},
 		new Entry
 		{
+			PageId = "library:main",
+			NavId = "library",
+			Label = "实例库"
+		},
+		new Entry
+		{
 			PageId = "settings:layout",
 			NavId = "settings",
 			SettingsView = SettingsPage.LayoutView,
@@ -2083,6 +2078,39 @@ public static class LayoutBlockEntryCatalog
 			Hint = "先在「实例库」打开实例详情并切到「设置」分段,再在页面上右键「自定义布局...」"
 		}
 	};
+
+	/// <summary>设置 → 布局「页面」卡片默认显示的 6 页(GOAL §5.4),顺序即卡片顺序。</summary>
+	public static readonly string[] PrimaryCardPages = new string[6] { "launch", "download", "library:main", "multiplayer", "account", "ai" };
+
+	/// <summary>
+	/// 设置 → 布局「页面」卡片(GOAL §5.4):入口表去掉 SingleBlock 的页和「布局」页自己(settings:layout),共 15 张;
+	/// 常用 6 页(<see cref="PrimaryCardPages"/>)排前面,其余按入口表顺序。纯函数,测试直接断言。
+	/// </summary>
+	public static List<Entry> PageCardEntries()
+	{
+		List<Entry> list = new List<Entry>();
+		foreach (string id in PrimaryCardPages)
+		{
+			Entry? entry = Find(id);
+			if (entry != null && IsPageCard(entry))
+			{
+				list.Add(entry);
+			}
+		}
+		foreach (Entry entry in All)
+		{
+			if (!list.Contains(entry) && IsPageCard(entry))
+			{
+				list.Add(entry);
+			}
+		}
+		return list;
+	}
+
+	private static bool IsPageCard(Entry entry)
+	{
+		return !entry.SingleBlock && entry.PageId != "settings:layout";
+	}
 
 	/// <summary>单块页的 pageId 列表(报告与测试用)。</summary>
 	public static List<string> SingleBlockPageIds()
@@ -2122,6 +2150,29 @@ public static class LayoutBlockEntryCatalog
 /// </summary>
 public static class LayoutProfiles
 {
+	/// <summary>
+	/// 方案卡片上的显示名(GOAL §5.4):AI 备份(名字前缀 <c>AI 备份 </c>,见 LayoutTools.BackupPrefix)显示成「AI 改布局前 · 时间」,
+	/// 其余方案原样。只影响显示,方案的真实名字(文档里的 key)不变。
+	/// </summary>
+	public static string DisplayName(string? name)
+	{
+		if (name == null)
+		{
+			return "";
+		}
+		string prefix = TipCL.Core.Launcher.Ai.LayoutTools.BackupPrefix;
+		if (!name.StartsWith(prefix, StringComparison.Ordinal))
+		{
+			return name;
+		}
+		string stamp = name.Substring(prefix.Length).Trim();
+		if (DateTime.TryParseExact(stamp, "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime at))
+		{
+			stamp = at.ToString("M-d HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+		}
+		return (stamp.Length > 0) ? I18n.L("AI 改布局前 · {0}", stamp) : I18n.L("AI 改布局前");
+	}
+
 	/// <summary>方案名长度上限(防御:避免超长 key 撑爆 JSON);界面与校验共用同一个数。</summary>
 	public const int ProfileNameMax = 40;
 

@@ -45,6 +45,22 @@ public static class DevShot
 
 	public static int Run(string[] args)
 	{
+		// R35 合并接线(R34 WP-L0 合并事项 2):钩子接到编辑器 / 设置页的正式入口,反射兜底只在钩子返回 false 时才走
+		SelectHook ??= (BlockHost h, string id) => h.Editor.DevSelect(id);
+		LayoutDrawerHook ??= delegate(BlockHost h)
+		{
+			h.Editor.OpenAddDrawer();
+			return h.Editor.IsEditing;
+		};
+		ExpandHook ??= delegate(Window _, string key)
+		{
+			if (!string.Equals(key, "advanced", StringComparison.OrdinalIgnoreCase))
+			{
+				return false;
+			}
+			TipCL.Pages.Layout.LayoutShellHooks.OpenLayoutSettings(true);
+			return true;
+		};
 		DevShotArgs la = DevShotArgs.Parse(args);
 		string pageId = la.ShotId;
 		string outPath = ArgVal(args, "--out") ?? Path.GetFullPath($"shot-{Sanitize(pageId)}.png");
