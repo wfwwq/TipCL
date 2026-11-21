@@ -100,6 +100,7 @@ internal sealed class MultiInstanceBackend : ToolRunner.IBackend
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class LaunchedGamesTests
 {
     [Fact]
@@ -231,6 +232,7 @@ internal sealed class TempTipclHome : IDisposable
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ModDevTaskPersistenceTests
 {
     private static Task<PyDict> Done(PyDict d) => Task.FromResult(d);
@@ -333,6 +335,7 @@ public class ModDevTaskPersistenceTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ReadyMarkerTableTests
 {
     [Theory]
@@ -457,6 +460,7 @@ internal sealed class FakeDependencySource : IDependencySource
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ModDevDependencyFallbackTests
 {
     private static string FakeGame(Instance inst, string mc, string loader, string lv, Action<string> log, CancellationToken ct)
