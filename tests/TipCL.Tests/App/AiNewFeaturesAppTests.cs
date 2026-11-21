@@ -1,5 +1,5 @@
 // AI-new-features 包的界面测试:启动页「启动前 AI 预检」提示条 / 设置开关 / AI 页「导出诊断报告」入口。
-// 预检走 LaunchPage.PreflightOverride 注入,不碰真实实例与 Java;不联网。
+// 预检走 LaunchPreflightHook.Override 注入,不碰真实实例与 Java;不联网。
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -43,7 +43,7 @@ public class AiNewFeaturesAppTests
     private static void WithPreflight(Func<string, string, long, PyDict> hook, bool enabled, Action body)
     {
         object? saved = Config.CONFIG.Get(AiPreflight.ENABLED_KEY);
-        LaunchPage.PreflightOverride = hook;
+        LaunchPreflightHook.Override = hook;
         Config.CONFIG.Set(AiPreflight.ENABLED_KEY, enabled);
         try
         {
@@ -51,7 +51,7 @@ public class AiNewFeaturesAppTests
         }
         finally
         {
-            LaunchPage.PreflightOverride = null;
+            LaunchPreflightHook.Override = null;
             if (saved == null) Config.CONFIG.data.Remove(AiPreflight.ENABLED_KEY);
             else Config.CONFIG.Set(AiPreflight.ENABLED_KEY, saved);
             AiPage.QueuePrompt("");

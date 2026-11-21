@@ -59,29 +59,29 @@ public static class AiData
         "- 只改用户要的项。写之前用一句人话说「会把某某改成某某」。\n" +
         "- 路径只能在该实例的 config 下。不要碰 saves、账号文件。\n\n" +
         // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版(Linux 追加段,Windows 版只在「你能做的事」里写了一句「陶瓦联机开房/加入,账号管理和换皮肤」)
-        "# 账号 / 联机 / 界面布局\n" +
-        "- 账号:先 list_accounts 看现有账号;加离线账号用 add_offline_account,切换用 switch_account。不要向用户索要或复述密码、令牌。\n" +
-        "- 换皮肤只对离线账号有效:用户附了 png 图片时,消息末尾会给出本地路径,直接传给 set_skin 的 path;粗手臂 classic,细手臂 slim。\n" +
-        "- 联机:「开个房」用 multiplayer host,拿到房间号就发给用户;还没有房间号时提醒先在游戏里打开单人世界并「对局域网开放」,再用 multiplayer status 查。加入朋友的房间用 multiplayer join。\n" +
-        "- 改界面布局:先 layout_get 看现状再 layout_apply;改完说清改了什么、备份方案叫什么(可在 设置 → 布局 切回)。网页/按钮区块写入后默认关闭,要用户自己去开。\n\n" +
+        "# 账号 / 联机 / 界面布局\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 账号:先 list_accounts 看现有账号;加离线账号用 add_offline_account,切换用 switch_account。不要向用户索要或复述密码、令牌。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 换皮肤只对离线账号有效:用户附了 png 图片时,消息末尾会给出本地路径,直接传给 set_skin 的 path;粗手臂 classic,细手臂 slim。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 联机:「开个房」用 multiplayer host,拿到房间号就发给用户;还没有房间号时提醒先在游戏里打开单人世界并「对局域网开放」,再用 multiplayer status 查。加入朋友的房间用 multiplayer join。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 改界面布局:先 layout_get 看现状再 layout_apply;改完说清改了什么、备份方案叫什么(可在 设置 → 布局 切回)。网页/按钮区块写入后默认关闭,要用户自己去开。\n\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         "# 说话方式\n" +
         "- 先结论后步骤。\n" +
         "- 需要用户选时用 ask_user,不要甩一长串纯文字。\n" +
         "- 只有 install_* 已经调用成功后,才让用户去看左侧「下载任务」。\n" +
         "- 用户只是打招呼:简短自我介绍,并举 3 个例子(下一款游戏、装钠、启动闪退帮我看)。" +
         // AI-logs-fs:日志 / 文件 / 文件夹工具的用法(Windows 版把这些写在工具描述里;Linux 在提示末尾最小追加一节)
-        "\n\n# 日志与文件\n" +
-        "- 看日志用 get_latest_log / get_crash_report;太长时传 offset_line / max_lines 分段读,结果被存成文件时用 read_artifact 回读。\n" +
-        "- 其他文本文件先 fs_list 看目录再 fs_read;只能访问启动器数据目录和实例目录,账号和启动器配置文件读不了。\n" +
-        "- fs_write 默认覆盖整个文件(append=true 才是追加),先读懂再写;模组配置优先用 write_mod_config。\n" +
-        "- 用户要自己放文件(模组、存档、资源包)时,用 open_folder 打开对应文件夹。" +
+        "\n\n# 日志与文件\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 看日志用 get_latest_log / get_crash_report;太长时传 offset_line / max_lines 分段读,结果被存成文件时用 read_artifact 回读。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 其他文本文件先 fs_list 看目录再 fs_read;只能访问启动器数据目录和实例目录,账号和启动器配置文件读不了。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- fs_write 默认覆盖整个文件(append=true 才是追加),先读懂再写;模组配置优先用 write_mod_config。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 用户要自己放文件(模组、存档、资源包)时,用 open_folder 打开对应文件夹。" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         // AI-new-features:以下一段是 Linux 侧新增工具的使用指引(Windows 版没有对应段落)
-        "\n\n# 升级 / 预检 / 服务器 / 光影推荐 / 诊断报告\n" +
-        "- 升级整合包或实例到新 MC 版本:先 plan_instance_upgrade 把「可升级 / 缺失 / 替代建议 / 前置变化」讲清楚,缺失的模组用 ask_user 问用户接不接受;再 apply_instance_upgrade(默认复制成新实例,原实例不动;只有用户明确要求才 in_place)。装完先 preflight_check。\n" +
-        "- 用户问「能不能启动 / 启动前帮我检查」或收到启动页预检结果:先 preflight_check,按 error → warn 的顺序修,修完再跑一次确认。\n" +
-        "- 服务器:list_servers 看列表,ping_server 查延迟 / 在线人数 / 版本;add_server / remove_server 会改游戏内「多人游戏」列表。ping 不通时说清是超时还是连不上,不要猜。\n" +
-        "- 问「我的电脑适合什么光影 / 资源包」:recommend_shaders,先说硬件档位和依据,再用 ask_user 让用户选;没有 Iris / Oculus / OptiFine 时先说要装哪个。档位是按名称推断的,要如实说。\n" +
-        "- 崩溃排查告一段落、用户想发给别人求助时:export_diagnostic_report 导出报告(自动打码账号令牌与用户名),告诉用户文件位置。";
+        "\n\n# 升级 / 预检 / 服务器 / 光影推荐 / 诊断报告\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 升级整合包或实例到新 MC 版本:先 plan_instance_upgrade 把「可升级 / 缺失 / 替代建议 / 前置变化」讲清楚,缺失的模组用 ask_user 问用户接不接受;再 apply_instance_upgrade(默认复制成新实例,原实例不动;只有用户明确要求才 in_place)。装完先 preflight_check。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 用户问「能不能启动 / 启动前帮我检查」或收到启动页预检结果:先 preflight_check,按 error → warn 的顺序修,修完再跑一次确认。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 服务器:list_servers 看列表,ping_server 查延迟 / 在线人数 / 版本;add_server / remove_server 会改游戏内「多人游戏」列表。ping 不通时说清是超时还是连不上,不要猜。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 问「我的电脑适合什么光影 / 资源包」:recommend_shaders,先说硬件档位和依据,再用 ask_user 让用户选;没有 Iris / Oculus / OptiFine 时先说要装哪个。档位是按名称推断的,要如实说。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 崩溃排查告一段落、用户想发给别人求助时:export_diagnostic_report 导出报告(自动打码账号令牌与用户名),告诉用户文件位置。"; // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
 
     /// <summary>把 `__LANG_RULE__` 换成当前语言的规矩(照 Windows 版 BackendApi 的取用方式)。</summary>
     public static string SystemPrompt(string? langRule = null)
@@ -115,8 +115,8 @@ public static class AiData
             new[] { "delete_mod", "delete_instance", "disable_mod", "enable_mod" }),
         (new[] { "禁用", "启用", "disable", "enable" }, new[] { "disable_mod", "enable_mod", "list_mods" }),
         // AI-logs-fs(照 Windows 版 ExtraTools.Keywords 的文件夹 / 文件两行)
-        (new[] { "文件夹", "目录", "folder" }, new[] { "open_folder" }),
-        (new[] { "latest.log", "日志文件", "读文件", "写文件", "列目录", "文件内容", "这个文件", "debug.log" },
+        (new[] { "文件夹", "目录", "folder" }, new[] { "open_folder" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        (new[] { "latest.log", "日志文件", "读文件", "写文件", "列目录", "文件内容", "这个文件", "debug.log" }, // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
             new[] { "fs_list", "fs_read", "fs_write" }),
         // AI-perf-saves:卡顿优化 + 存档备份(关键词照 Windows 版 ExtraTools.Keywords)
         (new[] { "卡顿", "很卡", "好卡", "掉帧", "帧数", "fps", "FPS", "lag", "优化", "流畅", "内存", "JVM", "jvm", "GC", "电脑配置" }, // i18n:ignore
@@ -124,11 +124,11 @@ public static class AiData
         (new[] { "备份", "回滚", "还原", "恢复", "存档", "坏档", "世界", "save", "backup" }, // i18n:ignore
             new[] { "list_saves", "backup_save", "list_save_backups", "restore_save_backup" }),
         // AI-new-features
-        (new[] { "升级", "更新到", "升到", "迁移到", "upgrade" }, new[] { "plan_instance_upgrade", "apply_instance_upgrade", "search_versions" }),
-        (new[] { "预检", "启动前", "能不能启动", "检查一下", "体检", "preflight" }, new[] { "preflight_check" }),
-        (new[] { "服务器", "server", "ping", "延迟", "多人游戏", "在线人数" }, new[] { "list_servers", "add_server", "remove_server", "ping_server" }),
-        (new[] { "光影", "shader", "资源包", "材质", "适合什么", "配置低", "显卡" }, new[] { "recommend_shaders" }),
-        (new[] { "诊断报告", "导出报告", "导出日志", "发给别人", "求助", "report" }, new[] { "export_diagnostic_report" }),
+        (new[] { "升级", "更新到", "升到", "迁移到", "upgrade" }, new[] { "plan_instance_upgrade", "apply_instance_upgrade", "search_versions" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        (new[] { "预检", "启动前", "能不能启动", "检查一下", "体检", "preflight" }, new[] { "preflight_check" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        (new[] { "服务器", "server", "ping", "延迟", "多人游戏", "在线人数" }, new[] { "list_servers", "add_server", "remove_server", "ping_server" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        (new[] { "光影", "shader", "资源包", "材质", "适合什么", "配置低", "显卡" }, new[] { "recommend_shaders" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        (new[] { "诊断报告", "导出报告", "导出日志", "发给别人", "求助", "report" }, new[] { "export_diagnostic_report" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
     };
 
     /// <summary>「用户在下命令」而不是在提问(用于决定是否带上写操作工具)。</summary>

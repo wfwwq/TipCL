@@ -1,4 +1,6 @@
 // AI-logs-fs:日志 / 文件 / 打开文件夹这几样 AI 工具的实现。
+// i18n:ignore-file —— AI-integration:本文件的中文只出现在回给模型的工具结果 / 报错里(工具结果是数据,不是界面文案,
+// 同 SystemInfo.cs 与 ToolRunner 既有口径),以及 open_folder 的中文别名匹配表(用户输入的词,必须保持中文)。
 //
 // 来源(只读参照,不改 windos/):
 //   · get_latest_log / get_crash_report —— Windows 版 Tools.cs:993-996 + Diagnose.LogExcerpt / CollectLogs;

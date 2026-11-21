@@ -26,6 +26,17 @@ using UiClass = TipCL.App.Ui.Ui;
 
 namespace TipCL.App.Pages.Launch;
 
+/// <summary>
+/// 启动前 AI 预检的测试注入点(替换真正的预检,不碰真实实例目录与 Java)。
+/// AI-integration:从 LaunchPage 搬到独立静态类——挂在 LaunchPage 上时,测试在 UI 线程外赋值会先触发
+/// LaunchPage 的静态初始化(里面建画刷),在非 UI 线程抛 TypeInitializationException,并让整个测试进程里
+/// 所有用到 LaunchPage 的用例一起红(单分支里恰好被执行顺序掩盖,合并后暴露)。
+/// </summary>
+internal static class LaunchPreflightHook
+{
+    internal static Func<string, string, long, PyDict>? Override;
+}
+
 public sealed partial class LaunchPage
 {
     private Border? _preflightBar;
@@ -37,8 +48,7 @@ public sealed partial class LaunchPage
     /// <summary>提示条本身(测试用)。</summary>
     internal Border? PreflightBar => _preflightBar;
 
-    /// <summary>测试注入点:替换真正的预检(不碰真实实例目录与 Java)。</summary>
-    internal static Func<string, string, long, PyDict>? PreflightOverride;
+    // 测试注入点见上方 LaunchPreflightHook.Override(AI-integration 搬离,避免在 UI 线程外触发本类静态初始化)。
 
     /// <summary>
     /// 启动前 AI 预检闸门。返回 false = 这次不启动(发现 error,提示条已经显示)。
@@ -59,7 +69,7 @@ public sealed partial class LaunchPage
         PyDict report;
         try
         {
-            Func<string, string, long, PyDict>? hook = PreflightOverride;
+            Func<string, string, long, PyDict>? hook = LaunchPreflightHook.Override;
             report = hook != null
                 ? hook(instance, version, memoryMb)
                 : await Task.Run(() => AiPreflight.Check(new Instance(instance.Length > 0 ? instance : null!), version, memoryMb));
