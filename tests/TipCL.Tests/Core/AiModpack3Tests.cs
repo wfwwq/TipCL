@@ -275,7 +275,7 @@ public class AiModpack3Tests : IDisposable
             {
                 return Task.FromResult<T?>(default);
             }
-            PyDict payload = Py.D(args);
+            PyDict payload = Py.D(args!);
             Payloads.Add(payload);
             var gate = new ManualResetEventSlim(false);
             Work = Task.Run(() =>
