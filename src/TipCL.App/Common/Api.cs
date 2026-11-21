@@ -52,6 +52,11 @@ public sealed class TaskProgress
 
     public string TaskId => _taskId;
 
+    /// <summary>
+    /// AI3-content:任务成功结束时任务卡 / 任务页显示的结果行(如「已装好 12 个模组」);为空时照旧显示「已完成」。
+    /// </summary>
+    public string? FinishMessage { get; set; }
+
     public void Report(string message, long current = 0, long total = 0)
     {
         var row = TaskStore.Get(_taskId);
@@ -158,9 +163,9 @@ public sealed class InProcessApi : IApi
             try
             {
                 await work(progress, cts.Token).ConfigureAwait(false);
-                TaskStore.Finish(row, true);
+                TaskStore.Finish(row, true, progress.FinishMessage);
                 AppLog.Info($"任务完成 {id} {title}");
-                RaiseEvent(new ApiEvent { Event = "finished", TaskId = id, Success = true });
+                RaiseEvent(new ApiEvent { Event = "finished", TaskId = id, Success = true, Message = progress.FinishMessage ?? "" });
             }
             catch (OperationCanceledException)
             {
@@ -1188,6 +1193,32 @@ public sealed class InProcessApi : IApi
                     prog.Log("已导出 " + outPath);
                     return Task.CompletedTask;
                 }).Id;
+            // AI3-content:AI 的 install_mods_batch 整批确认后走这里起后台任务:逐项把「第 n/N 个、成功 / 失败」报给任务卡与任务日志,
+            // 立刻返回任务 id(AI 页不再长时间「执行中」)。有没装上的 → 任务以失败结束,原因里列出是哪几个。
+            case "install_mods_batch":
+            {
+                Instance batchInst = TipCL.Core.Launcher.Ai.ModpackTools.BatchInstance(args);
+                List<PyDict> batch = TipCL.Core.Launcher.Ai.ModpackTools.CheckBatch(args);
+                return StartDetached(TipCL.Core.Launcher.Ai.ModpackPreview.BatchTaskTitle(batch.Count, batchInst.name), (prog, ct) =>
+                {
+                    PyDict r = TipCL.Core.Launcher.Ai.ModpackTools.InstallBatch(batchInst, args, null, ev =>
+                    {
+                        string text = TipCL.Core.Launcher.Ai.ModpackPreview.BatchEventText(ev);
+                        prog.Report(text, ev.Phase == "start" ? ev.Index - 1 : ev.Index, ev.Total);
+                        if (ev.Phase == "done")
+                        {
+                            prog.Log(text);
+                        }
+                    }, ct);
+                    string summary = TipCL.Core.Launcher.Ai.ModpackPreview.BatchFinish(r);
+                    if (!Py.Truthy(r.Get("ok")))
+                    {
+                        throw new ModError(summary);
+                    }
+                    prog.FinishMessage = summary;
+                    return Task.CompletedTask;
+                }).Id;
+            }
             case "start_mod_updates":
                 return StartDetached("检查模组更新 " + Py.S(args.Get("instance")), (prog, ct) =>
                 {

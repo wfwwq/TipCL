@@ -26,8 +26,8 @@ public static class ModpackTools
         [
         {"type":"function","function":{"name":"check_modpack_distribution","description":"导出整合包前检查每个模组能不能分发(只读,联网):Modrinth 按 sha1 找得到的写成下载链接;CurseForge 查作者是否允许第三方分发(allowModDistribution);两边都找不到下载源的本地 jar 只能打进包里(可能侵权)。返回 可链接(linkable)/ 需打包(bundle)/ 禁止分发(forbidden)三类清单","parameters":{"type":"object","properties":{"instance":{"type":"string"},"format":{"type":"string","description":"mrpack / curseforge,默认 mrpack"}}}}},
         {"type":"function","function":{"name":"export_modpack","description":"把实例导出成整合包文件(写本地文件,需确认)。导出前自动做分发许可检查:有禁止分发的模组会拒绝导出(先替换、禁用或用 exclude 排除);来源不明的 jar 默认不打包,只有用户明确同意才传 allow_bundled_jars=true。确认卡会列出将写入的文件清单和大小。返回导出路径","parameters":{"type":"object","properties":{"instance":{"type":"string"},"format":{"type":"string","description":"mrpack(Modrinth)/ curseforge(CurseForge zip),默认 mrpack"},"name":{"type":"string","description":"整合包名,空则用实例名"},"version":{"type":"string","description":"整合包版本号,默认 1.0.0"},"summary":{"type":"string","description":"一句话简介"},"author":{"type":"string","description":"作者(CurseForge 清单里用)"},"icon":{"type":"string","description":"可选,png 图标文件路径"},"include_overrides":{"type":"array","items":{"type":"string"},"description":"打进包里的目录,config / resourcepacks / shaderpacks / datapacks 的子集,默认全部。config 就是当前实例的配置预设,用户不想带就去掉"},"allow_bundled_jars":{"type":"boolean","description":"把来源不明 / 许可未知的 jar 打进包(可能侵权)。只有用户明确同意时才设 true,默认 false"},"exclude":{"type":"array","items":{"type":"string"},"description":"不放进包里的模组文件名(如禁止分发的)"},"dest":{"type":"string","description":"导出目录,空则用启动器的导出目录"}}}}},
-        {"type":"function","function":{"name":"plan_modpack","description":"一句话造包的第一步(只读,联网):按 MC 版本、加载器、主题描述和规模,在 Modrinth 上挑候选模组清单,每项带入选理由、必需前置、与清单里其他模组的冲突提示,并在界面上展示后续步骤计划。只出清单,不建实例、不装任何东西","parameters":{"type":"object","properties":{"mc_version":{"type":"string","description":"如 1.20.1"},"loader":{"type":"string","description":"fabric / forge / neoforge / quilt"},"theme":{"type":"string","description":"主题描述,如「轻量科技 + 优化」"},"size":{"type":"string","description":"small(约 8 个)/ medium(约 20 个)/ large(约 40 个),默认 medium;主题里写了轻量时默认 small"},"keywords":{"type":"array","items":{"type":"string"},"description":"可选:额外的英文搜索词(主题里有分类认不出的玩法时用,如 create、farming)"}},"required":["mc_version","loader","theme"]}}},
-        {"type":"function","function":{"name":"install_mods_batch","description":"把用户已经确认的一批模组一次装进同一个实例(需确认:确认卡逐项列出每个模组,整批只确认一次;必需前置随装)。只在用户确认清单之后调用,mods 用 plan_modpack / search_mods 结果里的 slug(Modrinth)或 id(CurseForge)","parameters":{"type":"object","properties":{"instance":{"type":"string"},"mods":{"type":"array","description":"要装的模组,每项 {slug, name, source, id}","items":{"type":"object","properties":{"slug":{"type":"string"},"name":{"type":"string"},"source":{"type":"string","description":"modrinth / curseforge,默认 modrinth"},"id":{"type":"string","description":"CurseForge 数字 id"}}}},"mc_version":{"type":"string","description":"可选,空则按实例已装版本"},"loader":{"type":"string","description":"可选,空则按实例已装加载器"}},"required":["instance","mods"]}}}
+        {"type":"function","function":{"name":"plan_modpack","description":"一句话造包的第一步(只读,联网):按 MC 版本、加载器、主题描述和规模,在 Modrinth 与 CurseForge 上挑候选模组清单(两边按下载量和版本匹配合并去重,同一模组有 Modrinth 版本时优先 Modrinth;连不上 CurseForge 时只用 Modrinth 并在结果里注明),每项带入选理由、必需前置、与清单里其他模组的冲突提示,并在界面上展示后续步骤计划。只出清单,不建实例、不装任何东西","parameters":{"type":"object","properties":{"mc_version":{"type":"string","description":"如 1.20.1"},"loader":{"type":"string","description":"fabric / forge / neoforge / quilt"},"theme":{"type":"string","description":"主题描述,如「轻量科技 + 优化」"},"size":{"type":"string","description":"small(约 8 个)/ medium(约 20 个)/ large(约 40 个),默认 medium;主题里写了轻量时默认 small"},"keywords":{"type":"array","items":{"type":"string"},"description":"可选:额外的英文搜索词(主题里有分类认不出的玩法时用,如 create、farming)"}},"required":["mc_version","loader","theme"]}}},
+        {"type":"function","function":{"name":"install_mods_batch","description":"把用户已经确认的一批模组一次装进同一个实例(需确认:确认卡逐项列出每个模组,整批只确认一次;必需前置随装)。在后台逐个安装,立刻返回 task_id(任务卡显示第几个、成功还是失败),用 get_task_status 查进度与逐项结果。只在用户确认清单之后调用,mods 用 plan_modpack / search_mods 结果里的 slug(Modrinth)或 id(CurseForge)","parameters":{"type":"object","properties":{"instance":{"type":"string"},"mods":{"type":"array","description":"要装的模组,每项 {slug, name, source, id}","items":{"type":"object","properties":{"slug":{"type":"string"},"name":{"type":"string"},"source":{"type":"string","description":"modrinth / curseforge,默认 modrinth"},"id":{"type":"string","description":"CurseForge 数字 id"}}}},"mc_version":{"type":"string","description":"可选,空则按实例已装版本"},"loader":{"type":"string","description":"可选,空则按实例已装加载器"}},"required":["instance","mods"]}}}
         ]
         """;
 
@@ -224,8 +224,14 @@ public static class ModpackTools
     /// <summary>显示名(name 优先,其次 slug / id)。</summary>
     public static string ItemName(PyDict mod) => Py.S(Py.Or(mod.Get("name"), mod.Get("slug"), mod.Get("id")));
 
-    /// <summary>install_mods_batch 的执行体(已过确认):逐个装,单个失败不中断,最后一起报告。</summary>
-    public static PyDict InstallBatch(Instance inst, PyDict args, Action<string>? log = null)
+    /// <summary>
+    /// AI3-content:批量安装的一条进度事件。Phase = start(开始装第 Index 个)/ done(第 Index 个装完,Ok 表示成功,失败时 Error 是原因)。
+    /// Index 从 1 数,Total 是去重后的总数。
+    /// </summary>
+    public sealed record BatchEvent(string Phase, int Index, int Total, string Name, bool Ok, string Error);
+
+    /// <summary>mods 参数校验(空 / 超上限直接报错,什么都不装)→ 去重后的模组项。</summary>
+    public static List<PyDict> CheckBatch(PyDict args)
     {
         List<PyDict> items = BatchItems(args);
         if (items.Count == 0)
@@ -236,6 +242,39 @@ public static class ModpackTools
         {
             throw new ValueError("一次最多装 " + MAX_BATCH + " 个模组,请分批");
         }
+        return items;
+    }
+
+    /// <summary>宿主(启动器的任务表)用:按参数里的 instance 找到实例,不存在报错。</summary>
+    public static Instance BatchInstance(PyDict args)
+    {
+        string name = InstanceOf(args, "");
+        var inst = new Instance(name.Length > 0 ? name : null);
+        if (!LocalFs.IsDir(inst.path))
+        {
+            throw new FileNotFoundError("实例不存在: " + name);
+        }
+        return inst;
+    }
+
+    /// <summary>后台任务已经起来时回给模型的结果(逐项列出要装的模组,告诉它怎么等结果)。</summary>
+    public static PyDict BatchStarted(string taskId, Instance inst, List<PyDict> items) => PyDict.Of(
+        "ok", true,
+        "background", true,
+        "task_id", taskId,
+        "instance", inst.name,
+        "total", (long)items.Count,
+        "mods", items.Select(m => (object)PyDict.Of("name", ItemName(m), "slug", Py.S(m.Get("slug")), "id", Py.S(m.Get("id")), "source", Py.S(m.Get("source")))).ToList(),
+        "message", "已在后台开始逐个安装 " + items.Count + " 个模组(任务卡上能看到第几个、每个成功还是失败),不用干等。",
+        "next", "用 get_task_status(task_id=" + taskId + ", wait_seconds=60) 等它结束:status 是汇总,log 里逐项是 ✓ / ✗ 及失败原因。"
+            + "结束前不要再对同一实例调 install_mods_batch;结束后把没装上的告诉用户,再 scan_mod_conflicts + preflight_check。");
+
+    /// <summary>install_mods_batch 的执行体(已过确认):逐个装,单个失败不中断,最后一起报告。</summary>
+    /// <param name="progress">AI3-content:逐项进度(开始 / 成功 / 失败),后台任务用它更新任务卡。</param>
+    /// <param name="ct">取消:在两个模组之间检查(正在装的那个会装完)。</param>
+    public static PyDict InstallBatch(Instance inst, PyDict args, Action<string>? log = null, Action<BatchEvent>? progress = null, System.Threading.CancellationToken ct = default)
+    {
+        List<PyDict> items = CheckBatch(args);
         string mc = Py.Strip(Py.S(args.Get("mc_version")));
         string loader = InstanceUpgrade.NormalizeLoader(Py.S(args.Get("loader")));
         Func<Instance, PyDict, string?, string?, PyDict> install = InstallerHook ?? DefaultInstall;
@@ -243,18 +282,22 @@ public static class ModpackTools
         var failed = new List<object>();
         for (int i = 0; i < items.Count; i++)
         {
+            ct.ThrowIfCancellationRequested();
             PyDict mod = items[i];
             string label = ItemName(mod);
             log?.Invoke(ModpackPreview.BatchProgress(i + 1, items.Count, label));
+            progress?.Invoke(new BatchEvent("start", i + 1, items.Count, label, false, ""));
             try
             {
                 PyDict r = install(inst, mod, mc.Length > 0 ? mc : null, loader.Length > 0 ? loader : null);
                 installed.Add(PyDict.Of("name", label, "slug", Py.S(mod.Get("slug")), "source", Py.S(mod.Get("source")),
                     "files", Py.ListOr(r.Get("files"))));
+                progress?.Invoke(new BatchEvent("done", i + 1, items.Count, label, true, ""));
             }
             catch (Exception e)
             {
                 failed.Add(PyDict.Of("name", label, "slug", Py.S(mod.Get("slug")), "error", Py.ExcStr(e)));
+                progress?.Invoke(new BatchEvent("done", i + 1, items.Count, label, false, Py.ExcStr(e)));
             }
         }
         return PyDict.Of(
