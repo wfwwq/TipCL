@@ -87,6 +87,10 @@
 全量测试里 `InstanceUpgradeTests.ApplyTool_ConfirmPlanCardAndCheckpointRollbackRemovesNewInstance` 因此变红(收尾预检的冲突扫描打开了假源写出的非 zip「jar」,随后检查点回滚删不掉新实例目录)。
 修法:构造失败时先 `Dispose` 再抛。真实场景同样受益(mods 里有坏 jar 时,冲突扫描之后删模组 / 回滚会失败)。加了测试 `OpenZip_OnABrokenJar_ReleasesTheFile`。
 
+另一处测试稳定性修补:`DlgCloseTests.Confirm_WindowClosed_ReturnsFalse` 在本机全量里 3 次红了 2 次(progress/AI-engine-mcp.md 遗留 8 记过的既有 flaky:
+`ClickSweepTests` 点到 AI 页空态的「点一下直接发」建议按钮 → 默认内置网关下真的联网发了一轮对话 → 回包的事件 Post 落在后一个用例的 `ResetForUnitTests` 里)。
+修法照那份遗留的建议:建议按钮加 `Name = "AiSuggestion"`(`AiPage.cs` 一行),`ClickSweepTests.SideEffectNames` 加这个名字 —— 全点一遍测试不再从测试进程真的发起对话。
+
 ## 6. 文件清单
 
 新增:
@@ -114,7 +118,8 @@
   ② `Label()` 在 `AcctLayoutMpTools.Label` 转发之后加了 `I18nUxLabels.Label` 转发;`FillTemplate(fmt…)` 改成 `FillTemplate(I18nCore.Tr(fmt)…)`;最后一行 `label` 改成 `I18nCore.Tr(label)`。
   新工具建议照 `I18nUxLabels` / `PerfSavesPreview.Label` 的写法(switch + Tr),不要再往静态字典里写裸中文。
 - `ToolRunner.NewFeatures.cs` `ApplyUpgradeAsync`:titles 数组、`Show()` 里一行 `UpgradeStage(...)`、`TaskStarted` 标签、`return await AfterUpgradePreflightAsync(...)`。
-- `AiPage.cs`:执行器对象初始化器里 `ConversationProvider` 之后一行 `ToolProgress = …`。
+- `AiPage.cs`:执行器对象初始化器里 `ConversationProvider` 之后一行 `ToolProgress = …`;`BuildEmpty` 的建议按钮一行 `chip.Name = "AiSuggestion"`。
+- `tests/App/ClickSweepTests.cs`:`SideEffectNames` 加 `"AiSuggestion"`(与主线下发的 `SideEffectWords` 那一行是相邻的两处改动)。
 - `SettingsPage.Layout.cs`:`BuildLayoutView` 里 `RefreshShell();` 之后一行 `LayoutLiveOnBuilt(host);`。
 - `Controls/PageLayoutHost.cs`:`sealed class` → `sealed partial class`;构造函数 `SyncColumns();` 之后一行 `WireLiveRatio();`。
 - `InstanceDetailPage.cs`:设置分段(seg 4)开头两行。`VersionSetupDialog.cs`:GC 下拉数组多了第 0 项(`GcValues[0] = ""`),默认选中逻辑随之改。
@@ -123,10 +128,15 @@
 - `locales/{zh_CN,en}.json`:末尾追加 179 键(注意上一条末尾补逗号);合并后跑 `I18nCoreLocalesTests`。
 - `progress/I18N-BASELINE.md`:**合并后重跑一次** `python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md`(别的包也可能改了计数;只能调低或持平)。
 
-## 8. 测试与验收(本机实测,数字见 complete 汇报)
+## 8. 测试与验收(本机实测,2026-11-21 12:39~12:43,提交前最后一轮)
 
 - 新增 xunit **29 个**(Core 14 + App 15),覆盖 §0 每一项。
-- `--ai-selftest`:91 项全过(本包未加自检项)。
+- Debug `--no-incremental` 构建:0 错误,3 条警告(均为基线的 `LayoutMotionAndHeightTests` xUnit1013×2 / xUnit2000×1)。
+- 全量 `dotnet test`:**1150 通过 / 7 跳过 / 0 失败(共 1157 = 基线 1128 + 29)**,连跑两次一致;
+  (加「AiSuggestion」跳过之前的 3 次里有 2 次红在既有 flaky `DlgCloseTests.Confirm_WindowClosed_ReturnsFalse`,见 §5;加了之后单轮耗时也从 ~4.5 分钟降到 ~1.5 分钟 —— 不再从测试进程联网发对话)。
+- `--ai-selftest`:exit=0,**91 / 0 / 0**(本包未加自检项)。
+- i18n:未接线 3540 → 3370,基线文件 3605 → 3370;两表 3308 键、键集相等。
+- `git diff f1c070b HEAD -- windos` 为空。
 
 ## 9. 遗留问题与风险
 

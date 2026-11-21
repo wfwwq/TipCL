@@ -238,6 +238,7 @@ public sealed partial class AiPage : PageBase
         {
             string text = s;
             var chip = U.Btn(text, BtnKind.Chip);
+            chip.Name = "AiSuggestion"; // AI2-i18n-ux:点了会真的发一轮对话(联网),界面「全点一遍」测试靠这个 Name 跳过
             chip.Margin = new Thickness(0, 0, 8, 8);
             chip.Click += (_, _) =>
             {
