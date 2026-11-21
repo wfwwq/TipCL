@@ -121,6 +121,9 @@ Criterion
                  name from the Windows tree without reading its body first: `L` here is
                  mostly Py.L / coercion helpers and LayoutText.L is `return key;`,
                  `Gt` is a group-title builder or a dict getter.
+                 Also wrapped: literals on lines marked `i18n:runtime-tr` (or inside an
+                 `i18n:runtime-tr-begin` .. `-end` block) = table keys that are passed
+                 through I18nCore.Tr when read (only in RUNTIME_TR_FILES, test-guarded).
 
 Denominator / direction - READ THIS BEFORE QUOTING A NUMBER
   cjk_literals = DENOMINATOR: every CJK literal occurrence in src/TipCL.App + src/TipCL.Core.
@@ -421,6 +424,46 @@ def is_file_ignored(text: str) -> bool:
     return False
 
 
+# AI3-i18n: "wired at runtime" marker.
+#
+# Some CJK literals are word-table KEYS that are looked up later rather than at the
+# literal itself, e.g. the old tool-label dictionaries in Ai/Tools.cs:
+#     private static readonly Dictionary<string, string> Labels = new() { { "ask_user", "请你选一下" }, ... };
+#     ... return Labels.TryGetValue(key, out string? label) ? I18nCore.Tr(label) : key;
+# Switching the language DOES change what the user sees, but the literal is not an argument
+# of Tr(...), so the plain criterion above counts it as unwired (a false positive).
+#
+# Such literals can be marked, and then count as wrapped (callee "(runtime-tr)"):
+#   * a line containing `i18n:runtime-tr`                 -> that line;
+#   * `i18n:runtime-tr-begin` ... `i18n:runtime-tr-end`   -> every line in between (inclusive).
+# The marker is a claim that must be backed by a test: every file that uses it is listed in
+# RUNTIME_TR_FILES, and tests/TipCL.Tests/Repo/I18nRuntimeTrMarkerTests.cs fails when a new
+# file starts using it (or a listed one stops), so the list cannot silently grow. Each listed
+# file has a behaviour test proving the values really come out English under language=en
+# (Tools.cs: AiI18nUxLabelTests; AiUiText.cs: AiI18nResidueCoreTests). Marked literals also
+# join `wrapped_keys`, so a missing en translation shows up in `missing_en` like any Tr key.
+RUNTIME_TR_MARK = "i18n:runtime-tr"
+RUNTIME_TR_CALLEE = "(runtime-tr)"
+RUNTIME_TR_FILES = (
+    "src/TipCL.Core/Launcher/Ai/Tools.cs",
+    "src/TipCL.Core/Launcher/Ai/AiUiText.cs",
+)
+
+
+def runtime_tr_lines(lines):
+    """1-based line numbers covered by an i18n:runtime-tr marker (line or begin/end block)."""
+    covered = set()
+    inside = False
+    for idx, line in enumerate(lines, 1):
+        if RUNTIME_TR_MARK + "-begin" in line:
+            inside = True
+        if inside or RUNTIME_TR_MARK in line:
+            covered.add(idx)
+        if RUNTIME_TR_MARK + "-end" in line:
+            inside = False
+    return covered
+
+
 def line_of(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
@@ -432,6 +475,7 @@ def scan_file(path, root):
     if is_file_ignored(text):
         return rel, [], True
     lines = text.split("\n")
+    runtime = runtime_tr_lines(lines)
     rows = []
     for start, value in Lexer(text).run():
         if not has_cjk(value):
@@ -440,6 +484,11 @@ def scan_file(path, root):
         ignored = "i18n:ignore" in lines[ln - 1] if 0 < ln <= len(lines) else False
         callee = callee_before(text, start)
         wrapped = callee is not None and callee.split(".")[-1] in WRAPPERS
+        if not wrapped and ln in runtime:
+            # AI3-i18n: 这条字面量本身不是 Tr(...) 的实参,但它所在的表在**运行时**取出后一定过
+            # I18nCore.Tr(见 RUNTIME_TR_MARK 的说明)—— 切语言能改变它,按已接线计。
+            wrapped = True
+            callee = RUNTIME_TR_CALLEE
         rows.append({
             "file": rel, "line": ln, "text": value,
             "callee": callee, "wrapped": wrapped, "ignored": ignored,
@@ -702,6 +751,8 @@ def main(argv):
         "table_key_set_diff": sorted(set(tables["en"]) ^ set(tables["zh_CN"])),
         "cjk_literals": total,
         "wrapped": len(wrapped),
+        "runtime_tr_wrapped": sum(1 for r in wrapped if r["callee"] == RUNTIME_TR_CALLEE),
+        "runtime_tr_files": sorted({r["file"] for r in wrapped if r["callee"] == RUNTIME_TR_CALLEE}),
         "unwrapped": len(unwrapped),
         "ignored_lines": len(ignored_lines),
         "coverage": round(len(wrapped) / total, 4) if total else 0.0,
@@ -743,6 +794,8 @@ def main(argv):
     L.append("  CJK literals: %d" % total)
     L.append("  wrapped     : %d   (%.2f%% - these DO consult the word table)"
              % (len(wrapped), 100.0 * result["coverage"]))
+    L.append("    of which  : %d marked i18n:runtime-tr (looked up via Tr at runtime) in %s"
+             % (result["runtime_tr_wrapped"], ", ".join(result["runtime_tr_files"]) or "-"))
     L.append("  unwrapped   : %d   (%.2f%% - these do NOT, language switching cannot"
              " affect them; distinct %d, across %d files)"
              % (len(unwrapped), 100.0 * len(unwrapped) / total if total else 0.0,

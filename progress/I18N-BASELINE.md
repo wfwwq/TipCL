@@ -1,7 +1,7 @@
 # i18n 接线基线(未接线的用户可见 CJK 字面量)
 
 > 自动生成,**不要手改**:`python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md`
-> 生成时间:2026-11-21 12:24:02
+> 生成时间:2026-11-21 15:10:26
 >
 > 判据(与 `tools/i18n-audit.py --help` 顶部同一份口径):
 >   * **已接线(wrapped)** = 字面量是 `I18nCore.Tr(...)` 的实参 —— 切语言**能**改变它;
@@ -12,12 +12,12 @@
 
 | 指标 | 数值 |
 | --- | --- |
-| CJK 字面量(分母) | 5832 |
-| 已接线(wrapped) | 2395(41.07%) |
-| 未接线(unwrapped) | 3370 |
-| 其中**词表里已有 en 译文**(只差接线) | 354 |
-| 涉及的 .cs 文件 | 181 |
-| 词表条目(en / zh_CN) | 3308 / 3308 |
+| CJK 字面量(分母) | 5941 |
+| 已接线(wrapped) | 2615(44.02%) |
+| 未接线(unwrapped) | 3211 |
+| 其中**词表里已有 en 译文**(只差接线) | 296 |
+| 涉及的 .cs 文件 | 177 |
+| 词表条目(en / zh_CN) | 3451 / 3451 |
 
 ## 按文件聚合(未接线条数降序)
 
@@ -28,28 +28,27 @@
 | 153 | 9 | `src/TipCL.Core/Launcher/Modpack.cs` |
 | 122 | 2 | `src/TipCL.Core/Launcher/Installer.cs` |
 | 117 | 9 | `src/TipCL.Core/Launcher/Ai/AiSelfTest.cs` |
-| 87 | 65 | `src/TipCL.Core/Launcher/Ai/Tools.cs` |
 | 80 | 4 | `src/TipCL.Core/Launcher/Mods.cs` |
 | 77 | 0 | `src/TipCL.App/Session/SmokeRunner.cs` |
 | 77 | 13 | `src/TipCL.Core/Launcher/Ai/AiData.cs` |
 | 76 | 14 | `src/TipCL.Core/Launcher/Terracotta.cs` |
 | 69 | 10 | `src/TipCL.App/Common/Api.cs` |
-| 67 | 5 | `src/TipCL.Core/Launcher/Preflight.cs` |
 | 61 | 0 | `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs` |
 | 61 | 3 | `src/TipCL.Core/Launcher/DownloadManager.cs` |
 | 61 | 23 | `src/TipCL.Core/Launcher/Ai/ToolRunner.cs` |
 | 49 | 0 | `src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs` |
 | 47 | 11 | `src/TipCL.Core/Launcher/Ai/Client.cs` |
-| 45 | 0 | `src/TipCL.App/Pages/Ai/AiPage.cs` |
 | 45 | 0 | `src/TipCL.App/Ui/ThemeGalleryPage.cs` |
 | 44 | 4 | `src/TipCL.Core/Plugins/PluginManifest.cs` |
 | 42 | 4 | `src/TipCL.Core/Launcher/Ai/NewFeatures/DiagnosticReport.cs` |
 | 41 | 3 | `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs` |
 | 40 | 1 | `src/TipCL.Core/Launcher/Ai/LayoutTools.cs` |
+| 37 | 0 | `src/TipCL.App/Pages/Ai/AiPage.cs` |
 | 37 | 0 | `src/TipCL.App/Pages/Version/VersionManagePage.cs` |
 | 32 | 2 | `src/TipCL.Core/Launcher/Ai/AiAgent.cs` |
 | 30 | 4 | `src/TipCL.Core/Launcher/DownloadTracker.cs` |
 | 29 | 0 | `src/TipCL.Core/Launcher/Java.cs` |
+| 29 | 7 | `src/TipCL.Core/Launcher/Ai/Tools.cs` |
 | 27 | 0 | `src/TipCL.App/Common/FileKinds.cs` |
 | 26 | 7 | `src/TipCL.App/Pages/Feedback/FeedbackView.cs` |
 | 25 | 0 | `src/TipCL.App/Pages/Download/CatalogPage.cs` |
@@ -70,7 +69,6 @@
 | 18 | 0 | `src/TipCL.App/Session/CommandLine.cs` |
 | 18 | 0 | `src/TipCL.Core/Launcher/MicrosoftAuthenticator.cs` |
 | 18 | 3 | `src/TipCL.Core/Launcher/Ai/AiToolRefs.cs` |
-| 18 | 10 | `src/TipCL.Core/Launcher/Ai/AiUiText.cs` |
 | 17 | 0 | `src/TipCL.App/Common/Launch/LaunchCore.cs` |
 | 17 | 0 | `src/TipCL.App/Pages/MultiplayerPage.cs` |
 | 17 | 1 | `src/TipCL.App/Pages/Library/LibraryPage.cs` |
@@ -83,6 +81,7 @@
 | 14 | 0 | `src/TipCL.Core/Launcher/McLauncher.cs` |
 | 14 | 1 | `src/TipCL.Core/Launcher/Sysinfo.cs` |
 | 14 | 1 | `src/TipCL.Core/Launcher/Updater.cs` |
+| 14 | 14 | `src/TipCL.Core/Launcher/Ai/AiUiText.cs` |
 | 14 | 0 | `src/TipCL.Core/Launcher/Ai/NewFeatures/ServerPing.cs` |
 | 14 | 4 | `src/TipCL.Core/Plugins/PluginHost.cs` |
 | 14 | 4 | `src/TipCL.Core/Plugins/PluginMarket.cs` |
@@ -95,7 +94,6 @@
 | 12 | 0 | `src/TipCL.Core/Launcher/Ai/VisionCaps.cs` |
 | 12 | 1 | `src/TipCL.Core/Launcher/Sync/PhoneClient.cs` |
 | 11 | 0 | `src/TipCL.App/Common/FileDrop.cs` |
-| 11 | 0 | `src/TipCL.App/Pages/Ai/AiFixView.cs` |
 | 11 | 0 | `src/TipCL.App/Pages/Plugins/PluginHostPage.cs` |
 | 11 | 0 | `src/TipCL.App/Pages/Settings/SettingsPage.SaveLoad.cs` |
 | 11 | 2 | `src/TipCL.Core/Launcher/Feedback.cs` |
@@ -115,10 +113,10 @@
 | 10 | 0 | `src/TipCL.Core/Launcher/Ai/AiSelfTestEngineMcp.cs` |
 | 10 | 2 | `src/TipCL.Core/Launcher/Ai/ToolRunner.NewFeatures.cs` |
 | 9 | 0 | `src/TipCL.App/Pages/Plugins/PluginModels.cs` |
-| 9 | 0 | `src/TipCL.Core/Launcher/Ai/Conflict.cs` |
 | 8 | 0 | `src/TipCL.App/Pages/Plugins/PluginSettingsCard.cs` |
 | 8 | 3 | `src/TipCL.Core/Launcher/FeedbackDefaults.cs` |
 | 8 | 0 | `src/TipCL.Core/Launcher/Ai/Compact.cs` |
+| 7 | 1 | `src/TipCL.App/Pages/Ai/AiFixView.cs` |
 | 7 | 0 | `src/TipCL.App/Pages/Layout/LayoutBlockEntryCatalog.cs` |
 | 7 | 0 | `src/TipCL.App/Session/AiSelfTestCli.cs` |
 | 7 | 4 | `src/TipCL.Core/Launcher/Instances.cs` |
@@ -138,12 +136,10 @@
 | 5 | 0 | `src/TipCL.App/Pages/Settings/SettingsPage.Update.cs` |
 | 5 | 0 | `src/TipCL.Core/Launcher/Ai/McpClient.cs` |
 | 4 | 0 | `src/TipCL.App/Pages/Download/DownloadPage.cs` |
-| 4 | 0 | `src/TipCL.App/Pages/Version/VersionSetupDialog.cs` |
 | 4 | 2 | `src/TipCL.Core/BackendWorker.cs` |
 | 4 | 0 | `src/TipCL.Core/Launcher/ContentExport.cs` |
 | 4 | 1 | `src/TipCL.Core/Launcher/DownloadSnapshot.cs` |
 | 4 | 0 | `src/TipCL.Core/Launcher/Downloader.cs` |
-| 4 | 1 | `src/TipCL.Core/Launcher/ExportPack.cs` |
 | 4 | 0 | `src/TipCL.Core/Launcher/LaunchFlow.cs` |
 | 4 | 0 | `src/TipCL.Core/Launcher/ModUpdate.cs` |
 | 4 | 0 | `src/TipCL.Core/Launcher/OfficialMigrate.cs` |
@@ -170,7 +166,6 @@
 | 2 | 0 | `src/TipCL.App/Common/SelfUpdate.cs` |
 | 2 | 0 | `src/TipCL.App/Common/Ai/AiService.cs` |
 | 2 | 0 | `src/TipCL.App/Pages/TasksPage.cs` |
-| 2 | 0 | `src/TipCL.App/Pages/Ai/StepGroup.cs` |
 | 2 | 0 | `src/TipCL.App/Pages/Download/CatalogModels.cs` |
 | 2 | 0 | `src/TipCL.Core/Launcher/AccountManager.cs` |
 | 2 | 0 | `src/TipCL.Core/Launcher/GlobalMods.cs` |
@@ -195,6 +190,7 @@
 | 1 | 1 | `src/TipCL.Core/Launcher/I18nCore.cs` |
 | 1 | 0 | `src/TipCL.Core/Launcher/Lan.cs` |
 | 1 | 1 | `src/TipCL.Core/Launcher/LoaderMeta.cs` |
+| 1 | 1 | `src/TipCL.Core/Launcher/Preflight.cs` |
 | 1 | 0 | `src/TipCL.Core/Launcher/RSAKey.cs` |
 | 1 | 1 | `src/TipCL.Core/Launcher/UiLayout.cs` |
 | 1 | 0 | `src/TipCL.Core/Launcher/Ai/AiMemory.cs` |
@@ -457,51 +453,6 @@
 - `src/TipCL.Core/Launcher/Ai/AiSelfTest.cs:127` 只看不动 `[已有译文]`
 - …… 另有 77 条(见 `--list-unwrapped` 全量输出)
 
-### `src/TipCL.Core/Launcher/Ai/Tools.cs`(87 条)
-
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:25` [
-        {"type":"function","function":{"name":"ask_user","description":"向用户弹出结构化选择题。需要用户选实例、加载器、搜到多个结果、冲突留哪个时必须用这个,不要只在文字里问。界面会自动加「其他」让用户自己填。没选完之前不要调用 install
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:33` {"type":"function","function":{"name":"search_mods","description":"搜索模组(支持中文名)。同一轮用户请求只调用一次;搜完必须 ask_user 让用户选,禁止换词再搜。","parameters":{"type":"object","propertie
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:41` {"type":"function","function":{"name":"install_game","description":"真正开始下载/安装 Minecraft。用户已选定版本后必须调用这个,否则不会下载。纯原版 loader 填「无」。","parameters":{"type":"object","p
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:50` {"type":"function","function":{"name":"create_instance","description":"新建隔离实例,装整合包前建议先建","parameters":{"type":"object","properties":{"name":{"type":"string"}},"
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:60` {"type":"function","function":{"name":"plan_instance_upgrade","description":"升级整合包/实例前先出计划(只读,联网):逐个检查已装模组在 Modrinth/CurseForge 上有没有目标 MC 版本+加载器的版本,列出可升级/缺失/替代建
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:71` {"type":"function","function":{"name":"diagnose_launch","description":"分析启动失败:规则扫 latest.log 和崩溃报告","parameters":{"type":"object","properties":{"instance":{"typ
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:118` 请你选一下 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:119` 查启动器状态 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:120` 查实例列表 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:121` 查已装版本 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:122` 搜版本 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:123` 搜模组 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:124` 搜整合包 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:125` 搜内容 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:126` 搜地图 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:127` 查模组列表 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:128` 查 Java 列表 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:129` 装游戏 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:130` 装模组 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:131` 装整合包 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:132` 装光影 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:133` 装资源包 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:134` 装数据包 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:135` 装地图 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:136` 下载 Java `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:137` 启动游戏 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:138` 新建实例 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:139` 删除实例 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:140` 删除模组 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:141` 禁用模组 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:142` 启用模组 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:143` 诊断启动 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:144` 扫模组冲突 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:145` 检查模组 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:146` 查模组配置 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:147` 读配置 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:148` 改配置 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:149` 更新计划 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:150` 记住 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/Tools.cs:151` 忘掉 `[已有译文]`
-- …… 另有 47 条(见 `--list-unwrapped` 全量输出)
-
 ### `src/TipCL.Core/Launcher/Mods.cs`(80 条)
 
 - `src/TipCL.Core/Launcher/Mods.cs:283`  返回空响应
@@ -716,13 +667,13 @@
 - `src/TipCL.Core/Launcher/Terracotta.cs:405` 房间号校验失败。请向房主重新复制完整的 U/XXXX-XXXX-XXXX-XXXX。
 - `src/TipCL.Core/Launcher/Terracotta.cs:407` 房间号须为陶瓦 0.4.2 格式 U/XXXX-XXXX-XXXX-XXXX。官方内核已不再接受旧版 PCL / 旧陶瓦房间号。
 - `src/TipCL.Core/Launcher/Terracotta.cs:458` 当前系统架构暂不支持陶瓦联机。
-- `src/TipCL.Core/Launcher/Terracotta.cs:575` 当前系统请在系统防火墙里手动放行陶瓦联机。
-- `src/TipCL.Core/Launcher/Terracotta.cs:580` 还没找到陶瓦内核，请先点下载/启动，再允许防火墙。
-- `src/TipCL.Core/Launcher/Terracotta.cs:626` 已取消管理员授权，防火墙规则没有写入。
-- `src/TipCL.Core/Launcher/Terracotta.cs:628` 写入防火墙规则失败，请在 UAC 窗口点「是」。
-- `src/TipCL.Core/Launcher/Terracotta.cs:631` 、 `[已有译文]`
-- `src/TipCL.Core/Launcher/Terracotta.cs:632` 已允许 
-- `src/TipCL.Core/Launcher/Terracotta.cs:632`  通过防火墙。若装着电脑管家/360/火绒，还要在它们里面放行。
+- `src/TipCL.Core/Launcher/Terracotta.cs:581` 当前系统请在系统防火墙里手动放行陶瓦联机。
+- `src/TipCL.Core/Launcher/Terracotta.cs:586` 还没找到陶瓦内核，请先点下载/启动，再允许防火墙。
+- `src/TipCL.Core/Launcher/Terracotta.cs:632` 已取消管理员授权，防火墙规则没有写入。
+- `src/TipCL.Core/Launcher/Terracotta.cs:634` 写入防火墙规则失败，请在 UAC 窗口点「是」。
+- `src/TipCL.Core/Launcher/Terracotta.cs:637` 、 `[已有译文]`
+- `src/TipCL.Core/Launcher/Terracotta.cs:638` 已允许 
+- `src/TipCL.Core/Launcher/Terracotta.cs:638`  通过防火墙。若装着电脑管家/360/火绒，还要在它们里面放行。
 - …… 另有 36 条(见 `--list-unwrapped` 全量输出)
 
 ### `src/TipCL.App/Common/Api.cs`(69 条)
@@ -765,58 +716,9 @@
 - `src/TipCL.App/Common/Api.cs:1258` 备份存档 
 - `src/TipCL.App/Common/Api.cs:1262` 存档备份完成
 - `src/TipCL.App/Common/Api.cs:1333` IApi 尚未实现方法 {}(M2-B0 方法表之外,属 M3 或未搬后端能力)
-- `src/TipCL.App/Common/Api.cs:1445` 安装模组: 
-- `src/TipCL.App/Common/Api.cs:1455` 从 CurseForge 安装模组 id=
+- `src/TipCL.App/Common/Api.cs:1466` 安装模组: 
+- `src/TipCL.App/Common/Api.cs:1476` 从 CurseForge 安装模组 id=
 - …… 另有 29 条(见 `--list-unwrapped` 全量输出)
-
-### `src/TipCL.Core/Launcher/Preflight.cs`(67 条)
-
-- `src/TipCL.Core/Launcher/Preflight.cs:93` 实例目录不存在
-- `src/TipCL.Core/Launcher/Preflight.cs:107` 实例目录不可写
-- `src/TipCL.Core/Launcher/Preflight.cs:112` 未选择版本 `[已有译文]`
-- `src/TipCL.Core/Launcher/Preflight.cs:112` 请先到「下载 → 原版游戏」安装版本
-- `src/TipCL.Core/Launcher/Preflight.cs:119` 版本未安装
-- `src/TipCL.Core/Launcher/Preflight.cs:119` 找不到 
-- `src/TipCL.Core/Launcher/Preflight.cs:119`  的版本 JSON
-- `src/TipCL.Core/Launcher/Preflight.cs:126` 客户端 jar 未直接找到
-- `src/TipCL.Core/Launcher/Preflight.cs:126` （若为继承版本，启动时会解析父版本）
-- `src/TipCL.Core/Launcher/Preflight.cs:144` 磁盘空间不足
-- `src/TipCL.Core/Launcher/Preflight.cs:144` 实例所在盘仅剩约 
-- `src/TipCL.Core/Launcher/Preflight.cs:144`  MB，至少需要 512 MB
-- `src/TipCL.Core/Launcher/Preflight.cs:148` 磁盘空间偏低
-- `src/TipCL.Core/Launcher/Preflight.cs:148` 实例所在盘剩余约 
-- `src/TipCL.Core/Launcher/Preflight.cs:148`  MB，建议清理后再装大整合包
-- `src/TipCL.Core/Launcher/Preflight.cs:160` Mods 被解压成了文件夹
-- `src/TipCL.Core/Launcher/Preflight.cs:160` 直接放整个 .jar/.zip 即可。请删掉这些文件夹：
- - 
-- `src/TipCL.Core/Launcher/Preflight.cs:167` 原版版本不会加载模组
-- `src/TipCL.Core/Launcher/Preflight.cs:167` mods 里有 
-- `src/TipCL.Core/Launcher/Preflight.cs:167`  个 jar，但当前版本名像原版。请安装 Fabric/Forge 等加载器。
-- `src/TipCL.Core/Launcher/Preflight.cs:180` 自动选择 `[已有译文]`
-- `src/TipCL.Core/Launcher/Preflight.cs:185` 指定的 Java 不存在
-- `src/TipCL.Core/Launcher/Preflight.cs:193` Java 版本过低（需要 
-- `src/TipCL.Core/Launcher/Preflight.cs:193` +）
-- `src/TipCL.Core/Launcher/Preflight.cs:193` 当前是 Java 
-- `src/TipCL.Core/Launcher/Preflight.cs:193` ： `[已有译文]`
-- `src/TipCL.Core/Launcher/Preflight.cs:211` 分配内存接近可用物理内存
-- `src/TipCL.Core/Launcher/Preflight.cs:211` 游戏 
-- `src/TipCL.Core/Launcher/Preflight.cs:211`  MB，系统当前可用约 
-- `src/TipCL.Core/Launcher/Preflight.cs:211`  MB，可能触发交换卡顿
-- `src/TipCL.Core/Launcher/Preflight.cs:222` 预检通过
-- `src/TipCL.Core/Launcher/Preflight.cs:222` 未发现阻塞问题
-- `src/TipCL.Core/Launcher/Preflight.cs:329` 
-…共缺 
-- `src/TipCL.Core/Launcher/Preflight.cs:329`  个
-- `src/TipCL.Core/Launcher/Preflight.cs:331` 依赖库缺失
-- `src/TipCL.Core/Launcher/Preflight.cs:331` 缺少以下库文件，请到版本页点「修复」：
- - 
-- `src/TipCL.Core/Launcher/Preflight.cs:336` 依赖库校验不一致
-- `src/TipCL.Core/Launcher/Preflight.cs:336` 以下库 sha1/大小与清单不符，可能损坏：
- - 
-- `src/TipCL.Core/Launcher/Preflight.cs:336` 
-建议修复该版本。
-- `src/TipCL.Core/Launcher/Preflight.cs:352` 资源索引缺失
-- …… 另有 27 条(见 `--list-unwrapped` 全量输出)
 
 ### `src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs`(61 条)
 
@@ -1039,52 +941,6 @@
 - `src/TipCL.Core/Launcher/Ai/Client.cs:845` 已停止 `[已有译文]`
 - …… 另有 7 条(见 `--list-unwrapped` 全量输出)
 
-### `src/TipCL.App/Pages/Ai/AiPage.cs`(45 条)
-
-- `src/TipCL.App/Pages/Ai/AiPage.cs:36` 帮我看一下这次崩溃是什么原因
-- `src/TipCL.App/Pages/Ai/AiPage.cs:37` Fabric 和 Forge 有什么区别,我该选哪个
-- `src/TipCL.App/Pages/Ai/AiPage.cs:38` 这个版本装了什么模组,有冲突吗
-- `src/TipCL.App/Pages/Ai/AiPage.cs:39` 内存设多少合适
-- `src/TipCL.App/Pages/Ai/AiPage.cs:102` 上下文占用:按本会话每轮平均输入估算
-- `src/TipCL.App/Pages/Ai/AiPage.cs:104` 问启动、模组、崩溃都行;输入 / 看命令
-- `src/TipCL.App/Pages/Ai/AiPage.cs:123` 附一张图(也可以直接粘贴或拖进来)
-- `src/TipCL.App/Pages/Ai/AiPage.cs:211` 自定义端点
-- `src/TipCL.App/Pages/Ai/AiPage.cs:220` 权限:
-- `src/TipCL.App/Pages/Ai/AiPage.cs:229` 还没配置 AI 接入方式:到「设置 → 通用」填好地址与密钥后即可对话
-- `src/TipCL.App/Pages/Ai/AiPage.cs:235` 下面几句最常问,点一下直接发
-- `src/TipCL.App/Pages/Ai/AiPage.cs:278` 助手记忆
-- `src/TipCL.App/Pages/Ai/AiPage.cs:349` 这条命令还没接上
-- `src/TipCL.App/Pages/Ai/AiPage.cs:415` 对话没存下来
-- `src/TipCL.App/Pages/Ai/AiPage.cs:465` 已开新对话
-- `src/TipCL.App/Pages/Ai/AiPage.cs:465` 上一段对话还在存档里
-- `src/TipCL.App/Pages/Ai/AiPage.cs:473` 正在生成中
-- `src/TipCL.App/Pages/Ai/AiPage.cs:489` 没有可撤回的一轮
-- `src/TipCL.App/Pages/Ai/AiPage.cs:489` 这个对话还没有你发的消息
-- `src/TipCL.App/Pages/Ai/AiPage.cs:494` 没有可撤回的一轮
-- `src/TipCL.App/Pages/Ai/AiPage.cs:513` 已还原 
-- `src/TipCL.App/Pages/Ai/AiPage.cs:513`  个改过的文件
-- `src/TipCL.App/Pages/Ai/AiPage.cs:514` 这一轮没有改过文件
-- `src/TipCL.App/Pages/Ai/AiPage.cs:514` 这一轮没有磁盘改动
-- `src/TipCL.App/Pages/Ai/AiPage.cs:515` 已撤回上一轮
-- `src/TipCL.App/Pages/Ai/AiPage.cs:543` (估算)
-- `src/TipCL.App/Pages/Ai/AiPage.cs:545` 本会话:输入 {} / 输出 {} tokens{}
-
-- `src/TipCL.App/Pages/Ai/AiPage.cs:546` 上下文窗口 {},圆环为每轮平均占用的估算
-- `src/TipCL.App/Pages/Ai/AiPage.cs:577` 
-点击清空
-- `src/TipCL.App/Pages/Ai/AiPage.cs:591` 先写点内容
-- `src/TipCL.App/Pages/Ai/AiPage.cs:608` 还没配置 AI
-- `src/TipCL.App/Pages/Ai/AiPage.cs:608` 到「设置 → 通用」填好接入方式与密钥
-- `src/TipCL.App/Pages/Ai/AiPage.cs:630` 图片会被省略。
-- `src/TipCL.App/Pages/Ai/AiPage.cs:648` 正在生成...
-- `src/TipCL.App/Pages/Ai/AiPage.cs:671` 对话失败:
-- `src/TipCL.App/Pages/Ai/AiPage.cs:672` AI 对话失败
-- `src/TipCL.App/Pages/Ai/AiPage.cs:697` 上下文太长
-- `src/TipCL.App/Pages/Ai/AiPage.cs:697` 已把较早的对话压成摘要,继续问就行
-- `src/TipCL.App/Pages/Ai/AiPage.cs:710` 准备:
-- `src/TipCL.App/Pages/Ai/AiPage.cs:721` 完成:
-- …… 另有 5 条(见 `--list-unwrapped` 全量输出)
-
 ### `src/TipCL.App/Ui/ThemeGalleryPage.cs`(45 条)
 
 - `src/TipCL.App/Ui/ThemeGalleryPage.cs:48` 切换明暗主题
@@ -1219,46 +1075,46 @@
 
 ### `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs`(41 条)
 
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:39` 用户名只能是 3-16 位英文、数字或下划线
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:47` 已经有离线账号 
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:47` ,不用重复添加(要用它就调用 switch_account)
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:48` 已经有同名的
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:48` 账号 
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:48` ,为了不覆盖它,没有添加离线账号;换个名字再试
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:51` 已添加离线账号 
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:51` (已设为当前账号)
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:68` 、 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:69` 没有叫「
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:69` 」的账号
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:69` ;现有账号:
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:69` ;还没有任何账号,可以先 add_offline_account
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:72` 当前账号:
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:80` 找不到 png 皮肤文件:
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:89` 没有叫「
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:89` 」的账号
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:89` 还没有当前账号,先 add_offline_account 或 switch_account
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:95`  是
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:95` 账号:自定义皮肤只对离线账号有效,正版和皮肤站账号的皮肤要到各自的网站上改
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:99` 已给 
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:99`  换上皮肤(
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:99` )。离线账号进游戏即生效。
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:110` 没有这个工具: 
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:122` 正版 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:123` 外置登录
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:138` 当前系统不支持陶瓦联机
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:145` 陶瓦联机组件还没装,已开始下载(看左侧「下载任务」),装好后再试一次。
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:154` 联机内核正在启动,几秒后再调用一次 multiplayer 
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:154` 。
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:168` 房间已开好,房间号:
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:168` 。把它发给朋友,让朋友在联机页或对我说「加入房间 
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:168` 」。
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:171` 已开始开房:请先在游戏里打开单人世界,按 Esc →「对局域网开放」。几秒后用 multiplayer status 拿房间号发给朋友。
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:178` 要填朋友给的房间号
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:181` 正在加入房间 
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:181` 。连上后进游戏「多人游戏」,双击「陶瓦联机大厅」。
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:185` 已退出联机
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:196` 不认识的 action:
-- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:196` (只能是 status / host / join / stop)
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:43` 用户名只能是 3-16 位英文、数字或下划线
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:51` 已经有离线账号 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:51` ,不用重复添加(要用它就调用 switch_account)
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:52` 已经有同名的
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:52` 账号 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:52` ,为了不覆盖它,没有添加离线账号;换个名字再试
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:55` 已添加离线账号 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:55` (已设为当前账号)
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:72` 、 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:73` 没有叫「
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:73` 」的账号
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:73` ;现有账号:
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:73` ;还没有任何账号,可以先 add_offline_account
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:76` 当前账号:
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:84` 找不到 png 皮肤文件:
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:93` 没有叫「
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:93` 」的账号
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:93` 还没有当前账号,先 add_offline_account 或 switch_account
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:99`  是
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:99` 账号:自定义皮肤只对离线账号有效,正版和皮肤站账号的皮肤要到各自的网站上改
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:103` 已给 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:103`  换上皮肤(
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:103` )。离线账号进游戏即生效。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:114` 没有这个工具: 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:126` 正版 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:127` 外置登录
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:142` 当前系统不支持陶瓦联机
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:149` 陶瓦联机组件还没装,已开始下载(看左侧「下载任务」),装好后再试一次。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:158` 联机内核正在启动,几秒后再调用一次 multiplayer 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:158` 。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:172` 房间已开好,房间号:
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:172` 。把它发给朋友,让朋友在联机页或对我说「加入房间 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:172` 」。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:175` 已开始开房:请先在游戏里打开单人世界,按 Esc →「对局域网开放」。几秒后用 multiplayer status 拿房间号发给朋友。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:182` 要填朋友给的房间号
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:185` 正在加入房间 
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:185` 。连上后进游戏「多人游戏」,双击「陶瓦联机大厅」。
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:189` 已退出联机
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:200` 不认识的 action:
+- `src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs:200` (只能是 status / host / join / stop)
 - …… 另有 1 条(见 `--list-unwrapped` 全量输出)
 
 ### `src/TipCL.Core/Launcher/Ai/LayoutTools.cs`(40 条)
@@ -1308,6 +1164,48 @@
 - `src/TipCL.Core/Launcher/Ai/LayoutTools.cs:471` 网页/按钮区块 
 - `src/TipCL.Core/Launcher/Ai/LayoutTools.cs:471` 、 `[已有译文]`
 - `src/TipCL.Core/Launcher/Ai/LayoutTools.cs:471`  按安全规定先保持关闭,要用的话请用户自己到 设置 → 布局 → 自建区块 里开启。
+
+### `src/TipCL.App/Pages/Ai/AiPage.cs`(37 条)
+
+- `src/TipCL.App/Pages/Ai/AiPage.cs:36` 帮我看一下这次崩溃是什么原因
+- `src/TipCL.App/Pages/Ai/AiPage.cs:37` Fabric 和 Forge 有什么区别,我该选哪个
+- `src/TipCL.App/Pages/Ai/AiPage.cs:38` 这个版本装了什么模组,有冲突吗
+- `src/TipCL.App/Pages/Ai/AiPage.cs:39` 内存设多少合适
+- `src/TipCL.App/Pages/Ai/AiPage.cs:103` 上下文占用:按本会话每轮平均输入估算
+- `src/TipCL.App/Pages/Ai/AiPage.cs:105` 问启动、模组、崩溃都行;输入 / 看命令
+- `src/TipCL.App/Pages/Ai/AiPage.cs:124` 附一张图(也可以直接粘贴或拖进来)
+- `src/TipCL.App/Pages/Ai/AiPage.cs:212` 自定义端点
+- `src/TipCL.App/Pages/Ai/AiPage.cs:230` 还没配置 AI 接入方式:到「设置 → 通用」填好地址与密钥后即可对话
+- `src/TipCL.App/Pages/Ai/AiPage.cs:236` 下面几句最常问,点一下直接发
+- `src/TipCL.App/Pages/Ai/AiPage.cs:280` 助手记忆
+- `src/TipCL.App/Pages/Ai/AiPage.cs:351` 这条命令还没接上
+- `src/TipCL.App/Pages/Ai/AiPage.cs:417` 对话没存下来
+- `src/TipCL.App/Pages/Ai/AiPage.cs:467` 已开新对话
+- `src/TipCL.App/Pages/Ai/AiPage.cs:467` 上一段对话还在存档里
+- `src/TipCL.App/Pages/Ai/AiPage.cs:475` 正在生成中
+- `src/TipCL.App/Pages/Ai/AiPage.cs:491` 没有可撤回的一轮
+- `src/TipCL.App/Pages/Ai/AiPage.cs:491` 这个对话还没有你发的消息
+- `src/TipCL.App/Pages/Ai/AiPage.cs:496` 没有可撤回的一轮
+- `src/TipCL.App/Pages/Ai/AiPage.cs:515` 已还原 
+- `src/TipCL.App/Pages/Ai/AiPage.cs:515`  个改过的文件
+- `src/TipCL.App/Pages/Ai/AiPage.cs:516` 这一轮没有改过文件
+- `src/TipCL.App/Pages/Ai/AiPage.cs:516` 这一轮没有磁盘改动
+- `src/TipCL.App/Pages/Ai/AiPage.cs:517` 已撤回上一轮
+- `src/TipCL.App/Pages/Ai/AiPage.cs:545` (估算)
+- `src/TipCL.App/Pages/Ai/AiPage.cs:547` 本会话:输入 {} / 输出 {} tokens{}
+
+- `src/TipCL.App/Pages/Ai/AiPage.cs:548` 上下文窗口 {},圆环为每轮平均占用的估算
+- `src/TipCL.App/Pages/Ai/AiPage.cs:579` 
+点击清空
+- `src/TipCL.App/Pages/Ai/AiPage.cs:593` 先写点内容
+- `src/TipCL.App/Pages/Ai/AiPage.cs:610` 还没配置 AI
+- `src/TipCL.App/Pages/Ai/AiPage.cs:610` 到「设置 → 通用」填好接入方式与密钥
+- `src/TipCL.App/Pages/Ai/AiPage.cs:632` 图片会被省略。
+- `src/TipCL.App/Pages/Ai/AiPage.cs:650` 正在生成...
+- `src/TipCL.App/Pages/Ai/AiPage.cs:699` 上下文太长
+- `src/TipCL.App/Pages/Ai/AiPage.cs:699` 已把较早的对话压成摘要,继续问就行
+- `src/TipCL.App/Pages/Ai/AiPage.cs:893` 正在重试
+- `src/TipCL.App/Pages/Ai/AiPage.cs:941` 刚才那一步失败了,再试一次
 
 ### `src/TipCL.App/Pages/Version/VersionManagePage.cs`(37 条)
 
@@ -1368,31 +1266,96 @@
 - `src/TipCL.Core/Launcher/Ai/AiAgent.cs:252` 正在整理...
 - `src/TipCL.Core/Launcher/Ai/AiAgent.cs:264` 步骤太多,正在收尾...
 - `src/TipCL.Core/Launcher/Ai/AiAgent.cs:265` 工具轮数已达上限。请直接用已有信息回答用户,不要再调用工具。
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:341` 这一步的改动无法回退:
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:364` 正在压缩历史...
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:418`  [调用工具: 
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:434` [子任务] 
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:434` 
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:343` 这一步的改动无法回退:
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:366` 正在压缩历史...
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:420`  [调用工具: 
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:436` [子任务] 
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:436` 
 相关背景:
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:464` 子代理执行失败: 
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:469` 子代理未得出结论(停止原因: 
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:536` 限流
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:537` 超时
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:538` 网络异常
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:539` 连接中断
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:540` 出错 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:542` 接口
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:542` ,正在重试(第 
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:542`  次,约 
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:543`  秒后)
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:572` 已停止 `[已有译文]`
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:694` AI 接口出错
-- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:721` AI 对话异常:
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:466` 子代理执行失败: 
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:471` 子代理未得出结论(停止原因: 
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:538` 限流
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:539` 超时
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:540` 网络异常
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:541` 连接中断
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:542` 出错 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:544` 接口
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:544` ,正在重试(第 
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:544`  次,约 
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:545`  秒后)
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:574` 已停止 `[已有译文]`
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:696` AI 接口出错
+- `src/TipCL.Core/Launcher/Ai/AiAgent.cs:723` AI 对话异常:
+
+### `src/TipCL.Core/Launcher/DownloadTracker.cs`(30 条)
+
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:68` 就绪 `[已有译文]`
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:121` 准备下载
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:142` 下载完成
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:155` 下载失败 `[已有译文]`
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:201` 准备下载 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:201` 准备下载
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:232` 已存在，跳过 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:237` 下载完成 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:255` 下载失败: 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:271` 正在解析 DNS 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:287` DNS 解析成功 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:297` （ `[已有译文]`
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:297`  ms）
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:315` DNS 解析失败: 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:331` 正在 TCP 握手 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:349` TCP 握手成功 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:364` （ `[已有译文]`
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:364`  ms）
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:382` TCP 握手失败: 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:396` 正在 TLS 握手 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:419` TLS 握手成功
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:436` TLS 握手失败: 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:449` 复用已有 TCP 连接
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:452` 复用已有 TCP 连接
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:500` 已收到 HTTP 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:527` 下载中（
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:527`  个并发）
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:531` 下载中 
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:531` 下载中
+- `src/TipCL.Core/Launcher/DownloadTracker.cs:546` 正在校验 
+
+### `src/TipCL.Core/Launcher/Java.cs`(29 条)
+
+- `src/TipCL.Core/Launcher/Java.cs:352` 候选 Java 
+- `src/TipCL.Core/Launcher/Java.cs:352`  无法启动此版本（需要 
+- `src/TipCL.Core/Launcher/Java.cs:352` +）
+- `src/TipCL.Core/Launcher/Java.cs:357` 未找到 Java 
+- `src/TipCL.Core/Launcher/Java.cs:357` ，自动下载中…
+- `src/TipCL.Core/Launcher/Java.cs:1050` 获取 Java 运行时清单失败 %s: %s
+- `src/TipCL.Core/Launcher/Java.cs:1056` 使用缓存中的旧 Java 运行时清单。
+- `src/TipCL.Core/Launcher/Java.cs:1059` 无法获取 Java 运行时清单: 
+- `src/TipCL.Core/Launcher/Java.cs:1165` Mojang 运行时清单中没有平台 %s
+- `src/TipCL.Core/Launcher/Java.cs:1190` 下载 Mojang Java 运行时 
+- `src/TipCL.Core/Launcher/Java.cs:1196` Mojang 运行时清单无效: 
+- `src/TipCL.Core/Launcher/Java.cs:1225` Mojang 运行时缺少 raw 下载: %s
+- `src/TipCL.Core/Launcher/Java.cs:1237` 下载 Mojang Java 
+- `src/TipCL.Core/Launcher/Java.cs:1259` Mojang 运行时安装后未找到 java 可执行文件: %s
+- `src/TipCL.Core/Launcher/Java.cs:1319` 下载 Adoptium Java 
+- `src/TipCL.Core/Launcher/Java.cs:1319` ) 运行时
+- `src/TipCL.Core/Launcher/Java.cs:1344`  解压后未找到 java 可执行文件
+- `src/TipCL.Core/Launcher/Java.cs:1381` Mojang 运行时下载失败，回退 Adoptium: %s
+- `src/TipCL.Core/Launcher/Java.cs:1427` 未知的 Java 发行版: 
+- `src/TipCL.Core/Launcher/Java.cs:1456` 查询 Azul Zulu Java 
+- `src/TipCL.Core/Launcher/Java.cs:1468` Azul Zulu 没有 Java 
+- `src/TipCL.Core/Launcher/Java.cs:1468` ) 的 JRE 包
+- `src/TipCL.Core/Launcher/Java.cs:1473` Azul 返回的数据缺少下载地址
+- `src/TipCL.Core/Launcher/Java.cs:1481` 下载 Zulu Java 
+- `src/TipCL.Core/Launcher/Java.cs:1481` ) 运行时
+- `src/TipCL.Core/Launcher/Java.cs:1499`  解压后未找到 java 可执行文件
+- `src/TipCL.Core/Launcher/Java.cs:1522` 下载 Microsoft Java 
+- `src/TipCL.Core/Launcher/Java.cs:1522` ) 运行时
+- `src/TipCL.Core/Launcher/Java.cs:1544`  解压后未找到 java 可执行文件
 
 ## 机读守卫块(守卫测试读这里,勿改格式)
 
 <!-- I18N-GUARD-BEGIN -->
 ```json
-{"cjk_literals": 5832, "files": 181, "generated": "2026-11-21T12:24:02", "per_file": {"src/TipCL.App/Common/AccountGate.cs": 2, "src/TipCL.App/Common/Ai/AiService.cs": 2, "src/TipCL.App/Common/Api.cs": 69, "src/TipCL.App/Common/AppLog.cs": 2, "src/TipCL.App/Common/Dlg.cs": 5, "src/TipCL.App/Common/FeedbackConsent.cs": 2, "src/TipCL.App/Common/FileDrop.cs": 11, "src/TipCL.App/Common/FileKinds.cs": 27, "src/TipCL.App/Common/FpsOverlay.cs": 2, "src/TipCL.App/Common/ImportBatch.cs": 2, "src/TipCL.App/Common/Launch/LaunchCore.cs": 17, "src/TipCL.App/Common/Motion.cs": 1, "src/TipCL.App/Common/SelfUpdate.cs": 2, "src/TipCL.App/Common/TaskStore.cs": 1, "src/TipCL.App/Controls/PageLayoutHost.cs": 14, "src/TipCL.App/Pages/AccountPage.cs": 23, "src/TipCL.App/Pages/Ai/AiBubble.cs": 3, "src/TipCL.App/Pages/Ai/AiChatOps.cs": 10, "src/TipCL.App/Pages/Ai/AiFixView.cs": 11, "src/TipCL.App/Pages/Ai/AiImages.cs": 1, "src/TipCL.App/Pages/Ai/AiMemoryPanel.cs": 14, "src/TipCL.App/Pages/Ai/AiPage.cs": 45, "src/TipCL.App/Pages/Ai/AskCard.cs": 1, "src/TipCL.App/Pages/Ai/ChatInput.cs": 1, "src/TipCL.App/Pages/Ai/SlashMenu.cs": 1, "src/TipCL.App/Pages/Ai/StepGroup.cs": 2, "src/TipCL.App/Pages/Ai/TaskCard.cs": 1, "src/TipCL.App/Pages/Download/CatalogModels.cs": 2, "src/TipCL.App/Pages/Download/CatalogPage.cs": 25, "src/TipCL.App/Pages/Download/DownloadPage.cs": 4, "src/TipCL.App/Pages/Download/LoaderIcons.cs": 1, "src/TipCL.App/Pages/Feedback/CrashUi.cs": 3, "src/TipCL.App/Pages/Feedback/FeedbackView.cs": 26, "src/TipCL.App/Pages/Feedback/FirstRunWizard.cs": 19, "src/TipCL.App/Pages/Install/InstallPage.cs": 6, "src/TipCL.App/Pages/Launch/LaunchPage.cs": 6, "src/TipCL.App/Pages/Launch/LaunchPopups.cs": 12, "src/TipCL.App/Pages/Layout/LayoutBlockEntryCatalog.cs": 7, "src/TipCL.App/Pages/Layout/LayoutWidgetOps.cs": 1, "src/TipCL.App/Pages/Library/InstanceDetailPage.cs": 6, "src/TipCL.App/Pages/Library/LibraryPage.cs": 17, "src/TipCL.App/Pages/MultiplayerPage.cs": 17, "src/TipCL.App/Pages/PlaceholderPage.cs": 1, "src/TipCL.App/Pages/Plugins/PluginHostPage.cs": 11, "src/TipCL.App/Pages/Plugins/PluginModels.cs": 9, "src/TipCL.App/Pages/Plugins/PluginSettingsCard.cs": 8, "src/TipCL.App/Pages/Plugins/PluginsPage.Dev.cs": 22, "src/TipCL.App/Pages/Plugins/PluginsPage.Installed.cs": 16, "src/TipCL.App/Pages/Plugins/PluginsPage.Market.cs": 21, "src/TipCL.App/Pages/Plugins/PluginsPage.Settings.cs": 10, "src/TipCL.App/Pages/Plugins/PluginsPage.cs": 6, "src/TipCL.App/Pages/Settings/PhoneSyncPanel.cs": 22, "src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs": 49, "src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs": 61, "src/TipCL.App/Pages/Settings/SettingsPage.SaveLoad.cs": 11, "src/TipCL.App/Pages/Settings/SettingsPage.Update.cs": 5, "src/TipCL.App/Pages/Settings/SettingsPage.cs": 10, "src/TipCL.App/Pages/Settings/SettingsSubs.cs": 22, "src/TipCL.App/Pages/TasksPage.cs": 2, "src/TipCL.App/Pages/Version/ModsDialog.cs": 10, "src/TipCL.App/Pages/Version/SavesDialog.cs": 1, "src/TipCL.App/Pages/Version/VersionManagePage.cs": 37, "src/TipCL.App/Pages/Version/VersionSetupDialog.cs": 4, "src/TipCL.App/Program.cs": 3, "src/TipCL.App/Session/AiSelfTestCli.cs": 7, "src/TipCL.App/Session/CommandLine.cs": 18, "src/TipCL.App/Session/SmokeRunner.cs": 77, "src/TipCL.App/Shell/MainWindow.axaml.cs": 17, "src/TipCL.App/Ui/ThemeGalleryPage.cs": 45, "src/TipCL.Core/BackendWorker.cs": 4, "src/TipCL.Core/Launcher/AccountManager.cs": 2, "src/TipCL.Core/Launcher/Ai/AcctLayoutMpTools.cs": 25, "src/TipCL.Core/Launcher/Ai/AiAgent.cs": 32, "src/TipCL.Core/Launcher/Ai/AiData.cs": 77, "src/TipCL.Core/Launcher/Ai/AiFixChat.cs": 24, "src/TipCL.Core/Launcher/Ai/AiMemory.cs": 1, "src/TipCL.Core/Launcher/Ai/AiResponse.cs": 1, "src/TipCL.Core/Launcher/Ai/AiSelfTest.cs": 117, "src/TipCL.Core/Launcher/Ai/AiSelfTestEngineMcp.cs": 10, "src/TipCL.Core/Launcher/Ai/AiToolRefs.cs": 18, "src/TipCL.Core/Launcher/Ai/AiUiText.cs": 18, "src/TipCL.Core/Launcher/Ai/Artifacts.cs": 13, "src/TipCL.Core/Launcher/Ai/Checkpoint.cs": 6, "src/TipCL.Core/Launcher/Ai/Client.cs": 47, "src/TipCL.Core/Launcher/Ai/Compact.cs": 8, "src/TipCL.Core/Launcher/Ai/Conflict.cs": 9, "src/TipCL.Core/Launcher/Ai/FileMemory.cs": 13, "src/TipCL.Core/Launcher/Ai/Images.cs": 11, "src/TipCL.Core/Launcher/Ai/LayoutTools.cs": 40, "src/TipCL.Core/Launcher/Ai/Mcp.cs": 3, "src/TipCL.Core/Launcher/Ai/McpClient.cs": 5, "src/TipCL.Core/Launcher/Ai/McpServer.cs": 6, "src/TipCL.Core/Launcher/Ai/NewFeatures/AiPreflight.cs": 3, "src/TipCL.Core/Launcher/Ai/NewFeatures/DiagnosticReport.cs": 42, "src/TipCL.Core/Launcher/Ai/NewFeatures/InstanceUpgrade.cs": 25, "src/TipCL.Core/Launcher/Ai/NewFeatures/NewFeaturesSelfTest.cs": 17, "src/TipCL.Core/Launcher/Ai/NewFeatures/ServerPing.cs": 14, "src/TipCL.Core/Launcher/Ai/NewFeatures/ShaderAdvisor.cs": 16, "src/TipCL.Core/Launcher/Ai/Rewind.cs": 1, "src/TipCL.Core/Launcher/Ai/Scheduler.cs": 1, "src/TipCL.Core/Launcher/Ai/Store.cs": 3, "src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs": 41, "src/TipCL.Core/Launcher/Ai/ToolRunner.LogsFs.cs": 1, "src/TipCL.Core/Launcher/Ai/ToolRunner.NewFeatures.cs": 10, "src/TipCL.Core/Launcher/Ai/ToolRunner.cs": 61, "src/TipCL.Core/Launcher/Ai/Tools.cs": 87, "src/TipCL.Core/Launcher/Ai/VisionCaps.cs": 12, "src/TipCL.Core/Launcher/AppInfo.cs": 1, "src/TipCL.Core/Launcher/Auth.cs": 12, "src/TipCL.Core/Launcher/Authlib.cs": 10, "src/TipCL.Core/Launcher/Catalog.cs": 330, "src/TipCL.Core/Launcher/CatalogFiles.cs": 20, "src/TipCL.Core/Launcher/Cleaner.cs": 1, "src/TipCL.Core/Launcher/ContentExport.cs": 4, "src/TipCL.Core/Launcher/Crash.cs": 162, "src/TipCL.Core/Launcher/DownloadManager.cs": 61, "src/TipCL.Core/Launcher/DownloadSnapshot.cs": 4, "src/TipCL.Core/Launcher/DownloadStatus.cs": 22, "src/TipCL.Core/Launcher/DownloadTracker.cs": 30, "src/TipCL.Core/Launcher/Downloader.cs": 4, "src/TipCL.Core/Launcher/ExportPack.cs": 4, "src/TipCL.Core/Launcher/Feedback.cs": 11, "src/TipCL.Core/Launcher/FeedbackDefaults.cs": 8, "src/TipCL.Core/Launcher/GameCrashError.cs": 1, "src/TipCL.Core/Launcher/GameInstall.cs": 10, "src/TipCL.Core/Launcher/Gc.cs": 3, "src/TipCL.Core/Launcher/GlobalMods.cs": 2, "src/TipCL.Core/Launcher/HelpContent.cs": 12, "src/TipCL.Core/Launcher/I18nCore.cs": 1, "src/TipCL.Core/Launcher/Installer.cs": 122, "src/TipCL.Core/Launcher/Instance.cs": 11, "src/TipCL.Core/Launcher/Instances.cs": 7, "src/TipCL.Core/Launcher/Java.cs": 29, "src/TipCL.Core/Launcher/Lan.cs": 1, "src/TipCL.Core/Launcher/LaunchFlow.cs": 4, "src/TipCL.Core/Launcher/LauncherConfig.cs": 3, "src/TipCL.Core/Launcher/Liteloader.cs": 6, "src/TipCL.Core/Launcher/LoaderMeta.cs": 1, "src/TipCL.Core/Launcher/Manifest.cs": 10, "src/TipCL.Core/Launcher/McLauncher.cs": 14, "src/TipCL.Core/Launcher/MicrosoftAuthenticator.cs": 18, "src/TipCL.Core/Launcher/ModUpdate.cs": 4, "src/TipCL.Core/Launcher/Modpack.cs": 153, "src/TipCL.Core/Launcher/Mods.cs": 80, "src/TipCL.Core/Launcher/News.cs": 3, "src/TipCL.Core/Launcher/Nide8.cs": 11, "src/TipCL.Core/Launcher/OfficialMigrate.cs": 4, "src/TipCL.Core/Launcher/Optifine.cs": 21, "src/TipCL.Core/Launcher/Playtime.cs": 10, "src/TipCL.Core/Launcher/Preflight.cs": 67, "src/TipCL.Core/Launcher/RSAKey.cs": 1, "src/TipCL.Core/Launcher/Repair.cs": 6, "src/TipCL.Core/Launcher/RsaLite.cs": 3, "src/TipCL.Core/Launcher/Saves.cs": 20, "src/TipCL.Core/Launcher/Servers.cs": 11, "src/TipCL.Core/Launcher/Shortcut.cs": 4, "src/TipCL.Core/Launcher/Skin.cs": 4, "src/TipCL.Core/Launcher/SkinServer.cs": 3, "src/TipCL.Core/Launcher/Source.cs": 6, "src/TipCL.Core/Launcher/Sync/LevelDat.cs": 2, "src/TipCL.Core/Launcher/Sync/PhoneClient.cs": 12, "src/TipCL.Core/Launcher/Sync/PhoneLink.cs": 21, "src/TipCL.Core/Launcher/Sync/SaveSync.cs": 3, "src/TipCL.Core/Launcher/Sysinfo.cs": 14, "src/TipCL.Core/Launcher/Terracotta.cs": 76, "src/TipCL.Core/Launcher/Themes.cs": 6, "src/TipCL.Core/Launcher/UiLayout.cs": 1, "src/TipCL.Core/Launcher/UiPrefs.cs": 2, "src/TipCL.Core/Launcher/Updater.cs": 14, "src/TipCL.Core/Launcher/Utils.cs": 12, "src/TipCL.Core/Launcher/VersionOps.cs": 6, "src/TipCL.Core/Launcher/VersionSettings.cs": 7, "src/TipCL.Core/Launcher/Worlds.cs": 10, "src/TipCL.Core/Layout/PageLayoutStore.cs": 2, "src/TipCL.Core/Plugins/PluginDirs.cs": 1, "src/TipCL.Core/Plugins/PluginHost.cs": 14, "src/TipCL.Core/Plugins/PluginInstaller.cs": 2, "src/TipCL.Core/Plugins/PluginManifest.cs": 44, "src/TipCL.Core/Plugins/PluginMarket.cs": 14, "src/TipCL.Core/Plugins/SemVer.cs": 1, "src/TipCL.Core/Tests/CoreReuseSmokeTests.cs": 3}, "unwrapped_total": 3370, "unwrapped_with_en_key": 354, "wrapped": 2395}
+{"cjk_literals": 5941, "files": 177, "generated": "2026-11-21T15:10:26", "per_file": {"src/TipCL.App/Common/AccountGate.cs": 2, "src/TipCL.App/Common/Ai/AiService.cs": 2, "src/TipCL.App/Common/Api.cs": 69, "src/TipCL.App/Common/AppLog.cs": 2, "src/TipCL.App/Common/Dlg.cs": 5, "src/TipCL.App/Common/FeedbackConsent.cs": 2, "src/TipCL.App/Common/FileDrop.cs": 11, "src/TipCL.App/Common/FileKinds.cs": 27, "src/TipCL.App/Common/FpsOverlay.cs": 2, "src/TipCL.App/Common/ImportBatch.cs": 2, "src/TipCL.App/Common/Launch/LaunchCore.cs": 17, "src/TipCL.App/Common/Motion.cs": 1, "src/TipCL.App/Common/SelfUpdate.cs": 2, "src/TipCL.App/Common/TaskStore.cs": 1, "src/TipCL.App/Controls/PageLayoutHost.cs": 14, "src/TipCL.App/Pages/AccountPage.cs": 23, "src/TipCL.App/Pages/Ai/AiBubble.cs": 3, "src/TipCL.App/Pages/Ai/AiChatOps.cs": 10, "src/TipCL.App/Pages/Ai/AiFixView.cs": 7, "src/TipCL.App/Pages/Ai/AiImages.cs": 1, "src/TipCL.App/Pages/Ai/AiMemoryPanel.cs": 14, "src/TipCL.App/Pages/Ai/AiPage.cs": 37, "src/TipCL.App/Pages/Ai/AskCard.cs": 1, "src/TipCL.App/Pages/Ai/ChatInput.cs": 1, "src/TipCL.App/Pages/Ai/SlashMenu.cs": 1, "src/TipCL.App/Pages/Ai/TaskCard.cs": 1, "src/TipCL.App/Pages/Download/CatalogModels.cs": 2, "src/TipCL.App/Pages/Download/CatalogPage.cs": 25, "src/TipCL.App/Pages/Download/DownloadPage.cs": 4, "src/TipCL.App/Pages/Download/LoaderIcons.cs": 1, "src/TipCL.App/Pages/Feedback/CrashUi.cs": 3, "src/TipCL.App/Pages/Feedback/FeedbackView.cs": 26, "src/TipCL.App/Pages/Feedback/FirstRunWizard.cs": 19, "src/TipCL.App/Pages/Install/InstallPage.cs": 6, "src/TipCL.App/Pages/Launch/LaunchPage.cs": 6, "src/TipCL.App/Pages/Launch/LaunchPopups.cs": 12, "src/TipCL.App/Pages/Layout/LayoutBlockEntryCatalog.cs": 7, "src/TipCL.App/Pages/Layout/LayoutWidgetOps.cs": 1, "src/TipCL.App/Pages/Library/InstanceDetailPage.cs": 6, "src/TipCL.App/Pages/Library/LibraryPage.cs": 17, "src/TipCL.App/Pages/MultiplayerPage.cs": 17, "src/TipCL.App/Pages/PlaceholderPage.cs": 1, "src/TipCL.App/Pages/Plugins/PluginHostPage.cs": 11, "src/TipCL.App/Pages/Plugins/PluginModels.cs": 9, "src/TipCL.App/Pages/Plugins/PluginSettingsCard.cs": 8, "src/TipCL.App/Pages/Plugins/PluginsPage.Dev.cs": 22, "src/TipCL.App/Pages/Plugins/PluginsPage.Installed.cs": 16, "src/TipCL.App/Pages/Plugins/PluginsPage.Market.cs": 21, "src/TipCL.App/Pages/Plugins/PluginsPage.Settings.cs": 10, "src/TipCL.App/Pages/Plugins/PluginsPage.cs": 6, "src/TipCL.App/Pages/Settings/PhoneSyncPanel.cs": 22, "src/TipCL.App/Pages/Settings/SettingsPage.Cards.cs": 49, "src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs": 61, "src/TipCL.App/Pages/Settings/SettingsPage.SaveLoad.cs": 11, "src/TipCL.App/Pages/Settings/SettingsPage.Update.cs": 5, "src/TipCL.App/Pages/Settings/SettingsPage.cs": 10, "src/TipCL.App/Pages/Settings/SettingsSubs.cs": 22, "src/TipCL.App/Pages/TasksPage.cs": 2, "src/TipCL.App/Pages/Version/ModsDialog.cs": 10, "src/TipCL.App/Pages/Version/SavesDialog.cs": 1, "src/TipCL.App/Pages/Version/VersionManagePage.cs": 37, "src/TipCL.App/Program.cs": 3, "src/TipCL.App/Session/AiSelfTestCli.cs": 7, "src/TipCL.App/Session/CommandLine.cs": 18, "src/TipCL.App/Session/SmokeRunner.cs": 77, "src/TipCL.App/Shell/MainWindow.axaml.cs": 17, "src/TipCL.App/Ui/ThemeGalleryPage.cs": 45, "src/TipCL.Core/BackendWorker.cs": 4, "src/TipCL.Core/Launcher/AccountManager.cs": 2, "src/TipCL.Core/Launcher/Ai/AcctLayoutMpTools.cs": 25, "src/TipCL.Core/Launcher/Ai/AiAgent.cs": 32, "src/TipCL.Core/Launcher/Ai/AiData.cs": 77, "src/TipCL.Core/Launcher/Ai/AiFixChat.cs": 24, "src/TipCL.Core/Launcher/Ai/AiMemory.cs": 1, "src/TipCL.Core/Launcher/Ai/AiResponse.cs": 1, "src/TipCL.Core/Launcher/Ai/AiSelfTest.cs": 117, "src/TipCL.Core/Launcher/Ai/AiSelfTestEngineMcp.cs": 10, "src/TipCL.Core/Launcher/Ai/AiToolRefs.cs": 18, "src/TipCL.Core/Launcher/Ai/AiUiText.cs": 14, "src/TipCL.Core/Launcher/Ai/Artifacts.cs": 13, "src/TipCL.Core/Launcher/Ai/Checkpoint.cs": 6, "src/TipCL.Core/Launcher/Ai/Client.cs": 47, "src/TipCL.Core/Launcher/Ai/Compact.cs": 8, "src/TipCL.Core/Launcher/Ai/FileMemory.cs": 13, "src/TipCL.Core/Launcher/Ai/Images.cs": 11, "src/TipCL.Core/Launcher/Ai/LayoutTools.cs": 40, "src/TipCL.Core/Launcher/Ai/Mcp.cs": 3, "src/TipCL.Core/Launcher/Ai/McpClient.cs": 5, "src/TipCL.Core/Launcher/Ai/McpServer.cs": 6, "src/TipCL.Core/Launcher/Ai/NewFeatures/AiPreflight.cs": 3, "src/TipCL.Core/Launcher/Ai/NewFeatures/DiagnosticReport.cs": 42, "src/TipCL.Core/Launcher/Ai/NewFeatures/InstanceUpgrade.cs": 25, "src/TipCL.Core/Launcher/Ai/NewFeatures/NewFeaturesSelfTest.cs": 17, "src/TipCL.Core/Launcher/Ai/NewFeatures/ServerPing.cs": 14, "src/TipCL.Core/Launcher/Ai/NewFeatures/ShaderAdvisor.cs": 16, "src/TipCL.Core/Launcher/Ai/Rewind.cs": 1, "src/TipCL.Core/Launcher/Ai/Scheduler.cs": 1, "src/TipCL.Core/Launcher/Ai/Store.cs": 3, "src/TipCL.Core/Launcher/Ai/ToolRunner.AcctLayoutMp.cs": 41, "src/TipCL.Core/Launcher/Ai/ToolRunner.LogsFs.cs": 1, "src/TipCL.Core/Launcher/Ai/ToolRunner.NewFeatures.cs": 10, "src/TipCL.Core/Launcher/Ai/ToolRunner.cs": 61, "src/TipCL.Core/Launcher/Ai/Tools.cs": 29, "src/TipCL.Core/Launcher/Ai/VisionCaps.cs": 12, "src/TipCL.Core/Launcher/AppInfo.cs": 1, "src/TipCL.Core/Launcher/Auth.cs": 12, "src/TipCL.Core/Launcher/Authlib.cs": 10, "src/TipCL.Core/Launcher/Catalog.cs": 330, "src/TipCL.Core/Launcher/CatalogFiles.cs": 20, "src/TipCL.Core/Launcher/Cleaner.cs": 1, "src/TipCL.Core/Launcher/ContentExport.cs": 4, "src/TipCL.Core/Launcher/Crash.cs": 162, "src/TipCL.Core/Launcher/DownloadManager.cs": 61, "src/TipCL.Core/Launcher/DownloadSnapshot.cs": 4, "src/TipCL.Core/Launcher/DownloadStatus.cs": 22, "src/TipCL.Core/Launcher/DownloadTracker.cs": 30, "src/TipCL.Core/Launcher/Downloader.cs": 4, "src/TipCL.Core/Launcher/Feedback.cs": 11, "src/TipCL.Core/Launcher/FeedbackDefaults.cs": 8, "src/TipCL.Core/Launcher/GameCrashError.cs": 1, "src/TipCL.Core/Launcher/GameInstall.cs": 10, "src/TipCL.Core/Launcher/Gc.cs": 3, "src/TipCL.Core/Launcher/GlobalMods.cs": 2, "src/TipCL.Core/Launcher/HelpContent.cs": 12, "src/TipCL.Core/Launcher/I18nCore.cs": 1, "src/TipCL.Core/Launcher/Installer.cs": 122, "src/TipCL.Core/Launcher/Instance.cs": 11, "src/TipCL.Core/Launcher/Instances.cs": 7, "src/TipCL.Core/Launcher/Java.cs": 29, "src/TipCL.Core/Launcher/Lan.cs": 1, "src/TipCL.Core/Launcher/LaunchFlow.cs": 4, "src/TipCL.Core/Launcher/LauncherConfig.cs": 3, "src/TipCL.Core/Launcher/Liteloader.cs": 6, "src/TipCL.Core/Launcher/LoaderMeta.cs": 1, "src/TipCL.Core/Launcher/Manifest.cs": 10, "src/TipCL.Core/Launcher/McLauncher.cs": 14, "src/TipCL.Core/Launcher/MicrosoftAuthenticator.cs": 18, "src/TipCL.Core/Launcher/ModUpdate.cs": 4, "src/TipCL.Core/Launcher/Modpack.cs": 153, "src/TipCL.Core/Launcher/Mods.cs": 80, "src/TipCL.Core/Launcher/News.cs": 3, "src/TipCL.Core/Launcher/Nide8.cs": 11, "src/TipCL.Core/Launcher/OfficialMigrate.cs": 4, "src/TipCL.Core/Launcher/Optifine.cs": 21, "src/TipCL.Core/Launcher/Playtime.cs": 10, "src/TipCL.Core/Launcher/Preflight.cs": 1, "src/TipCL.Core/Launcher/RSAKey.cs": 1, "src/TipCL.Core/Launcher/Repair.cs": 6, "src/TipCL.Core/Launcher/RsaLite.cs": 3, "src/TipCL.Core/Launcher/Saves.cs": 20, "src/TipCL.Core/Launcher/Servers.cs": 11, "src/TipCL.Core/Launcher/Shortcut.cs": 4, "src/TipCL.Core/Launcher/Skin.cs": 4, "src/TipCL.Core/Launcher/SkinServer.cs": 3, "src/TipCL.Core/Launcher/Source.cs": 6, "src/TipCL.Core/Launcher/Sync/LevelDat.cs": 2, "src/TipCL.Core/Launcher/Sync/PhoneClient.cs": 12, "src/TipCL.Core/Launcher/Sync/PhoneLink.cs": 21, "src/TipCL.Core/Launcher/Sync/SaveSync.cs": 3, "src/TipCL.Core/Launcher/Sysinfo.cs": 14, "src/TipCL.Core/Launcher/Terracotta.cs": 76, "src/TipCL.Core/Launcher/Themes.cs": 6, "src/TipCL.Core/Launcher/UiLayout.cs": 1, "src/TipCL.Core/Launcher/UiPrefs.cs": 2, "src/TipCL.Core/Launcher/Updater.cs": 14, "src/TipCL.Core/Launcher/Utils.cs": 12, "src/TipCL.Core/Launcher/VersionOps.cs": 6, "src/TipCL.Core/Launcher/VersionSettings.cs": 7, "src/TipCL.Core/Launcher/Worlds.cs": 10, "src/TipCL.Core/Layout/PageLayoutStore.cs": 2, "src/TipCL.Core/Plugins/PluginDirs.cs": 1, "src/TipCL.Core/Plugins/PluginHost.cs": 14, "src/TipCL.Core/Plugins/PluginInstaller.cs": 2, "src/TipCL.Core/Plugins/PluginManifest.cs": 44, "src/TipCL.Core/Plugins/PluginMarket.cs": 14, "src/TipCL.Core/Plugins/SemVer.cs": 1, "src/TipCL.Core/Tests/CoreReuseSmokeTests.cs": 3}, "unwrapped_total": 3211, "unwrapped_with_en_key": 296, "wrapped": 2615}
 ```
 <!-- I18N-GUARD-END -->
