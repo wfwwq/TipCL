@@ -87,7 +87,14 @@ public static class AiData
         "- 用户说「帮我做一个 XX 主题的整合包」:先 plan_modpack(mc_version / loader / theme / size)出候选清单,把每项的理由、前置、冲突讲清楚,用 ask_user(allow_multiple=true)让用户勾选确认。有冲突的先 ask_user 问留哪个。用户没确认清单之前不要 create_instance,也不要装任何东西。\n" + // i18n:ignore(AI2-modpack:给模型看的提示词)
         "- 清单确认后按计划卡一步步做,每步完成用 update_plan 更新:create_instance → install_game(同一 mc_version + loader)→ install_mods_batch(把确认的模组一次列全,整批只确认一次)→ scan_mod_conflicts + preflight_check → (用户愿意时)launch_game 试启动并 get_latest_log 看日志 → export_modpack。每一步写操作都要等用户确认,被拒绝就停下来问。\n" + // i18n:ignore(AI2-modpack:给模型看的提示词)
         "- 导出前先 check_modpack_distribution,把「可链接 / 需打包 / 禁止分发」三类讲清楚:禁止分发的先替换、禁用或用 exclude 排除才能导出;来源不明的本地 jar 可能侵权,默认不打包,只有用户明确同意才传 allow_bundled_jars=true。\n" + // i18n:ignore(AI2-modpack:给模型看的提示词)
-        "- 要不要把当前 config(配置预设)/ 资源包 / 光影 / 数据包打进包由用户决定(include_overrides);不要编造预设,只打包实例里真实存在的文件。"; // i18n:ignore(AI2-modpack:给模型看的提示词)
+        "- 要不要把当前 config(配置预设)/ 资源包 / 光影 / 数据包打进包由用户决定(include_overrides);不要编造预设,只打包实例里真实存在的文件。" + // i18n:ignore(AI2-modpack:给模型看的提示词)
+        // AI2-content:数据包 / 资源包 / KubeJS 脚本的使用指引(Windows 版没有对应段落)
+        "\n\n# 数据包 / 资源包 / KubeJS 脚本\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 改配方、战利品、进度、函数:优先 create_datapack 写数据包(写在某个存档的 datapacks 下);只有实例装了 KubeJS、又需要动态逻辑(按条件改配方、监听事件)时才用 write_kubejs_script。\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 改物品名 / 翻译、方块模型、换贴图:create_resourcepack;贴图只能用用户附带的 png(消息末尾给出的本地路径),不要自己生成图片。\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 工具说 MC 版本推断不出或不在对照表里时,问用户确认版本,不要自己编格式号;已有同名包要改时传 update=true。校验报错就按报错改内容再试。\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 写完提醒用户:数据包在游戏里 /reload,资源包按 F3+T,服务端脚本 /reload、启动脚本要重启游戏;用户说没生效时用 validate_content 查加载报错。\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 不要用 fs_write 写脚本或数据包。"; // i18n:ignore(AI2-content:给模型看的提示词)
 
     /// <summary>把 `__LANG_RULE__` 换成当前语言的规矩(照 Windows 版 BackendApi 的取用方式)。</summary>
     public static string SystemPrompt(string? langRule = null)
@@ -138,6 +145,13 @@ public static class AiData
         // AI2-modpack:整合包制作(造包 / 批量安装 / 许可检查 / 导出)
         (new[] { "整合包", "modpack", "造包", "做包", "打包", "mrpack", "导出", "分发", "许可", "export" }, // i18n:ignore(AI2-modpack:给模型看的关键词)
             new[] { "plan_modpack", "install_mods_batch", "check_modpack_distribution", "export_modpack", "scan_mod_conflicts", "preflight_check", "install_game" }),
+        // AI2-content:数据包 / 资源包 / KubeJS / 加载错误
+        (new[] { "数据包", "datapack", "配方", "合成表", "recipe", "战利品", "掉落物", "loot", "进度", "成就", "advancement", "mcfunction", "函数文件" }, // i18n:ignore(AI2-content:关键词)
+            new[] { "create_datapack", "validate_content", "list_saves" }),
+        (new[] { "资源包", "材质", "贴图", "语言文件", "翻译", "改名字", "方块模型", "resourcepack", "texture" }, // i18n:ignore(AI2-content:关键词)
+            new[] { "create_resourcepack", "validate_content" }),
+        (new[] { "kubejs", "KubeJS", "Kubejs", "脚本" }, new[] { "write_kubejs_script", "create_datapack", "validate_content" }), // i18n:ignore(AI2-content:关键词)
+        (new[] { "没生效", "不生效", "加载失败", "加载错误", "/reload", "F3+T", "Couldn't parse", "Failed to load" }, new[] { "validate_content" }), // i18n:ignore(AI2-content:关键词)
     };
 
     /// <summary>「用户在下命令」而不是在提问(用于决定是否带上写操作工具)。</summary>

@@ -259,6 +259,8 @@ internal sealed class ConfirmCard : Border
         "remove_server" or "apply_instance_upgrade" => false,
         // AI2-modpack:导出整合包 / 批量装模组同样不给;执行器里 ToolRunner.AllowsAlways 再守一道
         "export_modpack" or "install_mods_batch" => false,
+        // AI2-content:KubeJS 脚本是高风险写(在游戏进程里运行),每次都问;执行器 ToolRunner.AllowsAlways 再守一道
+        "write_kubejs_script" => false,
         _ => true,
     };
 }

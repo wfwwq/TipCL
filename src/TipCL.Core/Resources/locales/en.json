@@ -3169,5 +3169,15 @@
  "mrpack 下载地址只认规范允许的域名": "mrpack download URLs only allow the hosts in the spec",
  "modrinth.index.json 字段符合 Modrinth 规范": "modrinth.index.json fields follow the Modrinth spec",
  "主题识别分类(轻量科技 + 优化 → technology, optimization;默认 small)": "Theme to categories (lightweight tech + optimization → technology, optimization; default small)",
- "整合包自检异常": "Modpack self-test error"
+ "整合包自检异常": "Modpack self-test error",
+ "生成数据包": "Create data pack",
+ "生成资源包": "Create resource pack",
+ "写 KubeJS 脚本": "Write KubeJS script",
+ "检查内容加载错误": "Check content load errors",
+ "这一步会被拒绝：": "This step will be rejected:",
+ "位置：{path}": "Location: {path}",
+ "MC {mc}，格式号 {format}": "MC {mc}, pack format {format}",
+ "静态检查通过：没有发现文件、网络、进程或反射类的用法。脚本会在游戏里运行，请确认内容可信。": "Static check passed: no file, network, process or reflection access found. The script runs inside the game, so make sure you trust it.",
+ "未变化：{file}": "Unchanged: {file}",
+ "（贴图）{file}：{w}×{h} PNG，{kb} KB": "(texture) {file}: {w}×{h} PNG, {kb} KB"
 }

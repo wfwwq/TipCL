@@ -123,6 +123,11 @@ public static class ToolMeta
         new("plan_modpack", true, "network", "low", false),
         new("export_modpack", false, "write_local", "medium", true),
         new("install_mods_batch", false, "write_local", "high", true),
+        // AI2-content:数据包 / 资源包 / KubeJS 脚本(脚本在游戏进程里运行,记 high,不给「本对话都允许」)/ 只读的加载错误检查
+        new("create_datapack", false, "write_local", "medium", false),
+        new("create_resourcepack", false, "write_local", "medium", false),
+        new("write_kubejs_script", false, "write_local", "high", false),
+        new("validate_content", true, "read", "low", false),
     };
 
     public static Dictionary<string, ToolMetaInfo> Map

@@ -202,6 +202,8 @@ public static class AiSelfTest
         NewFeaturesSelfTest.Verify(Check);
         // 15. AI2-modpack:整合包导出 / 分发许可 / 一句话造包 / 批量安装(纯逻辑)
         ModpackSelfTest.Verify(Check);
+        // 15. AI2-content:数据包 / 资源包 / KubeJS(格式对照、单复数目录、危险用法拦截,纯逻辑,见 ContentTools.SelfCheck)
+        ContentTools.SelfCheck((name, ok) => Check(name, ok));
 
         return result;
     }

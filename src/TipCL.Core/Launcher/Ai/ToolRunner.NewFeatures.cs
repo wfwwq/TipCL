@@ -34,6 +34,8 @@ public sealed partial class ToolRunner
         "fs_write" => false,
         // AI2-modpack:导出整合包(涉及分发许可,每次都要用户看清单)/ 批量装模组(整批只确认一次,但每批都要确认)
         "export_modpack" or "install_mods_batch" => false,
+        // AI2-content:KubeJS 脚本在游戏进程里运行(高风险),执行器这里也守一道(确认卡 ConfirmCard.AllowAlways 同样不给)
+        "write_kubejs_script" => false,
         _ => true,
     };
 
