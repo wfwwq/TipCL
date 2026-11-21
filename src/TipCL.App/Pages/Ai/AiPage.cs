@@ -218,7 +218,7 @@ public sealed partial class AiPage : PageBase
     {
         string mode = Py.S(TipCL.Core.Launcher.Config.CONFIG.Get("ai_permission_mode", "default"));
         int index = Array.IndexOf(AiPermissionPanel.Modes, mode);
-        _permLabel.Text = "权限:" + AiPermissionPanel.ModeLabels[index >= 0 ? index : 0];
+        _permLabel.Text = I18nCore.Tr("权限:") + AiPermissionPanel.ModeLabels[index >= 0 ? index : 0];
     }
 
     private static bool Configured() => TryEndpoint() != null;
@@ -670,8 +670,8 @@ public sealed partial class AiPage : PageBase
             string message = ex is PyException ? ex.Message : ex.ToString();
             AiUiPost.Post(this, () =>
             {
-                Append("assistant", "对话失败:" + message);
-                ToastHost.Show("AI 对话失败", message, ToastKind.Warning);
+                Append("assistant", I18nCore.Tr("对话失败:") + message);
+                ToastHost.Show(I18nCore.Tr("AI 对话失败"), message, ToastKind.Warning);
                 FinishRun("");
             });
         }
@@ -709,7 +709,7 @@ public sealed partial class AiPage : PageBase
                     break;
                 }
                 CloseRound();
-                Line(ev.Call!.name, "准备:" + ev.Text, ToolState.Prepare);
+                Line(ev.Call!.name, I18nCore.Tr("准备:") + ev.Text, ToolState.Prepare); // AI3-i18n:前缀走词表,AiUiText.StripState 认译文
                 _status.Text = I18nCore.Tr("正在执行操作…");
                 break;
             case "tool_done":
@@ -720,7 +720,7 @@ public sealed partial class AiPage : PageBase
                 CloseRound();
                 if (ev.Call != null)
                 {
-                    var line = Line(ev.Call.name, "完成:" + ev.Text, ToolState.Done);
+                    var line = Line(ev.Call.name, I18nCore.Tr("完成:") + ev.Text, ToolState.Done);
                     line.SetResult(Summarize(ev.Call));
                     AiAcctLayoutMpHooks.AfterTool(this, ev.Call); // AI-acct-layout-mp:layout_apply 后重排标题栏页签
                 }
@@ -734,8 +734,8 @@ public sealed partial class AiPage : PageBase
                 }
                 else
                 {
-                    Append("assistant", "对话失败:" + ev.Error);
-                    ToastHost.Show("AI 对话失败", ev.Error, ToastKind.Warning);
+                    Append("assistant", I18nCore.Tr("对话失败:") + ev.Error);
+                    ToastHost.Show(I18nCore.Tr("AI 对话失败"), ev.Error, ToastKind.Warning);
                     FinishRun("");
                 }
                 break;
@@ -776,7 +776,7 @@ public sealed partial class AiPage : PageBase
                 object? list = dict.Get("items");
                 if (list is List<object> items)
                 {
-                    return items.Count + " 条结果";
+                    return I18nCore.Tr("{n} 条结果").Replace("{n}", items.Count.ToString());
                 }
             }
             catch (Exception)

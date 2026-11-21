@@ -116,6 +116,8 @@ public static class Tools
     }
 
     /// <summary>工具名 → 中文标签(照 Windows 版 Tools._TOOL_LABELS)。</summary>
+    /// <remarks>AI3-i18n:值是词表键,<see cref="Label"/> 返回前过 I18nCore.Tr ⇒ i18n-audit 按「运行时接线」计(标记见 tools/i18n-audit.py RUNTIME_TR_MARK)。</remarks>
+    // i18n:runtime-tr-begin
     private static readonly Dictionary<string, string> Labels = new()
     {
         { "ask_user", "请你选一下" },
@@ -184,6 +186,7 @@ public static class Tools
         { "read_mod_config", "读配置 {path}" },
         // AI-logs-fs / AI-new-features 的模板已搬到 I18nUxLabels(AI2-i18n-ux:走词表)
     };
+    // i18n:runtime-tr-end
 
     /// <summary>是否写操作(风险分级非只读)。</summary>
     public static bool IsWriteTool(string name) => ToolMeta.Get(name) is { @readonly: false };

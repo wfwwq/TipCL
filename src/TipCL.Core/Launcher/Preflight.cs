@@ -42,6 +42,21 @@ public static class Preflight
 	/// <summary>AI2-stability 测试注入点:当前可用物理内存(MB);为空时 Windows 读 GlobalMemoryStatusEx,其它系统不比(与原来一致)。</summary>
 	public static Func<long?> AvailPhysMbHook;
 
+	// AI3-i18n:预检条目(标题 / 说明)显示在启动页提示条与启动失败对话框里,也会经 preflight_check / AiPreflight
+	// 作为工具结果交给模型 —— 与界面共用的文字跟界面语言走(D-82)。一律过词表;{x} 占位在 en 译文里原样保留,
+	// 中文界面下 Tr 返回原文 ⇒ 与改动前逐字相同(测试锁)。code / level 是数据,不翻译。
+	private static string Tr(string key) => I18nCore.Tr(key);
+
+	private static string Tr(string key, params (string Name, object Value)[] fill)
+	{
+		string s = I18nCore.Tr(key);
+		foreach ((string name, object value) in fill)
+		{
+			s = s.Replace("{" + name + "}", value as string ?? Py.Str(value)); // Py.S 会把 0 变成空串
+		}
+		return s;
+	}
+
 	private static PyDict _item(string level, string code, string title, string detail)
 	{
 		return PyDict.Of("level", level, "code", code, "title", title, "detail", detail);
@@ -93,7 +108,7 @@ public static class Preflight
 		string path = inst.path;
 		if (!new PPath(path).IsDir())
 		{
-			list.Add(_item("error", "no_instance", "实例目录不存在", PPath.Norm(path)));
+			list.Add(_item("error", "no_instance", Tr("实例目录不存在"), PPath.Norm(path)));
 			return PyDict.Of("ok", false, "items", list);
 		}
 		try
@@ -107,26 +122,26 @@ public static class Preflight
 		}
 		catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
 		{
-			list.Add(_item("error", "not_writable", "实例目录不可写", ex.Message));
+			list.Add(_item("error", "not_writable", Tr("实例目录不可写"), ex.Message));
 		}
 		PyDict pyDict = null;
 		if (text.Length == 0)
 		{
-			list.Add(_item("error", "no_version", "未选择版本", "请先到「下载 → 原版游戏」安装版本"));
+			list.Add(_item("error", "no_version", Tr("未选择版本"), Tr("请先到「下载 → 原版游戏」安装版本")));
 		}
 		else
 		{
 			PyDict pyDict2 = inst.VersionJson(text) as PyDict;
 			if (!Py.Truthy(pyDict2))
 			{
-				list.Add(_item("error", "no_version_json", "版本未安装", "找不到 " + text + " 的版本 JSON"));
+				list.Add(_item("error", "no_version_json", Tr("版本未安装"), Tr("找不到 {version} 的版本 JSON", ("version", text))));
 			}
 			else
 			{
 				string text2 = PPath.Join(inst.VersionsDir(), text, text + ".jar");
 				if (!new PPath(text2).IsFile())
 				{
-					list.Add(_item("warn", "no_client_jar", "客户端 jar 未直接找到", text2 + "（若为继承版本，启动时会解析父版本）"));
+					list.Add(_item("warn", "no_client_jar", Tr("客户端 jar 未直接找到"), Tr("{path}（若为继承版本，启动时会解析父版本）", ("path", text2))));
 				}
 				try
 				{
@@ -144,11 +159,11 @@ public static class Preflight
 			long num2 = num.Value / 1048576;
 			if (num2 < 512)
 			{
-				list.Add(_item("error", "disk_low", "磁盘空间不足", "实例所在盘仅剩约 " + num2 + " MB，至少需要 512 MB"));
+				list.Add(_item("error", "disk_low", Tr("磁盘空间不足"), Tr("实例所在盘仅剩约 {mb} MB，至少需要 512 MB", ("mb", num2))));
 			}
 			else if (num2 < 2048)
 			{
-				list.Add(_item("warn", "disk_warn", "磁盘空间偏低", "实例所在盘剩余约 " + num2 + " MB，建议清理后再装大整合包"));
+				list.Add(_item("warn", "disk_warn", Tr("磁盘空间偏低"), Tr("实例所在盘剩余约 {mb} MB，建议清理后再装大整合包", ("mb", num2))));
 			}
 		}
 		string text3 = _resolve_mods_dir(inst, text);
@@ -160,14 +175,14 @@ public static class Preflight
 				select new PPath(p).Name).ToList();
 			if (list2.Count > 0)
 			{
-				list.Add(_item("warn", "mod_unzipped", "Mods 被解压成了文件夹", "直接放整个 .jar/.zip 即可。请删掉这些文件夹：\n - " + string.Join("\n - ", list2.Take(12))));
+				list.Add(_item("warn", "mod_unzipped", Tr("Mods 被解压成了文件夹"), Tr("直接放整个 .jar/.zip 即可。请删掉这些文件夹：") + "\n - " + string.Join("\n - ", list2.Take(12))));
 			}
 			List<string> list3 = source.Where((string p) => Py.Lower(new PPath(p).Suffix) == ".jar").ToList();
 			string vl = Py.Lower(text);
 			bool flag = new string[6] { "forge", "fabric", "quilt", "neoforge", "optifine", "liteloader" }.Any((string t) => vl.Contains(t));
 			if (list3.Count > 0 && text.Length > 0 && !flag)
 			{
-				list.Add(_item("warn", "vanilla_mods", "原版版本不会加载模组", "mods 里有 " + list3.Count + " 个 jar，但当前版本名像原版。请安装 Fabric/Forge 等加载器。"));
+				list.Add(_item("warn", "vanilla_mods", Tr("原版版本不会加载模组"), Tr("mods 里有 {n} 个 jar，但当前版本名像原版。请安装 Fabric/Forge 等加载器。", ("n", list3.Count))));
 			}
 		}
 		if (Py.Truthy(pyDict) && text.Length > 0)
@@ -185,7 +200,7 @@ public static class Preflight
 			PPath pPath = new PPath(java_exe);
 			if (!pPath.IsFile())
 			{
-				list.Add(_item("error", "java_missing", "指定的 Java 不存在", java_exe));
+				list.Add(_item("error", "java_missing", Tr("指定的 Java 不存在"), java_exe));
 			}
 			else if (text.Length > 0)
 			{
@@ -193,7 +208,7 @@ public static class Preflight
 				long? javaMajor = Java.GetJavaMajor(pPath.ToString());
 				if (num3 != 0L && javaMajor.HasValue && javaMajor.Value != 0L && javaMajor.Value < num3)
 				{
-					list.Add(_item("error", "java_too_old", "Java 版本过低（需要 " + num3 + "+）", "当前是 Java " + javaMajor.Value + "：" + pPath));
+					list.Add(_item("error", "java_too_old", Tr("Java 版本过低（需要 {required}+）", ("required", num3)), Tr("当前是 Java {major}：{path}", ("major", javaMajor.Value), ("path", pPath.ToString()))));
 				}
 			}
 		}
@@ -203,12 +218,12 @@ public static class Preflight
 		long? availPhysMb = (num4 > 0) ? AvailPhysMb() : null;
 		if (availPhysMb is long num5 && num4 + 1024 > num5)
 		{
-			list.Add(_item("warn", "memory_high", "分配内存接近可用物理内存", "游戏 " + num4 + " MB，系统当前可用约 " + num5 + " MB，可能触发交换卡顿"));
+			list.Add(_item("warn", "memory_high", Tr("分配内存接近可用物理内存"), Tr("游戏 {mem} MB，系统当前可用约 {avail} MB，可能触发交换卡顿", ("mem", num4), ("avail", num5))));
 		}
 		bool flag2 = !list.Any((object it) => Py.Eq(((PyDict)it)["level"], "error"));
 		if (list.Count == 0)
 		{
-			list.Add(_item("ok", "ready", "预检通过", "未发现阻塞问题"));
+			list.Add(_item("ok", "ready", Tr("预检通过"), Tr("未发现阻塞问题")));
 		}
 		return PyDict.Of("ok", flag2, "items", list);
 	}
@@ -344,14 +359,14 @@ public static class Preflight
 		if (list.Count > 0)
 		{
 			string text7 = string.Join("\n - ", list.Take(10));
-			string text8 = ((list.Count > 10) ? ("\n…共缺 " + list.Count + " 个") : "");
+			string text8 = ((list.Count > 10) ? ("\n" + Tr("…共缺 {n} 个", ("n", list.Count))) : "");
 			string level = ((list.Count >= 3) ? "error" : "warn");
-			items.Add(_item(level, "libs_missing", "依赖库缺失", "缺少以下库文件，请到版本页点「修复」：\n - " + text7 + text8));
+			items.Add(_item(level, "libs_missing", Tr("依赖库缺失"), Tr("缺少以下库文件，请到版本页点「修复」：") + "\n - " + text7 + text8));
 		}
 		if (list2.Count > 0)
 		{
 			string text9 = string.Join("\n - ", list2.Take(8));
-			items.Add(_item("warn", "libs_hash", "依赖库校验不一致", "以下库 sha1/大小与清单不符，可能损坏：\n - " + text9 + "\n建议修复该版本。"));
+			items.Add(_item("warn", "libs_hash", Tr("依赖库校验不一致"), Tr("以下库 sha1/大小与清单不符，可能损坏：") + "\n - " + text9 + "\n" + Tr("建议修复该版本。")));
 		}
 	}
 
@@ -367,17 +382,17 @@ public static class Preflight
 		string text3 = PPath.Join(text, "indexes", text2 + ".json");
 		if (!new PPath(text3).IsFile())
 		{
-			items.Add(_item("error", "assets_index_missing", "资源索引缺失", "找不到 assets/indexes/" + text2 + ".json，请修复该版本。"));
+			items.Add(_item("error", "assets_index_missing", Tr("资源索引缺失"), Tr("找不到 assets/indexes/{id}.json，请修复该版本。", ("id", text2))));
 			return;
 		}
 		if (Py.Truthy(pyDict.Get("sha1")) && !Utils.FileMatches(text3, pyDict.Get("sha1"), pyDict.Get("size")))
 		{
-			items.Add(_item("warn", "assets_index_hash", "资源索引校验失败", text2 + ".json 与清单不符，建议修复该版本。"));
+			items.Add(_item("warn", "assets_index_hash", Tr("资源索引校验失败"), Tr("{id}.json 与清单不符，建议修复该版本。", ("id", text2))));
 		}
 		PyDict pyDict2 = Py.DictOr(Py.Or(Py.DictOr(Py.Or(Utils.ReadJson(text3), new PyDict())).Get("objects"), new PyDict()));
 		if (pyDict2.Count == 0)
 		{
-			items.Add(_item("warn", "assets_index_empty", "资源索引为空", text2 + ".json 没有 objects，游戏可能缺材质/音效。"));
+			items.Add(_item("warn", "assets_index_empty", Tr("资源索引为空"), Tr("{id}.json 没有 objects，游戏可能缺材质/音效。", ("id", text2))));
 			return;
 		}
 		List<string> list = pyDict2.Keys.ToList();
@@ -396,14 +411,14 @@ public static class Preflight
 		{
 			double num2 = (double)num / (double)Math.Max(1, list2.Count);
 			long num3 = Py.RoundInt(num2 * (double)pyDict2.Count);
-			string text5 = "抽样 " + list2.Count + " 个资源缺 " + num + " 个（约估全量缺 " + num3 + "/" + pyDict2.Count + "）。";
+			(string, object)[] fill = { ("sample", list2.Count), ("missing", num), ("est", num3), ("total", pyDict2.Count) };
 			if (num2 >= 0.25 || num >= 8)
 			{
-				items.Add(_item("error", "assets_missing", "游戏资源大量缺失", text5 + "请修复该版本。"));
+				items.Add(_item("error", "assets_missing", Tr("游戏资源大量缺失"), Tr("抽样 {sample} 个资源缺 {missing} 个（约估全量缺 {est}/{total}）。请修复该版本。", fill)));
 			}
 			else
 			{
-				items.Add(_item("warn", "assets_partial", "部分游戏资源缺失", text5 + "可先启动，异常再修复。"));
+				items.Add(_item("warn", "assets_partial", Tr("部分游戏资源缺失"), Tr("抽样 {sample} 个资源缺 {missing} 个（约估全量缺 {est}/{total}）。可先启动，异常再修复。", fill)));
 			}
 		}
 	}
@@ -432,7 +447,7 @@ public static class Preflight
 			}
 			if (!Installer.NativesPresent(text))
 			{
-				items.Add(_item("warn", "natives_missing", "本地库（natives）可能未解压", text + " 为空或不完整。启动时会尝试再解压；若仍黑屏请修复该版本。"));
+				items.Add(_item("warn", "natives_missing", Tr("本地库（natives）可能未解压"), Tr("{dir} 为空或不完整。启动时会尝试再解压；若仍黑屏请修复该版本。", ("dir", text))));
 			}
 		}
 	}
@@ -531,13 +546,13 @@ public static class Preflight
 			List<object> list5 = (List<object>)item4.Value;
 			if (list5.Count > 1)
 			{
-				list4.Add(item4.Key + " ×" + list5.Count + "（" + string.Join(", ", from g in list5.Take(3)
-					select Py.Str(Py.Or(((PyDict)g).Get("file"), "?"))) + "）");
+				list4.Add(Tr("{id} ×{n}（{files}）", ("id", item4.Key), ("n", list5.Count), ("files", string.Join(", ", from g in list5.Take(3)
+					select Py.Str(Py.Or(((PyDict)g).Get("file"), "?"))))));
 			}
 		}
 		if (list4.Count > 0)
 		{
-			items.Add(_item("error", "mod_duplicate", "重复安装同一模组", "同 id 装了多份会导致启动失败：\n - " + string.Join("\n - ", list4.Take(8))));
+			items.Add(_item("error", "mod_duplicate", Tr("重复安装同一模组"), Tr("同 id 装了多份会导致启动失败：") + "\n - " + string.Join("\n - ", list4.Take(8))));
 		}
 		HashSet<string> hashSet = new HashSet<string>(pyDict.Keys);
 		bool flag = hashSet.Contains("fabric-api") || hashSet.Contains("fabricapi");
@@ -548,6 +563,8 @@ public static class Preflight
 		}
 		List<string> list6 = new List<string>();
 		List<string> list7 = new List<string>();
+		// AI3-i18n:缺 Fabric API 的条目单独收集 —— 以前靠文字里含不含 "Fabric API" 再分拣,文字走词表后不再可靠
+		List<string> fab = new List<string>();
 		HashSet<string> hashSet3 = new HashSet<string> { "minecraft", "java", "forge", "neoforge", "fabricloader", "fabric-loader", "quilt_loader", "quilt-loader" };
 		foreach (PyDict item5 in list3)
 		{
@@ -574,13 +591,13 @@ public static class Preflight
 				case "fabric":
 					if (!flag)
 					{
-						list7.Add(text5 + " 需要 Fabric API");
+						fab.Add(Tr("{mod} 需要 Fabric API", ("mod", text5)));
 					}
 					break;
 				default:
 					if (!hashSet.Contains(text4))
 					{
-						list7.Add(text5 + " 缺少 " + text4);
+						list7.Add(Tr("{mod} 缺少 {dep}", ("mod", text5), ("dep", text4)));
 					}
 					break;
 				}
@@ -588,17 +605,16 @@ public static class Preflight
 		}
 		if (list6.Count > 0)
 		{
-			items.Add(_item("error", "mod_breaks", "模组互相冲突", "元数据声明不兼容：\n - " + string.Join("\n - ", list6.Take(8))));
+			items.Add(_item("error", "mod_breaks", Tr("模组互相冲突"), Tr("元数据声明不兼容：") + "\n - " + string.Join("\n - ", list6.Take(8))));
 		}
-		List<string> fab = list7.Where((string x) => x.Contains("Fabric API")).ToList();
-		List<string> list8 = list7.Where((string x) => !fab.Contains(x)).ToList();
+		List<string> list8 = list7;
 		if (fab.Count > 0)
 		{
-			items.Add(_item("error", "mod_missing_fabric_api", "缺少 Fabric API", string.Join("\n - ", Dedup(fab).Take(6))));
+			items.Add(_item("error", "mod_missing_fabric_api", Tr("缺少 Fabric API"), string.Join("\n - ", Dedup(fab).Take(6))));
 		}
 		if (list8.Count > 0)
 		{
-			items.Add(_item("warn", "mod_missing_dep", "可能缺少模组依赖", string.Join("\n - ", Dedup(list8).Take(8)) + "\n（若实际由其它 jar 提供可忽略）"));
+			items.Add(_item("warn", "mod_missing_dep", Tr("可能缺少模组依赖"), string.Join("\n - ", Dedup(list8).Take(8)) + "\n" + Tr("（若实际由其它 jar 提供可忽略）")));
 		}
 	}
 }

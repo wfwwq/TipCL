@@ -241,7 +241,7 @@ internal sealed class AiFixView : Border
                     break;
                 }
                 CloseRound();
-                Line(ev.Call!.name, "准备:" + ev.Text, ToolState.Prepare);
+                Line(ev.Call!.name, I18nCore.Tr("准备:") + ev.Text, ToolState.Prepare); // AI3-i18n:前缀走词表(与 AiPage 同口径)
                 _status.Text = I18nCore.Tr("正在执行操作…");
                 break;
             case "tool_done":
@@ -252,7 +252,7 @@ internal sealed class AiFixView : Border
                 CloseRound();
                 if (ev.Call != null)
                 {
-                    Line(ev.Call.name, "完成:" + ev.Text, ToolState.Done);
+                    Line(ev.Call.name, I18nCore.Tr("完成:") + ev.Text, ToolState.Done);
                 }
                 _status.Text = I18nCore.Tr("操作完成");
                 break;
@@ -260,8 +260,8 @@ internal sealed class AiFixView : Border
                 // [audit/B i18n] "已停止" 是 Core(AiAgent/Client)写进事件的原文,不是界面 key ⇒ 比较用原文
             if (ev.Text != I18nCore.Tr("已停止"))
                 {
-                    Append("assistant", "修复会话失败:" + ev.Error);
-                    ToastHost.Show("AI 修复失败", ev.Error, ToastKind.Warning);
+                    Append("assistant", I18nCore.Tr("修复会话失败:") + ev.Error);
+                    ToastHost.Show(I18nCore.Tr("AI 修复失败"), ev.Error, ToastKind.Warning);
                 }
                 FinishRun(ev.Text == I18nCore.Tr("已停止") ? I18nCore.Tr("已停止") : "");
                 break;
