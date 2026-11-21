@@ -1538,3 +1538,12 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - 复验(本机,全程隐藏窗口):Debug `--no-incremental` 构建 0 错误,警告只有基线 3 条 xUnit;全量测试连跑 3 次,每次 **1358 通过 / 7 跳过 / 0 失败**(共 1365,基线 1128);`--ai-selftest` **108 / 0 / 0**;`windos/` 无改动。
 - 文档:README(AI 场景表 +3 行、MCP 小节、指南链接)、新增 `docs/MCP接入指南.md`、PARITY §10 更正 + §11、DECISIONS D-82。
 - 遗留:见 PARITY §11.4。
+
+
+## 2026-11-21 AI 助手第三轮:补遗留 + 真 Linux 验证 + 无窗口视觉巡检(主 agent 编排;AI3-integration 合并)
+- 分支:`ai3/stability`(9f1cce9)、`ai3/moddev`(507269f)、`ai3/content`(921f19c)、`ai3/i18n`(2f72a64)、`ai3/linux-real`(40cf8a4)、`ai3/visual`(1f50077),按此顺序 `--no-ff` 合入 `ai3/integration`(基于 main@b6df4bb)。集成代理合完六包、补挂测试集合后因服务错误中断,主 agent 接手写文档、复验、快进进 main;未 push。
+- 落地:见 docs/PARITY.md §12(§11.4 遗留逐条解决、WSL2 真 Linux 验证、`--visual-tour` 无窗口巡检与对比报告)。
+- 合并时补:stability 的全局状态守卫拦下其他包新增的 6 个测试类,补挂 `GlobalStateCollection`。
+- 视觉巡检首轮:306 步 / 298 OK / 8 FAIL,80 张截图,41 条差异 → 5 份修复清单 76 条,交第四轮按 D-84 修。
+- 复验(本机,全程隐藏窗口):Debug `--no-incremental` 构建 0 错误,警告只有基线 3 条;全量测试连跑 3 次,每次 **1491 通过 / 7 跳过 / 0 失败**(共 1498,上轮 1365);`--ai-selftest` **110 / 0 / 0**;`windos/` 无改动。
+

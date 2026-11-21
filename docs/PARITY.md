@@ -865,3 +865,30 @@ list_servers / add_server / remove_server / ping_server(自实现 Server List Pi
 - plan_modpack 候选只搜 Modrinth;install_mods_batch 同步逐个下载,装得多时 AI 页长时间「执行中」。
 - 原地升级撤回认不出 OptiFine 这类不继承原版的版本目录;SRV 没在真网络上验证;测试夹具在并行测试类里改全局目录,是另一个潜在的偶发失败源。
 - 真模型端到端仍留给用户(需要 API key)。
+
+## 12. AI 助手第三轮:补遗留 + 真 Linux 验证 + 无窗口视觉巡检(2026-11-21,六包并行 + AI3-integration 合并)
+
+分支 `ai3/stability` / `ai3/moddev` / `ai3/content` / `ai3/i18n` / `ai3/linux-real` / `ai3/visual` 依次合入 `ai3/integration`(基于 main@b6df4bb)。工具数仍为 78。
+细节见 `progress/AI3-<包名>.md`,决策见 DECISIONS D-83(本轮)与 D-84(界面对齐效果图的裁定)。
+
+### 12.1 §11.4 已解决的条目
+
+- 老 `Preflight` / `Conflict` 预检条目、AI 页「准备:」「完成:」前缀、启动时定死语言的下拉文案 → 已接 `Tr`,切语言即时生效(AI3-i18n);未接线中文字面量 3370 → 3211,基线随之调低。
+- 测试启动只关自己拉起的进程(按 PID,多开不误关);模组测试任务记录落盘,重启后仍可查(进行中的标 interrupted);各加载器「进入主菜单」特征行整理成可配置表;依赖在 Modrinth 找不到回落 CurseForge(AI3-moddev)。
+- 数据包 / 资源包撤回后清掉新建的空目录;物品 / 方块 ID 命名空间认不出时给警告;KubeJS 静态检查补拦拼接 / 转义 / 模板字符串 / 动态属性 / `.constructor` / `Function(`;plan_modpack 候选加 CurseForge;install_mods_batch 改为后台任务逐项报进度(AI3-content)。
+- 原地升级撤回按升级前后版本目录集合的差集判断,认得出 OptiFine / Forge 安装器目录;改全局状态的测试类收进同一个不并行的集合(`GlobalStateCollection`),并有守卫测试拦新的漏网类;SRV 用真 DNS 做了一次手动核验(AI3-stability)。
+- 真 Linux 验证(WSL2 Ubuntu 24.04,.NET 8.0.428 装在用户目录):构建 0 错误、全量测试 1366 / 7 / 0、自检 108 项;硬件探测与 `/proc`、`nvidia-smi`、`lspci` 对得上;假 `xdg-open` 记录的 21 次参数全部正确;测试期间真实 xdg-open 调用 0 次(AI3-linux-real)。
+
+### 12.2 无窗口视觉巡检(AI3-visual)
+
+- 新 CLI 开关 `--visual-tour <剧本.json> <输出目录>`:Avalonia Headless + Skia,不建系统窗口;剧本支持 navigate / click(按控件 Name 或可见文字)/ rightclick / key / scroll / resize / theme / wait / shot;动画时钟冻结;找不到控件记 FAIL 不崩。
+- 固定假数据目录生成器(实例 / 版本 / 模组 / 存档 / 服务器 / 游戏时长 / 离线账号),各页不再是空态。
+- v3 HTML 效果图的各个状态用无头 Edge(独立配置目录)截图;对比报告 `_visual/report/index.html`(效果图 | 实际 | 差异热力图 + 分数)。工具说明见 `tools/visual/README.md`。
+- 首轮完整巡检:306 步,298 OK,8 FAIL(都是效果图里有、实际还没有的入口);80 张截图;0 次启动游戏、0 次真实外部打开。人工逐对审核得出 41 条差异(缺功能 10 / 明显缺陷 19 / 视觉偏差 12)+ 6 类可接受差异,整理成 5 份修复清单共 76 条,交给第四轮(界面对齐)。
+
+### 12.3 仍未做(如实)
+
+- 界面与效果图的差异(41 条)本轮只查不改,由第四轮按 D-84 修。
+- WSL 里按名字调用 `wsl -d Ubuntu-24.04` 因一条陈旧注册失效,验证脚本改用发行版 id;那条注册没动。
+- 真模型端到端仍留给用户(需要 API key)。
+

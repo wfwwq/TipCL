@@ -62,9 +62,9 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 | “这个服务器延迟多少” | 查延迟、在线人数和版本，增删游戏内「多人游戏」列表（**仅 Linux 版**） |
 | “我的电脑适合什么光影” | 按显卡和内存分低 / 中 / 高配推荐光影和资源包（**仅 Linux 版**） |
 | “导出诊断报告” | 把排查过程、日志片段、模组清单和硬件摘要导出成一份报告，自动打码账号令牌和用户名（**仅 Linux 版**） |
-| “给我做一个 1.20.1 Fabric 的轻量科技包” | 按主题出候选清单（每项带理由、前置、冲突提示），确认后建实例、整批安装、预检，最后导出 mrpack 或 CurseForge 整合包；导出前做分发许可检查，禁止分发的模组会拒绝导出，来源不明的 jar 默认不打包（**仅 Linux 版**） |
-| “把钻石剑的配方改便宜点” | 生成数据包、资源包，装了 KubeJS 时也能写脚本；按 MC 版本对照 `pack_format` 并校验格式，写完提示你 `/reload` 或 F3+T，没生效时从日志里找加载错误（**仅 Linux 版**） |
-| 自己写模组 | 内置助手不写、不编译 Java 模组；外部编程工具（Claude Code、Cursor 等）经 MCP 把 TipCL 当测试环境：建测试实例、装本地 jar、试启动并读崩溃报告，见[外部编程工具接入指南](docs/MCP接入指南.md)（**仅 Linux 版**） |
+| “给我做一个 1.20.1 Fabric 的轻量科技包” | 按主题出候选清单（候选来自 Modrinth 与 CurseForge，每项带理由、前置、冲突提示），确认后建实例、后台整批安装（任务卡逐项显示进度）、预检，最后导出 mrpack 或 CurseForge 整合包；导出前做分发许可检查，禁止分发的模组会拒绝导出，来源不明的 jar 默认不打包（**仅 Linux 版**） |
+| “把钻石剑的配方改便宜点” | 生成数据包、资源包，装了 KubeJS 时也能写脚本；按 MC 版本对照 `pack_format` 并校验格式，引用的物品 / 方块 ID 命名空间既不是 minecraft 也不是已装模组时会提醒，写完提示你 `/reload` 或 F3+T，没生效时从日志里找加载错误（**仅 Linux 版**） |
+| 自己写模组 | 内置助手不写、不编译 Java 模组；外部编程工具（Claude Code、Cursor 等）经 MCP 把 TipCL 当测试环境：建测试实例、装本地 jar、试启动并读崩溃报告（依赖在 Modrinth 找不到会回落 CurseForge；试启动只关自己拉起的那个游戏进程；任务记录重启后仍可查），见[外部编程工具接入指南](docs/MCP接入指南.md)（**仅 Linux 版**） |
 
 - **看图**：自动判断当前模型是否支持多模态，支持选择、粘贴、拖入图片，也可以在设置里手动指定。
 - **长期记忆**：跨对话记住你常玩的版本、硬件和偏好，记录保存在本地 `ai_memory.md`，可随时查看和删除。
@@ -142,6 +142,8 @@ dotnet build TipCL.Linux.sln
 ```
 
 打包成 AppImage / `.deb` 要 Linux 环境，脚本是 `tools/package.sh` 与 `tools/deb.sh`；发版时由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 CI 上跑。
+
+开发者自查（都不起界面、不启动游戏）：`tools/linux-real/verify.sh` 在真 Linux / WSL2 上构建、跑全量测试与硬件探针（装了 NVIDIA 专有驱动时，显卡显存从 `nvidia-smi` 读取）；`--visual-tour <剧本.json> <输出目录>` 按剧本无窗口点击并截图，配合 `tools/visual/` 生成与效果图的对照报告，见 [`tools/visual/README.md`](tools/visual/README.md)。
 
 ## 📁 目录结构
 
