@@ -30,6 +30,9 @@ public sealed class DownloadPage : PageBase
 
 	private readonly Grid _shell = Ui.G("Auto,*");
 
+	// 分类标签行(原版 / Mod / 整合包…);编辑「下载」页期间收起,让编辑条落在内容区顶部
+	private Grid? _vanillaTop;
+
 	/// <summary>原版分段视图：筛选行 + 版本列表卡两个区块，交给 BlockHost 排布与持久化。</summary>
 	private readonly BlockHost _vanillaHost;
 
@@ -87,6 +90,9 @@ public sealed class DownloadPage : PageBase
 		top.Add(task.VCenter(), 0, 1);
 		_shell.Add(top, 0);
 		_shell.Add(_host, 1);
+		// R35 真机修复(win-fix2):编辑「下载」页时,编辑条要在**内容区顶部**(效果图 layout3.html .bodyA > .ebar),
+		// 不能夹在分类标签行和列表中间。编辑的只是「原版」这一栏的区块,编辑期间把分类标签行收起,完成后恢复。
+		_vanillaTop = top;
 
 		_search.TextChanged += delegate
 		{
@@ -117,8 +123,15 @@ public sealed class DownloadPage : PageBase
 		_vanillaHost = new BlockHost("download", new List<BlockSpec>
 		{
 			new BlockSpec { Id = "filters", Title = I18n.L("筛选"), Content = bar },
-			new BlockSpec { Id = "list", Title = I18n.L("版本列表"), Content = card }
+		new BlockSpec { Id = "list", Title = I18n.L("版本列表"), Content = card }
 		}, new Thickness(0.0));
+		_vanillaHost.Editor.EditingChanged += delegate(bool editing)
+		{
+			if (_vanillaTop != null)
+			{
+				_vanillaTop.Visibility = (editing ? Visibility.Collapsed : Visibility.Visible);
+			}
+		};
 
 		base.Content = _shell;
 		TaskStore.Added += delegate

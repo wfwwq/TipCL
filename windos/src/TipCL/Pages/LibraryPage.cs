@@ -271,6 +271,14 @@ public sealed class LibraryPage : PageBase
 					W = 8.0,
 					H = 1.0,
 					Span = 8
+				},
+				// R35 win-fix2:「实例状态」默认隐藏,只登记列宽(与文件夹栏同宽 4 列);从「添加」里显示时
+				// 自动流到文件夹栏下面,不再按契约默认矩形缩成 1 列窄条挤在左栏旁边(录屏:左栏排布错乱)
+				new BlockLayout
+				{
+					Id = "status",
+					Hidden = true,
+					Span = 4
 				}
 			}
 		};

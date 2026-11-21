@@ -125,7 +125,7 @@ public static class LayoutShellHooks
 			{
 				MenuItem reset = new MenuItem
 				{
-					Header = I18n.L("重置本页布局")
+					Header = I18n.L("重置本页")
 				};
 				reset.Click += delegate
 				{
@@ -133,15 +133,8 @@ public static class LayoutShellHooks
 				};
 				menu.Items.Add(reset);
 			}
-			MenuItem settings = new MenuItem
-			{
-				Header = I18n.L("布局设置...")
-			};
-			settings.Click += delegate
-			{
-				OpenLayoutSettings();
-			};
-			menu.Items.Add(settings);
+			// R35 win-fix2:v3 右键只给「自定义布局…」(编辑态:「完成编辑」「重置本页」),与 BlockHost 自带菜单同一套;
+			// v2 留下的「布局设置...」去掉 —— 整套布局在编辑条「⋯ → 整套布局与方案…」和 设置 → 布局 里。
 			menu.PlacementTarget = ((src as UIElement) ?? _win) as UIElement;
 			menu.IsOpen = true;
 			e.Handled = true;

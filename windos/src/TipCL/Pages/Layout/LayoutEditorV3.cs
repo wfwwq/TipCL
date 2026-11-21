@@ -420,6 +420,15 @@ public sealed partial class LayoutEditor
 		}
 	}
 
+	// R35 真机修复(win-fix2):拖完松手就取消选中。按下即选中(主题色 2px 实线框)本身对,但高块(实例库的文件夹栏、
+	// 下载页的版本列表)在视口里只露出左右两条边 —— 拖完之后那条主题色竖边一直留在页面中间,看起来像一条常驻红线。
+	// 只是点一下(没拖)仍保持选中(Delete / 方向键要用);点空白处照旧取消。
+	private void ClearSelectionAfterDrop()
+	{
+		_session.ClearSelection();
+		UpdateSelectionVisual();
+	}
+
 	/// <summary>深色表面(GOAL §6.4 第 2 条:只按 pageId == "launch" 判断):编辑控件用深色玻璃配色。</summary>
 	internal bool IsDarkSurface
 	{
@@ -955,9 +964,30 @@ public sealed partial class LayoutEditor
 			bool multi = type == LayoutSchema.WidgetNote || type == LayoutSchema.WidgetDivider;
 			bool taken = !multi && usedTypes.Contains(type);
 			string capturedType = type;
+			// R35 真机修复(win-fix2):一页只能放一个的类型,如果以前建过、本页还没放,「添加」直接把那个加回来
+			// (原来另起一行「你建过的游戏时长」,和类型行「游戏时长 · 本周每天玩了多久」重复成两行)。
+			string? reuse = null;
+			if (!multi && !taken)
+			{
+				foreach (WidgetDef built in AvailableWidgets())
+				{
+					if (string.Equals(built.Type, type, StringComparison.Ordinal) && !string.IsNullOrEmpty(built.Id))
+					{
+						reuse = built.Id;
+						break;
+					}
+				}
+			}
 			Button add = Ui.Btn(taken ? I18n.L("已添加") : I18n.L("添加"), taken ? BtnKind.Ghost : BtnKind.Soft, delegate
 			{
-				OnAddWidgetType(capturedType);
+				if (reuse != null)
+				{
+					AddCustomBlock(reuse);
+				}
+				else
+				{
+					OnAddWidgetType(capturedType);
+				}
 			});
 			add.IsEnabled = !taken;
 			_v3DrawerWidgets.Children.Add(DrawerItem(LayoutIcons.WidgetIcon(type), WidgetUI.TypeLabel(type), WidgetDescription(type), add, (_v3PendingType == type) ? PendingForm(type) : null));
@@ -975,16 +1005,7 @@ public sealed partial class LayoutEditor
 				_v3DrawerWidgets.Children.Add(DrawerItem(LayoutIcons.WidgetIcon(type), WidgetUI.TypeLabel(type), WidgetDescription(type), add, (_v3PendingType == type) ? PendingForm(type) : null));
 			}
 		}
-		// 以前建过、本页还没放的组件:直接加回来
-		foreach (WidgetDef widget in AvailableWidgets())
-		{
-			string wid = widget.Id;
-			Button add = Ui.Btn(I18n.L("添加"), BtnKind.Soft, delegate
-			{
-				AddCustomBlock(wid);
-			});
-			_v3DrawerWidgets.Children.Add(DrawerItem(LayoutIcons.WidgetIcon(widget.Type ?? ""), WidgetUI.TitleOf(widget), I18n.L("你建过的{0}", WidgetUI.TypeLabel(widget.Type ?? "")), add, null));
-		}
+		// 「你建过的 X」不再单列一行(效果图组件区只有类型行;单例类型已由上面的「添加」复用,便签 / 分隔线本来就可以再建)
 	}
 
 	private static string WidgetDescription(string type)
@@ -1226,6 +1247,18 @@ internal sealed partial class LayoutCard
 	// 下边缘把手(GOAL Q3:网格保留右边缘 + 下边缘,悬停或选中才出现)
 	private readonly Border _v3GripS = new Border();
 
+	/// <summary>
+	/// 编辑态整卡命中层(R35 win-fix2):透明底 = 参与命中测试;按下冒泡到卡片 → 开始拖动,滚轮冒泡给页面滚动。
+	/// 常态折叠,内容照常可点。internal 只为测试能断言它的存在与层级。
+	/// </summary>
+	internal readonly Border _editShield = new Border
+	{
+		Background = Brushes.Transparent,
+		Focusable = false
+	};
+
+	internal bool EditShieldActive => _editShield.Visibility == Visibility.Visible;
+
 	private bool _v3Hover;
 
 	private static readonly DoubleCollection DashPattern = CreateDash();
@@ -1401,6 +1434,7 @@ internal sealed partial class LayoutCard
 			_v3Label.Visibility = Visibility.Collapsed;
 			_v3Acts.Visibility = Visibility.Collapsed;
 			_v3Grip.Visibility = Visibility.Collapsed;
+			_v3GripS.Visibility = Visibility.Collapsed;
 			return;
 		}
 		_v3Outline.Visibility = Visibility.Visible;

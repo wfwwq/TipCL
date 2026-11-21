@@ -250,7 +250,8 @@ public sealed partial class LayoutEditor
 		// 根结构:上 = 编辑工具条(仅编辑态占位;常态整行折叠,内容区高度与改动前一致),下 = 滚动内容区。
 		// 内容宿主始终是 _root.Children[0](Show*Host 按下标换),只是放在第 1 行;抽屉是第 1 行上的覆盖层。
 		SPanel bottom = Ui.V(0.0, _barHost);
-		bottom.Margin = new Thickness(_list.Margin.Left, 10.0, _list.Margin.Right, 0.0);
+		// R35 win-fix2:页面自己管边距(宿主边距 0,例如「下载」)时编辑条也留 22px 边,不贴着内容区边缘(效果图 .bodyA padding)
+		bottom.Margin = new Thickness(LayoutV3Compat.EditBarSideMargin(_list.Margin.Left), (_list.Margin.Top < 8.0) ? 14.0 : 10.0, LayoutV3Compat.EditBarSideMargin(_list.Margin.Right), (_list.Margin.Top < 8.0) ? 12.0 : 0.0);
 		bottom.Visibility = Visibility.Collapsed;
 		_bottom = bottom;
 		_root = Ui.G("Auto,*");
@@ -615,6 +616,10 @@ public sealed partial class LayoutEditor
 		// span = clamp(round(w×cols), max(2, MinCols), cols));存档本身不动,编辑后才按 grid 落盘
 		PageLayoutV2? canvasPage = page;
 		page = LayoutCanvasMigration.IsCanvas(canvasPage) ? LayoutCanvasMigration.ToGridPage(canvasPage, (string id) => MinColsOf(id, LayoutGrid.Columns(canvasPage!))) : page;
+		// R35 真机修复(win-fix2):启动页的旧版纵向流存档按 v3 默认网格呈现(新闻整行、小卡片两两并排、日志整行);
+		// 网格页里「显示出来时没带列宽」的块按默认布局补列宽(实例库「实例状态」缩成窄条挤在左栏旁)。都只是读时呈现。
+		page = LayoutV3Compat.LaunchLegacyStackAsGrid(_pageId, page, _defaultPage, (string id) => MinColsOf(id, PageDefaultLayouts.Cols));
+		page = LayoutV3Compat.FillMissingSpans(page, _defaultPage);
 		// 全局密度也来自 v2(缺省 standard → 间距档 10 = 现状)
 		_density = ((doc.Layout?.Shell != null && LayoutSchema.IsKnownDensity(doc.Layout.Shell.Density)) ? doc.Layout.Shell.Density : LayoutSchema.DensityStandard);
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
@@ -1538,7 +1543,10 @@ public sealed partial class LayoutEditor
 		{
 			// 丝滑版:每帧只动被拖卡片的 RenderTransform(不触发任何布局);换位判定带滞回,
 			// 只有"确实越过相邻块中点 ±H"才动模型 + 搬元素 + 给其余块补 FLIP。
-			_stackPointerY = y;
+			// R35 真机修复(win-fix2):这里原来写的是 _stackPointerY(起手锚点)而不是 _stackPointerYLive ——
+			// 位移 = Live - 锚点 就变成了「起手 y - 当前 y」,指针上移块反而往下走(录屏「版本列表」块)。
+			// 锚点只在 BeginStackFloat 里定一次;这里只更新实时位置。
+			_stackPointerYLive = y;
 			MoveStackFloat();
 			AutoScrollNearEdgeStack(y);
 			int target = StackDragPlan.TargetIndex(_state.VisibleIds(), _dragHeights, _state.Page.Gap, y, before);
@@ -1619,7 +1627,7 @@ public sealed partial class LayoutEditor
 		{
 			return;
 		}
-		tt.Y = _stackFloatBase + (_stackPointerYLive - _stackPointerY);
+		tt.Y = StackDragPlan.FloatOffset(_stackFloatBase, _stackPointerY, _stackPointerYLive);
 	}
 
 	// 换位:模型动一格 → 元素搬到新下标 → 其余块 FLIP;被拖块用基准位移抵消格子移动
@@ -1822,6 +1830,7 @@ public sealed partial class LayoutEditor
 		if (changed && _edit)
 		{
 			Persist();
+			ClearSelectionAfterDrop();
 		}
 		else if (_edit)
 		{
@@ -2345,6 +2354,7 @@ public sealed partial class LayoutEditor
 		if (persist)
 		{
 			CommitBox();
+			ClearSelectionAfterDrop();
 		}
 		else
 		{
@@ -3143,6 +3153,13 @@ internal sealed partial class LayoutCard : Border
 		grid.Add(_bar, 0);
 		grid.Add(_titleRow, 1);
 		grid.Add(_bodyWrap, 2);
+		// R35 真机修复(win-fix2):编辑态整卡命中层(效果图 .blk .bc{pointer-events:none})。
+		// 原来只把 _body 设成不可命中,但外面那层 ScrollViewer 仍可命中 —— 它在 MouseLeftButtonDown 里抢焦点并置 Handled,
+		// 冒泡到卡片的 OnCardMouseDown 就收不到,结果只有按在浮动标签 / 按钮上才拖得动;滚轮也被块内滚动吃掉。
+		// 现在编辑态把整个内容体设为不可命中,再盖一层透明命中层接住按下 / 滚轮(滚轮冒泡给页面滚动)。
+		// 它在手柄层与 v3 浮动件(眼睛 / 垃圾桶 / 右边缘 / 下边缘把手)之下,那几样照常可点。
+		_editShield.Visibility = Visibility.Collapsed;
+		grid.Add(_editShield, 0, 0, 3, 1);
 		// 画布模式的缩放手柄层(8 向;grid 用 e/s/se)。缺省与 stack 模式一律折叠 → 不影响默认渲染。
 		_handleLayer = new Grid
 		{
@@ -3288,6 +3305,8 @@ internal sealed partial class LayoutCard : Border
 		}
 		_collapseBtn.Visibility = (edit ? Visibility.Visible : Visibility.Collapsed);
 		_body.IsHitTestVisible = !edit;
+		_bodyWrap.IsHitTestVisible = !edit;
+		_editShield.Visibility = (edit ? Visibility.Visible : Visibility.Collapsed);
 		if (!edit)
 		{
 			SetCollapsed(false); // 退出编辑自动展开

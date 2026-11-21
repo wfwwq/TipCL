@@ -527,14 +527,15 @@ public sealed partial class LaunchPage : PageBase
 		// contentMargin 对齐英雄区：左 56（同 _hero）、右 24（同 _hero）、下 18（原新闻卡底边距）
 		// R34（§5.5）：文档里还没有 launch 时默认 = 12 列网格，新闻整行；任务 / 时长 / 便签显示后两两并排、日志占整行
 		// （PageDefaultLayouts.LaunchContent）。英雄区仍然不进布局系统；已经存过 launch 的用户完全照文档。
-		Border logCard = Ui.Card(_log, 10.0);
-		logCard.Height = 240.0;
+		// R35 真机修复(win-fix2):四张小卡片改成效果图 pages3.html 的 .wcard —— 圆角 12、内边距 12/16、顶部一行浅色小标签,
+		// 底色随背景走半透明玻璃(与新闻卡同一套 Glass/Tone),不再是 Ui.Card 的整块深色空面板。
+		Border logCard = LaunchMiniCard(I18n.L("日志"), _log, 150.0);
 		_blocks = new BlockHost("launch", new List<BlockSpec>
 		{
 			new BlockSpec { Id = "news", Title = I18n.L("新闻"), Content = _newsCard },
-			new BlockSpec { Id = "tasks", Title = I18n.L("下载任务"), Content = Ui.Card(_taskHost), DefaultVisible = false },
-			new BlockSpec { Id = "playtime", Title = I18n.L("游戏时长"), Content = Ui.Card(_playTotal), DefaultVisible = false },
-			new BlockSpec { Id = "notes", Title = I18n.L("便签"), Content = Ui.Card(_notes), DefaultVisible = false },
+			new BlockSpec { Id = "tasks", Title = I18n.L("下载任务"), Content = LaunchMiniCard(I18n.L("下载任务"), _taskHost, 0.0), DefaultVisible = false },
+			new BlockSpec { Id = "playtime", Title = I18n.L("游戏时长"), Content = LaunchMiniCard(I18n.L("游戏时长"), _playTotal, 0.0), DefaultVisible = false },
+			new BlockSpec { Id = "notes", Title = I18n.L("便签"), Content = LaunchMiniCard(I18n.L("便签"), _notes, 64.0), DefaultVisible = false },
 			new BlockSpec { Id = "log", Title = I18n.L("日志"), Content = logCard, DefaultVisible = false }
 		}, new Thickness(56.0, 0.0, 24.0, 18.0), PageDefaultLayouts.LaunchContent());
 		// 多块同时展开时限高内滚（约 62% 页高），避免 Auto 行把上方英雄区挤没；默认仅新闻卡时远达不到上限
@@ -597,6 +598,56 @@ public sealed partial class LaunchPage : PageBase
 			}
 		}
 		return false;
+	}
+
+	// 启动页下方小卡片(效果图 .wcard / .wl):小标签 12px、60% 不透明;内容体透明底,字色继承卡片(随 Tone 切换)。
+	// bodyHeight > 0 = 内容体固定高度(日志);0 = 跟随内容,最矮 56(两张并排时高度对齐由网格行负责)。
+	private Border LaunchMiniCard(string label, FrameworkElement body, double bodyHeight)
+	{
+		TextBlock tag = Ui.Txt(label, 12.0);
+		tag.Opacity = 0.66;
+		tag.Margin = new Thickness(0.0, 0.0, 0.0, 4.0);
+		if (body is TextBox box)
+		{
+			// 便签 / 日志:去掉输入框自己的底色与描边,看起来是卡片里的一段文字
+			box.Background = Brushes.Transparent;
+			box.BorderThickness = new Thickness(0.0);
+			box.Padding = new Thickness(0.0);
+			// Input 模板里的底框 Bd 写死了 B.Paper / B.Line:模板套上之后把它也设成透明(本地值压过模板触发器)
+			box.Loaded += delegate
+			{
+				box.ApplyTemplate();
+				if (box.Template?.FindName("Bd", box) is Border bd)
+				{
+					bd.Background = Brushes.Transparent;
+					bd.BorderBrush = Brushes.Transparent;
+					bd.BorderThickness = new Thickness(0.0);
+				}
+			};
+			box.SetBinding(Control.ForegroundProperty, new Binding
+			{
+				Path = new PropertyPath(System.Windows.Documents.TextElement.ForegroundProperty),
+				RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(Border), 1)
+			});
+		}
+		if (bodyHeight > 0.0)
+		{
+			body.Height = bodyHeight;
+		}
+		Grid g = Ui.G("Auto,*");
+		g.Add(tag, 0);
+		g.Add(body, 1);
+		Border card = new Border
+		{
+			CornerRadius = new CornerRadius(12.0),
+			BorderThickness = new Thickness(1.0),
+			Padding = new Thickness(16.0, 12.0, 16.0, 12.0),
+			MinHeight = 56.0,
+			Child = g
+		};
+		Glass(card);
+		Tone(card, hover: false);
+		return card;
 	}
 
 	// 半透明按钮（48 高，圆角 12）；label 为 null 即 48×48 图标钮
@@ -1371,7 +1422,9 @@ public sealed partial class LaunchPage : PageBase
 		List<TaskRow> list = TaskStore.Rows.Reverse().Take(5).ToList();
 		if (list.Count == 0)
 		{
-			_taskHost.Children.Add(Ui.Muted(I18n.L("暂无下载任务")));
+			TextBlock none = Ui.Txt(I18n.L("暂无下载任务"), 13.0);
+			none.Opacity = 0.72; // 字色继承小卡片(玻璃底上白字 / 无背景图时主题字色)
+			_taskHost.Children.Add(none);
 			return;
 		}
 		foreach (TaskRow item in list)
