@@ -17,8 +17,8 @@ public sealed partial class ToolRunner
     /// </summary>
     public bool ForceConfirmWrites { get; set; }
 
-    /// <summary>外部写操作闸门给确认卡的理由。</summary>
-    public const string ExternalWriteReason = "外部 MCP 客户端发起的写操作需要你确认";
+    /// <summary>外部写操作闸门给确认卡的理由(显示在确认卡上;AI2-i18n-ux:走词表)。</summary>
+    public static string ExternalWriteReason => I18nCore.Tr("外部 MCP 客户端发起的写操作需要你确认");
 
     /// <summary>
     /// 钩子报错回传(工具调用、阶段 before/after、错误列表「钩子名: 异常」)。

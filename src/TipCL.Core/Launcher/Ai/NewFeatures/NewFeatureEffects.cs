@@ -59,6 +59,19 @@ public static class NewFeatureEffects
     private static PyDict Row(string kind, string head, List<string> lines)
         => PyDict.Of("kind", kind, "head", head, "lines", lines.Cast<object>().ToList(), "too_large", false);
 
+    // AI2-i18n-ux:确认卡预览是用户看的,一律走词表;占位 {x} 在 en 译文里原样保留
+    private static string Tr(string key) => I18nCore.Tr(key);
+
+    private static string Tr(string key, params (string Name, object? Value)[] fill)
+    {
+        string s = I18nCore.Tr(key);
+        foreach ((string name, object? value) in fill)
+        {
+            s = s.Replace("{" + name + "}", Py.S(value));
+        }
+        return s;
+    }
+
     /// <summary>按 index 或 address(ip[:port])在实例的服务器列表里找一台;找不到返回 -1。</summary>
     public static int FindServerIndex(Instance inst, PyDict args)
     {
@@ -119,8 +132,8 @@ public static class NewFeatureEffects
                 }
                 string label = Py.S(Py.Or(args.Get("name"), host));
                 lines.Add("+ " + label + "  " + host + ":" + port);
-                lines.Add("写入实例「" + instName + "」的 servers.dat(游戏内「多人游戏」列表)");
-                return Row("summary", "将添加服务器：", lines);
+                lines.Add(Tr("写入实例「{instance}」的 servers.dat(游戏内「多人游戏」列表)", ("instance", instName)));
+                return Row("summary", Tr("将添加服务器："), lines);
             }
             case "remove_server":
             {
@@ -136,21 +149,21 @@ public static class NewFeatureEffects
                 }
                 if (index < 0)
                 {
-                    lines.Add("（没找到这台服务器，执行时会报「不存在」）");
-                    return Row("summary", "将移除服务器：", lines);
+                    lines.Add(Tr("（没找到这台服务器，执行时会报「不存在」）"));
+                    return Row("summary", Tr("将移除服务器："), lines);
                 }
                 PyDict row = Py.D(Servers.ListServers(inst)[index]);
                 lines.Add("- #" + index + " " + Py.S(row.Get("name")) + "  " + Py.S(row.Get("ip")) + ":" + Py.S(row.Get("port")));
-                lines.Add("从实例「" + instName + "」的 servers.dat 里删掉（已做检查点，可撤回）");
-                return Row("summary", "将移除服务器：", lines);
+                lines.Add(Tr("从实例「{instance}」的 servers.dat 里删掉（已做检查点，可撤回）", ("instance", instName)));
+                return Row("summary", Tr("将移除服务器："), lines);
             }
             case "export_diagnostic_report":
             {
                 string path = DiagnosticReport.ResolveOutPath(args, instName);
                 lines.Add(path);
-                lines.Add("内容：排查过程摘要 / 诊断结论 / 实例与模组清单 / 硬件摘要 / 日志关键片段");
-                lines.Add("账号令牌、UUID、含用户名的路径、邮箱会自动打码");
-                return Row("summary", "将写入：", lines);
+                lines.Add(Tr("内容：排查过程摘要 / 诊断结论 / 实例与模组清单 / 硬件摘要 / 日志关键片段"));
+                lines.Add(Tr("账号令牌、UUID、含用户名的路径、邮箱会自动打码"));
+                return Row("summary", Tr("将写入："), lines);
             }
             case "apply_instance_upgrade":
             {
@@ -172,39 +185,42 @@ public static class NewFeatureEffects
                 string toLoader = InstanceUpgrade.NormalizeLoader(loaderArg.Length > 0 ? loaderArg : curLoader);
                 if (inPlace)
                 {
-                    lines.Add("⚠ 原地升级实例「" + instName + "」：mods 目录会被改写（已做检查点，可撤回）");
+                    lines.Add("⚠ " + Tr("原地升级实例「{instance}」：mods 目录会被改写（已做检查点，可撤回）", ("instance", instName)));
                 }
                 else
                 {
-                    lines.Add("新建实例「" + InstanceUpgrade.NewInstanceName(args, instName) + "」，原实例「" + instName + "」与存档不动");
-                    lines.Add("复制：" + string.Join(" ", InstanceUpgrade.CARRY_OVER));
+                    lines.Add(Tr("新建实例「{new}」，原实例「{instance}」与存档不动",
+                        ("new", InstanceUpgrade.NewInstanceName(args, instName)), ("instance", instName)));
+                    lines.Add(Tr("复制：") + string.Join(" ", InstanceUpgrade.CARRY_OVER));
                 }
-                lines.Add("安装 Minecraft " + mc + " + " + InstanceUpgrade.LoaderLabel(toLoader));
+                lines.Add(Tr("安装 Minecraft {mc} + {loader}", ("mc", mc), ("loader", InstanceUpgrade.LoaderLabel(toLoader))));
                 PyDict? plan = InstanceUpgrade.CachedPlan(instName, mc, toLoader);
                 if (plan == null)
                 {
-                    lines.Add("模组清单执行时联网核对（建议先 plan_instance_upgrade 看清单）");
-                    return Row("summary", "升级方案：", lines);
+                    lines.Add(Tr("模组清单执行时联网核对（建议先 plan_instance_upgrade 看清单）"));
+                    return Row("summary", Tr("升级方案："), lines);
                 }
                 PyDict sum = Py.D(plan.Get("summary"));
-                lines.Add("模组：升级 " + Py.S(sum.Get("upgrade")) + " / 原样保留 " + Py.S(sum.Get("compatible")) +
-                          " / 跳过 " + Py.S(sum.Get("missing")) + "（目标版本没有）/ 认不出 " + Py.S(sum.Get("unknown")));
+                lines.Add(Tr("模组：升级 {upgrade} / 原样保留 {compatible} / 跳过 {missing}（目标版本没有）/ 认不出 {unknown}",
+                    ("upgrade", sum.Get("upgrade")), ("compatible", sum.Get("compatible")),
+                    ("missing", sum.Get("missing")), ("unknown", sum.Get("unknown"))));
                 var skip = Py.ListOr(args.Get("skip")).Select(x => Py.S(x)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                string dropped = inPlace ? Tr("将禁用") : Tr("不带过去");
                 foreach (object raw in Py.ListOr(plan.Get("mods")).Take(60))
                 {
                     PyDict row = Py.D(raw);
                     string mod = Py.S(row.Get("name"));
                     if (skip.Contains(Py.S(row.Get("filename"))))
                     {
-                        lines.Add("  ⊘ " + mod + "（用户要求跳过）");
+                        lines.Add("  ⊘ " + mod + Tr("（用户要求跳过）"));
                         continue;
                     }
                     lines.Add(Py.S(row.Get("status")) switch
                     {
-                        "upgrade" => "  ↑ " + mod + "：" + Py.S(row.Get("current")) + " → " + Py.S(row.Get("target_version")),
-                        "compatible" => "  = " + mod + "（当前文件已支持 " + mc + "）",
-                        "missing" => "  ✗ " + mod + "（目标版本没有，" + (inPlace ? "将禁用" : "不带过去") + "）",
-                        _ => "  ? " + mod + "（认不出来源，" + (inPlace ? "将禁用" : "不带过去") + "）",
+                        "upgrade" => "  ↑ " + mod + ": " + Py.S(row.Get("current")) + " → " + Py.S(row.Get("target_version")),
+                        "compatible" => "  = " + mod + Tr("（当前文件已支持 {mc}）", ("mc", mc)),
+                        "missing" => "  ✗ " + mod + Tr("（目标版本没有，{action}）", ("action", dropped)),
+                        _ => "  ? " + mod + Tr("（认不出来源，{action}）", ("action", dropped)),
                     });
                 }
                 foreach (object raw in Py.ListOr(plan.Get("dependency_changes")).Take(10))
@@ -213,10 +229,11 @@ public static class NewFeatureEffects
                     var need = Py.ListOr(d.Get("need_install")).Select(x => Py.S(x)).ToList();
                     if (need.Count > 0)
                     {
-                        lines.Add("  前置变化：" + Py.S(d.Get("mod")) + " 新增需要 " + string.Join(", ", need) + "（装完后需补装）");
+                        lines.Add("  " + Tr("前置变化：{mod} 新增需要 {need}（装完后需补装）",
+                            ("mod", d.Get("mod")), ("need", string.Join(", ", need))));
                     }
                 }
-                return Row("summary", "升级方案：", lines);
+                return Row("summary", Tr("升级方案："), lines);
             }
         }
         return null;

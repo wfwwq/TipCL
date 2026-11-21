@@ -151,23 +151,7 @@ public static class Tools
         { "forget", "忘掉" },
         { "read_artifact", "读文件" },
         { "dispatch_subagent", "派发子任务" },
-        // AI-logs-fs(标签照 Windows 版 Tools._TOOL_LABELS / ExtraTools.Labels)
-        { "get_latest_log", "读最新日志" },
-        { "get_crash_report", "读崩溃报告" },
-        { "fs_list", "列文件" },
-        { "fs_read", "读文件" },
-        { "fs_write", "写文件" },
-        { "open_folder", "打开文件夹" },
-        // AI-new-features
-        { "plan_instance_upgrade", "查升级计划" },
-        { "apply_instance_upgrade", "升级实例" },
-        { "preflight_check", "启动前预检" },
-        { "list_servers", "查服务器列表" },
-        { "add_server", "添加服务器" },
-        { "remove_server", "删除服务器" },
-        { "ping_server", "查服务器状态" },
-        { "recommend_shaders", "按硬件推荐光影" },
-        { "export_diagnostic_report", "导出诊断报告" },
+        // AI-logs-fs / AI-new-features 的标签已搬到 I18nUxLabels(AI2-i18n-ux:走词表)
     };
 
     /// <summary>带参数时更好读的标签模板(照 Windows 版 Tools._FMT)。</summary>
@@ -195,18 +179,7 @@ public static class Tools
         { "search_versions", "搜版本「{query}」" },
         { "inspect_mod", "检查模组 {filename}" },
         { "read_mod_config", "读配置 {path}" },
-        // AI-logs-fs
-        { "fs_list", "列文件 {path}" },
-        { "fs_read", "读文件 {path}" },
-        { "fs_write", "写文件 {path}" },
-        { "open_folder", "打开文件夹 {kind}" },
-        // AI-new-features
-        { "plan_instance_upgrade", "查升级计划 {instance} → {target_version}" },
-        { "apply_instance_upgrade", "升级实例 {instance} → {target_version}" },
-        { "add_server", "添加服务器 {address}" },
-        { "remove_server", "删除服务器 #{index}" },
-        { "ping_server", "查服务器 {address}" },
-        { "export_diagnostic_report", "导出诊断报告 → {dest_dir}" },
+        // AI-logs-fs / AI-new-features 的模板已搬到 I18nUxLabels(AI2-i18n-ux:走词表)
     };
 
     /// <summary>是否写操作(风险分级非只读)。</summary>
@@ -225,15 +198,20 @@ public static class Tools
         {
             return extraLabel;
         }
+        // AI2-i18n-ux:上一轮新增工具的标签走词表(I18nUxLabels);老工具的中文标签在返回前也过一遍 I18nCore.Tr
+        if (I18nUxLabels.Label(key, args) is { } i18nUxLabel)
+        {
+            return i18nUxLabel;
+        }
         if (args != null && Formats.TryGetValue(key, out string? fmt))
         {
-            string filled = FillTemplate(fmt, args);
+            string filled = FillTemplate(I18nCore.Tr(fmt), args);
             if (filled.Length > 0)
             {
                 return filled;
             }
         }
-        return Labels.TryGetValue(key, out string? label) ? label : key;
+        return Labels.TryGetValue(key, out string? label) ? I18nCore.Tr(label) : key;
     }
 
     private static string FillTemplate(string fmt, PyDict args)

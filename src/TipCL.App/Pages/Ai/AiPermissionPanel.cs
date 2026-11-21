@@ -25,12 +25,12 @@ internal sealed class AiPermissionPanel : Border
     /// <summary>档位键(与 Windows 版一致,存进 config.json)。</summary>
     internal static readonly string[] Modes = { "default", "acceptEdits", "plan", "yolo", "custom" };
 
-    /// <summary>档位文案(顺序与 Modes 对齐)。</summary>
-    internal static readonly string[] ModeLabels = { I18nCore.Tr("每次确认"), I18nCore.Tr("写直接执行"), I18nCore.Tr("只看不动"), I18nCore.Tr("全自动"), I18nCore.Tr("自定义") };
+    /// <summary>档位文案(顺序与 Modes 对齐)。AI2-i18n-ux:每次现查词表(静态只读数组在类型初始化时就定死了语言)。</summary>
+    internal static string[] ModeLabels => new[] { I18nCore.Tr("每次确认"), I18nCore.Tr("写直接执行"), I18nCore.Tr("只看不动"), I18nCore.Tr("全自动"), I18nCore.Tr("自定义") };
 
     private static readonly string[] Behaviors = { "allow", "deny", "ask" };
 
-    private static readonly string[] BehaviorLabels = { I18nCore.Tr("允许"), I18nCore.Tr("禁止"), I18nCore.Tr("每次问") };
+    private static string[] BehaviorLabels => new[] { I18nCore.Tr("允许"), I18nCore.Tr("禁止"), I18nCore.Tr("每次问") };
 
     private readonly IApi _api;
     private readonly string _instance;
@@ -38,7 +38,7 @@ internal sealed class AiPermissionPanel : Border
     private readonly ComboBox _tool = UiClass.Combo(Tools.Names(), null, 190);
     private readonly ComboBox _behavior = UiClass.Combo(BehaviorLabels.ToList(), I18nCore.Tr("允许"), 100);
     private readonly ComboBox _scope = UiClass.Combo(new[] { I18nCore.Tr("所有实例"), I18nCore.Tr("仅当前实例") }, I18nCore.Tr("所有实例"), 125);
-    private readonly TextBox _content = UiClass.Input("限定参数(留空 = 整个工具)");
+    private readonly TextBox _content = UiClass.Input(I18nCore.Tr("限定参数(留空 = 整个工具)"));
     private readonly StackPanel _rules = UiClass.V(6);
     private readonly TextBlock _status = UiClass.Small("");
     private readonly TextBlock _usage = UiClass.Small("");
@@ -59,9 +59,9 @@ internal sealed class AiPermissionPanel : Border
         row.Add(UiExt.Mk(add, 8, 0, 0, 0), 0, 4);
 
         var body = UiClass.V(8,
-            UiClass.Section(I18nCore.Tr("权限档位"), "与 Windows 版共用五档权限;自定义规则会覆盖默认判定"),
+            UiClass.Section(I18nCore.Tr("权限档位"), I18nCore.Tr("与 Windows 版共用五档权限;自定义规则会覆盖默认判定")),
             UiClass.Field(I18nCore.Tr("当前档位"), control, I18nCore.Tr("点保存后立即对下一轮生效")),
-            UiClass.Section(I18nCore.Tr("规则"), "规则可记到全局或当前实例;命中多条时 禁止 > 允许 > 每次问"),
+            UiClass.Section(I18nCore.Tr("规则"), I18nCore.Tr("规则可记到全局或当前实例;命中多条时 禁止 > 允许 > 每次问")),
             row,
             UiClass.Small(ContentHint).Wrap(),
             _status,
@@ -74,11 +74,12 @@ internal sealed class AiPermissionPanel : Border
     /// <summary>
     /// 「限定参数」怎么匹配(AI-engine-mcp:Core 的 PermissionRules 已让它参与判定,文案照实际规则写)。
     /// 与 Windows 版 Permission.RuleContentFromInput 同一份键序;作用范围按这次调用要动的实例算。
+    /// AI2-i18n-ux:改成现查词表的属性(原来是 const 中文)。
     /// </summary>
-    internal const string ContentHint =
-        "限定参数:只对参数完全一致的那一次调用生效(不分大小写,路径写法会先归一)。比对的是调用里第一个非空的 "
-        + "path / filename / slug / name / version / major 等参数,例如只允许改 config 里的某个文件、只允许装某个模组。"
-        + "「仅当前实例」按这次操作要动的实例算。删除类工具的「允许」必须填限定参数才生效。";
+    internal static string ContentHint =>
+        I18nCore.Tr("限定参数:只对参数完全一致的那一次调用生效(不分大小写,路径写法会先归一)。比对的是调用里第一个非空的 ")
+        + I18nCore.Tr("path / filename / slug / name / version / major 等参数,例如只允许改 config 里的某个文件、只允许装某个模组。")
+        + I18nCore.Tr("「仅当前实例」按这次操作要动的实例算。删除类工具的「允许」必须填限定参数才生效。");
 
     /// <summary>刷新当前档位与规则列表(宿主在弹出前后各调一次即可)。</summary>
     public Task RefreshAsync()
@@ -110,7 +111,7 @@ internal sealed class AiPermissionPanel : Border
         string tool = _tool.SelectedItem as string ?? "";
         if (tool.Length == 0)
         {
-            _status.Text = "先选一个工具";
+            _status.Text = I18nCore.Tr("先选一个工具");
             return;
         }
         var rules = Py.ListOr(TipCL.Core.Launcher.Config.CONFIG.Get("ai_permission_rules")).Select(Py.D).ToList();
@@ -131,8 +132,8 @@ internal sealed class AiPermissionPanel : Border
         });
         _content.Text = "";
         _status.Text = behavior == "allow" && content.Length == 0 && ToolMeta.Get(tool)?.side_effect == "delete"
-            ? "已添加,但删除类工具的「允许」没填限定参数不会生效(仍会弹确认)"
-            : "已添加规则";
+            ? I18nCore.Tr("已添加,但删除类工具的「允许」没填限定参数不会生效(仍会弹确认)")
+            : I18nCore.Tr("已添加规则");
         ReloadRules();
     }
 
@@ -172,8 +173,10 @@ internal sealed class AiPermissionPanel : Border
             _rules.Children.Add(UiClass.Muted(I18nCore.Tr("还没有自定义规则")));
         }
         int modeIndex = Math.Clamp(_mode.SelectedIndex, 0, ModeLabels.Length - 1);
-        _usage.Text = "当前档位:" + ModeLabels[modeIndex]
-            + (total > 0 ? $" · 自定义规则 {total} 条(其中禁止 {denied} 条)" : "");
+        _usage.Text = I18nCore.Tr("当前档位:") + ModeLabels[modeIndex]
+            + (total > 0
+                ? " · " + I18nCore.Tr("自定义规则 {total} 条(其中禁止 {denied} 条)").Replace("{total}", total.ToString()).Replace("{denied}", denied.ToString())
+                : "");
     }
 
     private async Task RemoveRuleAsync(string tool, string instance, string content)

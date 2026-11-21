@@ -24,25 +24,25 @@ public static class AcctLayoutMpTools
         LayoutTools.GetName, LayoutTools.ApplyName,
     };
 
-    /// <summary>工具名 → 中文标签(与 Windows ExtraTools.Labels 同文)。</summary>
-    public static readonly Dictionary<string, string> Labels = new(StringComparer.Ordinal)
+    /// <summary>工具名 → 标签(与 Windows ExtraTools.Labels 同文)。AI2-i18n-ux:每次现查词表(英文界面不再显示中文)。</summary>
+    public static Dictionary<string, string> Labels => new(StringComparer.Ordinal)
     {
-        { "list_accounts", "查看账号" },
-        { "add_offline_account", "添加离线账号" },
-        { "switch_account", "切换账号" },
-        { "set_skin", "设置皮肤" },
-        { "multiplayer", "联机" },
-        { "layout_get", "查看界面布局" },
-        { "layout_apply", "调整界面布局" },
+        { "list_accounts", I18nCore.Tr("查看账号") },
+        { "add_offline_account", I18nCore.Tr("添加离线账号") },
+        { "switch_account", I18nCore.Tr("切换账号") },
+        { "set_skin", I18nCore.Tr("设置皮肤") },
+        { "multiplayer", I18nCore.Tr("联机") },
+        { "layout_get", I18nCore.Tr("查看界面布局") },
+        { "layout_apply", I18nCore.Tr("调整界面布局") },
     };
 
-    /// <summary>带参数时的标签模板(参数缺失就回落成上面的通用标签)。</summary>
-    private static readonly Dictionary<string, string> Formats = new(StringComparer.Ordinal)
+    /// <summary>带参数时的标签模板(参数缺失就回落成上面的通用标签)。AI2-i18n-ux:同上,现查词表。</summary>
+    private static Dictionary<string, string> Formats => new(StringComparer.Ordinal)
     {
-        { "add_offline_account", "添加离线账号 {username}" },
-        { "switch_account", "切换账号 {name}" },
-        { "set_skin", "给 {name} 换皮肤" },
-        { "multiplayer", "联机:{action}" },
+        { "add_offline_account", I18nCore.Tr("添加离线账号 {username}") },
+        { "switch_account", I18nCore.Tr("切换账号 {name}") },
+        { "set_skin", I18nCore.Tr("给 {name} 换皮肤") },
+        { "multiplayer", I18nCore.Tr("联机:{action}") },
     };
 
     /// <summary>按用户用词追加的工具(与 Windows ExtraTools.Keywords 的三行同值)。</summary>

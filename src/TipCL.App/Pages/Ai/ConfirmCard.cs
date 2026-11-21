@@ -65,7 +65,7 @@ internal sealed class ConfirmCard : Border
 
         var head = UiClass.G(null, "Auto,*");
         head.Add(AiIcons.Icon(AiIcons.Alert, 16, Risk == AiRisk.Delete ? "B.Danger" : "B.Warn").VCenter(), 0, 0);
-        var headText = UiClass.Txt("助手要执行一个操作,需要你确认", 13, true, "B.Ink");
+        var headText = UiClass.Txt(I18nCore.Tr("助手要执行一个操作,需要你确认"), 13, true, "B.Ink");
         headText.Margin = new Thickness(9, 0, 0, 0);
         head.Add(headText.VCenter(), 0, 1);
         var header = new Border { Padding = new Thickness(14, 10, 14, 10), Child = head };
@@ -84,7 +84,7 @@ internal sealed class ConfirmCard : Border
         var body = UiClass.V(6, row);
         if (Risk == AiRisk.Delete)
         {
-            var warn = UiClass.Txt("删除类操作:如果这一轮没有检查点,删掉后无法一键撤回", 12, false, "B.Danger").Wrap();
+            var warn = UiClass.Txt(I18nCore.Tr("删除类操作:如果这一轮没有检查点,删掉后无法一键撤回"), 12, false, "B.Danger").Wrap();
             warn.Margin = new Thickness(24, 0, 0, 0);
             body.Children.Add(warn);
         }
@@ -186,7 +186,7 @@ internal sealed class ConfirmCard : Border
         _answer(false, false, "instance");
     }
 
-    private static string RiskText(AiRisk risk) => AiUiText.RiskText(risk);
+    private static string RiskText(AiRisk risk) => I18nCore.Tr(AiUiText.RiskText(risk)); // AI2-i18n-ux:风险标签过词表(Core 里的原文自检要求是中文,不动)
 
     /// <summary>预览框(像 diff 就按 +/- 着色;最多 40 行 + 「还有 N 行」)。</summary>
     private static Control PreviewBox(List<string> lines)
@@ -226,7 +226,7 @@ internal sealed class ConfirmCard : Border
         }
         if (lines.Count > 40)
         {
-            var more = UiClass.Txt($"...还有 {lines.Count - 40} 行", 11.5, false, "B.InkMuted");
+            var more = UiClass.Txt(I18nCore.Tr("...还有 {n} 行").Replace("{n}", (lines.Count - 40).ToString()), 11.5, false, "B.InkMuted");
             more.Margin = new Thickness(10, 2, 0, 2);
             body.Children.Add(more);
         }

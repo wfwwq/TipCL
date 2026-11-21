@@ -14,6 +14,19 @@ namespace TipCL.Core.Launcher.Ai;
 /// <summary>启动前预检(只读)。</summary>
 public static class AiPreflight
 {
+    // AI2-i18n-ux:预检条目(标题 / 说明 / 建议)会显示在启动页提示条上,也会作为「交给 AI 一键修复」的开场发出 ——
+    // 都是用户看得到的,一律走词表;{x} 占位在 en 译文里原样保留。工具结果里给模型的也是同一份文字(按界面语言)。
+    private static string Tr(string key) => I18nCore.Tr(key);
+
+    private static string Tr(string key, params (string Name, object? Value)[] fill)
+    {
+        string s = I18nCore.Tr(key);
+        foreach ((string name, object? value) in fill)
+        {
+            s = s.Replace("{" + name + "}", Py.S(value));
+        }
+        return s;
+    }
     /// <summary>设置开关「启动前 AI 预检」的配置键(缺省 = 开)。</summary>
     public const string ENABLED_KEY = "ai_preflight_enabled";
 
@@ -86,7 +99,7 @@ public static class AiPreflight
         }
         catch (Exception ex)
         {
-            Add("warn", "preflight_failed", "基础预检没跑完", Py.ExcStr(ex), "可以先启动看看,失败后用 diagnose_launch 分析");
+            Add("warn", "preflight_failed", Tr("基础预检没跑完"), Py.ExcStr(ex), Tr("可以先启动看看,失败后用 diagnose_launch 分析"));
         }
 
         // 2) Java 与 MC 版本是否匹配(含「自动选择」)
@@ -108,16 +121,16 @@ public static class AiPreflight
                 switch (type)
                 {
                     case "missing_dep":
-                        Add("error", "dep_missing", "缺少前置模组", msg, "用 search_mods 搜「" + Py.S(issue.Get("need")) + "」并安装,或先 disable_mod 禁用 " + Py.S(issue.Get("file")));
+                        Add("error", "dep_missing", Tr("缺少前置模组"), msg, Tr("用 search_mods 搜「{need}」并安装,或先 disable_mod 禁用 {file}", ("need", issue.Get("need")), ("file", issue.Get("file"))));
                         break;
                     case "loader_mismatch":
-                        Add("error", "loader_mismatch", "模组与加载器不匹配", msg, "禁用这个模组,或换成对应加载器的版本");
+                        Add("error", "loader_mismatch", Tr("模组与加载器不匹配"), msg, Tr("禁用这个模组,或换成对应加载器的版本"));
                         break;
                     case "duplicate_id":
-                        Add("warn", "mod_duplicate", "同一个模组装了多份", msg, "只留一份,其余 disable_mod");
+                        Add("warn", "mod_duplicate", Tr("同一个模组装了多份"), msg, Tr("只留一份,其余 disable_mod"));
                         break;
                     case "breaks":
-                        Add("warn", "mod_breaks", "模组声明互不兼容", msg, "让用户选留哪个,另一个 disable_mod");
+                        Add("warn", "mod_breaks", Tr("模组声明互不兼容"), msg, Tr("让用户选留哪个,另一个 disable_mod"));
                         break;
                 }
             }
@@ -136,15 +149,16 @@ public static class AiPreflight
             {
                 if (memoryMb >= total)
                 {
-                    Add("error", "memory_exceeds_physical", "分配内存超过物理内存",
-                        "游戏分配 " + memoryMb + " MB,本机物理内存只有约 " + total + " MB,JVM 会起不来或疯狂换页",
-                        "把内存改到 " + SuggestMemory(total) + " MB 左右");
+                    Add("error", "memory_exceeds_physical", Tr("分配内存超过物理内存"),
+                        Tr("游戏分配 {mem} MB,本机物理内存只有约 {total} MB,JVM 会起不来或疯狂换页", ("mem", memoryMb), ("total", total)),
+                        Tr("把内存改到 {mb} MB 左右", ("mb", SuggestMemory(total))));
                 }
                 else if (memoryMb > total * 0.8)
                 {
-                    Add("warn", "memory_near_physical", "分配内存接近物理内存",
-                        "游戏分配 " + memoryMb + " MB,占本机 " + total + " MB 的 " + (int)Math.Round(memoryMb * 100.0 / total) + "%,系统和显卡驱动会不够用",
-                        "建议改到 " + SuggestMemory(total) + " MB 左右");
+                    Add("warn", "memory_near_physical", Tr("分配内存接近物理内存"),
+                        Tr("游戏分配 {mem} MB,占本机 {total} MB 的 {pct}%,系统和显卡驱动会不够用",
+                            ("mem", memoryMb), ("total", total), ("pct", (int)Math.Round(memoryMb * 100.0 / total))),
+                        Tr("建议改到 {mb} MB 左右", ("mb", SuggestMemory(total))));
                 }
             }
         }
@@ -152,8 +166,8 @@ public static class AiPreflight
         int errors = items.Count(i => Py.S(i.Get("level")) == "error");
         int warns = items.Count(i => Py.S(i.Get("level")) == "warn");
         string summary = errors == 0 && warns == 0
-            ? "预检通过,没发现会挡住启动的问题"
-            : "发现 " + errors + " 个会导致启动失败的问题、" + warns + " 个提醒";
+            ? Tr("预检通过,没发现会挡住启动的问题")
+            : Tr("发现 {errors} 个会导致启动失败的问题、{warns} 个提醒", ("errors", errors), ("warns", warns));
         return PyDict.Of(
             "ok", errors == 0,
             "instance", inst.name,
@@ -171,19 +185,23 @@ public static class AiPreflight
     {
         var lines = new List<string>
         {
-            "启动前预检发现了问题,请帮我修好再启动。",
-            "实例:" + Py.S(report.Get("instance")) + ";版本:" + Py.S(report.Get("version")) +
-            ";内存:" + Py.S(report.Get("memory_mb")) + " MB;Java:" + Py.S(report.Get("java")),
-            "预检结果(" + Py.S(report.Get("summary")) + "):",
+            Tr("启动前预检发现了问题,请帮我修好再启动。"),
+            Tr("实例:{instance};版本:{version};内存:{memory} MB;Java:{java}",
+                ("instance", report.Get("instance")), ("version", report.Get("version")),
+                ("memory", report.Get("memory_mb")),
+                // 「自动选择」是数据约定值(与 Instance.JavaPref 同),显示时才过词表
+                ("java", Py.S(report.Get("java")) is "" or "自动选择" ? Tr("自动选择") : report.Get("java"))),
+            Tr("预检结果({summary}):", ("summary", report.Get("summary"))),
         };
         foreach (object? raw in Py.ListOr(report.Get("items")))
         {
             PyDict it = Py.D(raw);
-            string level = Py.S(it.Get("level")) == "error" ? "错误" : "提醒";
-            lines.Add("- [" + level + "] " + Py.S(it.Get("title")) + ":" + AiUiText.Trim(Py.S(it.Get("detail")), 240) +
-                      (Py.S(it.Get("fix")).Length > 0 ? "(建议:" + Py.S(it.Get("fix")) + ")" : ""));
+            string level = Py.S(it.Get("level")) == "error" ? Tr("错误") : Tr("提醒");
+            string fix = Py.S(it.Get("fix"));
+            lines.Add("- [" + level + "] " + Py.S(it.Get("title")) + ": " + AiUiText.Trim(Py.S(it.Get("detail")), 240) +
+                      (fix.Length > 0 ? Tr("(建议:{fix})", ("fix", fix)) : ""));
         }
-        lines.Add("请先用 preflight_check 复核,再按问题逐个修复(写操作照常走确认);修完告诉我能不能启动。");
+        lines.Add(Tr("请先用 preflight_check 复核,再按问题逐个修复(写操作照常走确认);修完告诉我能不能启动。"));
         return string.Join("\n", lines);
     }
 
@@ -195,15 +213,15 @@ public static class AiPreflight
 
     private static string FixFor(string code) => code switch
     {
-        "no_version" or "no_version_json" => "先 install_game 装好这个版本",
-        "libs_missing" or "libs_hash" or "assets_index_missing" or "assets_missing" or "natives_missing" => "到版本页点「修复」,或重新 install_game 同一版本补文件",
-        "disk_low" or "disk_warn" => "清理磁盘空间(设置 → 存储 → 空间清理)",
-        "mod_unzipped" => "删掉 mods 里被解压出来的文件夹,直接放 .jar",
-        "vanilla_mods" => "先给这个实例装对应的加载器(Fabric / Forge 等)",
-        "java_missing" => "把 Java 改回「自动选择」,或 download_java 装一个",
-        "java_too_old" => "download_java 装需要的版本,或把 Java 改回「自动选择」",
-        "not_writable" => "检查实例目录权限,或换一个可写的游戏目录",
-        "memory_high" => "把分配内存调小一些",
+        "no_version" or "no_version_json" => Tr("先 install_game 装好这个版本"),
+        "libs_missing" or "libs_hash" or "assets_index_missing" or "assets_missing" or "natives_missing" => Tr("到版本页点「修复」,或重新 install_game 同一版本补文件"),
+        "disk_low" or "disk_warn" => Tr("清理磁盘空间(设置 → 存储 → 空间清理)"),
+        "mod_unzipped" => Tr("删掉 mods 里被解压出来的文件夹,直接放 .jar"),
+        "vanilla_mods" => Tr("先给这个实例装对应的加载器(Fabric / Forge 等)"),
+        "java_missing" => Tr("把 Java 改回「自动选择」,或 download_java 装一个"),
+        "java_too_old" => Tr("download_java 装需要的版本,或把 Java 改回「自动选择」"),
+        "not_writable" => Tr("检查实例目录权限,或换一个可写的游戏目录"),
+        "memory_high" => Tr("把分配内存调小一些"),
         _ => "",
     };
 
@@ -229,11 +247,13 @@ public static class AiPreflight
             {
                 if (m < required)
                 {
-                    add("error", "java_too_old", "Java 版本过低(需要 " + required + "+)", "当前指定的是 Java " + m, FixFor("java_too_old"));
+                    add("error", "java_too_old", Tr("Java 版本过低(需要 {required}+)", ("required", required)), Tr("当前指定的是 Java {major}", ("major", m)), FixFor("java_too_old"));
                 }
                 else if (required <= 8 && m >= 17)
                 {
-                    add("warn", "java_too_new", "老版本 MC 配了新 Java", "这个版本要 Java " + required + ",指定的是 Java " + m + ",Forge 等老加载器常因此崩溃", "改成 Java 8(download_java 8)或「自动选择」");
+                    add("warn", "java_too_new", Tr("老版本 MC 配了新 Java"),
+                        Tr("这个版本要 Java {required},指定的是 Java {major},Forge 等老加载器常因此崩溃", ("required", required), ("major", m)),
+                        Tr("改成 Java 8(download_java 8)或「自动选择」"));
                 }
             }
             return;
@@ -252,9 +272,10 @@ public static class AiPreflight
         bool newer = required >= 17 && majors.Any(x => x > required);
         if (!exact && !newer)
         {
-            add("warn", "java_auto_download", "本机没有合适的 Java " + required,
-                "已装:" + (majors.Count > 0 ? string.Join(", ", majors.Distinct().OrderBy(x => x).Select(x => "Java " + x)) : "无") + ";启动时会自动下载,首次启动会慢一些",
-                "可以先 download_java " + required);
+            add("warn", "java_auto_download", Tr("本机没有合适的 Java {required}", ("required", required)),
+                Tr("已装:{list};启动时会自动下载,首次启动会慢一些",
+                    ("list", majors.Count > 0 ? string.Join(", ", majors.Distinct().OrderBy(x => x).Select(x => "Java " + x)) : Tr("无"))),
+                Tr("可以先 download_java {required}", ("required", required)));
         }
     }
 
