@@ -55,11 +55,11 @@ claude mcp add --transport http tipcl http://127.0.0.1:25585/mcp
 
 ## 5. 推荐的开发 → 测试循环
 
-1. **一次性准备**:`create_test_instance {mc_version:"1.20.1", loader:"fabric", dependencies:["fabric-api"]}`,记下返回的 `instance` 和 `task_id`;用 `get_task_status {task_id, wait_seconds:30}` 轮询到 `state=succeeded`。测试实例的 `.instance.json` 里会标 `dev=true`,名字带 `[dev]` 前缀。
+1. **一次性准备**:`create_test_instance {mc_version:"1.20.1", loader:"fabric", dependencies:["fabric-api"]}`,记下返回的 `instance` 和 `task_id`;用 `get_task_status {task_id, wait_seconds:30}` 轮询到 `state=succeeded`。测试实例的 `.instance.json` 里会标 `dev=true`,名字带 `[dev]` 前缀。依赖先查 Modrinth,找不到回落 CurseForge;写成 `curseforge:<slug 或项目 id>` / `modrinth:<slug>` 只查一边,每个依赖从哪里装的看 `result.dependencies[].source`。
 2. **改代码 → 编译**:外部工具自己做,例如 `./gradlew build`,产物在 `build/libs/*.jar`。注意挑不带 `-sources` / `-dev` 后缀的那个。
 3. **装进测试实例**:`install_local_mod {jar_path:"<绝对路径>/build/libs/mymod-1.0.1.jar", instance:"[dev] 1.20.1-fabric"}`。同 id 的旧版本会自动换下,返回里看 `warnings`(MC 版本不符、缺依赖提示)。被拒时看 `error`:`loader_mismatch` / `invalid_jar` / `not_a_mod` / `needs_confirmation` / `file_exists`。
 4. **试启动**:`run_test_launch {instance:"[dev] 1.20.1-fabric"}`,再用 `get_task_status {task_id, wait_seconds:30}` 循环到 `finished=true`:
-   - `result.outcome == "ready"`:进了主菜单,测试通过,游戏已自动关闭;
+   - `result.outcome == "ready"`:进了主菜单,测试通过,这次拉起的游戏进程已自动关闭(`game_pid` / `stop_result`;不关你同时在玩的别的实例);
    - `crashed`:看 `result.crash.description / exception / suspected_mods` 和 `result.log_excerpt`,回到第 2 步改;
    - `timeout`:加大 `timeout_seconds`,或用 `ready_pattern` 指定你的模组在标题画面打的日志;
    - `launch_failed`:多半是没装好版本、没账号或缺 Java,看 `message`。
@@ -68,8 +68,8 @@ claude mcp add --transport http tipcl http://127.0.0.1:25585/mcp
 
 ## 6. 已知限制
 
-- 「进入主菜单」的判定靠日志特征行,还没在真游戏的各加载器、各版本上逐一核对过,必要时用 `ready_pattern` 自己指定。
-- 测试启动结束时关的是启动器记住的那个游戏进程;开了「允许多开」又同时在玩别的实例时,可能关错。
-- 依赖只能从 Modrinth 装;只在 CurseForge 上的依赖可以下载后用 `install_local_mod` 装。
-- 任务记录只存在内存里,启动器重启后旧 `task_id` 查不到,返回 `not_found`。
+- 「进入主菜单」的判定靠日志特征行:一张按加载器(Vanilla / Fabric / Quilt / Forge / NeoForge)× MC 版本段的表,每条的来源、是不是推断写在 `src/TipCL.Core/Launcher/Ai/ModDev/ReadyMarkers.cs`;结果里的 `ready_markers` 列出这次实际用的几条。表还没在真游戏的各加载器、各版本上逐一核对(标了推断的尤其如此);原版的 `Sound engine started` 比标题画面略早,在标题画面初始化时才崩的模组可能被判成 ready。必要时用 `ready_pattern` 自己指定(给了就整张表让位)。
+- 测试启动结束时只关它自己那次 `launch_game` 拉起的进程(按启动任务登记的 PID,结果里的 `game_pid` / `stop_result`),开了「允许多开」同时在玩的别的实例不会被关;游戏进程还没起来就超时时,取消那次启动任务,不会再起游戏。登记表只认 TipCL 自己拉起的进程;`stop_result=not_tracked` 表示没有可关的进程(什么都没关)。
+- 依赖先从 Modrinth 装,找不到(或 Modrinth 出错)回落 CurseForge(与下载页同一套 CurseForge 安装函数,需要 CurseForge API 可用);两边都没有时任务记 failed,`result.dependencies[].tried` 写清每边的结果,可以下载后用 `install_local_mod` 装。
+- 模组测试任务(`create_test_instance` / `run_test_launch`)的记录写在数据目录的 `cache/moddev_tasks.json`(最近 50 条),启动器重启后 `get_task_status` 仍能查到已结束任务的结果(带 `restored: true`);重启前还没跑完的记为 `interrupted`,需要重新发起。`install_*` / `launch_game` 起的启动器任务仍只在本次运行期间可查。两个 TipCL 同时用同一个数据目录时,后启动的那个会把前一个正在跑的任务读成 interrupted。
 - 长任务进度用查询工具 `get_task_status`,不用 MCP 的 progress notification(本机 MCP Server 没有 SSE 流)。
