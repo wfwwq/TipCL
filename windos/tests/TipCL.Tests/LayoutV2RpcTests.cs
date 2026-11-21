@@ -168,6 +168,82 @@ public class LayoutV2RpcTests : IDisposable
 		Assert.NotEqual(beforeMode, nowPage.Mode);
 	}
 
+	// ————— 3b. R34(D-81 Q1):mode=canvas 按 grid 处理,结果里带提示,落盘的是 grid —————
+
+	[Fact]
+	public void ApplyModeCanvasIsTreatedAsGridAndSaysSo()
+	{
+		UseDir();
+
+		string result = (string)_api.layout_v2_apply(PyDict.Of("page", "launch", "mode", "canvas"))!;
+
+		Assert.Contains("已更新布局", result, StringComparison.Ordinal);       // 返回成功
+		Assert.Contains(LayoutTools.CanvasNotice, result, StringComparison.Ordinal); // 带一条提示
+		Assert.Single(BackupProfiles(LayoutStoreV2.Load()));
+		LayoutStoreV2.ResetCache();
+		LayoutV2 doc = LayoutStoreV2.Load();
+		Assert.True(doc.Layout.Pages.TryGetValue("launch", out PageLayoutV2? page), "apply 之后 launch 页应该存在");
+		Assert.Equal(LayoutSchema.ModeGrid, page!.Mode); // 落盘的是 grid,不是 canvas
+		Assert.DoesNotContain("\"canvas\"", File.ReadAllText(LayoutStoreV2.FilePath), StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public void ApplyOnAStoredCanvasPageDerivesGridGeometryAndKeepsBlocks()
+	{
+		UseDir();
+		// 旧文档里已有一份 canvas 页(含隐藏块与自建块)
+		LayoutV2 seed = LayoutStoreV2.Load();
+		PageLayoutV2 canvas = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeCanvas,
+			Cols = 12
+		};
+		canvas.Blocks.Add(new BlockLayout { Id = "players", X = 0.5, Y = 0.5, W = 0.5, H = 0.5 });
+		canvas.Blocks.Add(new BlockLayout { Id = "status", X = 0.0, Y = 0.0, W = 0.5, H = 0.4 });
+		canvas.Blocks.Add(new BlockLayout { Id = "room", X = 0.5, Y = 0.0, W = 0.5, H = 0.4 });
+		canvas.Blocks.Add(new BlockLayout { Id = "intro", Hidden = true, X = 0.0, Y = 0.9, W = 1.0, H = 0.1 });
+		canvas.Blocks.Add(new BlockLayout { Id = "custom:w-1", X = 0.0, Y = 0.5, W = 0.25, H = 0.3 });
+		seed.Layout.Pages["multiplayer"] = canvas;
+		Assert.True(LayoutStoreV2.Save(seed));
+
+		string result = LayoutTools.Apply(PyDict.Of("page", "multiplayer", "mode", "canvas"));
+
+		Assert.Contains("已更新布局", result, StringComparison.Ordinal);
+		Assert.Contains(LayoutTools.CanvasNotice, result, StringComparison.Ordinal);
+		LayoutStoreV2.ResetCache();
+		LayoutV2 doc = LayoutStoreV2.Load();
+		PageLayoutV2 page = doc.Layout.Pages["multiplayer"];
+		Assert.Equal(LayoutSchema.ModeGrid, page.Mode);
+		// 先 y 后 x;归一化坐标换成了网格单位(不是把 0.5 当成第 0 列挤成一堆)
+		Assert.Equal(new string[5] { "status", "room", "custom:w-1", "players", "intro" }, page.Blocks.Select((BlockLayout b) => b.Id).ToArray());
+		BlockLayout room = page.Blocks.First((BlockLayout b) => b.Id == "room");
+		Assert.Equal(6.0, room.X);
+		Assert.Equal(0.0, room.Y);
+		Assert.Equal(6, room.Span);
+		BlockLayout widget = page.Blocks.First((BlockLayout b) => b.Id == "custom:w-1");
+		Assert.Equal(0.0, widget.X);
+		Assert.Equal(1.0, widget.Y);
+		Assert.Equal(3, widget.Span);
+		BlockLayout players = page.Blocks.First((BlockLayout b) => b.Id == "players");
+		Assert.Equal(3.0, players.X);
+		Assert.Equal(1.0, players.Y);
+		Assert.Equal(6, players.Span);
+		Assert.True(page.Blocks.First((BlockLayout b) => b.Id == "intro").Hidden);
+		// 备份里存的是改动前的 canvas 原样(用户可以切回去)
+		string[] backups = BackupProfiles(doc);
+		Assert.Single(backups);
+		Assert.Equal(LayoutSchema.ModeCanvas, doc.Profiles[backups[0]].Pages["multiplayer"].Mode);
+	}
+
+	[Fact]
+	public void ApplySchemaOnlyOffersStackAndGrid()
+	{
+		string schema = PyJson.Dumps(LayoutTools.Schemas(), 2, ensureAscii: false);
+		Assert.Contains("stack", schema, StringComparison.Ordinal);
+		Assert.Contains("grid", schema, StringComparison.Ordinal);
+		Assert.DoesNotContain("canvas", schema, StringComparison.Ordinal);
+	}
+
 	// ————— 4. 插件那条路没被关掉(LauncherDeny 是按源码断言的门禁,与 LayoutNativeBlockTests 同一手法) —————
 
 	[Fact]
