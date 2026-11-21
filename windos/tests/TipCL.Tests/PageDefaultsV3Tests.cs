@@ -106,7 +106,6 @@ public class PageDefaultsV3Tests
 		yield return new object[] { "multiplayer", "src/TipCL/Pages/MultiplayerPage.cs", "Multiplayer" };
 		yield return new object[] { "playtime", "src/TipCL/Pages/PlaytimePage.cs", "Playtime" };
 		yield return new object[] { "java", "src/TipCL/Pages/JavaPage.cs", "Java" };
-		yield return new object[] { "launch", "src/TipCL/Pages/LaunchPage.cs", "LaunchContent" };
 	}
 
 	private static PageLayoutV2 Factory(string name)
@@ -202,28 +201,6 @@ public class PageDefaultsV3Tests
 		PageLayoutV2 page = PageDefaultLayouts.LaunchContent();
 		Assert.Equal("news@0,0,12", Cells(page));
 		Assert.Equal(new[] { "tasks", "playtime", "notes", "log" }, page.Blocks.Where((BlockLayout b) => b.Hidden).Select((BlockLayout b) => b.Id).ToArray());
-	}
-
-	// 默认隐藏的块显示出来之后:接在已有块后面,两两并排,日志占整行(不会挤进第 0 列、不会压住新闻)
-	[Fact]
-	public void LaunchHiddenBlocksPairUpWhenShownAndLogTakesTheWholeRow()
-	{
-		List<LayoutBlockRef> refs = RefsOf(HostSpecs(Src("src/TipCL/Pages/LaunchPage.cs"), "launch", out string _));
-		LayoutPageState state = LayoutEngine.LoadState("launch", PageDefaultLayouts.LaunchContent(), refs);
-		Assert.Equal(new[] { "news" }, state.VisibleIds().ToArray());
-
-		state.Restore("tasks");
-		state.Restore("playtime");
-		Assert.Equal("news@0,0,12 tasks@0,1,6 playtime@6,1,6", Cells(state.ToPage()));
-
-		state.Restore("notes");
-		state.Restore("log");
-		Assert.Equal("news@0,0,12 tasks@0,1,6 playtime@6,1,6 notes@0,2,6 log@0,3,12", Cells(state.ToPage()));
-
-		// 只显示日志:直接接在新闻下面占整行
-		LayoutPageState only = LayoutEngine.LoadState("launch", PageDefaultLayouts.LaunchContent(), refs);
-		only.Restore("log");
-		Assert.Equal("news@0,0,12 log@0,1,12", Cells(only.ToPage()));
 	}
 
 	[Fact]
@@ -448,7 +425,6 @@ public class PageDefaultsV3Tests
 	// ————— LayoutBlockHostTests.HostTable 是手抄的白名单,改过的这几页对一遍源码,防止表和代码分叉 —————
 
 	[Theory]
-	[InlineData("launch", "src/TipCL/Pages/LaunchPage.cs")]
 	[InlineData("multiplayer", "src/TipCL/Pages/MultiplayerPage.cs")]
 	[InlineData("playtime", "src/TipCL/Pages/PlaytimePage.cs")]
 	[InlineData("java", "src/TipCL/Pages/JavaPage.cs")]

@@ -186,16 +186,7 @@ public class R35WinFix2Tests
 		{
 			Assert.True(Find(def, id).Hidden, id);
 		}
-		string launch = Src("src/TipCL/Pages/LaunchPage.cs");
-		foreach (string id in new string[4] { "tasks", "playtime", "notes", "log" })
-		{
-			Assert.Matches("new BlockSpec \\{ Id = \"" + id + "\"[^\\r\\n]*DefaultVisible = false", launch);
-		}
-		// 外观:效果图 .wcard 小卡片,不再是 Ui.Card 的整块深色空面板
-		Assert.Contains("LaunchMiniCard(I18n.L(\"下载任务\"), _taskHost", launch);
-		Assert.DoesNotContain("Ui.Card(_taskHost)", launch);
-		Assert.DoesNotContain("Ui.Card(_notes)", launch);
-		Assert.DoesNotContain("Ui.Card(_playTotal)", launch);
+		// R35 启动页 v3:启动页不再有 BlockHost,这几块映射成右侧组件区的组件(R35LaunchV3Tests);源码断言随旧界面删除
 	}
 
 	[Fact]

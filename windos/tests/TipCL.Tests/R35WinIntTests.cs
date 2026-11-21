@@ -173,7 +173,7 @@ public class R35WinIntTests
 		// L5 越界需求:启动页编辑态压暗英雄区 + 「主区域固定」
 		string v3 = Src("src/TipCL/Pages/Layout/LayoutEditorV3.cs");
 		Assert.Contains("public event Action<bool>? EditingChanged;", v3);
-		Assert.Contains("_blocks.Editor.EditingChanged += OnLayoutEditingChanged;", Src("src/TipCL/Pages/LaunchPage.cs"));
+		// R35 启动页 v3:编辑态压暗 / 「主区域固定」改由组件区 ZoneSetMode 驱动(R35LaunchV3Tests 守卫)
 		// 设置页 ↔ 编辑态
 		string settings = Src("src/TipCL/Pages/SettingsLayoutPage.cs");
 		Assert.Contains("LayoutShellHooks.BeginEditPage(pageId);", settings);

@@ -317,7 +317,24 @@ public static class DevShot
 
 	private static async Task ApplyLayoutShotAsync(MainWindow win, DevShotArgs la)
 	{
-		if (la.Edit)
+		if (la.Edit && win.PageInstance("launch") is LaunchPage lp && lp.IsVisible)
+		{
+			// R35 启动页 v3:组件区编辑态 / 组件库(--pop layout-drawer)
+			await win.Dispatcher.InvokeAsync(delegate
+			{
+				win.UpdateLayout();
+				if (la.LayoutDrawer)
+				{
+					lp.ZoneOpenLibrary();
+				}
+				else
+				{
+					lp.ZoneBeginEdit();
+				}
+			}, DispatcherPriority.ContextIdle);
+			await Task.Delay(600);
+		}
+		else if (la.Edit)
 		{
 			BlockHost? host = null;
 			await win.Dispatcher.InvokeAsync(delegate

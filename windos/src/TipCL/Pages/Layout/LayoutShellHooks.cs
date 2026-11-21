@@ -338,6 +338,10 @@ public static class LayoutShellHooks
 		{
 			return false;
 		}
+		if (pageKey == "launch")
+		{
+			return true; // 启动页 v3:主区域固定,右侧组件区由 LaunchPage 自己编辑(右下「编辑组件」)
+		}
 		int count = LayoutEditor.SpecCountOf(pageKey);
 		if (count >= 0)
 		{
@@ -366,6 +370,16 @@ public static class LayoutShellHooks
 			if (main == null)
 			{
 				return false;
+			}
+			if (pageKey == "launch")
+			{
+				// 启动页 v3 不再有区块宿主:跳过去后直接进组件区编辑态(等价于点右下「编辑组件」)
+				main.Navigate("launch");
+				main.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate
+				{
+					(main.PageInstance("launch") as LaunchPage)?.ZoneBeginEdit();
+				}));
+				return true;
 			}
 			LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(pageKey);
 			BlockHost? live = FindHost(pageKey);
