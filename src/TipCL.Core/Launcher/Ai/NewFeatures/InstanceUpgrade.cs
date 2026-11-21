@@ -574,7 +574,7 @@ public static class InstanceUpgrade
             "mods_failed", failed,
             "dependency_changes", Py.Or(plan.Get("dependency_changes"), new List<object>()),
             "next_steps", inPlace
-                ? "已在原实例上升级;如需回退可用对话里的「撤回」(只覆盖 mods 目录)。建议接着 preflight_check 再启动。"
+                ? "已在原实例上升级;如需回退可用对话里的「撤回」(还原 mods 与实例设置,并删掉这次新装的版本目录)。建议接着 preflight_check 再启动。"
                 : "原实例「" + inst.name + "」没动。新实例「" + target.name + "」装好后先 preflight_check,再按 dependency_changes 补装前置。");
     }
 }

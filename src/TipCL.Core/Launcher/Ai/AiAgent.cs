@@ -328,6 +328,8 @@ public sealed class AiAgent
             {
                 return;
             }
+            // AI2-stability:原地升级新装的版本目录也纳入撤回(只记名单不存内容,见 UpgradeCheckpoint)
+            UpgradeCheckpoint.SnapshotFor(ChatId, TurnId, call.name, call.args, _runner.Instance);
             List<string> paths = Tools.AffectedPaths(call.name, call.args, _runner.Instance);
             if (paths.Count == 0)
             {
