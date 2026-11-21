@@ -1241,3 +1241,17 @@
 - **合并后三处调整**:硬件探测统一走 `SystemInfo`(删 `NfHardwareProbe`);高危工具确认卡名单收口;ClickSweep 按控件 Name 跳过 MCP 开关(免得测试进程占用 25585)。
 - **遗留**:见 PARITY §10.4(界面文案未接 Tr、联机未真机跑通、MCP 确认框可能被遮挡、真模型端到端)。另记:`zh_CN.json` / `en.json` 里基线就有重复键 `"关"`(两处同值),本轮未动。
 - 可回滚:是(`ai/integration` 尚未并入 main;各包分支保留)。
+
+### D-82 · AI 助手第二轮:整合包分发许可、无代码内容的写入边界、模组测试环境走 MCP、测试进程不出网不弹窗(2026-11-21,主 agent 编排、AI2-integration 合并)
+
+- **背景**:五个子代理并行(`ai2/stability` / `ai2/modpack` / `ai2/content` / `ai2/moddev-mcp` / `ai2/i18n-ux`),主 agent 合入 `ai2/integration` 后快进进 main。清单见 `docs/PARITY.md` §11 与 `progress/AI2-*.md`。工具表 65 → 78。
+- **整合包分发许可**:mrpack 只链接规范允许的域名;CurseForge `allowModDistribution=false` 且 Modrinth 找不到 → 判「禁止分发」,export_modpack 拒绝导出、一个文件都不写;来源不明的本地 jar 默认不打包,只有用户显式同意(`allow_bundled_jars=true`)才打进 overrides。界面导出入口保持原行为(不做许可检查),但与 AI 共用 `ModpackExport.Export`,不另写一份导出逻辑。
+- **无代码内容不放宽 fs_write**:数据包 / 资源包 / KubeJS 改为专用工具,各自限定写入目录并按类型校验;`pack_format` 只认对照表(来源 Minecraft Wiki,写在代码注释里),查不到的版本拒绝,不猜。KubeJS 只在实例真装了时可用,静态检查拦文件 / 网络 / 进程 / 反射类写法,风险 high。
+- **内置助手不写、不编译 Java 模组**(用户 2026-11-21 明确决定):写代码与编译交给外部编程工具,TipCL 经 MCP 提供测试环境(create_test_instance / install_local_mod / revert_local_mod / run_test_launch / get_task_status)。测试实例 = `.instance.json` 的 `dev=true`;非 dev 实例装 jar 要 `allow_non_dev` 且执行器强制确认;长任务进度用查询工具而不是 progress notification(本机 MCP 没有 SSE);外部确认 120 秒没人点按拒绝,确认时主窗口置前。D-81 的 MCP 遗留三条(确认框被遮挡、无状态条、长任务无进度)由此关闭。
+- **「本对话都允许」名单扩充**:在 D-81 的基础上再加 export_modpack / install_mods_batch / write_kubejs_script / revert_local_mod;确认卡与执行器两处都拦,缺一处都算缺陷。
+- **测试进程不出网、不弹窗**:`HttpHandlerHook` + `TestNetworkIsolation` —— AI 通道只放行环回地址,其余当场回 400、不重试;界面回调一律走 `AiUiPost`,页面已卸载时丢弃。App 侧打开链接 / 文件夹统一走 `App/Common/ShellOpen`,与 Core 的 `Crash.ShellOpenHook` / `Auth.OpenBrowserHook` 共用测试钩子;源码守卫测试禁止页面直接 `Process.Start` 外部程序。理由:ClickSweep 曾因此真向外网发请求(连带偶发失败)、真弹浏览器。
+- **工具结果里与界面共用的文字跟界面语言走**(预检条目、确认卡预览):界面是英文时,模型收到的也是英文;给模型看的提示词本身不翻译。
+- **实际生效的内存 / GC 只算一处**(`EffectiveJvm.Resolve`:版本 → 实例 → 调用方 → 全局 → 4096);检查点新增「只记名单不存内容」的新建子目录操作,撤回时删除本次新建的版本目录、已存在的不删。
+- **合并时修的既有缺陷**:install_* 参数(顶层 / extra 两种都认)与 task_id(字符串 / 字典两种都认),见 PARITY §11.3。
+- **遗留**:见 PARITY §11.4。
+- 可回滚:是(各包分支 `ai2/*` 保留;main 由 f1c070b 快进而来)。

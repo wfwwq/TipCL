@@ -804,7 +804,7 @@ $env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
 ### 10.2 Linux 独有(Windows 版暂无对应)
 
 plan_instance_upgrade / apply_instance_upgrade(默认复制成新实例再升级)、preflight_check(+ 启动页「启动前 AI 预检」与设置开关 `ai_preflight_enabled`)、
-list_servers / add_server / remove_server / ping_server(自实现 Server List Ping,不解析 SRV)、recommend_shaders、export_diagnostic_report(全文脱敏)。
+list_servers / add_server / remove_server / ping_server(自实现 Server List Ping;地址没写端口时查 `_minecraft._tcp` SRV,查不到回落 A 记录 + 25565 —— AI2-stability)、recommend_shaders、export_diagnostic_report(全文脱敏)。
 
 ### 10.3 合并时补的两处问题(AI-integration)
 
@@ -813,7 +813,55 @@ list_servers / add_server / remove_server / ping_server(自实现 Server List Pi
 
 ### 10.4 仍未做(如实)
 
-- 启动页预检提示条的文案(`NewFeatures/AiPreflight.cs`)与新工具的中文标签(`Tools.cs` Labels)未接 `I18nCore.Tr`,英文界面下仍是中文。
-- 联机(multiplayer)只用假接口测了流程,没在真网络 + 第二台机器上跑通;硬件探测没在真 Linux 机器上跑过。
-- MCP 外部写操作的确认框是模态 `Dlg.Ask`,主窗口不在前台时用户可能看不到;AI 页还没有「MCP 已开启 · 最近外部调用」状态条。
+- ~~启动页预检提示条的文案与新工具的中文标签未接 `I18nCore.Tr`~~ —— 2026-11-21 AI2-i18n-ux 已接(残留见 §11.4)。
+- 联机(multiplayer)只用假接口测了流程,没在真网络 + 第二台机器上跑通;硬件探测没在真 Linux 机器上跑过。等待时长已改为具名常量,可用 `ai_multiplayer_start_wait_ms` / `ai_multiplayer_room_wait_ms` 覆盖,每次实际耗时写日志(AI2-stability)。
+- ~~MCP 外部写操作的确认框可能被遮挡;AI 页没有 MCP 状态条~~ —— 2026-11-21 AI2-moddev-mcp 已处理:确认时主窗口置前,120 秒超时按拒绝;AI 页加了「MCP 已开启 · 最近外部调用」状态条。
+- 真模型端到端仍留给用户(需要 API key)。
+
+## 11. AI 助手第二轮:整合包 / 无代码内容 / 模组测试环境 / i18n / 稳定性(2026-11-21,五包并行 + AI2-integration 合并)
+
+分支 `ai2/stability` / `ai2/modpack` / `ai2/content` / `ai2/moddev-mcp` / `ai2/i18n-ux` 依次合入 `ai2/integration`(基于 main@f1c070b)。
+工具表 65 → **78** 项(+4 整合包、+4 内容制作、+5 模组测试环境;名字无重复);`--ai-selftest` **108 项**;全量测试 **1358 通过 / 7 跳过 / 0 失败**(共 1365,连跑 3 次一致)。
+每个包的细节见 `progress/AI2-<包名>.md`,决策见 DECISIONS D-82。
+
+### 11.1 Linux 独有的新工具(Windows 版暂无对应)
+
+| 包 | 工具 | 风险 / 只读 | 说明 |
+|---|---|---|---|
+| AI2-modpack | check_modpack_distribution | low,只读,联网 | 导出前把模组分成 可链接 / 需打包 / 禁止分发 |
+| AI2-modpack | plan_modpack | low,只读,联网 | 一句话造包:按主题出候选清单 + 6 步计划卡 |
+| AI2-modpack | export_modpack | medium,写 | mrpack / CurseForge 两种格式;有禁止分发就拒绝导出;来源不明的 jar 默认不打包 |
+| AI2-modpack | install_mods_batch | high,写 | 逐项列出、整批确认一次 |
+| AI2-content | create_datapack / create_resourcepack | medium,写 | `pack_format` 只认对照表(来源 Minecraft Wiki),查不到拒绝不猜;1.21 起单数目录、1.21.9 起 `min_format/max_format` 按版本处理 |
+| AI2-content | write_kubejs_script | high,写 | 只在真装了 KubeJS 时可用;静态检查拦 20 类危险写法 |
+| AI2-content | validate_content | low,只读 | 从 latest.log / KubeJS 日志找加载错误 |
+| AI2-moddev-mcp | create_test_instance / install_local_mod / revert_local_mod / run_test_launch / get_task_status | medium~high | 给外部编程工具经 MCP 用的测试环境;接入方法见 [docs/MCP接入指南.md](MCP接入指南.md) |
+
+「本对话都允许」不给:export_modpack / install_mods_batch / write_kubejs_script / revert_local_mod(确认卡 `ConfirmCard.AllowAlways` 与执行器 `ToolRunner.AllowsAlways` 两处都拦);非 dev 实例上的 install_local_mod 执行器强制再确认。
+
+### 11.2 界面与稳定性
+
+- **导出**:界面「导出为整合包」与 AI 的 export_modpack 共用 `ModpackExport.Export`;顺带修了原 mrpack 不合 Modrinth 规范的两处(sha512 留空 → 本地计算;加载器键 `fabric` → `fabric-loader`)。
+- **i18n**:上一轮新增的界面文案全部接 `Tr`,未接线中文字面量 3540 → 3370,基线随之调低;切到 en 时这些入口不含 CJK(有测试)。
+- **实例设置**:实例详情 → 设置 可编辑实例内存 / GC;版本设置的 GC 下拉默认项改为「跟随实例 / 全局」(以前默认「自动」,保存一次就让实例层 GC 失效)。
+- **存档还原**:Linux 存档对话框的还原 = 先自动备份再回滚(Windows 版界面直接覆盖);游戏运行中禁用。
+- **布局**:「布局」视图开着时,AI 调 layout_apply 后方案列表与 JSON 卡片自动刷新,分栏比例即时生效。
+- **升级进度**:apply_instance_upgrade 期间步骤行显示「第 n/5 步」。
+- **偶发失败根治**:`DlgCloseTests` 等跨用例时序串扰 —— 测试进程里 AI 请求只放行环回地址(`HttpHandlerHook` + `TestNetworkIsolation`)、界面回调走 `AiUiPost` 并在页面已卸载时丢弃、`Res.Bind` 拿不到资源不抛;`LayoutSmoothDragUiTests` 冻结动画时钟。循环跑复现率 4/8 → 0/8、1/10 → 0/10。
+- **其他**:实际生效内存 / GC 只在 `EffectiveJvm` 一处计算(LaunchFlow / Preflight / preflight_check 共用);ping_server 支持 SRV;原地升级撤回会删掉本次新建的版本目录;并行只读工具背后的四处共享状态改为线程安全。
+
+### 11.3 合并时补的(AI2-integration)
+
+1. **install_* 丢参数**(modpack 与 moddev-mcp 都报的既有缺陷):AI 工具把实例名 / slug / 来源放在参数顶层,`InProcessApi` 只读 `extra` → 落到默认实例、slug 为空。`CatalogExtra` 改为 extra 优先、顶层补缺。
+2. **install_* 的 task_id 为空**:`InProcessApi` 的 install_* 直接回任务 id 字符串,`ToolRunner.Start` 只认 `{task_id}` 字典。现在两种都认,任务卡能正常出现。
+3. **打开链接 / 文件夹统一入口**:App 里 9 处各自 `Process.Start` 的地方(账号页、Markdown 链接、联机页、设置卡片、插件三处、危险区块、实例库)都改走 `App/Common/ShellOpen`;测试进程里它与 Core 的 `Crash.ShellOpenHook` 共用空操作钩子,一律不真打开。新增源码守卫测试:App 里再出现直接 ShellExecute / xdg-open 就报红。Core 的「打开防火墙设置」同样接上这个钩子。
+4. 冲突处理:全部是共享文件的追加点,两边保留;手工处理的是确认判定一行(stability 的线程安全 `IsAllowedAlways` + moddev-mcp 的 `ModDevForceAsk` 合成一个条件)、几处转发块共用的右括号、`AiData.cs` 提示词拼接处的收尾。
+
+### 11.4 仍未做(如实)
+
+- 启动页提示条里来自老 `Preflight` / `Conflict` 代码的条目,英文界面下仍是中文;AI 页「准备:」「完成:」前缀仍是中文。
+- 「进入主菜单」判定的日志特征行没在真游戏各加载器 / 各版本上核对;测试启动开了「允许多开」时可能关错进程;模组测试任务记录只存内存。
+- KubeJS 静态检查按文字匹配,拦不住所有动态写法(所以每次都要确认);数据包撤回后会留下空目录;物品 ID 是否存在只靠游戏日志验证。
+- plan_modpack 候选只搜 Modrinth;install_mods_batch 同步逐个下载,装得多时 AI 页长时间「执行中」。
+- 原地升级撤回认不出 OptiFine 这类不继承原版的版本目录;SRV 没在真网络上验证;测试夹具在并行测试类里改全局目录,是另一个潜在的偶发失败源。
 - 真模型端到端仍留给用户(需要 API key)。

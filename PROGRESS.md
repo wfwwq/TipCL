@@ -1529,3 +1529,12 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - 合并冲突:全部是共享文件的追加点(Tools.cs / AiToolTypes.cs / ToolRunner.cs / AiData.cs / AiSelfTest.cs / ConfirmCard.cs / SettingsPage.cs / 两份 locales),两边保留;需要手工处理的是「本对话都允许」那一行(三包各加一个条件 → 合成一个判定)、Tools.cs 两处转发块的大括号、AiData.cs 提示词拼接处的分号、locales 追加块之间的逗号。每合一包都先构建通过再合下一包。
 - 合并后修两处只在合并后才暴露的问题 + 三处调整,详见 DECISIONS D-81 与 docs/PARITY.md §10。
 - 复验与遗留:见本轮 AI-integration 汇报;遗留同 PARITY §10.4。
+
+## 2026-11-21 AI 助手第二轮:整合包 / 无代码内容 / 模组测试环境 / i18n / 稳定性(主 agent 编排;AI2-integration 合并)
+- 分支:`ai2/stability`(a451dd5)、`ai2/modpack`(a270991)、`ai2/content`(40642c1)、`ai2/moddev-mcp`(04b087b)、`ai2/i18n-ux`(e9a78cd),按此顺序 `--no-ff` 合入 `ai2/integration`(基于 main@f1c070b),复验通过后快进进 main;未 push。
+- 落地:P1 整合包制作(分发许可检查 / 一句话造包 / 批量安装 / mrpack 与 CurseForge 导出);P2 数据包 / 资源包 / KubeJS 脚本与加载错误检查;P3 经 MCP 给外部编程工具用的模组测试环境 + MCP 遗留三条;上一轮的 i18n 与界面遗留;测试偶发失败根治与底层遗留。工具表 65 → 78。按用户决定,内置助手不写、不编译 Java 模组。
+- 合并冲突:共享文件追加点两边保留;手工处理确认判定一行、转发块右括号、提示词拼接收尾、两份 locales 的逗号(合并后两表各 3377 键,JSON 合法)。每合一包都先构建通过。
+- 合并后修:install_* 丢参数与 task_id 为空(既有缺陷);App 打开链接 / 文件夹统一入口 `ShellOpen` + 源码守卫(测试进程里一律不真打开)。新增测试 13 条。
+- 复验(本机,全程隐藏窗口):Debug `--no-incremental` 构建 0 错误,警告只有基线 3 条 xUnit;全量测试连跑 3 次,每次 **1358 通过 / 7 跳过 / 0 失败**(共 1365,基线 1128);`--ai-selftest` **108 / 0 / 0**;`windos/` 无改动。
+- 文档:README(AI 场景表 +3 行、MCP 小节、指南链接)、新增 `docs/MCP接入指南.md`、PARITY §10 更正 + §11、DECISIONS D-82。
+- 遗留:见 PARITY §11.4。
