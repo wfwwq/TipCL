@@ -277,6 +277,10 @@ public static class Preview
                 {
                     return modpack; // AI2-modpack:export_modpack / install_mods_batch
                 }
+                if (ModDevText.ChangePreview(name, args, instance) is { } modDev)
+                {
+                    return modDev; // AI2-moddev-mcp:建测试实例 / 装本地 jar / 撤回 / 测试启动
+                }
                 if (PerfSavesPreview.ChangePreview(name, args, instance) is { } perfSaves)
                 {
                     return perfSaves; // AI-perf-saves:tune_jvm / backup_save / restore_save_backup

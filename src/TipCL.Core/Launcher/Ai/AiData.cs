@@ -152,6 +152,9 @@ public static class AiData
             new[] { "create_resourcepack", "validate_content" }),
         (new[] { "kubejs", "KubeJS", "Kubejs", "脚本" }, new[] { "write_kubejs_script", "create_datapack", "validate_content" }), // i18n:ignore(AI2-content:关键词)
         (new[] { "没生效", "不生效", "加载失败", "加载错误", "/reload", "F3+T", "Couldn't parse", "Failed to load" }, new[] { "validate_content" }), // i18n:ignore(AI2-content:关键词)
+        // AI2-moddev-mcp:模组开发测试环境(主要给外部编程工具经 MCP 用;内置助手不写、不编译模组,只在用户点名时带上)
+        (new[] { "测试实例", "本地 jar", "本地jar", "自己编译", "开发模组", "测试启动", "任务进度", "dev 实例", "moddev" }, // i18n:ignore(给模型看的关键词)
+            new[] { "create_test_instance", "install_local_mod", "revert_local_mod", "run_test_launch", "get_task_status" }),
     };
 
     /// <summary>「用户在下命令」而不是在提问(用于决定是否带上写操作工具)。</summary>

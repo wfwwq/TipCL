@@ -45,6 +45,9 @@ public sealed class McpHttpServer : IDisposable
 
     public string LastError { get; private set; } = "";
 
+    /// <summary>AI2-moddev-mcp:外部写操作等用户确认的最长时间(默认取 <see cref="McpServer.ConfirmTimeout"/>;测试调小)。</summary>
+    public TimeSpan ConfirmTimeout { get; set; } = McpServer.ConfirmTimeout;
+
     /// <summary>外部客户端调用工具时触发(工具名、本机时间;可能在后台线程)。</summary>
     public event Action<string, DateTime>? ToolCalled;
 
@@ -326,6 +329,8 @@ public sealed class McpHttpServer : IDisposable
         }
         // 外部发起的写操作一律要坐在电脑前的用户点确认(见文件头);由服务端强制,不信任宿主工厂
         runner.ForceConfirmWrites = true;
+        // AI2-moddev-mcp:确认等待超时(默认 120 秒),超时按拒绝处理并如实说明原因(见 McpConfirmGate)
+        McpConfirmGate.Handle confirmGate = McpConfirmGate.Wrap(runner, ConfirmTimeout);
         NoteToolCall(name);
         string rawArgs = prm.TryGetProperty("arguments", out JsonElement ae) && ae.ValueKind == JsonValueKind.Object ? ae.GetRawText() : "{}";
         (PyDict? args, string parseError) = Tools.ParseArgs(rawArgs, name);
@@ -335,6 +340,10 @@ public sealed class McpHttpServer : IDisposable
         }
         var call = new ToolCall("mcp-" + Guid.NewGuid().ToString("N").Substring(0, 12), name, args);
         string output = runner.RunAsync(call).ConfigureAwait(false).GetAwaiter().GetResult();
+        if (confirmGate.TimedOut)
+        {
+            output = McpConfirmGate.TimeoutPayload(name, confirmGate.Timeout);
+        }
         bool isError = call.status != ToolCallStatus.COMPLETED || McpServer.LooksLikeError(output);
         return ToolText(output, isError);
     }
@@ -414,6 +423,9 @@ public static class McpServer
     public const int DefaultPort = 25585;
 
     public const string ProtocolVersion = "2025-06-18";
+
+    /// <summary>AI2-moddev-mcp:外部写操作等用户确认的最长时间,超时按拒绝(permission_denied + confirm_timeout)。</summary>
+    public static TimeSpan ConfirmTimeout { get; set; } = TimeSpan.FromSeconds(120);
 
     /// <summary>initialize 返回给外部 agent 的说明(与参考版同一句话)。</summary>
     public const string Instructions = "TipCL 启动器的本机工具：查实例、装版本/模组/整合包/光影、启动游戏、诊断崩溃。写操作会直接改玩家的游戏目录，执行前请先和用户确认。";

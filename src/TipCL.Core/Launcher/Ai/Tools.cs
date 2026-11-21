@@ -108,6 +108,7 @@ public static class Tools
                 cached.AddRange(AcctLayoutMpTools.Schemas());
                 cached.AddRange(ModpackTools.Schemas()); // AI2-modpack:整合包制作 4 条(表数据在 ModpackTools)
                 cached.AddRange(ContentTools.Schemas()); // AI2-content:数据包 / 资源包 / KubeJS / 加载检查 4 条
+                cached.AddRange(ModDevSchemas.Schemas()); // AI2-moddev-mcp:模组开发测试环境 5 个工具
                 _schemas = cached;
             }
             return cached;
@@ -234,6 +235,10 @@ public static class Tools
         if (ContentPreview.Label(key, args) is { } contentLabel)
         {
             return contentLabel; // AI2-content:标签走词表(I18nCore.Tr)
+        }
+        if (ModDevText.Label(key, args) is { } modDevLabel)
+        {
+            return modDevLabel; // AI2-moddev-mcp:本包工具的标签走词表(I18nCore.Tr)
         }
         if (args != null && Formats.TryGetValue(key, out string? fmt))
         {
@@ -724,6 +729,10 @@ public static class Tools
         if (ModpackTools.Handles(name))
         {
             return ModpackTools.AffectedPaths(name, args, instance); // AI2-modpack:导出 = 新文件;批量安装 = mods 目录
+        }
+        if (ModDevSchemas.Handles(name))
+        {
+            return ModDevOps.AffectedPathsFor(name, args, instance); // AI2-moddev-mcp
         }
         string instName = Py.S(Py.Or(args.Get("instance"), instance));
         string root;

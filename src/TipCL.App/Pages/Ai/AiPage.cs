@@ -102,7 +102,7 @@ public sealed partial class AiPage : PageBase
         ToolTip.SetTip(_usageLabel, "上下文占用:按本会话每轮平均输入估算");
         _ringHost.Child = AiIcons.Ring(0);
         var head = UiClass.Section(I18nCore.Tr("AI 助手"), "问启动、模组、崩溃都行;输入 / 看命令",
-            UiClass.H(8, _model.VCenter(), _permLabel.VCenter(), _ringHost, _usageLabel.VCenter(), memoryBtn, permBtn, ExportReportButton(), settings, clear));
+            UiClass.H(8, _model.VCenter(), _permLabel.VCenter(), McpStatusChip(), _ringHost, _usageLabel.VCenter(), memoryBtn, permBtn, ExportReportButton(), settings, clear));
         _scroll = new ScrollViewer
         {
             Content = _messages,

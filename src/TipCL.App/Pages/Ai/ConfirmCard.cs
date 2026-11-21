@@ -261,6 +261,8 @@ internal sealed class ConfirmCard : Border
         "export_modpack" or "install_mods_batch" => false,
         // AI2-content:KubeJS 脚本是高风险写(在游戏进程里运行),每次都问;执行器 ToolRunner.AllowsAlways 再守一道
         "write_kubejs_script" => false,
+        // AI2-moddev-mcp:撤回本地模组会删文件(删除类);执行器 ToolRunner.AllowsAlways 同样守一道
+        "revert_local_mod" => false,
         _ => true,
     };
 }

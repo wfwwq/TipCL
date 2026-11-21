@@ -36,6 +36,8 @@ public sealed partial class ToolRunner
         "export_modpack" or "install_mods_batch" => false,
         // AI2-content:KubeJS 脚本在游戏进程里运行(高风险),执行器这里也守一道(确认卡 ConfirmCard.AllowAlways 同样不给)
         "write_kubejs_script" => false,
+        // AI2-moddev-mcp:revert_local_mod 会删掉新装的 jar(删除类),不给「本对话都允许」(确认卡 ConfirmCard.AllowAlways 同样不给)
+        "revert_local_mod" => false,
         _ => true,
     };
 
