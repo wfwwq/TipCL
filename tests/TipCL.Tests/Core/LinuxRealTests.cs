@@ -15,6 +15,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class LinuxRealTests
 {
     // WSL2(本机实测)的 lspci -mm 原样
