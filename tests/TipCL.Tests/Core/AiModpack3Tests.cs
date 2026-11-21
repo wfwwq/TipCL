@@ -75,6 +75,7 @@ internal sealed class Mp3FakeSource : IModpackSource
         "dependencies", deps.Select(d => (object)PyDict.Of("mod_id", d.Id, "type", d.Type)).ToList());
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiModpack3Tests : IDisposable
 {
     public void Dispose()

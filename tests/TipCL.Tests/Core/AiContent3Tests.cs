@@ -20,6 +20,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiContent3Tests : IDisposable
 {
     private sealed class NullApi : ToolRunner.IBackend
