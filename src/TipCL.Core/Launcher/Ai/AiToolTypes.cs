@@ -91,6 +91,14 @@ public static class ToolMeta
         new("fs_read", true, "read", "low", false),
         new("fs_write", false, "write_local", "high", false),
         new("open_folder", true, "none", "low", false),
+        // 卡顿优化 + 存档备份(AI-perf-saves;分级照 Windows 版 ExtraTools.Meta)
+        new("get_system_info", true, "read", "low", false),
+        new("diagnose_lag", true, "read", "low", false),
+        new("tune_jvm", false, "write_local", "medium", false),
+        new("list_saves", true, "read", "low", false),
+        new("backup_save", false, "write_local", "low", false),
+        new("list_save_backups", true, "read", "low", false),
+        new("restore_save_backup", false, "delete", "high", false),
     };
 
     public static Dictionary<string, ToolMetaInfo> Map
