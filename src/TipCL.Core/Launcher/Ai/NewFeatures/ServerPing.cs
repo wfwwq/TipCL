@@ -3,10 +3,13 @@
 // 只读联网:握手(next_state=1)→ 状态请求 → 读 JSON → ping/pong 测延迟。全程带超时,
 // 连不上 / 超时 / 对端不是 MC 服务器时返回 ok=false + 中文原因,不抛到工具层(让模型能直接转述)。
 // 不做 SRV 记录解析(.NET 没有内置 DNS SRV 查询,不加新依赖),域名按 A/AAAA 直连;遗留在 progress 文档里。
+// AI2-stability:补上 SRV —— 地址没写端口且是域名时先查 _minecraft._tcp.<host>(DnsSrv,自己发 UDP 查询,无新依赖),
+// 查不到 / 超时就回落到 A 记录 + 原端口(25565)。结果里多给 resolved_via / connect_host / connect_port / srv。
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -21,11 +24,76 @@ public static class ServerPing
     /// <summary>握手里报的协议号:-1 是社区约定的「只查状态」写法,新老服务端都会回 status。</summary>
     public const int PROTOCOL_PROBE = -1;
 
+    /// <summary>SRV 查询最多占用多久(毫秒;实际取 min(此值, 总超时/2))。</summary>
+    public const int SrvTimeoutMs = 1500;
+
     /// <summary>
     /// 查询一台服务器。返回字段:ok / host / port / latency_ms / online / max / version / protocol / motd /
-    /// players_sample / error / message。<paramref name="timeoutMs"/> 是连接与每次读写的超时。
+    /// players_sample / error / message,以及 resolved_via(srv / a / literal)/ connect_host / connect_port / srv。
+    /// <paramref name="timeoutMs"/> 是连接与每次读写的超时;<paramref name="resolveSrv"/> = true(地址里没写端口)时先查 SRV。
     /// </summary>
-    public static async Task<PyDict> PingAsync(string host, long port = 25565, int timeoutMs = 5000, CancellationToken ct = default)
+    public static async Task<PyDict> PingAsync(string host, long port = 25565, int timeoutMs = 5000, CancellationToken ct = default, bool resolveSrv = false)
+    {
+        string h = Py.Strip(host ?? "");
+        long p = port < 1 || port > 65535 ? 25565 : port;
+        (string connectHost, long connectPort, string via, PyDict? srv) = await ResolveTargetAsync(h, p, resolveSrv, timeoutMs, ct).ConfigureAwait(false);
+        PyDict result = await PingCoreAsync(h, p, connectHost, connectPort, timeoutMs, ct).ConfigureAwait(false);
+        result["resolved_via"] = via;
+        result["connect_host"] = connectHost;
+        result["connect_port"] = connectPort;
+        result["srv"] = srv;
+        return result;
+    }
+
+    /// <summary>
+    /// 算出真正要连的地址:开了 SRV 且是域名 → 查 _minecraft._tcp.&lt;host&gt;,查到就用记录里的目标与端口(via=srv);
+    /// 查不到 / 超时 / 没有 DNS 服务器 → 原主机 + 原端口(via=a,由系统解析 A/AAAA);IP 字面量 via=literal。
+    /// </summary>
+    internal static async Task<(string Host, long Port, string Via, PyDict? Srv)> ResolveTargetAsync(string h, long p, bool resolveSrv, int timeoutMs, CancellationToken ct)
+    {
+        string connectHost = h;
+        long connectPort = p;
+        string via = DnsSrv.ShouldQuery(h) ? "a" : "literal";
+        PyDict? srv = null;
+        if (resolveSrv && h.Length > 0 && DnsSrv.ShouldQuery(h))
+        {
+            string name = DnsSrv.MinecraftName(h);
+            SrvRecord? rec = null;
+            try
+            {
+                rec = await DnsSrv.ResolveAsync(name, Math.Min(SrvTimeoutMs, Math.Max(200, timeoutMs / 2)), ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                rec = null;
+            }
+            if (rec != null)
+            {
+                connectHost = rec.Target;
+                connectPort = rec.Port;
+                via = "srv";
+                srv = PyDict.Of("name", name, "target", rec.Target, "port", (long)rec.Port, "priority", (long)rec.Priority, "weight", (long)rec.Weight);
+            }
+        }
+        return (connectHost, connectPort, via, srv);
+    }
+
+    /// <summary>地址里有没有显式写端口(参数 port 非空,或 host:port / [v6]:port)。没写才查 SRV(与原版客户端一致)。</summary>
+    public static bool HasExplicitPort(string? address, object? port)
+    {
+        if (port != null && !(port is string ps && Py.Strip(ps).Length == 0) && Py.Truthy(port))
+        {
+            return true;
+        }
+        string a = Py.Strip(address ?? "");
+        if (a.StartsWith("[", StringComparison.Ordinal))
+        {
+            return a.Contains("]:", StringComparison.Ordinal);
+        }
+        return a.Count(c => c == ':') == 1;
+    }
+
+    private static async Task<PyDict> PingCoreAsync(string host, long port, string connectHost, long connectPort, int timeoutMs, CancellationToken ct)
     {
         host = Py.Strip(host ?? "");
         if (host.Length == 0)
@@ -43,7 +111,7 @@ public static class ServerPing
         try
         {
             using var client = new TcpClient { NoDelay = true, ReceiveTimeout = timeoutMs, SendTimeout = timeoutMs };
-            await client.ConnectAsync(host, (int)port, cts.Token).ConfigureAwait(false);
+            await client.ConnectAsync(connectHost, (int)connectPort, cts.Token).ConfigureAwait(false);
             using NetworkStream stream = client.GetStream();
 
             // 握手 + 状态请求

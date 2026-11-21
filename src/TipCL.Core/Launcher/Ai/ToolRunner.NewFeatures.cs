@@ -105,6 +105,8 @@ public sealed partial class ToolRunner
             {
                 string address = Py.S(Py.Or(args.Get("address"), args.Get("ip")));
                 object? port = args.Get("port");
+                // AI2-stability:地址里没写端口才查 SRV(与原版客户端一致)
+                bool srv = !ServerPing.HasExplicitPort(address, port);
                 if (address.Length == 0 && args.Get("index") != null)
                 {
                     Instance inst = ExistingInstance(InstName(args));
@@ -116,10 +118,11 @@ public sealed partial class ToolRunner
                     PyDict row = Py.D(Servers.ListServers(inst)[index]);
                     address = Py.S(row.Get("ip"));
                     port = row.Get("port");
+                    srv = !ServerPing.HasExplicitPort(address, null) && Py.Int(Py.Or(port, 25565L)) == 25565;
                 }
                 (string host, long p) = Servers._split_addr(address, port);
                 int timeout = (int)Math.Clamp(Py.Int(Py.Or(args.Get("timeout_ms"), 5000L)), 200L, 30000L);
-                return await ServerPing.PingAsync(host, p, timeout, ct).ConfigureAwait(false);
+                return await ServerPing.PingAsync(host, p, timeout, ct, resolveSrv: srv).ConfigureAwait(false);
             }
 
             case "recommend_shaders":
