@@ -96,7 +96,7 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 [交接必读.md](../交接必读.md) 接手流程（立项阶段写成，现状以 PROGRESS.md 为准）。
 
 布局 v2 的 **Windows 版**手册(1.2.0):[docs/布局使用指南.md](布局使用指南.md) 完整手册(三个入口 / 手势 / 三种模式 / 分栏 / 整机方案导入导出 / 自建区块 / AI 排版回退 / 本版的坑)·
-[docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 10 条 FAQ。**这两份写的是 Windows 桌面版行为**;Linux 侧除「AI 排版」外的入口都在,但**编辑态手感有四处差异**(见下面「Linux 编辑态与 Windows 的四处差异」)。
+[docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 10 条 FAQ。**这两份写的是 Windows 桌面版行为**;Linux 侧入口都在(「AI 排版」已于 2026-11-21 补齐,见下),但**编辑态手感有四处差异**(见下面「Linux 编辑态与 Windows 的四处差异」)。
 
 ### 布局 v2:Linux 移植版的真实进度(截至 `b86afe3`,2026-11-20 复核)
 
@@ -115,7 +115,7 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 | 布局 JSON 卡片(校验 / 应用 / 刷新) | `Pages/Layout/LayoutJsonEditor.cs` |
 | 页签与标题栏编辑 | `Pages/Layout/ShellTabs.cs` |
 
-**尚未落地**(别再按 Windows 手册去找这些入口):**AI 排版工具** —— `layout_apply` / `layout_get` 工具与「AI 备份 <时间>」方案的实现在 `windos/src/TipCL/Core/Launcher/Ai/LayoutTools.cs`,Linux 树 `src/` 里 `LayoutTools` 与字符串「AI 备份」**零命中**(`grep -r "LayoutTools\|AI 备份" src/` 无结果)。故 Windows 手册里「让 AI 改布局」「AI 改坏了用 AI 备份回退」两节对 Linux 版不适用。
+**AI 排版工具(2026-11-21 已落地,AI-acct-layout-mp 包)**:`layout_get` / `layout_apply` 在 `src/TipCL.Core/Launcher/Ai/LayoutTools.cs`,应用前先把当前布局存成「AI 备份 yyyy-MM-dd HH:mm:ss」方案(只留最近 5 份),改坏了可在「设置 → 布局 → 布局方案」切回。与 Windows 手册的差别:Linux 版对 `widgets` 参数和整份 `json` 都执行 D-30 门禁(web 只认 https;button 只认 `page:` / `launch:` / `folder:data` / `rpc:` + 只读接口白名单,不合法整次拒绝且不产生备份),AI 写入或改过地址 / 动作的网页 / 按钮区块一律 `enabled=false`,要用户自己开启;设置页「布局」视图若正开着,AI 改完后要切一下视图才刷新方案列表。
 
 ### Linux 编辑态与 Windows 的四处差异(2026-11-20 复核,别当 bug 修)
 

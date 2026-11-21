@@ -1521,3 +1521,11 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 - 计帧走 `TopLevel.RequestAnimationFrame`(每帧一回调,与合成器同节拍),500ms 采样出 `NN FPS`;不用 DispatcherTimer 数自己跳了几次(界面卡死时定时器照样准点跳,读数恒为名义值)。角标 `IsHitTestVisible=false`,不吃窗口右下角命中。详见 `progress/R33-FPS.md` 与 `DECISIONS.md` D-80。
 - 自证:build 0 警告 0 错误;`--filter TipCL.Tests.App` **358 通过 / 0 失败 / 0 跳过**(新增 `App/FpsOverlayTests.cs` 3 条:出厂默认关 / 默认不可见且钉右下角且跟着开关走 / 开关真落盘);`--smoke` 三张真渲染图逐张核过 —— 关:左栏底部开关为关、右下角无角标;开:开关变绿 + 右下角出现 `5 FPS`;深色照片壁纸下白字深底仍可读。
 - 遗留:界面完全静止时 Avalonia 不出帧,读数会偏低/停住(恒定刷新要每帧 `InvalidateVisual`,代价是常态 CPU,不做);该行文案未走词表(英文界面下仍中文,与本页既有写法一致);只挂主窗口,对话框不显示。
+
+
+## 2026-11-21 AI 助手功能补齐:五包并行 + 集成合并(主 agent 编排;AI-integration 合并与复验)
+- 分支:`ai/logs-fs`(1c596e8)、`ai/perf-saves`(3b67771)、`ai/acct-layout-mp`(2c1159a)、`ai/engine-mcp`(c028c7e)、`ai/new-features`(c2362b0),按此顺序 `--no-ff` 合入 `ai/integration`(基于 main@4277a02);尚未并入 main。
+- 落地:P0 补注册 get_latest_log / get_crash_report(提示词与崩溃修复上下文早就让模型调用它们,Linux 却没注册)+ 自检改为「提示里点名的工具必须都已注册」;ExtraTools 全套(文件 / 卡顿 / 存档 / 账号皮肤 / 联机)与 AI 排版;只读工具并行、工具前后钩子、规则按参数匹配、Linux 版 MCP Server;Linux 独有的升级 / 预检 / 服务器 / 光影推荐 / 诊断报告。工具表 36 → 65 项。
+- 合并冲突:全部是共享文件的追加点(Tools.cs / AiToolTypes.cs / ToolRunner.cs / AiData.cs / AiSelfTest.cs / ConfirmCard.cs / SettingsPage.cs / 两份 locales),两边保留;需要手工处理的是「本对话都允许」那一行(三包各加一个条件 → 合成一个判定)、Tools.cs 两处转发块的大括号、AiData.cs 提示词拼接处的分号、locales 追加块之间的逗号。每合一包都先构建通过再合下一包。
+- 合并后修两处只在合并后才暴露的问题 + 三处调整,详见 DECISIONS D-81 与 docs/PARITY.md §10。
+- 复验与遗留:见本轮 AI-integration 汇报;遗留同 PARITY §10.4。

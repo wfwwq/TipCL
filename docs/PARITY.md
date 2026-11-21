@@ -121,12 +121,12 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 会话记忆面板(`AiMemoryPanel`,与设置页「记忆」卡同一份 `ai_memory.md`)、上下文占用环(`AiIcons.Ring` + `Usage` + `AiUiText.ContextRatio`)、
 对话持久化到 `ai_chats.json` 并在回页时读回、**`/撤回` 真的接上 `Rewind`**(对话截断 + 文件还原)。
 
-**仍未做(如实)**:1**真模型端到端**(需要真实 API key,属对外调用,留给用户);2`McpServer`(把启动器工具开放给外部 agent)不移植 —— 它依赖 `BackendApi`(D-2 已判无宿主),且 Linux 的写工具要过界面确认回调,外部客户端没有用户点确认只会被自动拒;3`Hooks/AgentPresets`(无插件宿主,同 §7);4`Prompt/Diagnose/Permission/ModConfig` 参考版有独立文件,Linux 侧早在 P5 就并进 `AiData.SYSTEM_PROMPT` / `Crash` + `ToolRunner.Diagnose` / `ToolRunner.Decide` + 权限档位与规则键 / `ToolRunner` 的 `list/read/write_mod_config`,不再另建同名类。`--ai-selftest` 自检由 32 项扩到 **52 项**→R21d 再 +2 = **54**（以 §9.4 为准）(压缩/检查点/回退/产物/用量/MCP 各条,R19 再 +2 条权限理由)。
+**仍未做(如实)**:1**真模型端到端**(需要真实 API key,属对外调用,留给用户);2~~`McpServer` 不移植~~ —— **2026-11-21 已移植**(`Core/Launcher/Ai/McpServer.cs`,零依赖、只听 127.0.0.1;外部发起的写操作每次在启动器里弹确认,见 §10);3`Hooks` **2026-11-21 已移植**(进程内注册 + `write_audit`;无插件宿主所以没有插件钩子),`AgentPresets` 仍未做;4`Prompt/Diagnose/Permission/ModConfig` 参考版有独立文件,Linux 侧早在 P5 就并进 `AiData.SYSTEM_PROMPT` / `Crash` + `ToolRunner.Diagnose` / `ToolRunner.Decide` + 权限档位与规则键 / `ToolRunner` 的 `list/read/write_mod_config`,不再另建同名类。`--ai-selftest` 自检由 32 项扩到 **52 项**→R21d 再 +2 = **54**（以 §9.4 为准）(压缩/检查点/回退/产物/用量/MCP 各条,R19 再 +2 条权限理由)。
 
 ## 3. Core / Services
 
 ### 缺失 Core(按 2026-11-12 复核;已搬走的不再列在这里)
-- **AI Agent 子系统的「服务层」部分**:工具链那一半(`Tools` 表 / `ToolCall` / `ToolMeta` / `ToolRunner` / `AiAgent` / `Conflict`)已在 M4-H P5 移植;**服务层那一半已在 M4-H R1 补齐**(`Checkpoint / Rewind / Compact(+CompactState/CompactionResult/AutoConfig/MicroConfig/MicroResult/RapidRefillBlocked) / Tokens / TokenState / Usage / Store / Trace / Artifacts / AiFs / Mcp / McpClient / McpError / StopReason`,见 §2 AI 小节)。仍不移植:`Scheduler`(Linux 的工具循环按顺序执行,没有并发组)、`McpServer`(对外暴露,依赖 `BackendApi`)、`Permission`/`Prompt`/`Diagnose`/`ModConfig`(Linux 侧已有等价实现,不另建同名类;其中 `Permission` 的**裁决理由文案**已按 R19 逐字移植进 `ToolRunner.Decide`,`PermissionNote` **R21d 已补齐**（把当前档位写进系统提示,见 §9.4)、`Hooks`/`AgentPresets`/`ChatEventLog`(无插件宿主)、`ExtraTools` 的通用 fs 工具面(只留 `config/` 白名单的 `write_mod_config`,不放开任意路径读写)。(`Preview` 原在本清单里,M4-H R5 已补齐:**确认卡的改前改后 diff 预览**见 §2 AI 小节与 D-31。)
+- **AI Agent 子系统的「服务层」部分**:工具链那一半(`Tools` 表 / `ToolCall` / `ToolMeta` / `ToolRunner` / `AiAgent` / `Conflict`)已在 M4-H P5 移植;**服务层那一半已在 M4-H R1 补齐**(`Checkpoint / Rewind / Compact(+CompactState/CompactionResult/AutoConfig/MicroConfig/MicroResult/RapidRefillBlocked) / Tokens / TokenState / Usage / Store / Trace / Artifacts / AiFs / Mcp / McpClient / McpError / StopReason`,见 §2 AI 小节)。~~`Scheduler`、`McpServer`~~ 已于 2026-11-21 移植(只读工具并行 / 本机 MCP Server,见 §10);仍不移植:`Permission`/`Prompt`/`Diagnose`/`ModConfig`(Linux 侧已有等价实现,不另建同名类;其中 `Permission` 的**裁决理由文案**已按 R19 逐字移植进 `ToolRunner.Decide`,`PermissionNote` **R21d 已补齐**（把当前档位写进系统提示,见 §9.4)、`AgentPresets`/`ChatEventLog`(无插件宿主;`Hooks` 已于 2026-11-21 移植为进程内钩子)、~~`ExtraTools` 的通用 fs 工具面~~(2026-11-21 已移植 `fs_list / fs_read / fs_write / open_folder` 与 ExtraTools 其余工具,路径守卫比参考版更严,见 §10)。(`Preview` 原在本清单里,M4-H R5 已补齐:**确认卡的改前改后 diff 预览**见 §2 AI 小节与 D-31。)
 - **`Shortcut(ShortcutError)` 已完成**:M4-H P3.5 搬运 `Core/Launcher/Shortcut.cs` 并补了真的 CLI 入口(见 DECISIONS D-23)。
 - **插件宿主运行时不移植(M4-H P6 判定,理由见 §7.2)**:`PluginManager`(宿主运行时半部)`/ PluginHostApi / PluginSessions / PluginTools / PluginLlm / PluginAgentBridge / PluginHooks / LaunchHooks / DotNetPluginContext / JsonRpcPeer / NodeHostProcess / NodeRuntime / SecretStore / Sdk/PluginSdk / Sdk/PluginUiRegistry / BackendApi.Plugins` —— 都需要 Node 宿主或 WPF 契约。**文件级链路已真做**:`PluginDirs / PluginStateStore / PluginManifest / PluginMarket` + 新增 `PluginInstaller`(安装/更新/卸载)+ `PluginHost`(启停落盘/日志/UI 贡献汇总)。
 - **RPC/后端**:`BackendApi / BridgeServer / RpcDispatcher`
@@ -144,7 +144,7 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 1. ~~外壳 IA 重建~~:已按 Windows v2 落地(顶部 5 页签 + 无侧栏,见 D-11),`NavModel` 的 6 分组是 v1 旧设计线,不再作为目标。
 2. ~~任务/进度页真实化~~:已完成(`Pages/TasksPage.cs`,2026-11-10)。
 3. **长尾页面**(2026-11-12 P3.5/P5 复核后):已完成 AccountPage / Multiplayer / Tasks / Catalog(六分段)/ VersionManage + 版本设置·模组·存档对话框 / **JavaPage**(设置页 Java 子页,P4)/ **Feedback 独立页**(设置页内层第 6 项,P4)/ **FirstRunWizard**(P4)/ **CrashUi**(P4)/ **桌面快捷方式链**(P3.5)。剩 Playtime、Servers 独立页(现由设置页内层导航覆盖,未做独立页 —— 这两项在 Windows v2 也不是顶级页)。
-4. **AI 对话子系统**:2026-11-12 P5 主体完成(工具链 / 权限确认 / 结构化选择题 / 计划卡与任务卡 / 自检 / 图片输入 / 崩溃「交给 AI 修复」),**R1+R2(同日)补齐服务层与界面残留** —— 检查点回滚 / 上下文压缩 / 令牌与用量 / MCP 客户端 / 只读子代理 / 产物回读 / 斜杠命令 / 记忆面板 / 上下文占用环全部落地(见 §2 AI 小节);剩真模型端到端(需要 API key)与 `McpServer`(依赖 `BackendApi`)。**R5 接通了确认卡的变更预览**(逐行 diff / 删除清单 / 安装目标,见 §2 AI 小节与 D-31)。
+4. **AI 对话子系统**:2026-11-12 P5 主体完成(工具链 / 权限确认 / 结构化选择题 / 计划卡与任务卡 / 自检 / 图片输入 / 崩溃「交给 AI 修复」),**R1+R2(同日)补齐服务层与界面残留** —— 检查点回滚 / 上下文压缩 / 令牌与用量 / MCP 客户端 / 只读子代理 / 产物回读 / 斜杠命令 / 记忆面板 / 上下文占用环全部落地(见 §2 AI 小节);剩真模型端到端(需要 API key);`McpServer` 已于 2026-11-21 移植(见 §10)。**R5 接通了确认卡的变更预览**(逐行 diff / 删除清单 / 安装目标,见 §2 AI 小节与 D-31)。
 5. **Core 业务件**:`News`、`Worlds`、`Servers`、`Feedback`、`Repair`、`Themes`、`Thumbnails`、`UiLayout`、`Updater`、`Cleaner`、`ContentExport`、`HelpContent` —— 这些在 M4-D/P1/P2/P4 已陆续搬入 `src/TipCL.Core`(见 §3「已移植」);真正还缺的是 `Shortcut`(P3.5 已完成)与上表所列的 AI 服务层、插件宿主。
 6. ~~插件宿主全链~~:2026-11-12 P6 判定并落地 —— **文件级链路(市场/安装/更新/卸载/启停/日志/权限/开发链接)+ 壳侧(`plugin:` 页面、动态顶部页签、界面贡献快照)已真做**;需要在进程内跑插件代码或渲染插件网页的那一半不移植(无 Node 宿主、参考 .NET 契约基于 WPF),理由与逐项判定见 §7。
 7. **Services 视觉/交互件**:WebViewHost、SPanel、Wallpaper、SideFrost、SmoothScroll、LucideAssets(逐项结论见 §5);**`FileDrop/FileKinds` 已于 P6/P7 落地为代码级统一入口(见 §8)**;但 Linux/X11 上收不到系统拖放(平台限制,见 §8 首段与 D-38),真机可用入口是各页的显式导入按钮。
@@ -236,10 +236,10 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | `PluginManager.cs` | 55KB | **部分(文件级真做,运行时不做)** | 已搬:`PluginDirs`(含 staging/backup 目录)、`PluginStateStore`(plugins.json 原子写)、`PluginManifest`(清单校验/engines/依赖)、`PluginMarket`(索引+镜像+安装包处理),以及 Linux 侧 `PluginHost`(发现/启停落盘/日志/UI 贡献汇总)。不搬:Node 宿主启停、host hello 握手、页面 token、事件总线、热重载、服务/工具注册表——这些只有「进程内真的跑插件」才有意义。 |
 | `PluginHostApi.cs` | 15KB | **不移植** | 宿主对**插件侧**暴露的 API 面(launcher.call / ui.register / 凭据 / AI / 工具…)。插件进程不存在时,这一层没有调用方。 |
 | `PluginSessions.cs` | 9.4KB | **不移植** | 让插件新建/驱动 AI 会话;依赖插件进程与 Linux 不存在的会话宿主(参考版那套会话在 Python 侧)。 |
-| `PluginTools.cs` | 13KB | **不移植** | 插件注册进 AI 的工具表。Linux 的 AI 工具表在 `Core/Launcher/Ai/Tools.cs`(34 项内置),没有插件来源;接上只会得到「点了报未知工具」的死入口。 |
+| `PluginTools.cs` | 13KB | **不移植** | 插件注册进 AI 的工具表。Linux 的 AI 工具表在 `Core/Launcher/Ai/Tools.cs`(2026-11-21 起 65 项内置,见 §10),没有插件来源;接上只会得到「点了报未知工具」的死入口。 |
 | `PluginLlm.cs` | 12.8KB | **不移植** | 插件直接调模型(流式回传分片给插件进程)。无插件进程 + 无凭据托管方。 |
 | `PluginAgentBridge.cs` | 12KB | **不移植** | 插件 ↔ AI Agent 的桥(子代理、产物回读、检查点)。依赖 MCP/子代理/产物那套宿主,P5 已判 Linux 不做。 |
-| `PluginHooks.cs` / `LaunchHooks.cs` | 4KB / 4KB | **不移植** | 插件钩子表(`launch.before/after` 等)与启动链上的钩子点。Linux 启动链(`Common/Launch/LaunchCore`)没有插件钩子调用方,注册了也不会被调用。 |
+| `PluginHooks.cs` / `LaunchHooks.cs` | 4KB / 4KB | **不移植** | 插件钩子表(`launch.before/after` 等)与启动链上的钩子点。Linux 启动链(`Common/Launch/LaunchCore`)没有插件钩子调用方,注册了也不会被调用。AI 工具的前后钩子已有进程内 `Hooks`(2026-11-21),将来有插件宿主时挂这里。 |
 | `DotNetPluginContext.cs` | 575 | **不移植** | 契约类型 `TipCL.Plugins.*` 定义在 **net48 的 `TipCL` 程序集**里,UI 工厂签名是 `System.Windows.FrameworkElement`/`Window`。Linux 侧既不能引用这套契约,也不可能加载按它编译的插件二进制(**程序集标识 + WPF 依赖两条都不满足**);要「真做」只能另立一套与参考契约**不兼容**的新 SDK,而那样没有任何现成插件可用 —— 那属于新造生态,不是移植。因此 `PluginHost.Start` 对 `.NET` 插件**如实报错**(此前只做「程序集加载校验」就把状态标成 running,插件其实从未拿到 `Apply` 回调,属假成功,本轮修掉)。 |
 | `JsonRpcPeer.cs` | 11KB | **不移植** | Node 宿主 stdio 上的 JSON-RPC 对端;没有 Node 宿主就没有这条管道。 |
 | `NodeHostProcess.cs` / `NodeRuntime.cs` | 6.2KB / 14.3KB | **不移植** | 需要 Node 运行时(参考版会自动下载/内置一个)与 npm(`npm install` 装插件依赖)。Linux 侧不内置 Node、不引第三方宿主包、也不该在用户机器上静默拉 node/npm —— 这是本轮最硬的一条红线。 |
@@ -351,6 +351,7 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 | 2 | `ai_permission_dont_ask` | Linux 的 `Config` 写着默认值,**全仓无消费点**(参考版在 `Agent.cs:571` / `:1149-1152` 消费) | `ToolRunner.ApplyDontAsk`:需要确认的写操作直接拒绝,理由「用户开启了「不询问」模式」(只作用于 `ask`) | D-48 |
 | 3 | 被拒的步骤行 | 泛泛一句「当前权限档位不允许」 | 「已拒绝:&lt;裁决理由&gt;」,由 `AiPage.Summarize` 显示(照参考版把 reason 写进 denied 工具状态);**模型可见文本未变** | D-48 |
 | 4 | 参考版 `Permission.PermissionNote`(`Permission.cs:256-276`:把当前档位写成 6 句 `[权限设置] ...`;消费点 `Agent.cs:348` / `:368`) | 模型**不知道**自己处在哪个档位,只能从「刚才那次操作被拒了」反推 ⇒ 两种坏行为:该直接动手时反复问、被拒之后换个工具名重试同一件事 | **已补(R21d)**:`ToolRunner.PermissionNote()` 与参考版 6 句**逐字对位**(独立核对:从参考仓源码正则抽字面量比 SHA256,**6/6 相等**),作为独立段落插在系统消息的**运行时上下文之后、长期记忆之前**;崩溃修复会话同位置一并注入;归一化提出成 `ToolRunner.NormalizeMode`,裁决 / 提示 / 自检共用一份;`--ai-selftest` 52 → **54** 项 | D-57 |
+| 5 | 规则限定参数 `content`(参考版 `Permission._matches` / `RuleContentFromInput`) | D-24 记在规则里但不参与判定 | **已补(2026-11-21,AI-engine-mcp)**:`PermissionRules` 取参数的键序同参考版(path / filename / slug / name / version / major …第一个非空),路径写法归一后整串相等才算命中;命中多条时 禁止 > 允许 > 每次问;删除类工具上没填限定参数的「允许」不生效;作用实例按「这次操作要动的实例」算 | D-81 |
 
 > **仍未做(如实)**:「不询问」在 Linux 侧是**独立开关**(`ai_permission_dont_ask`,见 D-48)而不是档位名,所以那句 dontAsk 提示只在「开关打开 && 档位不是 `yolo` / `plan`」时用,其余档位保持原句 —— 这样提示与真实裁决自洽。
 >
@@ -778,3 +779,41 @@ $env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
 | 4 | 实例库新增「实例状态」区块 | **未移植**:Linux 的 `InstRow` 只有 `Name/Path/Versions`,`Ver` 只有 `Id/Loader/Type/Mods` —— 「游戏版本 / 整合包 / Java / 最近游玩」**没有数据源**。要补得先接 `get_instance_info` 契约并把 `LastPlayed` 补进 `Ver`,属数据层改动,不在本轮 | ❌ 待定 |
 
 **验证口径**(本机 Windows,`dotnet build TipCL.Linux.sln -c Release` + `dotnet test tests/TipCL.Tests`):构建 0 警告 0 错误;用例 **781 条 / 775 过 / 5 败 / 1 跳**,5 条失败与改动前**同一组**(写 `%TEMP%` 被拒的 `NewsTests` ×3 + `PhoneLinkProtocolTests` ×2,环境性);新增 `LayoutAutoPackTests` 3 条全过。**界面未在真窗跑过** —— 动画 / 滚轮转交 / 并排落位的手感仍需 Linux 真机验收。
+
+## 10. AI 助手功能补齐(2026-11-21,五包并行 + AI-integration 合并)
+
+分支 `ai/logs-fs` / `ai/perf-saves` / `ai/acct-layout-mp` / `ai/engine-mcp` / `ai/new-features` 合入 `ai/integration`。
+工具表 36 → **65** 项(`--ai-selftest`「工具表可解析 — 65 个工具」);每个包的细节见 `progress/AI-<包名>.md`,决策见 DECISIONS D-81。
+
+### 10.1 从 Windows 参考版移植(同名同形)
+
+| 参考版 | Linux | 与参考版的有意差异 |
+|---|---|---|
+| `Tools.cs` 的 get_latest_log / get_crash_report | `Ai/AiFsTools.cs` + `ToolRunner.LogsFs.cs` | 多两个可选分页参数 `offset_line / max_lines`;get_crash_report 取**修改时间最新**的一份(参考版取排序后第一份 = 最旧) |
+| `ExtraTools.cs` fs_list / fs_read / fs_write / open_folder | 同上 | 路径守卫更严:逐段跟随符号链接 / 目录联接算真实路径;拒 `..`、ADS、UNC、8.3 短名、设备名;`accounts.json / config.json / device_id` 读写都拒;fs_write 不给「本对话都允许」 |
+| `ExtraTools.cs` get_system_info / diagnose_lag / tune_jvm | `Launcher/SystemInfo.cs` + `JvmTuning.cs` + `Ai/PerfSavesTools.cs` | tune_jvm 写**实例**设置(`.instance.json`),参考版写全局;启动链 `LaunchFlow.Prepare` 补读实例级内存 / GC;物理核数按核算(参考版 `Sysinfo` 数的是插槽) |
+| `ExtraTools.cs` list_saves / backup_save / list_save_backups / restore_save_backup | `Launcher/SaveBackups.cs` + 同上 | 回滚前**一律**先备份当前存档(参考版只在 overwrite=true 时);游戏运行中拒绝;restore 不给「本对话都允许」 |
+| `ExtraTools.cs` list_accounts / add_offline_account / switch_account / set_skin | `Ai/AcctLayoutMpTools.cs` | list_accounts 只返回 5 个白名单字段;已有同名正版 / 外置账号时拒绝加同名离线号 |
+| `ExtraTools.cs` multiplayer(action = status / host / join / stop) | 同上 | 副作用记 `network`(参考版 write_local):它会拉起联机内核并连公共节点,不该被「文件类修改直接执行」档放行 |
+| `LayoutTools.cs` layout_get / layout_apply | `Ai/LayoutTools.cs` | 对 widgets 与整份 json 都执行 D-30 门禁;AI 写入 / 改过的 web、button 区块一律 `enabled=false` |
+| `Scheduler.cs` | `Ai/Scheduler.cs`(接入 `AiAgent`) | 另外不并行 `long_running` 与 update_plan / remember / forget / dispatch_subagent |
+| `Hooks.cs` / `Hook.cs` | `Ai/Hooks.cs`(接入 `ToolRunner.RunAsync`) | 多一个拦截口 `HookBlock`;插件侧无宿主,不挂插件钩子 |
+| `Permission.cs` 的 content 匹配 | `Ai/PermissionRules.cs` | 作用实例按目标实例算,模型换参数里的实例名绕不过去 |
+| `McpServer.cs` | `Ai/McpServer.cs` + `App/Common/Ai/McpServerHost.cs` + 设置页一行 | 外部写操作**每次弹确认**,「以后都允许」对外部调用不生效;先读完请求体再拒(参考版先拒后读,Windows 上连接被重置,403 传不到客户端) |
+
+### 10.2 Linux 独有(Windows 版暂无对应)
+
+plan_instance_upgrade / apply_instance_upgrade(默认复制成新实例再升级)、preflight_check(+ 启动页「启动前 AI 预检」与设置开关 `ai_preflight_enabled`)、
+list_servers / add_server / remove_server / ping_server(自实现 Server List Ping,不解析 SRV)、recommend_shaders、export_diagnostic_report(全文脱敏)。
+
+### 10.3 合并时补的两处问题(AI-integration)
+
+1. `LaunchPage.PreflightOverride` 搬到独立静态类 `LaunchPreflightHook`:挂在 LaunchPage 上时,测试在 UI 线程外赋值会触发 LaunchPage 静态初始化(建画刷)并抛 `TypeInitializationException`,整个测试进程里 26 个用到 LaunchPage 的用例一起红;单分支里恰好被执行顺序掩盖。
+2. i18n 基线:五包合计未接线 CJK 3651 > 基线 3605。只把给模型看的提示词 / 关键词(AiData.cs 23 行)与工具结果文件(AiFsTools.cs 文件级)标成 `i18n:ignore`;界面可见文案没有用 ignore 掩盖。
+
+### 10.4 仍未做(如实)
+
+- 启动页预检提示条的文案(`NewFeatures/AiPreflight.cs`)与新工具的中文标签(`Tools.cs` Labels)未接 `I18nCore.Tr`,英文界面下仍是中文。
+- 联机(multiplayer)只用假接口测了流程,没在真网络 + 第二台机器上跑通;硬件探测没在真 Linux 机器上跑过。
+- MCP 外部写操作的确认框是模态 `Dlg.Ask`,主窗口不在前台时用户可能看不到;AI 页还没有「MCP 已开启 · 最近外部调用」状态条。
+- 真模型端到端仍留给用户(需要 API key)。

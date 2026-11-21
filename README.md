@@ -52,11 +52,16 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 |---|---|
 | “给 1.20.1 Fabric 装上钠和小地图” | 搜索 Modrinth / CurseForge，匹配版本和前置，一起装好 |
 | “游戏闪退了” | 读崩溃报告和日志，定位冲突模组，给出一键修复 |
-| “好卡” | 看硬件、内存和模组数量，建议优化模组，自动调内存和 GC |
+| “好卡” | 看硬件、内存和模组数量，建议优化模组，自动调内存和 GC（Linux 版调的是该实例的内存与 GC） |
 | “备份一下我的生存存档” | 打包备份，之后可以随时回滚（回滚前会先备份当前状态） |
 | “开个房和朋友联机” | 启动内置 Terracotta，把房间号发给你 |
 | “把这张图设成皮肤” | 附上图片即可，支持离线账号 |
 | 截图报错界面 | 模型支持视觉时直接看图分析 |
+| “把这个整合包升到 1.21” | 逐个查模组有没有目标版本，列出可升级 / 缺失 / 替代建议，确认后复制成新实例再升级，不动原实例（**仅 Linux 版**） |
+| 点「启动」 | 启动前 AI 预检 Java、前置模组、加载器和内存，发现问题给出「交给 AI 一键修复」（**仅 Linux 版**，设置里可关） |
+| “这个服务器延迟多少” | 查延迟、在线人数和版本，增删游戏内「多人游戏」列表（**仅 Linux 版**） |
+| “我的电脑适合什么光影” | 按显卡和内存分低 / 中 / 高配推荐光影和资源包（**仅 Linux 版**） |
+| “导出诊断报告” | 把排查过程、日志片段、模组清单和硬件摘要导出成一份报告，自动打码账号令牌和用户名（**仅 Linux 版**） |
 
 - **看图**：自动判断当前模型是否支持多模态，支持选择、粘贴、拖入图片，也可以在设置里手动指定。
 - **长期记忆**：跨对话记住你常玩的版本、硬件和偏好，记录保存在本地 `ai_memory.md`，可随时查看和删除。
@@ -73,16 +78,15 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 | 👤 **账号** | 微软正版、外置登录（authlib-injector）、离线皮肤 |
 | 🌐 **联机** | 内置 Terracotta 局域网联机 |
 | 📱 **手机同步** | 同一 Wi-Fi 或 USB 数据线和手机启动器互传存档，配对码连接，谁改了传谁，覆盖前自动备份（**桌面端已就绪，手机端待配套**，见下） |
-| 🤖 **AI 助手** | 崩溃诊断、卡顿优化、看图、长期记忆、MCP Server（**MCP Server 仅 Windows**，见下），见[上文](#-ai-助手) |
+| 🤖 **AI 助手** | 崩溃诊断、卡顿优化、看图、长期记忆、MCP Server，见[上文](#-ai-助手) |
 | 🔌 **插件系统** | 插件市场一键安装，插件可加页面、AI 工具、启动钩子和首页卡片（**插件的网页界面仅 Windows**，见下），见[下文](#-插件系统) |
 | 🏠 **仪表盘首页** | 默认呈现启动横幅、启动配置、快捷入口和新闻；日志、时长、便签等卡片按需添加，布局随心拖拽，支持方案与导入导出 |
 | 🎨 **外观** | 浅色 / 深色主题，中英双语界面 |
 
-> **两条实现在这张表上的差异（2026-11-20 逐条核对）**：上表对 **Windows 桌面版**逐条成立；Linux / Avalonia 版（`src/`）除下面三处外也都已落地（启动链、Java 探测、模组/整合包、实例与存档、账号、Terracotta、AI 助手、插件市场与钩子、仪表盘、主题与双语）：
+> **两条实现在这张表上的差异（2026-11-20 逐条核对）**：上表对 **Windows 桌面版**逐条成立；Linux / Avalonia 版（`src/`）除下面两处外也都已落地（启动链、Java 探测、模组/整合包、实例与存档、账号、Terracotta、AI 助手、MCP Server、插件市场与钩子、仪表盘、主题与双语）。MCP Server 自 2026-11-21 起两版都有，Linux 版外部 agent 发起的写操作每次都会在启动器里弹确认（见[下文](#-mcp-server)）：
 >
 > | 能力 | Windows | Linux 树 | 事实 |
 > |---|---|---|---|
-> | **MCP Server**（`http://127.0.0.1:25585/mcp`） | ✅ `windos/src/TipCL/Core/Launcher/Ai/McpServer.cs`（`DefaultPort = 25585`） | ❌ 只有 MCP **客户端**（`src/TipCL.Core/Launcher/Ai/Mcp.cs`、`McpClient.cs`），`25585` / `McpServer` 在 `src/` **零命中** | Linux 版能连外部 MCP 服务，但**不能**被 Claude / Cursor 当 MCP Server 调用 |
 > | **插件网页界面**（插件页签 / 浮层 / 网页区块） | ✅ WebView2 内嵌；Win7 / 8.1 上自动改用浏览器 | ⚠️ **无网页宿主**：按既有先例恒走「当前系统不能内嵌网页 + 在浏览器中打开」的兜底分支（`src/TipCL.App/Pages/Layout/Widgets/DangerousWidgets.cs`、`Pages/Layout/PluginBlocks.cs` 文件头降级说明） | 插件的**逻辑**（AI 工具 / 钩子 / 首页卡片数据）在 Linux 可用，网页形态的 UI 面会外开浏览器 |
 > | **手机同步** | ✅ 桌面端（`Core/Launcher/Sync/PhoneClient.cs`） | ✅ 桌面端（`src/TipCL.Core/Launcher/Sync/`、设置页 `PhoneSyncPanel.cs`） | **两端都只是「桌面半边」**：手机端服务端在 `TipCL-Android` 仓库里找不到对应实现（`X-PyMCL-Token` / `/api/ping` / `deviceTimeMs` 全库 **0 命中**）⇒ 别把它当"现在就能互传存档" |
 
@@ -92,7 +96,7 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 
 1.2.0 起窗口长什么样可以自己做主(**布局 v2**):页签顺序、每个页面的区块顺序 / 显隐 / 跨列 / 位置、左右分栏比例、自建区块,全都是一份可读可写的 JSON 文档(`%TIPCL_HOME%\ui_layout_v2.json`),改一下即时保存、没有「保存」按钮 —— 在页面空白处**右键 →「自定义布局...」**即可进入编辑态,拖拽换序、按格缩放;页面支持 **stack / grid / canvas** 三种模式(grid 最高 12 列网格),整机布局可以导出成方案、再导入回来,也可以让 AI 直接排版(每次应用前先存一份「AI 备份 <时间>」方案)。
 
-> **平台口径(2026-11-20 复核,Linux 树代码尖 `b86afe3`)**:上面这段描述的是 **Windows 桌面版**(功能全量)。**Linux 移植版**已落地布局 v2 的文档 + 引擎 + 编辑器 + 右键「自定义布局...」入口 + 自建区块渲染,设置页「布局」视图的 7 个小节(外观与密度 / 页签与标题栏 / 页面区块 / 分栏比例 / 自建区块 / 布局方案 / 布局 JSON)也已在 Linux 树(`src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs`,分栏引擎在 `src/TipCL.App/Controls/PageLayoutHost.cs`);**仍缺**的是 AI 排版工具(`layout_apply` 与「AI 备份 <时间>」方案,只在 `windos/` 里)。逐条清单见 [`docs/README.md`](docs/README.md)「布局 v2:Linux 移植版的真实进度」。本节后面链接的两份手册写的是 **Windows 版**行为。
+> **平台口径(2026-11-20 复核,Linux 树代码尖 `b86afe3`)**:上面这段描述的是 **Windows 桌面版**(功能全量)。**Linux 移植版**已落地布局 v2 的文档 + 引擎 + 编辑器 + 右键「自定义布局...」入口 + 自建区块渲染,设置页「布局」视图的 7 个小节(外观与密度 / 页签与标题栏 / 页面区块 / 分栏比例 / 自建区块 / 布局方案 / 布局 JSON)也已在 Linux 树(`src/TipCL.App/Pages/Settings/SettingsPage.Layout.cs`,分栏引擎在 `src/TipCL.App/Controls/PageLayoutHost.cs`);AI 排版工具也已在 2026-11-21 落地(`src/TipCL.Core/Launcher/Ai/LayoutTools.cs` 的 `layout_get` / `layout_apply`,应用前同样先存一份「AI 备份 <时间>」方案;Linux 版对网页 / 按钮区块多执行一道 D-30 门禁,AI 写入或改过地址 / 动作的这类区块一律默认关闭,要用户自己去「设置 → 布局 → 自建区块」开启)。逐条清单见 [`docs/README.md`](docs/README.md)「布局 v2:Linux 移植版的真实进度」。本节后面链接的两份手册写的是 **Windows 版**行为。
 
 - 📖 [布局使用指南](docs/布局使用指南.md)—— 完整手册:三个入口、编辑手势、三种模式、分栏比例、整机方案导入导出、自建区块、AI 排版与回退、本版的坑
 - ⚡ [布局快速上手](docs/布局快速上手.md)—— 30 秒版 + 手势速查表 + 9 条 FAQ
@@ -162,11 +166,11 @@ windos/tools/iconfont/          内置图标字体的映射表与生成脚本
 
 ## 🔗 MCP Server
 
-> **平台口径(2026-11-20 核对)**:本节与 `25585` 这个端口**只在 Windows 桌面版成立**(`windos/src/TipCL/Core/Launcher/Ai/McpServer.cs`)。Linux / Avalonia 版只有 MCP **客户端**(能连外部 MCP 服务),`src/` 里 `25585` 与 `McpServer` 零命中 —— 别在 Linux 上找这个开关。
+> **平台口径(2026-11-21 更新)**:两版都有 MCP Server(Windows `windos/src/TipCL/Core/Launcher/Ai/McpServer.cs`,Linux `src/TipCL.Core/Launcher/Ai/McpServer.cs`),地址、端口 `25585`、协议版本、`mcp_server.json` 的键名都一样,默认都是关闭。差别只有一条:**Linux 版外部 agent 发起的写操作每次都会在启动器里弹确认**(即使权限档是全自动,「以后都允许」对外部调用也不生效;没有确认界面时返回 `permission_denied`);Windows 版直接执行,只在工具说明里请外部 agent 先问用户。
 
 TipCL 可以作为本机 MCP Server，让 Claude、Cursor 等外部 AI 直接调用启动器的工具：查实例、装版本 / 模组 / 整合包 / 光影、启动游戏、诊断崩溃和卡顿、备份存档。
 
-在 **设置 → AI 助手 → MCP Server** 打开开关即可，地址：`http://127.0.0.1:25585/mcp`（只监听本机）。
+在 **设置 → AI 助手 → MCP Server** 打开开关即可（Linux 版这一行还能直接改端口），地址：`http://127.0.0.1:25585/mcp`（只监听本机）。
 
 Claude Code：
 

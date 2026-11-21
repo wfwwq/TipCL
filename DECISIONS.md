@@ -1224,3 +1224,20 @@
   出厂默认关 / 默认不可见且钉右下角且跟着开关走 / 开关真落盘)。自证:App 批次 **358 通过 0 失败**;
   `--smoke` 三张真渲染图(关 / 开 / 深色照片壁纸)逐张核过。
 - 可回滚:是(新增一个文件 + 五处小改 + 一条默认键,无数据迁移、无版本号改动)。
+
+### D-81 · AI 助手功能补齐与旧口径更正:五包并行开发 + 集成分支合并(2026-11-21,主 agent 编排、AI-integration 合并)
+
+- **背景**:用户要求「推荐的功能全部落地」。五个子代理在各自 worktree 并行(`ai/logs-fs` / `ai/perf-saves` / `ai/acct-layout-mp` / `ai/engine-mcp` / `ai/new-features`),
+  主 agent 逐个复跑验收后合入 `ai/integration`(`--no-ff`,保留各分支历史)。逐项清单见 `docs/PARITY.md` §10 与 `progress/AI-*.md`。
+- **更正 D-24**:「`tune_jvm / backup_save / dispatch_subagent / read_artifact / MCP 工具` 不写进 schema」中,tune_jvm / backup_save 及 ExtraTools 其余工具已在 AI-perf-saves / AI-logs-fs / AI-acct-layout-mp 落地(dispatch_subagent / read_artifact 早在 R1 已落地);
+  「规则匹配只按工具名」已由 AI-engine-mcp 补上 content(限定参数)判定(`PermissionRules`,见 PARITY §9.4 第 5 行)。D-24 的原则「只注册真能执行的工具」不变,新增的 29 个工具都有真实现与测试。
+- **更正 D-28**:「McpServer 不移植」已不成立 —— Linux 侧零依赖实现,只听 127.0.0.1,默认关;与参考版的**有意差异**是外部发起的写操作每次都要在启动器里确认(参考版直接执行)。
+  理由:Linux 版没有「外部 agent 已经问过用户」的可验证信号,宁可多问一次。
+- **工具表**:36 → 65 项。新增 Linux 独有工具(升级 / 预检 / 服务器 / 光影 / 诊断报告)在 Windows 版暂无对应,工具名不与参考版冲突。
+- **「本对话都允许」的统一口径**:确认卡 `ConfirmCard.AllowAlways` 不给 delete_instance / delete_mod / restore_save_backup / fs_write / remove_server / apply_instance_upgrade;
+  执行器侧再守一道:`ToolRunner.RunAsync` 只在 `!ForceConfirmWrites(MCP 外部调用) && !NeverAlwaysAllow && AllowsAlways` 时记入。
+- **合并时修的两处**(只在合并后才暴露,单分支都是绿的):① 测试注入点 `LaunchPage.PreflightOverride` → `LaunchPreflightHook.Override`(避免在 UI 线程外触发 LaunchPage 静态初始化,同 D-44 一类问题);
+  ② i18n 基线超限(3651 > 3605),只给「给模型看的」文字打 `i18n:ignore`,不掩盖界面文案,基线文件未改。
+- **合并后三处调整**:硬件探测统一走 `SystemInfo`(删 `NfHardwareProbe`);高危工具确认卡名单收口;ClickSweep 按控件 Name 跳过 MCP 开关(免得测试进程占用 25585)。
+- **遗留**:见 PARITY §10.4(界面文案未接 Tr、联机未真机跑通、MCP 确认框可能被遮挡、真模型端到端)。另记:`zh_CN.json` / `en.json` 里基线就有重复键 `"关"`(两处同值),本轮未动。
+- 可回滚:是(`ai/integration` 尚未并入 main;各包分支保留)。
