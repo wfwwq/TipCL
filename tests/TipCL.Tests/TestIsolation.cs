@@ -26,6 +26,8 @@ internal static class TestIsolation
         // 必须在任何测试体之前:泄漏出来的 `update_staged` 反应是 Post 到 UI 线程的续体,
         // 可能在"发出事件的用例"结束之后才由别的用例的 pump 落地。
         TestWriteGuard.Install(dir);
+        // AI2-stability:出网闸门(AI 请求只放行环回;见 TestNetworkIsolation),必须早于任何 HttpClient 被建出来
+        TestNetworkIsolation.Install();
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             try { Directory.Delete(dir, recursive: true); }

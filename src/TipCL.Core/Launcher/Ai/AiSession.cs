@@ -23,7 +23,7 @@ public sealed class AiSession : IDisposable
 			AutomaticDecompression = (DecompressionMethods.GZip | DecompressionMethods.Deflate),
 			UseProxy = !flag
 		};
-		_client = new HttpClient(handler)
+		_client = new HttpClient(HttpHandlerHook.Apply(handler, HttpHandlerHook.ChannelAi)) // AI2-stability:测试注入点(生产不设 = 原处理器)
 		{
 			Timeout = Timeout.InfiniteTimeSpan
 		};

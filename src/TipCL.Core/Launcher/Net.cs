@@ -173,7 +173,7 @@ public static class Net
 		}
 		httpClientHandler.AutomaticDecompression = ((!raw) ? (DecompressionMethods.GZip | DecompressionMethods.Deflate) : DecompressionMethods.None);
 		httpClientHandler.UseCookies = true;
-		return new HttpClient(httpClientHandler, disposeHandler: true)
+		return new HttpClient(HttpHandlerHook.Apply(httpClientHandler, HttpHandlerHook.ChannelNet), disposeHandler: true)
 		{
 			Timeout = Timeout.InfiniteTimeSpan
 		};

@@ -84,11 +84,12 @@ public sealed partial class AiPage : PageBase
             Instance = Py.S(TipCL.Core.Launcher.Config.CONFIG.Get("default_instance", "default")),
             Confirm = ConfirmAsync,
             AskUser = AskUserAsync,
-            PlanChanged = plan => Dispatcher.UIThread.Post(() => ShowPlan(plan)),
-            TaskStarted = (taskId, label, tool) => Dispatcher.UIThread.Post(() => AddTaskCard(taskId, label, tool, null)),
-            Log = line => Dispatcher.UIThread.Post(() => _status.Text = AiUiText.Trim(line, 48)),
+            PlanChanged = plan => AiUiPost.Post(this, () => ShowPlan(plan)),
+            TaskStarted = (taskId, label, tool) => AiUiPost.Post(this, () => AddTaskCard(taskId, label, tool, null)),
+            Log = line => AiUiPost.Post(this, () => _status.Text = AiUiText.Trim(line, 48)),
             ConversationProvider = SnapshotHistory, // AI-new-features:导出诊断报告要带上对话摘要
         };
+        AiUiPost.Track(this); // AI2-stability:窗口关了 / Application 没了,晚到的 Agent 回调一律丢弃(见 AiUiPost)
 
         var permBtn = U.Btn(I18nCore.Tr("权限"), BtnKind.Chip, (_, _) => OpenPermissionPanel(), "Shield");
         var memoryBtn = U.Btn(I18nCore.Tr("记忆"), BtnKind.Chip, (_, _) => OpenMemoryPanel(), "Star");
@@ -650,7 +651,7 @@ public sealed partial class AiPage : PageBase
 
     private async Task RunAgentAsync()
     {
-        var agent = new AiAgent(_runner, ev => Dispatcher.UIThread.Post(() => OnAgentEvent(ev)))
+        var agent = new AiAgent(_runner, ev => AiUiPost.Post(this, () => OnAgentEvent(ev)))
         {
             ChatId = EnsureChatId(),
         };
@@ -660,12 +661,12 @@ public sealed partial class AiPage : PageBase
         }
         catch (OperationCanceledException)
         {
-            Dispatcher.UIThread.Post(() => FinishRun(I18nCore.Tr("已停止")));
+            AiUiPost.Post(this, () => FinishRun(I18nCore.Tr("已停止")));
         }
         catch (Exception ex)
         {
             string message = ex is PyException ? ex.Message : ex.ToString();
-            Dispatcher.UIThread.Post(() =>
+            AiUiPost.Post(this, () =>
             {
                 Append("assistant", "对话失败:" + message);
                 ToastHost.Show("AI 对话失败", message, ToastKind.Warning);
