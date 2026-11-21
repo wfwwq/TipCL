@@ -69,7 +69,7 @@ public static class SavesDialog
                 var del = UiClass.Btn(I18nCore.Tr("删除"), BtnKind.Danger, null);
                 del.Click += (_, _) => _ = Run(async () =>
                 {
-                    if (await Dlg.Confirm(I18nCore.Tr("删除存档"), $"「{name}」会被永久删除,其中的建筑与进度都无法恢复。", I18nCore.Tr("永久删除"), I18nCore.Tr("取消"), danger: true))
+                    if (await Dlg.Confirm(I18nCore.Tr("删除存档"), I18nCore.Tr("「{name}」会被永久删除,其中的建筑与进度都无法恢复。").Replace("{name}", name), I18nCore.Tr("永久删除"), I18nCore.Tr("取消"), danger: true))
                     {
                         await api.CallAsync<object>("delete_save", new { instance, name, version });
                         await ReloadAsync();
@@ -86,8 +86,16 @@ public static class SavesDialog
             }
 
             var backRows = await api.TryCallAsync<List<object?>>("list_save_backups", null, new { instance, version }) ?? new();
-            backups.Children.Add(UiClass.Txt($"备份({backRows.Count})", 12.5, bold: true));
-            if (backRows.Count == 0) backups.Children.Add(UiClass.Muted("还没有备份"));
+            backups.Children.Add(UiClass.Txt(I18nCore.Tr("备份({n})").Replace("{n}", backRows.Count.ToString()), 12.5, bold: true));
+            if (backRows.Count == 0) backups.Children.Add(UiClass.Muted(I18nCore.Tr("还没有备份")));
+            // AI2-i18n-ux:游戏运行中存档还在被写入 → 禁用还原并提示(与 AI 工具 restore_save_backup 同口径)
+            bool gameRunning = SavesRestore.GameRunning();
+            if (gameRunning && backRows.Count > 0)
+            {
+                var hint = UiClass.Muted(SavesRestore.RunningHint);
+                hint.Name = "SaveRestoreRunningHint";
+                backups.Children.Add(hint);
+            }
             foreach (var item in backRows.Take(20))
             {
                 if (item is not PyDict d) continue;
@@ -96,15 +104,30 @@ public static class SavesDialog
                     UiClass.Txt(bn, 12).Trim(),
                     UiClass.Small(JoinMeta(GlobalModsDialog.SizeText(Py.Int(d.Get("bytes"))), TimeText(Py.Int(d.Get("mtime"))))));
                 var acts = UiClass.H(6);
-                acts.Children.Add(Chip(I18nCore.Tr("还原"), async () =>
+                // AI2-i18n-ux:还原 = 先自动备份当前存档再回滚(SaveBackups.RestoreWithSafetyBackup,与 AI 工具一致)
+                var restore = Chip(I18nCore.Tr("还原"), async () =>
                 {
-                    if (await Dlg.Confirm(I18nCore.Tr("还原备份"), $"用「{bn}」覆盖现有存档?", I18nCore.Tr("还原")))
+                    if (SavesRestore.GameRunning())
                     {
-                        await api.CallAsync<PyDict>("restore_save_backup", new { instance, backup_name = bn, version, overwrite = true });
-                        ToastHost.Show(I18nCore.Tr("已还原"), bn, ToastKind.Success);
+                        ToastHost.Show(I18nCore.Tr("还原失败"), SavesRestore.RunningHint, ToastKind.Warning);
+                        await ReloadAsync();
+                        return;
+                    }
+                    if (await Dlg.Confirm(I18nCore.Tr("还原备份"), I18nCore.Tr("用「{name}」覆盖现有存档?还原前会先自动备份当前存档。").Replace("{name}", bn), I18nCore.Tr("还原")))
+                    {
+                        PyDict restored = await SavesRestore.RestoreAsync(instance, version, bn);
+                        ToastHost.Show(I18nCore.Tr("已还原"), SavesRestore.DoneText(restored, bn), ToastKind.Success);
                         await ReloadAsync();
                     }
-                }, I18nCore.Tr("还原失败")));
+                }, I18nCore.Tr("还原失败"));
+                restore.Name = "SaveRestoreButton";
+                restore.IsEnabled = !gameRunning;
+                if (gameRunning)
+                {
+                    ToolTip.SetTip(restore, SavesRestore.RunningHint);
+                    ToolTip.SetShowOnDisabled(restore, true);
+                }
+                acts.Children.Add(restore);
                 acts.Children.Add(Chip(I18nCore.Tr("删除"), async () =>
                 {
                     await api.CallAsync<object>("delete_save_backup", new { instance, backup_name = bn, version });
@@ -125,7 +148,7 @@ public static class SavesDialog
             string label = kind.SelectedItem as string ?? I18nCore.Tr("截图");
             string key = label == I18nCore.Tr("崩溃报告") ? "crash-reports" : label == I18nCore.Tr("日志") ? "logs" : "screenshots";
             var rows = await api.TryCallAsync<List<object?>>("list_media", null, new { instance, kind = key, version }) ?? new();
-            mediaCount.Text = $"{rows.Count} 个文件";
+            mediaCount.Text = I18nCore.Tr("{n} 个文件").Replace("{n}", rows.Count.ToString());
             if (rows.Count == 0)
             {
                 media.Children.Add(UiClass.Muted(I18nCore.Tr("这个目录还是空的")));
@@ -181,7 +204,7 @@ public static class SavesDialog
 
         await ReloadAsync();
         await ReloadMediaAsync();
-        await Dlg.Panel($"存档管理 · {instance}" + (string.IsNullOrEmpty(version) ? "" : " / " + version), body, 780);
+        await Dlg.Panel(I18nCore.Tr("存档管理 · {instance}").Replace("{instance}", instance) + (string.IsNullOrEmpty(version) ? "" : " / " + version), body, 780);
 
         static ScrollViewer Scroll(Control inner, double h) => new()
         {
@@ -206,11 +229,11 @@ public static class SavesDialog
         var files = await api.TryCallAsync<List<string>>("get_installed_datapacks", null, new { instance }) ?? new();
         if (files.Count == 0)
         {
-            await Dlg.Alert(I18nCore.Tr("没有数据包"), "先到「下载 → 数据包」装一个,再回来装进存档。");
+            await Dlg.Alert(I18nCore.Tr("没有数据包"), I18nCore.Tr("先到「下载 → 数据包」装一个,再回来装进存档。"));
             return;
         }
         var pick = UiClass.Combo(files, files[0], 320);
-        if (!await Dlg.Ask($"装进存档 · {save}", UiClass.V(8, UiClass.Muted(I18nCore.Tr("选择要装进这个世界的数据包")), pick), I18nCore.Tr("安装"))) return;
+        if (!await Dlg.Ask(I18nCore.Tr("装进存档 · {save}").Replace("{save}", save), UiClass.V(8, UiClass.Muted(I18nCore.Tr("选择要装进这个世界的数据包")), pick), I18nCore.Tr("安装"))) return;
         string file = pick.SelectedItem as string ?? files[0];
         string dest = await api.CallAsync<string>("install_datapack_into_save", new
         {
@@ -229,7 +252,7 @@ public static class SavesDialog
         var rows = await api.TryCallAsync<List<ModsTarget>>("get_saves_targets", null, new { instance }) ?? new();
         if (rows.Count <= 1) return rows.Count == 1 ? rows[0].Value : "";
         var pick = UiClass.Combo(rows.Select(r => r.Label), rows[0].Label, 320);
-        if (!await Dlg.Ask(title, UiClass.V(8, UiClass.Muted("装进哪个版本的存档目录?"), pick), I18nCore.Tr("继续"))) return null;
+        if (!await Dlg.Ask(title, UiClass.V(8, UiClass.Muted(I18nCore.Tr("装进哪个版本的存档目录?")), pick), I18nCore.Tr("继续"))) return null;
         int i = Math.Max(0, pick.SelectedIndex);
         return i < rows.Count ? rows[i].Value : "";
     }

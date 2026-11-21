@@ -276,6 +276,8 @@ public sealed class InstanceDetailPage : PageBase
         else if (seg == 4)
         {
             // 设置分段（精简版版本管理）：每个版本一行 —— 隔离标签 / Java / 打开文件夹
+            // AI2-i18n-ux:最前面加一行「实例内存 / GC」(tune_jvm 写的就是这两项,以前界面上看不到也改不了)
+            rows.Add(Row(InstanceJvmEditor.Title, InstanceJvmEditor.Summary(_inst), InstanceJvmEditor.EditButton(_inst, () => Run(LoadSegAsync))));
             string java = "";
             try { java = new Instance(_inst).JavaPref(); } catch (Exception) { }
             foreach (var id in _vers)
