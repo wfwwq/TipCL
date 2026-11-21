@@ -477,7 +477,9 @@ public sealed partial class LaunchPage : PageBase
 			OpenNewsPopup();
 		};
 		// —— 内容区块（WP-U3）：新闻卡默认可见，任务/时长/便签/日志默认收起；右键「自定义布局…」由 BlockHost 自带 ——
-		// contentMargin 对齐英雄区：左 56（同 _hero）、右 24（同 _hero）、下 18（原新闻卡底边距），默认渲染与旧布局逐像素等价
+		// contentMargin 对齐英雄区：左 56（同 _hero）、右 24（同 _hero）、下 18（原新闻卡底边距）
+		// R34（§5.5）：文档里还没有 launch 时默认 = 12 列网格，新闻整行；任务 / 时长 / 便签显示后两两并排、日志占整行
+		// （PageDefaultLayouts.LaunchContent）。英雄区仍然不进布局系统；已经存过 launch 的用户完全照文档。
 		Border logCard = Ui.Card(_log, 10.0);
 		logCard.Height = 240.0;
 		_blocks = new BlockHost("launch", new List<BlockSpec>
@@ -487,7 +489,7 @@ public sealed partial class LaunchPage : PageBase
 			new BlockSpec { Id = "playtime", Title = I18n.L("游戏时长"), Content = Ui.Card(_playTotal), DefaultVisible = false },
 			new BlockSpec { Id = "notes", Title = I18n.L("便签"), Content = Ui.Card(_notes), DefaultVisible = false },
 			new BlockSpec { Id = "log", Title = I18n.L("日志"), Content = logCard, DefaultVisible = false }
-		}, new Thickness(56.0, 0.0, 24.0, 18.0));
+		}, new Thickness(56.0, 0.0, 24.0, 18.0), PageDefaultLayouts.LaunchContent());
 		// 多块同时展开时限高内滚（约 62% 页高），避免 Auto 行把上方英雄区挤没；默认仅新闻卡时远达不到上限
 		_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, new Binding("ActualHeight")
 		{

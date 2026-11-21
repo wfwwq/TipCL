@@ -102,17 +102,20 @@ public sealed class MultiplayerPage : PageBase
 			Ui.OpenUrl(ProjectHome, "multiplayer.home");
 		}, "\ue71b"), Ui.Small(I18n.L("Terracotta | 陶瓦联机  © burningtnt  ·  基于 EasyTier")).VCenter());
 		Grid head = Ui.Section(I18n.L("陶瓦联机"), I18n.L("输入邀请码即可加入。陶瓦是 EasyTier P2P 打洞，不是 FRP 隧道；") + I18n.L("会与 HMCL 一样带上自定义会合节点。PCL 房间号不互通，局域网请用下面的地址。"));
-		// 页面布局自定义（WP-U3）：块内组合沿用旧 ScrollBody 的 10 间距包一层；默认全可见、顺序同旧 ScrollBody 实参
+		// 页面布局自定义（WP-U3）：块内组合沿用旧 ScrollBody 的 10 间距包一层
 		// （「节点说明」块顺带承载项目主页页脚，收起它意味着同时隐藏页脚）
+		// R34（§5.5）：块名改成用户看得懂的说法（id 不变）；文档里还没有这一页时默认就是 12 列网格：
+		// 说明整行 / 联机状态 + 房间各半 / 快捷操作整行 / 玩家 + 节点说明 8:4（PageDefaultLayouts.Multiplayer）。
+		// 已经存过这一页的用户完全照文档，不受影响。
 		base.Content = new BlockHost("multiplayer", new List<BlockSpec>
 		{
 			new BlockSpec { Id = "header", Title = I18n.L("说明"), Content = Ui.V(10.0, head, _lan.Wrap()) },
-			new BlockSpec { Id = "state", Title = I18n.L("状态卡"), Content = border },
-			new BlockSpec { Id = "room", Title = I18n.L("房间卡"), Content = _roomCard },
-			new BlockSpec { Id = "actions", Title = I18n.L("操作区"), Content = _actions },
-			new BlockSpec { Id = "players", Title = I18n.L("玩家列表"), Content = Ui.V(10.0, _playersTitle, _players) },
+			new BlockSpec { Id = "state", Title = I18n.L("联机状态"), Content = border },
+			new BlockSpec { Id = "room", Title = I18n.L("房间"), Content = _roomCard },
+			new BlockSpec { Id = "actions", Title = I18n.L("快捷操作"), Content = _actions },
+			new BlockSpec { Id = "players", Title = I18n.L("玩家"), Content = Ui.V(10.0, _playersTitle, _players) },
 			new BlockSpec { Id = "nodes", Title = I18n.L("节点说明"), Content = Ui.V(10.0, _nodes.Wrap(), sPanel) }
-		}).Root;
+		}, null, PageDefaultLayouts.Multiplayer()).Root;
 		_timer.Tick += delegate
 		{
 			PageBase.Run(ReloadAsync);
