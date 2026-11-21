@@ -131,6 +131,68 @@ public static class LayoutV3Compat
 		return (double.IsNaN(contentMargin) || contentMargin < 8.0) ? 22.0 : contentMargin;
 	}
 
+	// ——— R35 win-dl:编辑态内容区让位(效果图 layout3.html:.ebar 46 高 + margin-bottom 12;.cv padding-top 18、左右 10;
+	//     .lab / .acts top:-14;.blk outline-offset 4 + 选中 2px)———
+
+	/// <summary>编辑条高度(.ebar / .ebox height 46;WPF:MinHeight 34 + 上下内边距 5 + 描边 1)。</summary>
+	public const double EditBarHeight = 46.0;
+
+	/// <summary>编辑条与下面内容区的间距(.ebar margin-bottom 12)。</summary>
+	public const double EditBarGap = 12.0;
+
+	/// <summary>浮动块名 / 右上操作按钮伸出块上沿的高度(.lab / .acts top:-14)。</summary>
+	public const double EditLabelRise = 14.0;
+
+	/// <summary>虚线 / 选中框在块外侧让出的距离(outline-offset 4 + 选中线宽 2)。</summary>
+	public const double EditOutlineReach = 6.0;
+
+	/// <summary>编辑态内容区上内边距(.cv padding-top 18 = 块名伸出 14 + 留白 4)。</summary>
+	public const double EditCanvasTop = 18.0;
+
+	/// <summary>编辑态内容区左右 / 下内边距的下限(.cv padding 0 10;下边留出选中框)。</summary>
+	public const double EditCanvasSide = 10.0;
+	public const double EditCanvasBottom = 12.0;
+
+	/// <summary>
+	/// 编辑态里单块内容的最高预览高度:超出的部分在块内裁掉(效果图 .blk .bc{overflow:hidden})。
+	/// 「下载」页的版本列表有几百行,不封顶时它后面的块(「筛选」)被推到几万像素以外,编辑态里根本看不到、拖不到。
+	/// </summary>
+	public const double EditPreviewMaxHeight = 360.0;
+
+	/// <summary>
+	/// 编辑态内容区的边距(左, 上, 右, 下):页面给了编辑态专用边距(<paramref name="editOverride"/>,自己管边距的页,例如「下载」)就用它,
+	/// 否则在常态边距上保证下限 —— 上 ≥ 18(块名 / 右上按钮整块露出来)、左右 ≥ 10、下 ≥ 12(虚线 / 选中框四边完整,不被滚动区裁成两个角)。
+	/// 结果的上边距永远 ≥ <see cref="EditLabelRise"/> + 4,左右 / 下 ≥ <see cref="EditOutlineReach"/>。
+	/// </summary>
+	public static double[] EditContentPad(double left, double top, double right, double bottom, double[]? editOverride = null)
+	{
+		if (editOverride != null && editOverride.Length >= 4)
+		{
+			left = editOverride[0];
+			top = editOverride[1];
+			right = editOverride[2];
+			bottom = editOverride[3];
+		}
+		return new double[4]
+		{
+			Math.Max(Safe(left), EditCanvasSide),
+			Math.Max(Safe(top), EditCanvasTop),
+			Math.Max(Safe(right), EditCanvasSide),
+			Math.Max(Safe(bottom), EditCanvasBottom)
+		};
+	}
+
+	/// <summary>编辑态第一个块上沿相对内容区顶部(编辑条所在行的顶部)的 Y:编辑条上边距 + 编辑条高 + 间距 + 内容区上内边距。</summary>
+	public static double EditFirstBlockTop(double barTopMargin, double contentTopPad)
+	{
+		return Safe(barTopMargin) + EditBarHeight + EditBarGap + Safe(contentTopPad);
+	}
+
+	private static double Safe(double v)
+	{
+		return (double.IsNaN(v) || double.IsInfinity(v) || v < 0.0) ? 0.0 : v;
+	}
+
 	private static bool IsContractRect(BlockLayout block)
 	{
 		return block.X == 0.0 && block.Y == 0.0 && block.W <= 1.0 && block.H <= 1.0;

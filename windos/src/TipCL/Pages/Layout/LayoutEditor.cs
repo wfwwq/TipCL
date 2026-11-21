@@ -251,7 +251,8 @@ public sealed partial class LayoutEditor
 		// 内容宿主始终是 _root.Children[0](Show*Host 按下标换),只是放在第 1 行;抽屉是第 1 行上的覆盖层。
 		SPanel bottom = Ui.V(0.0, _barHost);
 		// R35 win-fix2:页面自己管边距(宿主边距 0,例如「下载」)时编辑条也留 22px 边,不贴着内容区边缘(效果图 .bodyA padding)
-		bottom.Margin = new Thickness(LayoutV3Compat.EditBarSideMargin(_list.Margin.Left), (_list.Margin.Top < 8.0) ? 14.0 : 10.0, LayoutV3Compat.EditBarSideMargin(_list.Margin.Right), (_list.Margin.Top < 8.0) ? 12.0 : 0.0);
+		// R35 win-dl:编辑条下面一律空 12(.ebar margin-bottom),内容区另有编辑态上内边距 18(EditContentPad),块名标签不会顶到编辑条下沿
+		bottom.Margin = new Thickness(LayoutV3Compat.EditBarSideMargin(_list.Margin.Left), (_list.Margin.Top < 8.0) ? 14.0 : 10.0, LayoutV3Compat.EditBarSideMargin(_list.Margin.Right), LayoutV3Compat.EditBarGap);
 		bottom.Visibility = Visibility.Collapsed;
 		_bottom = bottom;
 		_root = Ui.G("Auto,*");
@@ -666,7 +667,7 @@ public sealed partial class LayoutEditor
 		}
 		ShowStackHost();
 		_list.Spacing = LayoutAppearance.EffectiveGap(_density, plan.Gap);
-		_list.Margin = (_marginOverride ?? PadOf(plan));
+		_list.Margin = ContentPad(plan);
 		if (plan.IsSingleColumn)
 		{
 			foreach (LayoutRow row in plan.Rows)
@@ -707,7 +708,7 @@ public sealed partial class LayoutEditor
 		_box.SnapStep = _snapStep;
 		_box.DarkSurface = IsDarkSurface;
 		_box.EditMode = _edit;
-		_box.Margin = (_marginOverride ?? PadOf(_state.Plan()));
+		_box.Margin = ContentPad(_state.Plan());
 		// 覆盖层与画布同坐标系:鼠标坐标取自 e.GetPosition(_box)(已扣掉 Margin),
 		// 辅助线/框选层若不带同一个 Margin,整体会偏移 (padLeft, padTop),默认 (18,14)px(P2)
 		_guide.Margin = _box.Margin;
@@ -970,6 +971,24 @@ public sealed partial class LayoutEditor
 			}
 		}
 		return 0.0;
+	}
+
+	/// <summary>
+	/// R35 win-dl:编辑态专用内容区边距(左, 上, 右, 下)。自己管边距的页(宿主边距 0,例如「下载」)在编辑期间把块内边距收掉,
+	/// 由这里给出效果图的 22 / 18 / 22 / 16,块的虚线框正好贴着可见内容外 4px、和编辑条左右对齐。null = 只按下限补(EditContentPad)。
+	/// </summary>
+	public double[]? EditMargin { get; set; }
+
+	// 常态 = 页面覆盖或文档 pad(逐像素不变);编辑态 = 在它上面保证块名 / 右上按钮 / 选中框不被滚动区裁掉(layout3 .cv padding)
+	private Thickness ContentPad(LayoutPlan plan)
+	{
+		Thickness pad = _marginOverride ?? PadOf(plan);
+		if (!_edit)
+		{
+			return pad;
+		}
+		double[] e = LayoutV3Compat.EditContentPad(pad.Left, pad.Top, pad.Right, pad.Bottom, EditMargin);
+		return new Thickness(e[0], e[1], e[2], e[3]);
 	}
 
 	private void ShowStackHost()
@@ -3219,8 +3238,8 @@ internal sealed partial class LayoutCard : Border
 	public void SetFill(bool fill)
 	{
 		_fill = fill;
-		_bodyScroll.VerticalScrollBarVisibility = (fill ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
 		_fit.MaxNaturalHeight = ((fill || _boxMode == LayoutSchema.ModeStack) ? 0.0 : 170.0);
+		ApplyBodyHeight();
 	}
 
 	/// <summary>折叠/展开(只在编辑态用;不写进布局)。</summary>
@@ -3267,14 +3286,32 @@ internal sealed partial class LayoutCard : Border
 	/// <summary>固定像素高度(0 = 跟随内容):内容超出时在块内滚动。</summary>
 	public void SetFixedHeight(double px)
 	{
-		if (px > 0.0)
+		_fixedPx = ((px > 0.0) ? px : 0.0);
+		ApplyBodyHeight();
+	}
+
+	// 用户固定的像素高度(0 = 跟随内容)
+	private double _fixedPx;
+
+	/// <summary>当前内容体的最高高度(测试 / 调试用;∞ = 不限)。</summary>
+	internal double BodyMaxHeight => _bodyScroll.MaxHeight;
+
+	// 内容体高度上限:常态 = 用户固定高度(没有就不限,逐像素不变);
+	// R35 win-dl:编辑态再封顶 EditPreviewMaxHeight(效果图 .blk .bc{overflow:hidden})——
+	// 几百行的版本列表不再把后面的块(「筛选」)推到看不见的地方;占满剩余高度的块(Fill)不封顶。
+	private void ApplyBodyHeight()
+	{
+		double max = ((_fixedPx > 0.0) ? _fixedPx : double.PositiveInfinity);
+		if (_edit && !_fill)
 		{
-			_bodyScroll.MaxHeight = px;
-			_bodyScroll.VerticalScrollBarVisibility = (_fill ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
+			max = Math.Min(max, LayoutV3Compat.EditPreviewMaxHeight);
 		}
-		else
+		_bodyScroll.MaxHeight = max;
+		// 编辑态内容不吃鼠标,块内滚动条只会误导;超出部分直接裁掉
+		_bodyScroll.VerticalScrollBarVisibility = (_fill ? ScrollBarVisibility.Disabled : (_edit ? ScrollBarVisibility.Hidden : ScrollBarVisibility.Auto));
+		if (_edit)
 		{
-			_bodyScroll.MaxHeight = double.PositiveInfinity;
+			_bodyScroll.ScrollToTop();
 		}
 	}
 
@@ -3307,6 +3344,7 @@ internal sealed partial class LayoutCard : Border
 		_body.IsHitTestVisible = !edit;
 		_bodyWrap.IsHitTestVisible = !edit;
 		_editShield.Visibility = (edit ? Visibility.Visible : Visibility.Collapsed);
+		ApplyBodyHeight();
 		if (!edit)
 		{
 			SetCollapsed(false); // 退出编辑自动展开

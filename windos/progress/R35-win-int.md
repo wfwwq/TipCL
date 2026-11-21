@@ -367,3 +367,49 @@ zh_CN / en 成对 +62 条(编辑组件、编辑启动页、添加组件、导入
   `git -C 'D:\项目\TipCL\_r35\win-int' add -A windos; git -C 'D:\项目\TipCL\_r35\win-int' -c user.name=TipCL-agent -c user.email=agent@local commit -F 'D:\项目\TipCL\_r35\logs\win-launch-msg3.txt'`
 - `_r35\dist\windows\TipCL.exe` 已是最新 compact(5,735,424)。`C:\TipCL-R35\windows\TipCL.exe` 与它同一条命令先复制,桥断前应已完成(没能复核哈希)。
 - premium:最新代码的 premium 构建在桥断时刚启动,结果没能确认;`C:\TipCL-R35\windows-premium\` 与 `dist\windows-premium\` 里是 `2e97561` 的 premium(功能齐全,只差设置页启动卡片)。补:`win-fix-go.ps1 -Tag P7 -Mode premium -NoSync` 后把 `C:\r35\win-intb\windos\src\TipCL\bin\Release\net48\TipCL.exe` 复制到这两处。
+> 补记(win-dl,15:00):§11.8 列的未提交文件已在 `714f087` 提交;下面 §12 的交付已覆盖这些目录里的 exe。
+
+## 12. 下载页编辑态(win-dl,2026-11-21 15:00)
+
+> 依据:用户截图(下载页进编辑态:编辑条下面「版本列表」块名只露半截、上边框和右上按钮被切、左上 / 右上各一小截主题色、看不到「筛选」块)+ `layout3.html` 第一张(`secA` / `tbA` / `cv`)的 CSS 数值。
+> 全程隐藏启动(`Win32_Process.Create` + `ShowWindow=0`);截图只用离屏 `--shot download --edit`(+ `--select list`),`TIPCL_HOME=C:\r35\_tmp\win-fix\home`,真实 `%LOCALAPPDATA%\TipCL` 没碰。没改版本号、没 push、没碰 main。
+
+| 项 | 结果 |
+|---|---|
+| compact(8 处之 4:`C:\TipCL-R35\windows\`、桌面 / 下载 `TipCL-R35\Windows\`、`_r35\dist\windows\`) | **5,736,960 B**(上限 5,757,264,余 20,304)· SHA256 `8800C4EF3ECD6B63DD734F8B1B79F71526783611F9FAD75806A3CB6D1C662FC2` |
+| premium(`C:\TipCL-R35\windows-premium\`、桌面 / 下载 `TipCL-R35\Windows-premium\`、`_r35\dist\windows-premium\`) | **5,756,928 B** · SHA256 `28825866201A17FA104C35316A94AB56ECE6407CBF48813582ECABE73D71ADB5` |
+| 复制核对 | 8 个目标逐个 Get-FileHash 与源一致(`_r35\logs\win-dl-deliver.ps1`) |
+| 构建 | Release compact / premium 0 错误,警告仍是那 2 条 xUnit1031 |
+| 测试 | **801 过 / 0 败 / 6 跳**(807;基线 792 / 0 / 6,新增 `R35WinDlTests` 9 例) |
+
+### 12.1 原因
+
+1. **块名 / 上边框 / 右上按钮被切**:编辑条本身不压内容(编辑器根 Grid 第 0 行 Auto = 编辑条,第 1 行 = 滚动内容区),但「下载」宿主边距是 0(页面自己管 22px 边距),编辑态内容区上内边距也是 0 —— 第一个块贴着滚动区顶边,而浮动块名 / 右上眼睛按钮在块外 `top:-14`、虚线框在块外 4px,全在滚动区视口之外,被 ScrollViewer 裁掉,看上去就是「被编辑条压住」。效果图 `.cv{padding-top:18px}` 正是给它们留的位置。
+2. **左上 / 右上两小截主题色**:那是**选中框**(按下即选中,2px 主题色,块外 4px、圆角 12)。块左右也贴着视口边(宿主边距 0),选中框上边和两条竖边都在视口外,只剩两个圆角弧在视口里露出一小截。
+3. **看不到「筛选」**:不是被收起 —— win-fix2 编辑时收起的只是宿主外的分类标签行(原版 / Mod / 整合包…),「筛选」「版本列表」两块都在宿主里。用户存档 `pages.download` 的顺序是 **list → filters**(筛选排在版本列表后面),版本列表几百行全部展开,「筛选」被推到几万像素以下,编辑态里看不到、也拖不到。
+
+### 12.2 改法
+
+- `LayoutV3Compat`(纯函数):效果图常量 `EditBarHeight 46`、`EditBarGap 12`、`EditLabelRise 14`、`EditOutlineReach 6`、`EditCanvasTop 18`、`EditCanvasSide 10`、`EditCanvasBottom 12`、`EditPreviewMaxHeight 360`;`EditContentPad(l,t,r,b, override)` = 页面给的编辑态边距或常态边距,再保证 上 ≥ 18 / 左右 ≥ 10 / 下 ≥ 12;`EditFirstBlockTop(barTop, padTop)` = 编辑条上边距 + 46 + 12 + 上内边距。
+- `LayoutEditor`:列表(`_list`)和网格(`_box`)两种宿主的边距都改走 `ContentPad(plan)` —— 常态原样(逐像素不变),编辑态用 `EditContentPad`;新增 `EditMargin`(页面可给编辑态专用边距)。编辑条下边距一律 12(`.ebar margin-bottom`,原来非 0 边距页是 0)。所有页的块名标签 / 右上按钮 / 选中框在编辑态都不会再被滚动区裁掉。
+- `LayoutCard.ApplyBodyHeight`:编辑态里单块内容最高 360px,超出部分在块内裁掉(效果图 `.blk .bc{overflow:hidden}`;编辑态内容本来就不吃鼠标,块内滚动条改为隐藏);Fill 块(AI 对话区等)不封顶;常态 = 用户固定高度或不限,与原来一致。版本列表封顶后「筛选」紧跟在下面,能看到、能拖回上面。
+- `DownloadPage`:`Editor.EditMargin = {22, 18, 22, 16}`;编辑期间把「筛选」行和版本列表卡自己的 22px 左右边距收成 0,完成后恢复 —— 块 = 可见内容,虚线 / 选中框贴着内容外 4px 一整圈,和编辑条左右对齐(22)。第一个块上沿 = 14 + 46 + 12 + 18 = **90**,与效果图同。分类标签行仍只在编辑期间收起;没动用户存档的顺序。
+
+### 12.3 测试(`tests/TipCL.Tests/R35WinDlTests.cs`)
+
+- `EditModeFirstBlockTopIsNotUnderTheEditBar`:下载页第一个块上沿 ≥ 编辑条下沿 + 12,块名标签(伸出 14)上沿也 ≥ 编辑条下沿 + 12;上内边距 ≥ 14 + 4;= 90;左右 = 22;下 ≥ 6。
+- `EditPadAlwaysLeavesRoomForLabelAndOutline`(4 组边距,含 0 / NaN / 负数 / ∞):上 ≥ 18、左右下 ≥ 6,大边距原样保留。
+- `EditGeometryMatchesLayout3AndTheCardChrome`:常量 = 效果图;源码里编辑条 34 + 5 + 5 + 描边、块名 / 按钮 -14、虚线框 -4 同口径。
+- `EditorUsesEditPadForBothListAndGridHosts`、`DownloadEditKeepsFiltersBlockVisibleAndAlignsBlocksWithTheBar`(两块都在宿主里、宿主不收起、边距接线)、`EditPreviewHeightIsCappedSoLaterBlocksStayReachable`。
+
+### 12.4 截图(离屏 1000×720,`D:\项目\TipCL\_r35\shots\win-dl\`)
+
+- `d1-edit-sel.png`(`--select list`,看了):编辑条在顶部单行;「版本列表」块名标签完整、在编辑条下面;主题色选中框四边完整一圈;右上「隐藏」眼睛按钮完整;版本列表封顶后下面是「筛选」块(搜索框 + 正式版 / 快照 / 远古,灰色虚线框)。
+- `d1-edit.png`(未选中,没看图,像素扫描):块外没有主题色像素(只有内容里的「正式版」标签和筛选按钮),不再有两个红角。
+- `d1-normal.png`(常态,没看):常态边距 / 高度代码路径未变。
+
+### 12.5 没解决 / 待确认
+
+1. 用户存档里下载页是「版本列表」在上、「筛选」在下(之前的拖动方向 bug 可能就是这样来的);本轮没改存档,编辑态把「筛选」拖回上面或点「重置本页」即可。
+2. 编辑态版本列表只显示前约 360px(效果图的块也是裁切预览);拖动手感、悬停态只能真机看。
+3. 别的页(宿主边距 18 的页)编辑态上内边距 14 → 18、编辑条下 0 → 12:第一个块整体下移约 16px,按效果图口径,没逐页截图。
