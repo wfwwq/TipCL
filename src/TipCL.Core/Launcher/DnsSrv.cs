@@ -286,6 +286,55 @@ public static class DnsSrv
         return null;
     }
 
+    /// <summary>
+    /// AI3-stability:只问一台服务器,并把结果分清楚(真网络核验 `--srv-check` 用;ping_server 仍走 <see cref="ResolveAsync"/>)。
+    /// Status:ok / no_record(应答里没有 SRV)/ rcode=N(3 = NXDOMAIN)/ truncated / timeout / error:…。
+    /// </summary>
+    public static async Task<(List<SrvRecord> Records, string Status, int ElapsedMs)> QueryServerAsync(IPEndPoint server, string name, int timeoutMs, CancellationToken ct = default)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        ushort id = (ushort)Random.Shared.Next(1, 0xFFFF);
+        byte[] query;
+        try
+        {
+            query = BuildQuery(id, name);
+        }
+        catch (ArgumentException ex)
+        {
+            return (new List<SrvRecord>(), "error: " + ex.Message, 0);
+        }
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(Math.Max(50, timeoutMs));
+        try
+        {
+            using var udp = new UdpClient(server.AddressFamily);
+            await udp.SendAsync(query, query.Length, server).ConfigureAwait(false);
+            while (true)
+            {
+                UdpReceiveResult res = await udp.ReceiveAsync(cts.Token).ConfigureAwait(false);
+                if (!res.RemoteEndPoint.Address.Equals(server.Address) || res.Buffer.Length < 4 || ReadU16(res.Buffer, 0) != id)
+                {
+                    continue;
+                }
+                List<SrvRecord> recs = ParseResponse(res.Buffer, id);
+                int flags = ReadU16(res.Buffer, 2);
+                string status = recs.Count > 0 ? "ok"
+                    : (flags & 0x000F) != 0 ? "rcode=" + (flags & 0x000F)
+                    : (flags & 0x0200) != 0 ? "truncated"
+                    : "no_record";
+                return (recs, status, (int)sw.ElapsedMilliseconds);
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return (new List<SrvRecord>(), "timeout", (int)sw.ElapsedMilliseconds);
+        }
+        catch (SocketException ex)
+        {
+            return (new List<SrvRecord>(), "error: " + ex.SocketErrorCode, (int)sw.ElapsedMilliseconds);
+        }
+    }
+
     private static async Task<List<SrvRecord>> AskAsync(IPEndPoint server, byte[] query, ushort id, int timeoutMs, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);

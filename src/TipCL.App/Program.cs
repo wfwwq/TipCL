@@ -21,6 +21,10 @@ internal static class Program
             if (Array.IndexOf(args, "--ai-selftest") >= 0)
                 return Session.AiSelfTestCli.Run(sendOne: Array.IndexOf(args, "--ai-selftest-send") >= 0);
 
+            // AI3-stability:SRV 解析的真网络手动核验(不起 GUI;只发 DNS 查询,不连游戏服务器)
+            if (Array.IndexOf(args, Session.SrvCheckCli.Flag) >= 0)
+                return Session.SrvCheckCli.Run(args);
+
             // 桌面快捷方式入口(M4-H P3.5):-i <实例> launch <版本> [--account X|--username Y]。
             // 与 Core/Launcher/Shortcut.LaunchArgs 的输出严格对齐,走与 UI 相同的启动链路。
             var cli = Session.CommandLine.Parse(args);
