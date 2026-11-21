@@ -187,6 +187,27 @@ public class VisualTourFinderTests
     });
 
     [Fact]
+    public void Truncated_ReportsTextNarrowerThanItsNaturalWidth() => TestApp.Run(() =>
+    {
+        var narrow = new TextBlock { Text = "这是一句明显写不下的很长很长的说明文字", Width = 40, FontSize = 13 };
+        var wide = new TextBlock { Text = "短", FontSize = 13 };
+        var win = new Window { Width = 400, Height = 200, Content = new StackPanel { Children = { narrow, wide } } };
+        win.Show();
+        Pump();
+        Pump();
+        try
+        {
+            List<string> hits = TourFinder.Truncated(win);
+            Assert.Single(hits);
+            Assert.Contains("写不下", hits[0]);
+        }
+        finally
+        {
+            win.Close();
+        }
+    });
+
+    [Fact]
     public void Runner_MissingTarget_IsFail_AndTourContinues() => TestApp.Run(() =>
     {
         string outDir = Path.Combine(Path.GetTempPath(), "tipcl-visualtour-test-" + Guid.NewGuid().ToString("N"));

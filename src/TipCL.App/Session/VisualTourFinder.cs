@@ -227,6 +227,36 @@ internal static class TourFinder
             .FirstOrDefault();
     }
 
+    /// <summary>
+    /// 截断检测:不换行的 TextBlock,文字自然宽度(同字体字号重新排一遍)比实际宽度宽 2px 以上 = 被截断 / 裁掉。
+    /// 返回「文字 (实际宽/需要宽) @x,y」。
+    /// </summary>
+    public static List<string> Truncated(Visual layer)
+    {
+        var hits = new List<string>();
+        TopLevel? top = layer as TopLevel ?? TopLevel.GetTopLevel(layer);
+        foreach (Visual v in layer.GetVisualDescendants())
+        {
+            if (v is not TextBlock tb || !IsShown(tb) || string.IsNullOrWhiteSpace(tb.Text)) continue;
+            if (tb.TextWrapping != Avalonia.Media.TextWrapping.NoWrap) continue;
+            double need;
+            try
+            {
+                using var layout = new Avalonia.Media.TextFormatting.TextLayout(tb.Text,
+                    new Avalonia.Media.Typeface(tb.FontFamily, tb.FontStyle, tb.FontWeight, tb.FontStretch), tb.FontSize, null);
+                need = layout.WidthIncludingTrailingWhitespace + tb.Padding.Left + tb.Padding.Right;
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+            if (need <= tb.Bounds.Width + 2) continue;
+            Point? at = top == null ? null : tb.TranslatePoint(new Point(0, 0), top);
+            hits.Add($"\"{Normalize(tb.Text)}\" ({tb.Bounds.Width:F0}/{need:F0}px)" + (at is Point p ? $" @{p.X:F0},{p.Y:F0}" : ""));
+        }
+        return hits;
+    }
+
     /// <summary>一层里可见的文字 / 按钮清单(dump 用):每行「类型 文字 @x,y wxh」。</summary>
     public static List<string> Describe(Visual layer)
     {

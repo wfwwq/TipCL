@@ -154,6 +154,9 @@ internal sealed class TourStepResult
 
     public string Shot { get; set; } = "";
 
+    /// <summary>shot:这一帧里被截断 / 裁掉的文字(客观测量,供 findings 引用)。</summary>
+    public List<string> Truncated { get; set; } = new();
+
     public long Ms { get; set; }
 
     public string Step { get; set; } = "";
@@ -364,6 +367,10 @@ internal sealed class TourRunner
                     Settle(step.Ms >= 0 ? step.Ms : 250);
                     string file = Shot(step.Name, step.Layer == "main");
                     r.Shot = Path.GetFileName(file);
+                    // 每张截图都顺手留一份元素清单 + 截断清单(看图审核时对照文字与尺寸)
+                    Dump(step.Name);
+                    foreach (Visual layer in Layers()) r.Truncated.AddRange(TourFinder.Truncated(layer));
+                    r.Truncated = r.Truncated.Distinct().ToList();
                     return "shot " + r.Shot + $" ({Win.ClientSize.Width:F0}x{Win.ClientSize.Height:F0}, layers={Layers().Count})";
                 }
             case "dump":
@@ -562,10 +569,19 @@ internal sealed class TourRunner
         {
             Control? c = TourFinder.Find(Layers(), step.ScrollTo);
             if (c == null) throw new TourFail("scroll target not found: " + step.ScrollTo + Nearby(step.ScrollTo));
-            c.BringIntoView();
-            RenderPass();
             ScrollViewer? sv0 = TourFinder.NearestScrollViewer(c);
-            return "brought into view: " + step.ScrollTo + (sv0 == null ? "" : $" (offset {sv0.Offset.Y:F0}/{sv0.Extent.Height:F0})");
+            if (sv0 != null && c.TranslatePoint(new Point(0, 0), sv0) is Point q)
+            {
+                // 与效果图一致:把目标滚到可视区顶部(留 8px),而不是 BringIntoView 的「刚好露出来」
+                double max0 = Math.Max(0, sv0.Extent.Height - sv0.Viewport.Height);
+                sv0.Offset = new Vector(sv0.Offset.X, Math.Clamp(sv0.Offset.Y + q.Y - 8, 0, max0));
+            }
+            else
+            {
+                c.BringIntoView();
+            }
+            RenderPass();
+            return "scrolled to: " + step.ScrollTo + (sv0 == null ? "" : $" (offset {sv0.Offset.Y:F0}/{sv0.Extent.Height:F0})");
         }
         ScrollViewer? sv;
         if (step.Target != null && !step.Target.IsEmpty)
@@ -650,6 +666,9 @@ internal sealed class TourRunner
     private string Shot(string name, bool mainOnly)
     {
         string file = Path.Combine(_outDir, name + ".png");
+        // 截图前把指针停到标题栏左上角(没有可悬停元素的地方):否则上一步点过的行会带着悬停高亮进图
+        Win.MouseMove(new Point(2, 2), RawInputModifiers.None);
+        Settle(120);
         RenderPass();
         List<Visual> layers = Layers();
         foreach (Visual v in layers)

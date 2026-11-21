@@ -22,6 +22,7 @@
     { "id": "v2-install",  "title": "安装页(v2)", "mockup": "@repo/windos/docs/mockups-hark/v2/install2.png", "shot": "install", "src": "v2 install2" },
     { "id": "v2-plugins",  "title": "插件 · 已安装(v2)", "mockup": "@repo/windos/docs/mockups-hark/v2/plugins2.png", "shot": "plugins", "src": "v2 plugins2" },
     { "id": "v2-settings", "title": "设置 · 通用(v2)", "mockup": "@repo/windos/docs/mockups-hark/v2/settings2.png", "shot": "settings-general", "src": "v2 settings2" },
+    { "id": "v1-instance-detail", "title": "实例详情(v1,裁定：卡片「管理」进这里)", "mockup": "@repo/windos/docs/mockups-hark/instance.png", "shot": "dlg-instance-detail", "src": "v1 instance" },
     { "id": "win-launch-light",   "title": "启动页 · 浅色(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/launch-light.png", "shot": "launch", "src": "Windows hero" },
     { "id": "win-launch-dark",    "title": "启动页 · 深色(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/launch-dark.png", "shot": "launch-dark", "src": "Windows hero" },
     { "id": "win-pop-dark",       "title": "实例切换浮层 · 深色(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/pop-dark.png", "shot": "launch-switch-dark", "src": "Windows hero" },

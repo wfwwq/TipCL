@@ -218,7 +218,10 @@ def main():
            '<h1>TipCL 视觉巡检报告</h1>',
            '<p class="muted">效果图 | 实际截图(--visual-tour 无窗口渲染,固定假数据目录)| 差异热力图(两图缩放到同宽 %d px,'
            '%d×%d 块 SSIM + 主色差;黄框 = 差异最大的区域)。按分数从差到好排序。<b>分数只是辅助,结论见 '
-           '<a href="findings.md">findings.md</a>(逐对看图审核)。</b></p>' % (W, BLOCK, BLOCK)]
+           '<a href="findings.md">findings.md</a>(逐对看图审核)。</b> 修复清单:'
+           '<a href="fixlist-launch.md">启动页</a> · <a href="fixlist-layout.md">布局 / 编辑态</a> · '
+           '<a href="fixlist-download.md">下载 / 安装</a> · <a href="fixlist-library.md">实例库 / 详情</a> · '
+           '<a href="fixlist-other.md">其它</a></p>' % (W, BLOCK, BLOCK)]
     if tr:
         sm = tr.get('summary', {})
         out.append('<p>巡检剧本:<code>%s</code> · 步骤 %s · OK %s · <span class="fail">FAIL %s</span> · 截图 %s · 假数据:%s</p>'

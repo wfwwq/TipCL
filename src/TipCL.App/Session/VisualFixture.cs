@@ -288,7 +288,10 @@ internal static class VisualFixture
             }
             sum.Servers += spec.Servers.Length;
         }
-        for (int i = 0; i < 3; i++)
+        // 启动页背景 = 所选版本最新的一张截图(没有才用内置 hero.jpg):.minecraft 是对照效果图的那个实例,
+        // 不放截图,否则 64x36 的假截图会被拉伸成整屏背景(看起来像渲染故障)
+        int shots = spec.Name == ".minecraft" ? 0 : 3;
+        for (int i = 0; i < shots; i++)
         {
             string name = now.AddDays(-i).ToString("yyyy-MM-dd_HH.mm.ss", CultureInfo.InvariantCulture) + ".png";
             File.WriteAllBytes(Path.Combine(game, "screenshots", name), Png(64, 36, i));
