@@ -1,0 +1,22 @@
+{
+  "_comment": "v3 mockup states shot by shoot-mockups.ps1. file = mockup html under <_visual>/mockups; hash drives mockup-states.js.",
+  "states": [
+    { "name": "v3-launch-normal-1000", "file": "launch_v3.html", "hash": "m=normal&w=1000" },
+    { "name": "v3-launch-edit-1000",   "file": "launch_v3.html", "hash": "m=edit&w=1000" },
+    { "name": "v3-launch-lib-1000",    "file": "launch_v3.html", "hash": "m=lib&w=1000" },
+    { "name": "v3-launch-normal-780",  "file": "launch_v3.html", "hash": "m=normal&w=780" },
+    { "name": "v3-launch-edit-780",    "file": "launch_v3.html", "hash": "m=edit&w=780" },
+    { "name": "v3-launch-lib-780",     "file": "launch_v3.html", "hash": "m=lib&w=780" },
+    { "name": "v3-download-normal",    "file": "layout_v3.html", "hash": "A=normal&sel=%23winA" },
+    { "name": "v3-download-edit",      "file": "layout_v3.html", "hash": "A=edit&sel=%23winA" },
+    { "name": "v3-download-edit-add",  "file": "layout_v3.html", "hash": "A=edit&lib=1&sel=%23winA" },
+    { "name": "v3-download-edit-red",  "file": "layout_v3.html", "hash": "accent=red&A=edit&sel=%23winA" },
+    { "name": "v3-download-now",       "file": "layout_v3.html", "hash": "A=now&sel=%23secA%20.nowimg" },
+    { "name": "v3-settings-layout-top",     "file": "layout_v3.html", "hash": "B=new&sel=%23winB" },
+    { "name": "v3-settings-layout-pages",   "file": "layout_v3.html", "hash": "B=new&scroll=%E9%A1%B5%E9%9D%A2&sel=%23winB" },
+    { "name": "v3-settings-layout-schemes", "file": "layout_v3.html", "hash": "B=new&scroll=%E6%96%B9%E6%A1%88&sel=%23winB" },
+    { "name": "v3-settings-layout-adv",     "file": "layout_v3.html", "hash": "B=new&adv=1&bottom=1&sel=%23winB" },
+    { "name": "v3-settings-layout-red",     "file": "layout_v3.html", "hash": "accent=red&B=new&sel=%23winB" },
+    { "name": "v3-settings-layout-now",     "file": "layout_v3.html", "hash": "B=now&sel=%23secB%20.nowimg" }
+  ]
+}

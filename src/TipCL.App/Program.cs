@@ -17,6 +17,10 @@ internal static class Program
             if (Array.IndexOf(args, "--smoke") >= 0)
                 return Session.SmokeRunner.Run(BuildAvaloniaApp());
 
+            // AI3-visual:可点击的无窗口视觉巡检(--visual-tour <剧本.json> <输出目录>,见 Session/VisualTour.cs)
+            if (Array.IndexOf(args, "--visual-tour") >= 0)
+                return Session.VisualTour.Run(BuildAvaloniaApp(), args);
+
             // AI 功能自检(M4-H P5 尾巴):不起 GUI、不联网,结果打到 stdout 并落日志。
             if (Array.IndexOf(args, "--ai-selftest") >= 0)
                 return Session.AiSelfTestCli.Run(sendOne: Array.IndexOf(args, "--ai-selftest-send") >= 0);

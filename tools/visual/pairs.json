@@ -1,0 +1,33 @@
+{
+  "_comment": "mockup/reference <-> tour shot pairs for compare.py. mockup paths: '@visual/' = <_visual>, '@repo/' = repo root. shot = <tour>/<shot>.png",
+  "pairs": [
+    { "id": "v3-launch-normal-1000", "title": "启动页 · 常态 · 宽 1000", "mockup": "@visual/mockups/states/v3-launch-normal-1000.png", "shot": "v3-launch-normal-1000", "src": "v3 launch_v3" },
+    { "id": "v3-launch-edit-1000",   "title": "启动页 · 编辑态 · 宽 1000", "mockup": "@visual/mockups/states/v3-launch-edit-1000.png", "shot": "v3-launch-edit-1000", "src": "v3 launch_v3" },
+    { "id": "v3-launch-lib-1000",    "title": "启动页 · 组件库 · 宽 1000", "mockup": "@visual/mockups/states/v3-launch-lib-1000.png", "shot": "v3-launch-lib-1000", "src": "v3 launch_v3" },
+    { "id": "v3-launch-normal-780",  "title": "启动页 · 常态 · 窄 780", "mockup": "@visual/mockups/states/v3-launch-normal-780.png", "shot": "v3-launch-normal-780", "src": "v3 launch_v3" },
+    { "id": "v3-launch-edit-780",    "title": "启动页 · 编辑态 · 窄 780", "mockup": "@visual/mockups/states/v3-launch-edit-780.png", "shot": "v3-launch-edit-780", "src": "v3 launch_v3" },
+    { "id": "v3-launch-lib-780",     "title": "启动页 · 组件库 · 窄 780", "mockup": "@visual/mockups/states/v3-launch-lib-780.png", "shot": "v3-launch-lib-780", "src": "v3 launch_v3" },
+    { "id": "v3-download-normal",    "title": "下载页 · 新版常态", "mockup": "@visual/mockups/states/v3-download-normal.png", "shot": "v3-download-normal", "src": "v3 layout_v3 A" },
+    { "id": "v3-download-edit",      "title": "下载页 · 编辑态(右键「自定义布局...」)", "mockup": "@visual/mockups/states/v3-download-edit.png", "shot": "v3-download-edit", "src": "v3 layout_v3 A" },
+    { "id": "v3-download-edit-add",  "title": "下载页 · 编辑态 · 添加抽屉", "mockup": "@visual/mockups/states/v3-download-edit-add.png", "shot": "v3-download-edit-add", "src": "v3 layout_v3 A" },
+    { "id": "v3-download-edit-red",  "title": "下载页 · 编辑态 · 红色主题", "mockup": "@visual/mockups/states/v3-download-edit-red.png", "shot": "v3-download-edit-red", "src": "v3 layout_v3 A" },
+    { "id": "v3-settings-layout-top",     "title": "设置 → 布局 · 顶部(外观 / 导航)", "mockup": "@visual/mockups/states/v3-settings-layout-top.png", "shot": "v3-settings-layout-top", "src": "v3 layout_v3 B" },
+    { "id": "v3-settings-layout-pages",   "title": "设置 → 布局 · 页面", "mockup": "@visual/mockups/states/v3-settings-layout-pages.png", "shot": "v3-settings-layout-pages", "src": "v3 layout_v3 B" },
+    { "id": "v3-settings-layout-schemes", "title": "设置 → 布局 · 方案", "mockup": "@visual/mockups/states/v3-settings-layout-schemes.png", "shot": "v3-settings-layout-schemes", "src": "v3 layout_v3 B" },
+    { "id": "v3-settings-layout-adv",     "title": "设置 → 布局 · 高级", "mockup": "@visual/mockups/states/v3-settings-layout-adv.png", "shot": "v3-settings-layout-adv", "src": "v3 layout_v3 B" },
+    { "id": "v3-settings-layout-red",     "title": "设置 → 布局 · 红色主题", "mockup": "@visual/mockups/states/v3-settings-layout-red.png", "shot": "v3-settings-layout-red", "src": "v3 layout_v3 B" },
+    { "id": "v2-launch",   "title": "启动页(v2)", "mockup": "@repo/windos/docs/mockups-hark/v2/launch2.png", "shot": "launch", "src": "v2 launch2" },
+    { "id": "v2-library",  "title": "实例库(v2)", "mockup": "@repo/windos/docs/mockups-hark/v2/library2.png", "shot": "library", "src": "v2 library2" },
+    { "id": "v2-download", "title": "下载 · 原版(v2)", "mockup": "@repo/windos/docs/mockups-hark/v2/download2.png", "shot": "download", "src": "v2 download2" },
+    { "id": "v2-install",  "title": "安装页(v2)", "mockup": "@repo/windos/docs/mockups-hark/v2/install2.png", "shot": "install", "src": "v2 install2" },
+    { "id": "v2-plugins",  "title": "插件 · 已安装(v2)", "mockup": "@repo/windos/docs/mockups-hark/v2/plugins2.png", "shot": "plugins", "src": "v2 plugins2" },
+    { "id": "v2-settings", "title": "设置 · 通用(v2)", "mockup": "@repo/windos/docs/mockups-hark/v2/settings2.png", "shot": "settings-general", "src": "v2 settings2" },
+    { "id": "win-launch-light",   "title": "启动页 · 浅色(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/launch-light.png", "shot": "launch", "src": "Windows hero" },
+    { "id": "win-launch-dark",    "title": "启动页 · 深色(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/launch-dark.png", "shot": "launch-dark", "src": "Windows hero" },
+    { "id": "win-pop-dark",       "title": "实例切换浮层 · 深色(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/pop-dark.png", "shot": "launch-switch-dark", "src": "Windows hero" },
+    { "id": "win-library-light",  "title": "实例库(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/library-light.png", "shot": "library", "src": "Windows hero" },
+    { "id": "win-download-light", "title": "下载 · 原版(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/download-light.png", "shot": "download", "src": "Windows hero" },
+    { "id": "win-plugins-light",  "title": "插件 · 市场(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/plugins-light.png", "shot": "plugins-market", "src": "Windows hero" },
+    { "id": "win-settings-light", "title": "设置 · 通用(Windows 实拍)", "mockup": "@repo/windos/docs/ui-audit/hero/settings-light.png", "shot": "settings-general", "src": "Windows hero" }
+  ]
+}
