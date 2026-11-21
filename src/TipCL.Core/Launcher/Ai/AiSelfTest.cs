@@ -59,6 +59,10 @@ public static class AiSelfTest
         void Check(string name, bool ok, string detail = "")
             => (ok ? result.Passed : result.Failed).Add(detail.Length > 0 ? name + " — " + detail : name);
 
+        // AI-engine-mcp:下面的写调用会经过内置审计钩子 —— 审计日志指到临时目录,不弄脏用户数据目录(末尾复原)
+        string? savedHooksDir = Hooks.HOOKS_DIR;
+        Hooks.HOOKS_DIR = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tipcl-selftest-hooks-" + Guid.NewGuid().ToString("N"));
+
         // 1. 工具表:JSON 能解析、每个 schema 都有名字、每个名字都有元信息
         try
         {
@@ -190,6 +194,10 @@ public static class AiSelfTest
         {
             Id = "b", Type = "button", Settings = new Dictionary<string, object?> { ["action"] = "cmd:rm -rf /" },
         }) != null);
+        // 13. AI-engine-mcp:工具并行调度 / 前后钩子 / 规则按参数匹配 / 本机 MCP Server 协议面
+        await AiSelfTestEngineMcp.VerifyAsync((name, ok) => Check(name, ok)).ConfigureAwait(false);
+        try { System.IO.Directory.Delete(Hooks.HOOKS_DIR!, true); } catch (Exception) { }
+        Hooks.HOOKS_DIR = savedHooksDir;
 
         return result;
     }

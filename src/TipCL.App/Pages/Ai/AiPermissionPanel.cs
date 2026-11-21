@@ -61,14 +61,24 @@ internal sealed class AiPermissionPanel : Border
         var body = UiClass.V(8,
             UiClass.Section(I18nCore.Tr("权限档位"), "与 Windows 版共用五档权限;自定义规则会覆盖默认判定"),
             UiClass.Field(I18nCore.Tr("当前档位"), control, I18nCore.Tr("点保存后立即对下一轮生效")),
-            UiClass.Section(I18nCore.Tr("规则"), "规则可记到全局或当前实例;删除类工具不提供「始终允许」"),
+            UiClass.Section(I18nCore.Tr("规则"), "规则可记到全局或当前实例;命中多条时 禁止 > 允许 > 每次问"),
             row,
+            UiClass.Small(ContentHint).Wrap(),
             _status,
             _usage,
             new ScrollViewer { Content = _rules, MaxHeight = 290, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         Child = body;
         Padding = new Thickness(2);
     }
+
+    /// <summary>
+    /// 「限定参数」怎么匹配(AI-engine-mcp:Core 的 PermissionRules 已让它参与判定,文案照实际规则写)。
+    /// 与 Windows 版 Permission.RuleContentFromInput 同一份键序;作用范围按这次调用要动的实例算。
+    /// </summary>
+    internal const string ContentHint =
+        "限定参数:只对参数完全一致的那一次调用生效(不分大小写,路径写法会先归一)。比对的是调用里第一个非空的 "
+        + "path / filename / slug / name / version / major 等参数,例如只允许改 config 里的某个文件、只允许装某个模组。"
+        + "「仅当前实例」按这次操作要动的实例算。删除类工具的「允许」必须填限定参数才生效。";
 
     /// <summary>刷新当前档位与规则列表(宿主在弹出前后各调一次即可)。</summary>
     public Task RefreshAsync()
@@ -104,19 +114,25 @@ internal sealed class AiPermissionPanel : Border
             return;
         }
         var rules = Py.ListOr(TipCL.Core.Launcher.Config.CONFIG.Get("ai_permission_rules")).Select(Py.D).ToList();
+        string content = (_content.Text ?? "").Trim();
+        string scope = _scope.SelectedIndex == 1 ? _instance : "";
+        // 同一个(工具, 作用范围, 限定参数)只留一条:限定参数不同就是不同的规则,可以并存
         rules.RemoveAll(r => Py.S(r.Get("tool")) == tool
-            && Py.S(r.Get("instance")) == (_scope.SelectedIndex == 1 ? _instance : ""));
+            && Py.S(r.Get("instance")) == scope
+            && Py.Strip(Py.S(r.Get("content"))) == content);
         rules.Add(PyDict.Of(
             "tool", tool,
             "behavior", behavior,
-            "content", (_content.Text ?? "").Trim(),
-            "instance", _scope.SelectedIndex == 1 ? _instance : ""));
+            "content", content,
+            "instance", scope));
         await _api.CallAsync<object>("save_settings", new
         {
             data = new Dictionary<string, object> { ["ai_permission_rules"] = rules.Cast<object>().ToList() },
         });
         _content.Text = "";
-        _status.Text = "已添加规则";
+        _status.Text = behavior == "allow" && content.Length == 0 && ToolMeta.Get(tool)?.side_effect == "delete"
+            ? "已添加,但删除类工具的「允许」没填限定参数不会生效(仍会弹确认)"
+            : "已添加规则";
         ReloadRules();
     }
 
@@ -148,7 +164,7 @@ internal sealed class AiPermissionPanel : Border
             string text = (scope.Length == 0 ? I18nCore.Tr("全局") : scope) + " · " + tool
                 + (content.Length > 0 ? " · " + content : "")
                 + " · " + BehaviorLabels[behaviorIndex >= 0 ? behaviorIndex : 0];
-            var del = UiClass.IconBtn("Close", I18nCore.Tr("删除规则"), (_, _) => _ = RemoveRuleAsync(tool, scope));
+            var del = UiClass.IconBtn("Close", I18nCore.Tr("删除规则"), (_, _) => _ = RemoveRuleAsync(tool, scope, content));
             _rules.Children.Add(UiClass.G(null, "*,Auto").Add(UiClass.Muted(text).Wrap(), 0, 0).Add(del, 0, 1));
         }
         if (total == 0)
@@ -160,10 +176,11 @@ internal sealed class AiPermissionPanel : Border
             + (total > 0 ? $" · 自定义规则 {total} 条(其中禁止 {denied} 条)" : "");
     }
 
-    private async Task RemoveRuleAsync(string tool, string instance)
+    private async Task RemoveRuleAsync(string tool, string instance, string content)
     {
         var rules = Py.ListOr(TipCL.Core.Launcher.Config.CONFIG.Get("ai_permission_rules")).Select(Py.D)
-            .Where(r => !(Py.S(r.Get("tool")) == tool && Py.S(r.Get("instance")) == instance))
+            .Where(r => !(Py.S(r.Get("tool")) == tool && Py.S(r.Get("instance")) == instance
+                && Py.Strip(Py.S(r.Get("content"))) == Py.Strip(content)))
             .ToList();
         await _api.CallAsync<object>("save_settings", new
         {

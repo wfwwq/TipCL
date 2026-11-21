@@ -337,6 +337,7 @@ public sealed partial class SettingsPage : PageBase
                 UiClass.Field(I18nCore.Tr("接入方式"), _aiMode),
                 aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow,
                 UiClass.Field(I18nCore.Tr("权限"), UiClass.Muted(I18nCore.Tr("在 AI 对话界面的输入框上方设置"))),
+                UiClass.Field("MCP Server", BuildMcpRow(), I18nCore.Tr("把 AI 助手的工具开放给本机的 Claude / Cursor 等外部 agent;只监听 127.0.0.1,写操作每次都会弹确认")),
                 UiClass.Field("", UiClass.Btn(I18nCore.Tr("测试 AI 连接"), BtnKind.Chip, (_, _) => Run(TestAiAsync, I18nCore.Tr("AI 连接失败"))).Left()))));
 
         // 「通用」= BlockHost("settings:general")，9 个区块（照 Windows 版 _views[0]）

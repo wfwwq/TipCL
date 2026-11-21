@@ -68,7 +68,13 @@ public sealed partial class ToolRunner
     /// 理由文案与 Windows 版 Permission.Decide 的 switch 逐字对位(见下面 switch 里各分支的判据);
     /// 档位集合与参考版一致(含别名),面板仍只写本地那几档。
     /// </summary>
-    public PermissionVerdict Decide(string tool) => ApplyDontAsk(DecideRaw(tool));
+    public PermissionVerdict Decide(string tool) => ApplyDontAsk(DecideRaw(tool, null));
+
+    /// <summary>
+    /// 带参数的裁决(AI-engine-mcp):自定义规则的「限定参数 / 作用实例」要拿本次调用的参数来比,
+    /// 见 <see cref="PermissionRules"/>。RunAsync 走这个入口;不带参数时只有「整个工具」的规则会命中。
+    /// </summary>
+    public PermissionVerdict Decide(string tool, PyDict? args) => ApplyDontAsk(DecideRaw(tool, args));
 
     /// <summary>
     /// 「不询问」开关(<c>config.json</c> 的 <c>ai_permission_dont_ask</c>):需要确认的写操作**直接拒绝**。
@@ -86,7 +92,7 @@ public sealed partial class ToolRunner
     }
 
     /// <summary>按档位与自定义规则算出的原始裁决(「不询问」开关由 <see cref="Decide"/> 叠加)。</summary>
-    private PermissionVerdict DecideRaw(string tool)
+    private PermissionVerdict DecideRaw(string tool, PyDict? args)
     {
         // 「只看不动」是**硬停**:参考版把这一步放在规则之前(Permission.cs:186-190:
         // `if (mode == "plan" && !readonly) return deny`),所以连 allow 规则也突破不了它。
@@ -96,7 +102,7 @@ public sealed partial class ToolRunner
         {
             return new PermissionVerdict("deny", "当前是「只看不动」模式，不能执行这类操作");
         }
-        string rule = RuleFor(tool);
+        string rule = RuleFor(tool, args);
         if (rule.Length > 0)
         {
             // 规则三条理由与 Windows 版逐字相同
@@ -146,24 +152,14 @@ public sealed partial class ToolRunner
         };
     }
 
-    /// <summary>自定义规则(config.json 的 ai_permission_rules,照 Windows 版 ai_permission_rule_add)。</summary>
-    private static string RuleFor(string tool)
-    {
-        foreach (object? raw in Py.ListOr(Config.CONFIG.Get("ai_permission_rules")))
-        {
-            PyDict rule = Py.D(raw);
-            if (!Py.Eq(rule.Get("tool"), tool))
-            {
-                continue;
-            }
-            string behavior = Py.S(rule.Get("behavior"));
-            if (behavior is "allow" or "deny" or "ask")
-            {
-                return behavior;
-            }
-        }
-        return "";
-    }
+    /// <summary>
+    /// 自定义规则(config.json 的 ai_permission_rules,照 Windows 版 ai_permission_rule_add)。
+    /// AI-engine-mcp:规则里的 content(限定参数)与 instance(作用实例)现在参与判定,命中多条时
+    /// 禁止 &gt; 允许 &gt; 每次问(照参考版 Permission.Decide),匹配细节见 <see cref="PermissionRules"/>。
+    /// </summary>
+    private string RuleFor(string tool, PyDict? args)
+        => PermissionRules.Pick(Py.ListOr(Config.CONFIG.Get("ai_permission_rules")), tool, args,
+            PermissionRules.TargetInstance(args, Instance), ToolMeta.Get(tool)?.side_effect ?? "");
 
     /// <summary>当前实例(工具参数里没写 instance 时用)。</summary>
     public string Instance { get; set; } = "";
@@ -267,11 +263,19 @@ public sealed partial class ToolRunner
             return ToolErr(call.name, "unknown_tool", "没有这个工具: " + call.name, "");
         }
 
+        // AI-engine-mcp:执行前钩子(可改写参数 / 拦下调用;钩子自己出错只进 errors,不影响这次调用)
+        string? hookBlocked = RunBeforeHooks(call);
+        if (hookBlocked != null)
+        {
+            call.Mark(ToolCallStatus.DENIED, error: "[钩子] 已拦截:" + hookBlocked);
+            return ToolErr(call.name, "permission_denied", "这一步被工具钩子拦下了:" + hookBlocked, "");
+        }
+
         // MCP 工具是外部进程，本机无法判定它到底动没动东西:一律按写操作对待（除 yolo 档）
         bool readOnly = !mcp && ToolMeta.Get(call.name)!.@readonly;
-        if (!readOnly && !_alwaysAllowed.Contains(call.name))
+        if (!readOnly && (ForceConfirmWrites || !_alwaysAllowed.Contains(call.name)))
         {
-            PermissionVerdict verdict = mcp ? ApplyDontAsk(McpVerdict()) : Decide(call.name);
+            PermissionVerdict verdict = ExternalWriteGate(mcp ? ApplyDontAsk(McpVerdict()) : Decide(call.name, call.args));
             if (verdict.decision == "deny")
             {
                 // 步骤行右侧那格要说明「为什么被拒」(照 Windows 的 "denied" 工具状态带 reason),
@@ -301,7 +305,7 @@ public sealed partial class ToolRunner
                     preview = null;
                 }
                 (bool ok, bool always) = await Confirm(call, label, verdict.reason, preview).ConfigureAwait(false);
-                if (always && !NeverAlwaysAllow(call.name)) _alwaysAllowed.Add(call.name);
+                if (always && !ForceConfirmWrites && !NeverAlwaysAllow(call.name)) _alwaysAllowed.Add(call.name);
                 if (!ok)
                 {
                     call.Mark(ToolCallStatus.DENIED, error: "用户拒绝");
@@ -315,7 +319,7 @@ public sealed partial class ToolRunner
         try
         {
             object? result = await ExecuteAsync(call, ct).ConfigureAwait(false);
-            string text = Clip(AsText(result), call.name);
+            string text = Clip(RunAfterHooks(call, AsText(result)), call.name);
             call.Mark(ToolCallStatus.COMPLETED, result: text);
             return text;
         }
@@ -329,7 +333,7 @@ public sealed partial class ToolRunner
             string code = Tools.ClassifyException(ex);
             call.Mark(ToolCallStatus.FAILED, error: Py.ExcStr(ex));
             Log?.Invoke("失败: " + Tools.ErrorText(code) + " — " + Py.ExcStr(ex));
-            return Tools.ErrorPayload(ex, call.name, code);
+            return RunAfterHooks(call, Tools.ErrorPayload(ex, call.name, code));
         }
     }
 
