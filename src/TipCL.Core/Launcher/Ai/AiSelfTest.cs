@@ -198,6 +198,8 @@ public static class AiSelfTest
         await AiSelfTestEngineMcp.VerifyAsync((name, ok) => Check(name, ok)).ConfigureAwait(false);
         try { System.IO.Directory.Delete(Hooks.HOOKS_DIR!, true); } catch (Exception) { }
         Hooks.HOOKS_DIR = savedHooksDir;
+        // 14. AI-new-features:升级 / 预检 / 服务器 / 光影推荐 / 诊断报告(纯逻辑)
+        NewFeaturesSelfTest.Verify(Check);
 
         return result;
     }

@@ -305,7 +305,7 @@ public sealed partial class ToolRunner
                     preview = null;
                 }
                 (bool ok, bool always) = await Confirm(call, label, verdict.reason, preview).ConfigureAwait(false);
-                if (always && !ForceConfirmWrites && !NeverAlwaysAllow(call.name)) _alwaysAllowed.Add(call.name);
+                if (always && !ForceConfirmWrites && !NeverAlwaysAllow(call.name) && AllowsAlways(call.name)) _alwaysAllowed.Add(call.name);
                 if (!ok)
                 {
                     call.Mark(ToolCallStatus.DENIED, error: "用户拒绝");
@@ -606,6 +606,17 @@ public sealed partial class ToolRunner
             case "list_save_backups":
             case "restore_save_backup":
                 return await PerfSavesAsync(call.name, args, ct).ConfigureAwait(false);
+            // ── AI-new-features:升级 / 预检 / 服务器 / 光影推荐 / 诊断报告(实现见 ToolRunner.NewFeatures.cs)──
+            case "plan_instance_upgrade":
+            case "apply_instance_upgrade":
+            case "preflight_check":
+            case "list_servers":
+            case "add_server":
+            case "remove_server":
+            case "ping_server":
+            case "recommend_shaders":
+            case "export_diagnostic_report":
+                return await ExecuteNewFeaturesAsync(call, args, ct).ConfigureAwait(false);
 
             default:
                 // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版(执行体见 ToolRunner.AcctLayoutMp.cs)
