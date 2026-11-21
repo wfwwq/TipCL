@@ -92,6 +92,8 @@ public static class Tools
                 // AI-logs-fs:日志 / 文件 / 打开文件夹几个工具的 schema 放在自己的文件里(AiFsTools.SchemaJson),这里只接上
                 cached.AddRange(AiFsTools.Schemas());
                 cached.AddRange(PerfSavesTools.Schemas()); // AI-perf-saves:卡顿优化 + 存档备份的 7 个工具
+                // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版 7 条(表数据在 AcctLayoutMpTools)
+                cached.AddRange(AcctLayoutMpTools.Schemas());
                 _schemas = cached;
             }
             return cached;
@@ -189,6 +191,11 @@ public static class Tools
         {
             return perfSavesLabel; // AI-perf-saves:这几个工具的标签走词表(I18nCore.Tr)
         }
+        // AI-acct-layout-mp:本包工具的标签与模板在 AcctLayoutMpTools
+        if (AcctLayoutMpTools.Label(key, args) is { } extraLabel)
+        {
+            return extraLabel;
+        }
         if (args != null && Formats.TryGetValue(key, out string? fmt))
         {
             string filled = FillTemplate(fmt, args);
@@ -264,7 +271,7 @@ public static class Tools
     {
         var allowed = new HashSet<string>(AiData.CORE_TOOLS);
         string text = userText ?? LastUserText(messages);
-        foreach ((string[] keys, string[] extra) in AiData.KEYWORD_TOOLS)
+        foreach ((string[] keys, string[] extra) in AiData.KEYWORD_TOOLS.Concat(AcctLayoutMpTools.Keywords))
         {
             foreach (string key in keys)
             {
@@ -669,6 +676,11 @@ public static class Tools
         if (PerfSavesTools.AffectedPaths(name, args, instance) is { } perfSavesPaths)
         {
             return perfSavesPaths; // AI-perf-saves:取舍理由见 PerfSavesTools.AffectedPaths
+        }
+        // AI-acct-layout-mp:布局写工具的快照路径与实例无关,先于下面的实例解析处理
+        if (AcctLayoutMpTools.Handles(name))
+        {
+            return AcctLayoutMpTools.AffectedPaths(name, args);
         }
         string instName = Py.S(Py.Or(args.Get("instance"), instance));
         string root;

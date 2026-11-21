@@ -99,6 +99,15 @@ public static class ToolMeta
         new("backup_save", false, "write_local", "low", false),
         new("list_save_backups", true, "read", "low", false),
         new("restore_save_backup", false, "delete", "high", false),
+        // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版(风险分级照 Windows ExtraTools.Meta;
+        // multiplayer 的副作用按 Linux 实际行为记 network:它会拉起联机内核进程并连公共节点,不该被「文件类修改直接执行」档放行)
+        new("list_accounts", true, "read", "low", false),
+        new("add_offline_account", false, "write_local", "low", false),
+        new("switch_account", false, "write_local", "low", false),
+        new("set_skin", false, "write_local", "low", false),
+        new("multiplayer", false, "network", "medium", false),
+        new("layout_get", true, "read", "low", false),
+        new("layout_apply", false, "write_local", "medium", false),
     };
 
     public static Dictionary<string, ToolMetaInfo> Map

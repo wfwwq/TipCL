@@ -604,6 +604,11 @@ public sealed partial class ToolRunner
                 return await PerfSavesAsync(call.name, args, ct).ConfigureAwait(false);
 
             default:
+                // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版(执行体见 ToolRunner.AcctLayoutMp.cs)
+                if (AcctLayoutMpTools.Handles(call.name))
+                {
+                    return await RunAcctLayoutMpAsync(call.name, args, ct).ConfigureAwait(false);
+                }
                 // 兜底:MCP 工具（mcp_<server>_<tool>）路由到对应的外部 server
                 if (Mcp.IsMcpTool(call.name))
                 {

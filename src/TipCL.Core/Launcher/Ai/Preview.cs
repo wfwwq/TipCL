@@ -108,6 +108,11 @@ public static class Preview
     public static PyDict? ChangePreview(string name, PyDict? args, string instance = "")
     {
         args ??= new PyDict();
+        // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版的预览在 AcctLayoutMpTools(layout_apply 与执行共用同一份 Plan)
+        if (AcctLayoutMpTools.Handles(name))
+        {
+            return AcctLayoutMpTools.ChangePreview(name, args);
+        }
         var lines = new List<string>();
         switch (name)
         {

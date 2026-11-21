@@ -501,6 +501,11 @@ public sealed class AiPage : PageBase
         }
         RenderHistory();
         long files = Py.Int(Py.Or(result.Get("restored_files"), 0L));
+        if (files > 0)
+        {
+            // AI-acct-layout-mp:还原的文件里可能有 ui_layout_v2.json(layout_apply 的检查点),让布局缓存与界面跟上
+            AiAcctLayoutMpHooks.AfterRewind(this);
+        }
         string body = files > 0
             ? "已还原 " + files + " 个改过的文件"
             : (Py.Truthy(result.Get("rollbackable")) ? "这一轮没有改过文件" : "这一轮没有磁盘改动");
@@ -611,6 +616,9 @@ public sealed class AiPage : PageBase
         object content = text;
         if (_images.Count > 0)
         {
+            // AI-acct-layout-mp:模型看得到图但不知道文件在哪,把 png 附件的本地路径附在文字后面(set_skin 要用)
+            string attachNote = AcctLayoutMpTools.AttachmentNote(_images.Paths);
+            content = text + attachNote;
             List<object> imageBlocks = _images.Paths.Select(Images.EncodeFile).Where(x => x.Length > 0).Cast<object>().ToList();
             if (imageBlocks.Count > 0)
             {
@@ -620,7 +628,7 @@ public sealed class AiPage : PageBase
                 }
                 else
                 {
-                    content = Images.BuildUserContent(text, imageBlocks);
+                    content = Images.BuildUserContent(text + attachNote, imageBlocks);
                 }
             }
             _images.Clear();
@@ -709,6 +717,7 @@ public sealed class AiPage : PageBase
                 {
                     var line = Line(ev.Call.name, "完成:" + ev.Text, ToolState.Done);
                     line.SetResult(Summarize(ev.Call));
+                    AiAcctLayoutMpHooks.AfterTool(this, ev.Call); // AI-acct-layout-mp:layout_apply 后重排标题栏页签
                 }
                 _status.Text = I18nCore.Tr("操作完成");
                 break;

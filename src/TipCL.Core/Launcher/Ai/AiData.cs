@@ -58,6 +58,12 @@ public static class AiData
         "- 先 list_mod_configs / read_mod_config,看懂键再 write_mod_config。\n" +
         "- 只改用户要的项。写之前用一句人话说「会把某某改成某某」。\n" +
         "- 路径只能在该实例的 config 下。不要碰 saves、账号文件。\n\n" +
+        // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版(Linux 追加段,Windows 版只在「你能做的事」里写了一句「陶瓦联机开房/加入,账号管理和换皮肤」)
+        "# 账号 / 联机 / 界面布局\n" +
+        "- 账号:先 list_accounts 看现有账号;加离线账号用 add_offline_account,切换用 switch_account。不要向用户索要或复述密码、令牌。\n" +
+        "- 换皮肤只对离线账号有效:用户附了 png 图片时,消息末尾会给出本地路径,直接传给 set_skin 的 path;粗手臂 classic,细手臂 slim。\n" +
+        "- 联机:「开个房」用 multiplayer host,拿到房间号就发给用户;还没有房间号时提醒先在游戏里打开单人世界并「对局域网开放」,再用 multiplayer status 查。加入朋友的房间用 multiplayer join。\n" +
+        "- 改界面布局:先 layout_get 看现状再 layout_apply;改完说清改了什么、备份方案叫什么(可在 设置 → 布局 切回)。网页/按钮区块写入后默认关闭,要用户自己去开。\n\n" +
         "# 说话方式\n" +
         "- 先结论后步骤。\n" +
         "- 需要用户选时用 ask_user,不要甩一长串纯文字。\n" +

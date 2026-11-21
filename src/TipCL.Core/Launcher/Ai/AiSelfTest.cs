@@ -176,6 +176,20 @@ public static class AiSelfTest
 
         // 11. 卡顿优化 + 存档备份(AI-perf-saves;不碰用户数据,见 PerfSavesTools.SelfCheckAsync)
         await PerfSavesTools.SelfCheckAsync((name, ok) => Check(name, ok)).ConfigureAwait(false);
+        // 12. AI-acct-layout-mp:账号 / 联机 / 排版(纯逻辑,不碰磁盘与网络)
+        Check("账号/联机/排版工具已进表", AcctLayoutMpTools.Names.All(n => Tools.Names().Contains(n) && ToolMeta.Get(n) != null));
+        Check("账号列表不带令牌", !PyJson.Dumps(AcctLayoutMpTools.SafeAccountRows(new List<object?>
+        {
+            PyDict.Of("name", "Steve", "type", "microsoft", "access_token", "SECRET-T", "refresh_token", "SECRET-R", "active", true),
+        })).Contains("SECRET"));
+        Check("排版拒绝 file:// 网页区块", LayoutTools.DangerousWidgetError(new TipCL.Core.Launcher.Layout.WidgetDef
+        {
+            Id = "w", Type = "web", Settings = new Dictionary<string, object?> { ["url"] = "file:///etc/passwd" },
+        }) != null);
+        Check("排版拒绝白名单外的按钮动作", LayoutTools.DangerousWidgetError(new TipCL.Core.Launcher.Layout.WidgetDef
+        {
+            Id = "b", Type = "button", Settings = new Dictionary<string, object?> { ["action"] = "cmd:rm -rf /" },
+        }) != null);
 
         return result;
     }
