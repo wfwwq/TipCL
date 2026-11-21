@@ -1,0 +1,22 @@
+{
+  // 探路剧本:把每一页的可见元素清单 dump 出来(写真正的剧本之前先看清楚有哪些文字 / 名字)
+  "width": 1000, "height": 640, "fixture": true, "settleMs": 400,
+  "steps": [
+    { "op": "wait", "ms": 1500 },
+    { "op": "shot", "name": "p-launch" }, { "op": "dump", "name": "p-launch" },
+    { "op": "navigate", "page": "library" }, { "op": "wait", "ms": 1200 },
+    { "op": "shot", "name": "p-library" }, { "op": "dump", "name": "p-library" },
+    { "op": "navigate", "page": "download" }, { "op": "wait", "ms": 1500 },
+    { "op": "shot", "name": "p-download" }, { "op": "dump", "name": "p-download" },
+    { "op": "navigate", "page": "settings" }, { "op": "wait", "ms": 800 },
+    { "op": "shot", "name": "p-settings" }, { "op": "dump", "name": "p-settings" },
+    { "op": "click", "text": "布局" }, { "op": "wait", "ms": 800 },
+    { "op": "shot", "name": "p-settings-layout" }, { "op": "dump", "name": "p-settings-layout" },
+    { "op": "navigate", "page": "launch" },
+    { "op": "rightclick", "contains": "Fabric" },
+    { "op": "shot", "name": "p-launch-ctx" }, { "op": "dump", "name": "p-launch-ctx" },
+    { "op": "key", "keys": "Esc" },
+    { "op": "navigate", "page": "instance" }, { "op": "wait", "ms": 1200 },
+    { "op": "shot", "name": "p-instance" }, { "op": "dump", "name": "p-instance" }
+  ]
+}

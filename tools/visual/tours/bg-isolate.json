@@ -1,0 +1,14 @@
+{
+  // 隔离实验:启动页背景图在什么操作之后变成「色带」
+  "width": 900, "height": 550, "fixture": true, "settleMs": 350,
+  "steps": [
+    { "op": "wait", "ms": 1200 },
+    { "op": "shot", "name": "bg-0-start" },
+    { "op": "navigate", "page": "download" }, { "op": "navigate", "page": "launch" }, { "op": "shot", "name": "bg-1-after-download" },
+    { "op": "navigate", "page": "settings" }, { "op": "navigate", "page": "launch" }, { "op": "shot", "name": "bg-2-after-settings" },
+    { "op": "resize", "width": 1000, "height": 600 }, { "op": "shot", "name": "bg-3-resize-1000" },
+    { "op": "resize", "width": 900, "height": 550 }, { "op": "shot", "name": "bg-4-resize-back" },
+    { "op": "navigate", "page": "settings" }, { "op": "click", "text": "布局" }, { "op": "navigate", "page": "launch" }, { "op": "shot", "name": "bg-5-after-layout" },
+    { "op": "rightclick", "contains": "就绪" }, { "op": "click", "text": "自定义布局..." }, { "op": "reset" }, { "op": "shot", "name": "bg-6-after-edit" }
+  ]
+}
