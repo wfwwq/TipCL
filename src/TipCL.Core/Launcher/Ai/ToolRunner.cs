@@ -273,9 +273,9 @@ public sealed partial class ToolRunner
 
         // MCP 工具是外部进程，本机无法判定它到底动没动东西:一律按写操作对待（除 yolo 档）
         bool readOnly = !mcp && ToolMeta.Get(call.name)!.@readonly;
-        if (!readOnly && (ForceConfirmWrites || !_alwaysAllowed.Contains(call.name)))
+        if (!readOnly && (ForceConfirmWrites || !_alwaysAllowed.Contains(call.name) || ModDevForceAsk(call)))
         {
-            PermissionVerdict verdict = ExternalWriteGate(mcp ? ApplyDontAsk(McpVerdict()) : Decide(call.name, call.args));
+            PermissionVerdict verdict = ModDevGate(call, ExternalWriteGate(mcp ? ApplyDontAsk(McpVerdict()) : Decide(call.name, call.args)));
             if (verdict.decision == "deny")
             {
                 // 步骤行右侧那格要说明「为什么被拒」(照 Windows 的 "denied" 工具状态带 reason),
@@ -617,6 +617,13 @@ public sealed partial class ToolRunner
             case "recommend_shaders":
             case "export_diagnostic_report":
                 return await ExecuteNewFeaturesAsync(call, args, ct).ConfigureAwait(false);
+            // ── AI2-moddev-mcp:模组开发测试环境(实现见 ToolRunner.ModDevMcp.cs 与 ModDev/)──
+            case "create_test_instance":
+            case "install_local_mod":
+            case "revert_local_mod":
+            case "run_test_launch":
+            case "get_task_status":
+                return await ExecuteModDevAsync(call, args, ct).ConfigureAwait(false);
 
             default:
                 // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版(执行体见 ToolRunner.AcctLayoutMp.cs)

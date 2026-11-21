@@ -32,6 +32,8 @@ public sealed partial class ToolRunner
         "remove_server" or "apply_instance_upgrade" => false,
         // AI-integration:fs_write 也在执行器里守一道(确认卡 ConfirmCard.AllowAlways 已不给;restore_save_backup 由 NeverAlwaysAllow 守)
         "fs_write" => false,
+        // AI2-moddev-mcp:revert_local_mod 会删掉新装的 jar(删除类),不给「本对话都允许」(确认卡 ConfirmCard.AllowAlways 同样不给)
+        "revert_local_mod" => false,
         _ => true,
     };
 

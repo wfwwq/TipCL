@@ -196,6 +196,7 @@ public static class AiSelfTest
         }) != null);
         // 13. AI-engine-mcp:工具并行调度 / 前后钩子 / 规则按参数匹配 / 本机 MCP Server 协议面
         await AiSelfTestEngineMcp.VerifyAsync((name, ok) => Check(name, ok)).ConfigureAwait(false);
+            await AiSelfTestModDev.VerifyAsync((name, ok) => Check(name, ok)).ConfigureAwait(false); // AI2-moddev-mcp
         try { System.IO.Directory.Delete(Hooks.HOOKS_DIR!, true); } catch (Exception) { }
         Hooks.HOOKS_DIR = savedHooksDir;
         // 14. AI-new-features:升级 / 预检 / 服务器 / 光影推荐 / 诊断报告(纯逻辑)

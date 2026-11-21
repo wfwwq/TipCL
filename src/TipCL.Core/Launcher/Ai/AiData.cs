@@ -129,6 +129,9 @@ public static class AiData
         (new[] { "服务器", "server", "ping", "延迟", "多人游戏", "在线人数" }, new[] { "list_servers", "add_server", "remove_server", "ping_server" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         (new[] { "光影", "shader", "资源包", "材质", "适合什么", "配置低", "显卡" }, new[] { "recommend_shaders" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         (new[] { "诊断报告", "导出报告", "导出日志", "发给别人", "求助", "report" }, new[] { "export_diagnostic_report" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        // AI2-moddev-mcp:模组开发测试环境(主要给外部编程工具经 MCP 用;内置助手不写、不编译模组,只在用户点名时带上)
+        (new[] { "测试实例", "本地 jar", "本地jar", "自己编译", "开发模组", "测试启动", "任务进度", "dev 实例", "moddev" }, // i18n:ignore(给模型看的关键词)
+            new[] { "create_test_instance", "install_local_mod", "revert_local_mod", "run_test_launch", "get_task_status" }),
     };
 
     /// <summary>「用户在下命令」而不是在提问(用于决定是否带上写操作工具)。</summary>

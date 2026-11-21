@@ -106,6 +106,7 @@ public static class Tools
                 cached.AddRange(PerfSavesTools.Schemas()); // AI-perf-saves:卡顿优化 + 存档备份的 7 个工具
                 // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版 7 条(表数据在 AcctLayoutMpTools)
                 cached.AddRange(AcctLayoutMpTools.Schemas());
+                cached.AddRange(ModDevSchemas.Schemas()); // AI2-moddev-mcp:模组开发测试环境 5 个工具
                 _schemas = cached;
             }
             return cached;
@@ -224,6 +225,10 @@ public static class Tools
         if (AcctLayoutMpTools.Label(key, args) is { } extraLabel)
         {
             return extraLabel;
+        }
+        if (ModDevText.Label(key, args) is { } modDevLabel)
+        {
+            return modDevLabel; // AI2-moddev-mcp:本包工具的标签走词表(I18nCore.Tr)
         }
         if (args != null && Formats.TryGetValue(key, out string? fmt))
         {
@@ -710,6 +715,10 @@ public static class Tools
         if (AcctLayoutMpTools.Handles(name))
         {
             return AcctLayoutMpTools.AffectedPaths(name, args);
+        }
+        if (ModDevSchemas.Handles(name))
+        {
+            return ModDevOps.AffectedPathsFor(name, args, instance); // AI2-moddev-mcp
         }
         string instName = Py.S(Py.Or(args.Get("instance"), instance));
         string root;

@@ -118,6 +118,13 @@ public static class ToolMeta
         new("export_diagnostic_report", false, "write_local", "medium", false),
         new("apply_instance_upgrade", false, "write_local", "high", true),
         new("remove_server", false, "delete", "high", false),
+        // AI2-moddev-mcp:模组开发测试环境(见 ModDev/ModDevSchemas.cs)。revert_local_mod 会删掉新装的 jar,按删除类记;
+        // get_task_status 读的是进程内共享的任务表,标 long_running 不参与并行
+        new("create_test_instance", false, "write_local", "medium", true),
+        new("install_local_mod", false, "write_local", "medium", false),
+        new("revert_local_mod", false, "delete", "high", false),
+        new("run_test_launch", false, "launch", "medium", true),
+        new("get_task_status", true, "read", "low", true),
     };
 
     public static Dictionary<string, ToolMetaInfo> Map
