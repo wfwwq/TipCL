@@ -233,7 +233,7 @@ public class R35LaunchV3Tests
 			new KeyValuePair<string, bool>("custom:w-1", false)
 		};
 		List<ZoneItem> z = LaunchZone.FromLegacy(legacy, (string id) => (id == "custom:w-1") ? "playtime" : null);
-		Assert.Equal("tasks:s play:l note:s log:s ref:s", string.Join(" ", z.Select((ZoneItem i) => i.Type + ":" + i.Size)));
+		Assert.Equal("play:l tasks:s note:s log:s ref:s", string.Join(" ", z.Select((ZoneItem i) => i.Type + ":" + i.Size)));
 		Assert.Equal("custom:w-1", z[4].Ref);
 		Assert.Null(z.First((ZoneItem i) => i.Type == "note").Text);
 		ZonePack p = LaunchZone.Pack(z, 4, 4);

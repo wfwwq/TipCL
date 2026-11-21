@@ -443,6 +443,13 @@ public static class LaunchZone
 					list.Add(it);
 				}
 			}
+			// 游戏时长(4×2)排第一个 = 效果图的常态版式(右侧顶部是带每日柱状图的「本周游戏时长」);其余保持旧顺序
+			ZoneItem? play = list.FirstOrDefault((ZoneItem i) => i.Type == "play");
+			if (play != null && list.IndexOf(play) > 0)
+			{
+				list.Remove(play);
+				list.Insert(0, play);
+			}
 		}
 		return (list.Count == 0) ? Defaults() : list;
 	}
