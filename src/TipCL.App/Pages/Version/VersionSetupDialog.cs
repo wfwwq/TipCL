@@ -18,10 +18,21 @@ namespace TipCL.App.Pages.Version;
 /// <summary>版本设置对话框(照 Windows 版 VersionSetupDialog)。</summary>
 public static class VersionSetupDialog
 {
-    private static readonly string[] IsoLabels = { I18nCore.Tr("跟随全局"), "关闭(共用实例目录)", I18nCore.Tr("隔离存档"), I18nCore.Tr("隔离全部") };
+    private static readonly string[] IsoLabels = { I18nCore.Tr("跟随全局"), I18nCore.Tr("关闭(共用实例目录)"), I18nCore.Tr("隔离存档"), I18nCore.Tr("隔离全部") };
     private static readonly string[] IsoValues = { "", "none", "saves", "all" };
-    private static readonly string[] GcLabels = { I18nCore.Tr("自动"), "G1(通用)", "ZGC(大内存)", "Serial(老电脑)", I18nCore.Tr("不指定") };
-    private static readonly string[] GcValues = { "auto", "g1", "zgc", "serial", "none" };
+    // AI2-i18n-ux:第 0 项「跟随实例 / 全局」= 不在版本层设 GC(写空串)。以前未设置时下拉默认选「自动」,
+    // 一保存就把 gc="auto" 写进版本设置,版本层优先于实例层 ⇒ tune_jvm / 实例设置里的 GC 从此失效。
+    private static readonly string[] GcLabels = { I18nCore.Tr("跟随实例 / 全局"), I18nCore.Tr("自动"), I18nCore.Tr("G1(通用)"), I18nCore.Tr("ZGC(大内存)"), I18nCore.Tr("Serial(老电脑)"), I18nCore.Tr("不指定") };
+    private static readonly string[] GcValues = { "", "auto", "g1", "zgc", "serial", "none" };
+
+    /// <summary>「独占内存」输入框的占位字(AI2-i18n-ux:按新的读取顺序改)。</summary>
+    internal static string MemoryPlaceholder => I18nCore.Tr("留空则跟随实例 / 全局设置");
+
+    /// <summary>「独占内存」的说明:留空时实际按 版本 → 实例 → 调用方(启动页) → 全局 → 4096 取(LaunchFlow.Prepare)。</summary>
+    internal static string MemoryHint => I18nCore.Tr("单位 MB。留空时依次取:实例设置 → 启动页内存 → 全局默认 → 4096 MB");
+
+    /// <summary>GC 下拉的取值与文案(测试用)。</summary>
+    internal static (string[] Labels, string[] Values) GcChoices => (GcLabels, GcValues);
 
     public static async Task ShowAsync(string instance, string version)
     {
@@ -31,9 +42,9 @@ public static class VersionSetupDialog
         accounts.Insert(0, "(不绑定)");
 
         var iso = UiClass.Combo(IsoLabels, IsoLabels[Math.Max(0, Array.IndexOf(IsoValues, Py.S(data.Get("isolation"))))]);
-        var mem = UiClass.Input(I18nCore.Tr("留空则用全局设置"), Py.Truthy(data.Get("memory_mb")) ? Py.Str(data.Get("memory_mb")) : "");
+        var mem = UiClass.Input(MemoryPlaceholder, Py.Truthy(data.Get("memory_mb")) ? Py.Str(data.Get("memory_mb")) : "");
         var jvm = UiClass.Input("-XX:+UseG1GC ...", Py.S(data.Get("jvm_args")));
-        string gcVal = Py.S(data.Get("gc")) is { Length: > 0 } g ? g : "auto";
+        string gcVal = Py.S(data.Get("gc"));
         var gc = UiClass.Combo(GcLabels, GcLabels[Math.Max(0, Array.IndexOf(GcValues, gcVal))]);
         var server = UiClass.Input(I18nCore.Tr("进游戏直连的服务器"), Py.S(data.Get("server")));
         var port = UiClass.Input("25565", Py.S(data.Get("port")));
@@ -52,7 +63,7 @@ public static class VersionSetupDialog
         {
             Content = UiClass.V(4,
                 UiClass.Field(I18nCore.Tr("版本隔离"), iso, "存档 / 配置是否与实例其它版本分开"),
-                UiClass.Field(I18nCore.Tr("独占内存"), mem, I18nCore.Tr("单位 MB")),
+                UiClass.Field(I18nCore.Tr("独占内存"), mem, MemoryHint),
                 UiClass.Field(I18nCore.Tr("JVM 参数"), jvm),
                 UiClass.Field(I18nCore.Tr("垃圾回收器"), gc),
                 UiClass.Field(I18nCore.Tr("直连服务器"), server),

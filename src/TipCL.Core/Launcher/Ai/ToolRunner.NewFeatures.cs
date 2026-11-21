@@ -182,12 +182,13 @@ public sealed partial class ToolRunner
             throw new ValueError("缺少目标 MC 版本(target_version)");
         }
         bool inPlace = Py.Truthy(args.Get("in_place"));
+        // AI2-i18n-ux:计划卡标题是用户看的,走词表
         string[] titles =
         {
-            "核对每个模组在 " + target + " 上有没有对应版本",
-            inPlace ? "原地升级「" + inst.name + "」(已做检查点)" : "复制为新实例(config / 存档 / 资源包 / 光影)",
-            "安装 Minecraft " + target + " 与加载器",
-            "下载升级后的模组,跳过目标版本没有的",
+            I18nCore.Tr("核对每个模组在 {mc} 上有没有对应版本").Replace("{mc}", target),
+            inPlace ? I18nCore.Tr("原地升级「{instance}」(已做检查点)").Replace("{instance}", inst.name) : I18nCore.Tr("复制为新实例(config / 存档 / 资源包 / 光影)"),
+            I18nCore.Tr("安装 Minecraft {mc} 与加载器").Replace("{mc}", target),
+            I18nCore.Tr("下载升级后的模组,跳过目标版本没有的"),
         };
         void Show(int done)
         {
@@ -197,6 +198,7 @@ public sealed partial class ToolRunner
                 items.Add((titles[i], i < done ? "completed" : (i == done ? "in_progress" : "pending")));
             }
             PlanChanged?.Invoke(items);
+            UpgradeStage(done, inPlace); // AI2-i18n-ux:步骤行「执行中」后面带上当前阶段
         }
         Show(0);
         object? InstallGame(string mc, string loaderLabel, string instance)
@@ -212,12 +214,12 @@ public sealed partial class ToolRunner
             string taskId = Py.S(Py.Or(row.Get("task_id"), row.Get("id")));
             if (taskId.Length > 0)
             {
-                TaskStarted?.Invoke(taskId, "安装 " + mc + " → " + instance, "install_game");
+                TaskStarted?.Invoke(taskId, I18nCore.Tr("安装 {mc} → {instance}").Replace("{mc}", mc).Replace("{instance}", instance), "install_game");
             }
             return res;
         }
         PyDict result = await Task.Run(() => InstanceUpgrade.Apply(inst, args, InstallGame, step => Show(step + 1)), ct).ConfigureAwait(false);
         Show(titles.Length);
-        return result;
+        return await AfterUpgradePreflightAsync(result, ct).ConfigureAwait(false); // AI2-i18n-ux:最后一段「预检」
     }
 }

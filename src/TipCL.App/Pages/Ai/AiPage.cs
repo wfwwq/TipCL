@@ -88,6 +88,7 @@ public sealed partial class AiPage : PageBase
             TaskStarted = (taskId, label, tool) => AiUiPost.Post(this, () => AddTaskCard(taskId, label, tool, null)),
             Log = line => AiUiPost.Post(this, () => _status.Text = AiUiText.Trim(line, 48)),
             ConversationProvider = SnapshotHistory, // AI-new-features:导出诊断报告要带上对话摘要
+            ToolProgress = (tool, stage) => Dispatcher.UIThread.Post(() => ShowToolProgress(tool, stage)), // AI2-i18n-ux:长工具阶段进度
         };
         AiUiPost.Track(this); // AI2-stability:窗口关了 / Application 没了,晚到的 Agent 回调一律丢弃(见 AiUiPost)
 
@@ -238,6 +239,7 @@ public sealed partial class AiPage : PageBase
         {
             string text = s;
             var chip = U.Btn(text, BtnKind.Chip);
+            chip.Name = "AiSuggestion"; // AI2-i18n-ux:点了会真的发一轮对话(联网),界面「全点一遍」测试靠这个 Name 跳过
             chip.Margin = new Thickness(0, 0, 8, 8);
             chip.Click += (_, _) =>
             {

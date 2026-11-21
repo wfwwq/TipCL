@@ -604,7 +604,7 @@ public static class SplitRatioStore
 /// 后 SetLeft/SetRight;列定义、留白、拖拽边界一律取自 <see cref="SplitCatalog"/> 的现状声明,
 /// 页面里不散落新的魔数。
 /// </summary>
-public sealed class PageLayoutHost : Grid
+public sealed partial class PageLayoutHost : Grid
 {
 	/// <summary>现状没有留白时的分隔条默认宽度(§4.E:18px)。</summary>
 	public const double DefaultGap = 18.0;
@@ -721,6 +721,7 @@ public sealed class PageLayoutHost : Grid
 		base.Children.Add(_splitter);
 		_storedRatio = SplitRatioStore.Read(_pageId, _splitId) ?? double.NaN;
 		SyncColumns();
+		WireLiveRatio(); // AI2-i18n-ux:布局文档里的比例被别处改了(AI layout_apply / 设置页复位)→ 已打开的页面即时按新比例排
 		// [降级 D-07] WPF 覆写 OnRenderSizeChanged;Avalonia 侧订阅 SizeChanged(同一时点:拿到新宽度后)
 		SizeChanged += delegate
 		{

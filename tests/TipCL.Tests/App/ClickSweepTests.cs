@@ -64,6 +64,9 @@ public class ClickSweepTests
     private static readonly HashSet<string> SideEffectNames = new(StringComparer.Ordinal)
     {
         "McpServerSwitch",
+        // AI2-i18n-ux:AI 页空态的「点一下直接发」建议按钮会在默认内置网关下真发一轮对话;网络回包时机不定,
+        // 它的事件 Post 会落在后续用例的 ResetForUnitTests 里(DlgCloseTests 偶发红,见 progress/AI-engine-mcp.md 遗留 8)。
+        "AiSuggestion",
     };
 
     private sealed class Row
