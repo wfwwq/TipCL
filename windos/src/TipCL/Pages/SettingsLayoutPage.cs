@@ -724,6 +724,13 @@ public sealed partial class SettingsPage
 	{
 		bool custom = LayoutProfiles.IsPageCustomized(doc, entry.PageId);
 		LayoutThumbPlan plan = ThumbPlanOf(doc, entry);
+		// R35 启动页 v3:启动页的可调部分是右侧组件区(UiPrefs.LaunchZone),不再看旧版区块文档
+		if (entry.PageId == "launch")
+		{
+			string zone = PageBase.Win?.Prefs.LaunchZone ?? "";
+			custom = LaunchZone.FromJson(zone) != null && zone != LaunchZone.ToJson(LaunchZone.Defaults());
+			plan.Note = I18n.L("调整了组件");
+		}
 		Grid name = Ui.G(null, "*,Auto");
 		TextBlock title = Ui.Txt(I18n.L(entry.Label), 13.5, bold: true);
 		title.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -779,6 +786,16 @@ public sealed partial class SettingsPage
 
 	private void ResetOnePage(string pageId, string label)
 	{
+		if (pageId == "launch" && PageBase.Win != null)
+		{
+			// 组件区恢复成效果图默认(本周游戏时长 4×2 + 服务器 + 快捷入口);旧版区块文档不动
+			PageBase.Win.Prefs.LaunchZone = LaunchZone.ToJson(LaunchZone.Defaults());
+			PageBase.Win.SaveUiPrefs();
+			(PageBase.Win.PageInstance("launch") as LaunchPage)?.ZoneReload();
+			PageBase.Toast(I18n.L("「{0}」已恢复默认", label), "", ToastKind.Success);
+			RefreshLayoutView();
+			return;
+		}
 		string error = LayoutProfiles.ResetPage(pageId);
 		if (error.Length > 0)
 		{

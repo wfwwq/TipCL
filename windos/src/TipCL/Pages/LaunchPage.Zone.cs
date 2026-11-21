@@ -385,6 +385,22 @@ public sealed partial class LaunchPage
 		};
 	}
 
+	/// <summary>存档被别处改了(设置 → 布局「恢复默认」):丢掉当前组件重新读。</summary>
+	public void ZoneReload()
+	{
+		if (_zMode != 0)
+		{
+			return;
+		}
+		foreach (ZoneCard c in _zEls.Values)
+		{
+			_zCanvas.Children.Remove(c.Root);
+		}
+		_zEls.Clear();
+		_zLoaded = false;
+		ZoneEnsureLoaded();
+	}
+
 	private void ZoneEnsureLoaded()
 	{
 		if (_zLoaded)

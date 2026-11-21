@@ -272,3 +272,98 @@ foreach ($p in 'launch','multiplayer','playtime','java','library') {
 2. 用户存档里「插件」页是 `content / tabs / body` 的纵向顺序(内容在页签上面,另有一个不认识的 `body` 块),截图里插件页「已安装 / 市场」页签在空状态下面 —— 这是存档里的排列,本轮没改;在插件页右键 → 自定义布局 → 重置本页即可恢复。
 3. 拖动手感、悬停态、命中层是否挡住了某个应可点的东西(例如自建网页块)只能真机确认;离屏截图拍不到悬停 / 拖动过程。
 4. 启动页旧存档的网格呈现在用户「完成」一次编辑后才写盘;不进编辑就一直是读时推导。
+
+## 11. 启动页 v3(win-launch,2026-11-21 14:10)
+
+> 依据:用户定稿效果图 `_r35\ref\launch-v3.html`(取代 pages3.html 的启动页部分;CSS 数值照抄)+ 用户两张截图。用户追加「复刻」:一比一,不是参考。
+> 提交:`745dba3`(主体)、`2e97561`(词表 + 迁移顺序)、本节随后一次提交(设置 → 布局启动页卡片 + 报告)。没改版本号、没 push、没碰 main。
+> 全程没有弹窗口:构建 / 测试 / 截图都用 `Win32_Process.Create` + `ShowWindow=0` 隐藏启动;截图只用离屏 `--shot`,`TIPCL_HOME=C:\r35\_tmp\win-fix\home`(复制来的用户数据),真实 `%LOCALAPPDATA%\TipCL` 没碰。
+
+### 11.0 结论
+
+| 项 | 结果 |
+|---|---|
+| compact `C:\TipCL-R35\windows\TipCL.exe`(= `_r35\dist\windows\TipCL.exe`) | **5,735,424 B**(上限 5,757,264,余 21,840)· dist 里那份 SHA256 前缀 `6B373C163A9CA180`(含 11.4 的设置页改动) |
+| premium `C:\TipCL-R35\windows-premium\TipCL.exe`(= `_r35\dist\windows-premium\`) | **5,754,880 B** · SHA256 `A0C4F0AA4F8CC9D597E29739CA430F2B0A01BB1CE3CF67567AF71F48421248A2`(由 `2e97561` 编出;只差最后一处设置 → 布局「启动」卡片改动,见 11.8) |
+| 构建 | Release compact / premium 0 错误,警告仍是那 2 条 xUnit1031 |
+| 测试 | **792 过 / 0 败 / 6 跳**(798;基线 759 / 0 / 6) |
+| 体积 | 新代码约 +33 KB;为留余量把内嵌默认背景 `PremiumAssets\hero.jpg` 用质量 80 重新压缩(275,898 → 234,735 B,1600×962 不变,上面压着 45–80% 的深色渐变,肉眼看不出) |
+
+### 11.1 逐条规则 → 落地点
+
+| 效果图规则 | 落地 |
+|---|---|
+| 主区域不进布局系统:实例名、启动、联机是固定层,不能隐藏 / 拖动 / 缩放 | `LaunchPage.cs` BuildHero:**删掉** `BlockHost("launch")`(那一排排下载任务 / 游戏时长 / 便签 / 日志大卡片);根 Grid 只放背景、主区域(`.hero` 左 56、下 70、右 = 24 + 组件区宽 + 40,垂直居中)、新闻条、组件区、AI。测试 `MainAreaIsNotInTheLayoutSystem` |
+| 组件区在右侧,4 列网格:列宽 74、行高 96、间距 12;只有 2×1 / 2×2 / 4×2 | `Pages/LaunchZone.cs`(纯逻辑):`Col/Row/Gap`、`W/H/Normalize`、`Pack`(按顺序首个能放下的位置,先行后列);`LaunchPage.Zone.cs` `_zHost` 右 24、上 18(标题栏下),332×420。测试 `GridMetricsMatchMockup` `OnlyThreeSizes` `PackNeverOverlaps`(200 轮随机,不叠放) |
+| 窗口变窄减列数不缩字:4 → 2 列,4×2 换 2×2 版式,放不下的收起并提示;取代 FitBox 55% | `ColsFor`(页面宽 < 900 → 2 列)、`Eff`(窄窗口 l 按 m 摆)、`RowsFor`(页面矮时减行);溢出 → 右下「另有 N 个组件放不下，窗口变宽后自动回来」(宽窗口溢出提示「移除一个或换成小尺寸」)。启动页不再用 FitBox。测试 `ColumnsByWidth` `NarrowWindowTurnsLargeIntoMediumAndCollapsesTheRest` `RowsFollowPageHeight`;截图 `v2-narrow*.png` |
+| 松手就按顺序重排,不叠放、不留洞;吸附 / 靠拢不是开关,没有自由画布 | 拖动 = 效果图 onMove:被拖组件跟手(放大 1.03 + 阴影 + 主题色实线),其它组件 220 ms 让位,主题色 24% 底 + 1.5 虚线落点框(150 ms);`BestOrder` 选落点中心离指针最近的插入位置;松手提交顺序。没有任何吸附 / 画布开关。测试 `DragToTopLeftPutsItemFirst` `DragAtOwnPlaceKeepsOrder` |
+| 编辑态:右下「编辑组件」进入;编辑条只剩「添加组件 / 重置 / 完成」+「⋯」;提示「拖动组件换位置 · 点尺寸标签切换大小 · Ctrl Z 撤销 Ctrl Y 重做」;导入 / 导出 / 复制布局码 / 放弃这次改动收进「⋯」 | `BuildZoneBar`:白底 97%、圆角 12、内边距 8/8/8/14、阴影 0 10 30 .35;「编辑启动页」13 号 800;`.b` 30 高 / 圆角 8 / 左右 12 / 13 号;soft(主题色 12% 底 32% 描边)「＋ 添加组件」、普通「重置」、pri「完成」、30×30「⋯」;下面 12 号 72% 白提示 + 两个 kbd。「⋯」菜单 200 宽、圆角 12:导入布局… / 导出布局… / 复制布局码 / 分隔线 / 放弃这次改动。Ctrl+Z / Ctrl+Y(含 Ctrl+Shift+Z)/ Esc 挂在窗口 PreviewKeyDown(只在编辑态)。测试 `EditBarHasOnlyAddResetDoneAndMore` |
+| 编辑态主区域显示「主区域固定，不能拖动、隐藏或缩放」 | `BuildHeroLockChip`(在主区域最上面,12 号、4/10、圆角 8、14% 底 22% 描边、下 12);编辑态主区域 45% 不透明 + 整页 rgba(8,10,16,.5) 压暗;新闻条 / AI 淡出;网格空格显示 1px 18% 白虚线格(74×96、圆角 8) |
+| 点组件上的尺寸标签在 2×1 / 2×2 / 4×2 之间切换 | 组件右上 `.tools`(上 6 右 6、间距 4;22 高、圆角 8、92% 白、墨色 12 号粗体):尺寸标签 + ×。`NextSize` 跳过「看起来一样」的尺寸;放不下提示「这里放不下 4×2，先挪开或移除别的组件」;单尺寸提示「窄窗口下这个组件只有一种尺寸」。测试 `SizeTagCycles…` `SizeTagSkipsSameLooksOnNarrowWindow` `SizeTagRefuses…` `SingleSizeWidgets…` |
+| 组件库:「点『添加』放进右侧组件区，放满了会提示」 | `BuildZoneDrawer`:左侧 344 宽白底抽屉(标题栏下到底,0.28 s 滑入,阴影 12 0 40 .35);「组件库」15 号 800 + 12 号 ink3 说明 + 关闭钮;每行 `.lc`(112 / * / auto,间距 12,内边距 8,圆角 12,#f3f3f3):112×70 缩略图(背景图压 45% 暗 + 真组件等比缩到 104×62 内)、名称 13 粗 / 说明 12 ink2 / 尺寸 12 等宽 ink3、「添加」(已有 → 「已添加」灰字)。放满 → 「组件区放满了：先移除一个，或把大组件换成小尺寸」 |
+| 常态不显示区块标题;「本周游戏时长」是内容,开发命名不露 | 组件里只有效果图 `.lb` 那样的内容标签(本周游戏时长 / 生存服名字 / 便签 / 下载任务 / 游戏日志 / 最近截图 …),没有区块标题栏;自建组件显示它自己的标题 |
+| 两档圆角、五档字号:8 / 12;12 / 13 / 15 / 21 / 34 | 组件区代码里圆角只有 8、12(柱状图柱子 4 = 效果图 `.bt i`),字号只有 12 / 13 / 15 / 21 / 34;主区域:标签 12、按钮 13 / 15、标题 34、新闻 12。测试 `OnlyTwoRadiiAndFiveFontSizesInZone`(源码扫描) |
+| 常态版式:左大标题 + 标签 + 启动游戏 / 设置 / 联机,左下新闻条;右侧「本周游戏时长」4×2 带每日柱状图、「生存服」2×1、快捷入口(模组 / 截图 / 日志)2×1;右下「编辑组件」「AI Ctrl K」;半透明玻璃卡片 | 启动按钮 48 高 / 圆角 12 / 左右 28 / 15 号 800 + 实心三角 18;配置 48×48 滑杆图标;联机 48 高 / 左右 16 / 13 号 700 + wifi 图标(图标都是效果图内联 SVG 的路径);标签 12 号 3/10 圆角 8;新闻条 左 56 下 20、8/14/8/8、圆角 12、12% 底 18% 描边;「编辑组件」上 = 18 + 组件区高 + 10、28 高、圆角 8、12% 底 20% 描边、70% 不透明(悬停 100%);「AI Ctrl K」右 24 下 20、36 高、圆角 12、点了进 AI 页;组件卡片 rgba(14,18,27,.48) + 14% 白描边 + 圆角 12 + 内边距 12/14。默认组件 = 效果图 DEF(游戏时长 4×2 + 服务器 2×1 + 快捷入口 2×1),数据都是真的(见 11.3) |
+| 现有内容都映射成组件,只能三档尺寸;存档里的启动页块迁进组件区(读时推导,存档原样,编辑器提交一次才写新格式) | 组件类型 = 效果图 6 类(游戏时长 / 服务器状态 / 快捷入口 / 便签(可多张)/ 时钟 / 最近截图)+ 现有内容 2 类(下载任务 / 游戏日志)+ 用户自建组件 / 插件区块(`ref`,按原类型给尺寸)。`LoadZoneItems`:`UiPrefs.LaunchZone` 有就用;没有 → `LaunchZone.FromLegacy` 从 `ui_layout_v2.json` 的 `pages.launch.blocks` 读时推导(新闻 = 固定新闻条;隐藏的不迁;只有新闻 → 效果图默认;游戏时长 4×2 排第一,其余 2×1 → 用户那份正好放满 4×4 不溢出);旧文档一个字节不动,编辑器「完成」且有改动才写 `UiPrefs.LaunchZone`。第一张便签继续读写 `UiPrefs.Notes`。测试 `LegacyDefaultOnlyNewsGivesMockupDefaults` `LegacyUserBlocksMapToWidgetsAndFitTheGrid` `LegacyHiddenBlocksStayOut` `JsonRoundTrip` `BadInputIsRejected` `UnknownTypesAreDroppedAndIdsMadeUnique` |
+
+其他接线:设置 → 布局「启动」卡片「编辑」→ 跳到启动页直接进组件区编辑态(`LayoutShellHooks.BeginEditPage("launch")`);卡片的「已自定义 / 默认」看组件区存档,「恢复默认」= 组件区回到效果图默认(旧区块文档不动)。右键启动页空白:常态「编辑组件」/ 编辑态「完成」。切走页面时在编辑态 = 「完成」。DevShot `--shot launch --edit` / `--pop layout-drawer` 走组件区。
+
+### 11.2 截图对照(离屏 1000×600 / 780×600,`D:\项目\TipCL\_r35\shots\win-launch\`)
+
+文件:`v2-wide.png` `v2-wide-edit.png` `v2-narrow.png` `v2-narrow-edit.png` `v2-wide-lib.png`(v1-* 是迁移顺序调整前一版);效果图截图缩到同尺寸 `mock-wide-1000x600.png` 放在 workspace `artifacts/r35launch/`。看了 4 张拼图(效果图 + v1 宽常态;v1 宽编辑 / 组件库 / 窄常态 / 窄编辑;v2 宽常态 + 下载编辑 + 设置 → 布局)。
+
+| 区域 | 效果图(1000×600) | 新版 | 差异 / 处理 |
+|---|---|---|---|
+| 组件区 | 右 24、标题栏下 18、332×420;顶部 4×2 本周游戏时长 + 柱状图,下排 2×1 + 2×1 | 同位置同尺寸;顶部 4×2「本周游戏时长」+ 7 根柱(今天主题色、未来虚线) | 一致。用户存档迁移后下面是下载任务 / 便签 / 游戏日志 / 自建「游戏时长」(用户自己的块),不是生存服 / 快捷入口 —— 这是规则要求的迁移;点「重置」或设置 → 布局「恢复默认」就是效果图那三块 |
+| 组件卡片 | 48% 深色玻璃、14% 描边、圆角 12、12/14 内边距 | 同 | WPF 没有 backdrop-filter 模糊,只有半透明(和现有新闻条同样处理) |
+| 主区域 | 左 56;就绪行 12 号;标题 34 号 800;标签;按钮行 | 同 | 标题位置随内容高度垂直居中:没装版本时多一行「这个实例还没有版本…」状态行,整块上移约 10 px(效果图没有这行) |
+| 启动按钮 | 主色实底白字 | 同(截图里这个实例没装版本,按钮是禁用的半透明态) | 数据差异 |
+| 新闻条 / 编辑组件 / AI | 左下 / 组件区下 10 / 右下 | 同位置同尺寸 | 一致 |
+| 标题栏 | 无 AI 药丸,头像 + 名字 | 有 AI 药丸 + 主题切换(全局壳,不属于启动页) | 没改:标题栏是所有页面共用的壳,AI 药丸可在 设置 → 布局 → 标题栏 隐藏 |
+| 编辑态 | 压暗、主区域 45%、锁提示、编辑条左上、虚线组件 + 尺寸标签 | 同 | 一致;WPF 没有 `filter: saturate(.5)`,用压暗近似 |
+| 组件库 | 344 白抽屉 + 缩略图行 | 同 | 列表超出时竖滚动条占约 10 px,「游戏时长」那行尺寸「2×2 · 4×2 · 2×1」末尾被截 |
+| 窄窗口 780 | 2 列,4×2 → 2×2,放不下提示 | 2 列,游戏时长 2×2,「另有 2 个组件放不下，窗口变宽后自动回来」 | 一致 |
+
+### 11.3 真实数据替换示例数据
+
+- 本周游戏时长:`Playtime.GetAllPlaytime()` 的会话按本地日期归到周一…周日(`LaunchZone.Week`),大数字 < 1 小时按分钟;「比上周多 / 少 …」「玩得最多：<实例>」。测试 `WeekBucketsByLocalDayStartingMonday`。
+- 服务器:当前实例 `list_servers` 第一个;新增 `ServerPing`(Java 版 Server List Ping,2.5 s 超时)取在线 / 上限 / 延迟 / 玩家名首字;「加入服务器」= 填直连地址后走正常启动;没有服务器 → 「还没有服务器」/「添加服务器」(去服务器页)。测试 `ServerPingParsesStatusJson`。
+- 快捷入口:当前实例(版本隔离时优先 `versions/<版本>/`)的 mods / screenshots / logs / saves,资源管理器打开。
+- 最近截图:两个 screenshots 目录按时间倒序,缩略图走 `WebpFallback`(Win7 守卫)。
+- 下载任务 / 游戏日志:`TaskStore` / 启动输出(日志 0.5 s 合并刷新)。
+
+### 11.4 layout3.html 对照(下载页编辑态、设置 → 布局)
+
+截图 `k1-download-edit.png`(1000×720)、`k1-settings-layout.png`(1000×1100)。
+- 下载页编辑态:编辑条「编辑「下载」页 / 列表·网格 / 提示 / 撤销·重做图标 / ＋ 添加 / 重置本页 / 完成 / ⋯」与 layout3 `.ebar` 结构一致,位于内容区顶部(win-fix2 已修)。本轮没有发现需要改的差异。
+- 设置 → 布局:外观(区块间距 紧凑 / 标准 / 宽松)、导航(顶部页签拖动 + 眼睛、恢复默认;标题栏 AI 按钮 / 主题切换 / 账号)、页面缩略图卡片 3 列 + 已自定义 / 默认 + 编辑 / 恢复默认、「只有一块内容不提供编辑」+「显示全部 N 个页面」、方案(导入… / 导出整套布局… / 存为新方案)、高级,结构与 layout3 secB 一致。
+- 改了一处:「启动」卡片原来看的是旧区块文档(显示「已自定义 · 调整了顺序」,「恢复默认」会去改已经不用的旧文档),现在看组件区存档,「恢复默认」恢复组件区。
+- 「显示全部 15 个页面」(layout3 写 10)是实际页面数,不改。
+
+### 11.5 删掉的断言(都针对已删的启动页 BlockHost)
+
+- `PageDefaultsV3Tests.DefaultPages` 去掉 `launch` 一行(影响 5 个 Theory:`WithPageEntryTheHostFollowsTheDocumentExactly` / `DefaultCoversExactlyThePageBlocksAndIsWiredIntoTheHost` / `DefaultSurvivesAStoreRoundTrip` / `WithoutPageEntryTheHostRendersTheNewDefault` / `PagesWithV3DefaultsStillOfferTheMenu` 的 launch 用例)。
+- `PageDefaultsV3Tests.HostTableRowMatchesSource` 去掉 `[InlineData("launch", …)]`。
+- 删 `PageDefaultsV3Tests.LaunchHiddenBlocksPairUpWhenShownAndLogTakesTheWholeRow`(解析 LaunchPage.cs 里的 BlockSpec 列表)。
+- `R35WinFix2Tests.LaunchDefaultsStillHideSmallCards`:删源码部分(`new BlockSpec { Id = … DefaultVisible = false` 与 `LaunchMiniCard(...)` 断言),`PageDefaultLayouts.LaunchContent()` 的默认值断言保留。
+- `R35WinIntTests.CrossPackageWiringIsInPlace`:删 `_blocks.Editor.EditingChanged += OnLayoutEditingChanged;` 一行。
+- 新增 `R35LaunchV3Tests`(40 例);净变化 759 → 792。
+
+### 11.6 词表
+
+zh_CN / en 成对 +62 条(编辑组件、编辑启动页、添加组件、导入布局… / 导出布局… / 复制布局码 / 放弃这次改动、组件库说明、主区域固定提示、本周游戏时长、比上周多 / 少、服务器在线、各组件名称与说明、提示语等),`.json.gz` 用 `tools/pack-core-resources.ps1` 重新打包。废弃:「主区域固定，不能拖动或隐藏」(旧右上角提示)不再使用,key 保留。
+
+### 11.7 没做到 / 待真机
+
+1. 背景模糊(`backdrop-filter: blur`)和主区域去饱和(`saturate(.5)`)WPF 做不到,用半透明 / 压暗近似。
+2. 拖动手感、悬停、Ctrl+Z / Ctrl+Y、导入导出对话框、服务器延迟只能真机看;离屏截图拍不到拖动过程。
+3. 标题栏的 AI 药丸是全局壳,效果图启动页上没有;没删(其他页要用),可在 设置 → 布局 → 标题栏 关掉。
+4. 设置 → 布局「启动」卡片的缩略图仍按旧区块文档画(示意图),没改成组件区缩略图。
+5. 旧的 `LayoutV3Compat.LaunchLegacyStackAsGrid` 与 `PageDefaultLayouts.LaunchContent()` 已不被启动页使用,为了不动别的测试先留着。
+
+### 11.8 停在哪一步(14:12 本机命令桥断开,之后 15 分钟没恢复)
+
+- 已完成并提交:`745dba3`、`2e97561`。已编过、测过(792 / 0 / 6)但**还没提交**:`SettingsLayoutPage.cs`(启动卡片看组件区)、`LaunchPage.Zone.cs`(`ZoneReload`)、`locales/{zh_CN,en}.json(.gz)`(+「调整了组件」)、本报告 §11。提交信息已写好:`_r35\logs\win-launch-msg3.txt`。补提交:
+  `git -C 'D:\项目\TipCL\_r35\win-int' add -A windos; git -C 'D:\项目\TipCL\_r35\win-int' -c user.name=TipCL-agent -c user.email=agent@local commit -F 'D:\项目\TipCL\_r35\logs\win-launch-msg3.txt'`
+- `_r35\dist\windows\TipCL.exe` 已是最新 compact(5,735,424)。`C:\TipCL-R35\windows\TipCL.exe` 与它同一条命令先复制,桥断前应已完成(没能复核哈希)。
+- premium:最新代码的 premium 构建在桥断时刚启动,结果没能确认;`C:\TipCL-R35\windows-premium\` 与 `dist\windows-premium\` 里是 `2e97561` 的 premium(功能齐全,只差设置页启动卡片)。补:`win-fix-go.ps1 -Tag P7 -Mode premium -NoSync` 后把 `C:\r35\win-intb\windos\src\TipCL\bin\Release\net48\TipCL.exe` 复制到这两处。
