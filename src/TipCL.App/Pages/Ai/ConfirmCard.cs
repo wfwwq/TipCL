@@ -257,6 +257,8 @@ internal sealed class ConfirmCard : Border
         "fs_write" => false,
         // AI-integration:AI-new-features 的两个高危工具(删服务器 / 升级实例)同样不给;执行器里 ToolRunner.AllowsAlways 再守一道
         "remove_server" or "apply_instance_upgrade" => false,
+        // AI2-modpack:导出整合包 / 批量装模组同样不给;执行器里 ToolRunner.AllowsAlways 再守一道
+        "export_modpack" or "install_mods_batch" => false,
         _ => true,
     };
 }

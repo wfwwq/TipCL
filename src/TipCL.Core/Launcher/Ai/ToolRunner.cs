@@ -617,6 +617,12 @@ public sealed partial class ToolRunner
             case "recommend_shaders":
             case "export_diagnostic_report":
                 return await ExecuteNewFeaturesAsync(call, args, ct).ConfigureAwait(false);
+            // ── AI2-modpack:整合包制作(实现见 ToolRunner.Modpack.cs)──
+            case "check_modpack_distribution":
+            case "export_modpack":
+            case "plan_modpack":
+            case "install_mods_batch":
+                return await ExecuteModpackAsync(call, args, ct).ConfigureAwait(false);
 
             default:
                 // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版(执行体见 ToolRunner.AcctLayoutMp.cs)

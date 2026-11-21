@@ -32,6 +32,8 @@ public sealed partial class ToolRunner
         "remove_server" or "apply_instance_upgrade" => false,
         // AI-integration:fs_write 也在执行器里守一道(确认卡 ConfirmCard.AllowAlways 已不给;restore_save_backup 由 NeverAlwaysAllow 守)
         "fs_write" => false,
+        // AI2-modpack:导出整合包(涉及分发许可,每次都要用户看清单)/ 批量装模组(整批只确认一次,但每批都要确认)
+        "export_modpack" or "install_mods_batch" => false,
         _ => true,
     };
 
