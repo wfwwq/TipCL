@@ -97,6 +97,7 @@ public sealed partial class SettingsPage
             };
             // 视图一重建就顺手把标题栏对齐一次(构造期还没有 TopLevel ⇒ 空操作)
             RefreshShell();
+            LayoutLiveOnBuilt(host); // AI2-i18n-ux:布局文档被别处(AI layout_apply 等)改了时自动刷新本视图
             return host;
         }
         finally
