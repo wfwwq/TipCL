@@ -1083,7 +1083,18 @@ public static class Utils
 
 	public static ZipArchive OpenZip(string path, ZipArchiveMode mode = ZipArchiveMode.Read)
 	{
-		return new ZipArchive((mode == ZipArchiveMode.Read) ? new FileStream(AbsPath(path), FileMode.Open, FileAccess.Read, FileShare.Read) : new FileStream(AbsPath(path), (mode == ZipArchiveMode.Create) ? FileMode.Create : FileMode.Open, FileAccess.ReadWrite), mode, leaveOpen: false, Cp437);
+		// AI2-i18n-ux:包不是合法 zip 时 ZipArchive 构造会抛,原来那个 FileStream 就泄漏到 GC 为止 ——
+		// Windows 上这期间文件删不掉(冲突扫描碰到坏 jar 后,删模组 / 检查点回滚会失败)。抛之前先关掉流。
+		FileStream stream = (mode == ZipArchiveMode.Read) ? new FileStream(AbsPath(path), FileMode.Open, FileAccess.Read, FileShare.Read) : new FileStream(AbsPath(path), (mode == ZipArchiveMode.Create) ? FileMode.Create : FileMode.Open, FileAccess.ReadWrite);
+		try
+		{
+			return new ZipArchive(stream, mode, leaveOpen: false, Cp437);
+		}
+		catch
+		{
+			stream.Dispose();
+			throw;
+		}
 	}
 
 	public static string ZipEntryName(ZipArchiveEntry e)
