@@ -106,6 +106,7 @@ public static class Tools
                 cached.AddRange(PerfSavesTools.Schemas()); // AI-perf-saves:卡顿优化 + 存档备份的 7 个工具
                 // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版 7 条(表数据在 AcctLayoutMpTools)
                 cached.AddRange(AcctLayoutMpTools.Schemas());
+                cached.AddRange(ContentTools.Schemas()); // AI2-content:数据包 / 资源包 / KubeJS / 加载检查 4 条
                 _schemas = cached;
             }
             return cached;
@@ -224,6 +225,10 @@ public static class Tools
         if (AcctLayoutMpTools.Label(key, args) is { } extraLabel)
         {
             return extraLabel;
+        }
+        if (ContentPreview.Label(key, args) is { } contentLabel)
+        {
+            return contentLabel; // AI2-content:标签走词表(I18nCore.Tr)
         }
         if (args != null && Formats.TryGetValue(key, out string? fmt))
         {
@@ -784,6 +789,11 @@ public static class Tools
             // AI-logs-fs:fs_write 的目标按工具自己的路径守卫解析(与执行、预览是同一份真实路径)
             case "fs_write":
                 return AiFsTools.AffectedPaths(args, instance);
+            // AI2-content:只快照计划里真会变的文件(与执行、预览同一份计划,见 ContentTools.AffectedPaths)
+            case "create_datapack":
+            case "create_resourcepack":
+            case "write_kubejs_script":
+                return ContentTools.AffectedPaths(name, args, instance);
             default:
                 return new List<string>();
         }

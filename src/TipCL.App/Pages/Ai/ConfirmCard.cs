@@ -257,6 +257,8 @@ internal sealed class ConfirmCard : Border
         "fs_write" => false,
         // AI-integration:AI-new-features 的两个高危工具(删服务器 / 升级实例)同样不给;执行器里 ToolRunner.AllowsAlways 再守一道
         "remove_server" or "apply_instance_upgrade" => false,
+        // AI2-content:KubeJS 脚本是高风险写(在游戏进程里运行),每次都问;执行器 ToolRunner.AllowsAlways 再守一道
+        "write_kubejs_script" => false,
         _ => true,
     };
 }

@@ -118,6 +118,11 @@ public static class ToolMeta
         new("export_diagnostic_report", false, "write_local", "medium", false),
         new("apply_instance_upgrade", false, "write_local", "high", true),
         new("remove_server", false, "delete", "high", false),
+        // AI2-content:数据包 / 资源包 / KubeJS 脚本(脚本在游戏进程里运行,记 high,不给「本对话都允许」)/ 只读的加载错误检查
+        new("create_datapack", false, "write_local", "medium", false),
+        new("create_resourcepack", false, "write_local", "medium", false),
+        new("write_kubejs_script", false, "write_local", "high", false),
+        new("validate_content", true, "read", "low", false),
     };
 
     public static Dictionary<string, ToolMetaInfo> Map

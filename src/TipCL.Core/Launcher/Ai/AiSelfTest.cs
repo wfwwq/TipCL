@@ -200,6 +200,8 @@ public static class AiSelfTest
         Hooks.HOOKS_DIR = savedHooksDir;
         // 14. AI-new-features:升级 / 预检 / 服务器 / 光影推荐 / 诊断报告(纯逻辑)
         NewFeaturesSelfTest.Verify(Check);
+        // 15. AI2-content:数据包 / 资源包 / KubeJS(格式对照、单复数目录、危险用法拦截,纯逻辑,见 ContentTools.SelfCheck)
+        ContentTools.SelfCheck((name, ok) => Check(name, ok));
 
         return result;
     }

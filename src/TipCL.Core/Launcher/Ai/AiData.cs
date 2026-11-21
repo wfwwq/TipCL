@@ -81,7 +81,14 @@ public static class AiData
         "- 用户问「能不能启动 / 启动前帮我检查」或收到启动页预检结果:先 preflight_check,按 error → warn 的顺序修,修完再跑一次确认。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         "- 服务器:list_servers 看列表,ping_server 查延迟 / 在线人数 / 版本;add_server / remove_server 会改游戏内「多人游戏」列表。ping 不通时说清是超时还是连不上,不要猜。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         "- 问「我的电脑适合什么光影 / 资源包」:recommend_shaders,先说硬件档位和依据,再用 ask_user 让用户选;没有 Iris / Oculus / OptiFine 时先说要装哪个。档位是按名称推断的,要如实说。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
-        "- 崩溃排查告一段落、用户想发给别人求助时:export_diagnostic_report 导出报告(自动打码账号令牌与用户名),告诉用户文件位置。"; // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 崩溃排查告一段落、用户想发给别人求助时:export_diagnostic_report 导出报告(自动打码账号令牌与用户名),告诉用户文件位置。" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        // AI2-content:数据包 / 资源包 / KubeJS 脚本的使用指引(Windows 版没有对应段落)
+        "\n\n# 数据包 / 资源包 / KubeJS 脚本\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 改配方、战利品、进度、函数:优先 create_datapack 写数据包(写在某个存档的 datapacks 下);只有实例装了 KubeJS、又需要动态逻辑(按条件改配方、监听事件)时才用 write_kubejs_script。\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 改物品名 / 翻译、方块模型、换贴图:create_resourcepack;贴图只能用用户附带的 png(消息末尾给出的本地路径),不要自己生成图片。\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 工具说 MC 版本推断不出或不在对照表里时,问用户确认版本,不要自己编格式号;已有同名包要改时传 update=true。校验报错就按报错改内容再试。\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 写完提醒用户:数据包在游戏里 /reload,资源包按 F3+T,服务端脚本 /reload、启动脚本要重启游戏;用户说没生效时用 validate_content 查加载报错。\n" + // i18n:ignore(AI2-content:给模型看的提示词)
+        "- 不要用 fs_write 写脚本或数据包。"; // i18n:ignore(AI2-content:给模型看的提示词)
 
     /// <summary>把 `__LANG_RULE__` 换成当前语言的规矩(照 Windows 版 BackendApi 的取用方式)。</summary>
     public static string SystemPrompt(string? langRule = null)
@@ -129,6 +136,13 @@ public static class AiData
         (new[] { "服务器", "server", "ping", "延迟", "多人游戏", "在线人数" }, new[] { "list_servers", "add_server", "remove_server", "ping_server" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         (new[] { "光影", "shader", "资源包", "材质", "适合什么", "配置低", "显卡" }, new[] { "recommend_shaders" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         (new[] { "诊断报告", "导出报告", "导出日志", "发给别人", "求助", "report" }, new[] { "export_diagnostic_report" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        // AI2-content:数据包 / 资源包 / KubeJS / 加载错误
+        (new[] { "数据包", "datapack", "配方", "合成表", "recipe", "战利品", "掉落物", "loot", "进度", "成就", "advancement", "mcfunction", "函数文件" }, // i18n:ignore(AI2-content:关键词)
+            new[] { "create_datapack", "validate_content", "list_saves" }),
+        (new[] { "资源包", "材质", "贴图", "语言文件", "翻译", "改名字", "方块模型", "resourcepack", "texture" }, // i18n:ignore(AI2-content:关键词)
+            new[] { "create_resourcepack", "validate_content" }),
+        (new[] { "kubejs", "KubeJS", "Kubejs", "脚本" }, new[] { "write_kubejs_script", "create_datapack", "validate_content" }), // i18n:ignore(AI2-content:关键词)
+        (new[] { "没生效", "不生效", "加载失败", "加载错误", "/reload", "F3+T", "Couldn't parse", "Failed to load" }, new[] { "validate_content" }), // i18n:ignore(AI2-content:关键词)
     };
 
     /// <summary>「用户在下命令」而不是在提问(用于决定是否带上写操作工具)。</summary>

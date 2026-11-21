@@ -32,6 +32,8 @@ public sealed partial class ToolRunner
         "remove_server" or "apply_instance_upgrade" => false,
         // AI-integration:fs_write 也在执行器里守一道(确认卡 ConfirmCard.AllowAlways 已不给;restore_save_backup 由 NeverAlwaysAllow 守)
         "fs_write" => false,
+        // AI2-content:KubeJS 脚本在游戏进程里运行(高风险),执行器这里也守一道(确认卡 ConfirmCard.AllowAlways 同样不给)
+        "write_kubejs_script" => false,
         _ => true,
     };
 

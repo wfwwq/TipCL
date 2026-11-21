@@ -617,6 +617,12 @@ public sealed partial class ToolRunner
             case "recommend_shaders":
             case "export_diagnostic_report":
                 return await ExecuteNewFeaturesAsync(call, args, ct).ConfigureAwait(false);
+            // ── AI2-content:数据包 / 资源包 / KubeJS 脚本 / 内容加载检查(实现见 ToolRunner.Content.cs 与 Content/ContentTools.cs)──
+            case "create_datapack":
+            case "create_resourcepack":
+            case "write_kubejs_script":
+            case "validate_content":
+                return RunContent(call.name, args);
 
             default:
                 // AI-acct-layout-mp:账号 / 皮肤 / 联机 / 排版(执行体见 ToolRunner.AcctLayoutMp.cs)

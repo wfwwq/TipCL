@@ -113,6 +113,11 @@ public static class Preview
         {
             return AcctLayoutMpTools.ChangePreview(name, args);
         }
+        // AI2-content:数据包 / 资源包 / KubeJS 的逐文件 diff(与执行同一份计划,见 ContentPreview)
+        if (name is "create_datapack" or "create_resourcepack" or "write_kubejs_script")
+        {
+            return ContentPreview.ChangePreview(name, args, instance);
+        }
         var lines = new List<string>();
         switch (name)
         {
