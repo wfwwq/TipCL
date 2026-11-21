@@ -88,6 +88,7 @@ public sealed partial class AiPage : PageBase
             TaskStarted = (taskId, label, tool) => Dispatcher.UIThread.Post(() => AddTaskCard(taskId, label, tool, null)),
             Log = line => Dispatcher.UIThread.Post(() => _status.Text = AiUiText.Trim(line, 48)),
             ConversationProvider = SnapshotHistory, // AI-new-features:导出诊断报告要带上对话摘要
+            ToolProgress = (tool, stage) => Dispatcher.UIThread.Post(() => ShowToolProgress(tool, stage)), // AI2-i18n-ux:长工具阶段进度
         };
 
         var permBtn = U.Btn(I18nCore.Tr("权限"), BtnKind.Chip, (_, _) => OpenPermissionPanel(), "Shield");
