@@ -9,7 +9,8 @@
 // 诊断(Crash.AnalyzeInstance,与 diagnose_launch 同一个 Core 函数)。
 //
 // 测试里绝不真启动游戏:驱动是 ITestLaunchDriver 注入点(ModDevHost.LaunchDriverFactory),
-// 单测用假驱动模拟进程与日志;默认驱动 BackendLaunchDriver 走 IApi 的 launch_game / stop_game。
+// 单测用假驱动模拟进程与日志;默认驱动 BackendLaunchDriver 走 IApi 的 launch_game,关游戏只关自己拉起的进程(见 LaunchedGames.cs)。
+// AI3-moddev:特征行按加载器 × 版本段取自 ReadyMarkers.Table;结果里带 game_pid / stop_result。
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -36,6 +37,9 @@ public sealed class TestLaunchProbe
 
     /// <summary>结束时的说明(启动任务的状态 / 失败原因)。</summary>
     public string Message = "";
+
+    /// <summary>AI3-moddev:这次启动拉起的游戏进程 PID(还没起来 / 不知道 = 0)。</summary>
+    public long Pid;
 }
 
 /// <summary>run_test_launch 的启动驱动(测试注入假的;产品默认 <see cref="BackendLaunchDriver"/>)。</summary>
@@ -47,14 +51,23 @@ public interface ITestLaunchDriver
     /// <summary>读一次当前状态。</summary>
     TestLaunchProbe Probe(string handle);
 
-    /// <summary>关掉游戏进程。</summary>
+    /// <summary>关掉游戏进程(只关这次启动自己拉起的那个)。</summary>
     Task StopAsync(string handle);
+
+    /// <summary>AI3-moddev:上一次 StopAsync 实际做了什么(stopped / already_exited / not_tracked …;假驱动可不实现)。</summary>
+    string DescribeStop(string handle) => "";
 }
 
-/// <summary>默认驱动:IApi 的 launch_game(返回 task_id)/ stop_game,状态读 HostTaskProbe(启动器任务表)。</summary>
+/// <summary>
+/// 默认驱动:IApi 的 launch_game(返回 task_id),状态读 HostTaskProbe(启动器任务表)+ LaunchedGames(进程登记表)。
+/// AI3-moddev:关游戏不再调无参的 stop_game(它关的是启动器记住的「当前游戏」,多开时可能是用户自己那一局),
+/// 而是① 取消这次的启动任务(游戏进程还没起来时就不会再起);② 只关 LaunchedGames 里登记在这个 task_id 下的进程。
+/// 登记表里没有就什么都不杀。
+/// </summary>
 public sealed class BackendLaunchDriver : ITestLaunchDriver
 {
     private readonly ToolRunner.IBackend _api;
+    private readonly Dictionary<string, string> _stops = new(StringComparer.Ordinal);
 
     public BackendLaunchDriver(ToolRunner.IBackend api) => _api = api;
 
@@ -71,10 +84,18 @@ public sealed class BackendLaunchDriver : ITestLaunchDriver
 
     public TestLaunchProbe Probe(string handle)
     {
+        LaunchedGames.Entry? game = LaunchedGames.Get(handle);
+        long pid = game?.Proc.Pid ?? 0;
         PyDict? row = ModDevHost.HostTaskProbe?.Invoke(handle);
         if (row == null)
         {
-            // 没有任务表可读(无界面宿主):只能看进程在不在
+            if (game != null)
+            {
+                // 没有任务表可读,但登记表里有这次拉起的进程:按它的死活判断
+                bool exited = game.Proc.HasExited;
+                return new TestLaunchProbe { Exited = exited, Success = exited ? true : null, Message = exited ? "exited" : "running", Pid = pid };
+            }
+            // 没有任务表可读(无界面宿主):只能看进程在不在(只用来显示,不用来关进程)
             bool running = false;
             try
             {
@@ -92,17 +113,34 @@ public sealed class BackendLaunchDriver : ITestLaunchDriver
             Exited = finished,
             Success = finished ? Py.Truthy(row.Get("success")) : null,
             Message = Py.S(row.Get("status")),
+            Pid = pid,
         };
     }
 
     public async Task StopAsync(string handle)
     {
+        // ① 先取消启动任务:游戏进程还没起来(还在补文件 / 下 Java)时就不会再起;已经起来的,LaunchCore 等它退出后记「已取消」
+        //   (而不是把被杀当成崩溃弹崩溃窗)
         try
         {
-            await _api.CallAsync<object>("stop_game").ConfigureAwait(false);
+            await _api.CallAsync<object>("cancel_task", new { id = handle }).ConfigureAwait(false);
         }
         catch (Exception)
         {
+        }
+        // ② 只关登记在这个 task_id 下的进程;没有登记就不关(绝不退回到「关当前游戏」)
+        string r = LaunchedGames.StopTask(handle);
+        lock (_stops)
+        {
+            _stops[handle] = r;
+        }
+    }
+
+    public string DescribeStop(string handle)
+    {
+        lock (_stops)
+        {
+            return _stops.TryGetValue(handle, out string? r) ? r : "";
         }
     }
 }
@@ -111,14 +149,10 @@ public sealed class BackendLaunchDriver : ITestLaunchDriver
 public static class TestLaunch
 {
     /// <summary>
-    /// 「进入主菜单」的日志特征行(子串匹配,任一命中即算)。默认取 1.13+ 原版在加载完资源、显示标题画面时
-    /// 打出的那行;老版本(1.12 及以前)是 OpenAL initialized。调用方可用 ready_pattern(正则)覆盖。
+    /// 「进入主菜单」的全部日志特征行文字(子串匹配)。AI3-moddev:按加载器 × 版本段的可配置表在
+    /// <see cref="ReadyMarkers.Table"/>(每条写了来源);监视循环按实例取适用的几条,调用方可用 ready_pattern(正则)覆盖。
     /// </summary>
-    public static readonly string[] MainMenuMarkers =
-    {
-        "Sound engine started",
-        "OpenAL initialized",
-    };
+    public static readonly string[] MainMenuMarkers = ReadyMarkers.AllTexts();
 
     /// <summary>一出现就判崩溃的特征行(进程可能还没退,先判定再关)。</summary>
     public static readonly string[] CrashMarkers =
@@ -197,6 +231,8 @@ public static class TestLaunch
         }
         DateTime startedUtc = DateTime.UtcNow;
         var clock = Stopwatch.StartNew();
+        List<ReadyMarker> markers = ReadyMarkers.For(SafeLoader(inst), SafeMc(inst));
+        long pid = 0;
         string prevDefault = Py.S(Config.CONFIG.Get("default_instance", ""));
         task?.SetStep("启动 " + inst.name + " / " + version, 5);
         string handle;
@@ -210,7 +246,7 @@ public static class TestLaunch
         }
         catch (Exception ex)
         {
-            return Finish(inst, version, "launch_failed", false, clock, "", "", ex.Message, "", startedUtc, false, "");
+            return Finish(inst, version, "launch_failed", false, clock, "", "", ex.Message, "", startedUtc, false, "", markers, 0, "");
         }
         task?.Log("启动任务: " + handle);
         task?.SetStep("等待进入主菜单(最长 " + timeout + " 秒)", 10);
@@ -226,8 +262,12 @@ public static class TestLaunch
             {
                 ct.ThrowIfCancellationRequested();
                 TestLaunchProbe p = SafeProbe(driver, handle);
+                if (p.Pid > 0)
+                {
+                    pid = p.Pid;
+                }
                 log = Merge(p.Log, FileLog(inst, version, startedUtc));
-                string hit = FindReady(log, ready);
+                string hit = FindReady(log, ready, markers);
                 if (hit.Length > 0)
                 {
                     outcome = "ready";
@@ -262,9 +302,13 @@ public static class TestLaunch
         {
             // 无论怎么结束(含取消)都把游戏关掉:测试启动不留后台进程
             TestLaunchProbe last = SafeProbe(driver, handle);
+            if (last.Pid > 0)
+            {
+                pid = last.Pid;
+            }
             if (!last.Exited)
             {
-                task?.Log("关闭游戏进程");
+                task?.Log(pid > 0 ? "关闭本次拉起的游戏进程(PID " + pid + ")" : "关闭本次拉起的游戏进程");
                 stopped = true;
                 try
                 {
@@ -299,7 +343,43 @@ public static class TestLaunch
             exitMessage = final.Message;
         }
         task?.SetStep(outcome == "ready" ? "已进入主菜单,游戏已关闭" : "结束:" + outcome, 95);
-        return Finish(inst, version, outcome, outcome == "ready", clock, log, marker, exitMessage, handle, startedUtc, stopped, ready?.ToString() ?? "");
+        string stopResult = "";
+        try
+        {
+            stopResult = stopped ? driver.DescribeStop(handle) ?? "" : "";
+        }
+        catch (Exception)
+        {
+        }
+        if (final.Pid > 0)
+        {
+            pid = final.Pid;
+        }
+        return Finish(inst, version, outcome, outcome == "ready", clock, log, marker, exitMessage, handle, startedUtc, stopped, ready?.ToString() ?? "", markers, pid, stopResult);
+    }
+
+    private static string SafeLoader(Instance inst)
+    {
+        try
+        {
+            return ModDevOps.InstanceLoader(inst);
+        }
+        catch (Exception)
+        {
+            return "";
+        }
+    }
+
+    private static string SafeMc(Instance inst)
+    {
+        try
+        {
+            return ModDevOps.InstanceMc(inst);
+        }
+        catch (Exception)
+        {
+            return "";
+        }
     }
 
     private static TestLaunchProbe SafeProbe(ITestLaunchDriver driver, string handle)
@@ -350,21 +430,18 @@ public static class TestLaunch
         }
     }
 
-    public static string FindReady(string log, Regex? ready)
+    /// <summary>用全部特征行找(不分加载器 / 版本)。</summary>
+    public static string FindReady(string log, Regex? ready) => FindReady(log, ready, ReadyMarkers.Table);
+
+    /// <summary>ready_pattern 优先;否则在给定的特征行里找第一条命中的,返回命中的文字(没命中为空)。</summary>
+    public static string FindReady(string log, Regex? ready, IEnumerable<ReadyMarker> markers)
     {
         if (ready != null)
         {
             Match m = ready.Match(log ?? "");
             return m.Success ? m.Value : "";
         }
-        foreach (string mk in MainMenuMarkers)
-        {
-            if ((log ?? "").Contains(mk, StringComparison.Ordinal))
-            {
-                return mk;
-            }
-        }
-        return "";
+        return ReadyMarkers.Find(log ?? "", markers)?.Text ?? "";
     }
 
     public static string FindCrash(string log)
@@ -479,7 +556,7 @@ public static class TestLaunch
     }
 
     private static PyDict Finish(Instance inst, string version, string outcome, bool success, Stopwatch clock, string log, string marker,
-        string exitMessage, string handle, DateTime startedUtc, bool stopped, string readyPattern)
+        string exitMessage, string handle, DateTime startedUtc, bool stopped, string readyPattern, List<ReadyMarker> markers, long pid, string stopResult)
     {
         var result = PyDict.Of(
             "ok", success,
@@ -490,9 +567,17 @@ public static class TestLaunch
             "elapsed_s", Math.Round(clock.Elapsed.TotalSeconds, 1),
             "launch_task_id", handle,
             "marker", marker,
-            "ready_markers", readyPattern.Length > 0 ? new List<object> { readyPattern } : MainMenuMarkers.Cast<object>().ToList(),
+            "ready_markers", readyPattern.Length > 0 ? new List<object> { readyPattern } : markers.Select(m => (object)m.Text).Distinct().ToList(),
             "game_stopped_by_tipcl", stopped,
             "log_excerpt", KeyLines(log).Cast<object>().ToList());
+        if (pid > 0)
+        {
+            result["game_pid"] = pid;
+        }
+        if (stopResult.Length > 0)
+        {
+            result["stop_result"] = stopResult;
+        }
         if (exitMessage.Length > 0)
         {
             result["exit_message"] = exitMessage;

@@ -185,12 +185,19 @@ public static class ModDevOps
             t.SetStep("安装依赖 " + slug, 5 + (int)(90.0 * (i + 1) / steps));
             try
             {
-                string file = ModDevHost.InstallDependency(inst, slug, mc, loader, line => t.Log(line), ct);
-                depRows.Add(PyDict.Of("slug", slug, "ok", true, "file", file));
+                PyDict dep = ModDevHost.InstallDependency(inst, slug, mc, loader, line => t.Log(line), ct);
+                depRows.Add(PyDict.Of("slug", slug, "ok", true, "file", Py.S(dep.Get("file")), "source", Py.S(dep.Get("source")),
+                    "tried", Py.ListOr(dep.Get("tried"))));
             }
             catch (OperationCanceledException)
             {
                 throw;
+            }
+            catch (DependencyInstallException ex)
+            {
+                failed.Add(slug);
+                t.Log("依赖 " + slug + " 安装失败: " + ex.Message);
+                depRows.Add(PyDict.Of("slug", slug, "ok", false, "error", ex.Message, "tried", ex.Tried));
             }
             catch (Exception ex)
             {
@@ -208,7 +215,7 @@ public static class ModDevOps
             "dependencies", depRows,
             "message", ok
                 ? "测试实例已就绪:" + inst.name + " / " + versionId
-                : "游戏本体已装好,但这些依赖没装上: " + string.Join(", ", failed) + "(可以把依赖 jar 下载到本地后用 install_local_mod 装)");
+                : "游戏本体已装好,但这些依赖没装上: " + string.Join(", ", failed) + "(每个依赖试过哪些来源见 dependencies[].tried,默认先 Modrinth 后 CurseForge;可以把依赖 jar 下载到本地后用 install_local_mod 装)");
     }
 
     /// <summary>create_test_instance 将要新建的实例目录(检查点 / 预览用)。</summary>
