@@ -206,6 +206,8 @@ public class LayoutSmoothDragUiTests
 	{
 		private readonly bool _motion;
 
+		private readonly Func<long> _clock;
+
 		public Window Window { get; }
 
 		public LayoutEditor Editor { get; }
@@ -214,6 +216,11 @@ public class LayoutSmoothDragUiTests
 		{
 			_motion = Motion.Enabled;
 			Motion.Enabled = true;
+			// AI2-stability:冻住补间时钟 —— 无头输入内部会 RunJobs,用墙钟时机器一卡动画就被推走,
+			// 「松手 / Esc 瞬间」的位移断言偶发失败(基线单跑本类 10 次失败 1 次)。动画只在 FinishAnimations 里推到终点。
+			_clock = LayoutTween.Clock;
+			long frozen = System.Diagnostics.Stopwatch.GetTimestamp();
+			LayoutTween.Clock = () => frozen;
 			BlockSpec[] specs = ids.Select(id => new BlockSpec { Id = id, Title = id, Content = new Border { Height = 60.0 } }).ToArray();
 			Editor = new LayoutEditor(pageId, specs, new Thickness(0.0), page);
 			Window = new Window { Width = 900.0, Height = 600.0, Content = Editor.Root };
@@ -237,6 +244,7 @@ public class LayoutSmoothDragUiTests
 		{
 			Panel.FinishAnimations();
 			Motion.Enabled = _motion;
+			LayoutTween.Clock = _clock;
 			Window.Close();
 		}
 	}

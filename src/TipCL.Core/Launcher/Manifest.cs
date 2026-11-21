@@ -20,8 +20,18 @@ public static class Manifest
 
 	private static readonly Regex PlayableRe = new Regex("^(1\\.\\d+(?:\\.\\d+)?|\\d{2}\\.\\d+(?:\\.\\d+)?)(?:[-_+].+)$", RegexOptions.CultureInvariant);
 
+	/// <summary>AI2-stability:版本清单的联网拉取只让一个线程做(并行的 search_versions / 安装任务不重复拉、不同时写同一份缓存)。</summary>
+	private static readonly object _manifestFetchGate = new object();
+
+	/// <summary>最近一次拉取成功的时刻(Stopwatch 刻度);等门的线程据此判断「别人刚拉完,直接用」。</summary>
+	private static long _manifestFetchedAt;
+
+	/// <summary>实际发生的联网拉取次数(测试用)。</summary>
+	internal static int ManifestFetchCount;
+
 	public static object GetVersionManifest(DownloadManager dm, bool force = false)
 	{
+		long waitStart = System.Diagnostics.Stopwatch.GetTimestamp();
 		string text = PPath.Join(Utils.ROOT, "cache");
 		string text2 = PPath.Join(text, "version_manifest.json");
 		string path = PPath.Join(text, "version_manifest.meta");
@@ -44,6 +54,23 @@ public static class Manifest
 				}
 			}
 		}
+		lock (_manifestFetchGate)
+		{
+			if (System.Threading.Interlocked.Read(ref _manifestFetchedAt) > waitStart)
+			{
+				// 等门期间别的线程刚拉完:直接用它的结果(强制刷新也一样 —— 那份就是「此刻之后」拉的)
+				object just = Utils.ReadJson(text2);
+				if (Py.Truthy(just))
+				{
+					return just;
+				}
+			}
+			return FetchVersionManifestLocked(dm, text, text2, path);
+		}
+	}
+
+	private static object FetchVersionManifestLocked(DownloadManager dm, string text, string text2, string path)
+	{
 		Exception ex = null;
 		List<string> list = Source.VersionManifestUrls();
 		IEnumerable<string> enumerable2;
@@ -62,9 +89,11 @@ public static class Manifest
 			try
 			{
 				object obj3 = dm.FetchJson(item, 20L, expand: false);
+				System.Threading.Interlocked.Increment(ref ManifestFetchCount);
 				Utils.EnsureDir(text);
 				Utils.WriteJson(text2, obj3);
 				Utils.WriteJson(path, PyDict.Of("fetched_at", Py.Time(), "url", item));
+				System.Threading.Interlocked.Exchange(ref _manifestFetchedAt, System.Diagnostics.Stopwatch.GetTimestamp());
 				return obj3;
 			}
 			catch (Exception ex2) when (!(ex2 is TaskCancelled))

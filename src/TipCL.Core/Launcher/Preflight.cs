@@ -39,6 +39,9 @@ public static class Preflight
 
 	public static Func<string, long?> FreeBytesHook;
 
+	/// <summary>AI2-stability 测试注入点:当前可用物理内存(MB);为空时 Windows 读 GlobalMemoryStatusEx,其它系统不比(与原来一致)。</summary>
+	public static Func<long?> AvailPhysMbHook;
+
 	private static PyDict _item(string level, string code, string title, string detail)
 	{
 		return PyDict.Of("level", level, "code", code, "title", title, "detail", detail);
@@ -194,27 +197,13 @@ public static class Preflight
 				}
 			}
 		}
-		long num4 = memory_mb;
-		if (num4 > 0 && Utils.IS_WINDOWS)
+		// AI2-stability:比的是**实际生效**的内存(版本 → 实例 → 调用方 → 全局 → 4096,见 EffectiveJvm),
+		// 不是调用方传的那个数 —— 实例 / 版本单独设过内存时,以前会拿启动页滑块值去比,等于没检查。
+		long num4 = EffectiveJvm.MemoryMb(inst, text, memory_mb);
+		long? availPhysMb = (num4 > 0) ? AvailPhysMb() : null;
+		if (availPhysMb is long num5 && num4 + 1024 > num5)
 		{
-			try
-			{
-				MEMORYSTATUSEX st = new MEMORYSTATUSEX
-				{
-					dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX))
-				};
-				if (GlobalMemoryStatusEx(ref st))
-				{
-					long num5 = (long)(st.ullAvailPhys / 1048576);
-					if (num4 + 1024 > num5)
-					{
-						list.Add(_item("warn", "memory_high", "分配内存接近可用物理内存", "游戏 " + num4 + " MB，系统当前可用约 " + num5 + " MB，可能触发交换卡顿"));
-					}
-				}
-			}
-			catch (Exception)
-			{
-			}
+			list.Add(_item("warn", "memory_high", "分配内存接近可用物理内存", "游戏 " + num4 + " MB，系统当前可用约 " + num5 + " MB，可能触发交换卡顿"));
 		}
 		bool flag2 = !list.Any((object it) => Py.Eq(((PyDict)it)["level"], "error"));
 		if (list.Count == 0)
@@ -222,6 +211,35 @@ public static class Preflight
 			list.Add(_item("ok", "ready", "预检通过", "未发现阻塞问题"));
 		}
 		return PyDict.Of("ok", flag2, "items", list);
+	}
+
+	/// <summary>可用物理内存(MB):测试钩子优先;否则只在 Windows 上读(与原来一致,其它系统返回 null = 不比)。</summary>
+	private static long? AvailPhysMb()
+	{
+		Func<long?> hook = AvailPhysMbHook;
+		if (hook != null && hook() is long hooked)
+		{
+			return hooked; // 钩子回 null = 「这次不管」,走下面的真实探测
+		}
+		if (!Utils.IS_WINDOWS)
+		{
+			return null;
+		}
+		try
+		{
+			MEMORYSTATUSEX st = new MEMORYSTATUSEX
+			{
+				dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX))
+			};
+			if (GlobalMemoryStatusEx(ref st))
+			{
+				return (long)(st.ullAvailPhys / 1048576);
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return null;
 	}
 
 	private static List<string> Children(string dir)

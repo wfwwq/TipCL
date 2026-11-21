@@ -60,10 +60,11 @@ internal sealed class AiFixView : Border
             Instance = Py.S(Py.Or(_report.Get("instance"), TipCL.Core.Launcher.Config.CONFIG.Get("default_instance", "default"))),
             Confirm = ConfirmAsync,
             AskUser = AskUserAsync,
-            PlanChanged = plan => Dispatcher.UIThread.Post(() => ShowPlan(plan)),
-            TaskStarted = (taskId, label, tool) => Dispatcher.UIThread.Post(() => AddTaskCard(taskId, label, tool, null)),
-            Log = line => Dispatcher.UIThread.Post(() => _status.Text = AiUiText.Trim(line, 48)),
+            PlanChanged = plan => AiUiPost.Post(this, () => ShowPlan(plan)),
+            TaskStarted = (taskId, label, tool) => AiUiPost.Post(this, () => AddTaskCard(taskId, label, tool, null)),
+            Log = line => AiUiPost.Post(this, () => _status.Text = AiUiText.Trim(line, 48)),
         };
+        AiUiPost.Track(this); // AI2-stability:面板关了 / Application 没了,晚到的 Agent 回调一律丢弃
 
         var head = UiClass.Section(I18nCore.Tr("AI 修复"), BuildHeadSub(),
             U.Btn("重新开始", BtnKind.Chip, (_, _) => Restart(), "Refresh"));
@@ -186,7 +187,7 @@ internal sealed class AiFixView : Border
         _input.Stop.IsVisible = true;
         try
         {
-            var agent = new AiAgent(_runner, ev => Dispatcher.UIThread.Post(() => OnAgentEvent(ev)));
+            var agent = new AiAgent(_runner, ev => AiUiPost.Post(this, () => OnAgentEvent(ev)));
             await Task.Run(() => agent.RunAsync(_history, _runner.Instance, _run!.Token));
         }
         catch (OperationCanceledException)
@@ -196,7 +197,7 @@ internal sealed class AiFixView : Border
         catch (Exception ex)
         {
             string message = ex is PyException ? ex.Message : ex.ToString();
-            Dispatcher.UIThread.Post(() =>
+            AiUiPost.Post(this, () =>
             {
                 Append("assistant", "修复会话失败:" + message);
                 FinishRun("");

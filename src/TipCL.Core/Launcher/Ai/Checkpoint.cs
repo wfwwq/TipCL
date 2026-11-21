@@ -20,7 +20,7 @@ using TipCL.Core;
 namespace TipCL.Core.Launcher.Ai;
 
 /// <summary>文件检查点：快照、回滚、流水回收。</summary>
-public static class Checkpoint
+public static partial class Checkpoint
 {
     /// <summary>测试可指向临时目录；空 = 用默认位置。</summary>
     public static string? CheckpointsDir;
@@ -185,6 +185,10 @@ public static class Checkpoint
     /// <summary>重放一条操作；返回恢复失败的条数。</summary>
     private static long ApplyOp(string chatId, PyDict op)
     {
+        if (op.Get("new_children") is PyDict newChildren)
+        {
+            return ApplyNewChildren(newChildren); // AI2-stability:「本轮新建的子目录」一类操作,见 Checkpoint.NewChildren.cs
+        }
         List<PyDict> files = Py.ListOr(Py.Or(op.Get("files"), new List<object>())).Cast<PyDict>().ToList();
         var knownFiles = new HashSet<string>(files.Select(f => Py.Str(f.Req("path"))));
         var knownDirs = op.Get("known_dirs") is List<object> { Count: > 0 } dirs

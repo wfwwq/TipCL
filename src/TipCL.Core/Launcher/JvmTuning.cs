@@ -93,71 +93,7 @@ public static class JvmTuning
     /// 顺序与 <see cref="LaunchFlow.Prepare"/> 完全一致(调用方不额外传 memory_mb 时)。
     /// </summary>
     public static PyDict Effective(Instance instance, string? version = null)
-    {
-        PyDict vs = new PyDict();
-        if (!string.IsNullOrEmpty(version))
-        {
-            try
-            {
-                vs = VersionSettings.Load(instance, version);
-            }
-            catch (Exception)
-            {
-                vs = new PyDict();
-            }
-        }
-        long memory;
-        string memSource;
-        object? vMem = vs.Get("memory_mb");
-        object? iMem = InstanceMemory(instance);
-        object? gMem = Config.CONFIG.Get("default_memory_mb");
-        if (PositiveLong(vMem) is long v)
-        {
-            memory = v;
-            memSource = "version";
-        }
-        else if (PositiveLong(iMem) is long i)
-        {
-            memory = i;
-            memSource = "instance";
-        }
-        else if (PositiveLong(gMem) is long g)
-        {
-            memory = g;
-            memSource = "global";
-        }
-        else
-        {
-            memory = LauncherDefaultMemoryMb;
-            memSource = "default";
-        }
-        string gc;
-        string gcSource;
-        string vGc = Py.Lower(Py.Strip(Py.S(vs.Get("gc"))));
-        object? iGc = InstanceGc(instance);
-        string gGc = Py.Lower(Py.Strip(Py.S(Config.CONFIG.Get("gc_preset"))));
-        if (vGc.Length > 0)
-        {
-            gc = vGc;
-            gcSource = "version";
-        }
-        else if (iGc is string ig)
-        {
-            gc = ig;
-            gcSource = "instance";
-        }
-        else if (gGc.Length > 0)
-        {
-            gc = gGc;
-            gcSource = "global";
-        }
-        else
-        {
-            gc = "auto";
-            gcSource = "default";
-        }
-        return PyDict.Of("memory_mb", memory, "memory_source", memSource, "gc_preset", gc, "gc_label", GcLabel(gc), "gc_source", gcSource);
-    }
+        => EffectiveJvm.Resolve(instance, version); // AI2-stability:顺序与取值规则只在 EffectiveJvm 一处(不传调用方内存 = 原来的口径)
 
     /// <summary>该实例里单独设置过内存或 GC 的版本(这些版本仍以版本设置为准):<c>[{version, memory_mb, gc}]</c>。</summary>
     public static List<object> VersionOverrides(Instance instance)

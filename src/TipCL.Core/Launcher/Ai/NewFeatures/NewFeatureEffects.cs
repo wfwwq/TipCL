@@ -41,7 +41,8 @@ public static class NewFeatureEffects
                 case "apply_instance_upgrade":
                     if (Py.Truthy(args.Get("in_place")))
                     {
-                        // 原地升级:mods 目录与实例元数据(新装的版本目录太大,不进快照;见 progress 遗留项)
+                        // 原地升级:mods 目录与实例元数据(新装的版本目录太大,不进内容快照;
+                        // AI2-stability:它由 UpgradeCheckpoint 另记「新建子目录」名单,撤回时删掉,已有的版本不动)
                         return new List<string> { PPath.Join(root, "mods"), PPath.Join(root, ".instance.json") };
                     }
                     // 复制模式:新实例目录此刻不存在 ⇒ 回滚 = 删掉它,原实例一个字节不动

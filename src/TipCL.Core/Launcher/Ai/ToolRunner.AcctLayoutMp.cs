@@ -15,13 +15,17 @@ namespace TipCL.Core.Launcher.Ai;
 public sealed partial class ToolRunner
 {
     /// <summary>联机:等内核起来 / 等房间号时的轮询间隔(毫秒;测试可调小)。</summary>
-    internal static int MultiplayerPollMs = 500;
+    internal static int MultiplayerPollMs = MultiplayerTiming.DefaultPollMs;
 
-    /// <summary>联机:已装未启动时,最多等内核起来多久(毫秒)。</summary>
-    internal static int MultiplayerStartWaitMs = 15000;
+    /// <summary>联机:已装未启动时,最多等内核起来多久(毫秒)。AI2-stability:&lt; 0 = 按配置(MultiplayerTiming.StartWaitMs,默认 15000);测试可直接赋值。</summary>
+    internal static int MultiplayerStartWaitMs = -1;
 
-    /// <summary>联机:开房后最多等房间号出现多久(毫秒;房间号要等房主在游戏里「对局域网开放」后才有)。</summary>
-    internal static int MultiplayerRoomWaitMs = 6000;
+    /// <summary>联机:开房后最多等房间号出现多久(毫秒;房间号要等房主在游戏里「对局域网开放」后才有)。AI2-stability:&lt; 0 = 按配置(默认 6000)。</summary>
+    internal static int MultiplayerRoomWaitMs = -1;
+
+    private static int StartWaitLimitMs() => MultiplayerStartWaitMs >= 0 ? MultiplayerStartWaitMs : MultiplayerTiming.StartWaitMs();
+
+    private static int RoomWaitLimitMs() => MultiplayerRoomWaitMs >= 0 ? MultiplayerRoomWaitMs : MultiplayerTiming.RoomWaitMs();
 
     /// <summary>本包工具的分发(由 ExecuteAsync 的 default 分支转进来)。</summary>
     private async Task<object?> RunAcctLayoutMpAsync(string name, PyDict args, CancellationToken ct)
@@ -148,7 +152,7 @@ public sealed partial class ToolRunner
             {
                 // Linux 联机页是「打开本页才自动起内核」;AI 入口没有这一步,所以这里先起内核再继续
                 await StartPrepareAsync(ct).ConfigureAwait(false);
-                snap = await WaitSnapshotAsync(s => Py.Truthy(s.Get("running")), MultiplayerStartWaitMs, ct).ConfigureAwait(false);
+                snap = await WaitSnapshotAsync(s => Py.Truthy(s.Get("running")), StartWaitLimitMs(), ct, MultiplayerTiming.WaitStart).ConfigureAwait(false);
                 if (!Py.Truthy(snap.Get("running")))
                 {
                     return "联机内核正在启动,几秒后再调用一次 multiplayer " + action + "。";
@@ -160,7 +164,7 @@ public sealed partial class ToolRunner
             case "host":
             {
                 await _api.CallAsync<object>("terracotta_host", null, ct).ConfigureAwait(false);
-                PyDict after = await WaitSnapshotAsync(s => Py.S(s.Get("room")).Length > 0, MultiplayerRoomWaitMs, ct).ConfigureAwait(false);
+                PyDict after = await WaitSnapshotAsync(s => Py.S(s.Get("room")).Length > 0, RoomWaitLimitMs(), ct, MultiplayerTiming.WaitRoom).ConfigureAwait(false);
                 string room = Py.S(after.Get("room"));
                 if (room.Length > 0)
                 {
@@ -208,16 +212,20 @@ public sealed partial class ToolRunner
         }
     }
 
-    /// <summary>轮询联机快照直到条件满足或超时(返回最后一次快照)。</summary>
-    private async Task<PyDict> WaitSnapshotAsync(Func<PyDict, bool> done, int timeoutMs, CancellationToken ct)
+    /// <summary>轮询联机快照直到条件满足或超时(返回最后一次快照)。AI2-stability:实际耗时记进日志(MultiplayerTiming.Record)。</summary>
+    private async Task<PyDict> WaitSnapshotAsync(Func<PyDict, bool> done, int timeoutMs, CancellationToken ct, string what = "")
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int polls = 0;
         PyDict snap = await SnapshotAsync(ct).ConfigureAwait(false);
         DateTime deadline = DateTime.UtcNow.AddMilliseconds(Math.Max(0, timeoutMs));
         while (!done(snap) && DateTime.UtcNow < deadline)
         {
             await Task.Delay(Math.Max(1, MultiplayerPollMs), ct).ConfigureAwait(false);
             snap = await SnapshotAsync(ct).ConfigureAwait(false);
+            polls++;
         }
+        MultiplayerTiming.Record(what.Length > 0 ? what : "wait", sw.ElapsedMilliseconds, timeoutMs, done(snap), polls);
         return snap;
     }
 }

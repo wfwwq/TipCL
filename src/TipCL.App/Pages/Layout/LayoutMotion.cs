@@ -227,6 +227,12 @@ internal static class LayoutTween
 
 	private static Avalonia.Threading.DispatcherTimer? _timer;
 
+	/// <summary>
+	/// AI2-stability:补间用的时钟(Stopwatch 刻度)。测试把它冻住,断言就不再依赖墙钟:无头输入(MouseMove / KeyPress)内部会 RunJobs,
+	/// 机器一卡(首个用例 JIT 约 1s)计时器就把动画推到半路甚至终点,「松手 / Esc 瞬间」的位移断言偶发失败。
+	/// </summary>
+	internal static Func<long> Clock = Stopwatch.GetTimestamp;
+
 	/// <summary>开一段补间:<paramref name="step"/> 收到 [0,1] 的线性进度(缓动由调用方套)。</summary>
 	public static void Start(Visual anchor, object key, double durationMs, Action<double> step, Action? done = null)
 	{
@@ -243,7 +249,7 @@ internal static class LayoutTween
 		{
 			Key = key,
 			Top = top,
-			Start = Stopwatch.GetTimestamp(),
+			Start = Clock(),
 			Duration = durationMs,
 			Step = step,
 			Done = done
@@ -281,7 +287,7 @@ internal static class LayoutTween
 		{
 			return;
 		}
-		long now = Stopwatch.GetTimestamp();
+		long now = Clock();
 		List<object>? stale = null;
 		foreach (Entry entry in Active.Values)
 		{
@@ -331,7 +337,7 @@ internal static class LayoutTween
 
 	private static void Tick()
 	{
-		long now = Stopwatch.GetTimestamp();
+		long now = Clock();
 		List<Entry> due = new List<Entry>(Active.Values);
 		foreach (Entry entry in due)
 		{
