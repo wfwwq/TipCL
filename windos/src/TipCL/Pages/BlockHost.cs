@@ -210,19 +210,20 @@ public sealed class BlockHost : UserControl
 		// 入口:右键菜单 —— 至少 2 个块才有「自定义布局...」(D-81 Q5;页面内容自带 ContextMenu 时天然对方优先)。
 		// 第八轮曾放宽到 ≥1,原因是当时启动页宿主里只有一块;现在启动页宿主里有 5 块,不受影响。
 		// 只剩「下载与网络」「反馈与关于」这类单块页:整页就是一块,没什么可排的。
+		// 菜单项在打开前按状态重建:常态 =「自定义布局...」;编辑态 =「完成编辑」「重置本页」。
 		if (BlockHostRules.OffersLayoutMenu(_specCount))
 		{
 			ContextMenu contextMenu = new ContextMenu();
-			MenuItem menuItem = new MenuItem
+			contextMenu.Items.Add(new MenuItem
 			{
 				Header = I18n.L("自定义布局...")
-			};
-			menuItem.Click += delegate
-			{
-				_editor.EnterEdit();
-			};
-			contextMenu.Items.Add(menuItem);
+			});
 			base.ContextMenu = contextMenu;
+			base.ContextMenuOpening += delegate
+			{
+				RebuildContextMenu(contextMenu);
+			};
+			RebuildContextMenu(contextMenu);
 		}
 		else if (_specCount > 0)
 		{
@@ -280,6 +281,51 @@ public sealed class BlockHost : UserControl
 		{
 			return BlockHostRules.OffersLayoutMenu(_specCount);
 		}
+	}
+
+	/// <summary>是否提供编辑入口(v3:≥ 2 个块才可编辑;单块页返回 false)。</summary>
+	public bool CanEdit
+	{
+		get
+		{
+			return _editor.CanEdit;
+		}
+	}
+
+	private void RebuildContextMenu(ContextMenu menu)
+	{
+		menu.Items.Clear();
+		if (_editor.IsEditing)
+		{
+			MenuItem done = new MenuItem
+			{
+				Header = I18n.L("完成编辑")
+			};
+			done.Click += delegate
+			{
+				_editor.ExitEdit();
+			};
+			menu.Items.Add(done);
+			MenuItem reset = new MenuItem
+			{
+				Header = I18n.L("重置本页")
+			};
+			reset.Click += delegate
+			{
+				_editor.ResetPageFromMenu();
+			};
+			menu.Items.Add(reset);
+			return;
+		}
+		MenuItem open = new MenuItem
+		{
+			Header = I18n.L("自定义布局...")
+		};
+		open.Click += delegate
+		{
+			_editor.EnterEdit();
+		};
+		menu.Items.Add(open);
 	}
 
 	/// <summary>是否处于编辑态。</summary>

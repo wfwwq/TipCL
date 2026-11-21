@@ -564,8 +564,10 @@ public class LayoutProfileTests
 	[Fact]
 	public void BlockEntryCatalogCoversSingleBlockPages()
 	{
-		// D1 把 LayoutEditor.CanEdit 放宽到 specs ≥ 1 之后,单块页也要有入口:
-		// 设置页「布局」→「页面区块」小节必须能进 settings:network / settings:about 的编辑态
+		// v3(2026-11-20)起方向反过来:LayoutEditor.CanEdit 回到 specs ≥ 2,单块页**不提供**编辑入口。
+		// 入口表仍要登记这两页(SingleBlock = true):设置 → 布局「页面」卡片区靠它点名
+		// 「「下载与网络」「反馈与关于」只有一块内容，不提供编辑。」,LayoutShellHooks.CanEditPage 也靠它对未构建的页返回 false。
+		// (守卫见 LayoutV3SourceTests.ShellHooksExposeV3EntryPointsAndSingleBlockPagesAreNotEditable)
 		Assert.Equal(17, LayoutBlockEntryCatalog.All.Length);
 		Assert.Equal(17, LayoutBlockEntryCatalog.All.Select((LayoutBlockEntryCatalog.Entry e) => e.PageId).Distinct().Count());
 		Assert.Equal(new string[2] { "settings:network", "settings:about" }, LayoutBlockEntryCatalog.SingleBlockPageIds().ToArray());

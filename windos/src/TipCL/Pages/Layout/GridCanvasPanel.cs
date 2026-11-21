@@ -606,27 +606,7 @@ public sealed class GridCanvasPanel : Panel
 			}
 			return;
 		}
-		if (width <= 1.0 || _cells.Count == 0)
-		{
-			return;
-		}
-		for (int k = 1; k < Cols; k++)
-		{
-			double x = k * (_columnWidth + Gap) - Gap / 2.0;
-			if (x > 0.0 && x < width)
-			{
-				dc.DrawLine(pen, new Point(x, 0.0), new Point(x, height));
-			}
-		}
-		double y2 = 0.0;
-		for (int m = 0; m < _rowHeights.Length - 1; m++)
-		{
-			y2 += _rowHeights[m] + Gap;
-			if (y2 > 0.0 && y2 < height)
-			{
-				dc.DrawLine(pen, new Point(0.0, y2 - Gap / 2.0), new Point(width, y2 - Gap / 2.0));
-			}
-		}
+		// v3:网格模式不再铺主题色栅格底纹(效果图:内容是主角,只留灰色虚线框);对齐靠整数列吸附 + 落点占位框
 	}
 
 	// canvas 画布高:优先宿主给的有限高,否则用参考高(滚动区里量到的高是 Infinity)
