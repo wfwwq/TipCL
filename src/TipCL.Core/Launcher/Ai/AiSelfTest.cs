@@ -160,6 +160,12 @@ public static class AiSelfTest
         Check("崩溃上下文含实例与版本", context.Contains("demo") && context.Contains("1.20.1"));
         Check("崩溃上下文含结论", context.Contains("Sodium Extra"));
         Check("崩溃上下文要求自查日志", context.Contains("get_latest_log"));
+        // 8b. AI-logs-fs:提示里点名的工具必须真的注册了(schema / ToolMeta.ALL / ToolRunner 分发三处)。
+        //     上一条只看「文字里有没有 get_latest_log」,正好把「没注册」盖住了;这条按注册表动态核对,见 AiToolRefs。
+        List<AiToolRefs.Mention> mentions = AiToolRefs.AllMentions();
+        Check("提示里点名的工具能扫出来", mentions.Any(m => m.Name == "get_latest_log"), mentions.Count + " 处");
+        List<string> refProblems = await AiToolRefs.ProblemsAsync(mentions).ConfigureAwait(false);
+        Check("提示里点名的工具都已注册(schema/元信息/分发)", refProblems.Count == 0, string.Join("; ", refProblems.Take(5)));
         Check("修复会话系统提示含约定", AiFixChat.FixSystemPrompt(PyDict.Of("instance", "demo")).Contains("崩溃修复"));
 
         // 9. 会话循环:假门面 + 假流(不打网络)—— 由 xunit 里的脚本化门面覆盖,这里只验「能构造」

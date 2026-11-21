@@ -84,6 +84,13 @@ public static class ToolMeta
         new("delete_mod", false, "delete", "high", false),
         new("delete_instance", false, "delete", "high", false),
         new("launch_game", false, "launch", "high", false),
+        // AI-logs-fs:日志与文件(分级照 Windows 版 ToolMeta.cs:38-39 / ExtraTools.Meta)。fs_write 是高风险写,不给「本对话都允许」
+        new("get_latest_log", true, "read", "low", false),
+        new("get_crash_report", true, "read", "low", false),
+        new("fs_list", true, "read", "low", false),
+        new("fs_read", true, "read", "low", false),
+        new("fs_write", false, "write_local", "high", false),
+        new("open_folder", true, "none", "low", false),
     };
 
     public static Dictionary<string, ToolMetaInfo> Map

@@ -111,6 +111,10 @@ public static class Preview
         var lines = new List<string>();
         switch (name)
         {
+            // AI-logs-fs:fs_write 的逐行 diff(实现见 AiFsTools.WritePreview,目标路径与执行时同一套路径守卫)
+            case "fs_write":
+                return AiFsTools.WritePreview(args, instance);
+
             case "write_mod_config":
             {
                 string head = Tr("将要写入的变更：");
