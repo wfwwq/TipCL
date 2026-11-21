@@ -64,6 +64,34 @@ public static class ModpackPreview
     public static string BatchProgress(int i, int n, string name)
         => Tr("({i}/{n})安装 {name}").Replace("{i}", i.ToString()).Replace("{n}", n.ToString()).Replace("{name}", name);
 
+    /// <summary>AI3-content:批量安装后台任务的标题(任务卡 / 下载任务页)。</summary>
+    public static string BatchTaskTitle(int n, string instance)
+        => Tr("批量安装 {n} 个模组 → {instance}").Replace("{n}", n.ToString()).Replace("{instance}", instance);
+
+    /// <summary>AI3-content:一条进度事件的文字(任务卡状态行 + 任务日志):第 n/N 个开始 / 成功 / 失败。</summary>
+    public static string BatchEventText(ModpackTools.BatchEvent ev)
+    {
+        string text = ev.Phase == "start"
+            ? Tr("({i}/{n})安装 {name}")
+            : ev.Ok ? Tr("({i}/{n})✓ {name} 已装好") : Tr("({i}/{n})✗ {name} 没装上：{error}");
+        return text.Replace("{i}", ev.Index.ToString()).Replace("{n}", ev.Total.ToString())
+            .Replace("{name}", ev.Name).Replace("{error}", ev.Error);
+    }
+
+    /// <summary>AI3-content:批量安装结束时的汇总(任务卡的结果行)。</summary>
+    public static string BatchFinish(PyDict result)
+    {
+        List<object> failed = Py.ListOr(result.Get("failed"));
+        int ok = Py.ListOr(result.Get("installed")).Count;
+        if (failed.Count == 0)
+        {
+            return Tr("已装好 {n} 个模组").Replace("{n}", ok.ToString());
+        }
+        return Tr("装好 {ok} 个，{fail} 个没装上：{names}")
+            .Replace("{ok}", ok.ToString()).Replace("{fail}", failed.Count.ToString())
+            .Replace("{names}", string.Join(", ", failed.Take(10).Select(f => Py.S(Py.D(f).Get("name")))) + (failed.Count > 10 ? "…" : ""));
+    }
+
     /// <summary>字节数 → 人读的大小。</summary>
     public static string FmtBytes(long n)
     {
@@ -213,6 +241,7 @@ public static class ModpackPreview
             return "  + " + label + (slug.Length > 0 && slug != label ? " (" + slug + ")" : "") + " · " + Py.S(m.Get("source"));
         }));
         lines.Add(Tr("装到实例「{instance}」的 mods 目录，必需的前置会一起装上").Replace("{instance}", instName));
+        lines.Add(Tr("确认后在后台逐个安装，任务卡上显示第几个、每个成功还是失败"));
         if (items.Count > ModpackTools.MAX_BATCH)
         {
             lines.Add(Tr("超过一次最多 {n} 个的上限，执行时会被拒绝").Replace("{n}", ModpackTools.MAX_BATCH.ToString()));

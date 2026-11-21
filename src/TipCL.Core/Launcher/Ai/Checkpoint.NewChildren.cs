@@ -19,6 +19,8 @@
 // patches[game].version 是 match_mc;或 inheritsFrom 顺着兄弟目录一路追到 match_mc(OptiFine 装在 Forge 上);
 // 或目录名 / id 里以完整版本号的形式含 match_mc(「1.21.1-OptiFine_HD_U_J1」算,「1.21.10」不算)。
 // 注意:撤回时安装若还在跑,删的是整个目录,半成品也一并清掉。
+// AI3-content:同一种流水还有 only_empty 变体(SnapshotNewDirs,数据包 / 资源包新建的目录):只删点名且已经空了的目录,
+// 不走上面的差集口径,CaptureNewChildren 也不会去补记它(AI3-integration 合并时合成)。
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -87,6 +89,7 @@ public static partial class Checkpoint
                         continue;
                     }
                     if (!Py.Eq(Py.S(op.Get("turn_id")), turnId ?? "") || nc.Get("created") != null
+                        || Py.Truthy(nc.Get("only_empty")) // AI3-integration:content 的「新建空目录」名单不是升级名单,不补记
                         || !string.Equals(Py.S(nc.Get("parent")), parent, StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
@@ -118,9 +121,13 @@ public static partial class Checkpoint
         }
         var existing = new HashSet<string>(Py.ListOr(op.Get("existing")).Select(x => Py.S(x)), StringComparer.OrdinalIgnoreCase);
         string mc = Py.S(op.Get("match_mc"));
+        // AI3-stability:差集口径(原地升级)
         bool captured = op.Get("created") is List<object>;
         var created = new HashSet<string>(Py.ListOr(op.Get("created")).Select(x => Py.S(x)), StringComparer.OrdinalIgnoreCase);
         bool pending = Py.Truthy(op.Get("pending_install"));
+        // AI3-content:only_empty = 只删 names 里点名、本次新建、且此刻已经空了的目录(见 SnapshotNewDirs)
+        bool onlyEmpty = Py.Truthy(op.Get("only_empty"));
+        var names = new HashSet<string>(Py.ListOr(op.Get("names")).Select(x => Py.S(x)), StringComparer.OrdinalIgnoreCase);
         long failures = 0;
         foreach (string name in ChildDirNames(parent))
         {
@@ -129,15 +136,135 @@ public static partial class Checkpoint
                 continue;
             }
             string dir = PPath.Join(parent, name);
-            bool remove = captured
-                ? created.Contains(name) || (pending && BelongsToMc(dir, name, mc))
-                : BelongsToMc(dir, name, mc);
-            if (remove && !RemoveFile(dir))
+            if (onlyEmpty)
+            {
+                if (!names.Contains(name))
+                {
+                    continue; // 没点名的不动(比如游戏自己后来建的)
+                }
+                if (!IsEmptyTree(Abs(dir)))
+                {
+                    // 里面还有文件(用户后来放的 / 没撤掉的):目录本身留着,只把它里面已经空了的子目录清掉;不算失败
+                    PruneEmptySubdirs(Abs(dir));
+                    continue;
+                }
+            }
+            else
+            {
+                bool remove = captured
+                    ? created.Contains(name) || (pending && BelongsToMc(dir, name, mc))
+                    : BelongsToMc(dir, name, mc);
+                if (!remove)
+                {
+                    continue;
+                }
+            }
+            if (!RemoveFile(dir))
             {
                 failures++;
             }
         }
         return failures;
+    }
+
+    /// <summary>删掉目录里「整棵都是空目录」的子目录(深的先处理);链接不进也不删。</summary>
+    private static void PruneEmptySubdirs(string abs)
+    {
+        try
+        {
+            foreach (string sub in Directory.EnumerateDirectories(abs).ToList())
+            {
+                if (IsSymlink(sub))
+                {
+                    continue;
+                }
+                if (IsEmptyTree(sub))
+                {
+                    Directory.Delete(sub, true);
+                }
+                else
+                {
+                    PruneEmptySubdirs(sub);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+        {
+        }
+    }
+
+    /// <summary>目录树里一个文件都没有(只有空子目录);本身是链接、或里面有链接时一律算「不空」(不去动它)。</summary>
+    internal static bool IsEmptyTree(string abs)
+    {
+        try
+        {
+            if (!Directory.Exists(abs) || IsSymlink(abs))
+            {
+                return false;
+            }
+            foreach (string entry in Directory.EnumerateFileSystemEntries(abs, "*", SearchOption.AllDirectories))
+            {
+                if (File.Exists(entry) || IsSymlink(entry))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// AI3-content:记下 <paramref name="parentDir"/> 下「这一步可能会新建」的子目录名(<paramref name="names"/>,此刻已存在的自动去掉)。
+    /// 撤回这一轮时,内容快照先把新建的文件删掉(它的 seq 更大,先重放),再轮到这一条:点名的目录若已经空了就整个删掉;
+    /// 原来就有的目录、没点名的目录、里面还有文件的目录都不动。所以调用方要在 <see cref="Snapshot"/> 之前调。
+    /// 返回 <c>{ok, seq, names, reason}</c>;没有要记的名字时 ok=true、seq=-1、不写流水。
+    /// </summary>
+    public static PyDict SnapshotNewDirs(string chatId, string turnId, string parentDir, IEnumerable<string> names)
+    {
+        string chat = string.IsNullOrEmpty(chatId) ? "active" : chatId;
+        try
+        {
+            string parent = new PPath(parentDir).Resolve().ToString();
+            var existingSet = new HashSet<string>(ChildDirNames(parent), StringComparer.OrdinalIgnoreCase);
+            List<string> fresh = (names ?? Enumerable.Empty<string>())
+                .Where(n => !string.IsNullOrEmpty(n) && n != "." && n != ".." && n.IndexOfAny(new[] { '/', '\\' }) < 0 && !existingSet.Contains(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (fresh.Count == 0)
+            {
+                return PyDict.Of("ok", true, "seq", -1L, "names", 0L, "reason", "");
+            }
+            List<string> existing = existingSet.ToList();
+            existing.Sort(StringComparer.Ordinal);
+            lock (Gate)
+            {
+                List<object> journal = LoadJournal(chat);
+                long seq = journal.Count;
+                journal.Add(PyDict.Of(
+                    "seq", seq,
+                    "turn_id", turnId ?? "",
+                    "ts", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss"),
+                    "files", new List<object>(),
+                    "dirs", new List<object>(),
+                    "known_dirs", new List<object>(),
+                    "bytes", 0L,
+                    "new_children", PyDict.Of(
+                        "parent", parent,
+                        "existing", existing.Cast<object>().ToList(),
+                        "match_mc", "",
+                        "only_empty", true,
+                        "names", fresh.Cast<object>().ToList())));
+                SaveJournal(chat, journal);
+                return PyDict.Of("ok", true, "seq", seq, "names", (long)fresh.Count, "reason", "");
+            }
+        }
+        catch (Exception ex)
+        {
+            return PyDict.Of("ok", false, "seq", -1L, "names", 0L, "reason", Py.ExcStr(ex));
+        }
     }
 
     /// <summary>

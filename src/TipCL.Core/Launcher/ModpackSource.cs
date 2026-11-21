@@ -30,6 +30,21 @@ public interface IModpackSource
 
     /// <summary>Modrinth 项目批量查询:project_id → 项目(id / slug / title / categories)。</summary>
     Dictionary<string, PyDict> ModrinthProjects(IList<string> ids);
+
+    /// <summary>
+    /// AI3-content:CurseForge 模组搜索(复用 Mods.SearchCurseforge:按 MC 版本过滤、按热门度排;category 是 CurseForge 分类名里的关键词)。
+    /// 返回归一后的行 {source:"curseforge", id, slug, title, downloads, summary, cf_categories}。连不上抛异常。
+    /// 默认实现 = 不支持(老的假源照旧只有 Modrinth)。
+    /// </summary>
+    List<object> SearchCurseForge(string query, string mcVersion, string loader, string? category, int limit)
+        => throw new NotSupportedException("CurseForge search not supported by this source");
+
+    /// <summary>
+    /// AI3-content:CurseForge 项目在指定 MC + 加载器下最新的文件 {file_id, filename, size, display_name, release_type,
+    /// dependencies:[{mod_id, type: required / incompatible}]};没有匹配的文件返回 null,连不上抛异常。
+    /// </summary>
+    PyDict? CurseForgeLatestFile(string modId, string mcVersion, string loader)
+        => throw new NotSupportedException("CurseForge files not supported by this source");
 }
 
 /// <summary>整合包联网源的取用点(测试注入点:非空时用它造源)。</summary>
@@ -189,5 +204,63 @@ public sealed class NetModpackSource : IModpackSource
             }
         }
         return result;
+    }
+
+    /// <summary>CurseForge 的 modLoaderType:Forge 1 / Fabric 4 / Quilt 5 / NeoForge 6。</summary>
+    public static long CfLoaderType(string loader) => loader switch
+    {
+        "forge" => 1L,
+        "fabric" => 4L,
+        "quilt" => 5L,
+        "neoforge" => 6L,
+        _ => 0L,
+    };
+
+    public List<object> SearchCurseForge(string query, string mcVersion, string loader, string? category, int limit)
+    {
+        string q = Py.Strip(query ?? "");
+        return Mods.SearchCurseforge(_dm, q.Length > 0 ? q : null, Math.Clamp(limit, 1, 50), null, 6L, null,
+            mcVersion.Length > 0 ? mcVersion : null, string.IsNullOrEmpty(category) ? null : new List<object> { category! });
+    }
+
+    public PyDict? CurseForgeLatestFile(string modId, string mcVersion, string loader)
+    {
+        List<object> files;
+        try
+        {
+            long type = CfLoaderType(loader);
+            files = Mods.CfFiles(_dm, modId, null, mcVersion.Length > 0 ? mcVersion : null, type > 0 ? (object)type : null, 50L);
+        }
+        catch (ModError e) when (Py.ExcStr(e).Contains("没有可下载文件"))
+        {
+            return null;
+        }
+        bool LoaderOk(PyDict f)
+        {
+            var gv = Py.ListOr(f.Get("gameVersions")).Select(x => Py.Lower(Py.S(x))).ToList();
+            bool mcOk = mcVersion.Length == 0 || gv.Contains(mcVersion);
+            bool ldOk = loader.Length == 0 || gv.Contains(loader) || (loader == "quilt" && gv.Contains("fabric"));
+            return mcOk && ldOk;
+        }
+        List<PyDict> ok = files.Select(Py.D).Where(LoaderOk)
+            .OrderByDescending(f => Py.S(f.Get("fileDate")), StringComparer.Ordinal).ToList();
+        if (ok.Count == 0)
+        {
+            return null;
+        }
+        // 优先正式版(releaseType 1);没有才用 beta / alpha
+        PyDict pick = ok.FirstOrDefault(f => Py.Int(Py.Or(f.Get("releaseType"), 0L)) == 1) ?? ok[0];
+        var deps = Py.ListOr(pick.Get("dependencies")).Select(Py.D)
+            .Select(d => (Id: Py.S(d.Get("modId")), Rel: Py.Int(Py.Or(d.Get("relationType"), 0L))))
+            .Where(d => d.Id.Length > 0 && (d.Rel == 3 || d.Rel == 5))
+            .Select(d => (object)PyDict.Of("mod_id", d.Id, "type", d.Rel == 3 ? "required" : "incompatible"))
+            .ToList();
+        return PyDict.Of(
+            "file_id", Py.S(pick.Get("id")),
+            "filename", Py.S(pick.Get("fileName")),
+            "size", Py.Int(Py.Or(pick.Get("fileLength"), 0L)),
+            "display_name", Py.S(Py.Or(pick.Get("displayName"), pick.Get("fileName"))),
+            "release_type", Py.Int(Py.Or(pick.Get("releaseType"), 0L)),
+            "dependencies", deps);
     }
 }

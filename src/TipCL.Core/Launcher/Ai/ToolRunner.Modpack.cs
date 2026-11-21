@@ -60,11 +60,40 @@ public sealed partial class ToolRunner
             {
                 string name = Py.S(args.Get("instance"));
                 Instance inst = ExistingInstance(name.Length > 0 ? name : InstName(args));
-                return await Task.Run(() => ModpackTools.InstallBatch(inst, args, Log), ct).ConfigureAwait(false);
+                List<PyDict> items = ModpackTools.CheckBatch(args); // 空 / 超上限:现在就报错,什么都不起
+                // AI3-content:交给宿主起后台任务(任务卡逐项显示进度),工具立刻返回 task_id,AI 页不再长时间「执行中」。
+                // 确认已在 RunAsync 里整批问过一次;宿主不支持这个方法(如测试里的假后端)时退回原来的同步执行。
+                var payload = new PyDict(args) { ["instance"] = inst.name };
+                string taskId = await StartBatchTaskAsync(payload, ct).ConfigureAwait(false);
+                if (taskId.Length == 0)
+                {
+                    return await Task.Run(() => ModpackTools.InstallBatch(inst, args, Log, null, ct), ct).ConfigureAwait(false);
+                }
+                TaskStarted?.Invoke(taskId, ModpackPreview.BatchTaskTitle(items.Count, inst.name), "install_mods_batch");
+                return ModpackTools.BatchStarted(taskId, inst, items);
             }
 
             default:
                 return ToolErr(call.name, "unknown_tool", "unknown tool: " + call.name, "");
         }
+    }
+
+    /// <summary>AI3-content:让宿主起 install_mods_batch 后台任务,返回任务 id;宿主没有这个方法时返回空串。</summary>
+    private async Task<string> StartBatchTaskAsync(PyDict payload, CancellationToken ct)
+    {
+        object? result;
+        try
+        {
+            result = await _api.CallAsync<object>("install_mods_batch", payload, ct).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is NotImplementedException || e is NotSupportedException)
+        {
+            return "";
+        }
+        if (result is string direct)
+        {
+            return direct;
+        }
+        return result is PyDict row ? Py.S(Py.Or(row.Get("task_id"), row.Get("id"))) : "";
     }
 }

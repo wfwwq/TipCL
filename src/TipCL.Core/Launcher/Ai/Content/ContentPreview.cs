@@ -69,6 +69,12 @@ public static class ContentPreview
         {
             lines.Add(Tr("静态检查通过：没有发现文件、网络、进程或反射类的用法。脚本会在游戏里运行，请确认内容可信。"));
         }
+        if (plan.SuspiciousNamespaces.Count > 0)
+        {
+            // AI3-content:引用的 ID 命名空间没有来头 —— 只提醒,照样可以写
+            lines.Add(Tr("提醒：这些命名空间既不是 minecraft 也不是已装模组，可能拼错了或模组没装（不影响写入）：{list}")
+                .Replace("{list}", string.Join(", ", plan.SuspiciousNamespaces)));
+        }
         var diff = new List<string>();
         foreach (ContentTools.Write w in plan.Writes)
         {
