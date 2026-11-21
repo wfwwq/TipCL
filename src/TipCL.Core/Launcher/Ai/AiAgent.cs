@@ -316,7 +316,32 @@ public sealed class AiAgent
             return Tools.ErrorPayload(new ValueError(call.error), call.name, "bad_arguments");
         }
         SnapshotForTool(call);
-        return await _runner.RunAsync(call, ct).ConfigureAwait(false);
+        string? text = null;
+        try
+        {
+            text = await _runner.RunAsync(call, ct).ConfigureAwait(false);
+            return text;
+        }
+        finally
+        {
+            CaptureAfterTool(call, text); // AI3-stability:原地升级执行完补记「新建了哪些版本目录」(差集),见 UpgradeCheckpoint
+        }
+    }
+
+    /// <summary>AI3-stability:写工具执行完(含失败 / 取消)后补记检查点里的「新建子目录」差集;失败只记追踪,不影响结果。</summary>
+    private void CaptureAfterTool(ToolCall call, string? resultText)
+    {
+        try
+        {
+            if (Tools.IsWriteTool(call.name))
+            {
+                UpgradeCheckpoint.CaptureAfter(ChatId, TurnId, call.name, call.args, _runner.Instance, resultText);
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace.Record("checkpoint_capture_error", null, "", call.name, ex);
+        }
     }
 
     /// <summary>写操作之前做检查点快照(认不出受影响路径的工具不做,见 Tools.AffectedPaths)。</summary>
