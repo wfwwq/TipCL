@@ -962,7 +962,7 @@ public sealed partial class AiPage : PageBase
             _dock.Children.Clear();
             ConfirmCard? card = null;
             card = new ConfirmCard(call.name, label, reason, Preview.Flatten(preview),
-                ConfirmCard.AllowAlways(call.name) && ToolRunner.AllowsAlways(call.name),
+                ConfirmCard.AllowAlways(call.name),
                 (ok, always, _) =>
                 {
                     _pendingConfirm = null;

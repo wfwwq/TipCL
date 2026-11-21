@@ -54,6 +54,16 @@ public class ClickSweepTests
         "选择文件", "选择图片", "选择视频", "选择", "导入", "导出", "上传", "提交", "购买", "登录",
     };
 
+    /// <summary>
+    /// 按控件 Name 跳过的副作用控件(没有文字标签,SideEffectWords 识别不了)。
+    /// AI-integration:设置 → AI 助手里的 MCP Server 开关点下去会在本机 127.0.0.1:25585 起监听,
+    /// 测试进程会一直占着端口直到结束(也会把 mcp_server.json 的 enabled 写成 true)。
+    /// </summary>
+    private static readonly HashSet<string> SideEffectNames = new(StringComparer.Ordinal)
+    {
+        "McpServerSwitch",
+    };
+
     private sealed class Row
     {
         public string Page = "";
@@ -186,7 +196,8 @@ public class ClickSweepTests
                     string kind = c.GetType().Name + (classes.Length > 0 ? "[" + classes + "]" : "");
                     string labelOrKind = string.IsNullOrWhiteSpace(label) ? "<" + kind + ">" : label;
 
-                    if (SideEffectWords.Any(w => label.Contains(w, StringComparison.Ordinal)))
+                    if (SideEffectWords.Any(w => label.Contains(w, StringComparison.Ordinal))
+                        || (c.Name is { Length: > 0 } cname && SideEffectNames.Contains(cname)))
                     {
                         rows.Add(new Row { Page = page, Kind = kind, Label = labelOrKind, Outcome = "SKIP", Detail = "副作用类,未点击" });
                         continue;

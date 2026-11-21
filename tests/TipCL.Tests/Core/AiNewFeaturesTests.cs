@@ -410,7 +410,7 @@ public class AiPreflightTests
         using var t = new NfTempInstance("pf");
         t.Version("1.20.1", javaMajor: 17);
         AiPreflight.JavaListHook = () => new List<object> { PyDict.Of("major", 17L, "exe", "java17") };
-        NfHardwareProbe.Hook = () => PyDict.Of("ram_mb", 32768L, "gpu", "NVIDIA GeForce RTX 3060", "vram_mb", 12288L);
+        ShaderAdvisor.HardwareHook = () => PyDict.Of("ram_mb", 32768L, "gpu", "NVIDIA GeForce RTX 3060", "vram_mb", 12288L);
         try
         {
             var runner = new ToolRunner(new NfFakeApi()) { PermissionMode = "default" }; // 没接 Confirm:只读照样能跑
@@ -425,7 +425,7 @@ public class AiPreflightTests
         finally
         {
             AiPreflight.JavaListHook = null;
-            NfHardwareProbe.Hook = null;
+            ShaderAdvisor.HardwareHook = null;
         }
     }
 
@@ -514,7 +514,7 @@ public class ShaderAdvisorTests
         t.Version("fabric-loader-0.15.11-1.20.1");
         t.FabricJar("iris-1.7.2.jar", "iris");
         var api = new NfFakeApi { Shaders = Rows() };
-        NfHardwareProbe.Hook = () => PyDict.Of("gpu", "NVIDIA GeForce GTX 1660", "vram_mb", 6144L, "ram_mb", 16384L);
+        ShaderAdvisor.HardwareHook = () => PyDict.Of("gpu", "NVIDIA GeForce GTX 1660", "vram_mb", 6144L, "ram_mb", 16384L);
         try
         {
             var runner = new ToolRunner(api) { PermissionMode = "plan", Instance = t.Name }; // 只看不动档也能跑:只读
@@ -529,7 +529,7 @@ public class ShaderAdvisorTests
         }
         finally
         {
-            NfHardwareProbe.Hook = null;
+            ShaderAdvisor.HardwareHook = null;
         }
     }
 

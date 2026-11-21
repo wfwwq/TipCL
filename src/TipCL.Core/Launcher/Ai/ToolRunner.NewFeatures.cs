@@ -24,11 +24,14 @@ public sealed partial class ToolRunner
     /// <summary>
     /// 这个工具能不能给「本对话都允许」(D-24:删除 / 高危类不给)。本包新增的两个危险工具在执行器里也守这条:
     /// 就算界面传回 always=true,也只按「仅这一次」处理。既有的 delete_mod / delete_instance 仍只由确认卡
-    /// (ConfirmCard.AllowAlways)把关,行为不变(已有用例锁着)。确认卡是否显示那个按钮由页面拿它与 ConfirmCard.AllowAlways 一起判。
+    /// (ConfirmCard.AllowAlways)把关,行为不变(已有用例锁着)。AI-integration:确认卡是否显示那个按钮现在只看
+    /// ConfirmCard.AllowAlways(remove_server / apply_instance_upgrade / fs_write 已并入那张名单),这里是执行器侧的双保险。
     /// </summary>
     public static bool AllowsAlways(string tool) => tool switch
     {
         "remove_server" or "apply_instance_upgrade" => false,
+        // AI-integration:fs_write 也在执行器里守一道(确认卡 ConfirmCard.AllowAlways 已不给;restore_save_backup 由 NeverAlwaysAllow 守)
+        "fs_write" => false,
         _ => true,
     };
 
@@ -131,7 +134,7 @@ public sealed partial class ToolRunner
                 string method = kind == "shader" ? "search_shaders" : "search_resourcepacks";
                 List<object> results = await _api.CallAsync<List<object>>(method,
                     new { query, source = Py.Or(args.Get("source"), "全部") }, ct).ConfigureAwait(false) ?? new List<object>();
-                PyDict hw = await Task.Run(() => NfHardwareProbe.Probe(), ct).ConfigureAwait(false);
+                PyDict hw = await Task.Run(() => ShaderAdvisor.ProbeHardware(), ct).ConfigureAwait(false);
                 PyDict? loader = null;
                 if (kind == "shader")
                 {

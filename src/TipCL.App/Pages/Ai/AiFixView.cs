@@ -435,7 +435,7 @@ internal sealed class AiFixView : Border
         {
             _dock.Children.Clear();
             ConfirmCard? card = null;
-            card = new ConfirmCard(call.name, label, reason, Preview.Flatten(preview), ConfirmCard.AllowAlways(call.name) && ToolRunner.AllowsAlways(call.name),
+            card = new ConfirmCard(call.name, label, reason, Preview.Flatten(preview), ConfirmCard.AllowAlways(call.name),
                 (ok, always, _) =>
                 {
                     _pendingConfirm = null;

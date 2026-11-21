@@ -44,6 +44,8 @@ public sealed partial class SettingsPage
                 Toast(I18nCore.Tr("MCP Server 启动失败"), McpServer.LastError, ToastKind.Warning);
             Render();
         });
+        // AI-integration:给开关一个稳定的 Name,界面「全点一遍」测试(ClickSweepTests.SideEffectNames)靠它跳过,免得测试进程占用 25585
+        sw.Name = "McpServerSwitch";
         var applyPort = UiClass.Btn(I18nCore.Tr("应用端口"), BtnKind.Chip, (_, _) =>
         {
             if (!int.TryParse((portBox.Text ?? "").Trim(), out int p) || !McpServer.SetPort(p))

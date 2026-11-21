@@ -228,7 +228,7 @@ public static class DiagnosticReport
         // 4. 硬件摘要
         md.AppendLine("## 四、硬件摘要");
         md.AppendLine();
-        PyDict hw = hardware ?? NfHardwareProbe.Probe();
+        PyDict hw = hardware ?? ShaderAdvisor.ProbeHardware();
         md.AppendLine("- 内存:" + Py.S(hw.Get("ram_mb")) + " MB(可用 " + Py.S(hw.Get("ram_avail_mb")) + " MB)");
         md.AppendLine("- 显卡:" + R(Py.S(Py.Or(hw.Get("gpu"), "未识别"))) + (Py.Int(Py.Or(hw.Get("vram_mb"), 0L)) > 0 ? "(" + Py.S(hw.Get("vram_mb")) + " MB 显存)" : ""));
         if (Py.S(hw.Get("summary")).Length > 0)

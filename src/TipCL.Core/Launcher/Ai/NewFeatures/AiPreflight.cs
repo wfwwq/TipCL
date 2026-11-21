@@ -130,7 +130,7 @@ public static class AiPreflight
         // 4) 分配内存 vs 物理内存
         if (memoryMb > 0)
         {
-            PyDict hw = hardware ?? NfHardwareProbe.ProbeMemory();
+            PyDict hw = hardware ?? ShaderAdvisor.ProbeMemory();
             long total = Py.Int(Py.Or(hw.Get("ram_mb"), 0L));
             if (total > 0)
             {

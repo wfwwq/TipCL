@@ -1,8 +1,9 @@
 // AI-new-features:按硬件给光影 / 资源包分档推荐(recommend_shaders 的纯逻辑部分)。
 //
-// 硬件信息说明(合并须知):另一个包(AI-perf-saves)在做 get_system_info,并会提供 Core 静态类 SystemInfo。
-// 这里为了能独立编译,只写了一个最小的 internal 探测 NfHardwareProbe(内存走 Sysinfo.MemoryInfo、显卡走
-// Sysinfo.Collect 的 gpus)。**合并时改为调用 perf-saves 的 SystemInfo,删除 NfHardwareProbe**(见 progress/AI-new-features.md)。
+// 硬件信息(AI-integration 合并后):统一走 AI-perf-saves 的 Core 静态类 SystemInfo(Launcher/SystemInfo.cs),
+// 原先为独立编译临时写的 NfHardwareProbe 已删除。ShaderAdvisor.ProbeHardware / ProbeMemory 只做字段换算
+// (SystemInfo 的 total_mb / avail_mb / gpus[name,vram_mb] → 本包用的 ram_mb / ram_avail_mb / gpu / vram_mb / gpus / summary),
+// 测试注入点是 ShaderAdvisor.HardwareHook。
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,68 +11,70 @@ using System.Text.RegularExpressions;
 
 namespace TipCL.Core.Launcher.Ai;
 
-/// <summary>
-/// 最小硬件探测(合并时由 perf-saves 的 SystemInfo 取代)。结果字段:
-/// ram_mb / ram_avail_mb / gpu / vram_mb / gpus(名字列表)/ summary。
-/// </summary>
-internal static class NfHardwareProbe
+/// <summary>光影 / 资源包按硬件分档(低 / 中 / 高配)。</summary>
+public static class ShaderAdvisor
 {
-    /// <summary>测试注入点:非空时不碰真实机器。</summary>
-    internal static Func<PyDict>? Hook;
+    /// <summary>测试注入点:非空时不碰真实机器(ProbeHardware / ProbeMemory 都走它)。</summary>
+    internal static Func<PyDict>? HardwareHook;
 
-    internal static PyDict Probe()
+    /// <summary>
+    /// 硬件摘要:ram_mb / ram_avail_mb / gpu(有独显取独显)/ vram_mb / gpus(名字列表)/ summary。
+    /// 数据来自 <see cref="SystemInfo.Snapshot"/>(带 120 秒缓存);探测失败时各字段为 0 / 空。
+    /// </summary>
+    internal static PyDict ProbeHardware()
     {
-        Func<PyDict>? hook = Hook;
+        Func<PyDict>? hook = HardwareHook;
         if (hook != null)
         {
             return hook();
         }
-        PyDict mem = ProbeMemory();
-        long ramMb = Py.Int(Py.Or(mem.Get("ram_mb"), 0L));
-        long availMb = Py.Int(Py.Or(mem.Get("ram_avail_mb"), 0L));
-        string gpu = "";
-        long vram = 0;
-        var names = new List<object>();
-        string summary = "";
+        PyDict snap;
         try
         {
-            PyDict info = Sysinfo.Collect();
-            summary = Py.S(info.Get("summary"));
-            foreach (object? raw in Py.ListOr(info.Get("gpus")))
-            {
-                PyDict g = Py.D(raw);
-                string name = Py.S(g.Get("name"));
-                if (name.Length == 0)
-                {
-                    continue;
-                }
-                names.Add(name);
-                long v = Py.Int(Py.Or(g.Get("vram_mb"), 0L));
-                // 有独显时以独显为准(笔记本常见「核显 + 独显」)
-                if (gpu.Length == 0 || (ShaderAdvisor.IsIntegrated(gpu) && !ShaderAdvisor.IsIntegrated(name)) || v > vram)
-                {
-                    gpu = name;
-                    vram = v;
-                }
-            }
+            snap = SystemInfo.Snapshot();
         }
         catch (Exception)
         {
+            snap = new PyDict();
         }
-        return PyDict.Of("ram_mb", ramMb, "ram_avail_mb", availMb, "gpu", gpu, "vram_mb", vram, "gpus", names, "summary", summary);
+        string gpu = "";
+        long vram = 0;
+        var names = new List<object>();
+        foreach (object? raw in Py.ListOr(snap.Get("gpus")))
+        {
+            PyDict g = Py.D(raw);
+            string name = Py.S(g.Get("name"));
+            if (name.Length == 0)
+            {
+                continue;
+            }
+            names.Add(name);
+            long v = Py.Int(Py.Or(g.Get("vram_mb"), 0L));
+            // 有独显时以独显为准(笔记本常见「核显 + 独显」)
+            if (gpu.Length == 0 || (IsIntegrated(gpu) && !IsIntegrated(name)) || v > vram)
+            {
+                gpu = name;
+                vram = v;
+            }
+        }
+        return PyDict.Of(
+            "ram_mb", Py.Int(Py.Or(snap.Get("total_mb"), 0L)),
+            "ram_avail_mb", Py.Int(Py.Or(snap.Get("avail_mb"), 0L)),
+            "gpu", gpu, "vram_mb", vram, "gpus", names,
+            "summary", Py.S(snap.Get("summary")));
     }
 
-    /// <summary>只探内存(快:不跑显卡 / 磁盘查询;启动前预检只要这个)。</summary>
+    /// <summary>只探内存(快:不跑显卡 / Java 查询;启动前预检只要这个)。数据来自 <see cref="SystemInfo.Memory"/>。</summary>
     internal static PyDict ProbeMemory()
     {
-        Func<PyDict>? hook = Hook;
+        Func<PyDict>? hook = HardwareHook;
         if (hook != null)
         {
             return hook();
         }
         try
         {
-            PyDict mem = Sysinfo.MemoryInfo();
+            PyDict mem = SystemInfo.Memory();
             return PyDict.Of("ram_mb", Py.Int(Py.Or(mem.Get("total_mb"), 0L)), "ram_avail_mb", Py.Int(Py.Or(mem.Get("avail_mb"), 0L)));
         }
         catch (Exception)
@@ -79,11 +82,7 @@ internal static class NfHardwareProbe
             return PyDict.Of("ram_mb", 0L, "ram_avail_mb", 0L);
         }
     }
-}
 
-/// <summary>光影 / 资源包按硬件分档(低 / 中 / 高配)。</summary>
-public static class ShaderAdvisor
-{
     public static readonly string[] TIERS = { "low", "mid", "high" };
 
     public static string TierLabel(string tier) => tier switch
