@@ -28,6 +28,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class NewsTests : IDisposable
 {
     private static readonly string PrivateCache =

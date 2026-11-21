@@ -32,6 +32,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class WidgetTests : IDisposable
 {
     // ————————————————————————— 夹具 —————————————————————————

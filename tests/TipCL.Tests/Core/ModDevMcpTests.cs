@@ -218,6 +218,7 @@ internal sealed class ModDevFakeApi : ToolRunner.IBackend
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ModJarInfoTests
 {
     [Fact]
@@ -368,6 +369,7 @@ public class ModJarInfoTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ModDevOpsTests
 {
     [Fact]
@@ -573,6 +575,7 @@ public class ModDevOpsTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class TestLaunchTests
 {
     private static async Task<PyDict> RunTool(ToolRunner runner, PyDict args)
@@ -835,6 +838,7 @@ public class ModDevRegistryTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class McpModDevTests
 {
     private static string Rpc(int id, string method, string paramsJson = "{}")

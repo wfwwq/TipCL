@@ -17,6 +17,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AccountGateTests
 {
     private readonly IApi _api = InProcessApi.Instance;

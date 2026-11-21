@@ -13,6 +13,7 @@ namespace TipCL.Tests.App;
 /// <summary>
 /// M4-H P4 反馈页 / 崩溃界面 / 首启向导的 Api 契约回归(不联网:只测本地可验证的部分)。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class FeedbackApiTests
 {
     private readonly IApi _api = InProcessApi.Instance;

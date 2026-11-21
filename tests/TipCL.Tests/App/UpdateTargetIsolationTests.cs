@@ -28,6 +28,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class UpdateTargetIsolationTests
 {
     /// <summary>这条用例自己造的包内容(与 SelfUpdateFeedbackTests 那份区分开,断言才有指向性)。</summary>
@@ -44,6 +45,29 @@ public class UpdateTargetIsolationTests
             await Task.Delay(20);
         }
         return ready();
+    }
+
+    /// <summary>
+    /// AI3-stability:轮询读沙箱文件。更新器在另一个线程上「复制到 staged → File.Move 覆盖」,
+    /// 普通 File.ReadAllText 不带 FileShare.Delete,恰好撞上替换时会抛 IOException(全量巡检实测 5 次里红过 1 次:
+    /// 「being used by another process」),还可能反过来挡住更新器的覆盖。这里共享读写删打开,撞上就当「还没写好」再等一轮。
+    /// </summary>
+    private static string ReadShared(string path)
+    {
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var sr = new StreamReader(fs, Encoding.UTF8);
+            return sr.ReadToEnd();
+        }
+        catch (IOException)
+        {
+            return "";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return "";
+        }
     }
 
     /// <summary>
@@ -117,12 +141,12 @@ public class UpdateTargetIsolationTests
 
                 InProcessApi.Instance.RaiseEvent(new ApiEvent { Event = "update_staged", Text = pkg, Message = "99.0.9" });
 
-                bool written = await PumpAsync(() => File.ReadAllText(TestWriteGuard.UpdateTargetSandbox) == ProbePackage, 15000);
+                bool written = await PumpAsync(() => ReadShared(TestWriteGuard.UpdateTargetSandbox) == ProbePackage, 15000);
                 if (!written)
                 {
                     // 另一条落地路径:对话框真开出来了,等"有人把泄漏的对话框关掉"
                     await CloseLeakedDialogsAsync();
-                    written = await PumpAsync(() => File.ReadAllText(TestWriteGuard.UpdateTargetSandbox) == ProbePackage, 15000);
+                    written = await PumpAsync(() => ReadShared(TestWriteGuard.UpdateTargetSandbox) == ProbePackage, 15000);
                 }
 
                 Assert.True(written,

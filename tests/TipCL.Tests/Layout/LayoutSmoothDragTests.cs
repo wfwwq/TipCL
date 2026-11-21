@@ -20,6 +20,7 @@ using TipCL.Core.Layout;
 using TipCL.Tests.App;
 using Xunit;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class LayoutMotionPureTests
 {
 	[Fact]
@@ -168,6 +169,7 @@ public class LayoutMotionPureTests
 }
 
 /// <summary>真指针手势(无头窗口 + HeadlessWindowExtensions.MouseDown/Move/Up),夹具口径同 LayoutEditorUiTests。</summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class LayoutSmoothDragUiTests
 {
 	private sealed class Store : IDisposable

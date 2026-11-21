@@ -19,6 +19,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiLogsFsTests
 {
     /// <summary>什么都不做的门面:这些工具都不走 IApi。</summary>

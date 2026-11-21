@@ -14,8 +14,19 @@ using Xunit;
 namespace TipCL.Tests.Core;
 
 /// <summary>给会落盘的服务件指一套临时目录，Dispose 时复原。</summary>
+/// <remarks>
+/// AI3-stability:这些目录是进程级静态量,两个 AiServiceDirs 同时存活 = 两个测试在并行改同一套全局目录
+/// (快照写进 A、回滚去 B 里找;先结束的一方还会把目录「复原」成对方的)。用到它的类必须挂
+/// [Collection(GlobalStateCollection.Name)](GlobalStateGuardTests 会拦);万一漏了,这里在重叠的那一刻直接抛,
+/// 不让它变成无辜用例上的偶发红。
+/// </remarks>
 internal sealed class AiServiceDirs : IDisposable
 {
+    private static int _alive;
+
+    /// <summary>进程内发生过几次「两个 AiServiceDirs 同时存活」(诊断用)。</summary>
+    internal static int Overlaps;
+
     private readonly string _root;
     private readonly string? _checkpoints = Checkpoint.CheckpointsDir;
     private readonly string? _artifacts = Artifacts.ArtifactsDir;
@@ -25,6 +36,12 @@ internal sealed class AiServiceDirs : IDisposable
 
     public AiServiceDirs()
     {
+        if (System.Threading.Interlocked.Increment(ref _alive) > 1)
+        {
+            System.Threading.Interlocked.Decrement(ref _alive);
+            System.Threading.Interlocked.Increment(ref Overlaps);
+            throw new InvalidOperationException("AiServiceDirs 被两个测试并行使用:用到它的测试类要挂 [Collection(GlobalStateCollection.Name)]");
+        }
         _root = Path.Combine(Path.GetTempPath(), "tipcl-ai-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
         Checkpoint.CheckpointsDir = Path.Combine(_root, "checkpoints");
@@ -48,6 +65,7 @@ internal sealed class AiServiceDirs : IDisposable
         Store.SessionsDir = _sessions;
         Store.StoreFileOverride = _storeFile;
         try { Directory.Delete(_root, true); } catch (Exception) { }
+        System.Threading.Interlocked.Decrement(ref _alive);
     }
 }
 

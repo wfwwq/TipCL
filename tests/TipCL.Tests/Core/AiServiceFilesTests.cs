@@ -11,6 +11,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class CheckpointTests
 {
     [Fact]
@@ -123,6 +124,7 @@ public class CheckpointTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class RewindTests
 {
     private static (string chat, string file) ArrangeChat(AiServiceDirs dirs, string chatId)
@@ -232,6 +234,7 @@ public class RewindTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class StoreTests
 {
     [Fact]
@@ -372,6 +375,7 @@ public class StoreTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ArtifactsTests
 {
     [Fact]
@@ -439,6 +443,7 @@ public class ArtifactsTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class McpTests
 {
     [Fact]

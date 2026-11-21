@@ -48,6 +48,7 @@ using Xunit;
 
 namespace TipCL.Tests.MutCoverage;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class R32MutCoverageTests
 {
 	// ————————————————————————— 夹具 —————————————————————————

@@ -14,6 +14,7 @@ using Xunit;
 
 namespace TipCL.Tests.Core;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiPermissionAliasModeTests
 {
     private sealed class FakeApi : ToolRunner.IBackend

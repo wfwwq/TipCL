@@ -30,6 +30,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class SelfUpdateFeedbackTests
 {
     private const string PlaceholderSha = "REPLACE-WITH-THE-REAL-SHA256";

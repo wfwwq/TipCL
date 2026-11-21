@@ -7,6 +7,7 @@ using System.IO;
 using TipCL.Core.Layout;
 using Xunit;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class PageLayoutTests
 {
 	// ————— PageLayoutDoc.Default / Normalize —————

@@ -31,6 +31,7 @@ using Xunit;
 /// <summary>
 /// L0 兼容性回归闸门(§3.3 的"可测断言"):v1 ↔ v2 迁移 / 写通 / 回落 / 导入校验。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class LayoutV2CompatTests
 {
 	private readonly string _tmp = Path.Combine(Path.GetTempPath(), "tipcl_layoutv2_tests_" + Guid.NewGuid().ToString("N"));

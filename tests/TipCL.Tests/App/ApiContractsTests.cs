@@ -16,6 +16,7 @@ namespace TipCL.Tests.App;
 ///   2) 参数里的嵌套匿名对象能变成 PyDict——此前 `save_settings(new { data = new { … } })`
 ///      因浅转换被判非 PyDict,设置静默不生效且不落盘。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ApiContractsTests : IDisposable
 {
     private readonly IApi _api = InProcessApi.Instance;

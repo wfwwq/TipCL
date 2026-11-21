@@ -18,6 +18,7 @@ using Xunit;
 
 namespace TipCL.Tests.App;
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiNewFeaturesAppTests
 {
     private static PyDict Report(string level) => PyDict.Of(

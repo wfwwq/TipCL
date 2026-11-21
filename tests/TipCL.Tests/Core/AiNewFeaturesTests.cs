@@ -280,6 +280,7 @@ public class ServerPingTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ServerToolsTests
 {
     [Fact]
@@ -350,6 +351,7 @@ public class ServerToolsTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiPreflightTests
 {
     [Fact]
@@ -450,6 +452,7 @@ public class AiPreflightTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class ShaderAdvisorTests
 {
     [Theory]
@@ -544,6 +547,7 @@ public class ShaderAdvisorTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class DiagnosticReportTests
 {
     [Fact]
@@ -680,6 +684,7 @@ public class DiagnosticReportTests
     }
 }
 
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class InstanceUpgradeTests
 {
     /// <summary>假源:alpha 有新版(并多了一个前置)、beta 当前文件就兼容、gamma 目标版本没有、delta 认不出。</summary>

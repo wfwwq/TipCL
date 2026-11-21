@@ -16,6 +16,7 @@ namespace TipCL.Tests.App;
 /// M4-H P5:AI 子系统(工具表 / 参数解析 / 权限分级 / 三张卡 / 崩溃修复上下文 / 自检)。
 /// 这些用例都不联网:工具执行走假门面,事件链走 AiAgent 的公开回调。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class AiToolsTests
 {
     /// <summary>记录调用的假门面:只读工具调到这里不碰真实数据。</summary>

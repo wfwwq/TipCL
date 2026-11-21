@@ -479,6 +479,7 @@ public class LayoutEngineTests
 ///
 /// 这些用例全部只用零 WPF 的纯模型类型,能在 net8 测试宿主里跑。
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class LayoutRowClampTests
 {
 	/// <summary>造一份最小的合法 v2 文档:一页 + 给定的 blocks 数组正文。</summary>
@@ -731,6 +732,7 @@ public class LayoutRowClampTests
 ///   §3-问题3          → WheelRoutingPrefersInnermostThenOuter / WheelRoutingFallsBackToPageWidest
 ///   §4-能力1          → HostPickPrefersInnermostThenSmallestThenLargest
 /// </summary>
+[Collection(TipCL.Tests.GlobalStateCollection.Name)]
 public class LayoutFixTests
 {
 	private static List<LayoutBlockRef> Refs(params string[] ids)
