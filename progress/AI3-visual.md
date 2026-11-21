@@ -24,9 +24,14 @@
 - `tools/visual/*`(新:run-tour.ps1、shoot-mockups.ps1、mockup-states.js/json、pairs.json、compare.py、vtlib.py、crop.py、tours/*.json、README.md、.gitignore)
 - `progress/AI3-visual.md`(本文件)
 
-## 验收数字
+## 验收数字(2026-11-21 16:39 实测,`_verify_ai3\verify3.ps1 -Name visual`)
 
-见文末「验收」(由最终一次实测填写)。
+- Debug `--no-incremental` 构建 TipCL.Linux.sln:0 错误,警告 3 条(基线 `LayoutMotionAndHeightTests` 的 xUnit1013 ×2 / xUnit2000)。
+- 全量测试:通过 1379 / 跳过 7 / 失败 0(共 1386 = 基线 1365 + 新增 21)。
+- `--ai-selftest`:通过 108 / 失败 0 / 跳过 0,exit=0。
+- `git diff b6df4bb HEAD -- windos`:0 个文件;`git status`:干净。
+- 完整巡检 `tools/visual/tours/full.json`:306 步 / OK 298 / FAIL 8 / 截图 80 张(无窗口);8 步 FAIL 全部是「效果图里有、实际没有」的入口(第 9 / 14 / 23 / 38 / 53 / 153 / 154 / 292 步,逐条见 `_visual\report\findings.md` 第 6 节);0 次启动任务、0 次外部打开。
+- 报告:29 对对照;findings 41 条(缺功能 10 / 明显缺陷 19 / 视觉偏差 12)+ 可接受差异 6 类;修复清单 5 份共 76 条。
 
 ## 遗留 / 已知限制
 
