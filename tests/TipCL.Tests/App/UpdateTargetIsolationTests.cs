@@ -48,6 +48,29 @@ public class UpdateTargetIsolationTests
     }
 
     /// <summary>
+    /// AI3-stability:轮询读沙箱文件。更新器在另一个线程上「复制到 staged → File.Move 覆盖」,
+    /// 普通 File.ReadAllText 不带 FileShare.Delete,恰好撞上替换时会抛 IOException(全量巡检实测 5 次里红过 1 次:
+    /// 「being used by another process」),还可能反过来挡住更新器的覆盖。这里共享读写删打开,撞上就当「还没写好」再等一轮。
+    /// </summary>
+    private static string ReadShared(string path)
+    {
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var sr = new StreamReader(fs, Encoding.UTF8);
+            return sr.ReadToEnd();
+        }
+        catch (IOException)
+        {
+            return "";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return "";
+        }
+    }
+
+    /// <summary>
     /// 把还开着的对话框关掉(宿主 = <see cref="Dlg.Owner"/> 的 OwnedWindows + 桌面生命周期里除主窗口之外
     /// 的窗口)。照 `PhoneSyncTests.ResetLeakedDlgState()` / `InstanceDetailCrashTests:312` 的做法:
     /// "有人把泄漏的对话框关掉"正是让上面那条链落地的另一条路(`Closed` 处理器把 Confirm 判成 false)。
@@ -118,12 +141,12 @@ public class UpdateTargetIsolationTests
 
                 InProcessApi.Instance.RaiseEvent(new ApiEvent { Event = "update_staged", Text = pkg, Message = "99.0.9" });
 
-                bool written = await PumpAsync(() => File.ReadAllText(TestWriteGuard.UpdateTargetSandbox) == ProbePackage, 15000);
+                bool written = await PumpAsync(() => ReadShared(TestWriteGuard.UpdateTargetSandbox) == ProbePackage, 15000);
                 if (!written)
                 {
                     // 另一条落地路径:对话框真开出来了,等"有人把泄漏的对话框关掉"
                     await CloseLeakedDialogsAsync();
-                    written = await PumpAsync(() => File.ReadAllText(TestWriteGuard.UpdateTargetSandbox) == ProbePackage, 15000);
+                    written = await PumpAsync(() => ReadShared(TestWriteGuard.UpdateTargetSandbox) == ProbePackage, 15000);
                 }
 
                 Assert.True(written,
