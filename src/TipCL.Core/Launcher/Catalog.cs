@@ -547,12 +547,10 @@ public static class Catalog
 
 	public static object[] LookupModAlias(string query)
 	{
-		if (_modIdx == null)
-		{
-			_modIdx = Index(_MOD_ALIASES_LOWER);
-		}
+		// AI2-stability:并行搜索时可能同时初始化 —— 用 LazyInitializer 保证安全发布(不会读到建到一半的索引)
+		Dictionary<string, AliasInfo> modIdx = System.Threading.LazyInitializer.EnsureInitialized(ref _modIdx, () => Index(_MOD_ALIASES_LOWER));
 		string text = Py.Lower(Py.Strip(query));
-		if (_modIdx.TryGetValue(text, out AliasInfo value))
+		if (modIdx.TryGetValue(text, out AliasInfo value))
 		{
 			return new object[3]
 			{
@@ -588,12 +586,9 @@ public static class Catalog
 
 	public static object[] LookupModpackAlias(string query)
 	{
-		if (_packIdx == null)
-		{
-			_packIdx = Index(_MODPACK_ALIASES_LOWER);
-		}
+		Dictionary<string, AliasInfo> packIdx = System.Threading.LazyInitializer.EnsureInitialized(ref _packIdx, () => Index(_MODPACK_ALIASES_LOWER));
 		string text = Py.Lower(Py.Strip(query));
-		if (_packIdx.TryGetValue(text, out AliasInfo value))
+		if (packIdx.TryGetValue(text, out AliasInfo value))
 		{
 			return new object[3]
 			{

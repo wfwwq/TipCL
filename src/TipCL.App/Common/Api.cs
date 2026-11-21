@@ -1337,7 +1337,8 @@ public sealed class InProcessApi : IApi
     // ───────────────────── M4-H P1:内容目录(下载页六分段)辅助 ─────────────────────
 
     /// <summary>最近一次搜索结果缓存(按目录 kind),供 install_* 按名字回查 slug/id(照 Windows _mod_cache/_pack_cache)。</summary>
-    private static readonly Dictionary<string, List<object>> CatalogCache = new();
+    // AI2-stability:并行只读工具(search_mods / search_content 等同组并发)会同时写这张表,普通 Dictionary 并发写会损坏内部结构
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<object>> CatalogCache = new();
 
     private static string CatalogTitle(string verb, object name)
         => verb + " " + new PPath(Py.Str(name)).Name;

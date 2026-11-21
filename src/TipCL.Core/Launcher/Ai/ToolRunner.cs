@@ -245,10 +245,10 @@ public sealed partial class ToolRunner
     internal IBackend Api => _api;
 
     /// <summary>该工具现在是否免确认。</summary>
-    public bool IsAllowedAlways(string name) => _alwaysAllowed.Contains(name);
+    public bool IsAllowedAlways(string name) { lock (_alwaysAllowed) return _alwaysAllowed.Contains(name); } // AI2-stability:界面线程与 Agent 线程都会碰,加锁
 
     /// <summary>手动授权(页面「一直允许」按钮 / 测试用)。</summary>
-    public void AllowAlways(string name) => _alwaysAllowed.Add(name);
+    public void AllowAlways(string name) { lock (_alwaysAllowed) _alwaysAllowed.Add(name); }
 
     /// <summary>
     /// 执行一次工具调用。返回值是回给模型的文本(工具消息的 content)。
@@ -273,7 +273,7 @@ public sealed partial class ToolRunner
 
         // MCP 工具是外部进程，本机无法判定它到底动没动东西:一律按写操作对待（除 yolo 档）
         bool readOnly = !mcp && ToolMeta.Get(call.name)!.@readonly;
-        if (!readOnly && (ForceConfirmWrites || !_alwaysAllowed.Contains(call.name)))
+        if (!readOnly && (ForceConfirmWrites || !IsAllowedAlways(call.name)))
         {
             PermissionVerdict verdict = ExternalWriteGate(mcp ? ApplyDontAsk(McpVerdict()) : Decide(call.name, call.args));
             if (verdict.decision == "deny")
@@ -305,7 +305,7 @@ public sealed partial class ToolRunner
                     preview = null;
                 }
                 (bool ok, bool always) = await Confirm(call, label, verdict.reason, preview).ConfigureAwait(false);
-                if (always && !ForceConfirmWrites && !NeverAlwaysAllow(call.name) && AllowsAlways(call.name)) _alwaysAllowed.Add(call.name);
+                if (always && !ForceConfirmWrites && !NeverAlwaysAllow(call.name) && AllowsAlways(call.name)) AllowAlways(call.name);
                 if (!ok)
                 {
                     call.Mark(ToolCallStatus.DENIED, error: "用户拒绝");
