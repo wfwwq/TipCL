@@ -912,14 +912,23 @@ public sealed partial class LayoutEditor
 		}
 		if (_v3DrawerHidden.Children.Count == 0)
 		{
-			Border empty = new Border
+			// GOAL §5.2:没有隐藏项时是一个虚线空状态框(Border 画不了虚线,叠一层虚线 Rectangle)
+			System.Windows.Shapes.Rectangle dash = new System.Windows.Shapes.Rectangle
 			{
-				CornerRadius = new CornerRadius(12.0),
-				Padding = new Thickness(10.0),
-				BorderThickness = new Thickness(1.0),
-				Child = Ui.Txt(I18n.L("没有隐藏的内容"), 12.0, bold: false, "B.InkFaint").Center()
+				RadiusX = 12.0,
+				RadiusY = 12.0,
+				StrokeThickness = 1.2,
+				StrokeDashArray = new DoubleCollection { 4.0, 3.0 },
+				IsHitTestVisible = false
 			};
-			empty.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+			dash.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "B.EditOutline");
+			Grid empty = new Grid();
+			empty.Children.Add(dash);
+			empty.Children.Add(new Border
+			{
+				Padding = new Thickness(10.0, 14.0, 10.0, 14.0),
+				Child = Ui.Txt(I18n.L("没有隐藏的内容"), 12.0, bold: false, "B.InkFaint").Center()
+			});
 			_v3DrawerHidden.Children.Add(empty);
 		}
 		_v3DrawerWidgets.Children.Clear();
