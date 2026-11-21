@@ -216,6 +216,15 @@ public static class LaunchCore
         }
         var gp = new GameProcess(lc.cmd, gameDir, GameLine, null, Py.Str(prep["priority"]), Py.Str(Py.Or(prep.Get("window_title"), "")), start_readers: false);
         lock (_gameLock) _gameProc = gp.proc;
+        // AI3-moddev:按启动任务 id 登记这个进程(run_test_launch 只关自己那次 launch_game 拉起的进程,
+        // 开了「允许多开」时不误关用户正在玩的别的实例)。任务在登记前已被取消(测试启动超时 / 用户点了取消)
+        // ⇒ 进程刚起来就关掉,不留一个没人管的游戏窗口。
+        var tracked = new TipCL.Core.Launcher.Ai.SystemGameProcess(gp.proc);
+        TipCL.Core.Launcher.Ai.LaunchedGames.Register(progress.TaskId, tracked, inst.name, version);
+        if (ct.IsCancellationRequested)
+        {
+            try { tracked.Kill(); } catch (Exception) { }
+        }
         long pid = 0;
         try { pid = gp.proc.Id; } catch (Exception) { }
         api.RaiseEvent(new ApiEvent { Event = "game_started", Message = instName, Text = version, Current = pid });
@@ -245,6 +254,7 @@ public static class LaunchCore
             {
                 if (_gameProc == gp.proc) _gameProc = null;
             }
+            TipCL.Core.Launcher.Ai.LaunchedGames.Unregister(progress.TaskId, tracked);
             api.RaiseEvent(new ApiEvent { Event = "game_exited", Message = instName, Text = version, Current = pid });
         }
         ct.ThrowIfCancellationRequested();
