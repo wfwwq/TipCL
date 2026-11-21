@@ -112,7 +112,7 @@ public static class ShaderAdvisor
         }
         return g.Contains("intel") || g.Contains("uhd") || g.Contains("iris") || g.Contains("vega")
                || g.Contains("radeon(tm) graphics") || g.Contains("radeon graphics") || g.Contains("llvmpipe")
-               || g.Contains("microsoft basic") || g.Contains("virtual") || g.Contains("vmware");
+               || g.Contains("microsoft basic") || g.Contains("basic render") || g.Contains("virtual") || g.Contains("vmware");
     }
 
     /// <summary>独显里够跑重光影的那一档(RTX 20 起、RX 6000 起、Arc A7xx,或显存 ≥ 6 GB)。</summary>

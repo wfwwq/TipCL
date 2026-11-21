@@ -168,7 +168,7 @@ public static class SystemInfo
             {
                 lspci = Sysinfo._run(new List<string> { "lspci" }, 5.0);
             }
-            return MergeLinuxGpus(ParseLspci(lspci), drm, nvidia);
+            return MergeLinuxGpus(ParseLspci(lspci), drm, nvidia, ParseNvidiaSmi(NvidiaSmiText()));
         }
         catch (Exception)
         {
@@ -465,6 +465,97 @@ public static class SystemInfo
     /// lspci 没装时用 /sys 的厂商 + 设备号,NVIDIA 的再用 /proc 的型号替换。
     /// </summary>
     public static List<object> MergeLinuxGpus(List<object> lspci, List<object> drm, List<object> nvidia)
+        => MergeLinuxGpus(lspci, drm, nvidia, new List<object>());
+
+    /// <summary>
+    /// 同上,再叠一路 nvidia-smi(<see cref="ParseNvidiaSmi"/>)。AI3-linux-real 真机(WSL2)实测补的:
+    /// <list type="bullet">
+    /// <item>NVIDIA 专有驱动下 lspci / /sys / /proc 都给不出显存(vram_mb 恒为 0),nvidia-smi 给得出;
+    /// 按顺序把它的型号 / 显存 / 驱动版本合进 NVIDIA 条目。</item>
+    /// <item>WSL2 里 lspci 只有 GPU-PV 占位的「Microsoft Corporation Basic Render Driver」,真实独显只有
+    /// /usr/lib/wsl/lib/nvidia-smi 看得到;多出来的 nvidia-smi 条目先顶替这些占位,再不够就追加。</item>
+    /// </list>
+    /// </summary>
+    public static List<object> MergeLinuxGpus(List<object> lspci, List<object> drm, List<object> nvidia, List<object> smi)
+    {
+        List<object> merged = MergeLinuxGpusRaw(lspci, drm, nvidia);
+        smi ??= new List<object>();
+        int next = 0;
+        for (int i = 0; i < merged.Count && next < smi.Count; i++)
+        {
+            var g = new PyDict(Py.D(merged[i]));
+            if (!string.Equals(Py.S(g.Get("vendor")), "NVIDIA", StringComparison.OrdinalIgnoreCase)
+                && !Py.S(g.Get("name")).ToLowerInvariant().Contains("nvidia"))
+            {
+                continue;
+            }
+            merged[i] = g;
+            PyDict s = Py.D(smi[next++]);
+            g["name"] = s.Get("name");
+            g["vendor"] = "NVIDIA";
+            if (Py.Int(Py.Or(s.Get("vram_mb"), 0L)) > 0)
+            {
+                g["vram_mb"] = s.Get("vram_mb");
+            }
+            if (Py.S(g.Get("driver")).Length == 0)
+            {
+                g["driver"] = "nvidia";
+            }
+            g["driver_version"] = Py.Or(s.Get("driver_version"), "");
+        }
+        for (; next < smi.Count; next++)
+        {
+            var s = new PyDict(Py.D(smi[next]));
+            int placeholder = merged.FindIndex(o => IsWslPlaceholderGpu(Py.S(Py.D(o).Get("name"))));
+            if (placeholder >= 0)
+            {
+                merged[placeholder] = s;
+            }
+            else
+            {
+                merged.Add(s);
+            }
+        }
+        return Sysinfo._prefer_physical_gpus(merged);
+    }
+
+    /// <summary>WSL2 GPU-PV 在 lspci 里的占位设备(不是真实型号)。</summary>
+    public static bool IsWslPlaceholderGpu(string name)
+        => (name ?? "").IndexOf("basic render driver", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    /// <summary>
+    /// 解析 <c>nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits</c>
+    /// (也容忍带 「MiB」 单位的写法)。报错文字(驱动没加载、没有设备等)一律不当显卡。
+    /// </summary>
+    public static List<object> ParseNvidiaSmi(string text)
+    {
+        var list = new List<object>();
+        foreach (string line in Py.SplitLines(text ?? ""))
+        {
+            string[] parts = line.Split(',');
+            if (parts.Length < 3)
+            {
+                continue;
+            }
+            string name = parts[0].Trim();
+            string memText = parts[1].Trim();
+            string digits = new string(memText.TakeWhile(char.IsDigit).ToArray());
+            if (name.Length == 0 || digits.Length == 0 || !long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out long mib))
+            {
+                continue;
+            }
+            string rest = memText.Substring(digits.Length).Trim();
+            if (rest.Length > 0 && !rest.Equals("MiB", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            list.Add(PyDict.Of("name", name, "vendor", "NVIDIA", "driver", "nvidia", "vram_mb", mib,
+                "driver_version", parts[2].Trim()));
+        }
+        return list;
+    }
+
+    private static List<object> MergeLinuxGpusRaw(List<object> lspci, List<object> drm, List<object> nvidia)
     {
         var used = new HashSet<int>();
         PyDict? TakeDrm(string vendor)
@@ -494,7 +585,7 @@ public static class SystemInfo
                 }
                 result.Add(g);
             }
-            return Sysinfo._prefer_physical_gpus(result);
+            return result;
         }
         int nv = 0;
         foreach (object raw in drm)
@@ -511,7 +602,7 @@ public static class SystemInfo
         {
             result.Add(nvidia[nv]);
         }
-        return Sysinfo._prefer_physical_gpus(result);
+        return result;
     }
 
     // ───────────────────────────── 内部 ─────────────────────────────
@@ -531,7 +622,27 @@ public static class SystemInfo
         {
             return "Intel";
         }
+        if (lower.Contains("microsoft"))
+        {
+            return "Microsoft";
+        }
         return "";
+    }
+
+    /// <summary>
+    /// nvidia-smi 的查询输出;没装 / 没有 NVIDIA 显卡时为空串(起不来立刻返回,不等超时)。
+    /// 先找 PATH,再找 WSL2 的 /usr/lib/wsl/lib/nvidia-smi(非登录 shell 里它不一定在 PATH 上)。
+    /// </summary>
+    private static string NvidiaSmiText()
+    {
+        var args = new List<string> { "--query-gpu=name,memory.total,driver_version", "--format=csv,noheader,nounits" };
+        string text = Sysinfo._run(new List<string> { "nvidia-smi" }.Concat(args).ToList(), 5.0);
+        const string wsl = "/usr/lib/wsl/lib/nvidia-smi";
+        if (ParseNvidiaSmi(text).Count == 0 && File.Exists(wsl))
+        {
+            text = Sysinfo._run(new List<string> { wsl }.Concat(args).ToList(), 5.0);
+        }
+        return text;
     }
 
     private static string ReadSmall(string path)

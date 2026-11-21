@@ -309,13 +309,43 @@ public static class Auth
 		{
 			openBrowserHook(url);
 		}
-		else if (Utils.IS_WINDOWS)
+		else
 		{
-			Process.Start(new ProcessStartInfo(url)
+			// AI3-linux-real:Windows 原版只有 ShellExecute 一支,Linux / macOS 上登录页从不自动打开
+			// (用户只能在登录框里点「打开浏览器」)。这里补上 xdg-open / open,参数走 ArgumentList 不经 shell。
+			ProcessStartInfo psi = BrowserStartInfo(url, Utils.IS_WINDOWS, Utils.IS_MAC);
+			if (psi != null)
+			{
+				Process.Start(psi)?.Dispose();
+			}
+		}
+	}
+
+	/// <summary>
+	/// 打开登录页用的启动参数(纯函数,可测):只认 http(s) 地址;Windows 走 ShellExecute,
+	/// macOS 走 <c>open</c>,其余走 <c>xdg-open</c>,地址作为唯一参数原样传入。不认的地址返回 null。
+	/// </summary>
+	internal static ProcessStartInfo BrowserStartInfo(string url, bool windows, bool mac)
+	{
+		if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out Uri uri)
+			|| (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+		{
+			return null;
+		}
+		if (windows)
+		{
+			return new ProcessStartInfo(url.Trim())
 			{
 				UseShellExecute = true
-			})?.Dispose();
+			};
 		}
+		ProcessStartInfo psi = new ProcessStartInfo(mac ? "open" : "xdg-open")
+		{
+			UseShellExecute = false,
+			CreateNoWindow = true
+		};
+		psi.ArgumentList.Add(url.Trim());
+		return psi;
 	}
 
 	internal static object Idx(object obj, object key)
