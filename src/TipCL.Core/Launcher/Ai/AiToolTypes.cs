@@ -118,6 +118,11 @@ public static class ToolMeta
         new("export_diagnostic_report", false, "write_local", "medium", false),
         new("apply_instance_upgrade", false, "write_local", "high", true),
         new("remove_server", false, "delete", "high", false),
+        // AI2-modpack:整合包制作(导出 / 分发许可检查 / 一句话造包 / 批量安装)。两个写工具都不给「本对话都允许」,见 ToolRunner.AllowsAlways
+        new("check_modpack_distribution", true, "network", "low", false),
+        new("plan_modpack", true, "network", "low", false),
+        new("export_modpack", false, "write_local", "medium", true),
+        new("install_mods_batch", false, "write_local", "high", true),
     };
 
     public static Dictionary<string, ToolMetaInfo> Map

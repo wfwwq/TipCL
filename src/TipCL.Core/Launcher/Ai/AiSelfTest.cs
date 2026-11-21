@@ -200,6 +200,8 @@ public static class AiSelfTest
         Hooks.HOOKS_DIR = savedHooksDir;
         // 14. AI-new-features:升级 / 预检 / 服务器 / 光影推荐 / 诊断报告(纯逻辑)
         NewFeaturesSelfTest.Verify(Check);
+        // 15. AI2-modpack:整合包导出 / 分发许可 / 一句话造包 / 批量安装(纯逻辑)
+        ModpackSelfTest.Verify(Check);
 
         return result;
     }

@@ -81,7 +81,13 @@ public static class AiData
         "- 用户问「能不能启动 / 启动前帮我检查」或收到启动页预检结果:先 preflight_check,按 error → warn 的顺序修,修完再跑一次确认。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         "- 服务器:list_servers 看列表,ping_server 查延迟 / 在线人数 / 版本;add_server / remove_server 会改游戏内「多人游戏」列表。ping 不通时说清是超时还是连不上,不要猜。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         "- 问「我的电脑适合什么光影 / 资源包」:recommend_shaders,先说硬件档位和依据,再用 ask_user 让用户选;没有 Iris / Oculus / OptiFine 时先说要装哪个。档位是按名称推断的,要如实说。\n" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
-        "- 崩溃排查告一段落、用户想发给别人求助时:export_diagnostic_report 导出报告(自动打码账号令牌与用户名),告诉用户文件位置。"; // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        "- 崩溃排查告一段落、用户想发给别人求助时:export_diagnostic_report 导出报告(自动打码账号令牌与用户名),告诉用户文件位置。" + // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        // AI2-modpack:一句话造包 / 导出整合包的流程指引(Linux 侧新增,Windows 版没有对应段落)
+        "\n\n# 整合包制作(一句话造包 / 导出)\n" + // i18n:ignore(AI2-modpack:给模型看的提示词)
+        "- 用户说「帮我做一个 XX 主题的整合包」:先 plan_modpack(mc_version / loader / theme / size)出候选清单,把每项的理由、前置、冲突讲清楚,用 ask_user(allow_multiple=true)让用户勾选确认。有冲突的先 ask_user 问留哪个。用户没确认清单之前不要 create_instance,也不要装任何东西。\n" + // i18n:ignore(AI2-modpack:给模型看的提示词)
+        "- 清单确认后按计划卡一步步做,每步完成用 update_plan 更新:create_instance → install_game(同一 mc_version + loader)→ install_mods_batch(把确认的模组一次列全,整批只确认一次)→ scan_mod_conflicts + preflight_check → (用户愿意时)launch_game 试启动并 get_latest_log 看日志 → export_modpack。每一步写操作都要等用户确认,被拒绝就停下来问。\n" + // i18n:ignore(AI2-modpack:给模型看的提示词)
+        "- 导出前先 check_modpack_distribution,把「可链接 / 需打包 / 禁止分发」三类讲清楚:禁止分发的先替换、禁用或用 exclude 排除才能导出;来源不明的本地 jar 可能侵权,默认不打包,只有用户明确同意才传 allow_bundled_jars=true。\n" + // i18n:ignore(AI2-modpack:给模型看的提示词)
+        "- 要不要把当前 config(配置预设)/ 资源包 / 光影 / 数据包打进包由用户决定(include_overrides);不要编造预设,只打包实例里真实存在的文件。"; // i18n:ignore(AI2-modpack:给模型看的提示词)
 
     /// <summary>把 `__LANG_RULE__` 换成当前语言的规矩(照 Windows 版 BackendApi 的取用方式)。</summary>
     public static string SystemPrompt(string? langRule = null)
@@ -129,6 +135,9 @@ public static class AiData
         (new[] { "服务器", "server", "ping", "延迟", "多人游戏", "在线人数" }, new[] { "list_servers", "add_server", "remove_server", "ping_server" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         (new[] { "光影", "shader", "资源包", "材质", "适合什么", "配置低", "显卡" }, new[] { "recommend_shaders" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
         (new[] { "诊断报告", "导出报告", "导出日志", "发给别人", "求助", "report" }, new[] { "export_diagnostic_report" }), // i18n:ignore(AI-integration:给模型看的提示词/关键词,同 perf-saves 口径)
+        // AI2-modpack:整合包制作(造包 / 批量安装 / 许可检查 / 导出)
+        (new[] { "整合包", "modpack", "造包", "做包", "打包", "mrpack", "导出", "分发", "许可", "export" }, // i18n:ignore(AI2-modpack:给模型看的关键词)
+            new[] { "plan_modpack", "install_mods_batch", "check_modpack_distribution", "export_modpack", "scan_mod_conflicts", "preflight_check", "install_game" }),
     };
 
     /// <summary>「用户在下命令」而不是在提问(用于决定是否带上写操作工具)。</summary>
