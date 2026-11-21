@@ -537,6 +537,12 @@ public class AiContentTests
         ["javax.script(脚本引擎)"] = "Java.loadClass('javax.script.ScriptEngineManager')",
         ["sun.* / jdk.internal / com.sun.*(JDK 内部类)"] = "Java.loadClass('sun.misc.Unsafe')",
         ["Java.loadClass 参数不是字符串常量(没法确认加载的是什么)"] = "Java.loadClass(name)",
+        // AI3-content 补拦(更多正反例见 AiContent3Tests)
+        ["字符串拼接构造 Java 类名(如 'java.ne' + x)"] = "let cls = 'java.ne' + suffix",
+        ["\\u / \\x / 八进制转义写出普通 ASCII 字符(用转义藏代码)"] = "const k = '\\x65val'",
+        ["模板字符串(反引号,可用 ${} 拼出类名或代码)"] = "const s = `x`",
+        ["方括号动态属性访问(如 Java['loadClass'])"] = "Java['loadClass']('a.B')",
+        ["constructor / __proto__ 原型链(可以摸到 Function 构造器)"] = "''.constructor.constructor('x')",
     };
 
     [Fact]

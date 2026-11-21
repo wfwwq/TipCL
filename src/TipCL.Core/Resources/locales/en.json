@@ -3375,5 +3375,11 @@
  "搜地图「{query}」": "Search maps \"{query}\"",
  "搜版本「{query}」": "Search versions \"{query}\"",
  "检查模组 {filename}": "Inspect mod {filename}",
- "读配置 {path}": "Read config {path}"
+ "读配置 {path}": "Read config {path}",
+ "提醒：这些命名空间既不是 minecraft 也不是已装模组，可能拼错了或模组没装（不影响写入）：{list}": "Note: these namespaces are neither minecraft nor an installed mod; maybe a typo or the mod is missing (writing is not blocked): {list}",
+ "({i}/{n})✓ {name} 已装好": "({i}/{n}) ✓ {name} installed",
+ "({i}/{n})✗ {name} 没装上：{error}": "({i}/{n}) ✗ {name} failed: {error}",
+ "已装好 {n} 个模组": "Installed {n} mods",
+ "装好 {ok} 个，{fail} 个没装上：{names}": "Installed {ok}, {fail} failed: {names}",
+ "确认后在后台逐个安装，任务卡上显示第几个、每个成功还是失败": "After you confirm, they are installed one by one in the background; the task card shows which one is running and whether each succeeded"
 }

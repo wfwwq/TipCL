@@ -75,6 +75,12 @@ public static class ContentTools
         public readonly List<Write> Writes = new();
         public readonly List<string> Notes = new();
 
+        /// <summary>AI3-content:引用的 ID 命名空间可疑(不是 minecraft 也不是已装模组)的提醒;只提醒,不拒绝。</summary>
+        public readonly List<string> Warnings = new();
+
+        /// <summary>AI3-content:可疑的命名空间名(确认卡上列出)。</summary>
+        public readonly List<string> SuspiciousNamespaces = new();
+
         public IEnumerable<Write> Changed => Writes.Where(w => w.Changed);
     }
 
@@ -210,6 +216,25 @@ public static class ContentTools
         plan.Writes.Add(w);
     }
 
+    /// <summary>AI3-content:按已装模组的 mod id 检查引用的命名空间,结果进 plan.Warnings(不抛异常、不拒绝)。</summary>
+    private static void CheckIds(Plan plan, List<ContentIds.Ref> refs, HashSet<string> own, string modsDir)
+    {
+        if (refs.Count == 0)
+        {
+            return;
+        }
+        try
+        {
+            HashSet<string> mods = ContentIds.InstalledModIds(modsDir);
+            plan.Warnings.AddRange(ContentIds.Warnings(refs, mods, own));
+            plan.SuspiciousNamespaces.AddRange(ContentIds.SuspiciousNamespaces(refs, mods, own));
+        }
+        catch (Exception)
+        {
+            // 读不了 mods 目录:只是少一条提醒,不影响写入
+        }
+    }
+
     private static void CheckTotal(Plan plan)
     {
         long total = plan.Writes.Sum(w => w.Bytes?.LongLength ?? Encoding.UTF8.GetByteCount(w.Text ?? ""));
@@ -320,6 +345,8 @@ public static class ContentTools
             throw new ValueError("files 不能为空(至少一个配方 / 战利品表 / 进度 / 函数 / 标签)");
         }
         PackMeta(plan, root, row, description, name);
+        var refs = new List<ContentIds.Ref>();
+        HashSet<string> own = ContentIds.ExistingNamespaces(root, "data");
         for (int i = 0; i < files.Count; i++)
         {
             string where = "files[" + i + "]";
@@ -365,6 +392,7 @@ public static class ContentTools
                     }
                     dir = ContentFormats.TagDir(tagType, mc);
                     note = ContentValidate.Tag(json, mc, label);
+                    ContentIds.FromTag(json, tagType, label, refs);
                 }
                 else
                 {
@@ -375,6 +403,18 @@ public static class ContentTools
                         "loot_table" => ContentValidate.LootTable(json, mc, label),
                         _ => ContentValidate.Advancement(json, mc, label),
                     };
+                    switch (type)
+                    {
+                        case "recipe":
+                            ContentIds.FromRecipe(json, label, refs);
+                            break;
+                        case "loot_table":
+                            ContentIds.FromLootTable(json, label, refs);
+                            break;
+                        default:
+                            ContentIds.FromAdvancement(json, label, refs);
+                            break;
+                    }
                 }
                 if (note.Length > 0)
                 {
@@ -382,11 +422,13 @@ public static class ContentTools
                 }
                 text = Dump(json);
             }
+            own.Add(ns);
             string rel = "data/" + ns + "/" + dir + "/" + path + ext;
             string target = Guard(Path.Combine(new[] { root }.Concat(rel.Split('/')).ToArray()), root);
             AddText(plan, target, rel, text);
         }
         CheckTotal(plan);
+        CheckIds(plan, refs, own, PPath.Abs(Py.S(ctx.Folders.Get("mods"))));
         return plan;
     }
 
@@ -434,6 +476,8 @@ public static class ContentTools
             throw new ValueError("files 不能为空(至少一个语言文件 / 模型 / 方块状态 / 贴图)");
         }
         PackMeta(plan, root, row, description, name);
+        var refs = new List<ContentIds.Ref>();
+        HashSet<string> own = ContentIds.ExistingNamespaces(root, "assets");
         for (int i = 0; i < files.Count; i++)
         {
             string where = "files[" + i + "]";
@@ -453,6 +497,7 @@ public static class ContentTools
             {
                 throw new ValueError(where + ".namespace 只能用小写字母、数字和 _ . -: " + ns);
             }
+            own.Add(ns);
             string ext = type == "texture" ? ".png" : ".json";
             string path = StripExt(Py.S(f.Get("path")).Trim(), ext);
             string label = where + "(" + type + " " + ns + ":" + path + ")";
@@ -509,14 +554,17 @@ public static class ContentTools
                     break;
                 case "model":
                     ContentValidate.Model(json, label);
+                    ContentIds.FromModel(json, label, refs);
                     break;
                 default:
                     ContentValidate.Blockstate(json, label);
+                    ContentIds.FromBlockstate(json, ns + ":" + path, label, refs);
                     break;
             }
             AddText(plan, target, rel, Dump(json));
         }
         CheckTotal(plan);
+        CheckIds(plan, refs, own, PPath.Abs(Py.S(ctx.Folders.Get("mods"))));
         return plan;
     }
 
@@ -698,6 +746,68 @@ public static class ContentTools
         }
     }
 
+    /// <summary>
+    /// AI3-content:这次调用可能**新建**的目录 —— (最近的已存在祖先目录, 它下面第一级新目录名)。
+    /// 检查点只按文件记(新建的文件撤回时删掉),目录不记;这里把「撤回后会空着的新目录」交给
+    /// Checkpoint.SnapshotNewDirs 另记一份名单,撤回时只删本次新建、且已经空了的目录,原来就有的一个都不碰。
+    /// </summary>
+    public static List<(string Parent, string Child)> NewDirWatches(string name, PyDict? args, string instance)
+    {
+        var list = new List<(string, string)>();
+        Plan? plan;
+        try
+        {
+            plan = PlanFor(name, args, instance);
+        }
+        catch (Exception)
+        {
+            return list; // 执行时同样会被拒,不必记
+        }
+        if (plan == null)
+        {
+            return list;
+        }
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Write w in plan.Changed)
+        {
+            string? child = Path.GetDirectoryName(w.Path);
+            string? parent = child == null ? null : Path.GetDirectoryName(child);
+            if (child == null || Directory.Exists(child))
+            {
+                continue;
+            }
+            // 往上找到第一个已存在的目录:它下面那一级就是这次要新建的最外层目录
+            while (parent != null && !Directory.Exists(parent))
+            {
+                child = parent;
+                parent = Path.GetDirectoryName(parent);
+            }
+            if (parent != null && seen.Add(Path.Combine(parent, Path.GetFileName(child))))
+            {
+                list.Add((parent, Path.GetFileName(child)));
+            }
+        }
+        return list;
+    }
+
+    /// <summary>AiAgent 在写工具执行前调(在内容快照之前):按 <see cref="NewDirWatches"/> 记下名单。返回记了几条;失败不阻断操作。</summary>
+    public static int SnapshotNewDirs(string chatId, string turnId, string name, PyDict? args, string instance)
+    {
+        if (!Handles(name) || name == "validate_content")
+        {
+            return 0;
+        }
+        int n = 0;
+        foreach (IGrouping<string, (string Parent, string Child)> g in NewDirWatches(name, args, instance).GroupBy(x => x.Parent, StringComparer.OrdinalIgnoreCase))
+        {
+            if (Py.Truthy(Checkpoint.SnapshotNewDirs(chatId, turnId, g.Key, g.Select(x => x.Child)).Get("ok")))
+            {
+                n++;
+            }
+        }
+        return n;
+    }
+
     private static string Tip(string tool) => tool switch
     {
         "create_datapack" => "提醒用户:进存档后输入 /reload(需要作弊权限)或重进存档让数据包生效;没生效时用 validate_content 查加载报错。",
@@ -742,6 +852,11 @@ public static class ContentTools
         if (plan.Notes.Count > 0)
         {
             result["notes"] = plan.Notes.Cast<object>().ToList();
+        }
+        if (plan.Warnings.Count > 0)
+        {
+            // AI3-content:命名空间可疑的 ID 只提醒、照样写入;模型应转告用户确认是不是拼错 / 模组没装
+            result["warnings"] = plan.Warnings.Cast<object>().ToList();
         }
         result["next_step"] = written.Count == 0 ? "内容与现有文件完全相同,没有写入任何东西。" : Tip(plan.Tool);
         return result;
@@ -948,6 +1063,19 @@ public static class ContentTools
         check("KubeJS 危险用法拦截", ContentValidate.KubeJsViolations("Java.loadClass('java.lang.Runtime')").Count > 0
             && ContentValidate.KubeJsViolations("ServerEvents.recipes(event => { event.remove({ output: 'minecraft:stick' }) })").Count == 0);
         check("KubeJS 脚本不给「本对话都允许」", !ToolRunner.AllowsAlways("write_kubejs_script"));
+        // AI3-content:绕过写法加固 + ID 命名空间提醒
+        check("KubeJS 绕过写法(拼接 / 转义 / 模板 / 方括号 / constructor)也拦",
+            new[] { "const n = 'java.n' + 'et.Socket'", "const k = '\\x65val'", "const s = `x`", "Java['loadClass']('a.B')", "''.constructor.constructor('x')" }
+                .All(s => ContentValidate.KubeJsViolations(s).Count > 0)
+            && ContentValidate.KubeJsViolations("e.add('minecraft:diamond', '\\u00a7b宝石')").Count == 0);
+        var refs = new List<ContentIds.Ref>
+        {
+            new("minecraft:stone", "item", "r"), new("create:wrench", "item", "r"), new("#c:ingots", "tag", "r"),
+        };
+        var none = new HashSet<string>(StringComparer.Ordinal);
+        check("ID 命名空间提醒:未装模组才提醒,minecraft / 已装模组 / 公共标签不提醒",
+            ContentIds.Warnings(refs, none, none).Count == 1
+            && ContentIds.Warnings(refs, new HashSet<string>(StringComparer.Ordinal) { "create" }, none).Count == 0);
         bool traversal;
         try
         {

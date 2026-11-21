@@ -330,6 +330,8 @@ public sealed class AiAgent
             }
             // AI2-stability:原地升级新装的版本目录也纳入撤回(只记名单不存内容,见 UpgradeCheckpoint)
             UpgradeCheckpoint.SnapshotFor(ChatId, TurnId, call.name, call.args, _runner.Instance);
+            // AI3-content:数据包 / 资源包 / 脚本新建的目录也记一份名单(必须在内容快照之前:撤回时先删文件、再删变空的新目录)
+            ContentTools.SnapshotNewDirs(ChatId, TurnId, call.name, call.args, _runner.Instance);
             List<string> paths = Tools.AffectedPaths(call.name, call.args, _runner.Instance);
             if (paths.Count == 0)
             {

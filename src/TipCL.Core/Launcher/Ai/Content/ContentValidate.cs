@@ -980,14 +980,18 @@ public static class ContentValidate
     /// <summary>
     /// KubeJS 脚本里禁止出现的用法(规则名 → 正则)。脚本跑在游戏进程里,有完整的 Java 权限;
     /// 这里拦的是「能碰文件系统 / 网络 / 起进程 / 反射绕过」的那几类入口,以及能把这些拼出来的动态求值。
-    /// 检查对原文和「把 \uXXXX 转义还原后」的文本各跑一遍(防 \u0065val 这种写法);注释和字符串里出现也算 ——
+    /// 检查对三份文本各跑一遍:原文、「把 \uXXXX / \xXX / 八进制转义还原后」、「再把相邻的字符串常量拼接折叠后」
+    /// (防 \u0065val、'java.n' + 'et.URL' 这种写法);整段文本一起匹配(跨行写也算),注释和字符串里出现也算 ——
     /// 宁可误拦一句注释,也不去做容易被绕过的语法分析。
+    /// AI3-content 补的六类(表末尾):字符串拼接构造 Java 类名、用转义写普通字符、模板字符串、方括号动态属性访问、
+    /// constructor / __proto__ 原型链;Function 规则从只拦 Function( 扩到别名 / .call / .apply / new / 当参数传。
+    /// 转义只拦「写出的是可见 ASCII 字符」的(那只可能是在藏代码);\u00a7 这类颜色符、中文等非 ASCII 转义照常放行。
     /// </summary>
     public static readonly (string Rule, string Pattern)[] KubeJsDenied =
     {
         ("require(...) 加载模块", @"\brequire\s*\("),
         ("eval 动态求值", @"\beval\b"),
-        ("Function 构造器动态求值", @"\bFunction\s*\("),
+        ("Function 构造器动态求值", @"\bFunction\s*[(.\[`]|\bnew\s+Function\b|\breturn\s+Function\b|[=:(,?&|]\s*Function\b(?!\s*[\w$])"),
         ("importPackage / importClass / JavaImporter", @"\b(?:importPackage|importClass|JavaImporter)\b"),
         ("JavaAdapter", @"\bJavaAdapter\b"),
         ("Packages.* 直接访问 Java 包", @"\bPackages\s*[.\[]"),
@@ -1005,18 +1009,93 @@ public static class ContentValidate
         ("javax.script(脚本引擎)", @"javax\.script\b"),
         ("sun.* / jdk.internal / com.sun.*(JDK 内部类)", @"\b(?:sun\.|jdk\.internal|com\.sun\.)"),
         ("Java.loadClass 参数不是字符串常量(没法确认加载的是什么)", @"Java\s*\.\s*loadClass\s*\(\s*(?![""'][^""'+]*[""']\s*\))"),
+        // ── AI3-content 补拦 ──
+        ("字符串拼接构造 Java 类名(如 'java.ne' + x)",
+            @"([""'])\.?(?:java|javax|jdk|sun|com|org|net|dev|io|kotlin|scala|groovy)\.[\w$.]*\1\s*\+"
+            + @"|\+\s*([""'])\.?(?:java|javax|jdk|sun|com|org|net|dev|io|kotlin|scala|groovy)\.[\w$.]*\2"
+            + @"|([""'])\.(?:lang|io|net|nio|reflect|invoke|misc|internal|script)\b[\w$.]*\3\s*\+"
+            + @"|\+\s*([""'])\.(?:lang|io|net|nio|reflect|invoke|misc|internal|script)\b[\w$.]*\4"),
+        ("\\u / \\x / 八进制转义写出普通 ASCII 字符(用转义藏代码)",
+            @"\\u00[2-7][0-9a-fA-F]|\\u\{0*[2-7][0-9a-fA-F]\}|\\x[2-7][0-9a-fA-F]|\\(?:1[0-7]{2}|0?[4-7][0-7])(?![0-7])"),
+        ("模板字符串(反引号,可用 ${} 拼出类名或代码)", @"`"),
+        ("方括号动态属性访问(如 Java['loadClass'])",
+            @"(?:(?<![\w$])(?!(?:return|in|of|case|typeof|void|yield|await|else|do|throw|delete|new|default|instanceof)(?![\w$]))[A-Za-z_$][\w$]*|[)\]])\s*\[\s*[""'`]"
+            + @"|(?<![\w$.])(?:Java|Packages|java|javax|global|globalThis|this|self|Function|Object|Reflect|JavaWrapper|Utils)\s*\["),
+        ("constructor / __proto__ 原型链(可以摸到 Function 构造器)", @"\bconstructor\b|\b__proto__\b|\bgetPrototypeOf\b|\bsetPrototypeOf\b"),
     };
 
-    private static readonly Regex UnicodeEscapeRx = new(@"\\u([0-9a-fA-F]{4})|\\u\{([0-9a-fA-F]{1,6})\}", RegexOptions.CultureInvariant);
+    private static readonly Regex EscapeRx = new(
+        @"\\u([0-9a-fA-F]{4})|\\u\{([0-9a-fA-F]{1,6})\}|\\x([0-9a-fA-F]{2})|\\([0-3][0-7]{2}|[0-7]{2})", RegexOptions.CultureInvariant);
 
-    /// <summary>把 \uXXXX / \u{X} 转义还原(只为检查,不改写入内容)。</summary>
+    /// <summary>
+    /// 把 \uXXXX / \u{X} / \xXX / 八进制(\145)转义还原(只为检查,不改写入内容)。
+    /// 还原出的控制字符(含换行)一律写成空格,行号不会因此错位。
+    /// </summary>
     public static string UnescapeUnicode(string text)
-        => UnicodeEscapeRx.Replace(text ?? "", m =>
+        => EscapeRx.Replace(text ?? "", m =>
         {
-            string hex = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
-            int code = Convert.ToInt32(hex, 16);
-            return code <= 0x10FFFF ? char.ConvertFromUtf32(code >= 0xD800 && code <= 0xDFFF ? 0xFFFD : code) : m.Value;
+            int code;
+            if (m.Groups[4].Success)
+            {
+                code = Convert.ToInt32(m.Groups[4].Value, 8);
+            }
+            else
+            {
+                string hex = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value;
+                code = Convert.ToInt32(hex, 16);
+            }
+            if (code > 0x10FFFF)
+            {
+                return m.Value;
+            }
+            if (code < 0x20)
+            {
+                return " ";
+            }
+            return char.ConvertFromUtf32(code >= 0xD800 && code <= 0xDFFF ? 0xFFFD : code);
         });
+
+    /// <summary>相邻的两个字符串常量 'a' + 'b'(不含转义与换行)。</summary>
+    private static readonly Regex ConcatRx = new(
+        @"([""'])((?:(?!\1)[^\\\n])*)\1(\s*)\+(\s*)([""'])((?:(?!\5)[^\\\n])*)\5", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// 把 'java.n' + 'et.URL' 这种常量拼接折叠成一个字符串(只为检查)。拼接中间的换行挑到后面补回,行号不错位。
+    /// </summary>
+    public static string FoldConstantConcat(string text)
+    {
+        string cur = text ?? "";
+        for (int i = 0; i < 64; i++)
+        {
+            string next = ConcatRx.Replace(cur, m =>
+            {
+                string q = m.Groups[1].Value;
+                string newlines = new string('\n', (m.Groups[3].Value + m.Groups[4].Value).Count(c => c == '\n'));
+                return q + m.Groups[2].Value + m.Groups[6].Value + q + newlines;
+            });
+            if (next == cur)
+            {
+                break;
+            }
+            cur = next;
+        }
+        return cur;
+    }
+
+    private static readonly Dictionary<string, Regex> DeniedRx = new(StringComparer.Ordinal);
+
+    private static Regex RuleRx(string pattern)
+    {
+        lock (DeniedRx)
+        {
+            if (!DeniedRx.TryGetValue(pattern, out Regex? rx))
+            {
+                rx = new Regex(pattern, RegexOptions.CultureInvariant);
+                DeniedRx[pattern] = rx;
+            }
+            return rx;
+        }
+    }
 
     /// <summary>KubeJS 静态检查:返回命中的规则(「第 N 行:规则 —— 片段」);空 = 没发现禁用用法。</summary>
     public static List<string> KubeJsViolations(string content)
@@ -1024,30 +1103,28 @@ public static class ContentValidate
         var hits = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         string raw = (content ?? "").Replace("\r\n", "\n").Replace("\r", "\n");
-        foreach (string text in new[] { raw, UnescapeUnicode(raw) })
+        string unescaped = UnescapeUnicode(raw);
+        foreach (string text in new[] { raw, unescaped, FoldConstantConcat(unescaped) }.Distinct(StringComparer.Ordinal))
         {
             string[] lines = text.Split('\n');
+            var starts = new List<int> { 0 };
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] == '\n')
+                {
+                    starts.Add(i + 1);
+                }
+            }
             foreach ((string rule, string pattern) in KubeJsDenied)
             {
-                var rx = new Regex(pattern, RegexOptions.CultureInvariant);
-                for (int i = 0; i < lines.Length; i++)
+                // 整段匹配:跨行写法(参数换行、ASI 跨行的 x\n['y'])也算,行号取匹配起点
+                foreach (Match m in RuleRx(pattern).Matches(text))
                 {
-                    Match m = rx.Match(lines[i]);
-                    if (m.Success && seen.Add(rule + "@" + i))
+                    int at = starts.BinarySearch(m.Index);
+                    int line = at >= 0 ? at : ~at - 1;
+                    if (seen.Add(rule + "@" + line))
                     {
-                        hits.Add("第 " + (i + 1) + " 行:" + rule + " —— " + Clip(lines[i].Trim()));
-                    }
-                }
-                // 跨行的 loadClass(参数换行写)按整段再查一遍,行号取匹配起点
-                if (rule.StartsWith("Java.loadClass", StringComparison.Ordinal))
-                {
-                    foreach (Match m in rx.Matches(text))
-                    {
-                        int line = text.Substring(0, m.Index).Count(c => c == '\n');
-                        if (seen.Add(rule + "@" + line))
-                        {
-                            hits.Add("第 " + (line + 1) + " 行:" + rule + " —— " + Clip(lines[line].Trim()));
-                        }
+                        hits.Add("第 " + (line + 1) + " 行:" + rule + " —— " + Clip(lines[line].Trim()));
                     }
                 }
             }
