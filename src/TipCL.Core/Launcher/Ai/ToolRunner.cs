@@ -657,7 +657,11 @@ public sealed partial class ToolRunner
     {
         object? result = _api.CallAsync<object>(method, args, ct).ConfigureAwait(false).GetAwaiter().GetResult();
         PyDict row = Py.D(result);
-        taskId = Py.S(Py.Or(row.Get("task_id"), row.Get("id")));
+        // AI2-integration:进程内 IApi 的 install_* 直接返回任务 id 字符串(StartDetached(...).Id),
+        // 以前只认 {task_id} 字典,字符串会被当成空字典 → task_id 为空、任务卡不出现。
+        taskId = result is string direct && direct.Length > 0
+            ? direct
+            : Py.S(Py.Or(row.Get("task_id"), row.Get("id")));
         if (taskId.Length > 0)
         {
             // method 就是工具名(install_mod / install_game / download_java / launch_game …),任务卡要它

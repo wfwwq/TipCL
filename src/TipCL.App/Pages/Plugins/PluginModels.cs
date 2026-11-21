@@ -1,6 +1,7 @@
 // 来源: Windows 版参考仓库 src/TipCL/Pages/Plugins/PluginModels.cs（M2-B4 移植，仅改命名空间；
 // JSON 读法保持 camelCase/snake_case 双认读）。
 using System;
+using TipCL.App.Common;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -307,7 +308,7 @@ public static class UiDispatch
             {
                 try
                 {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(c.Url) { UseShellExecute = true });
+                    ShellOpen.Url(c.Url); // AI2-integration:统一入口
                 }
                 catch { }
             });

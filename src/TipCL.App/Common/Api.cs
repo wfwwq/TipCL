@@ -1343,7 +1343,27 @@ public sealed class InProcessApi : IApi
     private static string CatalogTitle(string verb, object name)
         => verb + " " + new PPath(Py.Str(name)).Name;
 
-    private static PyDict CatalogExtra(PyDict args) => new(Py.D(args.Get("extra")));
+    // AI2-integration:AI 工具(ToolRunner.install_*)把实例名 / slug / 来源放在参数顶层,页面放在 extra 里。
+    // 以前只读 extra,导致 AI 装模组时实例名与 slug 丢失(落到默认实例、slug 为空)。现在 extra 优先,顶层补缺。
+    internal static readonly string[] CatalogTopLevelKeys =
+    {
+        "name", "slug", "id", "source", "instance", "version", "version_id", "file_id",
+        "game_version", "mc_version", "path", "url", "save", "loader",
+    };
+
+    internal static PyDict CatalogExtra(PyDict args)
+    {
+        var extra = new PyDict(Py.D(args.Get("extra")));
+        foreach (string key in CatalogTopLevelKeys)
+        {
+            object top = args.Get(key);
+            if (top != null && Py.Truthy(top) && !Py.Truthy(extra.Get(key)))
+            {
+                extra[key] = top;
+            }
+        }
+        return extra;
+    }
 
     /// <summary>实例 + 版本 → mods 目录(照 Windows BackendApi._mods_folder)。</summary>
     private static string ModsFolder(Instance inst, object version = null!)

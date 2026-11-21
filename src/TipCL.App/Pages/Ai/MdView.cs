@@ -363,14 +363,7 @@ internal sealed class MdView : UserControl
     {
         try
         {
-            if (OperatingSystem.IsWindows())
-            {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-            }
-            else
-            {
-                Process.Start(OperatingSystem.IsMacOS() ? "open" : "xdg-open", new[] { url });
-            }
+            ShellOpen.Url(url); // AI2-integration:统一入口(测试进程里不真打开)
         }
         catch (Exception)
         {

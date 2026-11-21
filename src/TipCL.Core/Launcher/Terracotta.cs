@@ -556,6 +556,12 @@ public static class Terracotta
 		{
 			return;
 		}
+		// AI2-integration:与打开文件夹 / 链接共用测试钩子,测试进程里不真拉起控制面板
+		if (Crash.ShellOpenHook is { } hook)
+		{
+			hook("control firewall.cpl");
+			return;
+		}
 		try
 		{
 			Process.Start(new ProcessStartInfo("control", "firewall.cpl")

@@ -892,7 +892,7 @@ public class AiContentTests
         Assert.Equal(2L, counts.Get("kubejs"));
         PyDict recipe = issues.First(i => Py.S(i.Get("text")).Contains("Parsing error loading recipe"));
         Assert.Equal(2L, recipe.Get("repeat"));
-        Assert.Contains("JsonSyntaxException", Py.S(Py.ListOr(recipe.Get("detail")).FirstOrDefault()));
+        Assert.Contains("JsonSyntaxException", Py.S(Py.ListOr(recipe.Get("detail")).FirstOrDefault() ?? ""));
         Assert.Equal(2L, recipe.Get("line_no"));
         Assert.Contains("/reload", Py.S(all.Get("tip")));
         Assert.Contains("F3+T", Py.S(all.Get("tip")));

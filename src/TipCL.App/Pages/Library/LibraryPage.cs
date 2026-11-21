@@ -839,12 +839,7 @@ public sealed class LibraryPage : PageBase
         }
         try
         {
-            if (OperatingSystem.IsWindows())
-                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
-            else if (OperatingSystem.IsMacOS())
-                Process.Start("open", new[] { path });
-            else
-                Process.Start("xdg-open", new[] { path });
+            ShellOpen.Folder(path); // AI2-integration:统一入口(测试进程里不真打开)
         }
         catch (Exception ex)
         {

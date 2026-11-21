@@ -550,12 +550,7 @@ public sealed class AccountPage : PageBase
             return;
         try
         {
-            if (OperatingSystem.IsWindows())
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-            else if (OperatingSystem.IsMacOS())
-                Process.Start("open", new[] { url });
-            else
-                Process.Start("xdg-open", new[] { url });
+            ShellOpen.Url(url); // AI2-integration:统一入口(测试进程里不真打开)
         }
         catch (Exception)
         {

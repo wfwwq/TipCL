@@ -244,7 +244,7 @@ public sealed partial class PluginsPage : PageBase
     {
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            ShellOpen.Url(url); // AI2-integration:统一入口
         }
         catch (Exception ex)
         {
