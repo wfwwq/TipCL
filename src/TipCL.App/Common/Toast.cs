@@ -85,7 +85,7 @@ public static class ToastHost
         }
         var card = new Border
         {
-            CornerRadius = new CornerRadius(10),
+            CornerRadius = TipCL.App.Ui.Tok.CrCard,
             Padding = new Thickness(0),
             ClipToBounds = true,
             Child = new StackPanel

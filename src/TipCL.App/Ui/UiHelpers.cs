@@ -125,7 +125,8 @@ public static class Ui
         var t = new TextBlock
         {
             Text = text,
-            FontSize = size,
+            // AI4-other:字号一律收拢到五档(Tok.Font:12 / 13 / 15 / 21 / 34),调用方传 12.5 / 13.5 / 14 等旧值也落档
+            FontSize = Tok.Font(size),
             FontFamily = new FontFamily(FontUi),
             TextWrapping = TextWrapping.NoWrap
         };
@@ -250,7 +251,8 @@ public static class Ui
     {
         var b = new Border
         {
-            CornerRadius = new CornerRadius(radius),
+            // AI4-other:圆角收拢到两档(Tok.Radius:8 / 12;0 与药丸 999 保持)
+            CornerRadius = Tok.Cr(radius),
             Padding = new Thickness(padding)
         };
         b.Dyn(Border.BackgroundProperty, bg);
@@ -262,7 +264,7 @@ public static class Ui
     {
         var b = new Border
         {
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = Tok.CrCtl,
             Padding = new Thickness(padding),
             BorderThickness = new Thickness(1),
             Child = content
@@ -401,15 +403,15 @@ public static class Ui
 
     public static ProgressBar Prog(double value = 0) => new ProgressBar { Value = value, Maximum = 100 };
 
-    /// <summary>小标签：圆角 8 底色块 + 11px 小字（颜色可换键）。</summary>
+    /// <summary>小标签：圆角 8 底色块 + 12px 小字（颜色可换键）。</summary>
     public static Border Tag(string text, string fg = "B.InkMuted", string bg = "B.LineSoft")
     {
         var b = new Border
         {
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(6, 1.5, 6, 2.5),
+            CornerRadius = Tok.CrCtl,
+            Padding = new Thickness(7, 1, 7, 2),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = Txt(text, 11, fg: fg)
+            Child = Txt(text, Tok.FsCaption, fg: fg)
         };
         b.Dyn(Border.BackgroundProperty, bg);
         return b;
@@ -421,7 +423,7 @@ public static class Ui
         var t = new TextBlock
         {
             Text = text,
-            FontSize = 11,
+            FontSize = Tok.FsCaption,
             FontWeight = FontWeight.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
@@ -440,18 +442,49 @@ public static class Ui
         return b;
     }
 
-    /// <summary>左标签 + 右控件的表单行。</summary>
+    /// <summary>
+    /// 左标签 + 右控件的表单行。
+    /// AI4-other(findings D3 / D18,fixlist-other O2 / O3,对照 v2 settings2):
+    /// 左侧「标题 + 说明」占满剩余宽度、说明可换行(不再固定 130px 把说明截掉);控件靠右对齐。
+    /// 紧凑控件(开关 / 下拉 / 按钮 / 已有显式宽度的控件)按自身大小靠右;宽控件(输入框 / 带弹簧列的组合行)
+    /// 占右侧 3/5。<paramref name="labelWidth"/> 现在是左列的最小宽度(上限 120,窄容器里不把控件挤没)。
+    /// </summary>
     public static Grid Field(string label, Control control, string? hint = null, double labelWidth = 140)
     {
-        var left = V(2, Txt(label), hint == null ? null : Small(hint));
+        TextBlock? hintBlock = null;
+        if (hint != null)
+        {
+            hintBlock = Small(hint);
+            hintBlock.TextWrapping = TextWrapping.Wrap;
+        }
+        var title = string.IsNullOrEmpty(label) ? null : Txt(label);
+        if (title != null) title.TextWrapping = TextWrapping.Wrap;
+        var left = V(2, title, hintBlock);
         left.VerticalAlignment = VerticalAlignment.Center;
-        left.Margin = new Thickness(0, 0, 10, 0);
+        left.Margin = new Thickness(0, 0, 16, 0);
         control.VerticalAlignment = VerticalAlignment.Center;
-        var g = G(null, $"{labelWidth},*");
+        bool wide = IsWideFieldControl(control);
+        var g = new Grid();
+        g.ColumnDefinitions.Add(new ColumnDefinition(wide ? new GridLength(2, GridUnitType.Star) : new GridLength(1, GridUnitType.Star)) { MinWidth = Math.Min(labelWidth, 120) });
+        g.ColumnDefinitions.Add(new ColumnDefinition(wide ? new GridLength(3, GridUnitType.Star) : GridLength.Auto));
+        if (!wide && control.HorizontalAlignment == HorizontalAlignment.Stretch)
+            control.HorizontalAlignment = HorizontalAlignment.Right;
         g.Add(left, 0, 0);
         g.Add(control, 0, 1);
         g.Margin = new Thickness(0, 4, 0, 4);
         return g;
+    }
+
+    /// <summary>Field 的右侧控件是否「宽控件」:输入框、未定宽的滑块,或含弹簧(*)列的 Grid;已显式定宽的都算紧凑。</summary>
+    internal static bool IsWideFieldControl(Control c)
+    {
+        if (!double.IsNaN(c.Width)) return false;
+        if (c.HorizontalAlignment is HorizontalAlignment.Left or HorizontalAlignment.Right or HorizontalAlignment.Center) return false;
+        if (c is TextBox || c is Slider) return true;
+        if (c is Grid g)
+            foreach (var cd in g.ColumnDefinitions)
+                if (cd.Width.IsStar) return true;
+        return false;
     }
 
     /// <summary>分组标题：H2 标题 + 可选副标题 + 可选右侧内容。</summary>
@@ -479,7 +512,7 @@ public static class Ui
         var hintBlock = hint == null ? null : new TextBlock
         {
             Text = hint,
-            FontSize = 12,
+            FontSize = Tok.FsCaption,
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 420,
             TextAlignment = TextAlignment.Center,
@@ -489,7 +522,7 @@ public static class Ui
             new TextBlock
             {
                 Text = title,
-                FontSize = 13,
+                FontSize = Tok.FsBody,
                 HorizontalAlignment = HorizontalAlignment.Center
             }.Dyn(TextBlock.ForegroundProperty, "B.InkMuted"),
             hintBlock);
