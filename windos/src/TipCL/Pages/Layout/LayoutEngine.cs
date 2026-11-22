@@ -748,7 +748,9 @@ public static class LayoutEngine
 	/// <summary>
 	/// 把刚追加到页面的块放到末尾的合理槽位:
 	///   grid → 新起一行、占满全宽(编辑态 stack 会先折成 12 列网格,追加后视觉上才能真正落在页尾);
-	///   canvas → 左上角 0.4×0.25 的小卡片,避免默认 1×1 铺满整块画布。
+	///   canvas → 0.4×0.25 的小卡片,避免默认 1×1 铺满整块画布。
+	///     R34(D-81 Q1):canvas 页按「先 y 后 x」推导成网格渲染,所以新块不再放左上角(那会排到页首),
+	///     而是放在最靠下的那个块同一高度、靠右(x = 0.6)—— 推导出来就是页尾(尺寸不变,小卡片语义不变)。
 	/// 只动坐标,不动 id / 内容。
 	/// </summary>
 	public static void PlaceAppendedBlock(PageLayoutV2? page, BlockLayout? block)
@@ -781,10 +783,23 @@ public static class LayoutEngine
 		}
 		if (string.Equals(page.Mode, LayoutSchema.ModeCanvas, StringComparison.Ordinal))
 		{
-			block.X = 0.0;
-			block.Y = 0.0;
+			double lowest = 0.0;
+			if (page.Blocks != null)
+			{
+				foreach (BlockLayout other in page.Blocks)
+				{
+					if (other == null || ReferenceEquals(other, block) || double.IsNaN(other.Y) || double.IsInfinity(other.Y))
+					{
+						continue;
+					}
+					lowest = Math.Max(lowest, other.Y);
+				}
+			}
 			block.W = 0.4;
 			block.H = 0.25;
+			block.X = 1.0 - block.W;
+			// 顶多放到 1 - h:再往下 Sanitize 就会把高度压扁(不变式 y + h ≤ 1)
+			block.Y = LayoutSchema.Clamp(lowest, 0.0, 1.0 - block.H, 0.0);
 		}
 	}
 
@@ -926,6 +941,7 @@ public static class LayoutEngine
 //
 // 与默认渲染的关系(硬约束 D-11):本节所有函数**只在 mode=grid/canvas 时被调用**;
 // mode=stack(缺省)走的是文件上半部分那条老路径,一个像素都不经过这里。
+// R34(D-81 Q1):canvas 页不再以 canvas 排布,由 LayoutCanvasMigration(Core)推导成网格后走 grid 这条路径。
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// <summary>纯矩形(引擎层不引 WPF,不能用 <c>System.Windows.Rect</c>)。</summary>
@@ -1808,6 +1824,22 @@ public static class LayoutGrid
 		}
 	}
 
+	/// <summary>
+	/// R34(D-81 Q1)的提交路径:画布是从 canvas 页推导出来的网格时,用它代替 <see cref="Apply"/>。
+	/// 先把整页(含隐藏块、自建块、插件块、白名单外的块)按 <see cref="LayoutCanvasMigration.ConvertInPlace"/>
+	/// 就地写成 grid,再用画布当前槽位覆盖可见块的几何 —— 于是「编辑器里提交一次」之后文档就是 grid,
+	/// 之前文档原样不动。不是 canvas 页时与 <see cref="Apply"/> 完全等价。
+	/// </summary>
+	public static void CommitCanvasAsGrid(PageLayoutV2? page, IReadOnlyList<LayoutCell>? cells, Func<string, int>? minColsOf = null)
+	{
+		if (page == null)
+		{
+			return;
+		}
+		LayoutCanvasMigration.ConvertInPlace(page, minColsOf);
+		Apply(page, cells);
+	}
+
 	// 占用表:按行惰性增长(行数自适应),w×h 矩形查询/填充
 	private sealed class Occupancy
 	{
@@ -1925,6 +1957,11 @@ public static class LayoutGrid
 /// canvas 模式的纯几何(§4.A):归一化矩形 + 8 向手柄 + 栅格吸附。
 /// 吸附公式**直接移植**旧 <c>DashHost.SnapV</c>(v → round(v × axisPx / step) × step / axisPx,再夹 0..1),
 /// 吸附档沿用 <c>DashLayout</c> 的 {0,4,8,16,24}(0 = 不吸附)。
+/// R34(D-81 Q1 / GOAL-layout-v3 §5.3):canvas 退出界面 —— 画布不再以 canvas 模式排布(canvas 页按
+/// <see cref="LayoutCanvasMigration"/> 推导成网格),所以这里的 8 向手柄 / 吸附档 / Move / Resize / Snap 在界面上已不可达。
+/// 因为 LayoutEditor.cs(WP-L12)仍引用这些成员(§6.4 第 5 条:不许删或改名),本轮只留注释不删;
+/// 也不加 [Obsolete] 特性 —— 那会在编辑器与测试里引出 CS0618 新增警告。真正的删除留到合并后。
+/// 仍在用的纯模型成员:FallbackMinW / FallbackMinH / RefHeight(网格也用)、StackedOrder(网格子元素顺序)。
 /// </summary>
 public static class LayoutCanvas
 {
@@ -1946,10 +1983,10 @@ public static class LayoutCanvas
 	/// <summary>没命中任何手柄。</summary>
 	public const string HandleNone = "";
 
-	/// <summary>栅格吸附档 {0,4,8,16,24}(沿用 DashLayout.Grid)。</summary>
+	/// <summary>栅格吸附档 {0,4,8,16,24}(沿用 DashLayout.Grid)。R34 退役:界面不再提供「吸附 N」,吸附档固定为默认值;只为 LayoutEditor.CycleSnapStep 编译保留。</summary>
 	public static readonly double[] Steps = new double[5] { 0.0, 4.0, 8.0, 16.0, 24.0 };
 
-	/// <summary>8 向手柄名(与旧 DashHost.CardView.Handles 同名同序)。</summary>
+	/// <summary>8 向手柄名(与旧 DashHost.CardView.Handles 同名同序)。R34 退役:网格只留右边缘 + 下边缘(Q3),画布 8 向手柄不可达;只为 LayoutEditor 编译保留。</summary>
 	public static readonly string[] HandleNames = new string[8] { "nw", "n", "ne", "w", "e", "sw", "s", "se" };
 
 	/// <summary>吸附档归一到契约档位;非法值取最近档,0 保持 0(不吸附)。</summary>
@@ -3099,6 +3136,8 @@ public sealed class LayoutEditSession
 	/// <summary>
 	/// 方向键微调(§4.G):grid 模式按**格**走(Shift = 10px 折算,不足一格按一格);
 	/// canvas 模式按**吸附格**走(Shift = 10px);stack 模式没有自由坐标,返回 0。
+	/// R34:canvas 分支保持原语义(LayoutEditorTests 钉着);canvas 页在界面上已按网格推导渲染,
+	/// 编辑器应先用 <see cref="LayoutCanvasMigration.ConvertInPlace"/> 把本页写成 grid 再微调(接线见 WP-L3 报告)。
 	/// </summary>
 	public static int Nudge(PageLayoutV2? page, IEnumerable<string>? ids, int dxDir, int dyDir, bool fine, double canvasW, double canvasH, double stepPx)
 	{

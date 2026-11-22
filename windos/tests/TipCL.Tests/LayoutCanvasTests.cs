@@ -16,6 +16,13 @@ namespace TipCL.Tests;
 /// </summary>
 public class LayoutCanvasTests
 {
+	/// <summary>
+	/// R34(GOAL-layout-v3 §5.3 / D-81 Q1)起 canvas 退出界面:画布 8 向手柄、「吸附 N」循环、自由拖动/缩放的吸附
+	/// 都不再有入口(canvas 页按网格推导渲染,见 LayoutCanvasMigrationTests)。这些用例钉的是已退役的界面手势,
+	/// 代码因 LayoutEditor.cs 仍引用而暂留(§6.4 第 5 条),合并后连同代码一起删。
+	/// 纯模型用例(Load / Place / StackedOrder / Apply 与全部 grid 用例)继续跑。
+	/// </summary>
+	private const string SkipRetiredCanvasUi = "R34(D-81 Q1):canvas 自由画布已退出界面,本用例钉的是退役的界面手势(8 向手柄 / 吸附档 / 自由拖动缩放),代码暂留待合并后删除";
 	private static PageLayoutV2 Grid(int cols, params string[] ids)
 	{
 		PageLayoutV2 page = new PageLayoutV2
@@ -366,7 +373,7 @@ public class LayoutCanvasTests
 		Assert.Equal(100.0, rect.H, 6);
 	}
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void SnapUsesOldDashHostFormula()
 	{
 		// 旧 DashHost.SnapV 的公式**逐字移植**:Clamp(v,0,1) → round(v × axisPx / step) × step / axisPx → clamp 0..1
@@ -382,7 +389,7 @@ public class LayoutCanvasTests
 		Assert.Equal(0.53, LayoutCanvas.Snap(0.53, 1.0, 8.0), 6);
 	}
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void SnapStepSnapsToContractChoices()
 	{
 		Assert.Equal(0.0, LayoutCanvas.StepOf(0.0), 6);
@@ -394,7 +401,7 @@ public class LayoutCanvasTests
 		Assert.Equal(new double[] { 0.0, 4.0, 8.0, 16.0, 24.0 }, LayoutCanvas.Steps);
 	}
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void HandleAtFindsCornersEdgesAndNothing()
 	{
 		LayoutRect rect = new LayoutRect(0.0, 0.0, 100.0, 100.0);
@@ -409,7 +416,7 @@ public class LayoutCanvasTests
 		Assert.Equal(8, LayoutCanvas.HandleNames.Length);
 	}
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void CanvasMoveSnapsAndClamps()
 	{
 		LayoutCell cell = new LayoutCell
@@ -433,7 +440,7 @@ public class LayoutCanvasTests
 		Assert.Equal(0.75, cell.NX, 6);
 	}
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void CanvasResizeRespectsMinimumSize()
 	{
 		LayoutCell cell = new LayoutCell
@@ -452,7 +459,7 @@ public class LayoutCanvasTests
 		Assert.Equal(0.12, cell.NH, 6);
 	}
 
-	[Fact]
+	[Fact(Skip = SkipRetiredCanvasUi)]
 	public void CanvasResizeNorthWestKeepsOppositeCorner()
 	{
 		LayoutCell cell = new LayoutCell

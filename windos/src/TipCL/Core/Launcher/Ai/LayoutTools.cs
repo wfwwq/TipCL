@@ -31,6 +31,9 @@ public static class LayoutTools
 	/// <summary>最多保留几份 AI 备份(避免 profiles 无限膨胀)。</summary>
 	public const int MaxBackups = 5;
 
+	/// <summary>收到 <c>mode=canvas</c> 时附在结果里的提示(R34 / D-81 Q1:自由画布已从界面上去掉,按 grid 处理)。</summary>
+	public const string CanvasNotice = "提示:自由画布(canvas)模式已停用,已按网格(grid)处理";
+
 	private const int MaxBlocksPerPage = 512;
 
 	private const string SchemasJson = """
@@ -63,7 +66,7 @@ public static class LayoutTools
 	              }
 	            }
 	          },
-	          "mode": { "type": "string", "description": "该页布局模式:stack / grid / canvas" },
+	          "mode": { "type": "string", "description": "该页布局模式:stack(列表,上下排列)/ grid(网格,可并排、可跨列)" },
 	          "cols": { "type": "integer", "description": "该页列数:{2,3,4,6,12}" },
 	          "gap": { "type": "number", "description": "该页块间距 0..32,默认 10" },
 	          "profile": { "type": "string", "description": "应用一份已保存的命名方案(layout_get 里有方案名)" },
@@ -232,6 +235,7 @@ public static class LayoutTools
 		string page = Py.S(Py.Or(args.Get("page"), "")).Trim();
 		List<object> blocks = ListOrEmpty(args, "blocks");
 		bool hasPageParams = args.Get("mode") != null || args.Get("cols") != null || args.Get("gap") != null;
+		bool canvasNotice = false;
 		if (page.Length > 0 && (blocks.Count > 0 || hasPageParams))
 		{
 			PageLayoutV2? existing = null;
@@ -240,6 +244,22 @@ public static class LayoutTools
 				existing = found;
 			}
 			PageLayoutV2 target = ((existing != null) ? existing.Clone() : new PageLayoutV2());
+			if (args.Get("mode") != null)
+			{
+				string mode = Py.S(Py.Or(args.Get("mode"), "")).Trim();
+				// R34(D-81 Q1):canvas 已从界面上去掉 —— 收到 canvas 按 grid 处理,并在结果里提示。
+				// 目标页本来就是 canvas 时,先按同一份推导(先 y 后 x、span = round(w×cols))把几何换成网格单位,
+				// 否则归一化坐标(0.5 这类)会被当成第 0 列 / 第 0 行,整页挤成一堆。
+				// 放在 blocks 合并之前:推导会按 (y, x) 重排块表,不能盖掉 AI 给的新顺序。
+				bool canvasAsked = string.Equals(mode, LayoutSchema.ModeCanvas, StringComparison.OrdinalIgnoreCase);
+				if (canvasAsked)
+				{
+					mode = LayoutSchema.ModeGrid;
+					canvasNotice = true;
+				}
+				LayoutCanvasMigration.ConvertInPlace(target);
+				target.Mode = mode;
+			}
 			if (blocks.Count > 0)
 			{
 				if (blocks.Count > MaxBlocksPerPage)
@@ -272,10 +292,6 @@ public static class LayoutTools
 				// (实现只有一份:Core 的 LayoutStoreV2.MergeV1Order)
 				target = LayoutStoreV2.MergeV1Order(target, ordered);
 			}
-			if (args.Get("mode") != null)
-			{
-				target.Mode = Py.S(Py.Or(args.Get("mode"), "")).Trim();
-			}
 			if (args.Get("cols") != null)
 			{
 				target.Cols = (int)Py.Int(args.Get("cols"));
@@ -286,6 +302,10 @@ public static class LayoutTools
 			}
 			next.Layout.Pages[page] = target;
 			changes.Add("页面 " + page + " 的区块顺序/显隐" + (hasPageParams ? "与页面参数" : ""));
+			if (canvasNotice)
+			{
+				changes.Add(CanvasNotice);
+			}
 		}
 		List<object> widgets = ListOrEmpty(args, "widgets");
 		if (widgets.Count > 0)

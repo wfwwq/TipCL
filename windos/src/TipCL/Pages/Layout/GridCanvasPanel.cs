@@ -18,6 +18,10 @@ namespace TipCL.Pages.Layout;
 //                 row_h > 0 时直接用固定行高(内容超出按固定高裁,契约语义)。
 //   canvas 模式:按归一化矩形排布;画布高取宿主给的高,拿不到有限高(滚动区里最常见)时用
 //                 LayoutCanvas.RefHeight(600,对齐旧 DashHost 的兜底)。
+//   R34(D-81 Q1 / GOAL-layout-v3 §5.3):canvas 退出界面。SetLayout 收到 mode=canvas 时不再按归一化矩形排,
+//                 而是用 LayoutCanvasMigration.ToGridPage 推导成网格(先 y 后 x、span = clamp(round(w×cols)))——
+//                 文档不动;ApplyTo 提交时才经 LayoutGrid.CommitCanvasAsGrid 把整页写成 grid。
+//                 于是本 Panel 的 Mode 只会是 grid,下面所有 IsCanvas 分支都不可达(留着等合并后一起删)。
 //
 // 三条纪律:
 //   1) 几何全部来自纯模型(LayoutGrid / LayoutCanvas),本文件不写任何坐标公式,只做 Measure/Arrange;
@@ -53,8 +57,17 @@ public sealed class GridCanvasPanel : Panel
 		ClearDragVisuals();
 	}
 
-	/// <summary>页面模式(grid | canvas;stack 时本 Panel 不被使用)。</summary>
+	/// <summary>页面模式(R34 起只会是 grid;stack 时本 Panel 不被使用)。canvas 页看 <see cref="DerivedFromCanvas"/>。</summary>
 	public string Mode { get; private set; } = LayoutSchema.ModeStack;
+
+	/// <summary>
+	/// 当前槽位是不是从 canvas 页推导出来的网格(R34 / D-81 Q1)。
+	/// true 时文档里该页仍是 canvas;<see cref="ApplyTo"/> 提交时会把整页写成 grid。
+	/// </summary>
+	public bool DerivedFromCanvas { get; private set; }
+
+	/// <summary>深色表面(启动页):落点占位框改用白色半透明(B.EditOutlineOnDark),由编辑器按 pageId == "launch" 设置。</summary>
+	public bool DarkSurface { get; set; }
 
 	/// <summary>grid 列数。</summary>
 	public int Cols { get; private set; } = LayoutSchema.ColsDefault;
@@ -183,7 +196,7 @@ public sealed class GridCanvasPanel : Panel
 		return (double[])_rowHeights.Clone();
 	}
 
-	/// <summary>是否 canvas 模式。</summary>
+	/// <summary>是否 canvas 模式。R34 起恒为 false(canvas 页按网格推导,见 <see cref="DerivedFromCanvas"/>);保留是因为 LayoutEditor 还在读它。</summary>
 	public bool IsCanvas
 	{
 		get
@@ -192,18 +205,19 @@ public sealed class GridCanvasPanel : Panel
 		}
 	}
 
-	/// <summary>按页面 v2 条目重建槽位(改上下文/换页时调)。</summary>
+	/// <summary>
+	/// 按页面 v2 条目重建槽位(改上下文/换页时调)。
+	/// mode=canvas(R34 起界面不再提供)按网格推导:槽位来自 <see cref="LayoutCanvasMigration.ToGridPage"/> 的副本,
+	/// <paramref name="page"/> 本身一个字节都不改。
+	/// </summary>
 	public void SetLayout(string mode, int cols, double rowH, double gap, PageLayoutV2? page)
 	{
-		Mode = ((mode == LayoutSchema.ModeGrid || mode == LayoutSchema.ModeCanvas) ? mode : LayoutSchema.ModeStack);
+		DerivedFromCanvas = string.Equals(mode, LayoutSchema.ModeCanvas, StringComparison.Ordinal);
+		Mode = ((mode == LayoutSchema.ModeGrid || DerivedFromCanvas) ? LayoutSchema.ModeGrid : LayoutSchema.ModeStack);
 		Cols = Math.Max(1, cols);
 		RowH = rowH;
 		Gap = ((gap >= 0.0) ? gap : 0.0);
-		_cells = (IsCanvas ? LayoutCanvas.Load(page) : LayoutGrid.Pack(page));
-		if (IsCanvas)
-		{
-			_cells = LayoutCanvas.StackedOrder(_cells);
-		}
+		_cells = LayoutGrid.Pack(DerivedFromCanvas ? LayoutCanvasMigration.ToGridPage(page) : page);
 		_rows = LayoutGrid.RowCount(_cells);
 		_remeasureWidths.Clear();
 		InvalidateMeasure();
@@ -319,12 +333,16 @@ public sealed class GridCanvasPanel : Panel
 		return list;
 	}
 
-	/// <summary>把槽位写回页面块(拖拽/缩放提交时调)。</summary>
+	/// <summary>
+	/// 把槽位写回页面块(拖拽/缩放提交时调)。
+	/// 槽位是从 canvas 页推导来的(或传进来的页仍是 canvas)时走 <see cref="LayoutGrid.CommitCanvasAsGrid"/>:
+	/// 这就是 Q1 的「编辑器里提交一次之后才写成 grid」。
+	/// </summary>
 	public void ApplyTo(PageLayoutV2? page)
 	{
-		if (IsCanvas)
+		if (DerivedFromCanvas || LayoutCanvasMigration.IsCanvas(page))
 		{
-			LayoutCanvas.Apply(page, _cells);
+			LayoutGrid.CommitCanvasAsGrid(page, _cells);
 		}
 		else
 		{
@@ -591,26 +609,21 @@ public sealed class GridCanvasPanel : Panel
 			}
 			return;
 		}
-		if (width <= 1.0 || _cells.Count == 0)
+		// v3:网格模式常态编辑不再铺主题色栅格底纹(效果图:内容是主角,只留灰色虚线框);
+		// 只在拖动 / 改宽进行中(有浮起的卡片)铺一层淡色列底纹(GOAL §5.1「拖动时显示淡色列底纹」,B.EditColShade)
+		if (!HasFloating || width <= 1.0 || height <= 1.0 || Cols <= 1 || _columnWidth <= 1.0)
 		{
 			return;
 		}
-		for (int k = 1; k < Cols; k++)
+		Brush shade = TryFindResource("B.EditColShade") as Brush ?? brush;
+		for (int k = 0; k < Cols; k++)
 		{
-			double x = k * (_columnWidth + Gap) - Gap / 2.0;
-			if (x > 0.0 && x < width)
+			double x = k * (_columnWidth + Gap);
+			if (x >= width)
 			{
-				dc.DrawLine(pen, new Point(x, 0.0), new Point(x, height));
+				break;
 			}
-		}
-		double y2 = 0.0;
-		for (int m = 0; m < _rowHeights.Length - 1; m++)
-		{
-			y2 += _rowHeights[m] + Gap;
-			if (y2 > 0.0 && y2 < height)
-			{
-				dc.DrawLine(pen, new Point(0.0, y2 - Gap / 2.0), new Point(width, y2 - Gap / 2.0));
-			}
+			dc.DrawRoundedRectangle(shade, null, new Rect(x, 0.0, Math.Min(_columnWidth, width - x), height), 4.0, 4.0);
 		}
 	}
 
@@ -710,6 +723,7 @@ public sealed class GridCanvasPanel : Panel
 			}
 		}
 		InvalidateArrange();
+		InvalidateVisual();
 	}
 
 	/// <summary>拖动中:所有浮起卡片按像素平移(只改 RenderTransform,不触发布局)。</summary>
@@ -843,6 +857,7 @@ public sealed class GridCanvasPanel : Panel
 		_flipPending = false;
 		_flipOnly = null;
 		InvalidateArrange();
+		InvalidateVisual();
 	}
 
 	private void OnSettleFrame(object? sender, EventArgs e)
@@ -902,6 +917,7 @@ public sealed class GridCanvasPanel : Panel
 		_settleTo.Clear();
 		RemovePlaceholders();
 		InvalidateArrange();
+		InvalidateVisual();
 		Action? done = _settleDone;
 		_settleDone = null;
 		done?.Invoke();
@@ -927,7 +943,7 @@ public sealed class GridCanvasPanel : Panel
 		{
 			return;
 		}
-		DropPlaceholder placeholder = new DropPlaceholder(id);
+		DropPlaceholder placeholder = new DropPlaceholder(id, DarkSurface);
 		Panel.SetZIndex(placeholder, -1);
 		_placeholders[id] = placeholder;
 		base.Children.Insert(0, placeholder);
@@ -1051,13 +1067,27 @@ internal sealed class DropPlaceholder : Border
 	// 当前配色对应的主题色:主题切换后重取一次(颜色没变时 ApplyTheme 什么都不做)
 	private Color _accent;
 
-	public DropPlaceholder(string blockId)
+	private readonly bool _onDark;
+
+	// v3(GOAL §5.1):落点框 = 主题色浅底 + 虚线框;启动页这类深色表面用白色半透明
+	private readonly System.Windows.Shapes.Rectangle _dash = new System.Windows.Shapes.Rectangle
+	{
+		RadiusX = 10.0,
+		RadiusY = 10.0,
+		StrokeThickness = 1.5,
+		StrokeDashArray = new DoubleCollection { 4.0, 3.0 },
+		IsHitTestVisible = false
+	};
+
+	public DropPlaceholder(string blockId, bool onDark = false)
 	{
 		BlockId = blockId ?? "";
+		_onDark = onDark;
 		IsHitTestVisible = false;
 		Focusable = false;
 		CornerRadius = new CornerRadius(10.0);
-		BorderThickness = new Thickness(1.5);
+		BorderThickness = new Thickness(0.0);
+		Child = _dash;
 		ApplyTheme();
 		Tag = Prefix + BlockId;
 	}
@@ -1071,11 +1101,25 @@ internal sealed class DropPlaceholder : Border
 			return;
 		}
 		_accent = accent;
-		SolidColorBrush fill = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
-		fill.Freeze();
+		if (_onDark)
+		{
+			Brush? darkStroke = Application.Current?.TryFindResource("B.EditOutlineOnDark") as Brush;
+			SolidColorBrush darkFill = new SolidColorBrush(Color.FromArgb(26, 255, 255, 255));
+			darkFill.Freeze();
+			Background = darkFill;
+			_dash.Stroke = darkStroke ?? new SolidColorBrush(Color.FromArgb(150, 255, 255, 255));
+			return;
+		}
+		Brush? fill = Application.Current?.TryFindResource("B.EditDropFill") as Brush;
+		if (fill == null)
+		{
+			SolidColorBrush soft = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
+			soft.Freeze();
+			fill = soft;
+		}
 		SolidColorBrush stroke = new SolidColorBrush(Color.FromArgb(200, accent.R, accent.G, accent.B));
 		stroke.Freeze();
 		Background = fill;
-		BorderBrush = stroke;
+		_dash.Stroke = stroke;
 	}
 }

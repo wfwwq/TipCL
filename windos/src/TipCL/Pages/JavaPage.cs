@@ -57,7 +57,14 @@ public sealed class JavaPage : PageBase
 		{
 			PageBase.Run(LoadAsync);
 		});
-		Grid grid = Ui.Section("Java", I18n.L("游戏按版本挑 Java：26.1+ 要 25，1.20.5+ 要 21，1.18+ 要 17，老版本用 8"), Ui.H(8.0, _count.VCenter(), button2, button));
+		// R34（§5.5）：「说明」默认隐藏了 —— 计数 / 刷新 / 扫描系统 Java 挪到「已检测的 Java」块顶上（同效果图），
+		// 版本对应关系挪进「实例默认」的提示文字；说明块只留标题和这句话，在「添加」里可以找回来。
+		string versionMap = I18n.L("游戏按版本挑 Java：26.1+ 要 25，1.20.5+ 要 21，1.18+ 要 17，老版本用 8");
+		Grid grid = Ui.Section("Java", versionMap);
+		Grid listBar = Ui.G(null, "*,Auto");
+		listBar.Add(_count.VCenter(), 0);
+		listBar.Add(Ui.H(8.0, button2, button), 0, 1);
+		SPanel listBlock = Ui.V(10.0, listBar, _list);
 		WrapPanel wrapPanel = new WrapPanel();
 		(string, string)[] majors = Majors;
 		for (int num = 0; num < majors.Length; num++)
@@ -103,15 +110,17 @@ public sealed class JavaPage : PageBase
 		Grid grid3 = Ui.G(null, "*,Auto");
 		grid3.Add(_manual, 0);
 		grid3.Add(el.M(8.0, 0.0, 0.0, 0.0).VCenter(), 0, 1);
-		Border border3 = Ui.Card(Ui.V(4.0, Ui.Field(I18n.L("实例"), _inst), Ui.Field(I18n.L("默认 Java"), _java, I18n.L("「自动选择」由启动器按游戏版本匹配")), Ui.Field(I18n.L("自定义路径"), grid3, I18n.L("填绝对路径后点右边按钮，会先做一次规范化")), Ui.Field("", _instJava)), 13.0);
-		// 页面布局自定义（WP-U3）：区块 = 说明 / 安装方式 / 实例默认 / 已检测列表；默认全可见、顺序同旧 ScrollBody 实参
+		Border border3 = Ui.Card(Ui.V(4.0, Ui.Small(versionMap).Wrap(), Ui.Field(I18n.L("实例"), _inst), Ui.Field(I18n.L("默认 Java"), _java, I18n.L("「自动选择」由启动器按游戏版本匹配")), Ui.Field(I18n.L("自定义路径"), grid3, I18n.L("填绝对路径后点右边按钮，会先做一次规范化")), Ui.Field("", _instJava)), 13.0);
+		// 页面布局自定义（WP-U3）：区块 = 说明 / 安装方式 / 实例默认 / 已检测的 Java（R34 改名，id 不变）。
+		// 文档里还没有这一页时默认 = 12 列网格：安装方式 + 实例默认各半 / 已检测的 Java 整行；说明默认隐藏。
+		// 已经存过这一页的用户完全照文档，不受影响。
 		base.Content = new BlockHost("java", new List<BlockSpec>
 		{
-			new BlockSpec { Id = "intro", Title = I18n.L("说明"), Content = grid },
+			new BlockSpec { Id = "intro", Title = I18n.L("说明"), Content = grid, DefaultVisible = false },
 			new BlockSpec { Id = "install", Title = I18n.L("安装方式"), Content = border2 },
 			new BlockSpec { Id = "defaults", Title = I18n.L("实例默认"), Content = border3 },
-			new BlockSpec { Id = "list", Title = I18n.L("已检测列表"), Content = _list }
-		}).Root;
+			new BlockSpec { Id = "list", Title = I18n.L("已检测的 Java"), Content = listBlock }
+		}, null, PageDefaultLayouts.Java()).Root;
 	}
 
 	protected override async Task LoadAsync()

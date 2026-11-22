@@ -54,16 +54,23 @@ public sealed class PlaytimePage : PageBase
 		};
 		_total.SetResourceReference(TextBlock.ForegroundProperty, "B.AccentDeep");
 		Border border = Ui.Card(Ui.G(null, "*,Auto").Add(Ui.V(4.0, Ui.Muted(I18n.L("累计游玩")), _total, _sub), 0).Add(Ui.Glyph("\ue823", 44.0, "B.AccentSoft2").VCenter(), 0, 1), 20.0);
-		Border border2 = Ui.Card(Ui.H(10.0, Ui.Txt(I18n.L("范围"), 12.0, bold: false, "B.InkMuted").VCenter(), _inst.VCenter()), 12.0);
-		Grid head = Ui.Section(I18n.L("游戏时长"), I18n.L("按实例与版本统计，每次退出游戏后自动累加"), Ui.H(8.0, button2, button));
-		// 页面布局自定义（WP-U3）：区块 = 概览 / 累计卡 / 范围卡 / 明细列表；默认全可见、顺序同旧 ScrollBody 实参
+		// R34（§5.5）：「概览」默认隐藏了，刷新 / 清空统计从页头挪到「时间范围」卡右侧 —— 否则默认界面上就找不到这两个按钮。
+		Grid rangeRow = Ui.G(null, "Auto,Auto,*,Auto");
+		rangeRow.Add(Ui.Txt(I18n.L("范围"), 12.0, bold: false, "B.InkMuted").M(0.0, 0.0, 10.0).VCenter(), 0);
+		rangeRow.Add(_inst.VCenter(), 0, 1);
+		rangeRow.Add(Ui.H(8.0, button2, button).M(10.0, 0.0, 0.0, 0.0).VCenter(), 0, 3);
+		Border border2 = Ui.Card(rangeRow, 12.0);
+		Grid head = Ui.Section(I18n.L("游戏时长"), I18n.L("按实例与版本统计，每次退出游戏后自动累加"));
+		// 页面布局自定义（WP-U3）：区块 = 概览 / 累计时长 / 时间范围 / 明细（R34 改名，id 不变）。
+		// 文档里还没有这一页时默认 = 12 列网格：累计时长 + 时间范围各半 / 明细整行；概览默认隐藏（在「添加」里找回）。
+		// 已经存过这一页的用户完全照文档，不受影响。
 		base.Content = new BlockHost("playtime", new List<BlockSpec>
 		{
-			new BlockSpec { Id = "header", Title = I18n.L("概览"), Content = head },
-			new BlockSpec { Id = "total", Title = I18n.L("累计卡"), Content = border },
-			new BlockSpec { Id = "range", Title = I18n.L("范围卡"), Content = border2 },
-			new BlockSpec { Id = "list", Title = I18n.L("明细列表"), Content = _list }
-		}).Root;
+			new BlockSpec { Id = "header", Title = I18n.L("概览"), Content = head, DefaultVisible = false },
+			new BlockSpec { Id = "total", Title = I18n.L("累计时长"), Content = border },
+			new BlockSpec { Id = "range", Title = I18n.L("时间范围"), Content = border2 },
+			new BlockSpec { Id = "list", Title = I18n.L("明细"), Content = _list }
+		}, null, PageDefaultLayouts.Playtime()).Root;
 	}
 
 	protected override async Task LoadAsync()

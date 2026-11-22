@@ -256,4 +256,93 @@ public static class ShellTabs
 		LayoutStoreV2.Save(doc);
 		return CurrentShell();
 	}
+
+	// ————— v3:设置 → 布局「顶部页签」chip(拖动排序 + 眼睛显隐)用的纯逻辑 —————
+	// 存储语义不变:shell.tabs 仍然只记「显示的页签 + 顺序」,隐藏 = 不在列表里;
+	// 隐藏的页签在 chip 行里排在显示的后面(按默认顺序),重新显示时按它在 chip 行里的位置插回。
+
+	/// <summary>该页签能不能被隐藏:「设置」永远不能藏(否则用户再也进不了布局设置把它找回来)。</summary>
+	public static bool CanHide(string? key)
+	{
+		return !string.Equals(key, SettingsKey, StringComparison.Ordinal);
+	}
+
+	/// <summary>chip 行的顺序:先是显示中的页签(用户顺序),再是被隐藏的内置页签(默认顺序)。</summary>
+	public static List<string> ChipOrder(ShellLayout? shell)
+	{
+		List<string> list = OrderedKeys(shell);
+		foreach (string key in HiddenKeys(shell))
+		{
+			if (!list.Contains(key))
+			{
+				list.Add(key);
+			}
+		}
+		return list;
+	}
+
+	/// <summary>当前页签是否就是出厂默认(五项全显示、默认顺序)——「恢复默认」按钮据此决定可不可点。</summary>
+	public static bool IsDefaultTabs(ShellLayout? shell)
+	{
+		List<string> keys = OrderedKeys(shell);
+		if (keys.Count != BuiltinKeys.Length)
+		{
+			return false;
+		}
+		for (int i = 0; i < keys.Count; i++)
+		{
+			if (!string.Equals(keys[i], BuiltinKeys[i], StringComparison.Ordinal))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/// <summary>页签恢复默认(五项全显示、默认顺序);标题栏开关不动。返回落盘后的外壳。</summary>
+	public static ShellLayout ResetTabs()
+	{
+		return SetTabs(BuiltinKeys);
+	}
+
+	/// <summary>
+	/// 按 chip 行的顺序 + 显示集合写回 shell.tabs:只保留 <paramref name="visible"/> 里的 key,顺序取 <paramref name="chips"/>;
+	/// 「设置」不允许被藏 —— 调用方漏传时这里补回(放在它在 chip 行里的位置)。返回落盘后的外壳。
+	/// </summary>
+	public static ShellLayout SetChipOrder(IEnumerable<string>? chips, ICollection<string>? visible)
+	{
+		List<string> order = new List<string>();
+		HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+		if (chips != null)
+		{
+			foreach (string key in chips)
+			{
+				if (!LayoutSchema.IsKnownTab(key) || !seen.Add(key))
+				{
+					continue;
+				}
+				bool show = (visible != null && visible.Contains(key)) || !CanHide(key);
+				if (show)
+				{
+					order.Add(key);
+				}
+			}
+		}
+		if (visible != null)
+		{
+			// chip 行里没出现、但调用方说要显示的(理论上不会发生):追加在末尾,不丢
+			foreach (string key in visible)
+			{
+				if (LayoutSchema.IsKnownTab(key) && seen.Add(key))
+				{
+					order.Add(key);
+				}
+			}
+		}
+		if (!order.Contains(SettingsKey))
+		{
+			order.Add(SettingsKey);
+		}
+		return SetTabs(order);
+	}
 }

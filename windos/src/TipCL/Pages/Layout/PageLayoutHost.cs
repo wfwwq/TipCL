@@ -286,6 +286,52 @@ public static class SplitCatalog
 		}
 		return num;
 	}
+
+	/// <summary>
+	/// v3 设置 → 布局 → 高级「分栏宽度」一行用:13 处里是左右两栏、且用户真的拖过(已有存储比例)的那几处,按清单顺序。
+	/// </summary>
+	public static List<SplitSite> StoredSites()
+	{
+		List<SplitSite> list = new List<SplitSite>();
+		foreach (SplitSite site in All)
+		{
+			if (site.IsTwoColumn && SplitRatioStore.IsStored(site.PageId, site.SplitId))
+			{
+				list.Add(site);
+			}
+		}
+		return list;
+	}
+
+	/// <summary>
+	/// 给用户看的分栏名字(v3 去掉「#编号 pageId / splitId」这类内部说法);未登记的分栏退回 pageId,不抛。
+	/// </summary>
+	public static string DisplayName(SplitSite? site)
+	{
+		if (site == null)
+		{
+			return "";
+		}
+		switch (site.PageId + "/" + site.SplitId)
+		{
+		case "library/folders":
+			return I18n.L("实例库文件夹栏");
+		case "settings/nav":
+			return I18n.L("设置左侧导航");
+		case "version-manage/nav":
+			return I18n.L("版本管理左栏");
+		case "ai/history":
+			return I18n.L("AI 历史栏");
+		case "feedback/side":
+			return I18n.L("反馈页右栏");
+		case "account/hero":
+			return I18n.L("账号头像栏");
+		case "instance:settings/vm":
+			return I18n.L("版本管理左栏");
+		default:
+			return site.PageId;
+		}
+	}
 }
 
 /// <summary>
@@ -661,7 +707,7 @@ public sealed class PageLayoutHost : Grid
 			Background = Brushes.Transparent,
 			Cursor = Cursors.SizeWE,
 			Focusable = false,
-			ToolTip = I18n.L("自由拖动") + " · " + I18n.L("恢复默认")
+			ToolTip = I18n.L("拖动调整宽度 · 双击复位")
 		};
 		_splitter.Template = TransparentTemplate();
 		_splitter.DragStarted += OnDragStarted;

@@ -271,6 +271,14 @@ public sealed class LibraryPage : PageBase
 					W = 8.0,
 					H = 1.0,
 					Span = 8
+				},
+				// R35 win-fix2:「实例状态」默认隐藏,只登记列宽(与文件夹栏同宽 4 列);从「添加」里显示时
+				// 自动流到文件夹栏下面,不再按契约默认矩形缩成 1 列窄条挤在左栏旁边(录屏:左栏排布错乱)
+				new BlockLayout
+				{
+					Id = "status",
+					Hidden = true,
+					Span = 4
 				}
 			}
 		};
@@ -282,6 +290,11 @@ public sealed class LibraryPage : PageBase
 	}
 
 	// 右键菜单:四项平铺同级。「自定义布局...」现在点了真的进编辑态(以前是个只有子菜单的死项)。
+	// R34(§5.5 / D-81 Q2):保留区块编辑,只整理文案 ——
+	//   • 文件夹栏改成一个固定的勾选项「显示文件夹栏」(勾 = 正在显示)。原来标题在「隐藏 / 显示」之间来回变、
+	//     勾选状态又反着标,隐藏后会看到一个打了勾的「显示文件夹栏」;
+	//   • 导出时建议的文件名不再带内部页面 id(原来是「library:main.json」,冒号在 Windows 文件名里本来就不合法)。
+	//     导出内容不变:PageLayoutIO 导出的一直是全部页面(LoadAll),传进去的名字只决定建议的文件名。
 	private ContextMenu LayoutMenu()
 	{
 		bool folders = FoldersVisible();
@@ -297,9 +310,9 @@ public sealed class LibraryPage : PageBase
 		menu.Items.Add(edit);
 		MenuItem foldersItem = new MenuItem
 		{
-			Header = folders ? I18n.L("隐藏文件夹栏") : I18n.L("显示文件夹栏"),
+			Header = I18n.L("显示文件夹栏"),
 			IsCheckable = true,
-			IsChecked = !folders
+			IsChecked = folders
 		};
 		foldersItem.Click += delegate
 		{
@@ -312,7 +325,7 @@ public sealed class LibraryPage : PageBase
 		};
 		exportItem.Click += delegate
 		{
-			PageLayoutIO.ExportToFileDialog("library:main");
+			PageLayoutIO.ExportToFileDialog("library");
 		};
 		menu.Items.Add(exportItem);
 		MenuItem importItem = new MenuItem

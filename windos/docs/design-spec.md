@@ -142,3 +142,113 @@
 | 辅助文字对比度 | ≥3:1 | ≥4.5:1（AA） |
 | 键盘焦点 | 无（FocusVisualStyle 置空） | 模板内 2px 主题色焦点环 |
 | 渐变 | 仅 Logo | Logo + PageWash（极弱）+ BannerFill（兼容保留） |
+
+## 12. 布局 v3 编辑态（R34 WP-L0，2026-11-20）
+
+> 来源：`docs/mockups-hark/v3/layout3.html`（下载页编辑态 / 设置 → 布局）与 `pages3.html`（启动页深色编辑态）的 CSS。
+> 落点：画刷与阴影在 `Themes/Palette.Light.xaml` / `Palette.Dark.xaml`（**成对**），矢量图标与样式在 `Themes/Controls.xaml`。
+> 用法约定（GOAL-layout-v3 §6.4 第 1 条）：其他代码一律 `SetResourceReference` 或 `TryFindResource` + 兜底值取这些键，
+> 不用 `FindResource` / `(Style)Resources[...]`。守卫单测：`tests/TipCL.Tests/LayoutV3ResourceTests.cs`。
+
+### 12.1 画刷（Light / Dark）
+
+| 键 | Light | Dark | 用途 |
+|---|---|---|---|
+| `B.EditOutline` | `#29000000`（黑 16%） | `#2EFFFFFF`（白 18%） | 块的常态虚线框、编辑条分隔线、空状态虚线框、手柄描边 |
+| `B.EditOutlineHover` | `#57000000`（黑 34%） | `#5CFFFFFF`（白 36%） | 块悬停时的虚线框 |
+| `B.EditOutlineOnDark` | `#59FFFFFF`（白 35%） | 同左 | 深色背景（启动页英雄图）上的虚线框 |
+| `B.EditOutlineHoverOnDark` | `#B3FFFFFF`（白 70%） | 同左 | 同上，悬停 |
+| `B.EditDropFill` | `#E7F5EE` | `#1B3A2C` | 拖动落点框浅底（= 默认主题色的 `B.AccentSoft`） |
+| `B.EditDropFillOnDark` | `#1FFFFFFF`（白 12%） | 同左 | 深色背景上的落点框 |
+| `B.EditColShade` | `#09000000`（黑 3.5%） | `#0AFFFFFF` | 拖动 / 改宽时的列底纹 |
+| `B.EditColShadeOnDark` | `#0FFFFFFF`（白 6%） | 同左 | 深色背景上的列底纹 |
+| `B.EditBarBg` | `#FFFFFF` | `#2B2B2B` | 编辑条、浮动标签、块图标按钮、手柄、抽屉的底色 |
+| `B.EditBarLine` | `#14000000`（黑 8%） | `#1AFFFFFF` | 上述浮层的 1px 细描边 |
+| `B.EditItemBg` | `#F2F2F2` | `#313131` | 抽屉里每一项、底部说明框的灰底 |
+| `B.EditSegRail` | `#E7E7E7` | `#1E1E1E` | 「列表 / 网格」分段轨道 |
+| `B.EditSegOn` | `#FFFFFF` | `#3A3A3A` | 分段选中项底色 |
+| `B.EditDim` | `#800A0E16`（50%） | 同左 | 启动页编辑态压在英雄区上的遮罩（效果图是 45% 透明度 + 去饱和，WPF 没有去饱和滤镜，用遮罩近似） |
+| `B.EditGlass` | `#B80E121B`（72%） | 同左 | 深色玻璃：标签 / 图标按钮 / 编辑条的 OnDark 底 |
+| `B.EditGlassLine` | `#24FFFFFF`（白 14%） | 同左 | 深色玻璃描边 |
+| `B.EditGlassChip` / `B.EditGlassChipLine` | `#24FFFFFF` / `#38FFFFFF` | 同左 | 「主区域固定」小条的底 / 描边；OnDark 分隔线 |
+| `B.OnEditGlass` / `B.OnEditGlassMuted` | `#FFFFFF` / `#A8FFFFFF` | 同左 | 深色玻璃上的字色 / 次要字色；OnDark 选中框 |
+| `B.WarnSoft`（已有） | `#FDF3E2` | `#3A2F1C` | 琥珀浅底（高级区的导入提示） |
+| `B.WarnInk` | `#B45309` | `#EBB45E` | 琥珀字色（浅底上 ≥4.5:1） |
+
+- `…OnDark`、`B.EditGlass*`、`B.OnEditGlass*`、`B.EditDim` 只用在**永远是深色**的背景上，所以明暗两套取值相同（单测守住）。
+- 删除钮悬停红沿用窗口关闭钮的 `B.CaptionHot` / `B.OnCaptionHot`（`#C42B1C` / 白），不另开键。
+- **主题色跟随**：自定义主题色时 `SettingsPage.ApplyAccent` 只重算 `B.Accent*` 这一组；`B.EditDropFill` 目前是默认绿的固定值，
+  合并时需要在 `ApplyAccent` 里补一行（见 `windos/progress/WP-L0.md` 的合并事项）。选中框、落点框描边直接用 `B.Accent`，天然跟随。
+
+### 12.2 阴影（`DropShadowEffect`，成对放在两个 Palette 里）
+
+| 键 | 参数（Blur / Depth / 方向 / 不透明度 浅·深） | 对应 CSS |
+|---|---|---|
+| `Fx.EditBar` | 10 / 2 / 下 / 0.10 · 0.35 | `.ebox` `0 2px 10px rgba(0,0,0,.1)` |
+| `Fx.EditLabel` | 8 / 2 / 下 / 0.12 · 0.40 | `.lab` / `.acts button` `0 2px 8px rgba(0,0,0,.12)` |
+| `Fx.Drawer` | 32 / 12 / 左 / 0.14 · 0.50 | `.drawer` `-12px 0 32px rgba(0,0,0,.14)` |
+| `Fx.SegOn` | 2 / 1 / 下 / 0.08 · 0.30 | `.sg2 button.on` `0 1px 2px rgba(0,0,0,.08)` |
+
+`Layout.IconAct` / `Layout.SegItem` / `Layout.ResizeGrip` 把阴影放在模板里单独的底层 Border 上，内容不受 Effect 影响；
+`Layout.EditBar` / `EditLabel` / `Drawer` 的阴影直接挂在 Border 上（与现有 ContextMenu / ToolTip 一样，里面的文字是灰度抗锯齿）。
+
+### 12.3 矢量图标（`Geometry`，16×16 视框，只描边）
+
+| 键 | 形状（参照 layout3.html 的 SVG） | 用途 |
+|---|---|---|
+| `Geo.Eye` | 眼睛 + 瞳孔 | 设置 → 布局的页签「显示」 |
+| `Geo.EyeOff` | 眼睛划线 | 内置块「隐藏」、页签「已隐藏」 |
+| `Geo.Lock` | 锁 | 「设置」页签不可隐藏、启动页英雄区固定 |
+| `Geo.Undo` / `Geo.Redo` | 折返箭头 | 编辑条撤销 / 重做（比效果图整体上移 1，视觉居中） |
+| `Geo.Grip` | 六点（0.1 长线段 + 圆头线帽） | 浮动标签、页签芯片的拖拽点 |
+
+显示用 Path 样式：`Layout.Glyph`（14px = 16×0.875，有效线宽 1.4，Stroke 跟随所在 Control 的 Foreground）、
+`Layout.Glyph.Small`（12px，有效线宽 1.35）、`Layout.Grip` / `Layout.Grip.OnDark`（12px，点径约 1.65，Stroke 直接取色板，可放在非 Control 里）。
+都在 GOAL §4.3 的「10–14px、线宽 1.1–1.6、圆头」范围内。垃圾桶 / 更多 / 添加 / 列表 / 网格 / 关闭继续用 `Services/Ico.cs` 的字形。
+
+### 12.4 样式
+
+| 键 | 目标类型 | 关键数值 | 用途 |
+|---|---|---|---|
+| `Layout.EditOutline` / `.OnDark` | Rectangle | 1.5 虚线 `3 2`、圆角 12、Margin −4（外扩 4）；`Tag="hover"` 加深，`"selected"`/`"drag"` 2px 实线（主题色 / 白） | 块的编辑态框线（叠在块上方，不吃鼠标） |
+| `Layout.EditLabel` / `.OnDark` | Border | 高 24、圆角 8、内距 6,0,10,0、12 粗体、默认偏移 8,−14 | 悬停 / 选中时块左上角的标签 |
+| `Layout.EditLabelNote` / `.OnDark` | TextBlock | 12 常规、InkMuted | 标签里的「· 组件」 |
+| `Layout.IconAct` / `.OnDark` | ButtonBase | 26×24、圆角 8、悬停字色加深 | 块右上角「隐藏」（内容放 `Geo.EyeOff`） |
+| `Layout.IconAct.Danger` / `.Danger.OnDark` | ButtonBase | 同上，悬停整块 `#C42B1C` + 白 | `custom:` / `plugin:` 块的「删除」（`Ico.Trash`） |
+| `Layout.ResizeGrip` / `.Bottom` | Thumb | 10×36 / 36×10 白胶囊 + 2px 灰条，拖动中变主题色 | 网格块右边缘 / 下边缘手柄 |
+| `Layout.EditTip` | Border | 圆角 8、内距 8,2、深底浅字 12 | 拖右边缘时的「N / 列数」 |
+| `Layout.DropBox` / `.OnDark` | Rectangle | 浅底 + 1.5 主题色虚线、圆角 12 | 拖动落点框 |
+| `Layout.ColShade` / `.OnDark` | Border | 圆角 8 | 拖动时的列底纹 |
+| `Layout.EditBar` / `.OnDark` | Border | 高 46、圆角 12、内距 14,0,8,0、13 号 | 内容区顶部的编辑条 |
+| `Layout.EditBarTitle` | TextBlock | 13 ExtraBold | 「编辑「页名」」 |
+| `Layout.EditHint` / `.OnDark` | TextBlock | 12、InkMuted、省略号 | 编辑条里的灰色提示 |
+| `Layout.EditBarSep` / `.OnDark` | Border | 1×18、左右 2 | 编辑条竖分隔线 |
+| `Layout.Count` | Border | 高 16、圆角 8、主题色底白字 12 粗 | 「添加」按钮的数字角标 |
+| `Layout.SegRail` | Border | 圆角 12、内距 3 | 「列表 / 网格」轨道 |
+| `Layout.SegItem` | ToggleButton（RadioButton 也可用） | 高 24、内距 10,0、圆角 8、13 号；选中白底 + 粗体 + 淡阴影 | 分段里的一项 |
+| `Layout.Drawer` | Border | 宽 316、靠右、左侧阴影 + 1px 线 | 「添加」抽屉 |
+| `Layout.DrawerTitle` / `DrawerSection` | TextBlock | 15 ExtraBold / 12 InkMuted、上 10 下 6 | 抽屉标题 / 分节小字 |
+| `Layout.DrawerItem` / `DrawerIcon` | Border | 内距 8、圆角 12、灰底 / 40×40、圆角 8 | 抽屉里的一项 / 项目图标底 |
+| `Layout.DrawerEmpty` | Rectangle | 1px 虚线 `4 3`、圆角 12 | 没有隐藏项时的空状态框（文字叠在上面） |
+| `Layout.DrawerNote` | Border | 内距 12,10、圆角 12、12 号 | 抽屉底部说明 |
+| `Layout.WarnNote` | Border | 内距 12,8、圆角 8、琥珀底字 | 高级区「导入的布局…仍然默认关闭」 |
+| `Layout.LockNote` | Border | 内距 10,4、圆角 8、玻璃底白字 12 | 启动页「主区域固定，不能拖动或隐藏」 |
+
+**和规范其他条目的关系**
+
+- 圆角只用 8 / 12（单测守住）。效果图里 `.sg2 button` 是 6、外扩 4 的 outline 在浏览器里是 16，这里分别取 8 / 12 收敛进现有三档。
+- 字号都在 §2 的合法集合里（12 / 13 / 15）。编辑条左内距 14、标签上偏 −14 直接取效果图，属于浮层定位，不进 §1 的间距栅格。
+- 对比度：灰字一律用 `B.InkMuted`（效果图的 `#8c8c8c` 在白底只有 3.4:1，不满足 §4 的 4.5:1）；琥珀字 `B.WarnInk` 在 `B.WarnSoft` 上浅色 4.6:1、深色 7.0:1；深色抽屉项底 `#313131` 上 `B.InkMuted` 为 4.6:1。
+
+### 12.5 截图开关（`DevShot.cs`，只写了代码，**本轮没有运行**）
+
+| 开关 | 作用 |
+|---|---|
+| `--edit` | 截图前让目标页的区块宿主进编辑态（按页 id 精确匹配，其次「页 id:」前缀，例如 `library` → `library:main`） |
+| `--select <blockId>` | 模拟选中某块，拍浮动标签和手柄（隐含 `--edit`） |
+| `--pop layout-drawer` | 打开「添加」抽屉（隐含 `--edit`） |
+| `--expand advanced` | 展开设置 → 布局的「高级」（按标题「分栏、网页与按钮组件、布局文件」找） |
+| `--shot settings:<子页>` | 设置子视图：general / account / java / network / servers / playtime / about / layout；`java` / `servers` / `playtime` / `feedback` 不是顶栏页，直接 `--shot java` 也会落到设置子视图 |
+| `--design-sheet` | 样张页末尾追加本节全部样式的演示（`--no-v3-sheet` 关掉） |
+
+参数解析在纯函数 `DevShotArgs.Parse`（有单测）；选中 / 抽屉 / 展开各留了一个钩子（`DevShot.SelectHook` / `LayoutDrawerHook` / `ExpandHook`），合并后接到正式入口。

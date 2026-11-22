@@ -71,6 +71,18 @@ public static class StackDragPlan
 	}
 
 	/// <summary>
+	/// 被拖卡片的竖直位移(RenderTransform.Y):<c>基准 + (当前指针 - 起手锚点)</c>。
+	/// 指针上移(<paramref name="pointerY"/> &lt; <paramref name="anchorY"/>)→ 位移变小(卡片往上走),反之往下;
+	/// 方向只由这一个公式决定(R35 真机问题「往上拖块反而往下走」就是调用方把锚点和实时位置写反了)。
+	/// </summary>
+	public static double FloatOffset(double baseOffset, double anchorY, double pointerY)
+	{
+		double b = (double.IsNaN(baseOffset) || double.IsInfinity(baseOffset)) ? 0.0 : baseOffset;
+		double d = pointerY - anchorY;
+		return (double.IsNaN(d) || double.IsInfinity(d)) ? b : b + d;
+	}
+
+	/// <summary>
 	/// 指针在可视区上下边缘时,自动滚动应该推多少(px):<paramref name="zone"/> 内越靠边越快,
 	/// 返回 0 = 不在边缘区。抽成纯函数是为了让"边缘多深 → 多快"有可断言的口径。
 	/// </summary>
