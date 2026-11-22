@@ -50,6 +50,9 @@ public class LayoutMotionAndHeightTests
 
     // ————— 1. 可用宽度变窄(滚动条出现)⇒ 行高必须重量 —————
 
+    // [2026-11-22 补] 这两条本来就是测试(内含 Assert、文件名/头注释都写着"钉成断言"),但漏了 `[Fact]`
+    // ⇒ xUnit 从来不跑它们 —— 属于「静默不执行的用例」,比断言写错更坏。这里补上特性。
+    [Fact]
     public void ColumnWidthShrinksWithAvailableWidth_WhichIsWhatMakesRowHeightRecompute()
     {
         // 端到端(滚动条出现 → 行高重算)依赖宿主把子控件登记成 LayoutCell;纯单测里拿不到那条注册链,
@@ -58,7 +61,7 @@ public class LayoutMotionAndHeightTests
         double wide = LayoutGrid.ColumnWidth(400.0, 2, 10.0);
         double narrow = LayoutGrid.ColumnWidth(380.0, 2, 10.0);
         Assert.True(narrow < wide, "可用宽度 400 → 380 后列宽没有变窄(" + wide + " → " + narrow + "),行高就会继续用旧值");
-        Assert.Equal(wide - narrow, 10.0, 6);   // 少 20px / 2 列 = 每列少 10px
+        Assert.Equal(10.0, wide - narrow, 6);   // 少 20px / 2 列 = 每列少 10px
 
         // 列数越多,单列越窄(单调):这条保证"滚动条吃掉 10px"的影响随列数收敛,不会算错
         double one = LayoutGrid.ColumnWidth(400.0, 1, 10.0);
@@ -82,26 +85,37 @@ public class LayoutMotionAndHeightTests
         Assert.Equal(260.0, LayoutCell.ReadHeightPx(back), 6);
     }
 
+    [Fact]
     public void HeightPxAcceptsWhateverTheOtherSideWrote()
     {
+        // [2026-11-22 定案] 真实落盘形状是**扁平**的:BlockLayout.ToDict() 经 LayoutJson.MergeExtra 把 Extra
+        // 平铺到块上,FromJson 再把未知字段收回 Extra(LayoutDocV2.cs:1030 / :1094)。所以 height_px 直接挂在块上,
+        // 原先手写的 "extra":{...} 嵌套层是测试写错了(那样 height_px 会被读成 Extra["extra"]["height_px"],恒为 0)。
         // Windows 侧写出来的可能是整数 260 或浮点 260.0;两种都必须被读成 260(跨平台互通的那条路)
-        foreach (string raw in new[] { "260", "260.0" })
+        // [2026-11-22 契约定案] 宽容读取:数字字符串 "260" 也读成 260(与 ReadHeightPx 走 Convert.ToDouble 的现行为一致,
+        // 手改 JSON / 其他工具把数字写成字符串时不丢固定高度)。
+        foreach (string raw in new[] { "260", "260.0", "\"260\"", "\"260.0\"" })
         {
-            string json = "{\"id\":\"a\",\"extra\":{\"height_px\":" + raw + "}}";
+            string json = "{\"id\":\"a\",\"height_px\":" + raw + "}";
             using JsonDocument doc = JsonDocument.Parse(json);
             BlockLayout block = BlockLayout.FromJson(doc.RootElement);
-            Assert.Equal(260.0, LayoutCell.ReadHeightPx(block), 6);
+            Assert.True(Math.Abs(LayoutCell.ReadHeightPx(block) - 260.0) < 1e-6, "height_px=" + raw + " 应读成 260,实际 " + LayoutCell.ReadHeightPx(block));
         }
 
         // 缺失 / null / 非数字 / 非正数 → 0(跟随内容),绝不能抛
+        // 注:旧版把字符串 "260" 列在这里期望 0,能绿只是因为嵌套写错、根本没读到值;契约已定为宽容读取,移到上面正例。
         foreach (string json in new[]
         {
             "{\"id\":\"a\"}",
-            "{\"id\":\"a\",\"extra\":{}}",
-            "{\"id\":\"a\",\"extra\":{\"height_px\":null}}",
-            "{\"id\":\"a\",\"extra\":{\"height_px\":\"260\"}}",
-            "{\"id\":\"a\",\"extra\":{\"height_px\":\"abc\"}}",
-            "{\"id\":\"a\",\"extra\":{\"height_px\":-5}}",
+            "{\"id\":\"a\",\"height_px\":null}",
+            "{\"id\":\"a\",\"height_px\":\"abc\"}",
+            "{\"id\":\"a\",\"height_px\":\"\"}",
+            "{\"id\":\"a\",\"height_px\":\"-5\"}",
+            "{\"id\":\"a\",\"height_px\":-5}",
+            "{\"id\":\"a\",\"height_px\":0}",
+            "{\"id\":\"a\",\"height_px\":{}}",
+            // 旧的嵌套写法(不是合法落盘形状)也必须安全地读成 0
+            "{\"id\":\"a\",\"extra\":{\"height_px\":260}}",
         })
         {
             using JsonDocument doc = JsonDocument.Parse(json);
