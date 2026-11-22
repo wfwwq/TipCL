@@ -18,3 +18,6 @@ smoke*.png
 
 # macOS
 .DS_Store
+
+# R32-MACMORE:_tmp 是 dotnet/Roslyn 构建期缓存目录,不进仓库
+_tmp/
