@@ -4,7 +4,9 @@
 // 做法:订阅已有的静态事件 LayoutStoreV2.LayoutChanged(进可视树订阅、离开退订,与 BlockHost 同一纪律);
 // 事件可能来自任意线程(AI 工具在线程池上跑),一律投回构造时捕获的 UI 调度器、合并成一次处理。
 // 处理时按「布局 JSON 文本」做指纹:与视图上次构建时一样(本视图自己改完已经 RefreshLayoutView 过)就什么都不做;
-// 不一样且「布局」视图正显示 → 重建视图。JSON 卡片里用户没动过的文本换成最新;用户正编辑着没应用的草稿则保留并提示。
+// 不一样且「布局」视图正显示 → 重建视图。v3(T-07)起 JSON 编辑框是独立窗口 LayoutJsonWindow:
+// 草稿由那个窗口自己持有,它不会因为别处改了布局就把用户没应用的文本换掉;本文件只据它的 IsDirty
+// 决定要不要弹「草稿还在这里」的提示(原来那份自记的 JSON 文本字段已删)。
 // 本视图自己的区块正处于编辑态时不重建(会打断拖动),等下一次变更或重新进入再刷新。
 // 共享的 SettingsPage.Layout.cs 只在 BuildLayoutView 末尾加了一行 LayoutLiveOnBuilt(host)。
 using System;
@@ -98,12 +100,11 @@ public sealed partial class SettingsPage
         {
             return false;
         }
-        string before = _layoutLiveStamp;
-        bool draftKept = _layoutJsonText.Length > 0 && _layoutJsonText != before;
-        if (!draftKept)
-        {
-            _layoutJsonText = "";
-        }
+        // v3(T-07):JSON 编辑框搬进独立窗口 LayoutJsonWindow —— 草稿由**那个窗口自己**持有,
+        // 本视图的自动刷新不会去碰它(窗口不会因为别处改了布局就把用户没应用的文本换掉),
+        // 所以这里只据它决定要不要提示,不再自己记一份 JSON 文本。
+        LayoutJsonWindow? json = LayoutJsonWindow.Current;
+        bool draftKept = json != null && json.IsDirty;
         RefreshLayoutView();
         LayoutLiveRefreshCount++;
         if (draftKept)

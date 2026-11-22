@@ -96,10 +96,6 @@ public sealed partial class SettingsPage
     // 「高级 → 组件管理」内联面板展开态(只在本次会话内记住)
     private bool _layoutWidgetPanelOpen;
 
-    // JSON 编辑框里还没「应用」的草稿:v3 把它收进独立窗口(LayoutJsonWindow),
-    // 但 LayoutLive 的「别处改了布局」判定仍要读它 —— 保留字段,语义不变(空串 = 没有草稿)。
-    private string _layoutJsonText = "";
-
     // ————— 视图装配 —————
 
     /// <summary>构「布局」视图(每次切到该视图都重建,保证读到最新状态)。</summary>

@@ -23,6 +23,9 @@ using Xunit;
 namespace TipCL.Tests.Layout;
 
 /// <summary>canvas 页「读取时按网格推导、提交一次才写成 grid」的迁移单测(纯模型 + 编辑器无头宿主)。</summary>
+// [R35 合并后补] 本类夹具 Store..ctor 会 set LayoutStoreV2.DirOverride(进程级全局状态),
+// 必须挂在串行集合上 —— GlobalStateGuardTests 会扫出来(IL 守卫,漏了当场红)。
+[Collection(GlobalStateCollection.Name)]
 public class LayoutCanvasMigrationTests
 {
 	// ————— 夹具:3 份 canvas 文档 —————

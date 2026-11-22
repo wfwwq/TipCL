@@ -424,7 +424,18 @@ public class AiI18nUxLayoutLiveTests
 
                 Assert.True(page.LayoutLiveRefreshCount > before, "布局视图没有自动刷新");
                 Assert.Contains(win.GetVisualDescendants().OfType<TextBlock>(), x => (x.Text ?? "").Contains("AI-made-profile"));
-                Assert.Contains("loose", JsonBox(win).Text ?? "");
+
+                // v3(T-07):JSON 编辑框搬进独立窗口 LayoutJsonWindow —— 从**那个窗口**看「磁盘上的文档真变了」。
+                // 原来这条读的是设置页里的常驻 JSON 卡片(`JsonBox(win)`),v3 起那个卡片不再存在。
+                LayoutJsonWindow json = LayoutJsonWindow.ShowFor(win, null);
+                try
+                {
+                    Assert.Contains("loose", JsonBox(json).Text ?? "");
+                }
+                finally
+                {
+                    json.Close();
+                }
 
                 // 本视图自己没改东西时,同一份文档再触发一次不重建
                 int count = page.LayoutLiveRefreshCount;
@@ -445,12 +456,19 @@ public class AiI18nUxLayoutLiveTests
         TestApp.Run(() =>
         {
             var win = new MainWindow();
+            LayoutJsonWindow? json = null;
             try
             {
                 SettingsPage page = OpenLayoutView(win);
-                TextBox box = JsonBox(win);
+
+                // v3(T-07):草稿现在住在独立窗口里 —— 设置页的自动刷新不许把它顶掉。
+                json = LayoutJsonWindow.ShowFor(win, null);
+                TextBox box = JsonBox(json);
+                string loaded = box.Text ?? "";
                 box.Text = "{ \"draft\": true }";
                 Pump(win);
+                Assert.True(json.IsDirty, "改过 JSON 之后窗口应当认作有没应用的草稿");
+
                 int before = page.LayoutLiveRefreshCount;
                 Task.Run(() =>
                 {
@@ -459,11 +477,19 @@ public class AiI18nUxLayoutLiveTests
                     LayoutStoreV2.Save(doc);
                 }).Wait();
                 HeadlessPump.WaitFor(win, () => page.LayoutLiveRefreshCount > before);
-                Assert.True(page.LayoutLiveRefreshCount > before);
-                Assert.Contains(win.GetVisualDescendants().OfType<TextBox>(), b => b.Text == "{ \"draft\": true }");
+                Assert.True(page.LayoutLiveRefreshCount > before, "布局视图没有自动刷新");
+
+                // 草稿原样还在(没有被「换最新」),窗口也仍认作脏
+                Assert.Equal("{ \"draft\": true }", box.Text);
+                Assert.True(json.IsDirty);
+
+                // 还原成「未改动」再关,免得走关窗确认框
+                box.Text = loaded;
+                Pump(win);
             }
             finally
             {
+                json?.Close();
                 win.Close();
             }
         });

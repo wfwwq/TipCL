@@ -22,10 +22,14 @@ using TipCL.App.Pages.Layout;
 using TipCL.Core.Launcher;
 using TipCL.Core.Launcher.Layout;
 using TipCL.Core.Layout;
+using TipCL.Tests;
 using TipCL.Tests.App;
 using Xunit;
 
 /// <summary>A 组:纯规则(不需要 UI 线程)。</summary>
+// [R35 合并后补] DangerHookFailuresCountAsOff 会写 LayoutAddDrawer.DangerWidgetsAllowed(静态字段),
+// 属于进程级全局状态 → 挂串行集合(GlobalStateGuardTests 的 IL 守卫会扫出来)。
+[Collection(GlobalStateCollection.Name)]
 public class LayoutEditorV3RuleTests
 {
 	private static Func<string, WidgetDef?> Widgets(params WidgetDef[] defs)
@@ -164,6 +168,8 @@ public class LayoutEditorV3RuleTests
 }
 
 /// <summary>B 组:无头 UI(TestApp.Run 的 UI 线程)。</summary>
+// [R35 合并后补] 夹具 Store..ctor 会 set LayoutStoreV2.DirOverride(进程级全局状态)→ 挂串行集合。
+[Collection(GlobalStateCollection.Name)]
 public class LayoutEditorV3UiTests
 {
 	private sealed class Store : IDisposable

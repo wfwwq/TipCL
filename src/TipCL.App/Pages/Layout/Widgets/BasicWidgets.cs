@@ -34,7 +34,9 @@ internal static class BasicWidgets
         {
             text = text.Substring(0, 4000) + "...";
         }
-        TextBlock body = U.Txt(text, 12.5);
+        // AI4-other 令牌:D-84 §3 / launch_v3 规则 7「字号只有五档」。便签正文原来是 12.5,
+        // 按 Tok.Font 的归并表(≤12.5 → 12)本来就是「说明 / 次要字」档 → 直接写令牌,不再留一个会被归并的字面量。
+        TextBlock body = U.Txt(text, TipCL.App.Ui.Tok.FsCaption);
         body.TextWrapping = TextWrapping.Wrap;
         body.LineHeight = 19.0;
         StackPanel panel = U.V(6.0, U.Small(WidgetUI.TitleOf(widget)), body);

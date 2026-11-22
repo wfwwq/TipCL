@@ -6,11 +6,13 @@
 //       (套件里只有反向断言「没工厂时显示『区块不可用』」,缺「注册了工厂 → 内容真渲染」正向路径);
 //   M13 `LayoutEditor.cs:1676` `MinBlockPx 56 → 20` ⇒ 全绿(既有用例只断言 `px >= 56`);
 //   M14 `BasicWidgets.cs:37` 便签字号 `12.5 → 99` ⇒ 全绿(部件"外观"零断言);
+//       (2026-11-22 R34/R35 合并后:该行改为直接写令牌 `TipCL.App.Ui.Tok.FsCaption` —— 全仓 `U.Txt` 会把
+//        字号收拢到五档,12.5 本来就落 12。用例仍按**精确值**钉,只是钉的从"12.5"变成"令牌那一档"。)
 //   M15 `LayoutEditor.cs:1681` `MinCols 2 → 1` ⇒ 全绿(现有用例的块宽 2/4/6 列,永远碰不到下限)。
 //
 // 本文件的每条用例都按「**能被对应变异杀红**」设计:
 //   * M13 / M15 断言**精确下界**(56.0 / 2 列),不是 `>0` 或 `>=56`;
-//   * M14 断言便签正文 TextBlock 的 **FontSize == 12.5**(从真实可视树里按正文取,不是"存在某元素");
+//   * M14 断言便签正文 TextBlock 的 **FontSize == Tok.FsCaption**(从真实可视树里按正文取,不是"存在某元素");
 //   * M12 断言**注册表内容真的进了编辑器的可视树**(唯一 marker 文本存在 + 「区块不可用」占位不存在);
 //   * M11 两条:一条**真跑生产初始化方法** `App.OnFrameworkInitializationCompleted()` 后断言
 //     `WidgetRegistry.Registered == True`(这是 MUT-LIN 记录的「真实 lifetime 路径」在**进程内**的
@@ -536,18 +538,19 @@ public class R32MutCoverageTests
 		});
 	}
 
-	// ═════════════════ M14:便签正文的默认字号 = 12.5(精确) ═════════════════
+	// ═════════════════ M14:便签正文的默认字号 = Tok.FsCaption(精确) ═════════════════
 
 	/// <summary>
-	/// 便签部件的正文 TextBlock 必须有 `FontSize == 12.5`。
+	/// 便签部件的正文 TextBlock 必须有 `FontSize == Tok.FsCaption`(= 12)。
 	///
 	/// 走的是生产分派 `WidgetUI.Build`(type=note → `BasicWidgets.Note`),并把结果挂进真窗口,
-	/// 再从可视树里按**正文文本**取 TextBlock —— 断言的正是 MUT-LIN M14 改的那个常数
-	/// (`BasicWidgets.cs:37` 的 `U.Txt(text, 12.5)`),改成 99 会直接变红。
+	/// 再从可视树里按**正文文本**取 TextBlock —— 断言的正是 MUT-LIN M14 改的那个常数:
+	/// 现在源码写的是令牌 `TipCL.App.Ui.Tok.FsCaption`(2026-11-22 由字面量 `12.5` 改成令牌,
+	/// 因为全仓 `U.Txt` 会把字号收拢到五档,12.5 本来就落 12);把它改成 99 或别的档仍会变红。
 	/// 既有 `WidgetTests` 只断言文本/结构,对"部件长什么样"零覆盖,这条补的就是那一格。
 	/// </summary>
 	[Fact]
-	public void NoteWidgetBody_KeepsItsDesignedFontSizeOf12Point5()
+	public void NoteWidgetBody_UsesTheCaptionFontToken()
 	{
 		TestApp.Run(() =>
 		{
@@ -576,7 +579,7 @@ public class R32MutCoverageTests
 			{
 				TextBlock? body = Find<TextBlock>(window, (TextBlock t) => t.Text == Body);
 				Assert.True(body != null, "便签正文没有出现在可视树里;树 = " + Dump(window, 0));
-				Assert.Equal(12.5, body!.FontSize, 6);
+				Assert.Equal(TipCL.App.Ui.Tok.FsCaption, body!.FontSize, 6);
 			}
 			finally
 			{
