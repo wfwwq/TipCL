@@ -26,3 +26,6 @@ artifacts/
 _wpf_run/
 # R32-LC 测试临时目录(lead 授权):dotnet test 在本机必须把 TEMP/TMP 指到工作区内
 .testtmp/
+
+# R32-LINMORE:_linmore_tmp 是 dotnet/Roslyn 构建期缓存(与 _linsplit_tmp / _macmore_tmp 同性质),不进仓库
+_linmore_tmp/
