@@ -14,6 +14,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using TipCL.Core.Launcher.Layout;
 using TipCL.Models;
 using TipCL.Services;
 using TipCL.Themes;
@@ -109,6 +110,29 @@ public sealed class CatalogPage : PageBase
 
 	private readonly Grid _listHost = new Grid();
 
+	// [layout-fix] 规格 §3-问题2:原来是一个写死的三行 Grid(Auto/Auto/*),现在换成区块宿主,
+	// 分成「标题」「筛选」「结果列表」三个区块。页面 ID = catalog:<类型>(见 LayoutPageId)。
+	private readonly BlockHost _host;
+
+	/// <summary>
+	/// [layout-fix] 规格 §4-能力2:各 catalog 分段的出厂默认布局 —— 单列 stack(三块纵向流),
+	/// 区间距 14(等于原来筛选卡自己的上下外边距)、pad 26,20,26,20(等于原来根的 Margin),
+	/// 于是"没写过布局文档"时默认渲染与改动前逐步等价(Windows <c>CatalogPage.cs:86-101</c> 逐字同构)。
+	/// </summary>
+	private static PageLayoutV2 CatalogDefaultPage()
+	{
+		PageLayoutV2 page = new PageLayoutV2
+		{
+			Mode = LayoutSchema.ModeStack,
+			Gap = 14.0,
+			Pad = new double[4] { 26.0, 20.0, 26.0, 20.0 }
+		};
+		page.Blocks.Add(new BlockLayout { Id = "header", Span = 1, Z = 0 });
+		page.Blocks.Add(new BlockLayout { Id = "filters", Span = 1, Z = 1 });
+		page.Blocks.Add(new BlockLayout { Id = "results", Span = 1, Z = 2 });
+		return page;
+	}
+
 	private readonly ToggleButton _modeSearch;
 
 	private readonly ToggleButton _modeInstalled;
@@ -145,6 +169,12 @@ public sealed class CatalogPage : PageBase
 	private List<string> _installedNames = new List<string>();
 
 	public override string Title => _kind.Title;
+
+	/// <summary>
+	/// 布局寻址用的稳定 pageId(设计 §5.2):六个分段内嵌的都是本页,各自带 kind
+	/// (<c>catalog:mod</c> / <c>catalog:modpack</c> / …)。这个 id 供 v2 pages 寻址(Windows <c>:132-138</c>)。
+	/// </summary>
+	public string LayoutPageId => "catalog:" + _kind.Key;
 
 	// ================================================================= 注入缝(C6a · D 类)
 
@@ -317,12 +347,16 @@ public sealed class CatalogPage : PageBase
 		_results = Ui.VirtualList<object>(BuildRow);
 		_listHost.Children.Add(_results);
 		_listHost.Children.Add(Ui.Scroll(_placeholder));
-		Grid root = Ui.G("Auto,Auto,*");
-		root.Add(section, 0);
-		root.Add(filterCard.M(0.0, 14.0, 0.0, 14.0), 1);
-		root.Add(_listHost, 2);
-		root.Margin = new Thickness(26.0, 20.0, 26.0, 20.0);
-		base.Content = root;
+		// [layout-fix] 三行 Grid → 区块宿主("header"/"filters"/"results",pageId = catalog:<类型>)。
+		// 边距与区间距都收进 CatalogDefaultPage():26,20,26,20 + gap 14,默认渲染与旧版等价。
+		// (旧 root 的三行 Grid 与 filterCard 的上下 14 外边距一并退场 —— 间距改由宿主统一给。)
+		_host = new BlockHost(LayoutPageId, new List<BlockSpec>
+		{
+			new BlockSpec { Id = "header", Title = I18n.L("标题"), Content = section },
+			new BlockSpec { Id = "filters", Title = I18n.L("筛选"), Content = filterCard },
+			new BlockSpec { Id = "results", Title = I18n.L("结果列表"), Content = _listHost }
+		}, null, CatalogDefaultPage());
+		base.Content = _host;
 		EnableDrop(() => new FileDrop.DropContext
 		{
 			Instance = CurrentInstance(),

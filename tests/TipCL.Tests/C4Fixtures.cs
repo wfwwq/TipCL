@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Styling;
+using TipCL.Core.Launcher.Layout;
 using TipCL.Models;
 using TipCL.Pages;
 using TipCL.Services;
@@ -72,7 +73,7 @@ internal static class C4Expected
     };
 
     /// <summary>【Windows 源】<c>LibraryPage.cs:269-320</c> 的右键「自定义布局...」菜单(3 项,顺序如此)。</summary>
-    internal static readonly string[] LibraryLayoutMenuItems = { "自定义布局...", "显示文件夹栏", "导出布局", "导入布局" };
+    internal static readonly string[] LibraryLayoutMenuItems = { "自定义布局...", "隐藏文件夹栏", "导出布局", "导入布局" };
 
     /// <summary>【Windows 源】<c>LibraryPage.cs:786-802</c> 的 <c>InferType</c> 判据(7 组输入 → 期望类型)。</summary>
     internal static readonly (string Id, string Type)[] InferTypeCases =
@@ -180,6 +181,8 @@ internal sealed class C4Scope : IDisposable
 
     private readonly string? _layoutDir;
 
+    private readonly string? _layoutDirV2;
+
     private bool _disposed;
 
     private C4Scope()
@@ -199,6 +202,7 @@ internal sealed class C4Scope : IDisposable
         _flyToTasks = LaunchPage.FlyToTasksSeam;
         _settingsFactory = InstanceDetailPage.SettingsPageFactory;
         _layoutDir = PageLayoutStore.DirOverride;
+        _layoutDirV2 = LayoutStoreV2.DirOverride;
     }
 
     internal static C4Scope Capture()
@@ -230,6 +234,9 @@ internal sealed class C4Scope : IDisposable
         LaunchPage.FlyToTasksSeam = _flyToTasks;
         InstanceDetailPage.SettingsPageFactory = _settingsFactory;
         PageLayoutStore.DirOverride = _layoutDir;
+        PageLayoutStore.ResetCache();
+        LayoutStoreV2.DirOverride = _layoutDirV2;
+        LayoutStoreV2.ResetCache();
     }
 }
 
@@ -430,6 +437,10 @@ internal static class C4Files
         System.IO.Directory.CreateDirectory(dir);
         PageLayoutStore.DirOverride = dir;
         PageLayoutStore.ResetCache();
+        // 布局 v2(ui_layout_v2.json)也指到同一目录:BlockHost 页面(实例库/资源目录/插件/设置)
+        // 读写的是它,不隔离就会落到 test-home 的共享目录里、用例之间互相看得见。
+        LayoutStoreV2.DirOverride = dir;
+        LayoutStoreV2.ResetCache();
         return dir;
     }
 

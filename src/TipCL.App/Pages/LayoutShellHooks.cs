@@ -29,8 +29,9 @@
 //   win.Toast(title, body, kind)           → AppServices.Toast(title, body, kind)
 //   I18n.L(key)                            → I18n.L(key)(同名同位置)
 //   win.PageHost                           → win.Host(MainWindow 的 internal 属性,返回 Pages.PageHost)
-//   win.GetPage("settings") is SettingsPage → **mac SettingsPage 没有布局内层视图**(实测 grep OpenLayoutView 零命中),
-//     所以 OpenLayoutSettings 只能 Navigate("settings")(见下方方法注释与 R32-MWG.md 的降级清单)
+//   win.GetPage("settings") is SettingsPage → mac SettingsPage **有**「布局」内层视图了
+//     (SettingsPage.Layout.cs:`LayoutView = 7` + `public OpenLayoutView()`),OpenLayoutSettings 与 Windows 逐字同构。
+//     [本包 R32-MACMORE 修掉的降级] 上一版 mac 只 Navigate("settings")、不切内层视图,见 R32-MWG.md §5。
 //   BlockHost.Editor(FrameworkElement 侧 internal) → 本程序集内可见,右键链路直接读 Editor.IsEditing / CanEdit
 using System;
 using System.Collections.Generic;
@@ -270,19 +271,24 @@ internal static class LayoutShellHooks
 		{
 			return true;
 		}
-		// 移植降级:mac 设置页没有「布局」内层视图、也没有密度/分栏 UI(实测 SettingsPage 只有
-		// settings:general / settings:network / settings:about 三个 BlockHost),文案只指向真正存在的入口。
-		AppServices.Toast(I18n.L("这个页面没有可拖动的区块"), I18n.L("页签、主题可以在「设置」里调整"), ToastKind.Warning);
+		// 与 Windows LayoutShellHooks.cs:223 逐字同文(入口「设置 → 布局」在本包已真实存在,不再是降级文案)
+		AppServices.Toast(I18n.L("这个页面没有可拖动的区块"), I18n.L("页签、密度、分栏比例可以在「设置 → 布局」里调整"), ToastKind.Warning);
 		return false;
 	}
 
 	/// <summary>打开「布局设置」。</summary>
 	public static void OpenLayoutSettings(MainWindow win)
 	{
-		// Windows: win.Navigate("settings") + SettingsPage.OpenLayoutView()(切到内层「布局」视图)。
-		// mac 降级:SettingsPage 没有 OpenLayoutView / BuildLayoutView(grep 全树零命中),
-		// 这里只保证"切到设置页";整页布局设置在 mac 上不存在,不伪造(见 R32-MWG.md 未做到清单)。
+		// Windows LayoutShellHooks.cs:228-235 同构:
+		//   win.Navigate("settings") → 切到设置页;`GetPage("settings") is SettingsPage` → page.OpenLayoutView()
+		//   → Select(LayoutView = 7) 切到内层「布局」视图(SettingsPage.Layout.cs)。
+		// 映射说明:Windows 的 `SettingsPage.OpenLayoutView()` 与 mac 同名同签名,内部差距只有后者走
+		// `Select(int)` 时**重建**布局视图(Windows SettingsPage.cs:825-830 也是这个行为)。
 		win.Navigate("settings");
+		if (win.GetPage("settings") is SettingsPage page)
+		{
+			page.OpenLayoutView();
+		}
 	}
 
 	// ───────────────────────────── 可视树小工具 ─────────────────────────────
