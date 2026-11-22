@@ -125,7 +125,7 @@ public static class FpsOverlay
             _text = new TextBlock
             {
                 Text = Placeholder,
-                FontSize = 11,
+                FontSize = TipCL.App.Ui.Tok.FsCaption,
                 FontFamily = new FontFamily(TipCL.App.Ui.Ui.FontMono),
                 Foreground = Brushes.White,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -133,7 +133,7 @@ public static class FpsOverlay
             // 深色半透明底 + 白字:明暗两套主题下都读得清(角标不参与主题换色,免得跟内容撞色)
             Root = new Border
             {
-                CornerRadius = new CornerRadius(6),
+                CornerRadius = TipCL.App.Ui.Tok.CrCtl,
                 Padding = new Thickness(7, 2, 7, 3),
                 Background = new SolidColorBrush(Color.Parse("#A6000000")),
                 Child = _text,

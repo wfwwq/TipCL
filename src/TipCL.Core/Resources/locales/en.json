@@ -3456,4 +3456,420 @@
  "按钮不能打开这个页面": "This button cannot open that page",
  "· {n} 步": "· {n} steps",
  "· {n} 步失败": "· {n} failed"
+ ,
+  "编辑本页": "Edit this page"
+ ,
+  "编辑「{0}」页": "Edit \"{0}\" page"
+ ,
+  "添加到本页": "Add to this page"
+ ,
+  "添加到「{0}」页": "Add to \"{0}\" page"
+ ,
+  "列表": "List"
+ ,
+  "网格": "Grid"
+ ,
+  "拖动调整上下顺序": "Drag to reorder"
+ ,
+  "拖动换位置 · 拖右边缘改宽度": "Drag to move · drag the right edge to resize"
+ ,
+  "拖动块调整顺序；网格模式下拖块的右边缘改宽度；悬停能看到块名和隐藏 / 删除按钮。": "Drag a block to reorder it; in grid mode drag its right edge to change the width; hover to see the block name and the hide / delete buttons."
+ ,
+  "撤销 (Ctrl+Z)": "Undo (Ctrl+Z)"
+ ,
+  "重做 (Ctrl+Y)": "Redo (Ctrl+Y)"
+ ,
+  "添加组件,或者找回隐藏的内容": "Add a widget, or bring back hidden content"
+ ,
+  "完成编辑并保存 (Esc)": "Finish editing and save (Esc)"
+ ,
+  "导出本页…": "Export this page…"
+ ,
+  "导入到本页…": "Import into this page…"
+ ,
+  "整套布局与方案…": "Whole layout and presets…"
+ ,
+  "松手后自动靠拢": "Auto-pack on release"
+ ,
+  "已切换到列表": "Switched to list"
+ ,
+  "已切换到网格": "Switched to grid"
+ ,
+  "每块占满一整行": "Each block takes a full row"
+ ,
+  "一行可以并排放几块,拖右边缘改宽度": "Several blocks can share a row; drag the right edge to resize"
+ ,
+  "关闭 (Esc)": "Close (Esc)"
+ ,
+  "网页、按钮组件默认关闭，可在 设置 → 布局 → 高级 里开启。": "Web and button widgets are off by default; turn them on in Settings → Layout → Advanced."
+ ,
+  "跳到 设置 → 布局 → 高级": "Go to Settings → Layout → Advanced"
+ ,
+  "已隐藏的内容": "Hidden content"
+ ,
+  "组件": "Widgets"
+ ,
+  "点一下放回原来的位置": "Click to put it back where it was"
+ ,
+  "显示": "Show"
+ ,
+  "没有隐藏的内容": "Nothing is hidden"
+ ,
+  "记一句话，可以加多张": "Jot a line; you can add several"
+ ,
+  "一键启动指定实例": "Launch a chosen instance in one click"
+ ,
+  "当前时间和日期": "Current time and date"
+ ,
+  "本周每天玩了多久": "How long you played each day this week"
+ ,
+  "把页面分成两段": "Split the page into two parts"
+ ,
+  "嵌入一个 https 网页": "Embed an https web page"
+ ,
+  "点一下打开页面或启动实例": "Open a page or launch an instance in one click"
+ ,
+  "已添加「{0}」": "Added \"{0}\""
+ ,
+  "放在了页面末尾": "It's at the end of the page"
+ ,
+  "已删除「{0}」": "Deleted \"{0}\""
+ ,
+  "按 Ctrl+Z 可以撤销": "Press Ctrl+Z to undo"
+ ,
+  "已隐藏「{0}」": "Hid \"{0}\""
+ ,
+  "在「添加」里可以找回": "You can bring it back from \"Add\""
+ ,
+  "已恢复「{0}」": "Restored \"{0}\""
+ ,
+  "{0} / {1} 列": "{0} / {1} columns"
+ ,
+  "已删除选中的组件": "Deleted the selected widgets"
+ ,
+  "已隐藏选中的内容": "Hid the selected content"
+ ,
+  "删除这个组件": "Delete this widget"
+ ,
+  "· 组件": "· widget"
+ ,
+  "拖动改宽度": "Drag to change the width"
+ ,
+  "这个页面只有一块内容": "This page has only one block"
+ ,
+  "只有一块内容的页面不提供编辑": "Pages with a single block can't be customized"
+ ,
+  "插件 · 市场": "Plugins · Market"
+ ,
+  "资源目录 · Mod": "Resources · Mods"
+ ,
+  "资源目录 · 整合包": "Resources · Modpacks"
+ ,
+  "资源目录 · 数据包": "Resources · Data packs"
+ ,
+  "资源目录 · 资源包": "Resources · Resource packs"
+ ,
+  "资源目录 · 光影包": "Resources · Shaders"
+ ,
+  "资源目录 · 世界": "Resources · Worlds"
+ ,
+  "没能进入编辑": "Couldn't start editing"
+ ,
+  "调整导航、各页面的排列，或者保存成方案。改动即时生效，随时可以恢复默认。": "Arrange navigation and page layouts, or save them as profiles. Changes apply instantly and can be reset at any time."
+ ,
+  "导航": "Navigation"
+ ,
+  "页面": "Pages"
+ ,
+  "高级": "Advanced"
+ ,
+  "区块间距": "Block spacing"
+ ,
+  "所有可以自定义的页面一起生效": "Applies to every customizable page"
+ ,
+  "区块间距:{0}": "Block spacing: {0}"
+ ,
+  "间距：{0}": "Spacing: {0}"
+ ,
+  "页签恢复默认": "Reset tabs to default"
+ ,
+  "页签已恢复默认": "Tabs reset to default"
+ ,
+  "顶部页签": "Top tabs"
+ ,
+  "拖动调整顺序，点眼睛隐藏；「设置」不能隐藏": "Drag to reorder, click the eye to hide; \"Settings\" can't be hidden"
+ ,
+  "AI 按钮": "AI button"
+ ,
+  "主题切换": "Theme switch"
+ ,
+  "账号名称": "Account name"
+ ,
+  "隐藏 AI 按钮后仍可按 Ctrl+K 打开": "With the AI button hidden you can still open it with Ctrl+K"
+ ,
+  "标题栏显示:{0}": "Show in title bar: {0}"
+ ,
+  "「设置」页签始终显示，否则没有入口改回来": "The \"Settings\" tab is always shown, otherwise there'd be no way back"
+ ,
+  "隐藏这个页签": "Hide this tab"
+ ,
+  "显示这个页签": "Show this tab"
+ ,
+  "隐藏页签:{0}": "Hide tab: {0}"
+ ,
+  "显示页签:{0}": "Show tab: {0}"
+ ,
+  "页签:{0}": "Tab: {0}"
+ ,
+  "页签顺序已更新": "Tab order updated"
+ ,
+  "全部恢复默认": "Reset all to default"
+ ,
+  "所有页面恢复默认": "Reset all pages to default"
+ ,
+  "「{0}」": "\"{0}\" "
+ ,
+  "{0}只有一块内容，不提供编辑。": "{0}have only one block, so they can't be edited."
+ ,
+  "显示全部 {0} 个页面": "Show all {0} pages"
+ ,
+  "已自定义": "Customized"
+ ,
+  "和出厂时一样": "Same as factory default"
+ ,
+  "编辑页面布局:{0}": "Edit page layout: {0}"
+ ,
+  "页面恢复默认:{0}": "Reset page to default: {0}"
+ ,
+  "{0} 个组件": "{0} widgets"
+ ,
+  "隐藏了 {0} 项": "{0} hidden"
+ ,
+  "调整了顺序": "Reordered"
+ ,
+  "写盘失败": "Couldn't write to disk"
+ ,
+  "「{0}」已恢复默认": "\"{0}\" reset to default"
+ ,
+  "所有页面的排列都会回到出厂时的样子；页签、分栏和方案不受影响。": "Every page goes back to its factory arrangement; tabs, panes and profiles are not affected."
+ ,
+  "所有页面已恢复默认": "All pages reset to default"
+ ,
+  "原来的布局已存为方案「{0}」，可以从「方案」里切回": "The previous layout was saved as profile \"{0}\"; switch back from Profiles"
+ ,
+  "导出整套布局…": "Export whole layout…"
+ ,
+  "存为新方案": "Save as new profile"
+ ,
+  "导入布局文件": "Import layout file"
+ ,
+  "导出整套布局": "Export whole layout"
+ ,
+  "正在使用": "In use"
+ ,
+  "当前布局": "Current layout"
+ ,
+  "{0} · 还没存成方案": "{0} · not saved as a profile yet"
+ ,
+  "把当前布局存为新方案": "Save the current layout as a new profile"
+ ,
+  "AI 备份": "AI backup"
+ ,
+  "当前方案": "Current profile"
+ ,
+  "应用方案:{0}": "Apply profile: {0}"
+ ,
+  "方案菜单:{0}": "Profile menu: {0}"
+ ,
+  "已把当前布局存为方案「{0}」": "Saved the current layout as profile \"{0}\""
+ ,
+  "已切换到「{0}」，所有页面已重排": "Switched to \"{0}\"; all pages rearranged"
+ ,
+  "原来的布局已存为方案「{0}」，可以随时切回": "The previous layout was saved as profile \"{0}\"; you can switch back any time"
+ ,
+  "已复制一份": "Duplicated"
+ ,
+  "整套布局含页签、页面排列、分栏和组件；兼容 v1 的页面布局只含每页区块的顺序与显隐": "A whole layout includes tabs, page arrangements, panes and widgets; the v1-compatible page layout only has each page's block order and visibility"
+ ,
+  "已导出整套布局": "Whole layout exported"
+ ,
+  "已导出页面布局": "Page layout exported"
+ ,
+  "这是一整套布局(含页签、页面排列、分栏)。要怎么用?": "This is a whole layout (tabs, page arrangements, panes). How do you want to use it?"
+ ,
+  "布局已应用": "Layout applied"
+ ,
+  "已存为方案「{0}」": "Saved as profile \"{0}\""
+ ,
+  "已导入 {0} 个页面的布局(下次打开对应页面生效)": "Imported layouts for {0} pages (takes effect the next time each page opens)"
+ ,
+  "分栏、网页与按钮组件、布局文件": "Panes, web & button widgets, layout file"
+ ,
+  "一般不需要动": "Usually no need to change"
+ ,
+  "展开或收起高级设置": "Expand or collapse advanced settings"
+ ,
+  "在页面上拖两栏中间的分隔线即可调整，双击复位。": "Drag the divider between two panes on the page to adjust; double-click to reset."
+ ,
+  "都是默认宽度。": "All panes use the default width. "
+ ,
+  "已调整 {0} 处：{1}。": "{0} adjusted: {1}. "
+ ,
+  "全部复位分栏": "Reset all panes"
+ ,
+  "分栏宽度": "Pane widths"
+ ,
+  "分栏宽度已全部复位": "All pane widths reset"
+ ,
+  "实例库文件夹栏": "Library folder pane"
+ ,
+  "设置左侧导航": "Settings side navigation"
+ ,
+  "版本管理左栏": "Version manager left pane"
+ ,
+  "AI 对话历史栏": "AI chat history pane"
+ ,
+  "反馈页右栏": "Feedback right pane"
+ ,
+  "账号头像卡": "Account avatar card"
+ ,
+  "网页和按钮组件": "Web page & button widgets"
+ ,
+  "导入的布局里如果带网页或按钮组件，仍然默认关闭，需要你逐个打开。": "Web page or button widgets in imported layouts stay off by default; you need to turn them on one by one."
+ ,
+  "已开启：「添加」抽屉里多了网页和按钮": "On: the \"Add\" drawer now offers web pages and buttons"
+ ,
+  "已关闭网页和按钮组件": "Web page & button widgets turned off"
+ ,
+  "开启后可以添加嵌入网页（只接受 https）和执行动作的按钮": "When on, you can add embedded web pages (https only) and action buttons"
+ ,
+  "打开所在文件夹": "Open containing folder"
+ ,
+  "在编辑器中打开…": "Open in editor…"
+ ,
+  "打开布局文件所在文件夹": "Open the layout file's folder"
+ ,
+  "在编辑器中打开布局文件": "Open the layout file in the editor"
+ ,
+  "布局文件": "Layout file"
+ ,
+  "用 JSON 编辑整套布局，适合批量修改或分享给别人": "Edit the whole layout as JSON — handy for bulk changes or sharing"
+ ,
+  "紧凑间距": "Compact spacing"
+ ,
+  "宽松间距": "Loose spacing"
+ ,
+  "标准间距": "Standard spacing"
+ ,
+  "{0} 个页面自定义": "{0} pages customized"
+ ,
+  "页面都是默认排列": "All pages use the default arrangement"
+ ,
+  "{0} 个页签 · {1} 个页面自定义 · {2} 处分栏 · {3} 个组件 · {4} 个方案": "{0} tabs · {1} pages customized · {2} panes · {3} widgets · {4} profiles"
+ ,
+  "重新载入": "Reload"
+ ,
+  "丢掉这里的修改，重新读取当前布局": "Discard the edits here and reload the current layout"
+ ,
+  "应用并保存": "Apply and save"
+ ,
+  "重新载入布局 JSON": "Reload layout JSON"
+ ,
+  "用 JSON 编辑整套布局": "Edit the whole layout as JSON"
+ ,
+  "可以直接编辑或粘贴。先点「校验」看看会改成什么样，校验通过才会保存；有错误时什么都不会写入。": "Edit or paste directly. Click \"Check\" first to preview the result; it's only saved once it passes, and nothing is written if there are errors."
+ ,
+  "这是当前正在使用的整套布局。": "This is the whole layout currently in use."
+ ,
+  "有未保存的修改。": "There are unsaved changes."
+ ,
+  "有错误，不能保存：看下面的具体字段。": "There are errors, so it can't be saved — see the fields below."
+ ,
+  "校验通过（{0} 处会按规则自动修正）：{1}": "Check passed ({0} will be auto-corrected): {1}"
+ ,
+  "校验通过：{0}": "Check passed: {0}"
+ ,
+  "看编辑器下面的具体字段": "See the fields below the editor"
+ ,
+  "应用这份布局": "Apply this layout"
+ ,
+  "会替换当前的整套布局：{0}。确定吗？": "This replaces the whole current layout: {0}. Continue?"
+ ,
+  "没能保存：看下面的具体原因。": "Couldn't save — see the reasons below."
+ ,
+  "看编辑器下面的具体原因": "See the reasons below the editor"
+ ,
+  "已保存，所有页面已按新布局重排。": "Saved; all pages now use the new layout."
+ ,
+  "有 {0} 处按规则自动修正": "{0} auto-corrected"
+ ,
+  "关闭布局文件": "Close layout file"
+ ,
+  "这里的修改还没有保存，关掉就没了。": "Your edits here aren't saved yet and will be lost if you close."
+ ,
+  "不保存，关闭": "Close without saving"
+ ,
+  "应用布局 JSON": "Apply layout JSON"
+ ,
+  "校验布局 JSON": "Validate layout JSON"
+ ,
+  "AI 改布局之前自动存的一份": "Saved automatically before AI changed the layout"
+ ,
+  "AI 改布局前 {0}": "Before AI change {0}"
+ ,
+  "{0} · 用在 {1} 个页面": "{0} · used on {1} pages"
+ ,
+  "{0} · 还没放到页面上": "{0} · not placed on any page yet"
+ ,
+  "{0} 个页面自定义过": "{0} pages customized"
+ ,
+  "主区域固定，不能拖动或隐藏": "Main area is fixed and can't be moved or hidden"
+ ,
+  "切换方案或恢复默认之前自动留的底": "Kept automatically before switching profile or resetting"
+ ,
+  "删除组件:{0}": "Delete widget: {0}"
+ ,
+  "删除组件「{0}」？它会从所有页面上移走。": "Delete widget \"{0}\"? It will be removed from every page."
+ ,
+  "删除组件会把它从所有页面上移走；要新加组件，在页面的编辑态里点「添加」。": "Deleting a widget removes it from every page. To add a new one, click \"Add\" in a page's edit mode."
+ ,
+  "各页面都是默认排列": "All pages use the default arrangement"
+ ,
+  "已创建 {0} 个组件": "{0} widgets created"
+ ,
+  "已检测的 Java": "Detected Java"
+ ,
+  "快捷操作": "Quick actions"
+ ,
+  "房间": "Room"
+ ,
+  "找不到这个组件的内容，可能已被删除；可以在编辑态点「添加」重新放一个。": "This widget's content can't be found and may have been deleted. In edit mode, click \"Add\" to place a new one."
+ ,
+  "拖动改高度 · 双击恢复自动高度": "Drag to change height · double-click to reset to auto height"
+ ,
+  "时间范围": "Time range"
+ ,
+  "明细": "Details"
+ ,
+  "正在使用的方案不能删除，先切到别的方案": "The profile in use can't be deleted. Switch to another one first"
+ ,
+  "游戏按版本挑 Java:26.1+ 要 25,1.20.5+ 要 21,1.18+ 要 17,老版本用 8": "Pick Java by game version: 26.1+ needs 25, 1.20.5+ needs 21, 1.18+ needs 17, older versions use 8"
+ ,
+  "管理…": "Manage…"
+ ,
+  "管理已创建的组件": "Manage created widgets"
+ ,
+  "累计时长": "Total playtime"
+ ,
+  "组件名": "Widget name"
+ ,
+  "组件管理": "Widgets"
+ ,
+  "联机状态": "Connection status"
+ ,
+  "账号列表": "Account list"
+ ,
+  "还没有组件。在页面的编辑态里点「添加」就能放便签、时钟等组件。": "No widgets yet. In a page's edit mode, click \"Add\" to place notes, clocks and more."
+ ,
+  "重命名组件:{0}": "Rename widget: {0}"
 }

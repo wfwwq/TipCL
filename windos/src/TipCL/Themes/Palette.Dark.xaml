@@ -72,4 +72,31 @@
     <GradientStop Color="#1B1B1B" Offset="0.6" />
     <GradientStop Color="#181818" Offset="1" />
   </LinearGradientBrush>
+  <!-- R34 WP-L0 布局 v3 编辑态令牌（2026-11-20）。与 Palette.Light.xaml 成对；效果图只画了浅色，深色取值按本色板的卡片 / 分段层级推导；
+       …OnDark / B.EditGlass* / B.OnEditGlass* / B.EditDim 与浅色相同（它们只用在永远是深色的启动页英雄图上）。用法见 docs/design-spec.md §12。 -->
+  <SolidColorBrush x:Key="B.EditOutline" Color="#2EFFFFFF" />
+  <SolidColorBrush x:Key="B.EditOutlineHover" Color="#5CFFFFFF" />
+  <SolidColorBrush x:Key="B.EditOutlineOnDark" Color="#59FFFFFF" />
+  <SolidColorBrush x:Key="B.EditOutlineHoverOnDark" Color="#B3FFFFFF" />
+  <SolidColorBrush x:Key="B.EditDropFill" Color="#1B3A2C" />
+  <SolidColorBrush x:Key="B.EditDropFillOnDark" Color="#1FFFFFFF" />
+  <SolidColorBrush x:Key="B.EditColShade" Color="#0AFFFFFF" />
+  <SolidColorBrush x:Key="B.EditColShadeOnDark" Color="#0FFFFFFF" />
+  <SolidColorBrush x:Key="B.EditBarBg" Color="#2B2B2B" />
+  <SolidColorBrush x:Key="B.EditBarLine" Color="#1AFFFFFF" />
+  <SolidColorBrush x:Key="B.EditItemBg" Color="#313131" />
+  <SolidColorBrush x:Key="B.EditSegRail" Color="#1E1E1E" />
+  <SolidColorBrush x:Key="B.EditSegOn" Color="#3A3A3A" />
+  <SolidColorBrush x:Key="B.EditDim" Color="#800A0E16" />
+  <SolidColorBrush x:Key="B.EditGlass" Color="#B80E121B" />
+  <SolidColorBrush x:Key="B.EditGlassLine" Color="#24FFFFFF" />
+  <SolidColorBrush x:Key="B.EditGlassChip" Color="#24FFFFFF" />
+  <SolidColorBrush x:Key="B.EditGlassChipLine" Color="#38FFFFFF" />
+  <SolidColorBrush x:Key="B.OnEditGlass" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="B.OnEditGlassMuted" Color="#A8FFFFFF" />
+  <SolidColorBrush x:Key="B.WarnInk" Color="#EBB45E" />
+  <DropShadowEffect x:Key="Fx.EditBar" BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.35" Color="#000000" />
+  <DropShadowEffect x:Key="Fx.EditLabel" BlurRadius="8" ShadowDepth="2" Direction="270" Opacity="0.40" Color="#000000" />
+  <DropShadowEffect x:Key="Fx.Drawer" BlurRadius="32" ShadowDepth="12" Direction="180" Opacity="0.50" Color="#000000" />
+  <DropShadowEffect x:Key="Fx.SegOn" BlurRadius="2" ShadowDepth="1" Direction="270" Opacity="0.30" Color="#000000" />
 </ResourceDictionary>

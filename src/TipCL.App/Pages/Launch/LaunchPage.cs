@@ -357,6 +357,9 @@ public sealed partial class LaunchPage : PageBase
             Config.CONFIG.Save();
         };
         // 边距同英雄区(左 56 / 右 24 / 下 18)
+        // [R35 lin-l5] §5.5:文档里还没有 launch 时默认 = 12 列网格,新闻整行;任务 / 时长 / 便签显示后两两并排、
+        // 日志占整行(PageDefaultLayouts.LaunchContent,四块仍默认隐藏)。英雄区仍然不进布局系统;
+        // 已经存过 launch 的用户完全照文档。
         _blocks = new TipCL.App.Pages.Layout.BlockHost("launch", new List<TipCL.App.Pages.Layout.BlockSpec>
         {
             new() { Id = "news", Title = I18nCore.Tr("新闻"), Content = _newsCard },
@@ -364,7 +367,10 @@ public sealed partial class LaunchPage : PageBase
             new() { Id = "playtime", Title = I18nCore.Tr("游戏时长"), Content = UiClass.Card(_playTotal), DefaultVisible = false },
             new() { Id = "notes", Title = I18nCore.Tr("便签"), Content = UiClass.Card(_notes), DefaultVisible = false },
             new() { Id = "log", Title = I18nCore.Tr("日志"), Content = logCard, DefaultVisible = false },
-        }, new Thickness(56, 0, 24, 18));
+        }, new Thickness(56, 0, 24, 18), TipCL.App.Pages.Layout.PageDefaultLayouts.LaunchContent());
+        // [R35 lin-l5] §5.5:编辑态英雄区降到 45% 透明度、不接点击(防误点启动),右上角挂「🔒 主区域固定」
+        _heroLock = BuildHeroLock();
+        _blocks.EditingChanged += ApplyHeroEditLook;
         // 多块同时展开时限高约 62% 页高,避免把上方英雄区挤没
         PropertyChanged += (_, e) =>
         {
@@ -384,6 +390,7 @@ public sealed partial class LaunchPage : PageBase
         Grid.SetColumnSpan(_bgImage, 2);
         Grid.SetColumnSpan(_bgShade, 2);
         root.Add(_hero, 0);
+        root.Add(_heroLock, 0);
         root.Add(_blocks, 1);
         Content = root;
         // [2026-11-19 修复 #2] 非编辑态滚轮:指针在英雄区 / 背景图上(不在区块宿主里)时,把滚轮转交给
@@ -426,6 +433,77 @@ public sealed partial class LaunchPage : PageBase
     }
 
     private Control? _statusRow;
+
+    // ——————————— [R35 lin-l5] 编辑态的英雄区(GOAL-layout-v3 §5.5,只属于区块宿主这一段) ———————————
+
+    /// <summary>编辑态英雄区的不透明度(效果图 pages3:45%)。</summary>
+    internal const double HeroEditOpacity = 0.45;
+
+    // 「🔒 主区域固定,不能拖动或隐藏」标签(编辑态才显示,不接点击)
+    private Border _heroLock = null!;
+
+    /// <summary>英雄区标签(测试用:编辑态可见、常态隐藏)。</summary>
+    internal Border HeroLock => _heroLock;
+
+    /// <summary>英雄区本体(测试用:编辑态不透明度 0.45、不接点击)。</summary>
+    internal Control? Hero => _hero;
+
+    /// <summary>下方内容区的区块宿主(测试用)。</summary>
+    internal TipCL.App.Pages.Layout.BlockHost? Blocks => _blocks;
+
+    private Border BuildHeroLock()
+    {
+        var text = UiClass.Txt("🔒 " + I18nCore.Tr("主区域固定，不能拖动或隐藏"), 12, bold: true);
+        text.Foreground = Brushes.White;
+        var badge = new Border
+        {
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 5, 10, 6),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 14, 24, 0),
+            IsHitTestVisible = false,
+            IsVisible = false,
+            Child = text,
+        };
+        // 深色玻璃配色:令牌由 lin-l0 提供(B.EditDim / B.EditOutlineOnDark),找不到就用代码内兜底值,不抛异常
+        badge.Background = BrushOr("B.EditDim", Color.FromArgb(0x99, 0x10, 0x12, 0x18));
+        badge.BorderBrush = BrushOr("B.EditOutlineOnDark", Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF));
+        return badge;
+    }
+
+    private static IBrush BrushOr(string key, Color fallback)
+    {
+        try
+        {
+            if (Application.Current != null
+                && Application.Current.TryGetResource(key, Application.Current.ActualThemeVariant, out object? value)
+                && value is IBrush brush)
+            {
+                return brush;
+            }
+        }
+        catch
+        {
+            // 资源系统还没起来(无头测试早期):用兜底色
+        }
+        return new SolidColorBrush(fallback);
+    }
+
+    /// <summary>编辑态进出:英雄区压暗到 45% 并停止接点击,标签显隐。英雄区仍不进布局系统。</summary>
+    private void ApplyHeroEditLook(bool editing)
+    {
+        if (_hero != null)
+        {
+            _hero.Opacity = editing ? HeroEditOpacity : 1.0;
+            _hero.IsHitTestVisible = !editing;
+        }
+        if (_heroLock != null)
+        {
+            _heroLock.IsVisible = editing;
+        }
+    }
 
     // 半透明玻璃图标钮（48 高圆角 12）；label 为 null 即 48×48 图标钮
     private Border GlassButton(string iconKey, string? label, Action click)

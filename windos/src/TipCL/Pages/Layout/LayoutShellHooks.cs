@@ -4,8 +4,10 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Reflection;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using TipCL.Services;
 
 namespace TipCL.Pages.Layout;
@@ -85,20 +87,28 @@ public static class LayoutShellHooks
 				}
 				return;
 			}
-			ContextMenu menu = new ContextMenu();
-			MenuItem open = new MenuItem
-			{
-				Header = I18n.L("自定义布局...")
-			};
-			open.Click += delegate
-			{
-				target.EnterEdit();
-			};
-			menu.Items.Add(open);
 			BlockHost? editing = hosts.FirstOrDefault(delegate(BlockHost h)
 			{
 				return h.IsEditing;
 			});
+			// v3:单块页面(设置「下载与网络」「反馈与关于」…)不提供编辑入口 —— 右键不出「自定义布局…」
+			if (!target.CanEdit && editing == null)
+			{
+				return;
+			}
+			ContextMenu menu = new ContextMenu();
+			if (editing == null)
+			{
+				MenuItem open = new MenuItem
+				{
+					Header = I18n.L("自定义布局...")
+				};
+				open.Click += delegate
+				{
+					target.EnterEdit();
+				};
+				menu.Items.Add(open);
+			}
 			if (editing != null)
 			{
 				MenuItem done = new MenuItem
@@ -115,7 +125,7 @@ public static class LayoutShellHooks
 			{
 				MenuItem reset = new MenuItem
 				{
-					Header = I18n.L("重置本页布局")
+					Header = I18n.L("重置本页")
 				};
 				reset.Click += delegate
 				{
@@ -123,15 +133,8 @@ public static class LayoutShellHooks
 				};
 				menu.Items.Add(reset);
 			}
-			MenuItem settings = new MenuItem
-			{
-				Header = I18n.L("布局设置...")
-			};
-			settings.Click += delegate
-			{
-				OpenLayoutSettings();
-			};
-			menu.Items.Add(settings);
+			// R35 win-fix2:v3 右键只给「自定义布局…」(编辑态:「完成编辑」「重置本页」),与 BlockHost 自带菜单同一套;
+			// v2 留下的「布局设置...」去掉 —— 整套布局在编辑条「⋯ → 整套布局与方案…」和 设置 → 布局 里。
 			menu.PlacementTarget = ((src as UIElement) ?? _win) as UIElement;
 			menu.IsOpen = true;
 			e.Handled = true;
@@ -154,15 +157,25 @@ public static class LayoutShellHooks
 		{
 			return null;
 		}
+		// 兜底路径(鼠标不在任何宿主里)只在「能给自定义布局」的宿主里挑:单块宿主(D-81 Q5)跳过,
+		// 否则在设置「下载与网络」左侧导航空白处右键仍会挑中那个单块宿主(R34 WP-L5 合并事项 2)
+		List<BlockHost> editable = hosts.Where(delegate(BlockHost h)
+		{
+			return h.OffersLayoutMenu || h.IsEditing;
+		}).ToList();
+		if (editable.Count == 0)
+		{
+			return null;
+		}
 		Point point = Mouse.GetPosition(_win);
-		BlockHost? containing = hosts
+		BlockHost? containing = editable
 			.Where(delegate(BlockHost h)
 			{
 				return Contains(h, point);
 			})
 			.OrderBy(Area)
 			.FirstOrDefault();
-		return containing ?? hosts.OrderByDescending(Area).First();
+		return containing ?? editable.OrderByDescending(Area).First();
 	}
 
 	private static double Area(BlockHost host)
@@ -283,11 +296,16 @@ public static class LayoutShellHooks
 		return false;
 	}
 
-	private static void OpenLayoutSettings()
+	/// <summary>
+	/// 跳到「设置 → 布局」(右键「布局设置...」、编辑态「⋯ → 整套布局与方案…」、抽屉底部「设置 → 布局 → 高级」都走这里)。
+	/// <paramref name="advanced"/> = 顺手展开「高级」(SettingsPage.OpenLayoutAdvanced)。
+	/// </summary>
+	internal static void OpenLayoutSettings(bool advanced = false)
 	{
 		try
 		{
-			if (_win is not MainWindow main)
+			MainWindow? main = (_win as MainWindow) ?? AppServices.Window;
+			if (main == null)
 			{
 				return;
 			}
@@ -295,7 +313,178 @@ public static class LayoutShellHooks
 			if (main.PageInstance("settings") is SettingsPage settings)
 			{
 				settings.OpenLayoutView();
+				if (advanced)
+				{
+					// 设置页代理提供:展开「高级」并滚到它
+					settings.OpenLayoutAdvanced();
+				}
 			}
+		}
+		catch
+		{
+		}
+	}
+
+	// ————— 3) v3 编辑入口(设置 → 布局 的页面卡片「编辑」等跨页入口用) —————
+
+	/// <summary>
+	/// 该页是否提供编辑入口:只有一个块的页面(「下载与网络」「反馈与关于」等)返回 false。
+	/// 页面已经构造过 → 按它实际交来的区块数(≥ 2 才可编辑);还没构造过 → 按入口表的 SingleBlock 标记;
+	/// 入口表里也没有 → true(设置 → 布局 的页面卡片在各页构造之前就要算,按「可编辑」处理,真进不去时 BeginEditPage 会提示)。
+	/// </summary>
+	public static bool CanEditPage(string pageKey)
+	{
+		if (string.IsNullOrEmpty(pageKey))
+		{
+			return false;
+		}
+		if (pageKey == "launch")
+		{
+			return true; // 启动页 v3:主区域固定,右侧组件区由 LaunchPage 自己编辑(右下「编辑组件」)
+		}
+		int count = LayoutEditor.SpecCountOf(pageKey);
+		if (count >= 0)
+		{
+			return BlockHostRules.OffersLayoutMenu(count);
+		}
+		LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(pageKey);
+		return entry == null || !entry.SingleBlock;
+	}
+
+	/// <summary>
+	/// 跳到该页并进入编辑态(等价于在那一页右键「自定义布局…」)。
+	/// 先按入口表导航(顶栏页 Navigate;设置页里的子视图再切到对应视图),等页面进可视树后找到 pageId 对应的
+	/// BlockHost 调 EnterEdit;找不到时给提示(子视图类页面提示怎么打开)。单块页直接返回 false 并提示。
+	/// 返回 true = 已发起跳转(进入编辑是异步的)。
+	/// </summary>
+	public static bool BeginEditPage(string pageKey)
+	{
+		try
+		{
+			if (!CanEditPage(pageKey))
+			{
+				AppServices.Toast(I18n.L("这个页面只有一块内容，不提供编辑"), "", ToastKind.Info);
+				return false;
+			}
+			MainWindow? main = (_win as MainWindow) ?? AppServices.Window;
+			if (main == null)
+			{
+				return false;
+			}
+			if (pageKey == "launch")
+			{
+				// 启动页 v3 不再有区块宿主:跳过去后直接进组件区编辑态(等价于点右下「编辑组件」)
+				main.Navigate("launch");
+				main.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate
+				{
+					(main.PageInstance("launch") as LaunchPage)?.ZoneBeginEdit();
+				}));
+				return true;
+			}
+			LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(pageKey);
+			BlockHost? live = FindHost(pageKey);
+			if (live != null && live.IsVisible && live.CanEdit)
+			{
+				// 就在眼前:直接进编辑
+				if (!live.IsEditing)
+				{
+					live.EnterEdit();
+				}
+				return true;
+			}
+			// 入口表里登记过的页:复用设置页的现成跳转(导航 → 切子视图 → 等 Loaded → 找宿主 EnterEdit)
+			if (entry != null)
+			{
+				SettingsPage? settings = main.PageInstance("settings") as SettingsPage;
+				if (settings == null)
+				{
+					main.Navigate("settings");
+					settings = main.PageInstance("settings") as SettingsPage;
+				}
+				if (settings != null && settings.OpenPageForLayoutEdit(pageKey))
+				{
+					return true;
+				}
+			}
+			if (live == null || !live.IsVisible)
+			{
+				string nav = (entry != null) ? entry.NavId : pageKey.Split(':')[0];
+				if (!string.IsNullOrEmpty(nav))
+				{
+					main.Navigate(nav);
+				}
+				if (entry != null && entry.SettingsView >= 0)
+				{
+					SelectSettingsView(main, entry.SettingsView);
+				}
+			}
+			string hint = (entry != null) ? entry.Hint : "";
+			main.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate
+			{
+				TryBeginEdit(main, pageKey, hint, 0);
+			}));
+			return true;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private static void TryBeginEdit(MainWindow main, string pageKey, string hint, int attempt)
+	{
+		try
+		{
+			BlockHost? host = FindHost(pageKey);
+			if (host != null && host.CanEdit)
+			{
+				if (!host.IsEditing)
+				{
+					host.EnterEdit();
+				}
+				return;
+			}
+			if (attempt < 4)
+			{
+				// 页面可能还在构建 / 切换动画里:空闲时再找一次
+				main.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(delegate
+				{
+					TryBeginEdit(main, pageKey, hint, attempt + 1);
+				}));
+				return;
+			}
+			AppServices.Toast(I18n.L("没找到可编辑的区块"), (hint.Length > 0) ? I18n.L(hint) : I18n.L("可以在页面上右键「自定义布局...」"), ToastKind.Warning);
+		}
+		catch
+		{
+		}
+	}
+
+	private static BlockHost? FindHost(string pageKey)
+	{
+		foreach (BlockHost host in Hosts())
+		{
+			if (string.Equals(host.PageId, pageKey, StringComparison.Ordinal))
+			{
+				return host;
+			}
+		}
+		return null;
+	}
+
+	// 设置页的视图切换:优先 public void OpenView(int)(设置页代理可加),否则用既有的私有 Select(int)(反射,失败不抛)
+	private static void SelectSettingsView(MainWindow main, int view)
+	{
+		try
+		{
+			if (!(main.PageInstance("settings") is SettingsPage settings))
+			{
+				return;
+			}
+			Type type = typeof(SettingsPage);
+			MethodInfo? select = type.GetMethod("OpenView", BindingFlags.Instance | BindingFlags.Public, null, new Type[1] { typeof(int) }, null)
+				?? type.GetMethod("Select", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, new Type[1] { typeof(int) }, null);
+			select?.Invoke(settings, new object[1] { view });
 		}
 		catch
 		{

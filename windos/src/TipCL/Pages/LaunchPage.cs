@@ -197,8 +197,14 @@ public sealed partial class LaunchPage : PageBase
 
 	private Border? _newsCard;
 
-	// 内容区块宿主（WP-U3）：BuildHero 里构建并放进根 Grid 第 1 行；premium 沉浸搬背景不受影响
-	private BlockHost? _blocks;
+	// R35 启动页 v3:主区域(英雄区)不再进布局系统;右侧组件区 / 编辑态 / 组件库见 LaunchPage.Zone.cs。
+	// 编辑态切换的压暗 / 45% 不透明 / 「主区域固定」提示都在 ZoneSetMode 里做,这里留给外部订阅者一个统一出口。
+	private void OnLayoutEditingChanged(bool editing)
+	{
+		ZoneEditingChanged?.Invoke(editing);
+	}
+
+	public event Action<bool>? ZoneEditingChanged;
 
 	private readonly System.Windows.Media.Effects.DropShadowEffect _launchGlow = new System.Windows.Media.Effects.DropShadowEffect
 	{
@@ -379,40 +385,45 @@ public sealed partial class LaunchPage : PageBase
 			VerticalAlignment = VerticalAlignment.Center
 		};
 		dot.SetResourceReference(Shape.FillProperty, "B.Ok");
-		SPanel kicker = Ui.H(7.0, dot, _kickerText);
-		// —— 大标题：实例名 + 下拉箭头，点击打开原有实例切换浮层 ——
-		TextBlock chevron = Ui.Glyph("\ue70d", 18.0);
+		// 效果图 .dot:7px 绿点 + 8px 同色光晕
+		dot.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 8.0, ShadowDepth = 0.0, Opacity = 1.0, Color = Color.FromRgb(0x4A, 0xDE, 0x80) };
+		_kickerText.FontSize = 12.0;
+		SPanel kicker = Ui.H(8.0, dot, _kickerText);
+		// —— 大标题(.t):34 号 800、上 4 下 2;实例名 + 20px 下拉箭头(70%),点击打开原有实例切换浮层 ——
+		FrameworkElement chevron = ZIcon(IcoChevron, 20.0);
 		chevron.Opacity = 0.7;
 		_titleRow = Ui.H(10.0, _heroTitle.VCenter(), chevron);
 		_titleRow.Cursor = Cursors.Hand;
 		_titleRow.Background = Brushes.Transparent;
 		_titleRow.HorizontalAlignment = HorizontalAlignment.Left;
-		_titleRow.Margin = new Thickness(0.0, 6.0, 0.0, 2.0);
+		_titleRow.Margin = new Thickness(0.0, 4.0, 0.0, 2.0);
 		_titleRow.MouseLeftButtonUp += delegate
 		{
 			OpenSwitchPopup();
 		};
-		// —— 小标签行（Java / 内存 / 模组数，SyncHero 填充）——
+		// —— 小标签行(.chips:上 10 下 24、间距 6;Java / 内存 / 模组数,SyncHero 填充)——
 		_chipRow.Margin = new Thickness(0.0, 10.0, 0.0, 24.0);
 		_configBody = (FrameworkElement)BuildConfig();
 		// MaxHeight 由 MakePopup 统一绑窗口百分比，不再写死
-		// —— 按钮行：主色「启动游戏」48 高 + 主色柔光；模板圆角固定，故用外壳 Border 提供圆角 ——
+		// —— 按钮行(.row 间距 10):.go 48 高、圆角 12、左右 28、15 号 800、主色柔光;模板圆角固定，故用外壳 Border 提供圆角 ——
 		_launchBtn.Style = Ui.S("Btn.Ghost");
 		_launchBtn.Padding = new Thickness(0.0);
-		_launchBtn.FontSize = 16.0;
+		_launchBtn.FontSize = 15.0;
 		_launchBtn.SetResourceReference(Control.ForegroundProperty, "B.OnAccentStrong");
-		TextBlock goText = Ui.Txt(I18n.L("启动游戏"), 16.0).VCenter();
+		TextBlock goText = Ui.Txt(I18n.L("启动游戏"), 15.0).VCenter();
 		goText.FontWeight = FontWeights.ExtraBold;
 		_goVer.FontSize = 13.0;
 		_goVer.Opacity = 0.85;
 		_goVer.Visibility = _goSep.Visibility = Visibility.Collapsed;
 		_goSep.SetResourceReference(Border.BackgroundProperty, "B.OnAccentStrong");
-		_launchBtn.Content = Ui.H(10.0, Ui.Glyph("\ue768", 17.0), goText, _goSep, _goVer);
+		FrameworkElement play = ZIcon(null, 18.0, IcoPlay);
+		play.SetBinding(System.Windows.Documents.TextElement.ForegroundProperty, new Binding("Foreground") { Source = _launchBtn });
+		_launchBtn.Content = Ui.H(10.0, play, goText, _goSep, _goVer);
 		_launchShell = new Border
 		{
 			CornerRadius = new CornerRadius(12.0),
 			Height = 48.0,
-			Padding = new Thickness(30.0, 0.0, 30.0, 0.0),
+			Padding = new Thickness(28.0, 0.0, 28.0, 0.0),
 			Child = _launchBtn,
 			Effect = _launchGlow
 		};
@@ -424,10 +435,11 @@ public sealed partial class LaunchPage : PageBase
 		_stopShell.Child = _stopBtn;
 		_stopShell.SetResourceReference(Border.BackgroundProperty, "B.DangerSoft");
 		_stopBtn.SetResourceReference(Control.ForegroundProperty, "B.Danger");
-		_configPill = GlassButton("\ue713", null, OpenConfigPopup);
+		// .gl.sq:48×48 启动配置(滑杆图标 18);.gl:48 高、左右 16、13 号 700、wifi 图标 17
+		_configPill = GlassIconButton(ZIcon(IcoSliders, 18.0), null, OpenConfigPopup);
 		_configPill.ToolTip = I18n.L("启动配置");
 		// 联机入口（原「更多」抽屉里的联机）：进入现有联机页
-		Border net = GlassButton("\ue701", I18n.L("联机"), delegate
+		Border net = GlassIconButton(ZIcon(IcoWifi, 17.0, IcoWifiDot), I18n.L("联机"), delegate
 		{
 			PageBase.Win?.Navigate("multiplayer");
 		});
@@ -443,89 +455,79 @@ public sealed partial class LaunchPage : PageBase
 		System.ComponentModel.DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock)).AddValueChanged(_status, syncStatus);
 		System.ComponentModel.DependencyPropertyDescriptor.FromProperty(UIElement.VisibilityProperty, typeof(UIElement)).AddValueChanged(_prog, syncStatus);
 		syncStatus(null, EventArgs.Empty);
-		_hero = Ui.V(0.0, kicker, _titleRow, _chipRow, launchRow, statusRow);
-		_hero.MaxWidth = 680.0;
+		// 编辑态主区域最上面的「主区域固定，不能拖动、隐藏或缩放」(.lock,在主区域里,随主区域一起 45%)
+		_heroLockChip = BuildHeroLockChip();
+		_hero = Ui.V(0.0, _heroLockChip, kicker, _titleRow, _chipRow, launchRow, statusRow);
 		_hero.HorizontalAlignment = HorizontalAlignment.Left;
 		_hero.VerticalAlignment = VerticalAlignment.Center;
-		_hero.Margin = new Thickness(56.0, 0.0, 24.0, 0.0);
-		// —— 底部新闻卡：圆角 12，主色「新闻」小标签 + 标题 + 箭头；点击打开原公告浮层 ——
+		// .hero:左 56、上 0(标题栏下)、下 70、右 = 24 + 组件区宽 + 40(ZoneMeasure 按列数更新)
+		_hero.Margin = new Thickness(56.0, 0.0, 396.0, 70.0);
+		// —— 左下新闻条(.news):左 56 下 20、上下 8 左 8 右 14、圆角 12、12% 白底 18% 描边、12 号、最宽 440 ——
 		Border tag = new Border
 		{
-			CornerRadius = new CornerRadius(6.0),
-			Padding = new Thickness(8.0, 2.0, 8.0, 3.0),
+			CornerRadius = new CornerRadius(8.0),
+			Padding = new Thickness(8.0, 1.0, 8.0, 1.0),
 			VerticalAlignment = VerticalAlignment.Center,
-			Child = Ui.Txt(I18n.L("新闻"), 11.0, bold: true, "B.OnAccent")
+			Child = Ui.Txt(I18n.L("新闻"), 12.0, bold: true, "B.OnAccent")
 		};
 		tag.SetResourceReference(Border.BackgroundProperty, "B.Accent");
-		TextBlock arrow = Ui.Glyph("\ue76c", 10.0);
-		arrow.Opacity = 0.8;
+		FrameworkElement arrow = ZIcon(IcoArrow, 12.0);
+		_newsTicker.FontSize = 12.0;
+		_newsTicker.MaxWidth = 360.0;
 		_newsCard = new Border
 		{
 			CornerRadius = new CornerRadius(12.0),
 			BorderThickness = new Thickness(1.0),
 			Padding = new Thickness(8.0, 8.0, 14.0, 8.0),
 			HorizontalAlignment = HorizontalAlignment.Left,
-			// Top:进了网格 / 画布区块后格子往往比新闻卡高,Bottom 会让新闻卡沉到格子底部、
-			// 看起来像"跑出了区块"(录屏 0:26–0:46)。默认纵向流里格子高 = 内容高,Top / Bottom 观感相同。
-			VerticalAlignment = VerticalAlignment.Top,
+			VerticalAlignment = VerticalAlignment.Bottom,
+			Margin = new Thickness(56.0, 0.0, 0.0, 20.0),
+			MaxWidth = 440.0,
 			Cursor = Cursors.Hand,
 			Child = Ui.H(10.0, tag, _newsTicker, arrow)
 		};
-		Glass(_newsCard);
+		ZGlass(_newsCard, 31, 46, 46);
 		_newsCard.MouseLeftButtonUp += delegate
 		{
 			OpenNewsPopup();
 		};
-		// —— 内容区块（WP-U3）：新闻卡默认可见，任务/时长/便签/日志默认收起；右键「自定义布局…」由 BlockHost 自带 ——
-		// contentMargin 对齐英雄区：左 56（同 _hero）、右 24（同 _hero）、下 18（原新闻卡底边距），默认渲染与旧布局逐像素等价
-		Border logCard = Ui.Card(_log, 10.0);
-		logCard.Height = 240.0;
-		_blocks = new BlockHost("launch", new List<BlockSpec>
-		{
-			new BlockSpec { Id = "news", Title = I18n.L("新闻"), Content = _newsCard },
-			new BlockSpec { Id = "tasks", Title = I18n.L("下载任务"), Content = Ui.Card(_taskHost), DefaultVisible = false },
-			new BlockSpec { Id = "playtime", Title = I18n.L("游戏时长"), Content = Ui.Card(_playTotal), DefaultVisible = false },
-			new BlockSpec { Id = "notes", Title = I18n.L("便签"), Content = Ui.Card(_notes), DefaultVisible = false },
-			new BlockSpec { Id = "log", Title = I18n.L("日志"), Content = logCard, DefaultVisible = false }
-		}, new Thickness(56.0, 0.0, 24.0, 18.0));
-		// 多块同时展开时限高内滚（约 62% 页高），避免 Auto 行把上方英雄区挤没；默认仅新闻卡时远达不到上限
-		_blocks.Root.SetBinding(FrameworkElement.MaxHeightProperty, new Binding("ActualHeight")
-		{
-			Source = this,
-			Converter = new Ui.WindowPctConverter(0.62)
-		});
-		// —— 根布局：背景层铺满两行；内容 * / 区块 Auto ——
-		Grid root = Ui.G("*,Auto");
+		// —— 根布局:背景层铺满;主区域 / 新闻条 / 组件区 / AI 都是固定层(效果图 .win 里的绝对定位)——
+		// 旧版的 BlockHost("launch")(新闻 / 任务 / 时长 / 便签 / 日志一排排大卡片)整个去掉:
+		// 这些内容都映射成组件区里的组件(LaunchZone.FromLegacy 读时推导),主区域不再被压扁。
+		Grid root = new Grid();
 		root.ClipToBounds = true;
-		root.Background = Brushes.Transparent; // 没截图时英雄区空白处也要能接到滚轮
-		root.Add(_bgImage, 0, 0, 2);
-		root.Add(_bgShade, 0, 0, 2);
-		root.Add(_hero, 0);
-		root.Add(_blocks.Root, 1);
+		root.Background = Brushes.Transparent; // 没截图时英雄区空白处也要能接到右键
+		root.Children.Add(_bgImage);
+		root.Children.Add(_bgShade);
+		root.Children.Add(_hero);
+		root.Children.Add(_newsCard);
+		Panel.SetZIndex(_newsCard, 3);
+		BuildZone(root);
 		base.Content = root;
-		// 非编辑态滚轮:鼠标在英雄区 / 背景图上(不在区块宿主里)时,把滚轮转交给自定义布局区 ——
-		// 区块多了被限高(62% 页高)之后,原来只有指针正好压在区块上才滑得动(录屏 2:30「非自定义布局模式下无法滑动」)。
-		root.PreviewMouseWheel += delegate(object _, MouseWheelEventArgs e)
-		{
-			if (e.Handled || _blocks == null)
-			{
-				return;
-			}
-			if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != ModifierKeys.None)
-			{
-				return;
-			}
-			if (e.OriginalSource is DependencyObject src && IsInside(src, _blocks.Root))
-			{
-				return; // 区块里面:交给区块自己的滚动(以及窗口级滚轮转交)
-			}
-			if (_blocks.ScrollBy(e.Delta))
-			{
-				e.Handled = true;
-			}
-		};
 		ApplyHeroTone(onImage: false);
 		SyncHero();
+	}
+
+	// 半透明按钮(.gl:48 高、圆角 12、14% 白底 22% 描边、左右 16、13 号 700);label 为 null 即 48×48(.gl.sq)
+	private Border GlassIconButton(FrameworkElement icon, string? label, Action click)
+	{
+		icon.HorizontalAlignment = HorizontalAlignment.Center;
+		Border b = new Border
+		{
+			Height = 48.0,
+			MinWidth = 48.0,
+			CornerRadius = new CornerRadius(12.0),
+			BorderThickness = new Thickness(1.0),
+			Padding = ((label == null) ? new Thickness(0.0) : new Thickness(16.0, 0.0, 16.0, 0.0)),
+			Cursor = Cursors.Hand,
+			Child = ((label == null) ? icon : (UIElement)Ui.H(8.0, icon, Ui.Txt(label, 13.0, bold: true).VCenter()))
+		};
+		Glass(b);
+		b.MouseLeftButtonUp += delegate
+		{
+			click();
+		};
+		return b;
 	}
 
 	private static bool IsInside(DependencyObject node, DependencyObject ancestor)
@@ -538,29 +540,6 @@ public sealed partial class LaunchPage : PageBase
 			}
 		}
 		return false;
-	}
-
-	// 半透明按钮（48 高，圆角 12）；label 为 null 即 48×48 图标钮
-	private Border GlassButton(string glyph, string? label, Action click)
-	{
-		TextBlock g = Ui.Glyph(glyph, 17.0);
-		g.HorizontalAlignment = HorizontalAlignment.Center;
-		Border b = new Border
-		{
-			Height = 48.0,
-			MinWidth = 48.0,
-			CornerRadius = new CornerRadius(12.0),
-			BorderThickness = new Thickness(1.0),
-			Padding = ((label == null) ? new Thickness(0.0) : new Thickness(16.0, 0.0, 16.0, 0.0)),
-			Cursor = Cursors.Hand,
-			Child = ((label == null) ? ((UIElement)g) : ((UIElement)Ui.H(8.0, g, Ui.Txt(label, 14.0, bold: true).VCenter())))
-		};
-		Glass(b);
-		b.MouseLeftButtonUp += delegate
-		{
-			click();
-		};
-		return b;
 	}
 
 	private void Glass(Border b)
@@ -630,6 +609,7 @@ public sealed partial class LaunchPage : PageBase
 			_launchGlow.Color = accent.Color;
 		}
 		_launchGlow.Opacity = (onImage ? 0.45 : 0.3);
+		ZoneToneAll();
 #if IMMERSIVE || PREMIUM
 		SyncImmersive(onImage);
 #endif
@@ -947,6 +927,7 @@ public sealed partial class LaunchPage : PageBase
 		_ = LoadNewsAsync();
 		_ = LoadPlaytimeAsync();
 		SyncTaskCard();
+		_ = ZoneLoadDataAsync();
 	}
 
 	private async Task OnInstanceChanged()
@@ -954,6 +935,7 @@ public sealed partial class LaunchPage : PageBase
 		await ReloadVersionsAsync();
 		await ReloadJavaAsync(scan: false);
 		SyncBanner();
+		_ = ZoneLoadDataAsync();
 	}
 
 	private int _verGen;
@@ -1308,11 +1290,14 @@ public sealed partial class LaunchPage : PageBase
 
 	private void SyncTaskCard()
 	{
+		ZoneRefreshContent("tasks");
 		_taskHost.Children.Clear();
 		List<TaskRow> list = TaskStore.Rows.Reverse().Take(5).ToList();
 		if (list.Count == 0)
 		{
-			_taskHost.Children.Add(Ui.Muted(I18n.L("暂无下载任务")));
+			TextBlock none = Ui.Txt(I18n.L("暂无下载任务"), 13.0);
+			none.Opacity = 0.72; // 字色继承小卡片(玻璃底上白字 / 无背景图时主题字色)
+			_taskHost.Children.Add(none);
 			return;
 		}
 		foreach (TaskRow item in list)
@@ -1945,6 +1930,7 @@ public sealed partial class LaunchPage : PageBase
 		if (!string.IsNullOrEmpty(text))
 		{
 			_logLines.Add(text);
+			ZoneLogDirty();
 			if (_logLines.Count > 2500)
 			{
 				_logLines.RemoveRange(0, _logLines.Count - 2500);

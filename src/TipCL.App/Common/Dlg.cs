@@ -373,7 +373,7 @@ public static class Dlg
         inner.Children.Add(new TextBlock
         {
             Text = title,
-            FontSize = 17,
+            FontSize = TipCL.App.Ui.Tok.FsTitle,
             FontWeight = FontWeight.Bold,
             [!TextBlock.ForegroundProperty] = Res.Bind("B.Ink"),
         });
@@ -382,7 +382,7 @@ public static class Dlg
         var card = new Border
         {
             Padding = new Thickness(20),
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = TipCL.App.Ui.Tok.CrCard,
             BorderThickness = new Thickness(1),
             Child = inner,
         };

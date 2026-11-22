@@ -120,14 +120,18 @@ public sealed class GuideLayer : Control
 		Color accent = LayoutVisualTokens.AccentColor();
 		if (_sizeText.Length != 0)
 		{
-			// 主题色小胶囊 + 白字,贴在卡片右下角内侧(放不下就往里收,不出画布)
-			FormattedText text = new FormattedText(_sizeText, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 11.0, Brushes.White);
-			double w = text.Width + 12.0;
-			double h = text.Height + 6.0;
+			// 「N / 列数」气泡,贴在卡片右下角内侧(放不下就往里收,不出画布)。
+			// R35 lin-int(L12←L0):= Layout.EditTip —— B.Ink 底、B.Paper 字、字号 12、圆角 8(效果图 .tip);
+			// 自绘层用 ColorOr 取色(找不到用兜底,不抛)
+			Color tipBg = LayoutVisualTokens.ColorOr("B.Ink", Color.FromArgb(230, 31, 31, 31));
+			Color tipFg = LayoutVisualTokens.ColorOr("B.Paper", Colors.White);
+			FormattedText text = new FormattedText(_sizeText, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 12.0, new SolidColorBrush(tipFg));
+			double w = text.Width + 16.0;
+			double h = text.Height + 8.0;
 			double x = Clamp(_sizeAnchor.X - w - 6.0, 0.0, Math.Max(0.0, Bounds.Width - w));
 			double y = Clamp(_sizeAnchor.Y - h - 6.0, 0.0, Math.Max(0.0, Bounds.Height - h));
-			context.DrawRectangle(new SolidColorBrush(Color.FromArgb(230, accent.R, accent.G, accent.B)), null, new RoundedRect(new Rect(x, y, w, h), h / 2.0));
-			context.DrawText(text, new Point(x + 6.0, y + 3.0));
+			context.DrawRectangle(new SolidColorBrush(tipBg), null, new RoundedRect(new Rect(x, y, w, h), LayoutVisualTokens.RadiusCtl));
+			context.DrawText(text, new Point(x + 8.0, y + 4.0));
 		}
 		if (_lines.Count != 0)
 		{
@@ -170,5 +174,83 @@ public sealed class GuideLayer : Control
 			return max;
 		}
 		return value;
+	}
+}
+
+/// <summary>
+/// [R35 lin-l12] GOAL §5.1「拖动时显示淡色列底纹」(效果图 #winA.edit.grid.busy .cols:每列一条 8px 圆角、
+/// rgba(0,0,0,.035) 的淡色竖条)。画在画布**之下**(LayoutEditor 把它放在 _stage 的第 0 层),只在拖动 / 改宽度期间显示。
+/// 颜色读 L0 的 B.EditColShade;查不到用效果图的数值。启动页这类深色表面用白色 6%(pages3 .dark .colsbg i)。
+/// 列宽 / 间距 / 列数由宿主在手势开始时从画布读来塞进来(画布 GridCanvasPanel 归 L3,这里不碰它)。
+/// </summary>
+public sealed class EditColumnShade : Control
+{
+	private int _cols;
+
+	private double _columnWidth;
+
+	private double _gap;
+
+	private bool _dark;
+
+	/// <summary>构造:不吃指针事件,默认不显示。</summary>
+	public EditColumnShade()
+	{
+		IsHitTestVisible = false;
+		IsVisible = false;
+		UseLayoutRounding = true;
+	}
+
+	/// <summary>当前列数(测试用)。</summary>
+	public int Columns => _cols;
+
+	/// <summary>显示:按画布当前的列数 / 列宽 / 间距画淡色列。</summary>
+	public void Show(int cols, double columnWidth, double gap, bool dark)
+	{
+		_cols = Math.Max(0, cols);
+		_columnWidth = Math.Max(0.0, columnWidth);
+		_gap = Math.Max(0.0, gap);
+		_dark = dark;
+		IsVisible = _cols > 0 && _columnWidth > 0.5;
+		InvalidateVisual();
+	}
+
+	/// <summary>收起。</summary>
+	public void Hide()
+	{
+		if (IsVisible)
+		{
+			IsVisible = false;
+		}
+	}
+
+	/// <summary>当前用的列底纹画刷(L0 键 → 兜底)。</summary>
+	internal IBrush ShadeBrush()
+	{
+		if (_dark)
+		{
+			return LayoutEditChrome.BrushOr("B.EditColShadeOnDark", null, Color.FromArgb(15, 255, 255, 255));
+		}
+		return LayoutEditChrome.BrushOr("B.EditColShade", null, Color.FromArgb(9, 0, 0, 0));
+	}
+
+	public override void Render(DrawingContext context)
+	{
+		base.Render(context);
+		if (_cols <= 0 || _columnWidth <= 0.5)
+		{
+			return;
+		}
+		double height = Math.Max(0.0, Bounds.Height);
+		if (height <= 1.0)
+		{
+			return;
+		}
+		IBrush brush = ShadeBrush();
+		for (int i = 0; i < _cols; i++)
+		{
+			double x = i * (_columnWidth + _gap);
+			context.DrawRectangle(brush, null, new RoundedRect(new Rect(x, 0.0, _columnWidth, height), 8.0));
+		}
 	}
 }

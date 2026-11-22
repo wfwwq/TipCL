@@ -64,6 +64,9 @@ public class LayoutBlockHostTests
 	// ————— 1) 12 个真实宿主的默认布局 = 冻结 v1 语义 —————
 
 	// 表格 = 逐个从源码里抄下来的页面白名单(src/TipCL/Pages/*.cs 的 new BlockHost(pageId, ...) 站点)
+	// R34(§5.5):playtime 的 header(概览)、java 的 intro(说明)改成 DefaultVisible = false。
+	// 注意这里测的是「白名单默认」(LoadState(pageId, null, refs));联机 / 游戏时长 / Java / 启动 4 页
+	// 另外给了「页面默认布局」(PageDefaultLayouts,文档里没有该页时由宿主替换白名单默认),那部分在 PageDefaultsV3Tests。
 	public static IEnumerable<object[]> HostTable()
 	{
 		yield return new object[] { "launch", "news,tasks,playtime,notes,log", "news" };
@@ -71,8 +74,8 @@ public class LayoutBlockHostTests
 		yield return new object[] { "download", "filters,list", "filters,list" };
 		yield return new object[] { "multiplayer", "header,state,room,actions,players,nodes", "header,state,room,actions,players,nodes" };
 		yield return new object[] { "servers", "header,instance,list", "header,instance,list" };
-		yield return new object[] { "java", "intro,install,defaults,list", "intro,install,defaults,list" };
-		yield return new object[] { "playtime", "header,total,range,list", "header,total,range,list" };
+		yield return new object[] { "java", "intro,install,defaults,list", "install,defaults,list" };
+		yield return new object[] { "playtime", "header,total,range,list", "total,range,list" };
 		yield return new object[] { "account", "header,list", "header,list" };
 		yield return new object[] { "feedback", "header,content", "header,content" };
 		yield return new object[] { "settings:general", "appearance,wallpaper,themePack,launcher,game,storage,ai,memory,phoneSync", "appearance,wallpaper,themePack,launcher,game,storage,ai,memory,phoneSync" };

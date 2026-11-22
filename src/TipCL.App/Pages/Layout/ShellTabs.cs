@@ -167,7 +167,10 @@ public static class ShellTabs
 
 	// ————— 标题栏元素:只显隐,形态不可改(D-16 是用户定案) —————
 
-	/// <summary>桥接药丸钮是否显示,默认 true。Linux 标题栏没有桥接钮 ⇒ 该开关只写文档,无宿主可显隐(见报告降级表)。</summary>
+	/// <summary>
+	/// 桥接药丸钮是否显示,默认 true。Linux 标题栏没有桥接钮 ⇒ 该字段只为存档兼容照旧读写;
+	/// [LAYOUT-V3-D] 设置页不再提供这个开关(v3 去掉「桥接」说法),也不再参与 <see cref="AnyTitlebarVisible"/>。
+	/// </summary>
 	public static bool ShowBridge(ShellLayout? shell)
 	{
 		return shell?.Titlebar?.Bridge ?? true;
@@ -191,10 +194,14 @@ public static class ShellTabs
 		return shell?.Titlebar?.Account ?? true;
 	}
 
-	/// <summary>标题栏四项里是否至少有一项要显示:全关时宿主把四项与窗口按钮之间的分隔线一起收起。</summary>
+	/// <summary>
+	/// 标题栏里用户能开关的三项(AI / 主题 / 账号)是否至少有一项要显示:全关时宿主把它们与窗口按钮之间的分隔线一起收起。
+	/// [LAYOUT-V3-D] 原来四项含「桥接」;Linux 没有桥接钮、设置页也不再给桥接开关,
+	/// 再算它会让「三项全关」时分隔线永远收不起来,所以去掉。
+	/// </summary>
 	public static bool AnyTitlebarVisible(ShellLayout? shell)
 	{
-		return ShowBridge(shell) || ShowAi(shell) || ShowTheme(shell) || ShowAccount(shell);
+		return ShowAi(shell) || ShowTheme(shell) || ShowAccount(shell);
 	}
 
 	// ————— 读取与写回:唯一入口 = LayoutStoreV2,本类型绝不自己碰文件 —————
@@ -239,6 +246,27 @@ public static class ShellTabs
 		doc.Layout.Shell.Tabs = keys;
 		LayoutStoreV2.Save(doc);
 		return CurrentShell();
+	}
+
+	/// <summary>
+	/// [LAYOUT-V3-D] 拖动排序 / 眼睛显隐的统一写回:<paramref name="fullOrder"/> 是界面上一排 chip 的完整顺序
+	/// (含被隐藏的),只把 <paramref name="visible"/> 里的按这个顺序写成 shell.tabs;其余照
+	/// <see cref="SetTabs"/> 的白名单 / 去重 / 回落规则处理。返回落盘后的外壳。
+	/// </summary>
+	public static ShellLayout ReorderTabs(IEnumerable<string>? fullOrder, ICollection<string>? visible)
+	{
+		List<string> keys = new List<string>();
+		if (fullOrder != null && visible != null)
+		{
+			foreach (string key in fullOrder)
+			{
+				if (visible.Contains(key))
+				{
+					keys.Add(key);
+				}
+			}
+		}
+		return SetTabs(keys);
 	}
 
 	/// <summary>显示 / 隐藏单个内置页签,其余顺序不变;返回落盘后的外壳。</summary>

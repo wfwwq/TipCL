@@ -991,6 +991,51 @@ public static class LayoutEngine
 		return true;
 	}
 
+	/// <summary>
+	/// [v3] §1.A.7 / R35 lin-l3(GOAL-layout-v3 §5.3 / D-81 Q1):不再提供自由画布 —— <c>mode = canvas</c> 的页
+	/// 按网格推导。推导规则只有一份,在 Core 的纯函数 <see cref="LayoutCanvasMigration.ConvertInPlace"/>:
+	/// 顺序先 y 后 x(含隐藏块,块表顺序与 z 随之改)、<c>span = clamp(round(w × cols), max(2, MinCols), cols)</c>、
+	/// 可见块按行流左对齐、隐藏块排在可见块之后的行里、cols = SnapCols(原 cols)、row_h = 0。
+	/// 本函数只在它之上加一条 Linux 渲染口径(与 <see cref="StackToGrid"/> 相同):<c>min_h ≤ 0</c> 的块写成 1,
+	/// 让推导出来的网格行高跟随内容,而不是被 <see cref="LayoutCanvas.FallbackMinH"/>(120px)撑高。
+	/// <para>
+	/// R35 起不再「每块一行后再压紧」(基线 quick-v3 的做法):压紧会让左边空着的下一行块浮上来,打乱「先 y 后 x」。
+	/// </para>
+	/// 就地改传入的这一份 —— 渲染方必须传克隆(或改用 <see cref="CanvasGridView"/>),文档原样不动;
+	/// 编辑器提交一次之后才按 grid 落盘。<paramref name="minColsOf"/>:块 id → 本页列数下的最小列数(可空)。
+	/// 不是 canvas 返回 false,什么都不动。
+	/// </summary>
+	public static bool CanvasToGrid(PageLayoutV2? page, Func<string, int>? minColsOf = null)
+	{
+		if (!LayoutCanvasMigration.ConvertInPlace(page, minColsOf))
+		{
+			return false;
+		}
+		foreach (BlockLayout block in page!.Blocks)
+		{
+			if (block != null && !string.IsNullOrEmpty(block.Id) && block.MinH <= 0.0)
+			{
+				block.MinH = 1.0;
+			}
+		}
+		return true;
+	}
+
+	/// <summary>
+	/// R35 lin-l3:渲染用的只读推导 —— canvas 页返回按 <see cref="CanvasToGrid"/> 推导出的网格**副本**,
+	/// 其它页返回原样副本(null → null)。入参一个字节都不改(「读入再原样写出逐字节相同」由此保证)。
+	/// </summary>
+	public static PageLayoutV2? CanvasGridView(PageLayoutV2? page, Func<string, int>? minColsOf = null)
+	{
+		if (page == null)
+		{
+			return null;
+		}
+		PageLayoutV2 copy = page.Clone();
+		CanvasToGrid(copy, minColsOf);
+		return copy;
+	}
+
 	/// <summary>把一页状态写回 v2 文档(没有该页就新建;不动别的页)。</summary>
 	public static void ApplyPage(LayoutV2 doc, string pageId, PageLayoutV2 page)
 	{
@@ -1978,6 +2023,12 @@ public static class LayoutGrid
 /// canvas 模式的纯几何(§4.A):归一化矩形 + 8 向手柄 + 栅格吸附。
 /// 吸附公式**直接移植**旧 <c>DashHost.SnapV</c>(v → round(v × axisPx / step) × step / axisPx,再夹 0..1),
 /// 吸附档沿用 <c>DashLayout</c> 的 {0,4,8,16,24}(0 = 不吸附)。
+/// R35 lin-l3(GOAL-layout-v3 §5.3 / D-81 Q1):canvas 退出界面 —— canvas 页按 <see cref="LayoutCanvasMigration"/>
+/// 推导成网格渲染(<see cref="LayoutEngine.CanvasToGrid"/> / <see cref="GridCanvasPanel.SetLayout"/>),
+/// 所以这里的 8 向手柄 / 吸附档 / Move / Resize / Snap 在界面上已不可达。LayoutEditor.cs(lin-l12)仍引用
+/// HandleNames 等成员(R35-BRIEF §3 第 5 条:不许删或改名),本轮只留注释不删;也不加 [Obsolete] 特性 ——
+/// 那会在编辑器与测试里引出 CS0618 新增警告。真正的删除留到合并后。
+/// 仍在用的纯模型成员:FallbackMinW / FallbackMinH / RefHeight(网格也用)、StackedOrder。
 /// </summary>
 public static class LayoutCanvas
 {
@@ -1999,10 +2050,10 @@ public static class LayoutCanvas
 	/// <summary>没命中任何手柄。</summary>
 	public const string HandleNone = "";
 
-	/// <summary>栅格吸附档 {0,4,8,16,24}(沿用 DashLayout.Grid)。</summary>
+	/// <summary>栅格吸附档 {0,4,8,16,24}(沿用 DashLayout.Grid)。R35 退役:界面不再提供「吸附 N」(CycleSnapStep 已由基线 quick-v3 C 从编辑器移除),吸附档固定为默认值;保留只为 StepOf / 测试编译。</summary>
 	public static readonly double[] Steps = new double[5] { 0.0, 4.0, 8.0, 16.0, 24.0 };
 
-	/// <summary>8 向手柄名(与旧 DashHost.CardView.Handles 同名同序)。</summary>
+	/// <summary>8 向手柄名(与旧 DashHost.CardView.Handles 同名同序)。R35 退役:网格只留右边缘 + 下边缘(Q3),画布 8 向手柄不可达;LayoutEditor.cs 仍引用,只为编译保留。</summary>
 	public static readonly string[] HandleNames = new string[8] { "nw", "n", "ne", "w", "e", "sw", "s", "se" };
 
 	/// <summary>吸附档归一到契约档位;非法值取最近档,0 保持 0(不吸附)。</summary>
@@ -3125,6 +3176,8 @@ public sealed class LayoutEditSession
 	/// <summary>
 	/// 方向键微调(§4.G):grid 模式按**格**走(Shift = 10px 折算,不足一格按一格);
 	/// canvas 模式按**吸附格**走(Shift = 10px);stack 模式没有自由坐标,返回 0。
+	/// R35 lin-l3:canvas 分支保持原语义(纯模型用例钉着);界面上 canvas 页读入时已经 CanvasToGrid 成网格,
+	/// 编辑器传进来的只会是 grid 页,canvas 分支不可达,合并后再删。
 	/// </summary>
 	public static int Nudge(PageLayoutV2? page, IEnumerable<string>? ids, int dxDir, int dyDir, bool fine, double canvasW, double canvasH, double stepPx)
 	{

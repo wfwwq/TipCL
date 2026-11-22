@@ -51,9 +51,11 @@ internal static class WidgetUI
     }
 
     /// <summary>布局里引用了 custom:&lt;id&gt; 但文档里没有这个定义(被外部工具删了):占位,不删引用。</summary>
+    /// <remarks>R35 lin-int(GOAL §5.1「永远不显示 id」):说明文字里不再带块 id;参数保留(调用方 / 签名不变)。</remarks>
     public static Control MissingWidget(string blockId)
     {
-        return Placeholder(I18nCore.Tr("自建区块不可用"), Py.Fmt(I18nCore.Tr("布局文档里找不到 {0} 的定义;可以重新添加同名区块。"), blockId ?? ""));
+        _ = blockId;
+        return Placeholder(I18nCore.Tr("自建区块不可用"), I18nCore.Tr("找不到这个组件的内容，可能已被删除；可以在编辑态点「添加」重新放一个。"));
     }
 
     /// <summary>危险类型被 Q5 默认关闭时的占位。</summary>

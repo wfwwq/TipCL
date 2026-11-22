@@ -531,7 +531,9 @@ public class WidgetTests : IDisposable
 
                 List<string> texts = Texts(root);
                 AssertHasText(texts, T("自建区块不可用"));
-                AssertHasText(texts, Py.Fmt(T("布局文档里找不到 {0} 的定义;可以重新添加同名区块。"), blockId));
+                // R35 lin-int(GOAL §5.1「永远不显示 id」):说明文字不再带块 id
+                AssertHasText(texts, T("找不到这个组件的内容，可能已被删除；可以在编辑态点「添加」重新放一个。"));
+                Assert.DoesNotContain(texts, t => t.Contains(blockId, StringComparison.Ordinal));
                 AssertNoWebHost(root);
             });
         }

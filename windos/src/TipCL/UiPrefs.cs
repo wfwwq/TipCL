@@ -28,4 +28,7 @@ public sealed class UiPrefs
 
 	/// <summary>布局编辑:「自动靠拢」(网格压紧上浮 / 左右互换 / 画布磁性吸附)。缺省开 = 与旧版行为一致。</summary>
 	public bool LayoutAutoPack { get; set; } = true;
+
+	/// <summary>启动页 v3 组件区(LaunchZone.ToJson);空 = 还没在编辑器里提交过,从旧版启动页区块读时推导。</summary>
+	public string LaunchZone { get; set; } = "";
 }
