@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using TipCL.Pages.Plugins;
 using TipCL.Services;
 
 using TipCL.Core.Launcher.Layout;
@@ -14,7 +15,8 @@ namespace TipCL.Pages.Layout;
 
 // 页面区块的渲染 + 编辑宿主(L1 把原来 BlockHost 里的那一套搬进来):
 //   常态:单列 = 与改动前完全相同的纵向流(SPanel + 每块一张零装饰卡),多列 = 行内 Grid(span 跨列);
-//   编辑态:每块顶部操作条(拖拽手柄 + 标题 + 显隐)+ 底部隐藏托盘 + 悬浮工具条(完成 / 重置本页 / 导出 / 导入)。
+//   编辑态(R34 v3,§5.1 / §5.2):内容区顶部一条编辑条(编辑「页名」/ 列表·网格 / 提示 / 撤销重做 / 添加 / 重置本页 / 完成 / ⋯),
+//   每块虚线外框 + 悬停或选中时的浮动标签与图标按钮,「添加」抽屉从右侧滑出(取代底部托盘与 7 个文字按钮)。
 // 三条边界:
 //   1) 顺序 / 显隐 / span 的状态与几何全在纯模型层(LayoutPageState + LayoutEngine),本文件只做 WPF 组装与手势;
 //   2) 持久化只走 LayoutStoreV2(v2 是唯一真源,v1 由它单向写通),写完清一次 PageLayoutStore 缓存;
@@ -29,7 +31,7 @@ public sealed class LayoutEditor
 
 	private readonly Dictionary<string, BlockSpec> _byId = new Dictionary<string, BlockSpec>(StringComparer.Ordinal);
 
-	// 每个区块一张卡(含编辑态操作条),常驻缓存,重排/显隐只动它在可视树里的位置
+	// 每个区块一张卡(含编辑态外框 / 标签 / 手柄),常驻缓存,重排/显隐只动它在可视树里的位置
 	private readonly Dictionary<string, LayoutCard> _cards = new Dictionary<string, LayoutCard>();
 
 	// 页面对宿主的显式边距覆盖(构造第 3 参);null = 用布局文档的 pad
@@ -50,20 +52,43 @@ public sealed class LayoutEditor
 	// 「页面默认布局」:v2 文档里还没有这一页时的兜底(实例库的左右排布靠它)
 	private readonly PageLayoutV2? _defaultPage;
 
-	private readonly Border _trayHost = new Border();
+	// ————— R34 v3:编辑条 / 「添加」抽屉 —————
 
-	private readonly WrapPanel _tray = new WrapPanel();
+	// 内容宿主所在的行(第 0 行是编辑条;内容宿主永远是 _root.Children[0])
+	private const int ContentRow = 1;
 
-	// L6:编辑态托盘里的「+ 自建区块」入口(列出已定义但本页还没有的自建块)
-	private readonly WrapPanel _trayAdd = new WrapPanel();
+	// 编辑态内容区顶部留给浮动标签的空间(标签浮在块上沿外 14px)
+	private const double EditTopRoom = 18.0;
 
-	private SPanel? _hiddenTrayPanel;
+	// 编辑条(常态折叠 = 第 0 行高度为 0,内容区与改动前一致)
+	private readonly Border _bar;
 
-	private SPanel? _addTrayPanel;
+	private TextBlock? _barTitle;
 
-	private bool _trayAddOpen;
+	private TextBlock? _barHint;
 
-	private readonly Border _barHost = new Border();
+	private RadioButton? _segStack;
+
+	private RadioButton? _segGrid;
+
+	// 分段按钮是否用的本文件兜底模板(WP-L0 的 Layout.SegItem 样式找不到时)
+	private bool _segFallback;
+
+	private Border? _addBadge;
+
+	private TextBlock? _addBadgeText;
+
+	// 「添加」抽屉(右侧滑出,宽 316)
+	private readonly LayoutAddDrawer _drawer;
+
+	// 启动页这类深色背景:编辑控件用深色玻璃配色(§6.4 第 2 条:按 pageId 内部判断,不对外加属性)
+	private readonly bool _darkSurface;
+
+	// 拖动 / 改宽度时卡片下面的淡色列底纹
+	private readonly EditColumnShade _shade = new EditColumnShade();
+
+	// 吸附档固定为默认值、自动靠拢固定为开(§5.2:界面上不再提供这两个开关;LayoutEditPrefs.AutoPack 本身仍可读,归 WP-L4)
+	private static readonly bool AutoPack = true;
 
 	private readonly Grid _root;
 
@@ -77,10 +102,11 @@ public sealed class LayoutEditor
 	// 本次 stack 拖拽是否真的换过序(只点一下手柄不该落盘)
 	private bool _dragChanged;
 
-	// 进编辑态时把 stack 临时折成 12 列网格(这样才能自由拖);没动过就在退出时还原
-	private bool _stackConverted;
+	// stack 拖拽起手时的页面快照(真的换过序才压进撤销栈)
+	private PageLayoutV2? _dragBefore;
+
+	// 本次编辑会话里是否真的改过布局(没改过就不落盘,也不回写原生默认排版)
 	private bool _layoutTouched;
-	private PageLayoutV2? _stackBackup;
 
 	// 拖拽手势状态:手柄捕获鼠标期间按缓存高度计算相邻块中点
 	private readonly Dictionary<string, double> _dragHeights = new Dictionary<string, double>();
@@ -112,7 +138,7 @@ public sealed class LayoutEditor
 	// 自己正在提交(内部守卫):本次保存触发的 LayoutChanged 不要再让自己重排一遍
 	private bool _saving;
 
-	// canvas 吸附档(px;编辑态可切 {0,4,8,16,24})
+	// canvas 吸附档(px):R34 起固定为默认档,界面上不再提供切换
 	private double _snapStep = LayoutCanvas.DefaultStep;
 
 	// 一次画布手势:起手时的槽位快照 + 指针起点(用绝对值算位移,避免逐帧累积误差)
@@ -177,22 +203,10 @@ public sealed class LayoutEditor
 
 	private long _autoScrollLastMs;
 
-	// 工具条上的撤销/重做按钮(按栈的可用性置灰)
+	// 编辑条上的撤销/重做图标按钮(按栈的可用性置灰)
 	private Button? _undoBtn;
 
 	private Button? _redoBtn;
-
-	// 吸附档按钮(只在 grid/canvas 编辑态可用)
-	private Button? _snapBtn;
-
-	// 「自动靠拢」开关按钮(grid 压紧上浮 / 左右互换 / canvas 磁性吸附;偏好存 UiPrefs.LayoutAutoPack)
-	private Button? _autoPackBtn;
-
-	// 「全部折叠」按钮:文案跟着卡片的实际折叠状态走(退出编辑自动展开后不再停在"全部展开")
-	private Button? _foldAllBtn;
-
-	// 底部托盘 + 工具条的外壳:只在编辑态占位(常态整行折叠,内容区高度与改动前一致)
-	private readonly SPanel _bottom;
 
 	// 「原生默认排版」(AI 页 / 版本管理页):没自定义过布局且不在编辑态时直接显示页面原来的排版根
 	private readonly BlockNativeLayout? _native;
@@ -215,6 +229,7 @@ public sealed class LayoutEditor
 		_marginOverride = contentMargin;
 		_defaultPage = defaultPage;
 		_native = ((native != null && native.Root != null) ? native : null);
+		_darkSurface = string.Equals(_pageId, "launch", StringComparison.Ordinal);
 		if (specs != null)
 		{
 			foreach (BlockSpec spec in specs)
@@ -232,112 +247,29 @@ public sealed class LayoutEditor
 			}
 		}
 		_list.Margin = (_marginOverride ?? new Thickness(18.0, 14.0, 18.0, 16.0));
-		// 底部托盘(编辑态):已隐藏区块以「+ 标题」chip 呈现,点击恢复;L6 追加「+ 自建区块」入口
-		_hiddenTrayPanel = Ui.V(6.0, Ui.Muted(I18n.L("已隐藏的区块")), _tray);
-		_addTrayPanel = Ui.V(6.0, Ui.Muted(I18n.L("添加自建区块到本页")), _trayAdd);
-		_addTrayPanel.Visibility = Visibility.Collapsed;
-		SPanel sPanel = Ui.V(10.0, _hiddenTrayPanel, _addTrayPanel);
-		_trayHost.CornerRadius = new CornerRadius(8.0);
-		_trayHost.Padding = new Thickness(10.0);
-		_trayHost.Visibility = Visibility.Collapsed;
-		_trayHost.SetResourceReference(Border.BackgroundProperty, "B.Paper2");
-		_trayHost.Child = sPanel;
-		// 底部悬浮工具条(编辑态):撤销 / 重做 / 完成 / 重置本页 / 导出布局 / 导入布局
-		_undoBtn = Ui.Btn(I18n.L("撤销"), BtnKind.Normal, delegate
-		{
-			UndoEdit();
-		});
-		_undoBtn.IsEnabled = false;
-		_redoBtn = Ui.Btn(I18n.L("重做"), BtnKind.Normal, delegate
-		{
-			RedoEdit();
-		});
-		_redoBtn.IsEnabled = false;
-		// 吸附档(编辑态可切 {0,4,8,16,24},沿用旧 DashLayout.Grid 的档位):
-		// 只在画布模式有意义,按钮常驻但内容/可用性随模式刷新
-		_snapBtn = Ui.Btn(I18n.L("吸附"), BtnKind.Normal, delegate
-		{
-			CycleSnapStep();
-		});
-		_snapBtn.ToolTip = I18n.L("吸附到栅格");
-		_autoPackBtn = Ui.Btn(I18n.L("自动靠拢"), BtnKind.Normal, delegate
-		{
-			ToggleAutoPack();
-		});
-		_autoPackBtn.ToolTip = I18n.L("开:松手后区块自动向上靠拢、与相邻区块互换位置、靠近时磁性吸附;关:区块停在你放下的位置");
-		// 按钮放进 WrapPanel:窄窗/高分屏下换行,不再像原来那样横向排一排被右侧裁掉半截。
-		WrapPanel barButtons = new WrapPanel
-		{
-			Orientation = Orientation.Horizontal
-		};
-		barButtons.Children.Add(_undoBtn);
-		barButtons.Children.Add(_redoBtn);
-		barButtons.Children.Add(_snapBtn);
-		barButtons.Children.Add(_autoPackBtn);
-		barButtons.Children.Add(Ui.Btn(I18n.L("完成编辑"), BtnKind.Primary, delegate
-		{
-			ExitEdit();
-		}));
-		Button foldAll = Ui.Btn(I18n.L("全部折叠"), BtnKind.Normal, null);
-		_foldAllBtn = foldAll;
-		foldAll.Click += delegate
-		{
-			// 状态从卡片读(不再靠按钮局部 bool):有任意一块折叠着 = 这一步"全部展开",否则"全部折叠"。
-			bool fold = !IsAnyCardCollapsed();
-			foreach (LayoutCard value2 in _cards.Values)
-			{
-				value2.SetCollapsed(fold);
-			}
-			RefreshFoldAllBtn();
-		};
-		barButtons.Children.Add(foldAll);
-		barButtons.Children.Add(Ui.Btn(I18n.L("重置本页"), BtnKind.Normal, delegate
-		{
-			ResetPage();
-		}));
-		barButtons.Children.Add(Ui.Btn(I18n.L("导出布局"), BtnKind.Normal, delegate
-		{
-			PageLayoutIO.ExportToFileDialog(_pageId);
-		}));
-		barButtons.Children.Add(Ui.Btn(I18n.L("导入布局"), BtnKind.Normal, delegate
-		{
-			ImportLayout();
-		}));
-		barButtons.HorizontalAlignment = HorizontalAlignment.Right;
-		// 两列:左列提示(宽度不够用省略号截断,悬停看全文),右列按钮靠右 ——
-		// 窄区域(设置页)里按钮不会被挤掉,提示也不会被裁一半。
-		string hintText = I18n.L("按住区块拖动移动 · 拖右/下边角缩放");
-		TextBlock barHint = Ui.Txt(hintText, 11.5, bold: false, "B.InkMuted");
-		barHint.TextTrimming = TextTrimming.CharacterEllipsis;
-		barHint.ToolTip = hintText;
-		barHint.Margin = new Thickness(2.0, 0.0, 8.0, 0.0);
-		Grid barGrid = Ui.G("*,Auto");
-		barGrid.Add(barHint.VCenter(), 0, 0);
-		barGrid.Add(barButtons.VCenter(), 0, 1);
-		SPanel sPanel2 = Ui.V(0.0, barGrid);
-		_barHost.CornerRadius = new CornerRadius(10.0);
-		_barHost.Padding = new Thickness(10.0, 8.0, 10.0, 8.0);
-		_barHost.Visibility = Visibility.Collapsed;
-		_barHost.SetResourceReference(Border.BackgroundProperty, "B.Paper");
-		_barHost.SetResourceReference(Border.BorderBrushProperty, "B.Line");
-		_barHost.BorderThickness = new Thickness(1.0);
-		_barHost.Child = sPanel2;
-		Motion.Shadow(_barHost, 16.0, 0.07, 3.0);
-		// 根结构:上滚动内容区,下托盘/工具条(仅编辑态占位出现,不悬浮遮挡内容)
-		// 常态整行折叠:原来这一行即使托盘和工具条都折叠了也占着 8 + 16 = 24px 的外边距,
-		// 内容区因此比改动前矮 24px(铺满整页的页面,例如 AI 对话区,会被看出来)。
-		SPanel bottom = Ui.V(8.0, _trayHost, _barHost);
-		bottom.Margin = new Thickness(_list.Margin.Left, 8.0, _list.Margin.Right, _list.Margin.Bottom);
-		bottom.Visibility = Visibility.Collapsed;
-		_bottom = bottom;
-		_root = Ui.G("*,Auto");
+		// R34 v3:编辑条挪到内容区顶部(单行圆角浮条);「添加」抽屉从右侧滑出,取代原来的底部托盘 + 悬浮工具条
+		_bar = BuildEditBar();
+		_bar.Visibility = Visibility.Collapsed;
+		_drawer = new LayoutAddDrawer();
+		_drawer.ShowHidden = RestoreFromDrawer;
+		_drawer.AddType = AddWidgetOfType;
+		_drawer.AddExisting = AddExistingWidget;
+		_drawer.OpenAdvanced = OpenLayoutSettings;
+		_drawer.Closed = FocusRoot;
+		// 根结构:第 0 行编辑条(仅编辑态占位),第 1 行内容宿主(永远是 Children[0]),抽屉叠在最上层。
+		// 常态编辑条折叠 → 第 0 行高度为 0,内容区高度与改动前一致(铺满整页的页面,例如 AI 对话区,不受影响)。
+		_root = Ui.G("Auto,*");
 		_scroll = Ui.Scroll(_list);
 		// 透明底:区块之间的空隙也能接到滚轮(null 底时滚轮穿透到页面背景,看起来"滑不动")
 		_scroll.Background = Brushes.Transparent;
-		_root.Add(_scroll, 0);
-		_root.Add(bottom, 1);
-		// grid/canvas 模式的可视宿主:自绘画布 Panel + 其上的对齐辅助线/框选覆盖层(同一格叠放)。
+		Grid.SetRow(_scroll, ContentRow);
+		_root.Children.Add(_scroll);
+		_root.Add(_bar, 0);
+		_root.Add(_drawer.Root, 0, 0, 2, 1);
+		Panel.SetZIndex(_drawer.Root, 50);
+		// grid/canvas 模式的可视宿主:列底纹(卡片下面)+ 自绘画布 Panel + 其上的对齐辅助线/框选覆盖层(同一格叠放)。
 		// 注意:stack(缺省)时这个宿主根本不进可视树 —— 默认渲染与改动前逐像素一致由这一点保证。
+		_stage.Children.Add(_shade);
 		_stage.Children.Add(_box);
 		_stage.Children.Add(_guide);
 		_boxScroll = Ui.Scroll(_stage);
@@ -352,6 +284,8 @@ public sealed class LayoutEditor
 		_root.Focusable = true;
 		_root.PreviewKeyDown += OnEditorKeyDown;
 		_box.MouseLeftButtonDown += OnBoxMouseDown;
+		// 列表模式:点块以外的空白 = 取消选择(点在块上时块的处理器已经把事件吞了)
+		_list.MouseLeftButtonDown += OnListMouseDown;
 		_autoScroll.Tick += OnAutoScrollTick;
 		LoadFromStore();
 		Render();
@@ -430,54 +364,39 @@ public sealed class LayoutEditor
 		Render();
 	}
 
-	// stack → 12 列网格:按当前顺序逐行折算(每块占满一行),画面看起来不变,
-	// 但块从此可以上下左右拖、拖边角改尺寸。
-	private void PrepareEditableGrid()
-	{
-		_stackConverted = false;
-		_layoutTouched = false;
-		_stackBackup = null;
-		PageLayoutV2 page = _state.Page;
-		if (page == null || !string.Equals(page.Mode, LayoutSchema.ModeStack, StringComparison.Ordinal))
-		{
-			return;
-		}
-		_stackBackup = page.Clone();
-		_stackConverted = true;
-		page.Mode = LayoutSchema.ModeGrid;
-		page.Cols = 12;
-		page.RowH = 0.0;
-		_state.RebuildPage();
-		int row = 0;
-		foreach (BlockLayout block in page.Blocks)
-		{
-			block.X = 0.0;
-			block.Y = row;
-			block.W = 12.0;
-			block.H = 1.0;
-			block.Span = 12;
-			row++;
-		}
-	}
+	// R34 v3:不再在进编辑态时把 stack 悄悄折成 12 列网格(原 PrepareEditableGrid / RestoreStackAfterEdit)。
+	// 编辑条上有了「列表 / 网格」分段切换(写 pages.<id>.mode):列表模式就是上下换序,想自由摆放先切到网格。
 
-	// 整场没动过:把页模式、列数与各块几何还原成进编辑前那一份。
-	private void RestoreStackAfterEdit()
+	/// <summary>编辑条上的「列表 / 网格」:切换本页模式(可撤销,即时落盘)。canvas 页在界面上按网格显示(Q1)。</summary>
+	private void SetPageMode(string mode)
 	{
-		PageLayoutV2? back = _stackBackup;
-		if (back == null)
+		if (!_edit)
 		{
+			RefreshToolbar();
 			return;
 		}
-		PageLayoutV2 page = _state.Page;
-		page.Mode = back.Mode;
-		page.Cols = back.Cols;
-		page.RowH = back.RowH;
-		List<BlockLayout> blocks = new List<BlockLayout>();
-		foreach (BlockLayout block in back.Blocks)
+		bool wantGrid = LayoutModeSwitch.IsGridLike(mode);
+		if (wantGrid == IsBoxMode)
 		{
-			blocks.Add(block.Clone());
+			RefreshToolbar();
+			return;
 		}
-		page.Blocks = blocks;
+		if (_gesture.Length != 0)
+		{
+			EndBoxGesture(false, false);
+		}
+		CancelDrag(_dragCard, _dragSrc);
+		_box.ClearDragVisuals();
+		PageLayoutV2 before = _state.ToPage();
+		PageLayoutV2 page = (wantGrid ? LayoutModeSwitch.ToGrid(before) : LayoutModeSwitch.ToStack(before));
+		_session.PushUndo(before);
+		_session.ClearSelection();
+		_renderWidened.Clear();
+		_state = LayoutEngine.LoadState(_pageId, page, _refs);
+		_session.Retain(_state.Order);
+		Persist();
+		Render();
+		CompactState(null);
 	}
 
 	/// <summary>某块当前是否隐藏(页面自己读状态用,例如实例库的「显示文件夹栏」菜单)。</summary>
@@ -568,16 +487,24 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = true;
-		_trayAddOpen = false;
-		PrepareEditableGrid();
-		CompactState(null);
+		_layoutTouched = false;
+		_drawer.CloseNow();
 		// 每次进编辑态都是一次新会话:多选与撤销栈清空(历史上的改动已经即时落盘,不需要跨会话撤销)
 		_session.ClearHistory();
 		_session.ClearSelection();
-		_bottom.Visibility = Visibility.Visible;
+		_bar.Visibility = Visibility.Visible;
 		Render();
-		_barHost.Visibility = Visibility.Visible;
-		// 键盘(§4.G)需要根元素拿到焦点;拿不到也不影响鼠标交互
+		CompactState(null);
+		FocusRoot();
+	}
+
+	// 键盘(§4.G)需要根元素拿到焦点;拿不到也不影响鼠标交互
+	private void FocusRoot()
+	{
+		if (!_edit)
+		{
+			return;
+		}
 		try
 		{
 			_root.Focus();
@@ -595,7 +522,7 @@ public sealed class LayoutEditor
 			return;
 		}
 		_edit = false;
-		_trayAddOpen = false;
+		_drawer.CloseNow();
 		// 退出编辑时把边缘自动滚动的计时器一起收掉(手势可能还没正常松手)
 		StopAutoScroll();
 		// stack 拖拽可能还没收尾(比如被快捷键/外部调用结束编辑):必须解绑并释放捕获,
@@ -606,28 +533,25 @@ public sealed class LayoutEditor
 			EndBoxGesture(false, false);
 		}
 		_box.ClearDragVisuals();
+		_shade.Hide();
 		// 原生默认排版的页面:整场什么都没动 → 不落盘,直接回到原排版(默认外观逐像素不变)
 		bool backToNative = _nativeActive && !_layoutTouched;
-		// 进编辑时把 stack 折成了网格:整场什么都没动就还原成原来的 stack,
-		// 不因为"点进来看看"就把用户的纵向页面悄悄改成网格。
-		if (_stackConverted && !_layoutTouched)
-		{
-			RestoreStackAfterEdit();
-		}
-		_stackConverted = false;
-		_stackBackup = null;
 		bool saved = true;
 		if (backToNative)
 		{
 			LoadFromStore();
 		}
-		else
+		else if (_layoutTouched)
 		{
 			saved = Persist();
 		}
-		_trayHost.Visibility = Visibility.Collapsed;
-		_barHost.Visibility = Visibility.Collapsed;
-		_bottom.Visibility = Visibility.Collapsed;
+		else
+		{
+			// 整场没改过(所有改动都是即时落盘的):不再为"点进来看看"写一份本页条目,
+			// 否则设置 → 布局的「已自定义」会被误标。进编辑时只在画布里做过压紧,这里重新装载丢掉。
+			LoadFromStore();
+		}
+		_bar.Visibility = Visibility.Collapsed;
 		Render();
 		_session.ClearSelection();
 		_session.ClearHistory();
@@ -652,6 +576,11 @@ public sealed class LayoutEditor
 		// 画布自己的栅格底纹 / 占位框配色、辅助线/框选也是按主题色画的 —— 一起重画(颜色都在 OnRender 里现取)
 		_box.RefreshThemeVisuals();
 		_guide.InvalidateVisual();
+		_shade.InvalidateVisual();
+		if (_segFallback)
+		{
+			RefreshToolbar();
+		}
 	}
 
 	// ————— 装载 / 渲染 —————
@@ -712,16 +641,14 @@ public sealed class LayoutEditor
 		{
 			// grid / canvas:整体交给画布 Panel(自绘 + 两趟测量);stack 的纵向流一行都不执行
 			RenderBox();
-			if (_edit)
-			{
-				RefreshTray();
-			}
 			RefreshToolbar();
 			return;
 		}
 		ShowStackHost();
 		_list.Spacing = LayoutAppearance.EffectiveGap(_density, plan.Gap);
-		_list.Margin = (_marginOverride ?? PadOf(plan));
+		Thickness pad = (_marginOverride ?? PadOf(plan));
+		_list.Margin = ContentMargin(pad);
+		PlaceBar(pad);
 		if (plan.IsSingleColumn)
 		{
 			foreach (LayoutRow row in plan.Rows)
@@ -732,6 +659,7 @@ public sealed class LayoutEditor
 					card.EnsureContent();
 					card.SetBoxMode(LayoutSchema.ModeStack);
 					card.SetEdit(_edit);
+					card.SetSelected(_edit && _session.IsSelected(card.Spec.Id));
 					ApplyLook(card);
 					AttachCard(_list, card);
 				}
@@ -743,10 +671,6 @@ public sealed class LayoutEditor
 			{
 				_list.Children.Add(BuildRow(row, plan));
 			}
-		}
-		if (_edit)
-		{
-			RefreshTray();
 		}
 		RefreshToolbar();
 	}
@@ -761,10 +685,13 @@ public sealed class LayoutEditor
 		SanitizeCellWidths();
 		_box.SnapStep = _snapStep;
 		_box.EditMode = _edit;
-		_box.Margin = (_marginOverride ?? PadOf(_state.Plan()));
+		Thickness pad = (_marginOverride ?? PadOf(_state.Plan()));
+		_box.Margin = ContentMargin(pad);
+		PlaceBar(pad);
 		// 覆盖层与画布同坐标系:鼠标坐标取自 e.GetPosition(_box)(已扣掉 Margin),
 		// 辅助线/框选层若不带同一个 Margin,整体会偏移 (padLeft, padTop),默认 (18,14)px(P2)
 		_guide.Margin = _box.Margin;
+		_shade.Margin = _box.Margin;
 		UpdateFillHeight();
 		_box.Children.Clear();
 		foreach (LayoutCell cell in LayoutCanvas.StackedOrder(_box.Cells))
@@ -913,7 +840,7 @@ public sealed class LayoutEditor
 		{
 			_root.Children.RemoveAt(0);
 		}
-		Grid.SetRow(native.Root, 0);
+		Grid.SetRow(native.Root, ContentRow);
 		_root.Children.Insert(0, native.Root);
 	}
 
@@ -1032,7 +959,7 @@ public sealed class LayoutEditor
 			return;
 		}
 		_root.Children.RemoveAt(0);
-		Grid.SetRow(_scroll, 0);
+		Grid.SetRow(_scroll, ContentRow);
 		_root.Children.Insert(0, _scroll);
 		_guide.Clear();
 	}
@@ -1044,82 +971,530 @@ public sealed class LayoutEditor
 			return;
 		}
 		_root.Children.RemoveAt(0);
-		Grid.SetRow(_boxScroll, 0);
+		Grid.SetRow(_boxScroll, ContentRow);
 		_root.Children.Insert(0, _boxScroll);
 		_list.Children.Clear();
 	}
 
-	// 工具条上的撤销/重做/吸附档可用性
+	// ————— R34 v3:编辑条 —————
+
+	// 编辑态内容区顶部多留出浮动标签的空间(标签浮在块上沿外 14px);常态原样
+	private Thickness ContentMargin(Thickness pad)
+	{
+		if (!_edit)
+		{
+			return pad;
+		}
+		return new Thickness(pad.Left, Math.Max(pad.Top, EditTopRoom), pad.Right, pad.Bottom);
+	}
+
+	// 编辑条与内容同一左右边距;设置子页的编辑器本来就在左侧导航右边,所以编辑条不会盖住导航
+	private void PlaceBar(Thickness pad)
+	{
+		_bar.Margin = new Thickness(Math.Max(8.0, pad.Left), Math.Max(8.0, pad.Top), Math.Max(8.0, pad.Right), 0.0);
+	}
+
+	// 编辑条(§5.2,单行):编辑「页名」/ 列表·网格 / 灰色提示 / 撤销 重做 / 分隔线 / 添加(角标)/ 重置本页 / 完成 / ⋯
+	private Border BuildEditBar()
+	{
+		_barTitle = Ui.Txt("", 13.0, bold: true);
+		_barTitle.VerticalAlignment = VerticalAlignment.Center;
+		_barTitle.Margin = new Thickness(0.0, 0.0, 6.0, 0.0);
+		_segStack = SegItem(I18n.L("列表"), Ico.List, LayoutSchema.ModeStack);
+		_segGrid = SegItem(I18n.L("网格"), Ico.Grid, LayoutSchema.ModeGrid);
+		Border seg = new Border
+		{
+			CornerRadius = new CornerRadius(8.0),
+			Padding = new Thickness(3.0),
+			VerticalAlignment = VerticalAlignment.Center,
+			Child = Ui.H(2.0, _segStack, _segGrid)
+		};
+		seg.SetResourceReference(Border.BackgroundProperty, "B.SegRail");
+		_barHint = Ui.Txt("", 12.0, bold: false, "B.InkFaint");
+		_barHint.TextTrimming = TextTrimming.CharacterEllipsis;
+		_barHint.VerticalAlignment = VerticalAlignment.Center;
+		_barHint.Margin = new Thickness(10.0, 0.0, 6.0, 0.0);
+		_undoBtn = IconAction(LayoutEditLook.Icon("Geo.Undo", LayoutEditLook.PathUndo, 15.0, "B.InkSoft"), I18n.L("撤销 (Ctrl+Z)"), UndoEdit);
+		_redoBtn = IconAction(LayoutEditLook.Icon("Geo.Redo", LayoutEditLook.PathRedo, 15.0, "B.InkSoft"), I18n.L("重做 (Ctrl+Y)"), RedoEdit);
+		Border sep = new Border
+		{
+			Width = 1.0,
+			Height = 18.0,
+			Margin = new Thickness(4.0, 0.0, 4.0, 0.0),
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		sep.SetResourceReference(Border.BackgroundProperty, "B.Line");
+		_addBadgeText = Ui.Txt("", 11.5, bold: true, "B.OnAccent");
+		_addBadgeText.HorizontalAlignment = HorizontalAlignment.Center;
+		_addBadgeText.VerticalAlignment = VerticalAlignment.Center;
+		_addBadge = new Border
+		{
+			MinWidth = 16.0,
+			Height = 16.0,
+			CornerRadius = new CornerRadius(8.0),
+			Padding = new Thickness(4.0, 0.0, 4.0, 0.0),
+			VerticalAlignment = VerticalAlignment.Center,
+			Visibility = Visibility.Collapsed,
+			Child = _addBadgeText
+		};
+		_addBadge.SetResourceReference(Border.BackgroundProperty, "B.Accent");
+		Button add = Ui.Btn(I18n.L("添加"), BtnKind.Soft, delegate
+		{
+			ToggleDrawer();
+		}, Ico.Add);
+		add.Content = Ui.H(6.0, Ui.Glyph(Ico.Add, 12.5), Ui.Txt(I18n.L("添加")).VCenter(), _addBadge);
+		Button reset = Ui.Btn(I18n.L("重置本页"), BtnKind.Normal, delegate
+		{
+			ResetPage();
+		});
+		Button done = Ui.Btn(I18n.L("完成"), BtnKind.Primary, delegate
+		{
+			ExitEdit();
+		});
+		Button more = Ui.IconBtn(Ico.More, I18n.L("更多"), null, 14.0);
+		more.Click += delegate
+		{
+			OpenMoreMenu(more);
+		};
+		Grid grid = Ui.G(null, "Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto");
+		grid.Add(_barTitle, 0, 0);
+		grid.Add(seg, 0, 1);
+		grid.Add(_barHint, 0, 2);
+		grid.Add(_undoBtn, 0, 3);
+		grid.Add(_redoBtn.M(2.0, 0.0, 0.0, 0.0), 0, 4);
+		grid.Add(sep, 0, 5);
+		grid.Add(add.VCenter(), 0, 6);
+		grid.Add(reset.M(6.0, 0.0, 0.0, 0.0).VCenter(), 0, 7);
+		grid.Add(done.M(6.0, 0.0, 0.0, 0.0).VCenter(), 0, 8);
+		grid.Add(more.M(4.0, 0.0, 0.0, 0.0).VCenter(), 0, 9);
+		Border bar = new Border
+		{
+			MinHeight = 46.0,
+			Padding = new Thickness(14.0, 6.0, 8.0, 6.0),
+			Child = grid
+		};
+		if (!LayoutEditLook.TryApplyStyle(bar, "Layout.EditBar"))
+		{
+			bar.CornerRadius = new CornerRadius(12.0);
+			bar.BorderThickness = new Thickness(1.0);
+			LayoutEditLook.Bind(bar, Border.BackgroundProperty, "B.EditBarBg", "B.Paper");
+			bar.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+			Motion.Shadow(bar, 10.0, 0.06, 1.0);
+		}
+		return bar;
+	}
+
+	// 「列表 / 网格」分段里的一项:优先用 WP-L0 的 Layout.SegItem 样式,找不到就用本文件的兜底模板 + 代码配色
+	private RadioButton SegItem(string text, string glyph, string mode)
+	{
+		RadioButton item = new RadioButton
+		{
+			Content = Ui.H(6.0, Ui.Glyph(glyph, 12.0), Ui.Txt(text, 12.5).VCenter()),
+			Focusable = false,
+			Cursor = Cursors.Hand,
+			VerticalAlignment = VerticalAlignment.Center
+		};
+		System.Windows.Automation.AutomationProperties.SetName(item, text);
+		if (!LayoutEditLook.TryApplyStyle(item, "Layout.SegItem"))
+		{
+			_segFallback = true;
+			item.Template = SegTemplate();
+		}
+		// 用 Click(只有用户点才触发),不用 Checked:RefreshToolbar 里程序化同步勾选状态时不能反过来改布局
+		item.Click += delegate
+		{
+			SetPageMode(mode);
+		};
+		return item;
+	}
+
+	private static ControlTemplate SegTemplate()
+	{
+		FrameworkElementFactory border = new FrameworkElementFactory(typeof(Border));
+		border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6.0));
+		border.SetValue(Border.PaddingProperty, new Thickness(10.0, 0.0, 10.0, 0.0));
+		border.SetValue(FrameworkElement.MinHeightProperty, 24.0);
+		border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+		FrameworkElementFactory presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+		presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+		border.AppendChild(presenter);
+		ControlTemplate template = new ControlTemplate(typeof(RadioButton))
+		{
+			VisualTree = border
+		};
+		template.Seal();
+		return template;
+	}
+
+	// 兜底模板下的选中配色(选中 = 白底加粗,未选 = 透明底灰字)
+	private static void PaintSeg(RadioButton? item, bool on)
+	{
+		if (item == null)
+		{
+			return;
+		}
+		if (on)
+		{
+			item.SetResourceReference(Control.BackgroundProperty, "B.SegOn");
+			item.SetResourceReference(Control.ForegroundProperty, "B.Ink");
+			item.FontWeight = FontWeights.SemiBold;
+		}
+		else
+		{
+			item.Background = Brushes.Transparent;
+			item.SetResourceReference(Control.ForegroundProperty, "B.InkSoft");
+			item.FontWeight = FontWeights.Normal;
+		}
+	}
+
+	// 撤销 / 重做图标按钮:不可用时置灰
+	private static Button IconAction(FrameworkElement icon, string tip, Action click)
+	{
+		Button button = Ui.IconBtn(Ico.More, tip, null, 14.0);
+		button.Content = icon;
+		button.VerticalAlignment = VerticalAlignment.Center;
+		button.Click += delegate
+		{
+			click();
+		};
+		button.IsEnabledChanged += delegate
+		{
+			button.Opacity = (button.IsEnabled ? 1.0 : 0.4);
+		};
+		button.IsEnabled = false;
+		button.Opacity = 0.4;
+		return button;
+	}
+
+	// 「⋯」菜单:导出本页… / 导入到本页… / 整套布局与方案…(最后一项跳到 设置 → 布局)
+	private void OpenMoreMenu(Button anchor)
+	{
+		ContextMenu menu = new ContextMenu
+		{
+			PlacementTarget = anchor,
+			Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom
+		};
+		menu.Items.Add(MenuItemOf(I18n.L("导出本页…"), delegate
+		{
+			PageLayoutIO.ExportToFileDialog(_pageId);
+		}));
+		menu.Items.Add(MenuItemOf(I18n.L("导入到本页…"), ImportLayout));
+		menu.Items.Add(new Separator());
+		menu.Items.Add(MenuItemOf(I18n.L("整套布局与方案…"), OpenLayoutSettings));
+		menu.IsOpen = true;
+	}
+
+	private static MenuItem MenuItemOf(string header, Action click)
+	{
+		MenuItem item = new MenuItem
+		{
+			Header = header
+		};
+		item.Click += delegate
+		{
+			click();
+		};
+		return item;
+	}
+
+	// 跳到 设置 → 布局(复用现有导航:MainWindow.Navigate + SettingsPage.OpenLayoutView);先完成编辑再走
+	private void OpenLayoutSettings()
+	{
+		try
+		{
+			if (_edit)
+			{
+				ExitEdit();
+			}
+			MainWindow? main = AppServices.Window;
+			if (main == null)
+			{
+				return;
+			}
+			main.Navigate("settings");
+			if (main.PageInstance("settings") is SettingsPage settings)
+			{
+				settings.OpenLayoutView();
+			}
+		}
+		catch
+		{
+			// 跳转失败不影响布局本身
+		}
+	}
+
+	// 页名:已知页用现有导航文案;插件页用插件给的标签;都没有 =「本页」
+	private string PageName()
+	{
+		string? known = LayoutEditPageNames.KnownNameOf(_pageId);
+		if (known != null)
+		{
+			return known;
+		}
+		try
+		{
+			string label = PluginUi.FindPage(_pageId)?.Label ?? "";
+			if (label.Trim().Length > 0)
+			{
+				return label.Trim();
+			}
+		}
+		catch
+		{
+		}
+		return I18n.L("本页");
+	}
+
+	// 编辑条状态:撤销 / 重做可用性跟着历史栈;分段勾选跟着模式;提示跟着模式;「添加」角标 = 隐藏项数
 	private void RefreshToolbar()
 	{
 		if (_undoBtn != null)
 		{
-			_undoBtn.IsEnabled = _session.CanUndo;
+			_undoBtn.IsEnabled = _edit && _session.CanUndo;
 		}
 		if (_redoBtn != null)
 		{
-			_redoBtn.IsEnabled = _session.CanRedo;
+			_redoBtn.IsEnabled = _edit && _session.CanRedo;
 		}
-		if (_snapBtn != null)
+		bool grid = IsBoxMode;
+		if (_segStack != null && _segGrid != null)
 		{
-			_snapBtn.IsEnabled = IsBoxMode;
-			_snapBtn.Content = I18n.L("吸附") + " " + _snapStep.ToString("0");
+			_segStack.IsChecked = !grid;
+			_segGrid.IsChecked = grid;
+			if (_segFallback)
+			{
+				PaintSeg(_segStack, !grid);
+				PaintSeg(_segGrid, grid);
+			}
 		}
-		if (_autoPackBtn != null)
+		if (_barHint != null)
 		{
-			_autoPackBtn.IsEnabled = IsBoxMode;
-			_autoPackBtn.Content = I18n.L("自动靠拢") + " " + (LayoutEditPrefs.AutoPack ? I18n.L("开") : I18n.L("关"));
+			_barHint.Text = LayoutEditRules.HintFor(_state.Page.Mode);
+			_barHint.ToolTip = _barHint.Text;
 		}
-		RefreshFoldAllBtn();
+		if (_barTitle != null)
+		{
+			_barTitle.Text = I18n.L("编辑「{0}」", PageName());
+		}
+		int hidden = LayoutEditRules.HiddenCount(_state.Order, _state.Hidden);
+		if (_addBadge != null && _addBadgeText != null)
+		{
+			_addBadgeText.Text = hidden.ToString();
+			_addBadge.Visibility = ((hidden > 0) ? Visibility.Visible : Visibility.Collapsed);
+		}
+		RefreshDrawer();
 	}
 
-	// 「全部折叠/全部展开」文案 = 卡片的实际折叠状态(退出编辑会把卡片强制展开,文案必须跟着回去)
-	internal void RefreshFoldAllBtn()
+	// ————— R34 v3:「添加」抽屉 —————
+
+	private void ToggleDrawer()
 	{
-		if (_foldAllBtn == null)
+		if (!_edit)
 		{
 			return;
 		}
-		_foldAllBtn.Content = I18n.L(IsAnyCardCollapsed() ? "全部展开" : "全部折叠");
+		if (_drawer.IsOpen)
+		{
+			_drawer.Close();
+			return;
+		}
+		_drawer.SetPageName(PageName());
+		_drawer.Open();
+		RefreshDrawer();
 	}
 
-	private bool IsAnyCardCollapsed()
+	// 抽屉开着时按最新状态重画两段列表(关着就不算,省一次 LayoutStoreV2.Load)
+	private void RefreshDrawer()
 	{
-		foreach (LayoutCard card in _cards.Values)
+		if (!_drawer.IsOpen)
 		{
-			if (card.IsCollapsed)
+			return;
+		}
+		List<WidgetDef> widgets = new List<WidgetDef>(WidgetRegistry.AllWidgets());
+		PageLayoutV2 page = _state.ToPage();
+		bool danger = LayoutAddDrawer.IsDangerAllowed();
+		_drawer.Refresh(LayoutAddCatalog.Hidden(_state.Order, _state.Hidden, (string id) => SpecOf(id).Title, widgets), LayoutAddCatalog.Types(page, widgets, danger), LayoutAddCatalog.Existing(page, widgets, danger), danger);
+	}
+
+	// 抽屉「显示」:恢复到原槽位,滚过去并闪一下
+	private void RestoreFromDrawer(string id)
+	{
+		if (!_edit || string.IsNullOrEmpty(id) || !_state.Hidden.Contains(id))
+		{
+			return;
+		}
+		BlockSpec spec = SpecOf(id);
+		Restore(spec);
+		ScrollToBlock(id);
+		AppServices.Window?.Toast(I18n.L("已恢复「{0}」", spec.Title), "", ToastKind.Success);
+	}
+
+	// 抽屉「添加」新组件:先在 widgets[] 里建定义,再把 custom:<id> 追加到本页末尾。返回 null = 成功,否则是原因。
+	private string? AddWidgetOfType(string type, string input)
+	{
+		if (!_edit || string.IsNullOrEmpty(type))
+		{
+			return null;
+		}
+		bool danger = LayoutSchema.IsDangerousWidgetType(type);
+		if (danger && !LayoutAddDrawer.IsDangerAllowed())
+		{
+			return I18n.L("网页和按钮组件还没有开启");
+		}
+		LayoutV2 doc = LayoutStoreV2.Load();
+		if (doc.Layout == null)
+		{
+			doc.Layout = new LayoutBody();
+		}
+		if (doc.Layout.Widgets == null)
+		{
+			doc.Layout.Widgets = new List<WidgetDef>();
+		}
+		if (!LayoutAddCatalog.AllowsMultiple(type) && LayoutAddCatalog.TypesOnPage(_state.ToPage(), doc.Layout.Widgets).Contains(type))
+		{
+			return I18n.L("本页已有这个区块");
+		}
+		WidgetDef? widget;
+		string error;
+		if (danger)
+		{
+			widget = CreateDangerWidget(doc, type, input, out error);
+		}
+		else
+		{
+			bool takesInput = LayoutAddCatalog.NeedsInput(type);
+			widget = WidgetLibrary.CreateFor(doc, type, LayoutBlockTitles.TypeLabel(type), takesInput ? input : "", "", out error);
+		}
+		if (widget == null)
+		{
+			return string.IsNullOrEmpty(error) ? I18n.L("没能添加") : error;
+		}
+		doc.Layout.Widgets.Add(widget);
+		_saving = true;
+		try
+		{
+			if (!LayoutStoreV2.Save(doc))
 			{
-				return true;
+				return I18n.L("布局未能保存");
+			}
+			PageLayoutStore.Reload();
+		}
+		finally
+		{
+			_saving = false;
+		}
+		AddCustomBlock(widget.Id);
+		return null;
+	}
+
+	// 网页 / 按钮:WidgetLibrary 不提供创建入口(Q5 门禁),这里在全局开关打开的前提下按白名单校验后建定义。
+	// 用户在开关打开后亲手添加的 = 显式开启;导入布局里带的仍按原规则强制关闭(不经过这里)。
+	private static WidgetDef? CreateDangerWidget(LayoutV2 doc, string type, string input, out string error)
+	{
+		error = "";
+		WidgetDef widget = new WidgetDef
+		{
+			Id = UniqueWidgetId(doc),
+			Type = type,
+			Title = LayoutBlockTitles.TypeLabel(type)
+		};
+		string value = (input ?? "").Trim();
+		if (string.Equals(type, LayoutSchema.WidgetWeb, StringComparison.Ordinal))
+		{
+			if (!WidgetCommon.TryAcceptWebUrl(value, out string url, out string reason))
+			{
+				error = reason;
+				return null;
+			}
+			widget.Settings["url"] = url;
+		}
+		else
+		{
+			if (!WidgetCommon.TryParseAction(value, out string _, out string _, out string _, out string reason2))
+			{
+				error = reason2;
+				return null;
+			}
+			widget.Settings["action"] = value;
+			foreach (KeyValuePair<string, string> preset in LayoutAddCatalog.ButtonPresets())
+			{
+				if (string.Equals(preset.Value, value, StringComparison.Ordinal))
+				{
+					widget.Title = preset.Key;
+					break;
+				}
 			}
 		}
-		return false;
+		widget.Settings[WidgetCommon.EnabledKey] = true;
+		return widget;
 	}
 
-	// 吸附档循环:0 → 4 → 8 → 16 → 24 → 0(与旧 DashLayout.Grid 的档位表一致)
-	// 「自动靠拢」开关:全局偏好(所有页面共用),即时生效;关掉后不再自动上浮 / 互换 / 磁性吸附
-	private void ToggleAutoPack()
+	// 文档内唯一 id(与 WidgetLibrary 同一规则:时间戳 id 撞车时补 -2 / -3...)
+	private static string UniqueWidgetId(LayoutV2 doc)
 	{
-		LayoutEditPrefs.AutoPack = !LayoutEditPrefs.AutoPack;
-		RefreshToolbar();
-		AppServices.Window?.Toast(I18n.L(LayoutEditPrefs.AutoPack ? "自动靠拢已开启" : "自动靠拢已关闭"), LayoutEditPrefs.AutoPack ? I18n.L("区块松手后会自动靠拢相邻区块") : I18n.L("区块会停在你放下的位置"), ToastKind.Success);
-	}
-
-	private void CycleSnapStep()
-	{
-		double[] steps = LayoutCanvas.Steps;
-		int index = 0;
-		for (int i = 0; i < steps.Length; i++)
+		string id = LayoutSchema.NewWidgetId();
+		HashSet<string> used = new HashSet<string>(StringComparer.Ordinal);
+		if (doc?.Layout?.Widgets != null)
 		{
-			if (Math.Abs(steps[i] - _snapStep) < 0.001)
+			foreach (WidgetDef widget in doc.Layout.Widgets)
 			{
-				index = i;
-				break;
+				if (widget != null && !string.IsNullOrEmpty(widget.Id))
+				{
+					used.Add(widget.Id);
+				}
 			}
 		}
-		_snapStep = steps[(index + 1) % steps.Length];
-		_box.SnapStep = _snapStep;
-		_box.InvalidateVisual();
-		RefreshToolbar();
+		if (!used.Contains(id))
+		{
+			return id;
+		}
+		int suffix = 2;
+		while (used.Contains(id + "-" + suffix))
+		{
+			suffix++;
+		}
+		return id + "-" + suffix;
+	}
+
+	// 抽屉「添加」已创建的组件
+	private void AddExistingWidget(string widgetId)
+	{
+		if (!_edit || string.IsNullOrEmpty(widgetId))
+		{
+			return;
+		}
+		List<WidgetDef> widgets = new List<WidgetDef>(WidgetRegistry.AllWidgets());
+		string type = LayoutAddCatalog.TypeOfBlock(LayoutEngine.CustomPrefix + widgetId, widgets);
+		if (!LayoutAddCatalog.AllowsMultiple(type) && type.Length > 0 && LayoutAddCatalog.TypesOnPage(_state.ToPage(), widgets).Contains(type))
+		{
+			AppServices.Window?.Toast(I18n.L("本页已有这个区块"), "", ToastKind.Info);
+			return;
+		}
+		AddCustomBlock(widgetId);
+	}
+
+	// 新块 / 恢复的块:等这一轮排版完,滚到它并闪一下主题色光晕
+	private void ScrollToBlock(string id)
+	{
+		if (string.IsNullOrEmpty(id))
+		{
+			return;
+		}
+		_root.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate
+		{
+			if (!_cards.TryGetValue(id, out LayoutCard? card) || card == null || !card.IsVisible)
+			{
+				return;
+			}
+			try
+			{
+				card.BringIntoView();
+			}
+			catch
+			{
+			}
+			card.Flash();
+		}));
 	}
 
 	// 区块外观参数(§4.B)落到卡上:style / 常态标题 / 每块边距;缺省(plain + false + null)= 现状零装饰
@@ -1194,30 +1569,38 @@ public sealed class LayoutEditor
 		return card;
 	}
 
-	// 页面 spec 优先;布局文档里的 custom: / plugin: 块可能没有对应 spec(§4.F),用 id 兜一个标题
+	// 页面 spec 优先;布局文档里的 custom: / plugin: 块没有对应 spec(§4.F):
+	// 自建块用 widgets[] 的 title → 类型名,插件块用插件给的标题 —— 任何显示文本里都不出现块 id(§5.1)
 	private BlockSpec SpecOf(string id)
 	{
 		if (_byId.TryGetValue(id, out BlockSpec? spec))
 		{
 			return spec;
 		}
-		BlockSpec synthetic = new BlockSpec
+		return new BlockSpec
 		{
 			Id = id,
-			Title = id
+			Title = LayoutBlockTitles.Resolve(id, null, WidgetRegistry.FindWidgetById, PluginBlockTitle)
 		};
-		string? widget = LayoutEngine.WidgetIdOf(id);
-		if (widget != null)
+	}
+
+	// 插件块标题:插件声明的 label → 插件名;都没有返回 null(由 LayoutBlockTitles 给通用名)
+	private static string? PluginBlockTitle(string plugin, string inner)
+	{
+		try
 		{
-			// 自建块:操作条 / 托盘显示用户起的标题,而不是裸 widgetId
-			WidgetDef? def = WidgetRegistry.FindWidgetById(widget);
-			synthetic.Title = ((def != null) ? WidgetUI.TitleOf(def) : widget);
+			string label = PluginUi.Find(WidgetRegistry.PluginKindBlock, plugin, inner)?.Label ?? "";
+			if (label.Trim().Length > 0)
+			{
+				return label;
+			}
+			string name = PluginUi.Plugin(plugin)?.Name ?? "";
+			return (name.Trim().Length > 0) ? name : null;
 		}
-		else if (LayoutEngine.TryParsePluginId(id, out string plugin, out string inner))
+		catch
 		{
-			synthetic.Title = plugin + " · " + inner;
+			return null;
 		}
-		return synthetic;
 	}
 
 	// 内容解析:内置块保持旧行为(没给内容就是没内容);custom:/plugin: 查注册表,查不到给「不可用」占位
@@ -1248,95 +1631,10 @@ public sealed class LayoutEditor
 
 	// ————— 编辑操作 —————
 
-	private void RefreshTray()
-	{
-		_tray.Children.Clear();
-		foreach (string id in _state.Order)
-		{
-			if (!_state.Hidden.Contains(id))
-			{
-				continue;
-			}
-			BlockSpec spec = SpecOf(id);
-			Button button = Ui.Btn(spec.Title, BtnKind.Chip, delegate
-			{
-				Restore(spec);
-			}, Ico.Add);
-			button.M(0.0, 0.0, 8.0, 6.0);
-			_tray.Children.Add(button);
-		}
-		if (_hiddenTrayPanel != null)
-		{
-			_hiddenTrayPanel.Visibility = ((_tray.Children.Count > 0) ? Visibility.Visible : Visibility.Collapsed);
-		}
-		// L6:已定义、但本页还没有的自建块 —— 点一下就等于把它追加到本页末尾
-		_trayAdd.Children.Clear();
-		List<WidgetDef> candidates = AvailableWidgets();
-		if (_addTrayPanel != null)
-		{
-			_addTrayPanel.Visibility = ((_edit && candidates.Count > 0) ? Visibility.Visible : Visibility.Collapsed);
-		}
-		if (_edit && candidates.Count > 0)
-		{
-			Button toggle = Ui.Btn(_trayAddOpen ? I18n.L("收起") : I18n.L("+ 自建区块"), BtnKind.Chip, delegate
-			{
-				_trayAddOpen = !_trayAddOpen;
-				RefreshTray();
-			});
-			toggle.M(0.0, 0.0, 8.0, 6.0);
-			_trayAdd.Children.Add(toggle);
-			if (_trayAddOpen)
-			{
-				foreach (WidgetDef widget in candidates)
-				{
-					string id = widget.Id;
-					Button chip = Ui.Btn(WidgetUI.TitleOf(widget), BtnKind.Chip, delegate
-					{
-						AddCustomBlock(id);
-					}, Ico.Add);
-					chip.ToolTip = WidgetUI.TypeLabel(widget.Type);
-					chip.M(0.0, 0.0, 8.0, 6.0);
-					_trayAdd.Children.Add(chip);
-				}
-			}
-		}
-		bool any = ((_hiddenTrayPanel != null && _hiddenTrayPanel.Visibility == Visibility.Visible)
-			|| (_addTrayPanel != null && _addTrayPanel.Visibility == Visibility.Visible));
-		_trayHost.Visibility = ((_edit && any) ? Visibility.Visible : Visibility.Collapsed);
-	}
-
-	// 自建块定义里,本页 BlockLayout 还没有 custom:<id> 的那些(按文档顺序)
-	private List<WidgetDef> AvailableWidgets()
-	{
-		List<WidgetDef> list = new List<WidgetDef>();
-		HashSet<string> present = new HashSet<string>(StringComparer.Ordinal);
-		if (_state.Page?.Blocks != null)
-		{
-			foreach (BlockLayout block in _state.Page.Blocks)
-			{
-				if (block != null && !string.IsNullOrEmpty(block.Id))
-				{
-					present.Add(block.Id);
-				}
-			}
-		}
-		foreach (WidgetDef widget in WidgetRegistry.AllWidgets())
-		{
-			if (widget == null || string.IsNullOrEmpty(widget.Id))
-			{
-				continue;
-			}
-			if (!present.Contains(LayoutEngine.CustomPrefix + widget.Id))
-			{
-				list.Add(widget);
-			}
-		}
-		return list;
-	}
-
 	/// <summary>
 	/// L6:把某个自建块追加到本页末尾(编辑态)。走 LayoutEditSession.AppendImplicit → 复用"粘贴到页面末尾"
 	/// 的白名单/去重规则;先压撤销快照,再重建页状态并 Persist,所以可撤销、最终由完成编辑/即时落盘写进 v2。
+	/// R34 v3:入口从底部托盘挪进「添加」抽屉;加完滚到新块并闪一下光晕,抽屉保持打开。
 	/// </summary>
 	internal void AddCustomBlock(string widgetId)
 	{
@@ -1352,7 +1650,7 @@ public sealed class LayoutEditor
 			AppServices.Window?.Toast(I18n.L("本页已有这个区块"), "", ToastKind.Info);
 			return;
 		}
-		// 新块落位到页尾(编辑态 stack 已折成网格,不给坐标会叠在 0,0)
+		// 新块落位到页尾(网格不给坐标会叠在 0,0)
 		if (page.Blocks != null && page.Blocks.Count > 0)
 		{
 			BlockLayout appended = page.Blocks[page.Blocks.Count - 1];
@@ -1364,26 +1662,134 @@ public sealed class LayoutEditor
 		_session.PushUndo(_state.ToPage());
 		_state = LayoutEngine.LoadState(_pageId, page, _refs);
 		_session.Retain(_state.Order);
-		_trayAddOpen = false;
 		Persist();
 		Render();
-		AppServices.Window?.Toast(I18n.L("已添加到本页"), WidgetRegistry.FindWidgetById(widgetId)?.Title ?? "", ToastKind.Success);
+		CompactState(null);
+		ScrollToBlock(blockId);
+		AppServices.Window?.Toast(I18n.L("已添加「{0}」到页面末尾", SpecOf(blockId).Title), "", ToastKind.Success);
 	}
 
+	/// <summary>块右上角「眼睛划线」:隐藏内置块(可在「添加」里找回)。</summary>
 	internal void HideBlock(BlockSpec spec)
 	{
-		_layoutTouched = true;
-		if (!_edit || spec == null || _state.Hidden.Contains(spec.Id))
+		if (!_edit || spec == null)
 		{
 			return;
 		}
-		_session.PushUndo(_state.ToPage());
-		_state.Hide(spec.Id);
-		Render();
-		Persist();
+		HideOrDelete(new List<string> { spec.Id });
 	}
 
-	// 从托盘恢复:隐藏项一直留在原槽位,插回原位置对应可视索引
+	/// <summary>块右上角垃圾桶:把 custom: / plugin: 块从本页删掉(widgets[] 里的定义保留;可撤销)。</summary>
+	internal void DeleteBlock(BlockSpec spec)
+	{
+		if (!_edit || spec == null || !LayoutEngine.IsImplicitRef(spec.Id))
+		{
+			return;
+		}
+		HideOrDelete(new List<string> { spec.Id });
+	}
+
+	// 隐藏 / 删除的唯一落点(块上的图标按钮与 Delete 键共用):内置块 = 隐藏,custom: / plugin: = 从本页删除。
+	// 一次压一份撤销快照,改完即时落盘。
+	private void HideOrDelete(IList<string> ids)
+	{
+		if (!_edit || ids == null || _gesture.Length != 0)
+		{
+			return;
+		}
+		List<string> hide = new List<string>();
+		HashSet<string> remove = new HashSet<string>(StringComparer.Ordinal);
+		foreach (string id in ids)
+		{
+			if (string.IsNullOrEmpty(id) || !_state.Order.Contains(id))
+			{
+				continue;
+			}
+			if (LayoutEditRules.DeleteHides(id))
+			{
+				if (!_state.Hidden.Contains(id) && !hide.Contains(id))
+				{
+					hide.Add(id);
+				}
+			}
+			else
+			{
+				remove.Add(id);
+			}
+		}
+		if (hide.Count == 0 && remove.Count == 0)
+		{
+			return;
+		}
+		string firstTitle = SpecOf((hide.Count > 0) ? hide[0] : new List<string>(remove)[0]).Title;
+		_layoutTouched = true;
+		_session.PushUndo(_state.ToPage());
+		foreach (string id in hide)
+		{
+			_state.Hide(id);
+		}
+		if (remove.Count > 0)
+		{
+			PageLayoutV2 page = _state.ToPage();
+			List<BlockLayout> keep = new List<BlockLayout>();
+			foreach (BlockLayout block in page.Blocks)
+			{
+				if (block != null && !remove.Contains(block.Id))
+				{
+					keep.Add(block);
+				}
+			}
+			page.Blocks = keep;
+			_state = LayoutEngine.LoadState(_pageId, page, _refs);
+		}
+		_session.ClearSelection();
+		_session.Retain(_state.Order);
+		Persist();
+		Render();
+		if (hide.Count + remove.Count > 1)
+		{
+			AppServices.Window?.Toast(I18n.L("已隐藏 {0} 个、删除 {1} 个区块", hide.Count, remove.Count), I18n.L("按 Ctrl+Z 可以撤销"), ToastKind.Success);
+		}
+		else if (hide.Count == 1)
+		{
+			AppServices.Window?.Toast(I18n.L("已隐藏「{0}」", firstTitle), I18n.L("在「添加」里可以找回"), ToastKind.Success);
+		}
+		else
+		{
+			AppServices.Window?.Toast(I18n.L("已删除「{0}」", firstTitle), I18n.L("按 Ctrl+Z 可以撤销"), ToastKind.Success);
+		}
+	}
+
+	/// <summary>列表模式下点块 = 选中它(Ctrl / Shift = 加减选),这样 Delete 键和选中外观在列表模式里也成立。</summary>
+	internal void SelectFromStack(LayoutCard card)
+	{
+		if (!_edit || card == null)
+		{
+			return;
+		}
+		if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != ModifierKeys.None)
+		{
+			_session.Toggle(card.Spec.Id);
+		}
+		else if (!_session.IsSelected(card.Spec.Id))
+		{
+			_session.Select(card.Spec.Id, false);
+		}
+		UpdateSelectionVisual();
+	}
+
+	// 列表模式:点块以外的空白 = 取消选择
+	private void OnListMouseDown(object sender, MouseButtonEventArgs e)
+	{
+		if (!_edit || IsBoxMode || e.Handled || _session.SelectedCount == 0)
+		{
+			return;
+		}
+		_session.ClearSelection();
+		UpdateSelectionVisual();
+	}
+
+	// 从「添加」抽屉恢复:隐藏项一直留在原槽位,插回原位置对应可视索引
 	private void Restore(BlockSpec spec)
 	{
 		if (!_edit || spec == null || !_state.Hidden.Contains(spec.Id))
@@ -1437,20 +1843,11 @@ public sealed class LayoutEditor
 				_state.Page.Gap = fresh.Gap;
 				_state.Page.Pad = fresh.Pad;
 			}
-			_stackConverted = false;
-			_stackBackup = null;
+			_session.ClearSelection();
+			_renderWidened.Clear();
 			Persist();
-			if (_edit)
-			{
-				// 仍在编辑态:stack 默认页重新折成可拖网格;之后不再改动就完成编辑 = 落回默认 stack
-				PrepareEditableGrid();
-			}
 			Render();
-			// 重置后把所有折叠的区块展开(否则看起来像"没反应")
-			foreach (LayoutCard card in _cards.Values)
-			{
-				card.SetCollapsed(false);
-			}
+			CompactState(null);
 			AppServices.Window?.Toast(I18n.L("布局已重置"), I18n.L("本页已恢复默认布局"), ToastKind.Success);
 		}
 		catch (Exception ex)
@@ -1479,19 +1876,11 @@ public sealed class LayoutEditor
 			_saving = false;
 		}
 		LoadFromStore();
-		_stackConverted = false;
-		_stackBackup = null;
-		if (_edit)
-		{
-			PrepareEditableGrid();
-			CompactState(null);
-		}
+		_session.ClearSelection();
+		_renderWidened.Clear();
 		_layoutTouched = false;
 		Render();
-		foreach (LayoutCard card in _cards.Values)
-		{
-			card.SetCollapsed(false);
-		}
+		CompactState(null);
 		this.Changed?.Invoke();
 		AppServices.Window?.Toast(I18n.L("布局已重置"), I18n.L("本页已恢复默认布局"), ToastKind.Success);
 	}
@@ -1604,6 +1993,8 @@ public sealed class LayoutEditor
 		_dragCard = card;
 		_dragSrc = src;
 		_dragChanged = false;
+		// 真的换过序才压进撤销栈(列表模式的拖动从 R34 起也能 Ctrl+Z)
+		_dragBefore = _state.ToPage();
 		_dragHeights.Clear();
 		foreach (UIElement child in _list.Children)
 		{
@@ -1907,6 +2298,7 @@ public sealed class LayoutEditor
 	{
 		LayoutCard? card = _dragCard;
 		bool changed = _dragChanged;
+		PageLayoutV2? before = _dragBefore;
 		// 先收浮起状态拿到起点,再走统一收尾(CancelDrag 会把 translate 清掉),最后补落位动画 ——
 		// 顺序反了的话落位动画会被 CancelDrag 立刻清掉(松开时"啪"一下归位,没有收敛感)。
 		double from = StopStackFloat();
@@ -1922,7 +2314,12 @@ public sealed class LayoutEditor
 		// 只点了一下手柄 / 已经退出编辑:没有换序就别落盘
 		if (changed && _edit)
 		{
+			if (before != null)
+			{
+				_session.PushUndo(before);
+			}
 			Persist();
+			RefreshToolbar();
 		}
 	}
 
@@ -1933,6 +2330,7 @@ public sealed class LayoutEditor
 		_dragCard = null;
 		_dragSrc = null;
 		_dragChanged = false;
+		_dragBefore = null;
 		if (card != null)
 		{
 			// 收尾:清掉被拖卡片身上的平移(落位动画由 EndStackFloat 负责,这里只兜底)
@@ -2050,6 +2448,11 @@ public sealed class LayoutEditor
 		_box.MouseMove += OnBoxDragMove;
 		_box.MouseLeftButtonUp += OnBoxGestureEnd;
 		_box.LostMouseCapture += OnBoxGestureLost;
+		// 网格:拖动 / 改宽度期间在卡片下面显示淡色列底纹(§5.1)
+		if (!_box.IsCanvas)
+		{
+			_shade.Show(LayoutGrid.Columns(_state.Page), _box.ColumnWidthValue, _box.Gap, _darkSurface);
+		}
 	}
 
 	// 整块拖拽(Ctrl = 只改选择;多选时整体移动)
@@ -2075,6 +2478,7 @@ public sealed class LayoutEditor
 		if (!_box.IsCanvas)
 		{
 			_box.BeginFloat(new List<string>(_gestureCells.Keys), true);
+			GuideLayer.DecorateDropBoxes(_box, _darkSurface);
 		}
 		UpdateSelectionVisual();
 		e.Handled = true;
@@ -2102,6 +2506,7 @@ public sealed class LayoutEditor
 		if (IsBoxMode && !_box.IsCanvas)
 		{
 			_box.BeginFloat(new string[1] { card.Spec.Id }, true);
+			GuideLayer.DecorateDropBoxes(_box, _darkSurface);
 		}
 		UpdateSelectionVisual();
 		e.Handled = true;
@@ -2407,6 +2812,8 @@ public sealed class LayoutEditor
 			_box.ReleaseMouseCapture();
 		}
 		_guide.Clear();
+		_shade.Hide();
+		HideSizeTips();
 		if (!active)
 		{
 			return;
@@ -2464,7 +2871,7 @@ public sealed class LayoutEditor
 		{
 			return;
 		}
-		_box.CompactCells(pinned, false, LayoutEditPrefs.AutoPack);
+		_box.CompactCells(pinned, false, AutoPack);
 		int cols = LayoutGrid.Columns(_state.Page);
 		foreach (LayoutCell cell in _box.Cells)
 		{
@@ -2523,7 +2930,7 @@ public sealed class LayoutEditor
 		{
 			LayoutGuideResult guides = LayoutGuides.Align(rect.Value, OtherRects(primary, true), LayoutGuides.Threshold);
 			// 「自动靠拢」关:只画对齐辅助线,不做磁性吸附(不再"自动靠到旁边的块上")
-			bool magnet = LayoutEditPrefs.AutoPack && _gesture == "move" && guides.HasSnap;
+			bool magnet = AutoPack && _gesture == "move" && guides.HasSnap;
 			// 磁性吸附"吸上 / 松开 / 换线"的那一下:不硬跳,被拖块用 90ms 短动画从上一帧的位置滑过去
 			double snapDx = (magnet ? guides.Dx : 0.0);
 			double snapDy = (magnet ? guides.Dy : 0.0);
@@ -2576,12 +2983,13 @@ public sealed class LayoutEditor
 		_guide.Clear();
 		if (_gesture == "resize")
 		{
-			// 卡片按像素实时变大小(最窄 2 列,最矮 56px)
-			double minW = Math.Max(1.0, _box.ColumnWidthValue * Math.Min(2, cols) + _box.Gap * (Math.Min(2, cols) - 1));
+			// 卡片实时变大小(最窄 = max(2 列, 块自己的 MinCols),最矮 56px)
+			int minCols = LayoutGestureRules.SideBySideMinWidth(MinColsOf(primary, cols), cols);
+			double minW = Math.Max(1.0, _box.ColumnWidthValue * minCols + _box.Gap * (minCols - 1));
 			LayoutRect live = LayoutMotion.ResizePreview(_gestureAnchor, _gestureHandle, dx, dy, minW, LayoutMotion.MinHeightPx);
-			_box.ResizeFloat(primary, live);
 			if (_pixelHeightGesture)
 			{
+				_box.ResizeFloat(primary, live);
 				// 下边整条边 = 像素高度(4px 吸附,最小 56):占位框显示吸附后的高度;其它块松手后再让位
 				double px = LayoutMotion.SnapPixelHeight(_gestureStartHeight, dy);
 				if (px != _lastSnapPx)
@@ -2597,7 +3005,18 @@ public sealed class LayoutEditor
 			int stepY = (int)Math.Round(dy / rowStep);
 			LayoutCell probe = from.Clone();
 			LayoutGrid.ResizeCell(probe, _gestureHandle, stepX, stepY, cols);
-			ClampMinWidth(probe, cols);
+			ClampMinWidth(probe, cols, minCols);
+			// 右边缘:宽度只按整列变化 —— 浮起的卡片直接显示吸附后的整列宽度,并提示「N / 列数」
+			if (_gestureHandle == "e")
+			{
+				double snappedW = probe.W * _box.ColumnWidthValue + Math.Max(0, probe.W - 1) * _box.Gap;
+				live = new LayoutRect(live.X, live.Y, Math.Max(1.0, snappedW), live.H);
+				if (_cards.TryGetValue(primary, out LayoutCard? sized))
+				{
+					sized.ShowSizeTip(LayoutEditRules.SizeTip(probe.W, cols));
+				}
+			}
+			_box.ResizeFloat(primary, live);
 			if (probe.W == _lastSnapW && probe.H == _lastSnapH && probe.X == _lastDropX && probe.Y == _lastDropY)
 			{
 				return;
@@ -2832,19 +3251,26 @@ public sealed class LayoutEditor
 			pinned.Add(primary);
 		}
 		_box.RequestFlip();
-		_box.CompactCells(pinned, swapX, LayoutEditPrefs.AutoPack);
+		_box.CompactCells(pinned, swapX, AutoPack);
 	}
 
 	// 最小宽度:12 列网格下不小于 2 列(1 列宽会把标题挤成竖排)
 	private static void ClampMinWidth(LayoutCell cell, int cols)
 	{
+		ClampMinWidth(cell, cols, 2);
+	}
+
+	// 最小宽度:不小于 min 列(全局下限 2 列;拖右边缘时叠加块自己的 MinCols,§5.1)
+	private static void ClampMinWidth(LayoutCell cell, int cols, int min)
+	{
 		if (cols < 2 || cell == null)
 		{
 			return;
 		}
-		if (cell.W < 2)
+		int floor = Math.Max(1, Math.Min(cols, Math.Max(2, min)));
+		if (cell.W < floor)
 		{
-			cell.W = 2;
+			cell.W = floor;
 		}
 		if (cell.X + cell.W > cols)
 		{
@@ -2909,13 +3335,36 @@ public sealed class LayoutEditor
 	// 选择态可视化(多选:主题色加粗描边 + 更深的蒙版)
 	private void UpdateSelectionVisual()
 	{
-		foreach (UIElement child in _box.Children)
+		foreach (LayoutCard card in _cards.Values)
 		{
-			if (child is LayoutCard card)
-			{
-				card.SetSelected(_edit && _session.IsSelected(card.Spec.Id));
-			}
+			card.SetSelected(_edit && _session.IsSelected(card.Spec.Id));
 		}
+	}
+
+	// 手势结束:收起所有「N / 列数」提示
+	private void HideSizeTips()
+	{
+		foreach (LayoutCard card in _cards.Values)
+		{
+			card.HideSizeTip();
+		}
+	}
+
+	// 事件源是否在「添加」抽屉里(抽屉输入框里的按键不能被当成布局快捷键)
+	private bool IsInDrawer(DependencyObject? source)
+	{
+		DependencyObject? cur = source;
+		int guard = 0;
+		while (cur != null && guard++ < 256)
+		{
+			if (ReferenceEquals(cur, _drawer.Root))
+			{
+				return true;
+			}
+			DependencyObject? parent = (cur is Visual) ? VisualTreeHelper.GetParent(cur) : null;
+			cur = parent ?? LogicalTreeHelper.GetParent(cur);
+		}
+		return false;
 	}
 
 	// ————————————— 键盘 / 撤销重做 / 剪贴板 —————————————
@@ -2924,6 +3373,16 @@ public sealed class LayoutEditor
 	{
 		if (!_edit)
 		{
+			return;
+		}
+		// 抽屉里的输入框:只认 Esc(先关抽屉),其它键交给输入框自己
+		if (_drawer.IsOpen && IsInDrawer(e.OriginalSource as DependencyObject))
+		{
+			if (e.Key == Key.Escape)
+			{
+				_drawer.Close();
+				e.Handled = true;
+			}
 			return;
 		}
 		bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
@@ -2942,13 +3401,18 @@ public sealed class LayoutEditor
 		switch (key)
 		{
 		case LayoutKey.Escape:
-			if (_gesture.Length != 0)
+			// Esc:先取消正在进行的手势,再关抽屉,最后才退出编辑(§5.2)
+			switch (LayoutEditRules.EscapeAction(_gesture.Length != 0, _drawer.IsOpen))
 			{
+			case LayoutEscapeAction.CancelGesture:
 				EndBoxGesture(false, true);
-			}
-			else
-			{
+				break;
+			case LayoutEscapeAction.CloseDrawer:
+				_drawer.Close();
+				break;
+			default:
 				ExitEdit();
+				break;
 			}
 			break;
 		case LayoutKey.Delete:
@@ -2978,41 +3442,15 @@ public sealed class LayoutEditor
 		e.Handled = true;
 	}
 
-	// Delete / Back:只移除**自建块 / 插件块**(内置块的内容属于页面,不允许从布局里删掉);
-	// widgets[] 里的定义不删(数据保留,区块管理在 L6)
+	// Delete / Back(§5.2):内置块 = 隐藏(可在「添加」里找回),自建块 / 插件块 = 从本页删除;
+	// widgets[] 里的定义不删(数据保留,组件管理在设置 → 布局)。列表 / 网格两种模式都生效。
 	private void DeleteSelection()
 	{
-		if (!IsBoxMode || _session.SelectedCount == 0)
+		if (_session.SelectedCount == 0)
 		{
 			return;
 		}
-		PageLayoutV2 page = _state.ToPage();
-		List<BlockLayout> keep = new List<BlockLayout>();
-		int removed = 0;
-		foreach (BlockLayout block in page.Blocks)
-		{
-			if (block == null)
-			{
-				continue;
-			}
-			if (_session.IsSelected(block.Id) && LayoutEngine.IsImplicitRef(block.Id))
-			{
-				removed++;
-				continue;
-			}
-			keep.Add(block);
-		}
-		if (removed == 0)
-		{
-			AppServices.Window?.Toast(I18n.L("内置区块不能移除"), "", ToastKind.Warning);
-			return;
-		}
-		_session.PushUndo(_state.ToPage());
-		page.Blocks = keep;
-		_state = LayoutEngine.LoadState(_pageId, page, _refs);
-		_session.Retain(_state.Order);
-		Persist();
-		Render();
+		HideOrDelete(_session.OrderedSelection(_state.Order));
 	}
 
 	// 方向键微调:grid 走"格",canvas 走"吸附格";Shift = 10px 档(§4.G)
