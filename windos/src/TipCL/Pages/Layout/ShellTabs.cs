@@ -89,6 +89,94 @@ public static class ShellTabs
 		return hidden;
 	}
 
+	// ————— 设置 → 布局的「顶部页签」标签行(R34):拖动 / 方向键排序 + 眼睛开关 + 「设置」锁定 —————
+
+	/// <summary>
+	/// 该页签能不能在界面上隐藏。「设置」锁定:它是布局设置本身的入口,藏掉就回不来了。
+	/// 只约束界面写入(<see cref="SetTabVisible"/>);文档里已经存着的显隐照旧生效,读取规则不变。
+	/// </summary>
+	public static bool CanHide(string? key)
+	{
+		return !string.IsNullOrEmpty(key) && !string.Equals(key, SettingsKey, StringComparison.Ordinal);
+	}
+
+	/// <summary>标签行的显示顺序:先是正在显示的页签(用户顺序),再是被隐藏的(默认顺序)。</summary>
+	public static List<string> ChipOrder(ShellLayout? shell)
+	{
+		List<string> list = OrderedKeys(shell);
+		list.AddRange(HiddenKeys(shell));
+		return list;
+	}
+
+	/// <summary>当前页签是不是出厂时的五项和顺序(「恢复默认」按钮据此置灰)。</summary>
+	public static bool IsDefaultTabs(ShellLayout? shell)
+	{
+		List<string> keys = OrderedKeys(shell);
+		if (keys.Count != BuiltinKeys.Length)
+		{
+			return false;
+		}
+		for (int i = 0; i < keys.Count; i++)
+		{
+			if (!string.Equals(keys[i], BuiltinKeys[i], StringComparison.Ordinal))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/// <summary>
+	/// 把 <paramref name="key"/> 在可见顺序里挪 <paramref name="delta"/> 格(方向键用):越界时原样返回;
+	/// 不在列表里(被隐藏的页签)也原样返回 —— 隐藏项的位置不进文档,挪了也存不住。
+	/// </summary>
+	public static List<string> MoveTab(IReadOnlyList<string>? order, string key, int delta)
+	{
+		List<string> list = (order != null) ? new List<string>(order) : new List<string>();
+		int index = list.IndexOf(key);
+		if (index < 0)
+		{
+			return list;
+		}
+		return MoveTabTo(list, key, index + delta);
+	}
+
+	/// <summary>把 <paramref name="key"/> 挪到可见顺序里的第 <paramref name="index"/> 位(拖动松手用;下标夹到合法范围)。</summary>
+	public static List<string> MoveTabTo(IReadOnlyList<string>? order, string key, int index)
+	{
+		List<string> list = (order != null) ? new List<string>(order) : new List<string>();
+		int from = list.IndexOf(key);
+		if (from < 0)
+		{
+			return list;
+		}
+		list.RemoveAt(from);
+		int target = Math.Max(0, Math.Min(index, list.Count));
+		list.Insert(target, key);
+		return list;
+	}
+
+	/// <summary>
+	/// 拖动中的落点:指针越过了多少个其它标签的中线,就排在第几位。
+	/// <paramref name="otherMidpoints"/> = 除正在拖的那个之外、按显示顺序排列的各标签中线 X。
+	/// </summary>
+	public static int DropIndex(IReadOnlyList<double>? otherMidpoints, double pointerX)
+	{
+		if (otherMidpoints == null || double.IsNaN(pointerX))
+		{
+			return 0;
+		}
+		int index = 0;
+		foreach (double mid in otherMidpoints)
+		{
+			if (pointerX > mid)
+			{
+				index++;
+			}
+		}
+		return index;
+	}
+
 	// ————— 文案与去向 —————
 
 	/// <summary>
@@ -136,7 +224,10 @@ public static class ShellTabs
 
 	// ————— 标题栏元素:只显隐,形态不可改(D-16 是用户定案) —————
 
-	/// <summary>桥接药丸钮是否显示,默认 true。</summary>
+	/// <summary>
+	/// 桥接药丸钮是否显示,默认 true。R34 起设置页不再提供这个开关(用户既定:C 桥只在断开时显示),
+	/// 但已存的值与 <see cref="SetTitlebar"/> 的 bridge 参数都保留,老文档照旧生效。
+	/// </summary>
 	public static bool ShowBridge(ShellLayout? shell)
 	{
 		return shell?.Titlebar?.Bridge ?? true;
@@ -210,9 +301,14 @@ public static class ShellTabs
 		return CurrentShell();
 	}
 
-	/// <summary>显示 / 隐藏单个内置页签,其余顺序不变;返回落盘后的外壳。</summary>
+	/// <summary>显示 / 隐藏单个内置页签,其余顺序不变;「设置」不能隐藏(见 <see cref="CanHide"/>)。返回落盘后的外壳。</summary>
 	public static ShellLayout SetTabVisible(string key, bool visible)
 	{
+		if (!visible && !CanHide(key))
+		{
+			// 锁定项:不写盘,原样返回当前外壳
+			return CurrentShell();
+		}
 		LayoutV2 doc = LayoutStoreV2.Load();
 		List<string> keys = OrderedKeys(doc.Layout.Shell);
 		if (visible)
@@ -255,5 +351,11 @@ public static class ShellTabs
 		doc.Layout.Shell.Titlebar = bar;
 		LayoutStoreV2.Save(doc);
 		return CurrentShell();
+	}
+
+	/// <summary>页签恢复出厂的五项与顺序(设置 → 布局「顶部页签」的「恢复默认」)。标题栏开关不动。</summary>
+	public static ShellLayout ResetTabs()
+	{
+		return SetTabs(BuiltinKeys);
 	}
 }

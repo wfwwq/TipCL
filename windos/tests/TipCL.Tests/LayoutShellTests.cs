@@ -264,12 +264,13 @@ public class LayoutShellTests
 			shell = ShellTabs.SetTabVisible("plugins", true);
 			Assert.Equal(5, shell.Tabs.Count);
 
-			// 全部隐藏 → 回落默认:界面上永远有入口
+			// 全部隐藏:「设置」锁定不能藏(R34),最后只剩它 —— 界面上永远有入口
 			foreach (string key in Builtins)
 			{
 				shell = ShellTabs.SetTabVisible(key, false);
 			}
-			Assert.Equal(Builtins, shell.Tabs.ToArray());
+			Assert.Equal(new[] { "settings" }, shell.Tabs.ToArray());
+			Assert.True(ShellTabs.IsVisible(shell, "settings"));
 		}
 		finally
 		{
@@ -323,6 +324,108 @@ public class LayoutShellTests
 	}
 
 	// ————— 小工具 —————
+
+	// ————— R34:设置 → 布局的页签标签行(拖动 / 方向键排序、眼睛开关、「设置」锁定) —————
+
+	[Fact]
+	public void SettingsTabIsLockedOthersCanHide()
+	{
+		Assert.False(ShellTabs.CanHide("settings"));
+		foreach (string key in new string[4] { "launch", "library", "download", "plugins" })
+		{
+			Assert.True(ShellTabs.CanHide(key));
+		}
+		Assert.False(ShellTabs.CanHide(""));
+		Assert.False(ShellTabs.CanHide(null));
+	}
+
+	[Fact]
+	public void HidingSettingsIsRefusedWithoutWriting()
+	{
+		UseDir();
+		try
+		{
+			ShellTabs.SetTabs(new[] { "launch", "settings" });
+			string before = File.ReadAllText(Path.Combine(_tmp, "ui_layout_v2.json"));
+			ShellLayout shell = ShellTabs.SetTabVisible("settings", false);
+			Assert.Equal(new[] { "launch", "settings" }, ShellTabs.OrderedKeys(shell).ToArray());
+			// 锁定项:一个字节都不写
+			Assert.Equal(before, File.ReadAllText(Path.Combine(_tmp, "ui_layout_v2.json")));
+			// 显示不受限制(老文档 / AI 藏掉了「设置」时,用户仍能在这里把它点回来)
+			ShellTabs.SetTabs(new[] { "launch" });
+			Assert.False(ShellTabs.IsVisible(ShellTabs.CurrentShell(), "settings"));
+			Assert.True(ShellTabs.IsVisible(ShellTabs.SetTabVisible("settings", true), "settings"));
+		}
+		finally
+		{
+			Release();
+		}
+	}
+
+	[Fact]
+	public void ChipOrderPutsHiddenTabsLast()
+	{
+		ShellLayout shell = new ShellLayout { Tabs = new List<string> { "plugins", "launch", "settings" } };
+		Assert.Equal(new[] { "plugins", "launch", "settings", "library", "download" }, ShellTabs.ChipOrder(shell).ToArray());
+		Assert.Equal(Builtins, ShellTabs.ChipOrder(new ShellLayout()).ToArray());
+		Assert.Equal(Builtins, ShellTabs.ChipOrder(null).ToArray());
+	}
+
+	[Fact]
+	public void MoveTabShiftsWithinVisibleOrder()
+	{
+		string[] order = new string[3] { "launch", "library", "settings" };
+		Assert.Equal(new[] { "library", "launch", "settings" }, ShellTabs.MoveTab(order, "launch", 1).ToArray());
+		Assert.Equal(new[] { "launch", "settings", "library" }, ShellTabs.MoveTab(order, "settings", -1).ToArray());
+		// 越界 / 不在列表里(被隐藏的页签) = 原样
+		Assert.Equal(order, ShellTabs.MoveTab(order, "launch", -1).ToArray());
+		Assert.Equal(order, ShellTabs.MoveTab(order, "settings", 1).ToArray());
+		Assert.Equal(order, ShellTabs.MoveTab(order, "plugins", 1).ToArray());
+		Assert.Empty(ShellTabs.MoveTab(null, "launch", 1));
+		// 拖动松手:下标夹到合法范围
+		Assert.Equal(new[] { "settings", "launch", "library" }, ShellTabs.MoveTabTo(order, "settings", 0).ToArray());
+		Assert.Equal(new[] { "library", "settings", "launch" }, ShellTabs.MoveTabTo(order, "launch", 99).ToArray());
+		Assert.Equal(new[] { "launch", "library", "settings" }, ShellTabs.MoveTabTo(order, "launch", -5).ToArray());
+		// 输入不被改动
+		Assert.Equal(new[] { "launch", "library", "settings" }, order);
+	}
+
+	[Fact]
+	public void DropIndexCountsCrossedMidpoints()
+	{
+		double[] mids = new double[3] { 40.0, 120.0, 200.0 };
+		Assert.Equal(0, ShellTabs.DropIndex(mids, 10.0));
+		Assert.Equal(1, ShellTabs.DropIndex(mids, 41.0));
+		Assert.Equal(2, ShellTabs.DropIndex(mids, 150.0));
+		Assert.Equal(3, ShellTabs.DropIndex(mids, 500.0));
+		Assert.Equal(0, ShellTabs.DropIndex(null, 500.0));
+		Assert.Equal(0, ShellTabs.DropIndex(mids, double.NaN));
+	}
+
+	[Fact]
+	public void ResetTabsRestoresDefaultsAndKeepsTitlebar()
+	{
+		UseDir();
+		try
+		{
+			Assert.True(ShellTabs.IsDefaultTabs(new ShellLayout()));
+			ShellTabs.SetTitlebar(ai: false);
+			ShellLayout moved = ShellTabs.SetTabs(new[] { "download", "launch", "settings" });
+			Assert.False(ShellTabs.IsDefaultTabs(moved));
+			Assert.False(ShellTabs.IsDefaultTabs(new ShellLayout { Tabs = new List<string> { "library", "launch", "download", "plugins", "settings" } }));
+			ShellLayout reset = ShellTabs.ResetTabs();
+			Assert.True(ShellTabs.IsDefaultTabs(reset));
+			Assert.Equal(Builtins, ShellTabs.OrderedKeys(reset).ToArray());
+			// 标题栏开关不跟着恢复
+			Assert.False(ShellTabs.ShowAi(reset));
+		}
+		finally
+		{
+			Release();
+		}
+	}
+
+	// ————— 小工具(续) —————
 
 	/// <summary>源码树根(向上找 TipCL.sln),与 StaticInitOrderTests 的做法一致。</summary>
 	private static string Root()

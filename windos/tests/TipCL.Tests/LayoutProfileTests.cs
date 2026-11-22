@@ -559,15 +559,14 @@ public class LayoutProfileTests
 		}
 	}
 
-	// ————— L5b:入口表必须覆盖单块页 —————
+	// ————— L5b:入口表必须覆盖单块页(R34:单块页仍在表里、用 SingleBlock 标出,页面卡片不列;并补上实例库) —————
 
 	[Fact]
 	public void BlockEntryCatalogCoversSingleBlockPages()
 	{
-		// D1 把 LayoutEditor.CanEdit 放宽到 specs ≥ 1 之后,单块页也要有入口:
-		// 设置页「布局」→「页面区块」小节必须能进 settings:network / settings:about 的编辑态
-		Assert.Equal(17, LayoutBlockEntryCatalog.All.Length);
-		Assert.Equal(17, LayoutBlockEntryCatalog.All.Select((LayoutBlockEntryCatalog.Entry e) => e.PageId).Distinct().Count());
+		// 单块页的条目留在表里(标记 = SingleBlock),实例库 library:main 是 R34 补的第 18 项
+		Assert.Equal(18, LayoutBlockEntryCatalog.All.Length);
+		Assert.Equal(18, LayoutBlockEntryCatalog.All.Select((LayoutBlockEntryCatalog.Entry e) => e.PageId).Distinct().Count());
 		Assert.Equal(new string[2] { "settings:network", "settings:about" }, LayoutBlockEntryCatalog.SingleBlockPageIds().ToArray());
 
 		LayoutBlockEntryCatalog.Entry? network = LayoutBlockEntryCatalog.Find("settings:network");
@@ -605,6 +604,7 @@ public class LayoutProfileTests
 	[InlineData("version-manage:embedded", "library", -1)]
 	[InlineData("install", "download", -1)]
 	[InlineData("settings:layout", "settings", 7)]
+	[InlineData("library:main", "library", -1)]
 	public void BlockEntryCatalogRegistersNewlySplitPages(string pageId, string navId, int settingsView)
 	{
 		LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(pageId);

@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
 using TipCL.Pages.Layout;
 using TipCL.Services;
 
@@ -12,17 +17,22 @@ using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Pages;
 
-// L5(设计 §4.C 的「布局」视图 + §4.G 的 JSON 编辑器):设置页第 8 个视图,7 个小节 ——
-//   a 外观与密度 / b 页签与标题栏 / c 页面区块入口 / d 分栏比例(L4 的 SplitCatalog 直接渲染成表)/
-//   e 自建区块(位置先留好,L6 落地后接)/ f 整机布局方案(增删改查 + 导入导出)/ g 高级:布局 JSON 编辑器。
-// 三条硬规矩:
+// 设置 → 布局(R34 布局 v3,对应 layout3 第二张):按「要做的事」分五组 ——
+//   外观(区块间距三段)/ 导航(顶部页签可拖动排序 + 眼睛开关、标题栏三个勾选项)/
+//   页面(15 张缩略图卡片:默认 / 已自定义 + 编辑 / 恢复默认)/ 方案(卡片:应用 / ⋯)/
+//   高级(默认折叠:分栏宽度一行、网页和按钮组件的全局开关、组件管理、布局文件)。
+// 三条硬规矩不变:
 //   1) 落盘唯一入口 = LayoutStoreV2(load → 改 → Save);本文件绝不自己写布局文件(导出到用户选定的路径除外);
 //   2) 方案应用 = **原子替换** layout(整个 LayoutBody 换掉)再 Save,v1 由 v2 单向写通(不往 v1 塞新字段);
-//   3) 本视图自带 18px 左留白(PageBase.ScrollBody 的 SPanel Margin = 18,14,18,16)——L4 把设置页左导航改成
-//      分栏后,_view.Margin = -18 归位、分隔条正好占住视图左边那 18px,新视图不留白就会被分隔条盖住。
+//   3) 本视图自带 18px 左留白(PageBase.ScrollBody 的 SPanel Margin = 18,14,18,16)——设置页左导航是分栏,
+//      _view.Margin = -18 归位、分隔条正好占住视图左边那 18px,新视图不留白就会被分隔条盖住。
+// 区块 id 沿用 R33 的七个(appearance / shell / blocks / splits / widgets / profiles / json):用户已存过的
+// 本页布局照旧对得上;「高级」一组拆在 splits(组标题 + 折叠头 + 分栏宽度)/ widgets / json 三块里,
+// 折叠时后两块内容收起。界面文案一律不出现文件名、包编号、#编号、块 id 这类内部说法
+// (SettingsLayoutV3Tests 扫描本文件全部 I18n.L 字面量把关)。
 //
-// 纯逻辑(LayoutProfiles / LayoutJsonEditor)刻意零 WPF 依赖:net8 测试宿主能直接断言方案增删改查、
-// 原子替换、导入校验与 JSON 编辑器的逐字段错误(见 tests/TipCL.Tests/LayoutProfileTests.cs)。
+// 纯逻辑(LayoutPageCards / LayoutSplitSummary / LayoutProfiles / LayoutJsonEditor)刻意零 WPF 依赖:
+// net8 测试宿主能直接断言页面卡片、已自定义判定、方案增删改查与 JSON 编辑器的逐字段错误。
 public sealed partial class SettingsPage
 {
 	/// <summary>「布局」视图在视图表/左导航里的下标(第 8 个)。</summary>
@@ -31,7 +41,7 @@ public sealed partial class SettingsPage
 	/// <summary>「布局」视图的区块宿主 pageId(区块:appearance / shell / blocks / splits / widgets / profiles / json)。</summary>
 	internal const string LayoutViewPageId = "settings:layout";
 
-	/// <summary>跳到「设置 → 布局」视图(全局右键菜单的「布局设置...」用)。</summary>
+	/// <summary>跳到「设置 → 布局」视图(全局右键菜单的「布局设置...」、编辑条「⋯ → 整套布局与方案…」用)。</summary>
 	public void OpenLayoutView()
 	{
 		try
@@ -44,16 +54,34 @@ public sealed partial class SettingsPage
 		}
 	}
 
-	// 页面区块入口表在 LayoutBlockEntryCatalog(纯数据、零 WPF 依赖,测试直接断言)。
-	// L5b:D1 把 LayoutEditor.CanEdit 从 specs ≥ 2 放宽到 ≥ 1,单块页(settings:network / settings:about)
-	// 也能进编辑态,所以表里现在就列全 12 个 BlockHost 宿主(按钮仍以 host.Editor.CanEdit 为最终门槛)。
+	/// <summary>展开 / 收起「高级」组(截图工具的 --expand advanced 用;默认折叠)。</summary>
+	public void ExpandLayoutAdvanced(bool open = true)
+	{
+		if (_layoutAdvancedOpen == open)
+		{
+			return;
+		}
+		_layoutAdvancedOpen = open;
+		RefreshLayoutView();
+	}
 
 	private bool _layoutRebuilding;
 
-	// JSON 编辑器的草稿:重建视图时保留用户还没应用的文本
-	private string _layoutJsonText = "";
+	// 以下开合状态跨视图重建保留(每次保存 / 刷新都会重建整个布局视图)
+	private bool _layoutAdvancedOpen;
 
-	private SPanel? _layoutJsonIssues;
+	private bool _layoutAllPages;
+
+	private bool _layoutWidgetPanelOpen;
+
+	private bool _layoutWidgetCreateOpen;
+
+	// 顶部页签的标签行:拖动 / 方向键 / 眼睛开关只重画这一行(不重建整个视图,焦点留在标签上)
+	private SPanel? _layoutTabChips;
+
+	private Button? _layoutTabReset;
+
+	private TabChipDrag? _tabChipDrag;
 
 	// ————— 视图装配 —————
 
@@ -63,19 +91,17 @@ public sealed partial class SettingsPage
 		_layoutRebuilding = true;
 		try
 		{
-			// 布局自定义:每个小节(分组标题 + 卡片)一个区块,页标题与说明跟着第一块走;
-			// 宿主默认边距 18,14,18,16 + 块间距 10 = 原 ScrollBody 的 SPanel(间距 10),默认外观逐像素不变。
-			// 本视图每次切进来都重建,宿主也跟着重建(布局从 v2 文档读,不丢)。
-			SPanel first = Ui.V(10.0, PTitle(I18n.L("布局")), Ui.Muted(I18n.L("默认布局 = 各页现状;这里的改动即时写进 ui_layout_v2.json,老版本程序照旧读得懂")).M(0.0, 0.0, 0.0, 4.0), LayoutSection(I18n.L("外观与密度"), LayoutAppearanceRows()));
+			// 每组(组标题 + 卡片)一个区块,页标题与说明跟着第一块走;宿主默认边距 18,14,18,16 + 块间距 10。
+			SPanel first = Ui.V(10.0, PTitle(I18n.L("布局")), Ui.Muted(I18n.L("调整导航、各页面的排列，或者保存成方案。改动即时生效，随时可以恢复默认。")).Wrap().M(0.0, 0.0, 0.0, 4.0), LayoutGroup(I18n.L("外观"), Ui.Card(Rows(LayoutAppearanceRows()))));
 			return new BlockHost(LayoutViewPageId, new List<BlockSpec>
 			{
-				new BlockSpec { Id = "appearance", Title = I18n.L("外观与密度"), Content = first },
-				new BlockSpec { Id = "shell", Title = I18n.L("页签与标题栏"), Content = LayoutSection(I18n.L("页签与标题栏"), LayoutShellRows()) },
-				new BlockSpec { Id = "blocks", Title = I18n.L("页面区块"), Content = LayoutSection(I18n.L("页面区块"), LayoutBlockRows()) },
-				new BlockSpec { Id = "splits", Title = I18n.L("分栏比例"), Content = LayoutSection(I18n.L("分栏比例"), LayoutSplitRows()) },
-				new BlockSpec { Id = "widgets", Title = I18n.L("自建区块"), Content = LayoutSection(I18n.L("自建区块"), LayoutWidgetRows()) },
-				new BlockSpec { Id = "profiles", Title = I18n.L("布局方案"), Content = LayoutSection(I18n.L("布局方案"), LayoutProfileRows()) },
-				new BlockSpec { Id = "json", Title = I18n.L("布局 JSON"), Content = LayoutJsonCard() }
+				new BlockSpec { Id = "appearance", Title = I18n.L("外观"), Content = first },
+				new BlockSpec { Id = "shell", Title = I18n.L("导航"), Content = LayoutGroup(I18n.L("导航"), LayoutNavCard()) },
+				new BlockSpec { Id = "blocks", Title = I18n.L("页面"), Content = LayoutPagesGroup() },
+				new BlockSpec { Id = "profiles", Title = I18n.L("方案"), Content = LayoutProfilesGroup() },
+				new BlockSpec { Id = "splits", Title = I18n.L("高级"), Content = LayoutAdvancedHead() },
+				new BlockSpec { Id = "widgets", Title = I18n.L("网页、按钮与组件"), Content = LayoutAdvancedWidgets() },
+				new BlockSpec { Id = "json", Title = I18n.L("布局文件"), Content = LayoutAdvancedFile() }
 			}).Root;
 		}
 		finally
@@ -97,120 +123,260 @@ public sealed partial class SettingsPage
 		}
 	}
 
-	// 一个小节 = 分组标题 + 卡片(行与行之间有通到卡片两端的分隔线,与设置页其它小节同一套视觉)
-	private static UIElement LayoutSection(string title, params FrameworkElement[] rows)
+	// ————— 共用小件 —————
+
+	// 组标题(卡片外的灰色小字)+ 右侧的小按钮
+	private static FrameworkElement LayoutGroupHead(string title, params UIElement[] right)
 	{
-		return Ui.V(10.0, Gt(title), Ui.Card(Rows(rows)));
+		Grid head = Ui.G(null, "*,Auto");
+		TextBlock text = Gt(title);
+		text.VerticalAlignment = VerticalAlignment.Bottom;
+		head.Add(text, 0);
+		if (right != null && right.Length > 0)
+		{
+			SPanel buttons = Ui.H(6.0, right);
+			buttons.Margin = new Thickness(0.0, 0.0, 0.0, 4.0);
+			buttons.VerticalAlignment = VerticalAlignment.Bottom;
+			head.Add(buttons, 0, 1);
+		}
+		return head;
 	}
 
-	// ————— a 外观与密度 —————
+	// 一组 = 组标题 + 内容(卡片 / 卡片网格),与设置页其它小节同一套间距
+	private static UIElement LayoutGroup(string title, UIElement body, params UIElement[] right)
+	{
+		return Ui.V(10.0, LayoutGroupHead(title, right), body);
+	}
+
+	// 一行设置:左边粗体标题 + 一句灰色说明,右边控件
+	private static Grid LayoutRow(string title, string? desc, UIElement? right)
+	{
+		Grid row = Ui.G(null, "*,Auto");
+		TextBlock? sub = string.IsNullOrEmpty(desc) ? null : Ui.Small(desc!).Wrap();
+		SPanel text = Ui.V(2.0, Ui.Txt(title, 13.0, bold: true), sub);
+		text.VerticalAlignment = VerticalAlignment.Center;
+		text.Margin = new Thickness(0.0, 0.0, 16.0, 0.0);
+		row.Add(text, 0);
+		if (right != null)
+		{
+			right.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+			row.Add(right, 0, 1);
+		}
+		row.Margin = new Thickness(0.0, 4.0, 0.0, 4.0);
+		return row;
+	}
+
+	// 组标题旁的小按钮(高 26,比卡片里的按钮矮一档)
+	private static Button SmallBtn(string text, BtnKind kind, RoutedEventHandler? click)
+	{
+		Button button = Ui.Btn(text, kind, click);
+		button.Height = 26.0;
+		button.Padding = new Thickness(10.0, 0.0, 10.0, 0.0);
+		button.VerticalAlignment = VerticalAlignment.Center;
+		return button;
+	}
+
+	// 「高级」折叠时 widgets / json 两块的内容:收起(宿主照常持有这两块,id 与已存布局对得上)
+	private static UIElement CollapsedBlock()
+	{
+		return new Border
+		{
+			Visibility = Visibility.Collapsed
+		};
+	}
+
+	// 资源键可能来自别的包(WP-L0 新增的令牌):有就动态引用,没有就用兜底键,绝不抛
+	private static void SetBrushOr(FrameworkElement el, DependencyProperty property, string key, string fallback)
+	{
+		object? found = null;
+		try
+		{
+			found = Application.Current?.TryFindResource(key);
+		}
+		catch
+		{
+			found = null;
+		}
+		el.SetResourceReference(property, (found != null) ? key : fallback);
+	}
+
+	// 矢量图标(16×16 视框、描边绘制):优先用样式里统一提供的几何,找不到用这里的兜底路径
+	private static FrameworkElement LayoutIcon(string geometryKey, string fallbackData, double size, string brushKey, double stroke = 1.4)
+	{
+		Geometry? geometry = null;
+		try
+		{
+			geometry = Application.Current?.TryFindResource(geometryKey) as Geometry;
+		}
+		catch
+		{
+			geometry = null;
+		}
+		if (geometry == null)
+		{
+			try
+			{
+				geometry = Geometry.Parse(fallbackData);
+			}
+			catch
+			{
+				geometry = Geometry.Empty;
+			}
+		}
+		System.Windows.Shapes.Path path = new System.Windows.Shapes.Path
+		{
+			Data = geometry,
+			StrokeThickness = stroke,
+			StrokeStartLineCap = PenLineCap.Round,
+			StrokeEndLineCap = PenLineCap.Round,
+			StrokeLineJoin = PenLineJoin.Round
+		};
+		path.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, brushKey);
+		Canvas box = new Canvas
+		{
+			Width = 16.0,
+			Height = 16.0
+		};
+		box.Children.Add(path);
+		return new Viewbox
+		{
+			Width = size,
+			Height = size,
+			Child = box,
+			VerticalAlignment = VerticalAlignment.Center,
+			SnapsToDevicePixels = true
+		};
+	}
+
+	private const string GeoEyeFallback = "M1.5,8 C3.2,4.6 5.4,3.2 8,3.2 C10.6,3.2 12.8,4.6 14.5,8 C12.8,11.4 10.6,12.8 8,12.8 C5.4,12.8 3.2,11.4 1.5,8 Z M8,5.8 A2.2,2.2 0 1 0 8,10.2 A2.2,2.2 0 1 0 8,5.8 Z";
+
+	private const string GeoEyeOffFallback = "M1.5,8 C3.2,4.6 5.4,3.2 8,3.2 C10.6,3.2 12.8,4.6 14.5,8 C12.8,11.4 10.6,12.8 8,12.8 C5.4,12.8 3.2,11.4 1.5,8 Z M2.5,2.5 L13.5,13.5";
+
+	private const string GeoLockFallback = "M4,7.5 L12,7.5 L12,13.5 L4,13.5 Z M5.5,7.5 L5.5,5.5 A2.5,2.5 0 0 1 10.5,5.5 L10.5,7.5";
+
+	private const string GeoGripFallback = "M6,4 L6.01,4 M10,4 L10.01,4 M6,8 L6.01,8 M10,8 L10.01,8 M6,12 L6.01,12 M10,12 L10.01,12";
+
+	// 虚线空状态框(没有方案时)
+	private static FrameworkElement EmptyBox(string text)
+	{
+		Grid grid = new Grid
+		{
+			MinHeight = 56.0
+		};
+		System.Windows.Shapes.Rectangle frame = new System.Windows.Shapes.Rectangle
+		{
+			RadiusX = 12.0,
+			RadiusY = 12.0,
+			StrokeThickness = 1.0,
+			StrokeDashArray = new DoubleCollection { 4.0, 3.0 },
+			SnapsToDevicePixels = true
+		};
+		frame.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "B.Line");
+		TextBlock label = Ui.Small(text).Wrap();
+		label.TextAlignment = TextAlignment.Center;
+		label.HorizontalAlignment = HorizontalAlignment.Center;
+		label.VerticalAlignment = VerticalAlignment.Center;
+		label.Margin = new Thickness(12.0, 10.0, 12.0, 10.0);
+		grid.Children.Add(frame);
+		grid.Children.Add(label);
+		return grid;
+	}
+
+	// 琥珀色提示条(网页 / 按钮组件开关打开后出现)
+	private static Border WarnBox(string text)
+	{
+		TextBlock label = Ui.Txt(text, 12.0).Wrap();
+		Border box = new Border
+		{
+			CornerRadius = new CornerRadius(8.0),
+			Padding = new Thickness(12.0, 8.0, 12.0, 8.0),
+			Child = label
+		};
+		SetBrushOr(box, Border.BackgroundProperty, "B.WarnSoft", "B.Paper2");
+		SetBrushOr(label, TextBlock.ForegroundProperty, "B.WarnInk", "B.Warn");
+		return box;
+	}
+
+	// ————— 1 外观 —————
 
 	private FrameworkElement[] LayoutAppearanceRows()
 	{
 		ShellLayout shell = ShellTabs.CurrentShell();
-		ComboBox density = Ui.Combo(new string[3] { I18n.L("紧凑"), I18n.L("标准"), I18n.L("宽松") }, DensityLabel(shell.Density), 150.0);
-		density.SelectionChanged += delegate
+		string current = LayoutPageCards.NormalizeDensity(shell.Density);
+		string[] keys = LayoutPageCards.DensityKeys;
+		SPanel rail = Ui.H(0.0);
+		ToggleButton[] items = new ToggleButton[keys.Length];
+		for (int i = 0; i < keys.Length; i++)
 		{
-			if (_layoutRebuilding)
+			int k = i;
+			ToggleButton item = new ToggleButton
 			{
-				return;
-			}
-			WriteLayout(delegate(LayoutV2 doc)
+				Style = Ui.S("Seg.Item"),
+				Content = LayoutPageCards.DensityLabel(keys[i]),
+				IsChecked = string.Equals(keys[i], current, StringComparison.Ordinal)
+			};
+			item.Click += delegate
 			{
-				doc.Layout.Shell.Density = DensityKey(density.SelectedIndex);
-			}, I18n.L("布局已保存"));
-		};
-		return new FrameworkElement[1]
-		{
-			Ui.Field(I18n.L("密度"), density, I18n.L("只影响区块间距档(紧凑 6 / 标准 10 / 宽松 14)"))
-		};
-	}
-
-	private static string DensityKey(int index)
-	{
-		return index switch
-		{
-			0 => LayoutSchema.DensityCompact,
-			2 => LayoutSchema.DensityLoose,
-			_ => LayoutSchema.DensityStandard
-		};
-	}
-
-	private static string DensityLabel(string? density)
-	{
-		return density switch
-		{
-			LayoutSchema.DensityCompact => I18n.L("紧凑"),
-			LayoutSchema.DensityLoose => I18n.L("宽松"),
-			_ => I18n.L("标准")
-		};
-	}
-
-	// ————— b 页签与标题栏(Q1 只做顶栏页签 + 标题栏元素显隐) —————
-
-	private FrameworkElement[] LayoutShellRows()
-	{
-		ShellLayout shell = ShellTabs.CurrentShell();
-		List<FrameworkElement> rows = new List<FrameworkElement>();
-		List<string> order = ShellTabs.OrderedKeys(shell);
-		foreach (string key in ShellTabs.BuiltinKeys)
-		{
-			string tab = key;
-			int index = order.IndexOf(tab);
-			CheckBox visible = Ui.Switch(ShellTabs.IsVisible(shell, tab));
-			visible.Checked += delegate
-			{
-				if (!_layoutRebuilding)
+				// 分段只认「选中哪一档」:点已选中的那档不会把它点成未选中
+				for (int j = 0; j < items.Length; j++)
 				{
-					ShellTabs.SetTabVisible(tab, visible: true);
-					RefreshLayoutView();
+					items[j].IsChecked = j == k;
 				}
-			};
-			visible.Unchecked += delegate
-			{
-				if (!_layoutRebuilding)
+				if (_layoutRebuilding || string.Equals(keys[k], current, StringComparison.Ordinal))
 				{
-					ShellTabs.SetTabVisible(tab, visible: false);
-					RefreshLayoutView();
+					return;
 				}
+				current = keys[k];
+				string key = keys[k];
+				WriteLayout(delegate(LayoutV2 doc)
+				{
+					doc.Layout.Shell.Density = key;
+				}, I18n.L("区块间距:{0}", LayoutPageCards.DensityLabel(key)));
 			};
-			Button up = Ui.IconBtn("\ue70e", I18n.L("上移"), null, 12.0);
-			Button down = Ui.IconBtn("\ue70d", I18n.L("下移"), null, 12.0);
-			up.IsEnabled = index > 0;
-			down.IsEnabled = index >= 0 && index < order.Count - 1;
-			up.Click += delegate
-			{
-				MoveTab(order, tab, -1);
-			};
-			down.Click += delegate
-			{
-				MoveTab(order, tab, 1);
-			};
-			rows.Add(Ui.Field(ShellTabs.Label(tab), Ui.H(8.0, visible, up, down), I18n.L("页签顺序与显隐")));
+			items[i] = item;
+			rail.Children.Add(item);
 		}
-		TitlebarLayout bar = shell.Titlebar ?? new TitlebarLayout();
-		rows.Add(TitlebarRow(I18n.L("桥接"), bar.Bridge, delegate(bool on)
+		Border seg = new Border
 		{
-			ShellTabs.SetTitlebar(bridge: on);
-		}));
-		rows.Add(TitlebarRow(I18n.L("AI"), bar.Ai, delegate(bool on)
+			Style = Ui.S("Seg.Rail"),
+			Child = rail,
+			HorizontalAlignment = HorizontalAlignment.Right
+		};
+		return new FrameworkElement[1] { LayoutRow(I18n.L("区块间距"), I18n.L("所有可以自定义的页面一起生效"), seg) };
+	}
+
+	// ————— 2 导航:顶部页签(拖动排序 + 眼睛开关,「设置」锁定)+ 标题栏三个勾选项 —————
+
+	private Border LayoutNavCard()
+	{
+		_layoutTabReset = SmallBtn(I18n.L("恢复默认"), BtnKind.Ghost, delegate
+		{
+			ShellTabs.ResetTabs();
+			RenderTabChips(null);
+			PageBase.Toast(I18n.L("页签已恢复默认"), "", ToastKind.Success);
+		});
+		_layoutTabChips = Ui.H(6.0);
+		_layoutTabChips.Margin = new Thickness(0.0, 0.0, 0.0, 4.0);
+		RenderTabChips(null);
+		FrameworkElement tabs = Ui.V(8.0, LayoutRow(I18n.L("顶部页签"), I18n.L("拖动调整顺序，点眼睛隐藏；「设置」不能隐藏"), _layoutTabReset), _layoutTabChips);
+		ShellLayout shell = ShellTabs.CurrentShell();
+		// 桥接按钮不再提供开关(用户既定:C 桥只在断开时显示);已存的值与 ShellTabs.SetTitlebar(bridge:) 都保留
+		SPanel options = Ui.H(8.0, TitlebarOption(I18n.L("AI 按钮"), ShellTabs.ShowAi(shell), delegate(bool on)
 		{
 			ShellTabs.SetTitlebar(ai: on);
-		}));
-		rows.Add(TitlebarRow(I18n.L("主题"), bar.Theme, delegate(bool on)
+		}), TitlebarOption(I18n.L("主题切换"), ShellTabs.ShowTheme(shell), delegate(bool on)
 		{
 			ShellTabs.SetTitlebar(theme: on);
-		}));
-		rows.Add(TitlebarRow(I18n.L("账号"), bar.Account, delegate(bool on)
+		}), TitlebarOption(I18n.L("账号"), ShellTabs.ShowAccount(shell), delegate(bool on)
 		{
 			ShellTabs.SetTitlebar(account: on);
 		}));
-		return rows.ToArray();
+		return Ui.Card(Rows(tabs, LayoutRow(I18n.L("标题栏"), I18n.L("隐藏 AI 按钮后仍可按 Ctrl+K 打开"), options)));
 	}
 
-	private FrameworkElement TitlebarRow(string label, bool value, Action<bool> write)
+	private FrameworkElement TitlebarOption(string label, bool value, Action<bool> write)
 	{
-		CheckBox box = Ui.Switch(value);
+		CheckBox box = Ui.Check(label, value);
 		box.Checked += delegate
 		{
 			if (!_layoutRebuilding)
@@ -225,43 +391,515 @@ public sealed partial class SettingsPage
 				write(obj: false);
 			}
 		};
-		return Ui.Field(I18n.L("标题栏:{0}", label), box, I18n.L("只隐藏 / 显示,不改形态"));
+		Border chip = new Border
+		{
+			CornerRadius = new CornerRadius(8.0),
+			BorderThickness = new Thickness(1.0),
+			Padding = new Thickness(8.0, 5.0, 10.0, 5.0),
+			Child = box
+		};
+		chip.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		return chip;
 	}
 
-	private void MoveTab(List<string> order, string key, int direction)
+	// 重画标签行(顺序 = ShellTabs.ChipOrder:正在显示的在前,隐藏的排在后面);focusKey 非空时把焦点还给那个标签
+	private void RenderTabChips(string? focusKey)
 	{
-		List<string> list = new List<string>(order);
-		int index = list.IndexOf(key);
-		int target = index + direction;
-		if (index < 0 || target < 0 || target >= list.Count)
+		SPanel? host = _layoutTabChips;
+		if (host == null)
 		{
 			return;
 		}
-		list.RemoveAt(index);
-		list.Insert(target, key);
-		ShellTabs.SetTabs(list);
+		_tabChipDrag = null;
+		host.Children.Clear();
+		ShellLayout shell = ShellTabs.CurrentShell();
+		ContentControl? focus = null;
+		foreach (string key in ShellTabs.ChipOrder(shell))
+		{
+			ContentControl chip = TabChip(key, ShellTabs.IsVisible(shell, key));
+			host.Children.Add(chip);
+			if (focusKey != null && string.Equals(key, focusKey, StringComparison.Ordinal))
+			{
+				focus = chip;
+			}
+		}
+		if (_layoutTabReset != null)
+		{
+			_layoutTabReset.IsEnabled = !ShellTabs.IsDefaultTabs(shell);
+		}
+		if (focus != null)
+		{
+			ContentControl target = focus;
+			base.Dispatcher.BeginInvoke((Action)delegate
+			{
+				target.Focus();
+				Keyboard.Focus(target);
+			}, System.Windows.Threading.DispatcherPriority.Input);
+		}
+	}
+
+	private ContentControl TabChip(string key, bool visible)
+	{
+		bool locked = !ShellTabs.CanHide(key);
+		string label = ShellTabs.Label(key);
+		Border face = new Border
+		{
+			CornerRadius = new CornerRadius(8.0),
+			BorderThickness = new Thickness(1.0),
+			Padding = new Thickness(8.0, 0.0, 4.0, 0.0),
+			Height = 32.0
+		};
+		face.SetResourceReference(Border.BackgroundProperty, "B.Paper2");
+		face.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+		TextBlock name = Ui.Txt(label, 13.0);
+		name.VerticalAlignment = VerticalAlignment.Center;
+		if (!visible)
+		{
+			name.TextDecorations = System.Windows.TextDecorations.Strikethrough;
+		}
+		string geometry = (visible && locked) ? "Geo.Lock" : (visible ? "Geo.Eye" : "Geo.EyeOff");
+		string fallback = (visible && locked) ? GeoLockFallback : (visible ? GeoEyeFallback : GeoEyeOffFallback);
+		Button eye = new Button
+		{
+			Style = Ui.S("Btn.Icon"),
+			Width = 24.0,
+			Height = 24.0,
+			Padding = new Thickness(0.0),
+			Content = LayoutIcon(geometry, fallback, 14.0, "B.InkSoft")
+		};
+		string tip = (visible && locked) ? I18n.L("「{0}」不能隐藏", label) : (visible ? I18n.L("隐藏「{0}」", label) : I18n.L("显示「{0}」", label));
+		eye.ToolTip = tip;
+		AutomationProperties.SetName(eye, tip);
+		ToolTipService.SetShowOnDisabled(eye, true);
+		eye.IsEnabled = !(visible && locked);
+		eye.Click += delegate
+		{
+			ToggleTab(key, !visible);
+		};
+		face.Child = Ui.H(6.0, LayoutIcon("Geo.Grip", GeoGripFallback, 12.0, "B.InkFaint", 1.8), name, eye);
+		ContentControl chip = new ContentControl
+		{
+			Content = face,
+			Tag = key,
+			Focusable = true,
+			IsTabStop = true,
+			FocusVisualStyle = null,
+			Opacity = (visible ? 1.0 : 0.55)
+		};
+		AutomationProperties.SetName(chip, I18n.L("页签「{0}」", label));
+		chip.GotKeyboardFocus += delegate
+		{
+			face.SetResourceReference(Border.BorderBrushProperty, "B.Accent");
+		};
+		chip.LostKeyboardFocus += delegate
+		{
+			if (!chip.IsKeyboardFocusWithin)
+			{
+				face.SetResourceReference(Border.BorderBrushProperty, "B.Line");
+			}
+		};
+		if (!visible)
+		{
+			// 隐藏项的位置不进文档(shell.tabs 只存正在显示的页签),所以不参与排序
+			chip.ToolTip = I18n.L("先点眼睛显示，再拖动调整位置");
+			return chip;
+		}
+		chip.ToolTip = I18n.L("拖动调整顺序；选中后也可以按左右方向键移动");
+		chip.Cursor = Cursors.SizeWE;
+		chip.PreviewMouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e)
+		{
+			if (IsInsideButton(e.OriginalSource as DependencyObject, chip))
+			{
+				return;
+			}
+			BeginTabChipDrag(chip, key, e);
+		};
+		chip.MouseMove += delegate(object sender, MouseEventArgs e)
+		{
+			DragTabChip(e);
+		};
+		chip.MouseLeftButtonUp += delegate
+		{
+			EndTabChipDrag();
+		};
+		chip.LostMouseCapture += delegate
+		{
+			EndTabChipDrag();
+		};
+		chip.PreviewKeyDown += delegate(object sender, KeyEventArgs e)
+		{
+			if (!ReferenceEquals(e.OriginalSource, chip))
+			{
+				return;
+			}
+			int delta = (e.Key == Key.Left) ? (-1) : ((e.Key == Key.Right) ? 1 : 0);
+			if (delta == 0)
+			{
+				return;
+			}
+			e.Handled = true;
+			MoveTabChip(key, delta);
+		};
+		return chip;
+	}
+
+	private static bool IsInsideButton(DependencyObject? source, DependencyObject stop)
+	{
+		DependencyObject? node = source;
+		int guard = 0;
+		while (node != null && !ReferenceEquals(node, stop) && guard++ < 32)
+		{
+			if (node is ButtonBase)
+			{
+				return true;
+			}
+			node = (node is Visual || node is System.Windows.Media.Media3D.Visual3D) ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
+		}
+		return false;
+	}
+
+	private void ToggleTab(string key, bool show)
+	{
+		if (!show && !ShellTabs.CanHide(key))
+		{
+			return;
+		}
+		string label = ShellTabs.Label(key);
+		ShellTabs.SetTabVisible(key, show);
+		RenderTabChips(key);
+		PageBase.Toast(show ? I18n.L("已显示「{0}」页签", label) : I18n.L("已隐藏「{0}」页签", label), "", ToastKind.Success);
+	}
+
+	// 方向键:在正在显示的页签里左右挪一格,马上落盘(标题栏随 LayoutChanged 当场重建)
+	private void MoveTabChip(string key, int delta)
+	{
+		List<string> order = ShellTabs.OrderedKeys(ShellTabs.CurrentShell());
+		List<string> next = ShellTabs.MoveTab(order, key, delta);
+		if (next.SequenceEqual(order))
+		{
+			return;
+		}
+		ShellTabs.SetTabs(next);
+		RenderTabChips(key);
+	}
+
+	/// <summary>一次标签拖动的现场:按下时记下各标签的原位,拖动中只用位移预览,松手才落盘。</summary>
+	private sealed class TabChipDrag
+	{
+		public string TabKey = "";
+
+		public ContentControl? Chip;
+
+		public double Grab;
+
+		public double StartX;
+
+		public bool Moved;
+
+		public int Target;
+
+		public List<string> Order = new List<string>();
+
+		public Dictionary<string, Rect> Slots = new Dictionary<string, Rect>(StringComparer.Ordinal);
+
+		public Dictionary<string, FrameworkElement> Chips = new Dictionary<string, FrameworkElement>(StringComparer.Ordinal);
+	}
+
+	private void BeginTabChipDrag(ContentControl chip, string key, MouseButtonEventArgs e)
+	{
+		SPanel? host = _layoutTabChips;
+		if (host == null)
+		{
+			return;
+		}
+		ShellLayout shell = ShellTabs.CurrentShell();
+		TabChipDrag drag = new TabChipDrag
+		{
+			TabKey = key,
+			Chip = chip,
+			Order = ShellTabs.OrderedKeys(shell)
+		};
+		foreach (UIElement child in host.Children)
+		{
+			if (child is FrameworkElement fe && fe.Tag is string tab && drag.Order.Contains(tab))
+			{
+				drag.Slots[tab] = LayoutInformation.GetLayoutSlot(fe);
+				drag.Chips[tab] = fe;
+			}
+		}
+		if (!drag.Slots.ContainsKey(key))
+		{
+			return;
+		}
+		Point p = e.GetPosition(host);
+		drag.StartX = p.X;
+		drag.Grab = p.X - drag.Slots[key].X;
+		drag.Target = drag.Order.IndexOf(key);
+		_tabChipDrag = drag;
+		chip.Focus();
+		chip.CaptureMouse();
+		e.Handled = true;
+	}
+
+	private void DragTabChip(MouseEventArgs e)
+	{
+		TabChipDrag? drag = _tabChipDrag;
+		SPanel? host = _layoutTabChips;
+		if (drag == null || host == null || drag.Chip == null)
+		{
+			return;
+		}
+		double x = e.GetPosition(host).X;
+		if (!drag.Moved)
+		{
+			if (Math.Abs(x - drag.StartX) < 4.0)
+			{
+				return;
+			}
+			drag.Moved = true;
+			Panel.SetZIndex(drag.Chip, 10);
+		}
+		List<double> mids = new List<double>();
+		foreach (string tab in drag.Order)
+		{
+			if (!string.Equals(tab, drag.TabKey, StringComparison.Ordinal) && drag.Slots.TryGetValue(tab, out Rect r))
+			{
+				mids.Add(r.X + r.Width / 2.0);
+			}
+		}
+		drag.Target = ShellTabs.DropIndex(mids, x);
+		// 预览:其它标签按「挪完之后」的顺序让位,被拖的那个跟手
+		List<string> preview = ShellTabs.MoveTabTo(drag.Order, drag.TabKey, drag.Target);
+		double cursor = drag.Slots[drag.Order[0]].X;
+		foreach (string tab in preview)
+		{
+			if (!drag.Slots.TryGetValue(tab, out Rect slot))
+			{
+				continue;
+			}
+			if (!string.Equals(tab, drag.TabKey, StringComparison.Ordinal) && drag.Chips.TryGetValue(tab, out FrameworkElement? other))
+			{
+				other.RenderTransform = new TranslateTransform(cursor - slot.X, 0.0);
+			}
+			cursor += slot.Width + host.Spacing;
+		}
+		drag.Chip.RenderTransform = new TranslateTransform(x - drag.Grab - drag.Slots[drag.TabKey].X, 0.0);
+	}
+
+	private void EndTabChipDrag()
+	{
+		TabChipDrag? drag = _tabChipDrag;
+		if (drag == null)
+		{
+			return;
+		}
+		_tabChipDrag = null;
+		if (drag.Chip != null && drag.Chip.IsMouseCaptured)
+		{
+			drag.Chip.ReleaseMouseCapture();
+		}
+		if (!drag.Moved)
+		{
+			return;
+		}
+		List<string> next = ShellTabs.MoveTabTo(drag.Order, drag.TabKey, drag.Target);
+		if (!next.SequenceEqual(drag.Order))
+		{
+			ShellTabs.SetTabs(next);
+			PageBase.Toast(I18n.L("页签顺序已更新"), "", ToastKind.Success);
+		}
+		RenderTabChips(drag.TabKey);
+	}
+
+	// ————— 3 页面:缩略图卡片(编辑 = 跳到该页并进入编辑态,复用 LayoutEditor.EnterEdit) —————
+
+	private UIElement LayoutPagesGroup()
+	{
+		LayoutV2 doc = LayoutStoreV2.Load();
+		Button resetAll = SmallBtn(I18n.L("全部恢复默认"), BtnKind.Ghost, delegate
+		{
+			PageBase.Run(ResetAllPagesAsync);
+		});
+		resetAll.IsEnabled = LayoutPageCards.CustomizedCount(doc) > 0;
+		UniformGrid grid = new UniformGrid
+		{
+			Columns = 3,
+			Margin = new Thickness(-6.0)
+		};
+		foreach (LayoutBlockEntryCatalog.Entry entry in LayoutPageCards.Shown(_layoutAllPages))
+		{
+			grid.Children.Add(PageCard(doc, entry).M(6.0));
+		}
+		Grid foot = Ui.G(null, "*,Auto");
+		foot.Add(Ui.Small(LayoutPageCards.SingleBlockNote()).Wrap().VCenter(), 0);
+		Button more = SmallBtn(_layoutAllPages ? I18n.L("收起") : I18n.L("显示全部 {0} 个页面", LayoutPageCards.Cards().Count), BtnKind.Ghost, delegate
+		{
+			_layoutAllPages = !_layoutAllPages;
+			RefreshLayoutView();
+		});
+		foot.Add(more, 0, 1);
+		return Ui.V(10.0, LayoutGroupHead(I18n.L("页面"), resetAll), grid, foot);
+	}
+
+	private FrameworkElement PageCard(LayoutV2 doc, LayoutBlockEntryCatalog.Entry entry)
+	{
+		string pageId = entry.PageId;
+		string navId = entry.NavId;
+		int view = entry.SettingsView;
+		string hint = entry.Hint;
+		bool custom = LayoutPageCards.IsCustomized(doc, pageId);
+		PageLayoutV2? page = LayoutPageCards.PageOf(doc, pageId) ?? LivePage(pageId);
+		Grid name = Ui.G(null, "*,Auto");
+		name.Add(Ui.Txt(I18n.L(entry.Label), 13.0, bold: true).Trim().VCenter(), 0);
+		name.Add(custom ? Ui.Tag(I18n.L("已自定义"), "B.AccentText", "B.AccentSoft") : Ui.Tag(I18n.L("默认")), 0, 1);
+		string text = custom ? LayoutPageCards.Summary(page) : I18n.L("和出厂时一样");
+		TextBlock summary = Ui.Small(text).Trim();
+		summary.ToolTip = text;
+		Button edit = Ui.Btn(I18n.L("编辑"), BtnKind.Soft, delegate
+		{
+			OpenBlockEditor(pageId, navId, view, hint);
+		});
+		Grid acts = Ui.G(null, custom ? "*,6,*" : "*");
+		acts.Add(edit, 0);
+		if (custom)
+		{
+			Button reset = Ui.Btn(I18n.L("恢复默认"), BtnKind.Normal, delegate
+			{
+				PageBase.Run(() => ResetPageAsync(entry));
+			});
+			acts.Add(reset, 0, 2);
+		}
+		return Ui.Card(Ui.V(8.0, ThumbView(LayoutPageCards.ThumbOf(pageId, page)), name, summary, acts), 10.0);
+	}
+
+	// 缩略图:按该页当前布局画出各块的位置和宽度,组件块用主题色浅底
+	private static FrameworkElement ThumbView(LayoutThumb thumb)
+	{
+		Grid grid = new Grid
+		{
+			VerticalAlignment = VerticalAlignment.Top
+		};
+		int cols = Math.Max(1, thumb.Cols);
+		for (int c = 0; c < cols; c++)
+		{
+			grid.ColumnDefinitions.Add(new ColumnDefinition
+			{
+				Width = new GridLength(1.0, GridUnitType.Star)
+			});
+		}
+		int rows = 0;
+		foreach (LayoutThumbCell cell in thumb.Cells)
+		{
+			rows = Math.Max(rows, cell.Row + cell.RowSpan);
+		}
+		for (int r = 0; r < rows; r++)
+		{
+			grid.RowDefinitions.Add(new RowDefinition
+			{
+				Height = GridLength.Auto
+			});
+		}
+		foreach (LayoutThumbCell cell in thumb.Cells)
+		{
+			Border box = new Border
+			{
+				CornerRadius = new CornerRadius(4.0),
+				Height = 14.0 * Math.Max(1, cell.RowSpan) + 4.0 * (Math.Max(1, cell.RowSpan) - 1),
+				Margin = new Thickness(2.0),
+				Opacity = (thumb.Placeholder ? 0.6 : 1.0)
+			};
+			box.SetResourceReference(Border.BackgroundProperty, cell.Widget ? "B.AccentSoft" : "B.Line");
+			Grid.SetColumn(box, Math.Max(0, Math.Min(cell.Col, cols - 1)));
+			Grid.SetColumnSpan(box, Math.Max(1, Math.Min(cell.Span, cols - Math.Max(0, Math.Min(cell.Col, cols - 1)))));
+			Grid.SetRow(box, Math.Max(0, cell.Row));
+			Grid.SetRowSpan(box, Math.Max(1, cell.RowSpan));
+			grid.Children.Add(box);
+		}
+		Border frame = new Border
+		{
+			Height = 92.0,
+			CornerRadius = new CornerRadius(8.0),
+			Padding = new Thickness(6.0),
+			ClipToBounds = true,
+			Child = grid
+		};
+		frame.SetResourceReference(Border.BackgroundProperty, "B.Paper2");
+		return frame;
+	}
+
+	// 没自定义过的页:页面已经建好(设置页的子视图 / 当前显示的页)就读它的默认排布,否则缩略图画成通用占位
+	private PageLayoutV2? LivePage(string pageId)
+	{
+		try
+		{
+			BlockHost? host = null;
+			foreach (UIElement? view in _views)
+			{
+				if (view != null)
+				{
+					host = FindBlockHostLogical(view, pageId, 0) ?? FindBlockHostVisual(view, pageId, 0);
+					if (host != null)
+					{
+						break;
+					}
+				}
+			}
+			if (host == null && PageBase.Win != null)
+			{
+				host = FindBlockHost(PageBase.Win, pageId);
+			}
+			return host?.Editor.State.ToPage();
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	private async System.Threading.Tasks.Task ResetPageAsync(LayoutBlockEntryCatalog.Entry entry)
+	{
+		string name = I18n.L(entry.Label);
+		if (!await Dlg.Confirm(I18n.L("「{0}」恢复默认？", name), I18n.L("这一页的排列、隐藏项和放上去的组件都会回到出厂时的样子；组件本身不会被删除。"), I18n.L("恢复默认"), I18n.L("取消")))
+		{
+			return;
+		}
+		LayoutV2 doc = LayoutStoreV2.Load();
+		if (LayoutPageCards.Reset(doc, entry.PageId) == 0)
+		{
+			RefreshLayoutView();
+			return;
+		}
+		if (!LayoutStoreV2.Save(doc))
+		{
+			PageBase.Toast(I18n.L("布局未能保存"), I18n.L("改动只保留在本次运行"), ToastKind.Warning);
+			return;
+		}
+		PageLayoutStore.Reload();
+		PageBase.Toast(I18n.L("「{0}」已恢复默认", name), "", ToastKind.Success);
 		RefreshLayoutView();
 	}
 
-	// ————— c 页面区块入口(复用 LayoutEditor.EnterEdit) —————
-
-	private FrameworkElement[] LayoutBlockRows()
+	private async System.Threading.Tasks.Task ResetAllPagesAsync()
 	{
-		List<FrameworkElement> rows = new List<FrameworkElement>();
-		foreach (LayoutBlockEntryCatalog.Entry entry in LayoutBlockEntryCatalog.All)
+		int count = LayoutPageCards.CustomizedCount(LayoutStoreV2.Load());
+		if (count == 0)
 		{
-			string pageId = entry.PageId;
-			string navId = entry.NavId;
-			int view = entry.SettingsView;
-			string hint = entry.Hint;
-			Button open = Ui.Btn(I18n.L("自定义布局..."), BtnKind.Chip, delegate
-			{
-				OpenBlockEditor(pageId, navId, view, hint);
-			});
-			rows.Add(Ui.Field(I18n.L(entry.Label), open, I18n.L("跳到该页并进入区块编辑(完成编辑后自动保存)")));
+			PageBase.Toast(I18n.L("所有页面都是默认布局"), "", ToastKind.Info);
+			return;
 		}
-		rows.Add(Ui.Field(I18n.L("单块页"), Ui.Muted(I18n.L("单块页(下载与网络 / 反馈与关于)也能进编辑态:可以调外观、标题或先隐藏")), ""));
-		return rows.ToArray();
+		if (!await Dlg.Confirm(I18n.L("所有页面恢复默认？"), I18n.L("{0} 个页面会回到出厂时的样子。现在这套布局会先存为方案「{1}」，需要时可以在「方案」里切回。", count, LayoutProfiles.PreviousName), I18n.L("全部恢复默认"), I18n.L("取消"), danger: true))
+		{
+			return;
+		}
+		string error = LayoutProfiles.ResetAllPages(out string kept, out int removed);
+		if (error.Length > 0)
+		{
+			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
+			return;
+		}
+		PageLayoutStore.Reload();
+		PageBase.Toast(I18n.L("所有页面已恢复默认"), (kept.Length > 0) ? I18n.L("原来的布局已存为「{0}」", kept) : "", ToastKind.Success);
+		RefreshLayoutView();
 	}
 
 	// 跳到目标页 → 找到那一页的 BlockHost → EnterEdit(等价于点右键菜单里的「自定义布局...」)
@@ -297,7 +935,7 @@ public sealed partial class SettingsPage
 			PageBase.Toast(I18n.L("已进入自定义布局"), I18n.L("完成编辑后自动保存"), ToastKind.Success);
 			return;
 		}
-		PageBase.Toast(I18n.L("没找到可编辑的区块"), (hint.Length > 0) ? I18n.L(hint) : I18n.L("可以在页面上右键「自定义布局...」"), ToastKind.Warning);
+		PageBase.Toast(I18n.L("没找到这个页面"), (hint.Length > 0) ? I18n.L(hint) : I18n.L("打开那个页面后，在空白处右键「自定义布局…」"), ToastKind.Warning);
 	}
 
 	// 视觉树优先(页面已渲染),找不到再退回逻辑树(ElementName/Content 挂载的场合)
@@ -321,10 +959,10 @@ public sealed partial class SettingsPage
 		{
 			return host;
 		}
-		int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+		int count = VisualTreeHelper.GetChildrenCount(root);
 		for (int i = 0; i < count; i++)
 		{
-			BlockHost? found = FindBlockHostVisual(System.Windows.Media.VisualTreeHelper.GetChild(root, i), pageId, depth + 1);
+			BlockHost? found = FindBlockHostVisual(VisualTreeHelper.GetChild(root, i), pageId, depth + 1);
 			if (found != null)
 			{
 				return found;
@@ -357,46 +995,376 @@ public sealed partial class SettingsPage
 		return null;
 	}
 
-	// ————— d 分栏比例(现状表直接来自 L4 的 SplitCatalog,视图里不重复硬编码) —————
+	// ————— 4 方案:卡片(应用 / ⋯),组标题右边是导入 / 导出整套布局 / 存为新方案 —————
 
-	private FrameworkElement[] LayoutSplitRows()
+	private UIElement LayoutProfilesGroup()
 	{
-		List<FrameworkElement> rows = new List<FrameworkElement>();
-		foreach (SplitSite site in SplitCatalog.All)
+		Button import = SmallBtn(I18n.L("导入…"), BtnKind.Ghost, delegate
 		{
-			SplitSite current = site;
-			string where = "#" + site.Index + "  " + site.PageId + " / " + site.SplitId;
-			double? stored = SplitRatioStore.Read(site.PageId, site.SplitId);
-			string now = SplitNowText(site);
-			if (!site.IsTwoColumn)
-			{
-				// 说明(为什么这处不是可拖分栏)放进 ToolTip:表格里保持一行,长文案不把行撑高
-				FrameworkElement plain = Ui.Field(where, Ui.Small(now), SplitKindLabel(site.Kind));
-				plain.ToolTip = site.Note;
-				rows.Add(plain);
-				continue;
-			}
-			Button reset = Ui.Btn(I18n.L("恢复默认"), BtnKind.Chip, delegate
-			{
-				if (SplitRatioStore.Clear(current.PageId, current.SplitId))
-				{
-					PageBase.Toast(I18n.L("已恢复默认"), "", ToastKind.Success);
-					RefreshLayoutView();
-				}
-			});
-			reset.IsEnabled = stored.HasValue;
-			string cur = (stored.HasValue ? I18n.L("当前 {0:P0}", stored.Value) : I18n.L("当前 = 现状"));
-			SPanel right = Ui.H(8.0, Ui.Small(now).VCenter(), Ui.Small(cur).VCenter(), reset);
-			FrameworkElement row = Ui.Field(where, right, SplitKindLabel(site.Kind));
-			row.ToolTip = site.Note;
-			rows.Add(row);
+			PageBase.Run(ImportLayoutFileAsync);
+		});
+		Button export = SmallBtn(I18n.L("导出整套布局…"), BtnKind.Ghost, delegate
+		{
+			PageBase.Run(ExportLayoutAsync);
+		});
+		Button save = SmallBtn(I18n.L("存为新方案"), BtnKind.Soft, delegate
+		{
+			PageBase.Run(NewProfileAsync);
+		});
+		List<LayoutProfileCard> cards = LayoutProfiles.Cards(LayoutStoreV2.Load());
+		UIElement body;
+		if (cards.Count == 0)
+		{
+			body = EmptyBox(I18n.L("还没有方案。点右上角「存为新方案」把现在这套布局存下来，以后随时切回。"));
 		}
-		Button resetAll = Ui.Btn(I18n.L("全部复位"), BtnKind.Normal, delegate
+		else
+		{
+			UniformGrid grid = new UniformGrid
+			{
+				Columns = 4,
+				Margin = new Thickness(-6.0)
+			};
+			foreach (LayoutProfileCard card in cards)
+			{
+				grid.Children.Add(ProfileCard(card).M(6.0));
+			}
+			body = grid;
+		}
+		return LayoutGroup(I18n.L("方案"), body, import, export, save);
+	}
+
+	private FrameworkElement ProfileCard(LayoutProfileCard card)
+	{
+		string tagText = card.IsActive ? I18n.L("正在使用") : (card.IsAiBackup ? I18n.L("AI 备份") : I18n.L("方案"));
+		Border tag = card.IsActive ? Ui.Tag(tagText, "B.AccentText", "B.AccentSoft") : Ui.Tag(tagText);
+		tag.HorizontalAlignment = HorizontalAlignment.Left;
+		TextBlock name = Ui.Txt(card.DisplayName, 13.0, bold: true).Trim();
+		name.ToolTip = card.Name;
+		TextBlock info = Ui.Small(card.Info).Wrap();
+		info.MinHeight = 34.0;
+		Button apply = Ui.Btn(card.IsActive ? I18n.L("当前方案") : I18n.L("应用"), card.IsActive ? BtnKind.Ghost : BtnKind.Soft, delegate
+		{
+			ApplyProfile(card.Name);
+		});
+		apply.IsEnabled = !card.IsActive;
+		Button more = Ui.IconBtn(Ico.More, I18n.L("更多"), null, 14.0);
+		more.Click += delegate
+		{
+			ShowProfileMenu(more, card);
+		};
+		Grid acts = Ui.G(null, "*,Auto");
+		acts.Add(apply, 0);
+		acts.Add(more.M(6.0, 0.0, 0.0, 0.0), 0, 1);
+		Border box = Ui.Card(Ui.V(4.0, tag, name, info, acts.M(0.0, 6.0, 0.0, 0.0)), 12.0);
+		if (card.IsActive)
+		{
+			// 正在使用的方案:1.5px 主题色描边
+			box.BorderThickness = new Thickness(1.5);
+			box.SetResourceReference(Border.BorderBrushProperty, "B.Accent");
+		}
+		return box;
+	}
+
+	private void ShowProfileMenu(Button anchor, LayoutProfileCard card)
+	{
+		ContextMenu menu = new ContextMenu
+		{
+			PlacementTarget = anchor,
+			Placement = PlacementMode.Bottom
+		};
+		MenuItem rename = new MenuItem
+		{
+			Header = I18n.L("重命名")
+		};
+		rename.Click += delegate
+		{
+			PageBase.Run(() => RenameProfileAsync(card.Name));
+		};
+		MenuItem copy = new MenuItem
+		{
+			Header = I18n.L("复制一份")
+		};
+		copy.Click += delegate
+		{
+			PageBase.Run(() => DuplicateProfileAsync(card.Name));
+		};
+		MenuItem del = new MenuItem
+		{
+			Header = I18n.L("删除"),
+			IsEnabled = !card.IsActive
+		};
+		if (card.IsActive)
+		{
+			del.ToolTip = I18n.L("正在使用的方案不能删除，先切到别的方案");
+			ToolTipService.SetShowOnDisabled(del, true);
+		}
+		del.Click += delegate
+		{
+			PageBase.Run(() => DeleteProfileAsync(card.Name));
+		};
+		menu.Items.Add(rename);
+		menu.Items.Add(copy);
+		menu.Items.Add(del);
+		menu.IsOpen = true;
+	}
+
+	private async System.Threading.Tasks.Task NewProfileAsync()
+	{
+		string? name = await Dlg.Prompt(I18n.L("存为新方案"), I18n.L("方案名"), I18n.L("我的布局 {0}", DateTime.Now.ToString("MM-dd HH:mm")));
+		if (name == null)
+		{
+			return;
+		}
+		string error = LayoutProfiles.Create(name, fromCurrent: true);
+		if (error.Length > 0)
+		{
+			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
+			return;
+		}
+		PageBase.Toast(I18n.L("方案「{0}」已保存", name.Trim()), I18n.L("来自现在这套布局"), ToastKind.Success);
+		RefreshLayoutView();
+	}
+
+	private void ApplyProfile(string name)
+	{
+		string error = LayoutProfiles.Apply(name, out string kept);
+		if (error.Length > 0)
+		{
+			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
+			return;
+		}
+		// 应用前旧布局已自动留底成「上一次布局」:换错了能用同名方案切回
+		PageBase.Toast(I18n.L("已切换到「{0}」", LayoutProfiles.DisplayName(name)), (kept.Length > 0) ? I18n.L("原来的布局已存为「{0}」", kept) : "", ToastKind.Success);
+		RefreshLayoutView();
+	}
+
+	private async System.Threading.Tasks.Task RenameProfileAsync(string name)
+	{
+		string? next = await Dlg.Prompt(I18n.L("重命名"), I18n.L("方案名"), name);
+		if (next == null || next == name)
+		{
+			return;
+		}
+		string error = LayoutProfiles.Rename(name, next);
+		if (error.Length > 0)
+		{
+			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
+			return;
+		}
+		RefreshLayoutView();
+	}
+
+	private async System.Threading.Tasks.Task DuplicateProfileAsync(string name)
+	{
+		string? next = await Dlg.Prompt(I18n.L("复制一份"), I18n.L("方案名"), I18n.L("{0} 副本", name));
+		if (next == null)
+		{
+			return;
+		}
+		string error = LayoutProfiles.Duplicate(name, next);
+		if (error.Length > 0)
+		{
+			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
+			return;
+		}
+		RefreshLayoutView();
+	}
+
+	private async System.Threading.Tasks.Task DeleteProfileAsync(string name)
+	{
+		// 正在使用的方案不能删(菜单里已置灰,这里再兜一道)
+		if (string.Equals(name, LayoutProfiles.ActiveName(), StringComparison.Ordinal))
+		{
+			PageBase.Toast(I18n.L("正在使用的方案不能删除，先切到别的方案"), "", ToastKind.Warning);
+			return;
+		}
+		if (!await Dlg.Confirm(I18n.L("删除"), I18n.L("删除方案「{0}」？", LayoutProfiles.DisplayName(name)), I18n.L("删除"), I18n.L("取消"), danger: true))
+		{
+			return;
+		}
+		string error = LayoutProfiles.Delete(name);
+		if (error.Length > 0)
+		{
+			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
+			return;
+		}
+		PageBase.Toast(I18n.L("方案「{0}」已删除", LayoutProfiles.DisplayName(name)), "", ToastKind.Success);
+		RefreshLayoutView();
+	}
+
+	// ————— 导入 / 导出整套布局 —————
+
+	private async System.Threading.Tasks.Task ExportLayoutAsync()
+	{
+		int choice = await Dlg.Choose(I18n.L("导出整套布局"), Ui.Muted(I18n.L("完整格式带上页签、页面排列、分栏宽度和组件；兼容旧版本的格式只含每页区块的顺序和显示 / 隐藏，旧版本程序也能导入。")).Wrap(), new string[3]
+		{
+			I18n.L("取消"),
+			I18n.L("导出完整格式"),
+			I18n.L("导出兼容旧版本的格式")
+		}, 560.0);
+		if (choice == 1)
+		{
+			string text = LayoutStoreV2.ExportJson(LayoutStoreV2.Load());
+			string? path = Dlg.SaveFile(I18n.L("布局 (*.json)|*.json|全部文件|*.*"), "tipcl-layout.json", I18n.L("导出整套布局"));
+			if (path != null && WriteTextFile(path, text))
+			{
+				PageBase.Toast(I18n.L("已导出整套布局"), path, ToastKind.Success);
+			}
+			return;
+		}
+		if (choice == 2)
+		{
+			string text = PageLayoutStore.ExportJson(LayoutV1Projection.ProjectV1(LayoutStoreV2.Load()));
+			string? path2 = Dlg.SaveFile(I18n.L("布局 (*.json)|*.json|全部文件|*.*"), "tipcl-page-layout.json", I18n.L("导出兼容旧版本的格式"));
+			if (path2 != null && WriteTextFile(path2, text))
+			{
+				PageBase.Toast(I18n.L("已导出整套布局"), path2, ToastKind.Success);
+			}
+		}
+	}
+
+	private async System.Threading.Tasks.Task ImportLayoutFileAsync()
+	{
+		string? path = Dlg.PickFile(I18n.L("布局 (*.json)|*.json|全部文件|*.*"), I18n.L("导入布局"));
+		if (path == null)
+		{
+			return;
+		}
+		string text;
+		try
+		{
+			text = File.ReadAllText(path);
+		}
+		catch (Exception ex)
+		{
+			PageBase.Toast(I18n.L("布局读取失败"), ex.Message, ToastKind.Error);
+			return;
+		}
+		LayoutV2? whole = LayoutV2.FromJsonText(text);
+		if (whole != null)
+		{
+			int choice = await Dlg.Choose(I18n.L("导入布局"), Ui.Muted(I18n.L("这是一整套布局（含页签、页面排列、分栏宽度和组件）。导入的网页和按钮组件默认关闭，需要你逐个打开。")).Wrap(), new string[3]
+			{
+				I18n.L("取消"),
+				I18n.L("应用为当前布局"),
+				I18n.L("存为新方案")
+			}, 560.0);
+			if (choice == 1)
+			{
+				string error = LayoutProfiles.ApplySnapshot(whole.Layout, out string kept);
+				if (error.Length > 0)
+				{
+					PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
+					return;
+				}
+				PageBase.Toast(I18n.L("已应用导入的布局"), (kept.Length > 0) ? I18n.L("原来的布局已存为「{0}」", kept) : System.IO.Path.GetFileName(path), ToastKind.Success);
+				RefreshLayoutView();
+			}
+			else if (choice == 2)
+			{
+				string? name = await Dlg.Prompt(I18n.L("存为新方案"), I18n.L("方案名"), System.IO.Path.GetFileNameWithoutExtension(path));
+				if (name == null)
+				{
+					return;
+				}
+				string error2 = LayoutProfiles.CreateFrom(name, whole.Layout);
+				if (error2.Length > 0)
+				{
+					PageBase.Toast(I18n.L("布局未能保存"), error2, ToastKind.Warning);
+					return;
+				}
+				PageBase.Toast(I18n.L("方案「{0}」已保存", name.Trim()), "", ToastKind.Success);
+				RefreshLayoutView();
+			}
+			return;
+		}
+		// 兼容旧版本的页面布局:把每页的 {id,hidden} 与顺序并进当前文档的 pages
+		try
+		{
+			IReadOnlyDictionary<string, PageLayoutDoc> pages = PageLayoutStore.ParseImport(text);
+			LayoutV2 doc = LayoutStoreV2.Load();
+			int num = LayoutProfiles.MergeV1Pages(doc, pages);
+			if (!LayoutStoreV2.Save(doc))
+			{
+				PageBase.Toast(I18n.L("布局未能保存"), I18n.L("改动只保留在本次运行"), ToastKind.Warning);
+				return;
+			}
+			PageLayoutStore.Reload();
+			PageBase.Toast(I18n.L("已导入 {0} 个页面的排列", num), System.IO.Path.GetFileName(path), ToastKind.Success);
+			RefreshLayoutView();
+		}
+		catch (Exception ex2)
+		{
+			PageBase.Toast(I18n.L("不是有效的布局文件"), ex2.Message, ToastKind.Error);
+		}
+	}
+
+	private static bool WriteTextFile(string path, string text)
+	{
+		try
+		{
+			File.WriteAllText(path, text);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			PageBase.Toast(I18n.L("布局未能保存"), ex.Message, ToastKind.Error);
+			return false;
+		}
+	}
+
+	// ————— 5 高级(默认折叠):分栏宽度 / 网页和按钮组件 / 组件管理 / 布局文件 —————
+
+	private UIElement LayoutAdvancedHead()
+	{
+		Grid head = Ui.G(null, "*,Auto");
+		head.Add(Ui.V(2.0, Ui.Txt(I18n.L("分栏、网页与按钮组件、布局文件"), 13.0, bold: true), Ui.Small(I18n.L("一般不需要动"))).VCenter(), 0);
+		head.Add(Ui.Glyph(_layoutAdvancedOpen ? Ico.ChevronUp : Ico.ChevronDown, 12.0, "B.InkSoft").M(12.0, 0.0, 4.0, 0.0), 0, 1);
+		Border hit = new Border
+		{
+			Background = Brushes.Transparent,
+			Padding = new Thickness(0.0, 4.0, 0.0, 4.0),
+			Child = head
+		};
+		ContentControl toggle = new ContentControl
+		{
+			Content = hit,
+			Focusable = true,
+			IsTabStop = true,
+			Cursor = Cursors.Hand
+		};
+		AutomationProperties.SetName(toggle, _layoutAdvancedOpen ? I18n.L("收起高级设置") : I18n.L("展开高级设置"));
+		toggle.MouseLeftButtonUp += delegate
+		{
+			ExpandLayoutAdvanced(!_layoutAdvancedOpen);
+		};
+		toggle.KeyDown += delegate(object sender, KeyEventArgs e)
+		{
+			if (e.Key == Key.Enter || e.Key == Key.Space)
+			{
+				e.Handled = true;
+				ExpandLayoutAdvanced(!_layoutAdvancedOpen);
+			}
+		};
+		List<FrameworkElement> rows = new List<FrameworkElement> { toggle };
+		if (_layoutAdvancedOpen)
+		{
+			rows.Add(LayoutSplitRow());
+		}
+		return LayoutGroup(I18n.L("高级"), Ui.Card(Rows(rows.ToArray())));
+	}
+
+	// 分栏宽度:只剩一行「已调整 N 处 + 全部复位」(具体宽度在页面上拖分隔线调)
+	private FrameworkElement LayoutSplitRow()
+	{
+		List<string> names = LayoutSplitSummary.AdjustedNames(LayoutStoreV2.Load());
+		string text = (names.Count > 0) ? I18n.L("已调整 {0} 处：{1}。在页面上拖两栏中间的分隔线即可调整，双击复位。", names.Count, string.Join(I18n.L("、"), names)) : I18n.L("所有分栏都是默认宽度。在页面上拖两栏中间的分隔线即可调整，双击复位。");
+		Button reset = Ui.Btn(I18n.L("全部复位"), BtnKind.Normal, delegate
 		{
 			ResetAllSplits();
 		});
-		rows.Add(Ui.Field(I18n.L("分栏比例"), resetAll, I18n.L("复位只删掉存储比例,回到各页现状列定义")));
-		return rows.ToArray();
+		reset.IsEnabled = names.Count > 0;
+		return LayoutRow(I18n.L("分栏宽度"), text, reset);
 	}
 
 	private void ResetAllSplits()
@@ -409,49 +1377,45 @@ public sealed partial class SettingsPage
 				count++;
 			}
 		}
-		PageBase.Toast((count > 0) ? I18n.L("已恢复默认") : I18n.L("没有需要复位的分栏"), (count > 0) ? I18n.L("已复位 {0} 处", count) : "", ToastKind.Success);
+		PageBase.Toast((count > 0) ? I18n.L("分栏宽度已全部复位") : I18n.L("所有分栏都是默认宽度"), (count > 0) ? I18n.L("已复位 {0} 处", count) : "", ToastKind.Success);
 		RefreshLayoutView();
 	}
 
-	// 现状文本:比例 / 像素 / 留白,全部来自 SplitCatalog 的声明
-	private static string SplitNowText(SplitSite site)
+	private UIElement LayoutAdvancedWidgets()
 	{
-		if (!site.IsTwoColumn)
+		if (!_layoutAdvancedOpen)
 		{
-			return I18n.L("没有左右分栏");
+			return CollapsedBlock();
 		}
-		string size = ((site.DefaultPixels > 0.0) ? I18n.L("{0}px", site.DefaultPixels) : I18n.L("星号 {0:P0}", site.DefaultRatio));
-		string side = ((site.PixelsSide == "right") ? I18n.L("右栏") : I18n.L("左栏"));
-		return I18n.L("现状:{0} {1} · 留白 {2}px", side, size, site.Gap);
-	}
-
-	private static string SplitKindLabel(string? kind)
-	{
-		return kind switch
+		bool allow = LayoutEditPrefs.AllowDangerWidgets;
+		CheckBox toggle = Ui.Switch(allow);
+		Border warn = WarnBox(I18n.L("导入的布局里如果带网页或按钮组件，仍然默认关闭，需要你逐个打开。"));
+		warn.Visibility = (allow ? Visibility.Visible : Visibility.Collapsed);
+		toggle.Checked += delegate
 		{
-			SplitKind.TwoColumn => I18n.L("左右两栏"),
-			SplitKind.Rows => I18n.L("纵向分行"),
-			SplitKind.ListRow => I18n.L("列表行内列宽"),
-			SplitKind.GridCols => I18n.L("网格列数"),
-			SplitKind.HeightClamp => I18n.L("限宽限高"),
-			_ => I18n.L("单列")
+			if (_layoutRebuilding)
+			{
+				return;
+			}
+			LayoutEditPrefs.AllowDangerWidgets = true;
+			warn.Visibility = Visibility.Visible;
+			PageBase.Toast(I18n.L("已开启网页和按钮组件"), I18n.L("在页面的编辑态里点「添加」就能找到它们"), ToastKind.Success);
 		};
-	}
-
-	// ————— e 自建区块(L6:内联管理面板) —————
-
-	// 面板开合状态跨视图重建保留(每次保存/刷新都会重建整个布局视图)
-	private bool _layoutWidgetPanelOpen;
-
-	private bool _layoutWidgetCreateOpen;
-
-	private FrameworkElement[] LayoutWidgetRows()
-	{
+		toggle.Unchecked += delegate
+		{
+			if (_layoutRebuilding)
+			{
+				return;
+			}
+			LayoutEditPrefs.AllowDangerWidgets = false;
+			warn.Visibility = Visibility.Collapsed;
+			PageBase.Toast(I18n.L("已关闭网页和按钮组件"), I18n.L("已经放在页面上的不受影响"), ToastKind.Success);
+		};
+		AutomationProperties.SetName(toggle, I18n.L("网页和按钮组件"));
+		FrameworkElement danger = Ui.V(8.0, LayoutRow(I18n.L("网页和按钮组件"), I18n.L("开启后可以添加嵌入网页（只接受 https）和执行动作的按钮"), toggle), warn);
 		LayoutV2 doc = LayoutStoreV2.Load();
-		List<WidgetDef> widgets = ((doc.Layout.Widgets != null) ? doc.Layout.Widgets : new List<WidgetDef>());
-		List<FrameworkElement> rows = new List<FrameworkElement>();
-		Button add = Ui.Btn(_layoutWidgetPanelOpen ? I18n.L("收起管理") : I18n.L("添加自建区块"), BtnKind.Normal, null);
-		add.Click += delegate
+		int count = (doc.Layout.Widgets != null) ? doc.Layout.Widgets.Count((WidgetDef w) => w != null) : 0;
+		Button manage = Ui.Btn(_layoutWidgetPanelOpen ? I18n.L("收起") : I18n.L("管理…"), BtnKind.Normal, delegate
 		{
 			_layoutWidgetPanelOpen = !_layoutWidgetPanelOpen;
 			if (!_layoutWidgetPanelOpen)
@@ -459,30 +1423,41 @@ public sealed partial class SettingsPage
 				_layoutWidgetCreateOpen = false;
 			}
 			RefreshLayoutView();
-		};
-		rows.Add(Ui.Field(I18n.L("自建区块"), Ui.H(8.0, Ui.Small(I18n.L("已保存 {0} 个", widgets.Count)).VCenter(), add), I18n.L("便签 / 快捷启动 / 时钟 / 分隔线 / 游戏时长")));
-		if (!_layoutWidgetPanelOpen)
+		});
+		List<FrameworkElement> rows = new List<FrameworkElement>
 		{
-			rows.Add(Ui.Field(I18n.L("危险类型"), Ui.Muted(I18n.L("网页 / 按钮默认关闭,需显式开启(L6)")), ""));
-			return rows.ToArray();
+			danger,
+			LayoutRow(I18n.L("组件管理"), I18n.L("已创建 {0} 个组件", count), manage)
+		};
+		if (_layoutWidgetPanelOpen)
+		{
+			rows.AddRange(LayoutWidgetRows(doc));
 		}
-		// 新建表单:只列出 5 种安全类型(web / button 没有创建入口)
+		return Ui.Card(Rows(rows.ToArray()));
+	}
+
+	// 组件管理的内联面板:新建表单 + 已有组件逐个编辑 / 删除
+	private FrameworkElement[] LayoutWidgetRows(LayoutV2 doc)
+	{
+		List<WidgetDef> widgets = ((doc.Layout.Widgets != null) ? doc.Layout.Widgets : new List<WidgetDef>());
+		List<FrameworkElement> rows = new List<FrameworkElement>();
+		// 新建表单:只列出 5 种可直接创建的类型(网页 / 按钮的参数要在布局文件里配置)
 		if (_layoutWidgetCreateOpen)
 		{
 			rows.Add(WidgetCreateForm());
 		}
 		else
 		{
-			Button create = Ui.Btn(I18n.L("新建自建区块"), BtnKind.Primary, delegate
+			Button create = Ui.Btn(I18n.L("新建组件"), BtnKind.Primary, delegate
 			{
 				_layoutWidgetCreateOpen = true;
 				RefreshLayoutView();
 			});
-			rows.Add(Ui.Field(I18n.L("新建"), create, I18n.L("新建出来的块不会自动加到任何页面;到页面的编辑态里用「+ 自建区块」添加")));
+			rows.Add(Ui.Field(I18n.L("新建"), create, I18n.L("新建的组件不会自动放到页面上；在页面的编辑态里点「添加」放进去")));
 		}
 		if (widgets.Count == 0)
 		{
-			rows.Add(Ui.Field(I18n.L("还没有自建区块"), Ui.Muted(I18n.L("点「新建自建区块」建一个便签 / 时钟等")), ""));
+			rows.Add(Ui.Field(I18n.L("还没有组件"), Ui.Muted(I18n.L("点「新建组件」建一个便签、时钟等")), ""));
 		}
 		else
 		{
@@ -494,7 +1469,7 @@ public sealed partial class SettingsPage
 				}
 			}
 		}
-		rows.Add(Ui.Field(I18n.L("危险类型"), Ui.Muted(I18n.L("网页 / 按钮默认关闭,需显式开启;参数请在布局 JSON 里配置")), ""));
+		rows.Add(Ui.Field(I18n.L("网页和按钮"), Ui.Muted(I18n.L("网页和按钮组件的地址、动作请在「布局文件」里编辑")).Wrap(), ""));
 		return rows.ToArray();
 	}
 
@@ -554,11 +1529,11 @@ public sealed partial class SettingsPage
 			WidgetDef? widget = WidgetLibrary.CreateFor(fresh, WidgetRegistry.SafeTypes[index], title.Text, param.Text, version.Text, out error);
 			if (widget == null)
 			{
-				PageBase.Toast(I18n.L("自建区块未能保存"), error, ToastKind.Warning);
+				PageBase.Toast(I18n.L("组件未能保存"), error, ToastKind.Warning);
 				return;
 			}
 			fresh.Layout.Widgets.Add(widget);
-			if (SaveWidgetDoc(fresh, I18n.L("自建区块已创建")))
+			if (SaveWidgetDoc(fresh, I18n.L("组件已创建")))
 			{
 				_layoutWidgetCreateOpen = false;
 				RefreshLayoutView();
@@ -570,21 +1545,21 @@ public sealed partial class SettingsPage
 			RefreshLayoutView();
 		});
 		return Ui.V(2.0,
-			Ui.Field(I18n.L("类型"), type, I18n.L("只看 5 种安全类型;网页 / 按钮默认关闭")),
-			Ui.Field(I18n.L("标题"), title, I18n.L("列表里显示的名字")),
+			Ui.Field(I18n.L("类型"), type, I18n.L("便签、快捷启动、时钟、分隔线、游戏时长")),
+			Ui.Field(I18n.L("标题"), title, I18n.L("页面上显示的名字")),
 			Ui.Field(I18n.L("参数"), paramRow, ""),
 			Ui.H(8.0, create, cancel),
 			hint.M(0.0, 0.0, 0.0, 6.0));
 	}
 
-	// 已有定义:标题 / 类型 / 引用数 + 参数编辑 + 保存 / 删除
+	// 已有组件:标题 / 类型 / 用在几个页面 + 参数编辑 + 保存 / 删除
 	private FrameworkElement WidgetAdminRow(LayoutV2 doc, WidgetDef widget)
 	{
 		int refs = WidgetLibrary.CountReferences(doc, widget.Id);
 		bool safe = WidgetLibrary.IsSafeType(widget.Type);
 		TextBox title = Ui.Input("", widget.Title ?? "");
 		title.Width = 180.0;
-		TextBlock refText = Ui.Small(I18n.L("被 {0} 个页面引用", refs));
+		TextBlock refText = Ui.Small(I18n.L("用在 {0} 个页面上", refs));
 		SPanel head = Ui.H(8.0, title, Ui.Tag(WidgetUI.TypeLabel(widget.Type)), refText.VCenter());
 		Button save = Ui.Btn(I18n.L("保存"), BtnKind.Soft, null);
 		Button del = Ui.Btn(I18n.L("删除"), BtnKind.Ghost, null);
@@ -606,7 +1581,7 @@ public sealed partial class SettingsPage
 		}
 		else
 		{
-			body = Ui.V(6.0, head, Ui.H(8.0, Ui.Small(I18n.L("危险类型:参数请在布局 JSON 里编辑")).VCenter(), save, del));
+			body = Ui.V(6.0, head, Ui.H(8.0, Ui.Small(I18n.L("网页和按钮组件的地址、动作请在「布局文件」里编辑")).VCenter(), save, del));
 		}
 		save.Click += delegate
 		{
@@ -615,12 +1590,12 @@ public sealed partial class SettingsPage
 			WidgetDef? target = FindWidget(fresh, widget.Id);
 			if (target == null)
 			{
-				PageBase.Toast(I18n.L("自建区块不存在"), "", ToastKind.Warning);
+				PageBase.Toast(I18n.L("组件不存在"), "", ToastKind.Warning);
 				return;
 			}
 			if (!WidgetLibrary.TryRename(target, title.Text, out error))
 			{
-				PageBase.Toast(I18n.L("自建区块未能保存"), error, ToastKind.Warning);
+				PageBase.Toast(I18n.L("组件未能保存"), error, ToastKind.Warning);
 				return;
 			}
 			if (safe)
@@ -629,11 +1604,11 @@ public sealed partial class SettingsPage
 				string versionText = ((versionBox != null && versionBox.Visibility == Visibility.Visible) ? versionBox.Text : "");
 				if (!WidgetLibrary.TryUpdateSettings(target, paramText, versionText, out error))
 				{
-					PageBase.Toast(I18n.L("自建区块未能保存"), error, ToastKind.Warning);
+					PageBase.Toast(I18n.L("组件未能保存"), error, ToastKind.Warning);
 					return;
 				}
 			}
-			if (SaveWidgetDoc(fresh, I18n.L("自建区块「{0}」已保存", target.Title)))
+			if (SaveWidgetDoc(fresh, I18n.L("组件「{0}」已保存", target.Title)))
 			{
 				RefreshLayoutView();
 			}
@@ -642,9 +1617,9 @@ public sealed partial class SettingsPage
 		{
 			PageBase.Run(async delegate
 			{
-				string name = widget.Title ?? widget.Id;
-				string body = ((refs > 0) ? I18n.L("删除定义,并从 {0} 个页面移除这个区块(不可撤销)", refs) : I18n.L("删除定义(不可撤销)"));
-				if (!await Dlg.Confirm(I18n.L("删除自建区块「{0}」?", name), body, I18n.L("删除"), I18n.L("取消"), danger: true))
+				string name = string.IsNullOrWhiteSpace(widget.Title) ? WidgetUI.TypeLabel(widget.Type) : widget.Title;
+				string text = ((refs > 0) ? I18n.L("会从 {0} 个页面上拿掉它，删除后不能撤销。", refs) : I18n.L("删除后不能撤销。"));
+				if (!await Dlg.Confirm(I18n.L("删除组件「{0}」？", name), text, I18n.L("删除"), I18n.L("取消"), danger: true))
 				{
 					return;
 				}
@@ -652,10 +1627,10 @@ public sealed partial class SettingsPage
 				int removed = WidgetLibrary.Delete(fresh, widget.Id);
 				if (removed < 0)
 				{
-					PageBase.Toast(I18n.L("自建区块不存在"), "", ToastKind.Warning);
+					PageBase.Toast(I18n.L("组件不存在"), "", ToastKind.Warning);
 					return;
 				}
-				if (SaveWidgetDoc(fresh, I18n.L("自建区块「{0}」已删除", name)))
+				if (SaveWidgetDoc(fresh, I18n.L("组件「{0}」已删除", name)))
 				{
 					RefreshLayoutView();
 				}
@@ -707,7 +1682,7 @@ public sealed partial class SettingsPage
 		return null;
 	}
 
-	// 自建块管理专用的落盘(与 WriteLayout 同规矩,但需要知道成功与否来刷新面板)
+	// 组件管理专用的落盘(与 WriteLayout 同规矩,但需要知道成功与否来刷新面板)
 	private static bool SaveWidgetDoc(LayoutV2 doc, string toast)
 	{
 		try
@@ -727,332 +1702,41 @@ public sealed partial class SettingsPage
 		}
 	}
 
-	// ————— f 整机布局方案 —————
-
-	private FrameworkElement[] LayoutProfileRows()
+	// 布局文件:打开所在文件夹 / 在独立窗口里用 JSON 编辑(页面上不再常驻 JSON 框)
+	private UIElement LayoutAdvancedFile()
 	{
-		List<FrameworkElement> rows = new List<FrameworkElement>();
-		Button create = Ui.Btn(I18n.L("新建布局方案"), BtnKind.Primary, delegate
+		if (!_layoutAdvancedOpen)
 		{
-			PageBase.Run(NewProfileAsync);
+			return CollapsedBlock();
+		}
+		Button folder = Ui.Btn(I18n.L("打开所在文件夹"), BtnKind.Normal, delegate
+		{
+			OpenLayoutFolder();
 		});
-		Button import = Ui.Btn(I18n.L("导入布局"), BtnKind.Chip, delegate
+		Button editor = Ui.Btn(I18n.L("在编辑器中打开…"), BtnKind.Normal, delegate
 		{
-			PageBase.Run(ImportLayoutFileAsync);
+			LayoutJsonWindow.ShowFor(PageBase.Win);
 		});
-		Button export = Ui.Btn(I18n.L("导出布局"), BtnKind.Chip, delegate
-		{
-			PageBase.Run(ExportLayoutAsync);
-		});
-		string active = LayoutProfiles.ActiveName();
-		string activeText = ((active.Length > 0) ? I18n.L("当前方案:{0}", active) : I18n.L("当前是直接编辑态"));
-		rows.Add(Ui.Field(I18n.L("布局方案"), Ui.H(8.0, create, import, export), activeText));
-		List<string> names = LayoutProfiles.Names();
-		if (names.Count == 0)
-		{
-			rows.Add(Ui.Field(I18n.L("还没有方案"), Ui.Muted(I18n.L("点「新建布局方案」把当前这套布局存下来")), ""));
-			return rows.ToArray();
-		}
-		foreach (string name in names)
-		{
-			rows.Add(ProfileRow(name, name == active));
-		}
-		return rows.ToArray();
+		return Ui.Card(Rows(LayoutRow(I18n.L("布局文件"), I18n.L("用 JSON 编辑整套布局，适合批量修改或分享给别人"), Ui.H(8.0, folder, editor))));
 	}
 
-	private FrameworkElement ProfileRow(string name, bool active)
+	private static void OpenLayoutFolder()
 	{
-		SPanel title = Ui.H(8.0, Ui.Txt(name, 13.5, bold: true).VCenter());
-		if (active)
-		{
-			title.Children.Add(Ui.Tag(I18n.L("当前"), "B.OnAccentStrong", "B.AccentStrong").VCenter());
-		}
-		Button apply = Ui.Btn(I18n.L("应用"), BtnKind.Soft, delegate
-		{
-			ApplyProfile(name);
-		});
-		Button rename = Ui.Btn(I18n.L("重命名"), BtnKind.Chip, delegate
-		{
-			PageBase.Run(() => RenameProfileAsync(name));
-		});
-		Button copy = Ui.Btn(I18n.L("复制一份"), BtnKind.Chip, delegate
-		{
-			PageBase.Run(() => DuplicateProfileAsync(name));
-		});
-		Button del = Ui.Btn(I18n.L("删除"), BtnKind.Ghost, delegate
-		{
-			PageBase.Run(() => DeleteProfileAsync(name));
-		});
-		Grid row = Ui.G(null, "*,Auto");
-		row.Add(title.VCenter(), 0);
-		row.Add(Ui.H(6.0, apply, rename, copy, del), 0, 1);
-		return row;
-	}
-
-	private async System.Threading.Tasks.Task NewProfileAsync()
-	{
-		string? name = await Dlg.Prompt(I18n.L("新建布局方案"), I18n.L("方案名"), I18n.L("我的布局 {0}", DateTime.Now.ToString("MM-dd HH:mm")));
-		if (name == null)
-		{
-			return;
-		}
-		string error = LayoutProfiles.Create(name, fromCurrent: true);
-		if (error.Length > 0)
-		{
-			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
-			return;
-		}
-		PageBase.Toast(I18n.L("布局方案「{0}」已保存", name), I18n.L("以当前布局为基线"), ToastKind.Success);
-		RefreshLayoutView();
-	}
-
-private void ApplyProfile(string name)
-	{
-		string error = LayoutProfiles.Apply(name, out string kept);
-		if (error.Length > 0)
-		{
-			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
-			return;
-		}
-		// 应用前旧布局已自动留底成「上一次布局」:换错了能用同名方案切回
-		PageBase.Toast(I18n.L("布局已应用,可直接「另存为方案」保留"), (kept.Length > 0) ? I18n.L("原布局已留底为「{0}」", kept) : name, ToastKind.Success);
-		RefreshLayoutView();
-	}
-
-	private async System.Threading.Tasks.Task RenameProfileAsync(string name)
-	{
-		string? next = await Dlg.Prompt(I18n.L("重命名"), I18n.L("方案名"), name);
-		if (next == null || next == name)
-		{
-			return;
-		}
-		string error = LayoutProfiles.Rename(name, next);
-		if (error.Length > 0)
-		{
-			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
-			return;
-		}
-		RefreshLayoutView();
-	}
-
-	private async System.Threading.Tasks.Task DuplicateProfileAsync(string name)
-	{
-		string? next = await Dlg.Prompt(I18n.L("复制一份"), I18n.L("方案名"), I18n.L("{0} 副本", name));
-		if (next == null)
-		{
-			return;
-		}
-		string error = LayoutProfiles.Duplicate(name, next);
-		if (error.Length > 0)
-		{
-			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
-			return;
-		}
-		RefreshLayoutView();
-	}
-
-	private async System.Threading.Tasks.Task DeleteProfileAsync(string name)
-	{
-		if (!await Dlg.Confirm(I18n.L("删除"), I18n.L("删除布局方案「{0}」?", name), I18n.L("删除"), I18n.L("取消"), danger: true))
-		{
-			return;
-		}
-		string error = LayoutProfiles.Delete(name);
-		if (error.Length > 0)
-		{
-			PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
-			return;
-		}
-		PageBase.Toast(I18n.L("布局方案「{0}」已删除", name), "", ToastKind.Success);
-		RefreshLayoutView();
-	}
-
-	// ————— f2 导入 / 导出 —————
-
-	private async System.Threading.Tasks.Task ExportLayoutAsync()
-	{
-		int choice = await Dlg.Choose(I18n.L("导出布局"), Ui.Muted(I18n.L("整机方案含页签 / 区块 / 分栏比例 / 自建区块;兼容 v1 的页面布局只含每页区块的顺序与显隐")), new string[3]
-		{
-			I18n.L("取消"),
-			I18n.L("导出整机方案(v2)"),
-			I18n.L("导出兼容 v1 的页面布局")
-		}, 560.0);
-		if (choice == 1)
-		{
-			string text = LayoutStoreV2.ExportJson(LayoutStoreV2.Load());
-			string? path = Dlg.SaveFile(I18n.L("布局 (*.json)|*.json|全部文件|*.*"), "tipcl-layout-v2.json", I18n.L("导出整机方案"));
-			if (path != null && WriteTextFile(path, text))
-			{
-				PageBase.Toast(I18n.L("导出布局"), path, ToastKind.Success);
-			}
-			return;
-		}
-		if (choice == 2)
-		{
-			string text = PageLayoutStore.ExportJson(LayoutV1Projection.ProjectV1(LayoutStoreV2.Load()));
-			string? path2 = Dlg.SaveFile(I18n.L("布局 (*.json)|*.json|全部文件|*.*"), "tipcl-page-layout.json", I18n.L("导出兼容 v1 的页面布局"));
-			if (path2 != null && WriteTextFile(path2, text))
-			{
-				PageBase.Toast(I18n.L("导出布局"), path2, ToastKind.Success);
-			}
-		}
-	}
-
-	private async System.Threading.Tasks.Task ImportLayoutFileAsync()
-	{
-		string? path = Dlg.PickFile(I18n.L("布局 (*.json)|*.json|全部文件|*.*"), I18n.L("导入布局"));
-		if (path == null)
-		{
-			return;
-		}
-		string text;
 		try
 		{
-			text = File.ReadAllText(path);
+			string file = LayoutStoreV2.FilePath;
+			if (File.Exists(file))
+			{
+				System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + file + "\"");
+			}
+			else
+			{
+				System.Diagnostics.Process.Start("explorer.exe", "\"" + LayoutStoreV2.DirPath + "\"");
+			}
 		}
 		catch (Exception ex)
 		{
-			PageBase.Toast(I18n.L("布局读取失败"), ex.Message, ToastKind.Error);
-			return;
-		}
-		LayoutV2? whole = LayoutV2.FromJsonText(text);
-		if (whole != null)
-		{
-			int choice = await Dlg.Choose(I18n.L("导入布局"), Ui.Muted(I18n.L("这是一份整机方案(含页签 / 区块 / 分栏比例)")), new string[3]
-			{
-				I18n.L("取消"),
-				I18n.L("应用为当前布局"),
-				I18n.L("存为方案")
-			}, 560.0);
-			if (choice == 1)
-			{
-				string error = LayoutProfiles.ApplySnapshot(whole.Layout, out string kept);
-				if (error.Length > 0)
-				{
-					PageBase.Toast(I18n.L("布局未能保存"), error, ToastKind.Warning);
-					return;
-				}
-				PageBase.Toast(I18n.L("布局已应用,可直接「另存为方案」保留"), (kept.Length > 0) ? I18n.L("原布局已留底为「{0}」", kept) : System.IO.Path.GetFileName(path), ToastKind.Success);
-				RefreshLayoutView();
-			}
-			else if (choice == 2)
-			{
-				string? name = await Dlg.Prompt(I18n.L("存为方案"), I18n.L("方案名"), System.IO.Path.GetFileNameWithoutExtension(path));
-				if (name == null)
-				{
-					return;
-				}
-				string error2 = LayoutProfiles.CreateFrom(name, whole.Layout);
-				if (error2.Length > 0)
-				{
-					PageBase.Toast(I18n.L("布局未能保存"), error2, ToastKind.Warning);
-					return;
-				}
-				PageBase.Toast(I18n.L("布局方案「{0}」已保存", name), "", ToastKind.Success);
-				RefreshLayoutView();
-			}
-			return;
-		}
-		// 兼容 v1 的页面布局:把每页的 {id,hidden} 与顺序并进当前文档的 pages
-		try
-		{
-			IReadOnlyDictionary<string, PageLayoutDoc> pages = PageLayoutStore.ParseImport(text);
-			LayoutV2 doc = LayoutStoreV2.Load();
-			int num = LayoutProfiles.MergeV1Pages(doc, pages);
-			if (!LayoutStoreV2.Save(doc))
-			{
-				PageBase.Toast(I18n.L("布局未能保存"), I18n.L("改动只保留在本次运行"), ToastKind.Warning);
-				return;
-			}
-			PageBase.Toast(I18n.L("已导入 {0} 个页面的布局（下次打开对应页面生效）", num), System.IO.Path.GetFileName(path), ToastKind.Success);
-			RefreshLayoutView();
-		}
-		catch (Exception ex2)
-		{
-			PageBase.Toast(I18n.L("不是有效的布局文件"), ex2.Message, ToastKind.Error);
-		}
-	}
-
-	private static bool WriteTextFile(string path, string text)
-	{
-		try
-		{
-			File.WriteAllText(path, text);
-			return true;
-		}
-		catch (Exception ex)
-		{
-			PageBase.Toast(I18n.L("布局未能保存"), ex.Message, ToastKind.Error);
-			return false;
-		}
-	}
-
-	// ————— g 高级:布局 JSON 编辑器 —————
-
-	private Border LayoutJsonCard()
-	{
-		TextBox box = Ui.LogBox();
-		box.Height = 220.0;
-		box.Text = ((_layoutJsonText.Length > 0) ? _layoutJsonText : LayoutJsonEditor.Text(LayoutStoreV2.Load()));
-		box.TextChanged += delegate
-		{
-			_layoutJsonText = box.Text ?? "";
-		};
-		_layoutJsonIssues = Ui.V(4.0);
-		Button check = Ui.Btn(I18n.L("校验"), BtnKind.Normal, delegate
-		{
-			InspectJson(box, apply: false);
-		});
-		Button apply = Ui.Btn(I18n.L("应用"), BtnKind.Primary, delegate
-		{
-			InspectJson(box, apply: true);
-		});
-		Button reload = Ui.Btn(I18n.L("刷新"), BtnKind.Chip, delegate
-		{
-			_layoutJsonText = "";
-			box.Text = LayoutJsonEditor.Text(LayoutStoreV2.Load());
-			RenderJsonIssues(new List<LayoutJsonIssue>());
-		});
-		reload.ToolTip = I18n.L("重新载入当前布局");
-		return Ui.Card(Ui.V(8.0, Ui.Field(I18n.L("布局 JSON"), Ui.V(8.0, box, Ui.H(8.0, check, apply, reload)), I18n.L("校验通过才会落盘;非法时按字段给出原因")), _layoutJsonIssues));
-	}
-
-	private void InspectJson(TextBox box, bool apply)
-	{
-		string text = box.Text ?? "";
-		LayoutV2? doc;
-		List<LayoutJsonIssue> issues = (apply ? LayoutJsonEditor.Apply(text, out doc) : LayoutJsonEditor.Inspect(text, out doc));
-		RenderJsonIssues(issues);
-		bool failed = issues.Any((LayoutJsonIssue i) => i.Error);
-		if (failed)
-		{
-			PageBase.Toast(I18n.L("布局 JSON 有错误"), I18n.L("看下面的具体字段"), ToastKind.Error);
-			return;
-		}
-		if (apply)
-		{
-			_layoutJsonText = "";
-			PageBase.Toast(I18n.L("布局已保存"), (issues.Count > 0) ? I18n.L("有 {0} 处按契约钳位 / 忽略", issues.Count) : "", ToastKind.Success);
-			RefreshLayoutView();
-		}
-		else
-		{
-			PageBase.Toast(I18n.L("校验通过"), (issues.Count > 0) ? I18n.L("有 {0} 处按契约钳位 / 忽略", issues.Count) : "", ToastKind.Success);
-		}
-	}
-
-	private void RenderJsonIssues(List<LayoutJsonIssue> issues)
-	{
-		if (_layoutJsonIssues == null)
-		{
-			return;
-		}
-		_layoutJsonIssues.Children.Clear();
-		foreach (LayoutJsonIssue issue in issues)
-		{
-			TextBlock line = Ui.Txt((issue.Path.Length > 0) ? (issue.Path + ": " + issue.Message) : issue.Message, 12.0, bold: false, issue.Error ? "B.Danger" : "B.Warn");
-			line.TextWrapping = TextWrapping.Wrap;
-			_layoutJsonIssues.Children.Add(line);
+			PageBase.Toast(I18n.L("没能打开文件夹"), ex.Message, ToastKind.Error);
 		}
 	}
 
@@ -1080,11 +1764,459 @@ private void ApplyProfile(string name)
 	}
 }
 
+/// <summary>页面卡片缩略图里的一块:网格坐标(列 / 行 / 跨列 / 跨行)+ 是否组件块(主题色浅底)。</summary>
+public sealed class LayoutThumbCell
+{
+	public string Id { get; set; } = "";
+
+	public int Col { get; set; }
+
+	public int Row { get; set; }
+
+	public int Span { get; set; } = 1;
+
+	public int RowSpan { get; set; } = 1;
+
+	/// <summary>自建组件 / 插件块(custom: / plugin:)。</summary>
+	public bool Widget { get; set; }
+}
+
+/// <summary>一张页面卡片的缩略图:列数 + 各块;Placeholder = 没有可用的排布(没自定义过、页面也还没建),画成通用占位。</summary>
+public sealed class LayoutThumb
+{
+	public int Cols { get; set; } = 1;
+
+	public List<LayoutThumbCell> Cells { get; set; } = new List<LayoutThumbCell>();
+
+	public bool Placeholder { get; set; }
+}
+
 /// <summary>
-/// 设置页「布局」视图里「页面区块」小节的入口表(纯数据、零 WPF 依赖,net8 测试宿主可直接断言):
-/// 覆盖全仓 12 个 BlockHost 宿主。D1 把 <c>LayoutEditor.CanEdit</c> 从 specs ≥ 2 放宽到 ≥ 1 之后,
-/// 单块页(settings:network / settings:about)同样能进编辑态,所以表里一并列出
-/// —— 单块页能调的东西少(外观 / 标题 / 先隐藏),但入口不该缺。
+/// 设置 → 布局「页面」组的纯逻辑(零 WPF 依赖,net8 测试宿主直接断言):
+/// 哪些页出卡片(入口表去掉单块页与「布局」页自己 = 15 张,默认先显示 6 张)、「已自定义」判定
+/// (= LayoutStoreV2 文档里有没有这一页的条目,主体或窄窗变体任一份)、摘要、缩略图、恢复默认。
+/// </summary>
+public static class LayoutPageCards
+{
+	/// <summary>默认先显示的 6 张(其余在「显示全部」里)。</summary>
+	public static readonly string[] FeaturedPageIds = new string[6] { "launch", "download", "library:main", "multiplayer", "account", "ai" };
+
+	/// <summary>默认显示几张。</summary>
+	public const int FeaturedCount = 6;
+
+	/// <summary>「布局」页自己的 pageId(不出卡片:在本页里编辑本页没有意义)。</summary>
+	public const string LayoutPageId = "settings:layout";
+
+	/// <summary>区块间距三档的存储值(紧凑 6 / 标准 10 / 宽松 14,数值见 LayoutAppearance)。</summary>
+	public static readonly string[] DensityKeys = new string[3] { LayoutSchema.DensityCompact, LayoutSchema.DensityStandard, LayoutSchema.DensityLoose };
+
+	/// <summary>该入口出不出卡片:单块页(只有一块内容,不提供编辑)和「布局」页自己不出。</summary>
+	public static bool IsCardPage(LayoutBlockEntryCatalog.Entry? entry)
+	{
+		return entry != null && !entry.SingleBlock && !string.Equals(entry.PageId, LayoutPageId, StringComparison.Ordinal);
+	}
+
+	/// <summary>全部卡片(显示顺序:默认 6 张在前,其余按入口表顺序)。</summary>
+	public static List<LayoutBlockEntryCatalog.Entry> Cards()
+	{
+		List<LayoutBlockEntryCatalog.Entry> list = new List<LayoutBlockEntryCatalog.Entry>();
+		foreach (string pageId in FeaturedPageIds)
+		{
+			LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(pageId);
+			if (IsCardPage(entry))
+			{
+				list.Add(entry!);
+			}
+		}
+		foreach (LayoutBlockEntryCatalog.Entry entry2 in LayoutBlockEntryCatalog.All)
+		{
+			if (IsCardPage(entry2) && !list.Contains(entry2))
+			{
+				list.Add(entry2);
+			}
+		}
+		return list;
+	}
+
+	/// <summary>当前要画的卡片:收起时只给前 6 张。</summary>
+	public static List<LayoutBlockEntryCatalog.Entry> Shown(bool all)
+	{
+		List<LayoutBlockEntryCatalog.Entry> cards = Cards();
+		return all ? cards : cards.Take(FeaturedCount).ToList();
+	}
+
+	/// <summary>卡片网格下方那一行说明:哪些页只有一块内容、不提供编辑。</summary>
+	public static string SingleBlockNote()
+	{
+		List<string> names = new List<string>();
+		foreach (LayoutBlockEntryCatalog.Entry entry in LayoutBlockEntryCatalog.All)
+		{
+			if (entry.SingleBlock)
+			{
+				names.Add(I18n.L("「{0}」", I18n.L(entry.Label)));
+			}
+		}
+		return (names.Count > 0) ? I18n.L("{0}只有一块内容，不提供编辑。", string.Concat(names)) : "";
+	}
+
+	// 主 body + 各窄窗变体(变体只看一层,与 LayoutVariantWrite 同口径)
+	private static IEnumerable<LayoutBody> Bodies(LayoutV2? doc)
+	{
+		if (doc?.Layout == null)
+		{
+			yield break;
+		}
+		yield return doc.Layout;
+		if (doc.Layout.Variants == null)
+		{
+			yield break;
+		}
+		foreach (LayoutBody variant in doc.Layout.Variants.Values)
+		{
+			if (variant != null)
+			{
+				yield return variant;
+			}
+		}
+	}
+
+	/// <summary>文档里这一页的条目:主 body 优先,没有再看窄窗变体;都没有 = null(= 默认布局)。</summary>
+	public static PageLayoutV2? PageOf(LayoutV2? doc, string? pageId)
+	{
+		if (string.IsNullOrEmpty(pageId))
+		{
+			return null;
+		}
+		foreach (LayoutBody body in Bodies(doc))
+		{
+			if (body.Pages != null && body.Pages.TryGetValue(pageId!, out PageLayoutV2? page) && page != null)
+			{
+				return page;
+			}
+		}
+		return null;
+	}
+
+	/// <summary>「已自定义」= LayoutStoreV2 文档里有这一页的条目(主 body 或窄窗变体任一份)。</summary>
+	public static bool IsCustomized(LayoutV2? doc, string? pageId)
+	{
+		return PageOf(doc, pageId) != null;
+	}
+
+	/// <summary>文档里有条目的页面数(主 body 与变体合并去重)。</summary>
+	public static int CustomizedCount(LayoutV2? doc)
+	{
+		HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
+		foreach (LayoutBody body in Bodies(doc))
+		{
+			if (body.Pages == null)
+			{
+				continue;
+			}
+			foreach (KeyValuePair<string, PageLayoutV2> kv in body.Pages)
+			{
+				if (!string.IsNullOrEmpty(kv.Key) && kv.Value != null)
+				{
+					ids.Add(kv.Key);
+				}
+			}
+		}
+		return ids.Count;
+	}
+
+	/// <summary>恢复默认:从主 body 与各变体删掉这一页的条目(不落盘,调用方 Save);返回删掉的份数。组件定义不动。</summary>
+	public static int Reset(LayoutV2? doc, string? pageId)
+	{
+		if (string.IsNullOrEmpty(pageId))
+		{
+			return 0;
+		}
+		int removed = 0;
+		foreach (LayoutBody body in Bodies(doc).ToList())
+		{
+			if (body.Pages != null && body.Pages.Remove(pageId!))
+			{
+				removed++;
+			}
+		}
+		return removed;
+	}
+
+	/// <summary>全部恢复默认:清空主 body 与各变体的 pages(不落盘);返回涉及的页面数。页签、分栏、组件定义都不动。</summary>
+	public static int ResetAll(LayoutV2? doc)
+	{
+		int count = CustomizedCount(doc);
+		foreach (LayoutBody body in Bodies(doc).ToList())
+		{
+			body.Pages?.Clear();
+		}
+		return count;
+	}
+
+	/// <summary>已自定义页的一行摘要,例如「网格 · 1 个组件 · 隐藏 1 项」;什么都没多出来时写「调整了顺序」。</summary>
+	public static string Summary(PageLayoutV2? page)
+	{
+		if (page == null)
+		{
+			return I18n.L("和出厂时一样");
+		}
+		List<string> bits = new List<string>();
+		if (page.Mode == LayoutSchema.ModeGrid || page.Mode == LayoutSchema.ModeCanvas)
+		{
+			// 自由画布在界面上已经并入网格(按网格渲染),摘要同样写「网格」
+			bits.Add(I18n.L("网格"));
+		}
+		int widgets = 0;
+		int hidden = 0;
+		if (page.Blocks != null)
+		{
+			foreach (BlockLayout block in page.Blocks)
+			{
+				if (block == null || string.IsNullOrEmpty(block.Id))
+				{
+					continue;
+				}
+				bool builtin = LayoutEngine.Classify(block.Id) == LayoutContentKind.Builtin;
+				if (!builtin && !block.Hidden)
+				{
+					widgets++;
+				}
+				else if (builtin && block.Hidden)
+				{
+					hidden++;
+				}
+			}
+		}
+		if (widgets > 0)
+		{
+			bits.Add(I18n.L("{0} 个组件", widgets));
+		}
+		if (hidden > 0)
+		{
+			bits.Add(I18n.L("隐藏 {0} 项", hidden));
+		}
+		return (bits.Count > 0) ? string.Join(" · ", bits) : I18n.L("调整了顺序");
+	}
+
+	/// <summary>缩略图:网格按 LayoutGrid.Pack 的槽位;列表按 LayoutEngine.Plan 的行;自由画布按「先 y 后 x」推成网格。</summary>
+	public static LayoutThumb ThumbOf(string? pageId, PageLayoutV2? page)
+	{
+		if (page == null || page.Blocks == null)
+		{
+			LayoutThumb placeholder = new LayoutThumb
+			{
+				Cols = 1,
+				Placeholder = true
+			};
+			for (int i = 0; i < 3; i++)
+			{
+				placeholder.Cells.Add(new LayoutThumbCell
+				{
+					Id = "",
+					Col = 0,
+					Row = i,
+					Span = 1
+				});
+			}
+			return placeholder;
+		}
+		LayoutThumb thumb = new LayoutThumb();
+		if (page.Mode == LayoutSchema.ModeGrid)
+		{
+			thumb.Cols = LayoutGrid.Columns(page);
+			foreach (LayoutCell cell in LayoutGrid.Pack(page))
+			{
+				thumb.Cells.Add(new LayoutThumbCell
+				{
+					Id = cell.Id,
+					Col = cell.X,
+					Row = cell.Y,
+					Span = cell.W,
+					RowSpan = cell.H,
+					Widget = LayoutEngine.Classify(cell.Id) != LayoutContentKind.Builtin
+				});
+			}
+		}
+		else if (page.Mode == LayoutSchema.ModeCanvas)
+		{
+			thumb.Cols = LayoutGrid.Columns(page);
+			thumb.Cells.AddRange(CanvasAsRows(page, thumb.Cols));
+		}
+		else
+		{
+			LayoutPlan plan = LayoutEngine.Plan(pageId ?? "", page);
+			thumb.Cols = Math.Max(1, plan.Columns);
+			for (int r = 0; r < plan.Rows.Count; r++)
+			{
+				foreach (LayoutSlot slot in plan.Rows[r].Slots)
+				{
+					thumb.Cells.Add(new LayoutThumbCell
+					{
+						Id = slot.Id,
+						Col = slot.Column,
+						Row = r,
+						Span = Math.Max(1, slot.Span),
+						Widget = LayoutEngine.Classify(slot.Id) != LayoutContentKind.Builtin
+					});
+				}
+			}
+		}
+		// 缩略图只有 92px 高:最多画前 8 行,够看出整体形状
+		thumb.Cells = thumb.Cells.Where((LayoutThumbCell c) => c.Row < 8).ToList();
+		return thumb;
+	}
+
+	// 自由画布(界面上已并入网格)的缩略:可见块按「先 y 后 x」排序,宽度按 w × 列数取整,依次铺满一行再换行
+	private static List<LayoutThumbCell> CanvasAsRows(PageLayoutV2 page, int cols)
+	{
+		List<LayoutThumbCell> cells = new List<LayoutThumbCell>();
+		List<KeyValuePair<int, BlockLayout>> visible = new List<KeyValuePair<int, BlockLayout>>();
+		for (int i = 0; i < page.Blocks.Count; i++)
+		{
+			BlockLayout block = page.Blocks[i];
+			if (block != null && !string.IsNullOrEmpty(block.Id) && !block.Hidden)
+			{
+				visible.Add(new KeyValuePair<int, BlockLayout>(i, block));
+			}
+		}
+		visible.Sort(delegate(KeyValuePair<int, BlockLayout> a, KeyValuePair<int, BlockLayout> b)
+		{
+			int byY = a.Value.Y.CompareTo(b.Value.Y);
+			if (byY != 0)
+			{
+				return byY;
+			}
+			int byX = a.Value.X.CompareTo(b.Value.X);
+			return (byX != 0) ? byX : a.Key.CompareTo(b.Key);
+		});
+		int row = 0;
+		int col = 0;
+		foreach (KeyValuePair<int, BlockLayout> kv in visible)
+		{
+			double w = kv.Value.W;
+			int span = (w > 1.0) ? (int)Math.Round(w) : (int)Math.Round(w * cols);
+			span = Math.Max(1, Math.Min(cols, span));
+			if (col > 0 && col + span > cols)
+			{
+				row++;
+				col = 0;
+			}
+			cells.Add(new LayoutThumbCell
+			{
+				Id = kv.Value.Id,
+				Col = col,
+				Row = row,
+				Span = span,
+				Widget = LayoutEngine.Classify(kv.Value.Id) != LayoutContentKind.Builtin
+			});
+			col += span;
+		}
+		return cells;
+	}
+
+	/// <summary>把文档里的 density 归一到三档之一(未知 / 空 = 标准)。</summary>
+	public static string NormalizeDensity(string? density)
+	{
+		foreach (string key in DensityKeys)
+		{
+			if (string.Equals(key, density, StringComparison.Ordinal))
+			{
+				return key;
+			}
+		}
+		return LayoutSchema.DensityStandard;
+	}
+
+	/// <summary>区块间距三档的显示名。</summary>
+	public static string DensityLabel(string? density)
+	{
+		return NormalizeDensity(density) switch
+		{
+			LayoutSchema.DensityCompact => I18n.L("紧凑"),
+			LayoutSchema.DensityLoose => I18n.L("宽松"),
+			_ => I18n.L("标准")
+		};
+	}
+}
+
+/// <summary>「高级 → 分栏宽度」那一行的纯逻辑:哪些左右分栏被拖过(文档里存了比例),以及它们给用户看的名字。</summary>
+public static class LayoutSplitSummary
+{
+	/// <summary>存过比例的左右分栏(按 SplitCatalog 顺序)。</summary>
+	public static List<SplitSite> Adjusted(LayoutV2? doc)
+	{
+		List<SplitSite> list = new List<SplitSite>();
+		if (doc?.Layout?.Splits == null)
+		{
+			return list;
+		}
+		foreach (SplitSite site in SplitCatalog.All)
+		{
+			if (site.IsTwoColumn && doc.Layout.Splits.TryGetValue(site.PageId, out SplitState? split) && split?.Ratios != null && split.Ratios.ContainsKey(site.SplitId))
+			{
+				list.Add(site);
+			}
+		}
+		return list;
+	}
+
+	/// <summary>存过比例的分栏名字,例如「设置左侧导航」「实例库文件夹栏」。</summary>
+	public static List<string> AdjustedNames(LayoutV2? doc)
+	{
+		return Adjusted(doc).Select(NameOf).ToList();
+	}
+
+	/// <summary>一处分栏给用户看的名字(不出现 pageId / splitId 这类内部写法)。</summary>
+	public static string NameOf(SplitSite site)
+	{
+		string where = (site?.PageId ?? "") + "/" + (site?.SplitId ?? "");
+		switch (where)
+		{
+		case "library/folders":
+			return I18n.L("实例库文件夹栏");
+		case "settings/nav":
+			return I18n.L("设置左侧导航");
+		case "version-manage/nav":
+			return I18n.L("版本管理左栏");
+		case "ai/history":
+			return I18n.L("AI 助手历史栏");
+		case "feedback/side":
+			return I18n.L("反馈页右栏");
+		case "account/hero":
+			return I18n.L("账号页头像卡");
+		default:
+		{
+			LayoutBlockEntryCatalog.Entry? entry = LayoutBlockEntryCatalog.Find(site?.PageId);
+			return (entry != null) ? I18n.L(entry.Label) : I18n.L("其它页面");
+		}
+		}
+	}
+}
+
+/// <summary>「方案」组里的一张卡片(纯数据)。</summary>
+public sealed class LayoutProfileCard
+{
+	/// <summary>方案名(文档里的键)。</summary>
+	public string Name { get; set; } = "";
+
+	/// <summary>显示名(AI 备份改写成「AI 改布局前 + 时间」)。</summary>
+	public string DisplayName { get; set; } = "";
+
+	/// <summary>一行信息(几个页面自定义过、间距档;AI 备份 / 自动留底写来源)。</summary>
+	public string Info { get; set; } = "";
+
+	/// <summary>正在使用(= active_profile):描边、不能删除。</summary>
+	public bool IsActive { get; set; }
+
+	/// <summary>AI 改布局前自动存的备份(名字以「AI 备份 」开头)。</summary>
+	public bool IsAiBackup { get; set; }
+}
+
+/// <summary>
+/// 设置页「布局」视图里「页面」一组的入口表(纯数据、零 WPF 依赖,net8 测试宿主可直接断言):
+/// 覆盖全仓 18 个 BlockHost 宿主(R34 补上了实例库 library:main)。单块页(settings:network /
+/// settings:about)仍留在表里并用 <see cref="Entry.SingleBlock"/> 标出来:页面卡片不列它们,
+/// 只在卡片下方用一行字说明(见 <see cref="LayoutPageCards"/>);「布局」页自己也不出卡片。
 /// </summary>
 public static class LayoutBlockEntryCatalog
 {
@@ -1103,7 +2235,7 @@ public static class LayoutBlockEntryCatalog
 		/// <summary>入口文案的 I18n key(复用既有导航文案)。</summary>
 		public string Label { get; set; } = "";
 
-		/// <summary>是否单块页(只有一个块:能调外观 / 标题 / 隐藏,不能重排)。</summary>
+		/// <summary>是否单块页(只有一块内容:不提供编辑,页面卡片里不列)。</summary>
 		public bool SingleBlock { get; set; }
 
 		/// <summary>
@@ -1113,8 +2245,8 @@ public static class LayoutBlockEntryCatalog
 		public string Hint { get; set; } = "";
 	}
 
-	/// <summary>17 个宿主:设置页内 8 个 + 顶栏导航 7 个 + 子视图 2 个(安装页、实例详情里内嵌的版本管理)。</summary>
-	public static readonly Entry[] All = new Entry[17]
+	/// <summary>18 个宿主:设置页内 8 个 + 顶栏导航 7 个 + 实例库 + 子视图 2 个(安装页、实例详情里内嵌的版本管理)。</summary>
+	public static readonly Entry[] All = new Entry[18]
 	{
 		new Entry
 		{
@@ -1178,6 +2310,13 @@ public static class LayoutBlockEntryCatalog
 			PageId = "download",
 			NavId = "download",
 			Label = "下载"
+		},
+		// 实例库是区块宿主(文件夹列表 / 版本选择 / 实例状态,LibraryPage),导航用顶部页签 library
+		new Entry
+		{
+			PageId = "library:main",
+			NavId = "library",
+			Label = "实例库"
 		},
 		new Entry
 		{
@@ -1394,6 +2533,105 @@ public static class LayoutProfiles
 		get
 		{
 			return I18n.L("上一次布局");
+		}
+	}
+
+	/// <summary>
+	/// AI 改布局前自动备份的方案名前缀(与 Core 的 LayoutTools.BackupPrefix 同值,单测钉住两边不漂移):
+	/// 方案卡片靠它识别「AI 备份」,并把显示名改成「AI 改布局前 + 时间」。
+	/// </summary>
+	public const string AiBackupPrefix = "AI 备份 ";
+
+	/// <summary>是不是 AI 改布局前自动存的备份。</summary>
+	public static bool IsAiBackup(string? name)
+	{
+		return !string.IsNullOrEmpty(name) && name!.StartsWith(AiBackupPrefix, StringComparison.Ordinal);
+	}
+
+	/// <summary>方案卡片上的显示名:AI 备份写成「AI 改布局前 MM-dd HH:mm」,其余原样。</summary>
+	public static string DisplayName(string? name)
+	{
+		string text = name ?? "";
+		if (!IsAiBackup(text))
+		{
+			return text;
+		}
+		string suffix = text.Substring(AiBackupPrefix.Length).Trim();
+		if (DateTime.TryParseExact(suffix, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime when))
+		{
+			suffix = when.ToString("MM-dd HH:mm", CultureInfo.InvariantCulture);
+		}
+		return I18n.L("AI 改布局前 {0}", suffix).Trim();
+	}
+
+	/// <summary>方案卡片上的一行信息:几个页面自定义过 + 间距档;AI 备份 / 自动留底写来源。</summary>
+	public static string CardInfo(string? name, LayoutBody? body)
+	{
+		if (IsAiBackup(name))
+		{
+			return I18n.L("AI 改布局之前自动存的一份");
+		}
+		if (string.Equals(name, PreviousName, StringComparison.Ordinal))
+		{
+			return I18n.L("切换方案或恢复默认之前自动留的底");
+		}
+		int pages = (body?.Pages != null) ? body.Pages.Count((KeyValuePair<string, PageLayoutV2> kv) => !string.IsNullOrEmpty(kv.Key) && kv.Value != null) : 0;
+		string first = ((pages > 0) ? I18n.L("{0} 个页面自定义过", pages) : I18n.L("各页面都是默认排列"));
+		return first + " · " + I18n.L("{0}间距", LayoutPageCards.DensityLabel(body?.Shell?.Density));
+	}
+
+	/// <summary>「方案」组的卡片(文档顺序);正在使用的那张标出来(描边、不能删)。</summary>
+	public static List<LayoutProfileCard> Cards(LayoutV2? doc)
+	{
+		List<LayoutProfileCard> list = new List<LayoutProfileCard>();
+		if (doc?.Profiles == null)
+		{
+			return list;
+		}
+		string active = doc.ActiveProfile ?? "";
+		foreach (KeyValuePair<string, LayoutBody> kv in doc.Profiles)
+		{
+			if (string.IsNullOrEmpty(kv.Key))
+			{
+				continue;
+			}
+			list.Add(new LayoutProfileCard
+			{
+				Name = kv.Key,
+				DisplayName = DisplayName(kv.Key),
+				Info = CardInfo(kv.Key, kv.Value),
+				IsActive = (active.Length > 0 && string.Equals(kv.Key, active, StringComparison.Ordinal)),
+				IsAiBackup = IsAiBackup(kv.Key)
+			});
+		}
+		return list;
+	}
+
+	/// <summary>
+	/// 「页面」组的「全部恢复默认」:先把当前布局留底成「上一次布局」(与应用方案同一套),再清空各页条目
+	/// (主体与窄窗变体);页签、分栏、组件定义都不动,回到直接编辑态。没有自定义过的页时什么也不做。
+	/// </summary>
+	public static string ResetAllPages(out string kept, out int removed)
+	{
+		kept = "";
+		removed = 0;
+		try
+		{
+			LayoutV2 doc = LayoutStoreV2.Load();
+			if (LayoutPageCards.CustomizedCount(doc) == 0)
+			{
+				return "";
+			}
+			kept = KeepPrevious(doc);
+			removed = LayoutPageCards.ResetAll(doc);
+			doc.ActiveProfile = "";
+			return LayoutStoreV2.Save(doc) ? "" : I18n.L("布局未能保存");
+		}
+		catch (Exception ex)
+		{
+			kept = "";
+			removed = 0;
+			return ex.Message;
 		}
 	}
 
