@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Avalonia;
@@ -79,6 +80,13 @@ internal static class SmokeRunner
             TaskStore.Finish(failed, false, "连接超时");
         }
 
+        // [R35 lin-l0] 布局 v3 截图开关(编辑态 / 「添加」抽屉 / 模拟选中 / 设置 → 布局「高级」展开)。
+        // 只在显式给了开关时生效:不给任何开关时 shot.Any == false、shot.Page 原样等于 SMOKE_PAGE ⇒ 默认帧逐字节不变。
+        var shot = SmokeShotOptions.Parse(Environment.GetCommandLineArgs(), Environment.GetEnvironmentVariable);
+        if (shot.Errors.Count > 0)
+            foreach (var err in shot.Errors) Console.Error.WriteLine("SMOKE-SHOT 参数: " + err);
+        if (!string.IsNullOrEmpty(shot.Output)) output = Path.GetFullPath(shot.Output);
+
         builder
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
             .UseSkia()
@@ -88,11 +96,13 @@ internal static class SmokeRunner
                 {
                     // 明暗只由 SMOKE_DARK 决定,且要进(内存里的)配置:外壳构造与设置页加载都按 ui_dark 取明暗,
                     // 只调 SetDark 的话设置页一加载就把深色帧改回浅色
-                    TipCL.Core.Launcher.Config.CONFIG.Set("ui_dark", Environment.GetEnvironmentVariable("SMOKE_DARK") == "1");
+                    TipCL.Core.Launcher.Config.CONFIG.Set("ui_dark", Environment.GetEnvironmentVariable("SMOKE_DARK") == "1" || shot.Dark);
                     var window = new Shell.MainWindow();
-                    var page = Environment.GetEnvironmentVariable("SMOKE_PAGE");
+                    var page = shot.Page;
                     window.Show();
-                    if (!string.IsNullOrEmpty(page))
+                    if (shot.SubPage != null)
+                        NavigateSubPage(window, shot.NavPage!, shot.SubPage);
+                    else if (!string.IsNullOrEmpty(page))
                         window.Navigate(page);
                     // SMOKE_SEG=1..6:下载页切到某个目录分段(Mod/整合包/数据包/资源包/光影/世界)
                     if (int.TryParse(Environment.GetEnvironmentVariable("SMOKE_SEG"), out var seg)
@@ -108,6 +118,12 @@ internal static class SmokeRunner
                     // Measure/Arrange,必须显式推渲染计时器,布局与重合成才跑得动
                     // (仓库先例:tests/TipCL.Tests/App/InstanceDetailCrashTests.cs 的 PassAsync)。
                     RenderPass();
+
+                    // [R35 lin-l0] 布局 v3 截图开关:先展开「高级」,再进编辑态 → 选中 → 打开抽屉(每步后推渲染 pass)
+                    if (shot.Any)
+                    {
+                        ApplyLayoutShot(window, shot);
+                    }
 
                     // R8 真机现象:冷启动首批 8 页里前 4 页把上一页(launch)的帧原样写进新文件名。
                     // 成因候选:SMOKE_WAIT 默认 0 时零 settle,CaptureRenderedFrame 抓到尚未重合成的上一帧。
@@ -155,6 +171,216 @@ internal static class SmokeRunner
 
     /// <summary>未显式给 SMOKE_WAIT 时的最小 settle 毫秒数:给外壳一次重新测量 + 重合成的机会。</summary>
     private const int DefaultSettleMs = 400;
+
+    // ───────────────────────── [R35 lin-l0] 布局 v3 截图开关 ─────────────────────────
+    //
+    // 对应 Windows r34/l0 的 DevShot 开关(--edit / --pop layout-drawer / --select <blockId> / --expand advanced)。
+    // **只写代码、本轮不运行**(R35-BRIEF §2「不跑实机」),截图命令写在 progress/R35-lin-l0.md「待真机」。
+    //
+    // 选中 / 抽屉的正式入口归 lin-l12(LayoutEditor / 新建的 LayoutAddDrawer.cs):这里不直接引用它们可能改名的成员,
+    // 先看下面两个钩子(合并时由主 agent 接到正式入口),没接就按名字反射找现有成员;都找不到只打印 NOTE,不让冒烟失败。
+
+    /// <summary>合并后接线:模拟选中某块(返回是否选中成功)。置 null = 走反射兜底。
+    /// [R35 lin-int] 已接到 lin-l12 的正式入口 <c>LayoutEditor.SelectBlock(string)</c>。</summary>
+    internal static Func<TipCL.App.Pages.Layout.LayoutEditor, string, bool>? SelectBlockHook = (editor, id) => editor.SelectBlock(id);
+
+    /// <summary>合并后接线:打开「添加」抽屉(返回是否打开成功)。置 null = 走反射兜底。
+    /// [R35 lin-int] 已接到 lin-l12 的正式入口 <c>LayoutEditor.OpenAddDrawer()</c>。</summary>
+    internal static Func<TipCL.App.Pages.Layout.LayoutEditor, bool>? OpenAddDrawerHook = editor => editor.OpenAddDrawer();
+
+    /// <summary>反射兜底时依次尝试的「选中」方法名(参数 string)。</summary>
+    internal static readonly string[] SelectMethodNames = { "SelectBlock", "SelectForShot", "Select" };
+
+    /// <summary>反射兜底时依次尝试的「打开抽屉」方法名(无参,或一个 bool 参数传 true)。</summary>
+    internal static readonly string[] DrawerMethodNames = { "OpenAddDrawer", "ShowAddDrawer", "OpenDrawer", "ShowDrawer" };
+
+    /// <summary>
+    /// 「settings:layout」这类带子页的页名:先进设置页再切内层视图。
+    /// layout → OpenLayoutView();其余按入口清单(LayoutBlockEntryCatalog)的 SettingsView 选内层导航。
+    /// </summary>
+    private static void NavigateSubPage(Shell.MainWindow window, string nav, string sub)
+    {
+        window.Navigate(nav);
+        RenderPass();
+        if (nav != "settings" || window.CurrentPage is not TipCL.App.Pages.Settings.SettingsPage st)
+            return;
+        if (sub == "layout")
+        {
+            st.OpenLayoutView();
+            return;
+        }
+        var entry = TipCL.App.Pages.Layout.LayoutBlockEntryCatalog.Find(nav + ":" + sub);
+        if (entry != null && entry.SettingsView >= 0)
+            st.SelectTab(entry.SettingsView);
+        else
+            Console.WriteLine($"SMOKE-SHOT NOTE: 不认识设置子页「{sub}」,停在设置页首屏");
+    }
+
+    /// <summary>按截图开关把界面摆到要拍的样子。每一步失败只打 NOTE,不抛异常、不改退出码。</summary>
+    private static void ApplyLayoutShot(Shell.MainWindow window, SmokeShotOptions shot)
+    {
+        try
+        {
+            if (shot.ExpandAdvanced)
+            {
+                if (window.CurrentPage is not TipCL.App.Pages.Settings.SettingsPage)
+                {
+                    window.Navigate("settings");
+                    RenderPass();
+                }
+                if (window.CurrentPage is TipCL.App.Pages.Settings.SettingsPage st)
+                {
+                    st.OpenLayoutAdvanced();
+                    Console.WriteLine("SMOKE-SHOT: 已打开 设置 → 布局 并展开「高级」");
+                }
+                else
+                {
+                    Console.WriteLine("SMOKE-SHOT NOTE: 设置页没起来,无法展开「高级」");
+                }
+                Settle(DefaultSettleMs);
+            }
+
+            if (!shot.NeedsEdit)
+                return;
+
+            var host = EnterEditForShot(window, shot.EditPage);
+            if (host == null)
+            {
+                Console.WriteLine("SMOKE-SHOT NOTE: 当前页没有可编辑的区块宿主(单块页 / 页面还没上屏),--edit / --select / --pop 跳过");
+                return;
+            }
+            Settle(DefaultSettleMs);
+            Console.WriteLine($"SMOKE-SHOT: 已进入编辑态 page={host.PageId}");
+
+            if (!string.IsNullOrEmpty(shot.Select))
+            {
+                bool ok = SelectBlockHook != null
+                    ? SafeInvoke(() => SelectBlockHook(host.Editor, shot.Select!))
+                    : ReflectSelect(host.Editor, shot.Select!);
+                Console.WriteLine(ok
+                    ? $"SMOKE-SHOT: 已模拟选中 {shot.Select}"
+                    : $"SMOKE-SHOT NOTE: 没能选中 {shot.Select}(选中入口未接线或块 id 不在本页)");
+                RenderPass();
+            }
+
+            if (shot.PopDrawer)
+            {
+                bool ok = OpenAddDrawerHook != null
+                    ? SafeInvoke(() => OpenAddDrawerHook(host.Editor))
+                    : ReflectOpenDrawer(host.Editor);
+                Console.WriteLine(ok
+                    ? "SMOKE-SHOT: 已打开「添加」抽屉"
+                    : "SMOKE-SHOT NOTE: 没能打开「添加」抽屉(抽屉入口未接线)");
+                Settle(DefaultSettleMs);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"SMOKE-SHOT NOTE: 摆拍步骤抛异常(忽略,照常截图): {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 进编辑态:给了 pageKey(如 "download" / "settings:general")就按 pageKey 找正在显示的宿主;
+    /// 没给就取当前页里第一个可编辑宿主。已经在编辑态的宿主直接返回。
+    /// </summary>
+    private static TipCL.App.Pages.Layout.BlockHost? EnterEditForShot(Shell.MainWindow window, string? pageKey)
+    {
+        if (window.PageHostControl?.Content is not Visual root)
+            return null;
+        var hosts = TipCL.App.Pages.Layout.LayoutShellHooks.FindHosts(root);
+        TipCL.App.Pages.Layout.BlockHost? host = string.IsNullOrEmpty(pageKey)
+            ? hosts.FirstOrDefault()
+            : hosts.FirstOrDefault(h => string.Equals(h.PageId, pageKey, StringComparison.Ordinal));
+        if (host == null && !string.IsNullOrEmpty(pageKey))
+        {
+            // 不在当前页:走设置 → 布局「编辑」同一个入口(会先跳页再进编辑态)
+            if (TipCL.App.Pages.Layout.LayoutShellHooks.BeginEditPage(pageKey))
+            {
+                Settle(DefaultSettleMs);
+                if (window.PageHostControl?.Content is Visual again)
+                    host = TipCL.App.Pages.Layout.LayoutShellHooks.FindHosts(again)
+                        .FirstOrDefault(h => string.Equals(h.PageId, pageKey, StringComparison.Ordinal));
+            }
+        }
+        if (host == null)
+            return null;
+        if (!host.Editor.IsEditing && !host.EnterEdit())
+            return null;
+        RenderPass();
+        return host.Editor.IsEditing ? host : null;
+    }
+
+    private static bool SafeInvoke(Func<bool> body)
+    {
+        try { return body(); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"SMOKE-SHOT NOTE: 钩子抛异常: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private const System.Reflection.BindingFlags AnyInstance =
+        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+
+    /// <summary>反射兜底:按 <see cref="SelectMethodNames"/> 找 (string) 方法;再退到「_session.Select(id,false) + UpdateSelectionVisual()」。</summary>
+    internal static bool ReflectSelect(object editor, string blockId)
+    {
+        try
+        {
+            var type = editor.GetType();
+            foreach (var name in SelectMethodNames)
+            {
+                var m = type.GetMethod(name, AnyInstance, null, new[] { typeof(string) }, null);
+                if (m == null) continue;
+                var r = m.Invoke(editor, new object[] { blockId });
+                return r is not bool b || b;
+            }
+            // 基线(quick-v3 C)的内部结构:LayoutEditSession _session + UpdateSelectionVisual()
+            var session = type.GetField("_session", AnyInstance)?.GetValue(editor);
+            var select = session?.GetType().GetMethod("Select", new[] { typeof(string), typeof(bool) });
+            if (session == null || select == null) return false;
+            select.Invoke(session, new object?[] { blockId, false });
+            type.GetMethod("UpdateSelectionVisual", AnyInstance, null, Type.EmptyTypes, null)?.Invoke(editor, null);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"SMOKE-SHOT NOTE: 反射选中失败: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>反射兜底:按 <see cref="DrawerMethodNames"/> 找无参方法,或一个 bool 参数的方法(传 true)。</summary>
+    internal static bool ReflectOpenDrawer(object editor)
+    {
+        try
+        {
+            var type = editor.GetType();
+            foreach (var name in DrawerMethodNames)
+            {
+                var noArg = type.GetMethod(name, AnyInstance, null, Type.EmptyTypes, null);
+                if (noArg != null)
+                {
+                    var r = noArg.Invoke(editor, null);
+                    return r is not bool b || b;
+                }
+                var withBool = type.GetMethod(name, AnyInstance, null, new[] { typeof(bool) }, null);
+                if (withBool != null)
+                {
+                    var r = withBool.Invoke(editor, new object[] { true });
+                    return r is not bool b || b;
+                }
+            }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"SMOKE-SHOT NOTE: 反射打开抽屉失败: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
 
     /// <summary>
     /// 显式推一次渲染 pass:计时器 tick + 跑 Dispatcher 队列。无头会话里只 RunJobs 不会触发
@@ -897,5 +1123,142 @@ internal static class SmokeRunner
             if (ex.InnerException != null) Console.WriteLine("NETPROBE inner: " + ex.InnerException.Message);
             return 2;
         }
+    }
+}
+
+/// <summary>
+/// [R35 lin-l0] --smoke 的布局 v3 截图开关(纯函数解析,单测锁住;对应 Windows r34/l0 的 DevShotArgs)。
+///
+/// 命令行(跟在 --smoke 后面)与环境变量二选一,命令行优先:
+///   --shot &lt;页&gt; / --page &lt;页&gt;      = SMOKE_PAGE      截哪一页;支持 "settings:layout" 这类「设置页 + 内层视图」
+///   --edit [页键]                    = SMOKE_EDIT=1|页键  截图前进编辑态(页键缺省 = 当前页第一个可编辑宿主)
+///   --select &lt;blockId&gt;              = SMOKE_SELECT    模拟选中某块(拍浮动标签 / 图标按钮 / 右边缘手柄;隐含 --edit)
+///   --pop layout-drawer              = SMOKE_POP       打开「添加」抽屉(隐含 --edit)
+///   --expand advanced                = SMOKE_EXPAND    设置 → 布局 展开「高级」(没给页时自动去 settings:layout)
+///   --dark                           = SMOKE_DARK=1    深色
+///   --out &lt;png&gt;                      = (无)            输出文件名(缺省 smoke.png)
+/// 一个开关都不给时 <see cref="Any"/> == false、<see cref="Page"/> == SMOKE_PAGE 原值 ⇒ 现有冒烟行为逐字节不变。
+/// </summary>
+internal sealed class SmokeShotOptions
+{
+    /// <summary>「添加」抽屉的 --pop 取值(与 Windows 一致)。</summary>
+    public const string PopLayoutDrawer = "layout-drawer";
+
+    /// <summary>--expand 的取值(与 Windows 一致)。</summary>
+    public const string ExpandAdvanced_ = "advanced";
+
+    /// <summary>要导航到的页(原样;可能带 ":子页")。</summary>
+    public string? Page { get; private set; }
+
+    /// <summary>Page 冒号前的部分(导航 id);没有冒号时等于 Page。</summary>
+    public string? NavPage => Page == null ? null : (Page.IndexOf(':') is var i && i > 0 ? Page.Substring(0, i) : Page);
+
+    /// <summary>Page 冒号后的子页(如 "layout");没有冒号时为 null。</summary>
+    public string? SubPage => Page == null ? null : (Page.IndexOf(':') is var i && i > 0 && i < Page.Length - 1 ? Page.Substring(i + 1) : null);
+
+    /// <summary>显式要求进编辑态(--edit / SMOKE_EDIT)。</summary>
+    public bool Edit { get; private set; }
+
+    /// <summary>--edit 后面跟的页键(BlockHost.PageId,如 "download" / "settings:general");null = 当前页第一个宿主。</summary>
+    public string? EditPage { get; private set; }
+
+    /// <summary>--select 的块 id。</summary>
+    public string? Select { get; private set; }
+
+    /// <summary>--pop 的取值(目前只认 layout-drawer)。</summary>
+    public string? Pop { get; private set; }
+
+    /// <summary>--expand 的取值(目前只认 advanced)。</summary>
+    public string? Expand { get; private set; }
+
+    /// <summary>--dark。</summary>
+    public bool Dark { get; private set; }
+
+    /// <summary>--out 输出文件。</summary>
+    public string? Output { get; private set; }
+
+    /// <summary>解析时发现的问题(不认识的取值、缺参数);只打印,不阻止截图。</summary>
+    public List<string> Errors { get; } = new();
+
+    public bool PopDrawer => string.Equals(Pop, PopLayoutDrawer, StringComparison.Ordinal);
+
+    public bool ExpandAdvanced => string.Equals(Expand, ExpandAdvanced_, StringComparison.Ordinal);
+
+    /// <summary>选中 / 抽屉都要求先进编辑态。</summary>
+    public bool NeedsEdit => Edit || !string.IsNullOrEmpty(Select) || PopDrawer;
+
+    /// <summary>有没有任何布局截图动作(决定要不要跑 ApplyLayoutShot)。</summary>
+    public bool Any => NeedsEdit || ExpandAdvanced;
+
+    /// <summary>解析命令行 + 环境变量(纯函数:不读进程状态,环境变量经 <paramref name="env"/> 注入)。</summary>
+    public static SmokeShotOptions Parse(IReadOnlyList<string>? args, Func<string, string?>? env)
+    {
+        var o = new SmokeShotOptions();
+        string? Env(string name)
+        {
+            var v = env?.Invoke(name);
+            return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        }
+
+        // —— 环境变量(低优先) ——
+        o.Page = Env("SMOKE_PAGE");
+        var edit = Env("SMOKE_EDIT");
+        if (edit != null && edit != "0" && !string.Equals(edit, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            o.Edit = true;
+            if (edit != "1" && !string.Equals(edit, "true", StringComparison.OrdinalIgnoreCase)) o.EditPage = edit;
+        }
+        o.Select = Env("SMOKE_SELECT");
+        o.Pop = Env("SMOKE_POP");
+        o.Expand = Env("SMOKE_EXPAND");
+        o.Dark = Env("SMOKE_DARK") == "1";
+
+        // —— 命令行(高优先) ——
+        if (args != null)
+        {
+            for (int i = 0; i < args.Count; i++)
+            {
+                string a = args[i];
+                string? Next() => (i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal)) ? args[++i] : null;
+                switch (a)
+                {
+                    case "--shot":
+                    case "--page":
+                        var p = Next();
+                        if (p == null) o.Errors.Add(a + " 缺少页名"); else o.Page = p;
+                        break;
+                    case "--edit":
+                        o.Edit = true;
+                        var ep = Next();
+                        if (ep != null) o.EditPage = ep;
+                        break;
+                    case "--select":
+                        var s = Next();
+                        if (s == null) o.Errors.Add("--select 缺少块 id"); else o.Select = s;
+                        break;
+                    case "--pop":
+                        var pop = Next();
+                        if (pop == null) o.Errors.Add("--pop 缺少取值(layout-drawer)"); else o.Pop = pop;
+                        break;
+                    case "--expand":
+                        var ex = Next();
+                        if (ex == null) o.Errors.Add("--expand 缺少取值(advanced)"); else o.Expand = ex;
+                        break;
+                    case "--dark":
+                        o.Dark = true;
+                        break;
+                    case "--out":
+                        var outFile = Next();
+                        if (outFile == null) o.Errors.Add("--out 缺少文件名"); else o.Output = outFile;
+                        break;
+                }
+            }
+        }
+
+        if (o.Pop != null && !o.PopDrawer) o.Errors.Add($"--pop 只认 {PopLayoutDrawer},收到 {o.Pop}");
+        if (o.Expand != null && !o.ExpandAdvanced) o.Errors.Add($"--expand 只认 {ExpandAdvanced_},收到 {o.Expand}");
+        // 只给了 --expand advanced 没给页:默认去 设置 → 布局
+        if (o.ExpandAdvanced && string.IsNullOrEmpty(o.Page)) o.Page = "settings:layout";
+        return o;
     }
 }

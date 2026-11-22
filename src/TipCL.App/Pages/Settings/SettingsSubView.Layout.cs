@@ -27,16 +27,41 @@ internal abstract partial class SettingsSubView
     protected BlockHost UseBlockHost(string pageId, string headerBlockId, string headerTitle,
         params (string Id, string Title, Control Content)[] blocks)
     {
+        return UseBlockHost(pageId, headerBlockId, headerTitle, (PageLayoutV2?)null, blocks);
+    }
+
+    /// <summary>
+    /// [R35 lin-l5] 同上,但出厂默认布局由调用方给(GOAL-layout-v3 §5.5 / D-81 Q4:Java / 游戏时长改成默认网格、
+    /// 「说明 / 概览」默认隐藏)。<paramref name="defaultPage"/> = null 时与上面完全一致(单列 stack)。
+    /// 只在布局文档里**没有**这一页时生效;默认里标了 hidden 的块,BlockSpec.DefaultVisible 同步为 false。
+    /// </summary>
+    protected BlockHost UseBlockHost(string pageId, string headerBlockId, string headerTitle, PageLayoutV2? defaultPage,
+        params (string Id, string Title, Control Content)[] blocks)
+    {
+        HashSet<string> hiddenByDefault = new(System.StringComparer.Ordinal);
+        if (defaultPage != null)
+        {
+            foreach (BlockLayout b in defaultPage.Blocks)
+            {
+                if (b != null && b.Hidden && !string.IsNullOrEmpty(b.Id)) hiddenByDefault.Add(b.Id);
+            }
+        }
         // 先把 _stack 里的子件全摘下来:它们随即要作为区块内容重新挂到宿主下,
         // Avalonia 不允许同一控件有两个父级(R32-MFIN 已踩过)。
         _stack.Children.Clear();
         List<BlockSpec> specs = new()
         {
-            new BlockSpec { Id = headerBlockId, Title = headerTitle, Content = Header },
+            new BlockSpec { Id = headerBlockId, Title = headerTitle, Content = Header, DefaultVisible = !hiddenByDefault.Contains(headerBlockId) },
         };
         foreach ((string id, string title, Control content) in blocks)
         {
-            specs.Add(new BlockSpec { Id = id, Title = title, Content = content });
+            specs.Add(new BlockSpec { Id = id, Title = title, Content = content, DefaultVisible = !hiddenByDefault.Contains(id) });
+        }
+        if (defaultPage != null)
+        {
+            var custom = new BlockHost(pageId, specs, new Thickness(18, 6, 18, 16), defaultPage);
+            Content = custom;
+            return custom;
         }
         // 出厂默认布局:_stack 原来是 Spacing 10 + ScrollViewer 边距 18,6,18,16 ⇒ 同值搬进文档
         PageLayoutV2 page = new()

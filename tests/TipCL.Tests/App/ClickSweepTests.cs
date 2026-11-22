@@ -52,21 +52,11 @@ public class ClickSweepTests
     {
         "启动游戏", "开始游戏", "安装", "下载", "删除", "卸载", "退出", "重启", "打开文件夹",
         "选择文件", "选择图片", "选择视频", "选择", "导入", "导出", "上传", "提交", "购买", "登录",
-        // 会调系统浏览器 / 文件管理器的按钮:在 Windows 开发机上跑会真的弹出 Edge(用户 2026-11-21 报告)
-        "主页", "GitHub", "issue", "网页", "浏览器", "官网", "链接", "文档", "文件夹", "在编辑器中打开",
-    };
-
-    /// <summary>
-    /// 按控件 Name 跳过的副作用控件(没有文字标签,SideEffectWords 识别不了)。
-    /// AI-integration:设置 → AI 助手里的 MCP Server 开关点下去会在本机 127.0.0.1:25585 起监听,
-    /// 测试进程会一直占着端口直到结束(也会把 mcp_server.json 的 enabled 写成 true)。
-    /// </summary>
-    private static readonly HashSet<string> SideEffectNames = new(StringComparer.Ordinal)
-    {
-        "McpServerSwitch",
-        // AI2-i18n-ux:AI 页空态的「点一下直接发」建议按钮会在默认内置网关下真发一轮对话;网络回包时机不定,
-        // 它的事件 Post 会落在后续用例的 ResetForUnitTests 里(DlgCloseTests 偶发红,见 progress/AI-engine-mcp.md 遗留 8)。
-        "AiSuggestion",
+        // R35:会调系统浏览器的链接按钮。Linux CI 上 xdg-open 没有浏览器、看不出来;
+        // 在 Windows 开发机上跑这条遍历,每跑一次就弹一次 github.com/burningtnt/Terracotta(用户 2026-11-20 报告)。
+        "主页", "GitHub", "issue", "网页", "浏览器", "官网", "链接", "文档",
+        // R35 lin-int:设置 → 布局 → 高级「打开所在文件夹」(会调系统文件管理器)/「在编辑器中打开…」(会开独立窗口)
+        "文件夹", "在编辑器中打开",
     };
 
     private sealed class Row
@@ -201,8 +191,7 @@ public class ClickSweepTests
                     string kind = c.GetType().Name + (classes.Length > 0 ? "[" + classes + "]" : "");
                     string labelOrKind = string.IsNullOrWhiteSpace(label) ? "<" + kind + ">" : label;
 
-                    if (SideEffectWords.Any(w => label.Contains(w, StringComparison.Ordinal))
-                        || (c.Name is { Length: > 0 } cname && SideEffectNames.Contains(cname)))
+                    if (SideEffectWords.Any(w => label.Contains(w, StringComparison.Ordinal)))
                     {
                         rows.Add(new Row { Page = page, Kind = kind, Label = labelOrKind, Outcome = "SKIP", Detail = "副作用类,未点击" });
                         continue;

@@ -58,6 +58,9 @@ public interface ILayoutCanvasChild
 //                 row_h > 0 时直接用固定行高(内容超出按固定高裁,契约语义)。
 //   canvas 模式:按归一化矩形排布;画布高取宿主给的高,拿不到有限高(滚动区里最常见)时用
 //                 LayoutCanvas.RefHeight(600,对齐旧 DashHost 的兜底)。
+//   R35 lin-l3(D-81 Q1 / GOAL-layout-v3 §5.3):canvas 退出界面。SetLayout 收到 mode=canvas 时按
+//                 LayoutEngine.CanvasGridView 推导成网格(文档不动),ApplyTo 提交时才写成 grid;
+//                 上面这条 canvas 排布路径因此不可达,代码留到合并后一起删。
 //
 // 三条纪律(与源一致):
 //   1) 几何全部来自纯模型(LayoutGrid / LayoutCanvas),本文件不写任何坐标公式,只做 Measure/Arrange;
@@ -121,6 +124,12 @@ public sealed class GridCanvasPanel : Decorator
 
 	private Color _penAccent;
 
+	private bool _penDark;
+
+	private Color _penFill;
+
+	private Color _penStroke;
+
 	private Pen? _gridPen;
 
 	private SolidColorBrush? _placeFill;
@@ -131,6 +140,24 @@ public sealed class GridCanvasPanel : Decorator
 
 	/// <summary>页面模式(grid | canvas;stack 时本 Panel 不被使用)。</summary>
 	public string Mode { get; private set; } = LayoutSchema.ModeStack;
+
+	/// <summary>
+	/// R35 lin-l3(D-81 Q1):当前槽位是不是从 canvas 页推导出来的网格。true 时 <see cref="Mode"/> 是 grid、
+	/// 文档里该页仍是 canvas(原样不动);<see cref="ApplyTo"/> 提交时才把整页写成 grid。
+	/// </summary>
+	public bool DerivedFromCanvas { get; private set; }
+
+	/// <summary>
+	/// R35 lin-int(L12←L3):canvas 页推导成网格时每块的最小列数(编辑器按 BlockSpec.MinCols 换算后给);
+	/// null = 只按全局 2 列兜底。
+	/// </summary>
+	public Func<string, int>? MinColsOf { get; set; }
+
+	/// <summary>
+	/// R35 lin-int:深色表面(启动页编辑态,编辑器按 pageId == "launch" 设)。落点框 / 网格线改用白色半透明
+	/// (pages3 `.win.edit.dark`),其余页仍是主题色。
+	/// </summary>
+	public bool DarkSurface { get; set; }
 
 	/// <summary>grid 列数。</summary>
 	public int Cols { get; private set; } = LayoutSchema.ColsDefault;
@@ -342,7 +369,7 @@ public sealed class GridCanvasPanel : Decorator
 		}
 	}
 
-	/// <summary>是否 canvas 模式。</summary>
+	/// <summary>是否 canvas 模式。R35 起恒为 false(canvas 页按网格推导,见 <see cref="DerivedFromCanvas"/>);保留是因为 LayoutEditor 与测试还在读它,合并后再删。</summary>
 	public bool IsCanvas
 	{
 		get
@@ -351,18 +378,23 @@ public sealed class GridCanvasPanel : Decorator
 		}
 	}
 
-	/// <summary>按页面 v2 条目重建槽位(改上下文/换页时调)。</summary>
+	/// <summary>
+	/// 按页面 v2 条目重建槽位(改上下文/换页时调)。
+	/// R35 lin-l3(GOAL-layout-v3 §5.3):mode=canvas 不再按归一化矩形排,而是用
+	/// <see cref="LayoutEngine.CanvasGridView"/> 推导成网格(先 y 后 x、span = clamp(round(w×cols), MinCols, cols));
+	/// 槽位来自副本,<paramref name="page"/> 本身一个字节都不改。于是本 Panel 的 Mode 只会是 grid / stack,
+	/// 下面所有 IsCanvas 分支都不可达(留着等合并后一起删)。
+	/// </summary>
 	public void SetLayout(string mode, int cols, double rowH, double gap, PageLayoutV2? page)
 	{
-		Mode = ((mode == LayoutSchema.ModeGrid || mode == LayoutSchema.ModeCanvas) ? mode : LayoutSchema.ModeStack);
-		Cols = Math.Max(1, cols);
-		RowH = rowH;
+		DerivedFromCanvas = string.Equals(mode, LayoutSchema.ModeCanvas, StringComparison.Ordinal);
+		Mode = ((mode == LayoutSchema.ModeGrid || DerivedFromCanvas) ? LayoutSchema.ModeGrid : LayoutSchema.ModeStack);
+		PageLayoutV2? derived = (DerivedFromCanvas ? LayoutEngine.CanvasGridView(page) : null);
+		// 推导出来的网格用推导后的列数(SnapCols(原 cols));row_h 在 canvas 下不生效 ⇒ 推导后一律自适应行
+		Cols = Math.Max(1, (derived != null) ? derived.Cols : cols);
+		RowH = (DerivedFromCanvas ? 0.0 : rowH);
 		Gap = ((gap >= 0.0) ? gap : 0.0);
-		_cells = (IsCanvas ? LayoutCanvas.Load(page) : LayoutGrid.Pack(page));
-		if (IsCanvas)
-		{
-			_cells = LayoutCanvas.StackedOrder(_cells);
-		}
+		_cells = LayoutGrid.Pack(DerivedFromCanvas ? derived : page);
 		_rows = LayoutGrid.RowCount(_cells);
 		// 换了页 / 换了列数:上一套宽度下的"已补过失效"记录不再成立
 		_remeasureWidths.Clear();
@@ -484,12 +516,18 @@ public sealed class GridCanvasPanel : Decorator
 		return list;
 	}
 
-	/// <summary>把槽位写回页面块(拖拽/缩放提交时调)。</summary>
+	/// <summary>
+	/// 把槽位写回页面块(拖拽/缩放提交时调)。
+	/// R35 lin-l3:槽位是从 canvas 页推导来的(或传进来的页仍是 canvas)时,先用 <see cref="LayoutEngine.CanvasToGrid"/>
+	/// 把整页(含隐藏块、自建块、插件块、白名单外的块)就地写成 grid,再用当前槽位覆盖可见块的几何 ——
+	/// 这就是 Q1 的「编辑器里提交一次之后才写成 grid」。不是 canvas 页时与改动前完全一致。
+	/// </summary>
 	public void ApplyTo(PageLayoutV2? page)
 	{
-		if (IsCanvas)
+		if (DerivedFromCanvas || LayoutCanvasMigration.IsCanvas(page))
 		{
-			LayoutCanvas.Apply(page, _cells);
+			LayoutEngine.CanvasToGrid(page);
+			LayoutGrid.Apply(page, _cells);
 		}
 		else
 		{
@@ -596,16 +634,29 @@ public sealed class GridCanvasPanel : Decorator
 
 	private void EnsurePens(Color accent)
 	{
-		if (_gridPen != null && _penAccent == accent)
+		// R35 lin-int(L3 + L0 令牌):落点框 = Layout.DropBox 的取值(B.EditDropFill 浅底 + 1.5px 主题色 3,2 虚线);
+		// 启动页深色表面(DarkSurface)= Layout.DropBox.OnDark(白 12% 浅底 + 白色虚线),网格线也换白色半透明。
+		// 颜色经 LayoutVisualTokens.ColorOr 取(找不到用兜底,不抛);明暗切换后颜色变了就重建
+		Color fillColor = (DarkSurface
+			? LayoutVisualTokens.ColorOr(LayoutVisualTokens.BrushKeys.EditDropFillOnDark, Color.FromArgb(31, 255, 255, 255))
+			: LayoutVisualTokens.ColorOr(LayoutVisualTokens.BrushKeys.EditDropFill, Color.FromArgb(28, accent.R, accent.G, accent.B)));
+		Color strokeColor = (DarkSurface
+			? LayoutVisualTokens.ColorOr(LayoutVisualTokens.BrushKeys.OnEditGlass, Colors.White)
+			: accent);
+		if (_gridPen != null && _penAccent == accent && _penDark == DarkSurface && _penFill == fillColor && _penStroke == strokeColor)
 		{
 			return;
 		}
 		_penAccent = accent;
-		_gridPen = new Pen(new SolidColorBrush(Color.FromArgb(38, accent.R, accent.G, accent.B)), 0.6);
-		_placeFill = new SolidColorBrush(Color.FromArgb(28, accent.R, accent.G, accent.B));
-		_placePen = new Pen(new SolidColorBrush(Color.FromArgb(200, accent.R, accent.G, accent.B)), 1.5)
+		_penDark = DarkSurface;
+		_penFill = fillColor;
+		_penStroke = strokeColor;
+		_gridPen = new Pen(new SolidColorBrush(DarkSurface ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(38, accent.R, accent.G, accent.B)), 0.6);
+		_placeFill = new SolidColorBrush(fillColor);
+		_placePen = new Pen(new SolidColorBrush(strokeColor), LayoutVisualTokens.OutlineThickness)
 		{
-			DashStyle = new DashStyle(new double[2] { 4.0, 3.0 }, 0.0)
+			// Avalonia 的虚线长度按线宽倍数计:3,2(效果图 .ph)
+			DashStyle = new DashStyle(new double[2] { 3.0, 2.0 }, 0.0)
 		};
 	}
 
@@ -877,7 +928,8 @@ public sealed class GridCanvasPanel : Decorator
 			child.Arrange(target);
 			_lastArranged[id] = target;
 			// 浮起的块盖在其它块上面
-			child.ZIndex = (_floating.ContainsKey(id) ? 1000 : 0);
+			// [v3] 编辑态悬停 / 选中的块也略微抬高:它的块名浮在卡片上沿外 14px,要盖住上一行的块
+			child.ZIndex = (_floating.ContainsKey(id) ? 1000 : ((child is LayoutCard raised && raised.IsRaised) ? 10 : 0));
 		}
 		return final;
 	}
@@ -928,21 +980,18 @@ public sealed class GridCanvasPanel : Decorator
 			return;
 		}
 		DrawPlaceholders(context, accent);
+		// [v3] §1.A.1「编辑控件只在需要时出现」:网格底纹(列分隔线)只在拖动 / 改宽度的过程中画
+		// (效果图 #winA.edit.grid.busy .cols);平时编辑态只有每块自己的灰色虚线框。行分隔线不再画。
+		if (!ShowPlaceholder)
+		{
+			return;
+		}
 		for (int k = 1; k < Cols; k++)
 		{
 			double x = k * (_columnWidth + Gap) - Gap / 2.0;
 			if (x > 0.0 && x < width)
 			{
 				context.DrawLine(pen, new Point(x, 0.0), new Point(x, height));
-			}
-		}
-		double y2 = 0.0;
-		for (int m = 0; m < _rowHeights.Length - 1; m++)
-		{
-			y2 += _rowHeights[m] + Gap;
-			if (y2 > 0.0 && y2 < height)
-			{
-				context.DrawLine(pen, new Point(0.0, y2 - Gap / 2.0), new Point(width, y2 - Gap / 2.0));
 			}
 		}
 	}

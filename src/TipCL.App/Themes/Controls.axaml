@@ -473,4 +473,480 @@
       </ControlTemplate>
     </Setter>
   </ControlTheme>
+
+  <!-- ===== R35 lin-l0 · 布局 v3 编辑态(2026-11-20)=====
+       数值取自 windos/docs/mockups-hark/v3/layout3.html 与 pages3.html 的 CSS;与 Windows r34/l0(b609ef1)Controls.xaml 的
+       Layout.* 样式一一对应。Avalonia 做法 = **ControlTheme**(与本文件其余部分一致),键名即约定名:
+         control.Theme = (ControlTheme)TryGetResource("Layout.EditBar") —— 其他包一律 TryGetResource + 代码内兜底,找不到不抛异常;
+         状态(悬停 / 选中 / 拖动)走 Classes:"hover" / "selected" / "drag"(只有 Layout.EditOutline* 用到)。
+       颜色 / 阴影只引 Palette.*.axaml 里成对的 B.Edit* / Fx.* 键;圆角只用 8 / 12。键表与消费方式见 docs/layout-v3-tokens.md。 -->
+
+  <!-- 矢量图标:16×16 视框,只描边(Fill 留空)。效果图 svg.i = stroke-width 1.6(按 16 视框)、圆头圆角。
+       Geo.Grip 的六个点是 0.1 长的短线段,靠圆头线帽画成圆点(线宽 2.2 = 效果图 r=1.1 的圆),所以同样走描边。
+       按显示尺寸缩放请用 LayoutVisualTokens.Glyph(key, size) —— 它会 Clone 几何并按 size/16 同比缩放线宽。 -->
+  <StreamGeometry x:Key="Geo.Eye">M1.5,8 C1.5,8 4,3.5 8,3.5 C12,3.5 14.5,8 14.5,8 C14.5,8 12,12.5 8,12.5 C4,12.5 1.5,8 1.5,8 Z M10,8 A2,2 0 1 1 6,8 A2,2 0 1 1 10,8 Z</StreamGeometry>
+  <StreamGeometry x:Key="Geo.EyeOff">M2,2 L14,14 M6.6,3.7 A6.6,6.6 0 0 1 8,3.5 C12,3.5 14.5,8 14.5,8 A12,12 0 0 1 12.5,10.6 M10.1,10.2 A3,3 0 0 1 8,11 C4,11 1.5,8 1.5,8 A12,12 0 0 1 4.4,4.8</StreamGeometry>
+  <StreamGeometry x:Key="Geo.Lock">M5,7 L11,7 A1.5,1.5 0 0 1 12.5,8.5 L12.5,12 A1.5,1.5 0 0 1 11,13.5 L5,13.5 A1.5,1.5 0 0 1 3.5,12 L3.5,8.5 A1.5,1.5 0 0 1 5,7 Z M5.5,7 L5.5,5 A2.5,2.5 0 0 1 10.5,5 L10.5,7</StreamGeometry>
+  <StreamGeometry x:Key="Geo.Undo">M5.5,3.5 L2.5,6.5 L5.5,9.5 M2.5,6.5 L9.5,6.5 A4,4 0 0 1 9.5,14.5 L8,14.5</StreamGeometry>
+  <StreamGeometry x:Key="Geo.Redo">M10.5,3.5 L13.5,6.5 L10.5,9.5 M13.5,6.5 L6.5,6.5 A4,4 0 0 0 6.5,14.5 L8,14.5</StreamGeometry>
+  <StreamGeometry x:Key="Geo.Grip">M6,3.95 L6,4.05 M10,3.95 L10,4.05 M6,7.95 L6,8.05 M10,7.95 L10,8.05 M6,11.95 L6,12.05 M10,11.95 L10,12.05</StreamGeometry>
+  <!-- 额外两枚(契约外,编辑条「列表 / 网格」分段用;与 LayoutEditChrome.ListModeData / GridModeData 同形) -->
+  <StreamGeometry x:Key="Geo.ListMode">M2.5,2.5 L13.5,2.5 L13.5,6.5 L2.5,6.5 Z M2.5,9.5 L13.5,9.5 L13.5,13.5 L2.5,13.5 Z</StreamGeometry>
+  <StreamGeometry x:Key="Geo.GridMode">M2.5,2.5 L13.5,2.5 L13.5,6.5 L2.5,6.5 Z M2.5,9.5 L9,9.5 L9,13.5 L2.5,13.5 Z M11,9.5 L13.5,9.5 L13.5,13.5 L11,13.5 Z</StreamGeometry>
+
+  <!-- 图标 Path(16 显示、线宽 1.6、圆头);Stroke 缺省 B.InkSoft,放在按钮里时请用 LayoutVisualTokens.Glyph(..., owner) 跟随按钮前景色 -->
+  <ControlTheme x:Key="Layout.Glyph" TargetType="Path">
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="Stretch" Value="None" />
+    <Setter Property="Stroke" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="StrokeThickness" Value="1.6" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="StrokeJoin" Value="Round" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </ControlTheme>
+  <!-- 小号锁形提示用:线宽加粗到 1.8(缩到 12px 显示时等效 1.35) -->
+  <ControlTheme x:Key="Layout.Glyph.Small" BasedOn="{StaticResource Layout.Glyph}" TargetType="Path">
+    <Setter Property="StrokeThickness" Value="1.8" />
+  </ControlTheme>
+  <!-- 浮动标签里的六点拖拽(效果图 12px 显示;本主题按 16 视框,缩放用 LayoutVisualTokens.Glyph("Geo.Grip", 12)) -->
+  <ControlTheme x:Key="Layout.Grip" TargetType="Path">
+    <Setter Property="Data" Value="{StaticResource Geo.Grip}" />
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="Stretch" Value="None" />
+    <Setter Property="Stroke" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="StrokeThickness" Value="2.2" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.Grip.OnDark" BasedOn="{StaticResource Layout.Grip}" TargetType="Path">
+    <Setter Property="Stroke" Value="{DynamicResource B.OnEditGlassMuted}" />
+  </ControlTheme>
+
+  <!-- 块的编辑态框线:叠在块上方的 Rectangle,外扩 4(Margin -4)、圆角 12、不吃指针。
+       缺省 = 1.5px 灰色虚线(3 2);Classes "hover" = 加深;"selected" / "drag" = 2px 主题色实线。 -->
+  <ControlTheme x:Key="Layout.EditOutline" TargetType="Rectangle">
+    <Setter Property="Stroke" Value="{DynamicResource B.EditOutline}" />
+    <Setter Property="StrokeThickness" Value="1.5" />
+    <Setter Property="StrokeDashArray" Value="3,2" />
+    <Setter Property="RadiusX" Value="12" />
+    <Setter Property="RadiusY" Value="12" />
+    <Setter Property="Margin" Value="-4" />
+    <Setter Property="Fill" Value="{x:Null}" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+    <Style Selector="^.hover">
+      <Setter Property="Stroke" Value="{DynamicResource B.EditOutlineHover}" />
+    </Style>
+    <Style Selector="^.selected">
+      <Setter Property="Stroke" Value="{DynamicResource B.Accent}" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeDashArray" Value="{x:Null}" />
+    </Style>
+    <Style Selector="^.drag">
+      <Setter Property="Stroke" Value="{DynamicResource B.Accent}" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeDashArray" Value="{x:Null}" />
+    </Style>
+  </ControlTheme>
+  <!-- 深色背景(启动页英雄图)版:白色半透明虚线,悬停加深,选中 / 拖动白色实线 -->
+  <ControlTheme x:Key="Layout.EditOutline.OnDark" BasedOn="{StaticResource Layout.EditOutline}" TargetType="Rectangle">
+    <Setter Property="Stroke" Value="{DynamicResource B.EditOutlineOnDark}" />
+    <Style Selector="^.hover">
+      <Setter Property="Stroke" Value="{DynamicResource B.EditOutlineHoverOnDark}" />
+    </Style>
+    <Style Selector="^.selected">
+      <Setter Property="Stroke" Value="{DynamicResource B.OnEditGlass}" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeDashArray" Value="{x:Null}" />
+    </Style>
+    <Style Selector="^.drag">
+      <Setter Property="Stroke" Value="{DynamicResource B.OnEditGlass}" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeDashArray" Value="{x:Null}" />
+    </Style>
+  </ControlTheme>
+  <!-- 拖动落点框:主题色浅底 + 1.5px 主题色虚线(效果图 .ph) -->
+  <ControlTheme x:Key="Layout.DropBox" TargetType="Rectangle">
+    <Setter Property="Fill" Value="{DynamicResource B.EditDropFill}" />
+    <Setter Property="Stroke" Value="{DynamicResource B.Accent}" />
+    <Setter Property="StrokeThickness" Value="1.5" />
+    <Setter Property="StrokeDashArray" Value="3,2" />
+    <Setter Property="RadiusX" Value="12" />
+    <Setter Property="RadiusY" Value="12" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.DropBox.OnDark" BasedOn="{StaticResource Layout.DropBox}" TargetType="Rectangle">
+    <Setter Property="Fill" Value="{DynamicResource B.EditDropFillOnDark}" />
+    <Setter Property="Stroke" Value="{DynamicResource B.OnEditGlass}" />
+  </ControlTheme>
+  <!-- 拖动 / 改宽时的淡色列底纹(每列一条,效果图 .cols i) -->
+  <ControlTheme x:Key="Layout.ColShade" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.EditColShade}" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.ColShade.OnDark" BasedOn="{StaticResource Layout.ColShade}" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.EditColShadeOnDark}" />
+  </ControlTheme>
+
+  <!-- 悬停 / 选中时浮在块左上角的小标签(拖拽点 + 标题,自建组件后接灰字「· 组件」):高 24、圆角 8、左 8 上 -14(效果图 .lab)。
+       文字请用 Layout.EditLabelText / Layout.EditLabelNote(Border 上不设 TextElement 附加属性,避免各 Avalonia 版本语法差异)。 -->
+  <ControlTheme x:Key="Layout.EditLabel" TargetType="Border">
+    <Setter Property="Height" Value="24" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="6,0,10,0" />
+    <Setter Property="Background" Value="{DynamicResource B.EditBarBg}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.EditBarLine}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BoxShadow" Value="{DynamicResource Fx.EditLabel}" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+    <Setter Property="Margin" Value="8,-14,0,0" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.EditLabel.OnDark" BasedOn="{StaticResource Layout.EditLabel}" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.EditGlass}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.EditGlassLine}" />
+  </ControlTheme>
+  <!-- 标签里的标题:12 粗体 -->
+  <ControlTheme x:Key="Layout.EditLabelText" BasedOn="{StaticResource {x:Type TextBlock}}" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.EditLabelText.OnDark" BasedOn="{StaticResource Layout.EditLabelText}" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource B.OnEditGlass}" />
+  </ControlTheme>
+  <!-- 标签里标题后面的灰字(「· 组件」,效果图 .lab em) -->
+  <ControlTheme x:Key="Layout.EditLabelNote" BasedOn="{StaticResource {x:Type TextBlock}}" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="Normal" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.EditLabelNote.OnDark" BasedOn="{StaticResource Layout.EditLabelNote}" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource B.OnEditGlassMuted}" />
+  </ControlTheme>
+
+  <!-- 块右上角的图标按钮(隐藏 / 删除):26×24、圆角 8、白底细描边 + 轻阴影;悬停字色加深(效果图 .acts button)。
+       内容放 LayoutVisualTokens.Glyph("Geo.EyeOff", 14, owner: 按钮) 或垃圾桶图标。 -->
+  <ControlTheme x:Key="Layout.IconAct" TargetType="Button">
+    <Setter Property="Width" Value="26" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Background" Value="{DynamicResource B.EditBarBg}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.EditBarLine}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" BoxShadow="{DynamicResource Fx.EditLabel}" />
+          <Border Name="Ov" Background="{DynamicResource B.Ink}" Opacity="0" CornerRadius="8" />
+          <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="8" Opacity="0" IsHitTestVisible="False" />
+          <ContentPresenter Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    </Style>
+    <Style Selector="^:pressed /template/ Border#Ov">
+      <Setter Property="Opacity" Value="0.08" />
+    </Style>
+    <Style Selector="^:focus-visible /template/ Border#Kf">
+      <Setter Property="Opacity" Value="0.9" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.4" />
+    </Style>
+  </ControlTheme>
+  <!-- 删除用(custom: / plugin: 块的垃圾桶):悬停整块变 #C42B1C + 白色(与窗口关闭钮同一对令牌,效果图 .acts button.del:hover) -->
+  <ControlTheme x:Key="Layout.IconAct.Danger" BasedOn="{StaticResource Layout.IconAct}" TargetType="Button">
+    <Style Selector="^:pointerover">
+      <Setter Property="Background" Value="{DynamicResource B.CaptionHot}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.CaptionHot}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.OnCaptionHot}" />
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.IconAct.OnDark" BasedOn="{StaticResource Layout.IconAct}" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource B.EditGlass}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.EditGlassLine}" />
+    <Setter Property="Foreground" Value="{DynamicResource B.OnEditGlassMuted}" />
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource B.OnEditGlass}" />
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.IconAct.Danger.OnDark" BasedOn="{StaticResource Layout.IconAct.OnDark}" TargetType="Button">
+    <Style Selector="^:pointerover">
+      <Setter Property="Background" Value="{DynamicResource B.CaptionHot}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource B.CaptionHot}" />
+      <Setter Property="Foreground" Value="{DynamicResource B.OnCaptionHot}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- 网格块右边缘 / 下边缘的手柄:10×36 白色胶囊 + 中间 2px 灰条(拖动中灰条变主题色,效果图 .rz) -->
+  <ControlTheme x:Key="Layout.ResizeGrip" TargetType="Thumb">
+    <Setter Property="Width" Value="10" />
+    <Setter Property="Height" Value="36" />
+    <Setter Property="Cursor" Value="SizeWestEast" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Background="{DynamicResource B.EditBarBg}" BorderBrush="{DynamicResource B.EditOutline}" BorderThickness="1" CornerRadius="8" BoxShadow="{DynamicResource Fx.ResizeGrip}" />
+          <Border Name="Bar" Width="2" CornerRadius="1" Margin="0,10" HorizontalAlignment="Center" Background="{DynamicResource B.InkMuted}" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pressed /template/ Border#Bar">
+      <Setter Property="Background" Value="{DynamicResource B.Accent}" />
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.ResizeGrip.Bottom" TargetType="Thumb">
+    <Setter Property="Width" Value="36" />
+    <Setter Property="Height" Value="10" />
+    <Setter Property="Cursor" Value="SizeNorthSouth" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Background="{DynamicResource B.EditBarBg}" BorderBrush="{DynamicResource B.EditOutline}" BorderThickness="1" CornerRadius="8" BoxShadow="{DynamicResource Fx.ResizeGrip}" />
+          <Border Name="Bar" Height="2" CornerRadius="1" Margin="10,0" VerticalAlignment="Center" Background="{DynamicResource B.InkMuted}" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pressed /template/ Border#Bar">
+      <Setter Property="Background" Value="{DynamicResource B.Accent}" />
+    </Style>
+  </ControlTheme>
+  <!-- 拖右边缘时的「N / 列数」提示气泡:深底浅字(明暗自动反相,效果图 .rz b);文字用 Layout.EditTipText -->
+  <ControlTheme x:Key="Layout.EditTip" TargetType="Border">
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="8,2" />
+    <Setter Property="Background" Value="{DynamicResource B.Ink}" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.EditTipText" BasedOn="{StaticResource {x:Type TextBlock}}" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Paper}" />
+  </ControlTheme>
+
+  <!-- 编辑条:内容区顶部单行浮条,高 46、圆角 12、内距 14/8、细描边 + 轻阴影(效果图 .ebox) -->
+  <ControlTheme x:Key="Layout.EditBar" TargetType="Border">
+    <Setter Property="Height" Value="46" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Padding" Value="14,0,8,0" />
+    <Setter Property="Background" Value="{DynamicResource B.EditBarBg}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.EditBarLine}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BoxShadow" Value="{DynamicResource Fx.EditBar}" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.EditBar.OnDark" BasedOn="{StaticResource Layout.EditBar}" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.EditGlass}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.EditGlassLine}" />
+  </ControlTheme>
+  <!-- 编辑条里的「编辑「页名」」:13 ExtraBold(.ebox h3) -->
+  <ControlTheme x:Key="Layout.EditBarTitle" BasedOn="{StaticResource {x:Type TextBlock}}" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="ExtraBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.EditBarTitle.OnDark" BasedOn="{StaticResource Layout.EditBarTitle}" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource B.OnEditGlass}" />
+  </ControlTheme>
+  <!-- 编辑条里的灰色提示(「拖动调整上下顺序」等),放不下就省略号(.ebox .hint) -->
+  <ControlTheme x:Key="Layout.EditHint" BasedOn="{StaticResource {x:Type TextBlock}}" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.EditHint.OnDark" BasedOn="{StaticResource Layout.EditHint}" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource B.OnEditGlassMuted}" />
+  </ControlTheme>
+  <!-- 编辑条里的竖分隔线:1×18(.ebox .vs) -->
+  <ControlTheme x:Key="Layout.EditBarSep" TargetType="Border">
+    <Setter Property="Width" Value="1" />
+    <Setter Property="Height" Value="18" />
+    <Setter Property="Margin" Value="2,0" />
+    <Setter Property="Background" Value="{DynamicResource B.EditOutline}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.EditBarSep.OnDark" BasedOn="{StaticResource Layout.EditBarSep}" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.EditGlassChipLine}" />
+  </ControlTheme>
+  <!-- 「添加」按钮右上角的数字角标:16 高、圆角 8(= 胶囊);文字用 Layout.CountText(.b .cnt) -->
+  <ControlTheme x:Key="Layout.Count" TargetType="Border">
+    <Setter Property="MinWidth" Value="16" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="Padding" Value="4,0" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Background" Value="{DynamicResource B.Accent}" />
+    <Setter Property="HorizontalAlignment" Value="Right" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.CountText" BasedOn="{StaticResource {x:Type TextBlock}}" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.OnAccent}" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </ControlTheme>
+
+  <!-- 「列表 / 网格」分段:轨道圆角 12、内距 3;项高 24、圆角 8,选中白底 + 粗体 + 淡阴影(效果图 .sg2;圆角按「只用 8 / 12」取整) -->
+  <ControlTheme x:Key="Layout.SegRail" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.EditSegRail}" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Padding" Value="3" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.SegRail.OnDark" BasedOn="{StaticResource Layout.SegRail}" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.EditGlassChip}" />
+  </ControlTheme>
+  <!-- 分段里的一项:ToggleButton 或 RadioButton(RadioButton 继承 ToggleButton,同一主题可用);内容可放「图标 + 文字」 -->
+  <ControlTheme x:Key="Layout.SegItem" TargetType="ToggleButton">
+    <Setter Property="FontFamily" Value="{StaticResource F.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkSoft}" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="Margin" Value="0" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel Background="Transparent">
+          <Border Name="On" Background="{DynamicResource B.EditSegOn}" CornerRadius="8" Opacity="0" BoxShadow="{DynamicResource Fx.SegOn}" />
+          <ContentPresenter Content="{TemplateBinding Content}" Margin="{TemplateBinding Padding}" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          <Border Name="Kf" BorderBrush="{DynamicResource B.Accent}" BorderThickness="2" CornerRadius="8" Opacity="0" IsHitTestVisible="False" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    </Style>
+    <Style Selector="^:checked">
+      <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#On">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="^:focus-visible /template/ Border#Kf">
+      <Setter Property="Opacity" Value="0.9" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.45" />
+    </Style>
+  </ControlTheme>
+  <!-- 深色玻璃版(启动页):未选白色 66%,选中白底深字(同 layout3 顶部 .seg 的深色写法) -->
+  <ControlTheme x:Key="Layout.SegItem.OnDark" BasedOn="{StaticResource Layout.SegItem}" TargetType="ToggleButton">
+    <Setter Property="Foreground" Value="{DynamicResource B.OnEditGlassMuted}" />
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource B.OnEditGlass}" />
+    </Style>
+    <Style Selector="^:checked">
+      <Setter Property="Foreground" Value="#1F1F1F" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#On">
+      <Setter Property="Background" Value="{DynamicResource B.OnEditGlass}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+  </ControlTheme>
+
+  <!-- 「添加」抽屉:从右侧滑出,宽 316,左侧阴影 + 1px 细线(效果图 .drawer);滑入动画由使用方做(TranslateTransform) -->
+  <ControlTheme x:Key="Layout.Drawer" TargetType="Border">
+    <Setter Property="Width" Value="316" />
+    <Setter Property="HorizontalAlignment" Value="Right" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="Background" Value="{DynamicResource B.EditBarBg}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.EditBarLine}" />
+    <Setter Property="BorderThickness" Value="1,0,0,0" />
+    <Setter Property="BoxShadow" Value="{DynamicResource Fx.Drawer}" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.Drawer.OnDark" BasedOn="{StaticResource Layout.Drawer}" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource B.EditGlass}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.EditGlassLine}" />
+  </ControlTheme>
+  <!-- 抽屉标题(「添加到「页名」页」):15 ExtraBold(.dh h3) -->
+  <ControlTheme x:Key="Layout.DrawerTitle" BasedOn="{StaticResource {x:Type TextBlock}}" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontWeight" Value="ExtraBold" />
+    <Setter Property="Foreground" Value="{DynamicResource B.Ink}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </ControlTheme>
+  <!-- 抽屉里的分节小字(「已隐藏的内容」「组件」,.dsec) -->
+  <ControlTheme x:Key="Layout.DrawerSection" BasedOn="{StaticResource {x:Type TextBlock}}" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource B.InkMuted}" />
+    <Setter Property="Margin" Value="0,10,0,6" />
+  </ControlTheme>
+  <!-- 抽屉里的一项:图标 40 + 名称 / 说明 + 右侧按钮;内距 8、圆角 12、灰底(.ditem) -->
+  <ControlTheme x:Key="Layout.DrawerItem" TargetType="Border">
+    <Setter Property="Padding" Value="8" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Margin" Value="0,0,0,6" />
+    <Setter Property="Background" Value="{DynamicResource B.EditItemBg}" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.DrawerIcon" TargetType="Border">
+    <Setter Property="Width" Value="40" />
+    <Setter Property="Height" Value="40" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Background" Value="{DynamicResource B.EditBarBg}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </ControlTheme>
+  <!-- 没有隐藏项时的虚线空状态框(Rectangle 垫底,文字由使用方叠在上面;.dempty 1px dashed) -->
+  <ControlTheme x:Key="Layout.DrawerEmpty" TargetType="Rectangle">
+    <Setter Property="Stroke" Value="{DynamicResource B.EditOutline}" />
+    <Setter Property="StrokeThickness" Value="1" />
+    <Setter Property="StrokeDashArray" Value="4,3" />
+    <Setter Property="RadiusX" Value="12" />
+    <Setter Property="RadiusY" Value="12" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </ControlTheme>
+  <!-- 抽屉底部的说明框(「想要更多组件?…」):内距 12,10、圆角 12、灰底(.dnote) -->
+  <ControlTheme x:Key="Layout.DrawerNote" TargetType="Border">
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Margin" Value="0,12,0,0" />
+    <Setter Property="Background" Value="{DynamicResource B.EditItemBg}" />
+  </ControlTheme>
+  <!-- 琥珀色提示条(设置 → 布局 → 高级里「导入的布局…仍然默认关闭」,.warn);文字用 Layout.WarnText -->
+  <ControlTheme x:Key="Layout.WarnNote" TargetType="Border">
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Background" Value="{DynamicResource B.WarnSoft}" />
+  </ControlTheme>
+  <ControlTheme x:Key="Layout.WarnText" BasedOn="{StaticResource {x:Type TextBlock}}" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource B.WarnInk}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </ControlTheme>
+  <!-- 启动页编辑态右上角「🔒 主区域固定…」:玻璃小条,图标用 Layout.Glyph.Small + Geo.Lock;文字用 Layout.EditLabelText.OnDark -->
+  <ControlTheme x:Key="Layout.LockNote" TargetType="Border">
+    <Setter Property="Padding" Value="10,4" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Background" Value="{DynamicResource B.EditGlassChip}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource B.EditGlassChipLine}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="HorizontalAlignment" Value="Right" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </ControlTheme>
 </ResourceDictionary>

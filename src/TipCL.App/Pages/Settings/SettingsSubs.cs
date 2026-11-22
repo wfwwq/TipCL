@@ -222,10 +222,13 @@ internal sealed class JavaView : SettingsSubView
     {
         var scan = U.Btn(I18nCore.Tr("扫描系统 Java"), BtnKind.Soft, (_, _) => Run(() => ReloadListAsync(scan: true), I18nCore.Tr("扫描失败")), "Search");
         var refresh = U.IconBtn("Refresh", I18nCore.Tr("刷新"), (_, _) => Run(LoadCoreAsync, I18nCore.Tr("加载失败")));
-        // 标题与副标题由 SettingsSubView 基类给出,这里只往右列补计数 / 刷新 / 扫描(Windows JavaPage 的头部操作区)
-        var headOps = UiClass.H(8, _count.VCenter(), refresh, scan);
-        headOps.VerticalAlignment = VerticalAlignment.Center;
-        Header.Add(headOps, 0, 1);
+        // [R35 lin-l5] §5.5(照 Windows r34/l5 JavaPage):「说明」默认隐藏了 —— 计数 / 刷新 / 扫描系统 Java
+        // 从标题行右列挪到「已检测的 Java」块顶上(同效果图),版本对应关系挪进「实例默认」的提示文字;
+        // 说明块只留标题和这句话,在「添加」里可以找回来。
+        string versionMap = I18nCore.Tr("游戏按版本挑 Java:26.1+ 要 25,1.20.5+ 要 21,1.18+ 要 17,老版本用 8");
+        var listBar = UiClass.G(null, "*,Auto");
+        listBar.Add(_count.VCenter(), 0, 0);
+        listBar.Add(UiClass.H(8, refresh, scan), 0, 1);
 
         // ── 安装方式:发行版 + 5 张下载卡 ──
         var cards = new WrapPanel();
@@ -260,20 +263,24 @@ internal sealed class JavaView : SettingsSubView
         useManual.Mk(8, 0, 0, 0).VCenter();
         manualRow.Add(useManual, 0, 1);
         var defaultsCard = UiClass.Card(UiClass.V(4,
+            UiClass.Small(versionMap).Wrap(),
             UiClass.Field(I18nCore.Tr("实例"), _inst),
             UiClass.Field(I18nCore.Tr("默认 Java"), _java, I18nCore.Tr("「自动选择」由启动器按游戏版本匹配")),
             UiClass.Field(I18nCore.Tr("自定义路径"), manualRow, "填绝对路径后点右边按钮,会先做一次规范化"),
             UiClass.Field("", _instJava)), 13);
         _stack.Children.Add(defaultsCard);
 
-        // ── 已检测列表 ──
-        _stack.Children.Add(_list);
+        // ── 已检测的 Java(计数 / 刷新 / 扫描 + 列表) ──
+        var listBlock = UiClass.V(10, listBar, _list);
+        _stack.Children.Add(listBlock);
         // [R32-LINMORE] 区块宿主(§2.1-5):intro(说明 = 标题行,Windows JavaPage 的首块就是它自己的
-        // Ui.Section 标题,不是另造的说明卡)/ install(安装方式)/ defaults(实例默认)/ list(已检测列表)。
-        UseBlockHost("java", "intro", "Java",
+        // Ui.Section 标题,不是另造的说明卡)/ install(安装方式)/ defaults(实例默认)/ list(已检测的 Java)。
+        // [R35 lin-l5] 「已检测列表」改名「已检测的 Java」(id 不变);文档里还没有这一页时默认 = 12 列网格:
+        // 安装方式 + 实例默认各半 / 已检测的 Java 整行;说明默认隐藏。已经存过这一页的用户完全照文档。
+        UseBlockHost("java", "intro", "Java", PageDefaultLayouts.Java(),
             ("install", I18nCore.Tr("安装方式"), installCard),
             ("defaults", I18nCore.Tr("实例默认"), defaultsCard),
-            ("list", I18nCore.Tr("已检测列表"), _list));
+            ("list", I18nCore.Tr("已检测的 Java"), listBlock));
     }
 
     protected override async Task LoadCoreAsync()
@@ -479,10 +486,11 @@ internal sealed class ServersView : SettingsSubView
         _stack.Children.Add(instCard);
         _inst.SelectionChanged += (_, _) => { if (!_sync) Run(ReloadAsync); };
         _stack.Children.Add(_list);
-        // [R32-LINMORE] 区块宿主(§2.1-4):header(概览 = 标题行)/ instance(实例行)/ list(服务器列表),
+        // [R32-LINMORE] 区块宿主(§2.1-4):header(概览 = 标题行)/ instance(实例)/ list(服务器列表),
         // 顺序与 id 逐字对齐 Windows ServersPage 的 BlockHost("servers", ...)。
+        // [R35 lin-l5] §5.5:「实例行」改名「实例」(id 不变,默认布局不变)。
         UseBlockHost("servers", "header", I18nCore.Tr("服务器"),
-            ("instance", I18nCore.Tr("实例行"), instCard),
+            ("instance", I18nCore.Tr("实例"), instCard),
             ("list", I18nCore.Tr("服务器列表"), _list));
     }
 
@@ -663,12 +671,15 @@ internal sealed class PlaytimeView : SettingsSubView
         _stack.Children.Add(rangeCard);
         _inst.SelectionChanged += (_, _) => { if (!_sync) Run(ReloadAsync); };
         _stack.Children.Add(_list);
-        // [R32-LINMORE] 区块宿主(§2.1-6):header(概览 = 标题行)/ total(累计卡)/ range(范围卡)/ list(明细列表),
+        // [R32-LINMORE] 区块宿主(§2.1-6):header(概览 = 标题行)/ total(累计时长)/ range(时间范围)/ list(明细),
         // 顺序与 id 逐字对齐 Windows PlaytimePage 的 BlockHost("playtime", ...)。
-        UseBlockHost("playtime", "header", I18nCore.Tr("游戏时长"),
-            ("total", I18nCore.Tr("累计卡"), totalCard),
-            ("range", I18nCore.Tr("范围卡"), rangeCard),
-            ("list", I18nCore.Tr("明细列表"), _list));
+        // [R35 lin-l5] §5.5:改名(id 不变);文档里还没有这一页时默认 = 12 列网格:累计时长 + 时间范围各半 / 明细整行;
+        // 概览默认隐藏(在「添加」里找回)。刷新 / 清空统计本来就在「时间范围」卡里,隐藏概览不丢按钮。
+        // 已经存过这一页的用户完全照文档。
+        UseBlockHost("playtime", "header", I18nCore.Tr("游戏时长"), PageDefaultLayouts.Playtime(),
+            ("total", I18nCore.Tr("累计时长"), totalCard),
+            ("range", I18nCore.Tr("时间范围"), rangeCard),
+            ("list", I18nCore.Tr("明细"), _list));
     }
 
     protected override async Task LoadCoreAsync()

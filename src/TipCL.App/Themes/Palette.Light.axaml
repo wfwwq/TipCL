@@ -82,4 +82,35 @@
   <SolidColorBrush x:Key="SliderThumbBackground" Color="#2E9B6B" />
   <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#2E9B6B" />
   <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#2E9B6B" />
+  <!-- R35 lin-l0 · 布局 v3 编辑态令牌(2026-11-20)。数值取自 windos/docs/mockups-hark/v3/layout3.html 与 pages3.html 的 CSS,
+       与 Windows r34/l0(b609ef1)Palette.Light.xaml 同名同值;与 Palette.Dark.axaml 成对(ThemeKeysTests 锁键集一致)。
+       …OnDark / B.EditGlass* / B.OnEditGlass* / B.EditDim 只用在启动页英雄图这类永远是深色的背景上,明暗两套取值相同。
+       B.WarnSoft 沿用上方已有的键(#FDF3E2 = 效果图的琥珀浅底 page-warn-bg)。键表与用法见 docs/layout-v3-tokens.md。 -->
+  <SolidColorBrush x:Key="B.EditOutline" Color="#29000000" />
+  <SolidColorBrush x:Key="B.EditOutlineHover" Color="#57000000" />
+  <SolidColorBrush x:Key="B.EditOutlineOnDark" Color="#59FFFFFF" />
+  <SolidColorBrush x:Key="B.EditOutlineHoverOnDark" Color="#B3FFFFFF" />
+  <SolidColorBrush x:Key="B.EditDropFill" Color="#E7F5EE" />
+  <SolidColorBrush x:Key="B.EditDropFillOnDark" Color="#1FFFFFFF" />
+  <SolidColorBrush x:Key="B.EditColShade" Color="#09000000" />
+  <SolidColorBrush x:Key="B.EditColShadeOnDark" Color="#0FFFFFFF" />
+  <SolidColorBrush x:Key="B.EditBarBg" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="B.EditBarLine" Color="#14000000" />
+  <SolidColorBrush x:Key="B.EditItemBg" Color="#F2F2F2" />
+  <SolidColorBrush x:Key="B.EditSegRail" Color="#E7E7E7" />
+  <SolidColorBrush x:Key="B.EditSegOn" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="B.EditDim" Color="#800A0E16" />
+  <SolidColorBrush x:Key="B.EditGlass" Color="#B80E121B" />
+  <SolidColorBrush x:Key="B.EditGlassLine" Color="#24FFFFFF" />
+  <SolidColorBrush x:Key="B.EditGlassChip" Color="#24FFFFFF" />
+  <SolidColorBrush x:Key="B.EditGlassChipLine" Color="#38FFFFFF" />
+  <SolidColorBrush x:Key="B.OnEditGlass" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="B.OnEditGlassMuted" Color="#A8FFFFFF" />
+  <SolidColorBrush x:Key="B.WarnInk" Color="#B45309" />
+  <!-- 阴影(Avalonia 用 Border.BoxShadow:offsetX offsetY blur spread color);CSS 原值见各行注释 -->
+  <BoxShadows x:Key="Fx.EditBar">0 1 3 0 #0F000000</BoxShadows>        <!-- .ebox 0 1 3 rgba(0,0,0,.06) -->
+  <BoxShadows x:Key="Fx.EditLabel">0 2 8 0 #1F000000</BoxShadows>      <!-- .lab / .acts button 0 2 8 rgba(0,0,0,.12) -->
+  <BoxShadows x:Key="Fx.Drawer">-12 0 32 0 #24000000</BoxShadows>      <!-- .drawer -12 0 32 rgba(0,0,0,.14) -->
+  <BoxShadows x:Key="Fx.SegOn">0 1 2 0 #14000000</BoxShadows>          <!-- .sg2 button.on 0 1 2 rgba(0,0,0,.08) -->
+  <BoxShadows x:Key="Fx.ResizeGrip">0 1 4 0 #33000000</BoxShadows>     <!-- .rz 0 1 4 rgba(0,0,0,.2) -->
 </ResourceDictionary>

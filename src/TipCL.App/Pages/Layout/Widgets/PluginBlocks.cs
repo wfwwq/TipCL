@@ -53,6 +53,24 @@ internal static class PluginBlocks
         return shell;
     }
 
+    /// <summary>
+    /// [R35 lin-l12] 插件给这个区块起的标题(界面贡献的 label);插件没装 / 没给标题返回 null。
+    /// 编辑态浮动标签 / 抽屉用它,不再拼「plugin · inner」这种内部说法(GOAL §5.1「永远不显示 id」)。
+    /// </summary>
+    public static string? TitleOf(string plugin, string id)
+    {
+        try
+        {
+            UiContribution? contribution = PluginUi.Find(WidgetRegistry.PluginKindBlock, plugin, id);
+            string? label = contribution?.Label;
+            return string.IsNullOrWhiteSpace(label) ? null : label!.Trim();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>插件界面贡献变化时(插件启用 / 禁用 / 重载),让所有外壳重新同步。</summary>
     private static void Hook()
     {

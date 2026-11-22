@@ -93,10 +93,11 @@ public sealed class AccountPage : PageBase
         body.SetLeft(heroCard.VTop());
         body.SetRight(_list);
 
+        // [R35 lin-l5] §5.5:「账号卡」改名「账号列表」(id 不变,默认布局不变)
         Body = new BlockHost("account", new List<BlockSpec>
         {
             new() { Id = "header", Title = I18nCore.Tr("账号操作"), Content = header },
-            new() { Id = "list", Title = I18nCore.Tr("账号卡"), Content = body },
+            new() { Id = "list", Title = I18nCore.Tr("账号列表"), Content = body },
         }).Root;
     }
 
