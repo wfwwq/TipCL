@@ -713,7 +713,7 @@ public sealed partial class SettingsPage : PageBase
 		Grid aiFallbackRow = Ui.Field(I18n.L("备用模型（可选）"), _aiFallback, I18n.L("主模型连续 429/5xx 时本回合自动切到它；留空不启用"));
 		_aiCustomRows.AddRange(new UIElement[5] { aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow });
 		Border border7 = Ui.Card(Ui.V(4.0, Ui.Small(I18n.L("对话里下游戏、装模组、读崩溃日志")).Wrap(), Rows(Ui.Field(I18n.L("接入方式"), _aiMode), aiBaseRow, aiKeyRow, aiModelRow, aiCtxRow, aiFallbackRow, Ui.Field(I18n.L("权限"), Ui.Muted(I18n.L("在 AI 对话界面的输入框上方设置"))), BuildVisionField(), BuildMcpField(), Ui.Field("", _testAi.Left()))));
-		Border border8 = Ui.Card(Rows(Ui.Field(I18n.L("启动器可见性"), _vis, I18n.L("游戏启动后启动器窗口怎么处理")), Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")), Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html 文件路径")), Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")), Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")), Ui.Field("", _langPreview), Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
+		Border border8 = Ui.Card(Rows(Ui.Field(I18n.L("启动器可见性"), _vis, I18n.L("游戏启动后启动器窗口怎么处理")), Ui.Field(I18n.L("启动页主页"), _home, I18n.L("新闻、自定义 HTML 或留空")), Ui.Field(I18n.L("自定义主页"), grid, I18n.L("本地 .html / .txt 文件路径；启动页只显示其中的文字")), Ui.Field(I18n.L("自动检查更新"), _autoUpdate, I18n.L("启动时检查启动器更新")), Ui.Field(I18n.L("语言"), _lang, I18n.L("切换界面语言，重启后完全生效")), Ui.Field("", _langPreview), Ui.Field(I18n.L("启动向导"), Ui.Btn(I18n.L("重新运行"), BtnKind.Chip, delegate
 		{
 			PageBase.Run(FirstRunWizard.ShowAsync, I18n.L("向导没能打开"));
 		}, "\ue7c1").Left(), I18n.L("目录、下载源、内存、隔离会再问一遍，最后一步还会指一遍容易错过的功能"))));

@@ -206,7 +206,7 @@ public partial class MainWindow : Window
 			Navigate("settings");
 		};
 		// 顶栏页签 / 标题栏元素:按布局真源重建,即 v2 文档的 shell.tabs / shell.titlebar.*。
-		// 必须早于下面的 Navigate("launch") —— 它内部会调 SyncTabs 读这些页签 —— 也早于首帧渲染。
+		// 必须早于下面启动时的首次 Navigate —— 它内部会调 SyncTabs 读这些页签 —— 也早于首帧渲染。
 		RebuildShellTabs();
 		LayoutStoreV2.LayoutChanged += OnLayoutChanged;
 		// 窄窗/宽窗两套布局(§0.1 Q6,D1):窗口尺寸一变就把**内容区**可用宽喂给布局层;
@@ -306,7 +306,8 @@ public partial class MainWindow : Window
 		};
 		LoadUiPrefs();
 		BuildDock();
-		Navigate("launch", instant: true);
+		// 进第一个可见的页签(默认就是启动页);启动页签被隐藏时不再把人放在一个离开就回不去的页上
+		Navigate(ShellTabs.StartPageId(ShellTabs.CurrentShell()), instant: true);
 		base.Loaded += delegate
 		{
 			Run(() => ConnectAsync());

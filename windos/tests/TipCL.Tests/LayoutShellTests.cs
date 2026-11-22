@@ -264,12 +264,13 @@ public class LayoutShellTests
 			shell = ShellTabs.SetTabVisible("plugins", true);
 			Assert.Equal(5, shell.Tabs.Count);
 
-			// 全部隐藏 → 回落默认:界面上永远有入口
+			// 全部隐藏 →「设置」藏不掉(R31 K-02):界面上永远有入口,而且是能把页签改回来的那个
 			foreach (string key in Builtins)
 			{
 				shell = ShellTabs.SetTabVisible(key, false);
 			}
-			Assert.Equal(Builtins, shell.Tabs.ToArray());
+			Assert.Equal(new[] { "settings" }, shell.Tabs.ToArray());
+			Assert.Equal(new[] { "settings" }, ShellTabs.OrderedKeys(shell).ToArray());
 		}
 		finally
 		{

@@ -1215,10 +1215,11 @@ public sealed partial class LaunchPage : PageBase
 			_newsHost.Children.Clear();
 			try
 			{
-				string text2 = ((string.IsNullOrWhiteSpace(path) || !File.Exists(path)) ? I18n.L("未设置自定义主页。到设置 → 启动页主页 填本地 HTML 路径。") : (await Task.Run(() => File.ReadAllText(path))));
-				string text3 = text2;
-				_newsHost.Children.Add(Ui.Muted((text3.Length > 2000) ? (text3.Substring(0, 2000) + "…") : text3));
-				_newsTicker.Text = (text3.Length > 60) ? (text3.Substring(0, 60) + "…") : text3;
+				// 这一栏只显示文字:HTML 取其中的可读文字,不再把 <!DOCTYPE html>… 源码原样甩给用户
+				string text2 = ((string.IsNullOrWhiteSpace(path) || !File.Exists(path)) ? I18n.L("未设置自定义主页。到设置 → 启动页主页 填本地 HTML 路径。") : HomepageText.ToDisplay(await Task.Run(() => File.ReadAllText(path))));
+				string text3 = ((text2.Length > 0) ? text2 : I18n.L("自定义主页里没有可显示的文字（启动页只显示文字，不加载图片和脚本）"));
+				_newsHost.Children.Add(Ui.Muted((text3.Length > 2000) ? (text3.Substring(0, 2000) + "…") : text3).Wrap());
+				_newsTicker.Text = HomepageText.OneLine(text3, 60);
 				return;
 			}
 			catch (Exception ex)

@@ -214,9 +214,17 @@ public static class LayoutTools
 				return "这份布局 JSON 用不了:" + ex.Message;
 			}
 			next.Layout = parsed.Layout;
-			next.Profiles = parsed.Profiles;
+			// 命名方案表按名字合并,不整份换掉:JSON 里没带的方案(含以前的 AI 备份)照样保留,同名才用 JSON 里的覆盖。
+			// 新名字最多加到上限前一格,给后面的自动备份留位置(Sanitize 会丢掉超过 MaxProfiles 的)
+			foreach (KeyValuePair<string, LayoutBody> kv in parsed.Profiles)
+			{
+				if (next.Profiles.ContainsKey(kv.Key) || next.Profiles.Count < LayoutSchema.MaxProfiles - 1)
+				{
+					next.Profiles[kv.Key] = kv.Value;
+				}
+			}
 			next.ActiveProfile = parsed.ActiveProfile;
-			changes.Add("用整份 JSON 替换了布局");
+			changes.Add("用整份 JSON 替换了布局(命名方案按名字合并,原有方案都在)");
 		}
 		string profile = Py.S(Py.Or(args.Get("profile"), "")).Trim();
 		if (profile.Length > 0)
