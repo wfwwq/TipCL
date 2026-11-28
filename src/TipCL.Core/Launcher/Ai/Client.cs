@@ -464,6 +464,31 @@ public static class Client
 		return pyDict;
 	}
 
+	/// <summary>
+	/// AI5-T:一次出站请求的快照(工具集与模型名都从 <see cref="Body"/> 里读,不再另存一份)。
+	/// 生产路径不会构造它,只有测试注入点会用。
+	/// </summary>
+	internal sealed class TestRequest
+	{
+		/// <summary>请求地址(生产里是 `&lt;base&gt;/chat/completions`)。</summary>
+		public string Url = "";
+
+		/// <summary>true = 流式(ChatStream 发起的);false = 非流式(ChatOnce 发起的)。</summary>
+		public bool Stream;
+
+		/// <summary>实际发出去的请求体:model / messages / tools / stream / max_tokens ...</summary>
+		public PyDict Body = new();
+	}
+
+	/// <summary>
+	/// AI5-T 假模型回放:可替换传输的注入点。非 null 时 <see cref="ChatStream"/> 与
+	/// <see cref="ChatOnce"/> **不再建 AiSession、不走网络**,改由它按请求体造一个 <see cref="AiResponse"/>;
+	/// 响应体的消费路径一个字都不变 —— 流式仍走 <see cref="AssembleStream"/> 的 SSE 装配,
+	/// 非流式仍走原来的 JSON 解析,所以回放测试验的就是生产那条路径。
+	/// 生产恒为 null(行为不变);测试里由 tests/TipCL.Tests/Ai5T 的 FakeModel 装上,用完必须还原。
+	/// </summary>
+	internal static Func<TestRequest, AiResponse>? TestTransport;
+
 	public static IEnumerable<PyDict> AssembleStream(IEnumerable<byte[]> lineSource, bool expectUsage = false)
 	{
 		SortedDictionary<long, ToolSlot> toolAcc = new SortedDictionary<long, ToolSlot>();
@@ -836,6 +861,24 @@ public static class Client
 		PyDict pyDict2 = Body(pyDict, settings, messages, tools, temperature, stream: true);
 		pyDict2["stream_options"] = PyDict.Of("include_usage", true);
 		bool expectUsage = true;
+		// AI5-T 注入点:假响应照样喂给 AssembleStream,SSE 装配路径不变(见 TestTransport 的说明)
+		if (TestTransport != null)
+		{
+			if (httpCancel != null && httpCancel.Cancelled())
+			{
+				throw new AIClientError("已停止");
+			}
+			AiResponse fake = TestTransport(new TestRequest { Url = (string)pyDict["url"], Stream = true, Body = pyDict2 });
+			if (fake == null)
+			{
+				throw new AIClientError("测试传输没有返回响应");
+			}
+			if (fake.StatusCode >= 400)
+			{
+				throw new AIClientError(_ErrText(fake), fake.StatusCode);
+			}
+			return GuardStream(fake, null, AssembleStream(fake.IterLines(), expectUsage));
+		}
 		AiSession aiSession = _Session();
 		if (httpCancel != null)
 		{
@@ -908,6 +951,15 @@ public static class Client
 	{
 		PyDict pyDict = ResolveEndpoint(settings);
 		PyDict jsonBody = Body(pyDict, settings, messages, tools, temperature, stream: false);
+		// AI5-T 注入点:假响应照样走下面的 OnceReply(非流式解析路径不变,见 TestTransport 的说明)
+		if (TestTransport != null)
+		{
+			if (httpCancel != null && httpCancel.Cancelled())
+			{
+				throw new AIClientError("已停止");
+			}
+			return OnceReply(TestTransport(new TestRequest { Url = (string)pyDict["url"], Stream = false, Body = jsonBody }));
+		}
 		// using:非流式这条路以前也不释放会话 → 每次调用漏一个 HttpClient(连接池随之泄漏)
 		using AiSession aiSession = _Session();
 		if (httpCancel != null)
@@ -926,6 +978,16 @@ public static class Client
 		catch (AiRequestException exc)
 		{
 			throw HttpError(exc, httpCancel);
+		}
+		return OnceReply(aiResponse);
+	}
+
+	/// <summary>把一次非流式响应解析成 {content, tool_calls, finish_reason, usage}(生产与假传输共用这一份)。</summary>
+	private static PyDict OnceReply(AiResponse aiResponse)
+	{
+		if (aiResponse == null)
+		{
+			throw new AIClientError("测试传输没有返回响应");
 		}
 		if (aiResponse.StatusCode >= 400)
 		{
