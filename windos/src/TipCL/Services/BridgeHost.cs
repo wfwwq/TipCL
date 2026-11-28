@@ -128,6 +128,7 @@ public sealed class BridgeHost : IDisposable
 			CoreState.Bus = new EventBus();
 			CoreState.Api = new BackendApi(CoreState.Bus);
 			CoreState.Root = root;
+			McpConfirmUi.Install(); // SEC-MCP-2：外部写操作弹确认
 			TipCL.Core.Launcher.Ai.McpServer.StartIfEnabled(CoreState.Api);
 			// 插件系统：后台发现并加载插件，不拖慢启动
 			TipCL.Core.Plugins.PluginManager.StartGlobal(CoreState.Api);

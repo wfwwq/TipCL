@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace TipCL.Core.Launcher.Ai;
 
@@ -164,9 +165,15 @@ public static class McpServer
 					if (i > 0) headers[line.Substring(0, i).Trim()] = line.Substring(i + 1).Trim();
 				}
 				// 防止网页通过浏览器偷偷调用本机接口（DNS rebinding / CSRF）
+				// SEC-MCP-1：Origin "null"（sandbox iframe / file:// / data: 页）不再视为本机；Host 也必须是环回名
 				if (headers.TryGetValue("Origin", out string origin) && !IsLocalOrigin(origin))
 				{
 					Write(s, 403, "text/plain", "forbidden origin");
+					return;
+				}
+				if (headers.TryGetValue("Host", out string host) && !IsLocalHost(host))
+				{
+					Write(s, 403, "text/plain", "forbidden host");
 					return;
 				}
 				int q = path.IndexOf('?');
@@ -189,6 +196,12 @@ public static class McpServer
 				if (method != "POST")
 				{
 					Write(s, 405, "text/plain", "method not allowed");
+					return;
+				}
+				// SEC-MCP-1：只收 application/json，逼浏览器先发 CORS 预检（本服务不回 CORS 头，跨站调用即被拦下）
+				if (!IsJsonContentType(headers.TryGetValue("Content-Type", out string ct) ? ct : null))
+				{
+					Write(s, 415, "text/plain", "Content-Type must be application/json");
 					return;
 				}
 				int len = headers.TryGetValue("Content-Length", out string cl) && int.TryParse(cl, out int n) ? n : 0;
@@ -215,9 +228,11 @@ public static class McpServer
 		}
 	}
 
-	private static bool IsLocalOrigin(string origin)
+	/// <summary>Origin 是否本机。没带 Origin（命令行 / 桌面客户端）放行；"null" 一律拒绝（SEC-MCP-1）。</summary>
+	public static bool IsLocalOrigin(string origin)
 	{
-		if (string.IsNullOrEmpty(origin) || origin == "null") return true;
+		if (string.IsNullOrEmpty(origin)) return true;
+		if (string.Equals(origin.Trim(), "null", StringComparison.OrdinalIgnoreCase)) return false;
 		try
 		{
 			string h = new Uri(origin).Host;
@@ -311,6 +326,13 @@ public static class McpServer
 		if (backend == null) return ToolText("启动器内核还没就绪，请稍后再试", true);
 		NoteToolCall(name);
 		string args = prm.TryGetProperty("arguments", out JsonElement ae) && ae.ValueKind == JsonValueKind.Object ? ae.GetRawText() : "{}";
+		// SEC-MCP-2：外部 agent 发起的写操作每次都要用户在启动器里点确认（与 Linux 版一致）；
+		// 没有确认界面、用户拒绝或超时都按拒绝处理
+		if (Tools.IsWriteTool(name))
+		{
+			string denied = ConfirmWriteOrDeny(name, args);
+			if (denied != null) return ToolText(denied, true);
+		}
 		string output = Tools.RunTool(backend, name, args, wait: true);
 		bool isError = LooksLikeError(output);
 		return ToolText(output, isError);
@@ -368,5 +390,59 @@ public static class McpServer
 		s.Write(h, 0, h.Length);
 		s.Write(data, 0, data.Length);
 		s.Flush();
+	}
+
+	/// <summary>外部写操作等待用户确认的最长时间，超时按拒绝处理。</summary>
+	public static TimeSpan ConfirmTimeout { get; set; } = TimeSpan.FromSeconds(120);
+
+	/// <summary>
+	/// 界面层注册的确认回调：参数为工具名、参数 JSON，返回用户是否允许（会在后台线程上调用，由回调自己切 UI 线程）。
+	/// 为 null 时外部写操作一律拒绝。
+	/// </summary>
+	public static Func<string, string, Task<bool>> ConfirmWrite { get; set; }
+
+	/// <summary>需要拒绝时返回原因文本，允许执行时返回 null。</summary>
+	public static string ConfirmWriteOrDeny(string name, string args)
+	{
+		Func<string, string, Task<bool>> confirm = ConfirmWrite;
+		if (confirm == null)
+			return "permission_denied: 启动器没有可用的确认界面，外部写操作已拒绝: " + name;
+		try
+		{
+			Task<bool> t = confirm(name, args);
+			if (t == null) return "permission_denied: 外部写操作已拒绝: " + name;
+			if (!t.Wait(ConfirmTimeout))
+				return "permission_denied: 用户 " + (int)ConfirmTimeout.TotalSeconds + " 秒内没有确认，已按拒绝处理: " + name;
+			return t.Result ? null : "permission_denied: 用户拒绝了这次外部写操作: " + name;
+		}
+		catch (Exception ex)
+		{
+			return "permission_denied: 确认失败，已按拒绝处理: " + (ex.GetBaseException().Message);
+		}
+	}
+
+	/// <summary>Host 头是否环回名（127.0.0.1 / localhost / [::1]，可带端口）；空视为本机。</summary>
+	public static bool IsLocalHost(string host)
+	{
+		if (string.IsNullOrWhiteSpace(host)) return true;
+		string h = host.Trim();
+		if (h.StartsWith("[", StringComparison.Ordinal))
+		{
+			int end = h.IndexOf(']');
+			h = end > 0 ? h.Substring(1, end - 1) : h;
+		}
+		else
+		{
+			int colon = h.LastIndexOf(':');
+			if (colon > 0 && h.IndexOf(':') == colon) h = h.Substring(0, colon);
+		}
+		return h == "127.0.0.1" || string.Equals(h, "localhost", StringComparison.OrdinalIgnoreCase) || h == "::1";
+	}
+
+	/// <summary>Content-Type 是否 application/json（允许带 charset 等参数）。</summary>
+	public static bool IsJsonContentType(string contentType)
+	{
+		if (string.IsNullOrWhiteSpace(contentType)) return false;
+		return string.Equals(contentType.Split(';')[0].Trim(), "application/json", StringComparison.OrdinalIgnoreCase);
 	}
 }

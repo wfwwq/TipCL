@@ -168,10 +168,16 @@ public sealed class McpHttpServer : IDisposable
                         read += r;
                     }
                 }
-                // 防止网页通过浏览器偷偷调用本机接口(DNS rebinding / CSRF),与参考版同一判据
+                // 防止网页通过浏览器偷偷调用本机接口(DNS rebinding / CSRF)。
+                // SEC-MCP-1:Origin "null"(sandbox iframe / file:// / data: 页)不再视为本机;Host 也必须是环回名。
                 if (headers.TryGetValue("Origin", out string? origin) && !McpServer.IsLocalOrigin(origin))
                 {
                     Write(s, 403, "text/plain", "forbidden origin");
+                    return;
+                }
+                if (headers.TryGetValue("Host", out string? host) && !McpServer.IsLocalHost(host))
+                {
+                    Write(s, 403, "text/plain", "forbidden host");
                     return;
                 }
                 int q = path.IndexOf('?');
@@ -197,6 +203,13 @@ public sealed class McpHttpServer : IDisposable
                 if (method != "POST")
                 {
                     Write(s, 405, "text/plain", "method not allowed");
+                    return;
+                }
+                // SEC-MCP-1:只收 application/json。text/plain 等「简单请求」浏览器不发 CORS 预检,
+                // 网页能直接打进来;强制 JSON 后浏览器必须先预检,而本服务不回 CORS 头,跨站调用就被拦下。
+                if (!McpServer.IsJsonContentType(headers.TryGetValue("Content-Type", out string? ct) ? ct : null))
+                {
+                    Write(s, 415, "text/plain", "Content-Type must be application/json");
                     return;
                 }
                 if (len <= 0 || len > 4194304)
@@ -669,12 +682,19 @@ public static class McpServer
         }
     }
 
-    /// <summary>Origin 是否本机(空 / "null" 视为本机,与参考版同一判据)。</summary>
+    /// <summary>
+    /// Origin 是否本机。没带 Origin(命令行 / 桌面 MCP 客户端)放行;
+    /// "null"(sandbox iframe、file://、data: 页面发出的请求)一律拒绝(SEC-MCP-1)。
+    /// </summary>
     public static bool IsLocalOrigin(string? origin)
     {
-        if (string.IsNullOrEmpty(origin) || origin == "null")
+        if (string.IsNullOrEmpty(origin))
         {
             return true;
+        }
+        if (string.Equals(origin.Trim(), "null", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
         }
         try
         {
@@ -685,5 +705,42 @@ public static class McpServer
         {
             return false;
         }
+    }
+
+    /// <summary>Host 头是否环回名(127.0.0.1 / localhost / [::1],可带端口);空视为本机(HTTP/1.0 客户端)。</summary>
+    public static bool IsLocalHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return true;
+        }
+        string h = host.Trim();
+        if (h.StartsWith("[", StringComparison.Ordinal))
+        {
+            int end = h.IndexOf(']');
+            h = end > 0 ? h.Substring(1, end - 1) : h;
+        }
+        else
+        {
+            int colon = h.LastIndexOf(':');
+            if (colon > 0 && h.IndexOf(':') == colon)
+            {
+                h = h.Substring(0, colon);
+            }
+        }
+        return string.Equals(h, "127.0.0.1", StringComparison.Ordinal)
+            || string.Equals(h, "localhost", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(h, "::1", StringComparison.Ordinal);
+    }
+
+    /// <summary>Content-Type 是否 application/json(允许带 charset 等参数)。</summary>
+    public static bool IsJsonContentType(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return false;
+        }
+        string media = contentType.Split(';')[0].Trim();
+        return string.Equals(media, "application/json", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -221,6 +221,27 @@ public class McpServerTests
             using HttpResponseMessage allowed = await http.SendAsync(local);
             Assert.Equal(200, (int)allowed.StatusCode);
         }
+        // SEC-MCP-1:sandbox iframe / file:// 页面的 Origin: null 403;text/plain 简单请求(无 CORS 预检)415;
+        // 非环回 Host(DNS rebinding)403。三种都不能走到工具执行。
+        int before = api.Methods.Count;
+        using (var nullOrigin = new HttpRequestMessage(HttpMethod.Post, server.Url) { Content = new StringContent(Rpc(9, "tools/call", "{\"name\":\"enable_mod\",\"arguments\":{\"filename\":\"a.jar\"}}"), Encoding.UTF8, "application/json") })
+        {
+            nullOrigin.Headers.Add("Origin", "null");
+            using HttpResponseMessage r = await http.SendAsync(nullOrigin);
+            Assert.Equal(403, (int)r.StatusCode);
+        }
+        using (var plain = new HttpRequestMessage(HttpMethod.Post, server.Url) { Content = new StringContent(Rpc(10, "tools/call", "{\"name\":\"enable_mod\",\"arguments\":{\"filename\":\"a.jar\"}}"), Encoding.UTF8, "text/plain") })
+        {
+            using HttpResponseMessage r = await http.SendAsync(plain);
+            Assert.Equal(415, (int)r.StatusCode);
+        }
+        using (var rebinding = new HttpRequestMessage(HttpMethod.Post, server.Url) { Content = new StringContent(Rpc(11, "ping"), Encoding.UTF8, "application/json") })
+        {
+            rebinding.Headers.Host = "evil.example:" + port;
+            using HttpResponseMessage r = await http.SendAsync(rebinding);
+            Assert.Equal(403, (int)r.StatusCode);
+        }
+        Assert.Equal(before, api.Methods.Count);
         using (HttpResponseMessage get = await http.GetAsync(server.Url))
         {
             Assert.Equal(405, (int)get.StatusCode);
@@ -306,11 +327,33 @@ public class McpServerTests
         Assert.False(McpServer.LooksLikeError("[1,2]"));
         Assert.False(McpServer.LooksLikeError("not json"));
         Assert.True(McpServer.IsLocalOrigin(null));
-        Assert.True(McpServer.IsLocalOrigin("null"));
+        Assert.False(McpServer.IsLocalOrigin("null")); // SEC-MCP-1:sandbox iframe / file:// 页的 Origin
+        Assert.False(McpServer.IsLocalOrigin(" NULL "));
+        Assert.True(McpServer.IsLocalOrigin(""));
         Assert.True(McpServer.IsLocalOrigin("http://127.0.0.1:8080"));
         Assert.True(McpServer.IsLocalOrigin("http://localhost"));
         Assert.False(McpServer.IsLocalOrigin("https://evil.example"));
         Assert.False(McpServer.IsLocalOrigin("garbage"));
+    }
+
+    [Fact]
+    public void Sec_Mcp_1_HostAndContentTypeGuards()
+    {
+        Assert.True(McpServer.IsLocalHost(null));
+        Assert.True(McpServer.IsLocalHost("127.0.0.1:25585"));
+        Assert.True(McpServer.IsLocalHost("localhost"));
+        Assert.True(McpServer.IsLocalHost("LOCALHOST:25585"));
+        Assert.True(McpServer.IsLocalHost("[::1]:25585"));
+        Assert.False(McpServer.IsLocalHost("evil.example:25585"));
+        Assert.False(McpServer.IsLocalHost("127.0.0.1.evil.example"));
+
+        Assert.True(McpServer.IsJsonContentType("application/json"));
+        Assert.True(McpServer.IsJsonContentType("application/json; charset=utf-8"));
+        Assert.True(McpServer.IsJsonContentType("Application/JSON"));
+        Assert.False(McpServer.IsJsonContentType(null));
+        Assert.False(McpServer.IsJsonContentType("text/plain"));
+        Assert.False(McpServer.IsJsonContentType("application/x-www-form-urlencoded"));
+        Assert.False(McpServer.IsJsonContentType("multipart/form-data; boundary=x"));
     }
 
     private static int FreePort()

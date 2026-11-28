@@ -48,7 +48,8 @@ claude mcp add --transport http tipcl http://127.0.0.1:25585/mcp
 
 ## 4. 安全口径(给外部工具的使用者)
 
-- 只听 127.0.0.1、只收本机来源;带外站 `Origin` 的请求一律 403。没有 token 鉴权(同 Windows 参考版)。
+- 只听 127.0.0.1、只收本机来源;带外站 `Origin` 或 `Origin: null`(sandbox iframe、本地 html 文件)的请求、`Host` 不是 127.0.0.1 / localhost / [::1] 的请求一律 403。没有 token 鉴权(同 Windows 参考版)。
+- POST 必须带 `Content-Type: application/json`,否则 415。主流 MCP 客户端本来就这样发;自己用 curl 调试记得加 `-H "Content-Type: application/json"`。
 - **所有写操作都要坐在电脑前的人在 TipCL 窗口里点「允许这一次」。** 弹确认时主窗口会自动置前;120 秒没人点按拒绝处理,返回 `permission_denied`(原因 `confirm_timeout`)。外部 agent 收到拒绝后应该停下来问用户,不要重试刷屏。
 - Linux 版里,即使权限档是全自动,「以后都允许」对外部调用也不生效。
 - 往非测试实例装 jar 需要 `allow_non_dev=true`,而且一定会再弹一次确认。
