@@ -295,6 +295,36 @@ public static class Tools
     private const int SelectionCharsPerMessage = 4000;
 
     /// <summary>
+    /// AI5-C3(方案 1b):按离线回放量出来的漏选补的**口语说法**。
+    /// 逐条依据与数据见 progress/AI5-C3.md,探针在 tools/ai-tool-selection-probe:
+    /// 补词前典型集 17.9/百回合、口语变体集 41.7/百回合;补词后见报告。
+    /// 只补关键词(不动 CORE_TOOLS —— 那是方案 1a,本轮没选),也不动 ACTION_RE/QUESTION_RE
+    /// (命令判定放大到窗口会把写工具全带上,tools token 从 +2.3% 涨到 +9.1%,见 progress/AI5-C1.md)。
+    /// </summary>
+    private static readonly (string[] keys, string[] extra)[] C3Keywords =
+    {
+        // 「禁用 / 启用」之外的口语:disable_mod 是回放里漏选最多的工具
+        (new[] { "停用", "别加载", "不加载", "模组关掉", "关掉这个模组" },
+            new[] { "disable_mod", "enable_mod", "list_mods" }),
+        // 「卸载 / 移除」之外的两个最常见说法
+        (new[] { "卸了", "卸掉" }, new[] { "delete_mod", "disable_mod", "enable_mod" }),
+        // 导出诊断报告:口语里是「发给…」「发到群里」「发我一份」,表里只收了「导出报告 / 发给别人」
+        (new[] { "发到群里", "发给群里", "发给作者", "发给开发", "发给管理员", "发我一份", "发你一份", "发给我一份", "整理一份", "整理一下发", "导出一下" },
+            new[] { "export_diagnostic_report" }),
+        // 文件读写:口语里是「建个文件」「写个说明」,表里只收了「写文件 / 文件内容」
+        (new[] { "建个文件", "写个说明", "写点说明", "写进文件", "存到文件", "保存到文件" },
+            new[] { "fs_list", "fs_read", "fs_write" }),
+        // 看 jar:口语里是「是什么模组」「装的是哪个版本」
+        (new[] { "是什么模组", "哪个模组", "这个 jar", "这个jar", "jar 是什么", "装的是哪个版本", "装的哪个版本" },
+            new[] { "inspect_mod", "list_mods" }),
+        // Java:口语里是「运行环境」,表里只收了「运行时」
+        (new[] { "运行环境", "运行库", "java 环境" }, new[] { "get_java_list", "download_java" }),
+        // 卡顿:表里有「卡顿 / 很卡 / 好卡」,但没有单独一个「卡」——「有点卡」「一卡一卡」都命中不了。
+        // SH-1 的 Windows 侧(ExtraTools.Keywords)连「好卡」都没有,那边要同样补一次(不在本树)。
+        (new[] { "卡" }, new[] { "get_system_info", "diagnose_lag", "tune_jvm" }),
+    };
+
+    /// <summary>
     /// 按对话内容挑选要暴露给模型的工具(照 Windows 版 Tools.SelectToolSchemas):
     /// 常驻 CORE_TOOLS 一定带;按最近 12 条 user/tool 消息里的用词命中 KEYWORD_TOOLS;
     /// 写操作不在关键词表里时,只有**本轮**用户话像在下命令才带(纯提问不给写工具,减少误装)。
@@ -306,7 +336,7 @@ public static class Tools
         // 但「这一轮是不是在下命令」只看本轮用户话 —— 理由与实测见 progress/AI5-C1.md
         string text = userText ?? SelectionText(messages);
         string turnText = userText ?? LastUserText(messages);
-        foreach ((string[] keys, string[] extra) in AiData.KEYWORD_TOOLS.Concat(AcctLayoutMpTools.Keywords))
+        foreach ((string[] keys, string[] extra) in AiData.KEYWORD_TOOLS.Concat(AcctLayoutMpTools.Keywords).Concat(C3Keywords))
         {
             foreach (string key in keys)
             {
