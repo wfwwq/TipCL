@@ -1637,6 +1637,7 @@
  "第一次打开需要你亲自选择。\n\n同意后才会向开发者上传：\n· 你提交的反馈内容\n· 本机配置（CPU / 内存 / 显卡 / Java / 已装版本）\n\n暂不同意则不会上传，以后可在设置里更改。": "You need to choose this yourself the first time.\n\nOnly after you agree will the following be uploaded to the developers:\n· The feedback you submit\n· This machine's configuration (CPU / memory / GPU / Java / installed versions)\n\nIf you choose Not now, nothing is uploaded; you can change this later in Settings.",
  "等你回答": "Waiting for your answer",
  "等你确认": "Waiting for your confirmation",
+ "等你确认超过 {0} 秒,这一次已按拒绝处理": "No confirmation after {0} seconds; this action was denied.",
  "等待任务超时": "Timed out waiting for task",
  "等待启动前命令结束": "Waiting for pre-launch command",
  "筛选": "Filter",
