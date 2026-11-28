@@ -295,7 +295,10 @@ public class AiAgentParallelToolsTests : IDisposable
 
         await agent.RunAsync(messages, "default");
 
-        Assert.Equal(StopReason.NO_TOOL_CALL, agent.stop_reason);
+        // AI5-A6:这一轮**执行过工具**再收尾,stop_reason 现在是 completed(不再是 no_tool_call)。
+        // 判定口径:一句工具都没调过才叫 no_tool_call;调过就是正常完成的收尾(与参考版把
+        // no_tool_call 归一成 completed 一致)。纯文字回复仍然是 no_tool_call,见 AiAgentLoopTests。
+        Assert.Equal(StopReason.COMPLETED, agent.stop_reason);
         Assert.Equal("查完了", agent.LastText);
         Assert.True(backend.Peak >= 2, "只读调用没有并发(峰值 " + backend.Peak + ")");
         // 写工具没接确认回调 ⇒ 被拒,门面上不该出现 install_mod;参数坏掉的那个也不该执行

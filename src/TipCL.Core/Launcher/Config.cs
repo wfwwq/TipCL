@@ -122,6 +122,12 @@ public static class Config
 		pyDict["ai_permission_dont_ask"] = false;
 		pyDict["ai_context_window"] = 200000L;
 		pyDict["ai_max_tokens"] = 8192L;
+		// AI5-A7:主对话的轮数上限(AiAgent 不显式指定 MaxRounds 时读它)。默认 20 与 Windows 侧对齐。
+		pyDict["ai_max_rounds"] = 20L;
+		// AI5-S:子代理的轮数上限;dispatch_subagent 的 max_rounds 参数可在硬上限内覆盖它。
+		pyDict["ai_subagent_max_rounds"] = 4L;
+		// AI5-A8:主模型被限流/5xx 打不通时的备用模型(空 = 不做降级)。设置页「备用模型(可选)」写的就是它。
+		pyDict["ai_fallback_model"] = "";
 		pyDict["ai_model_caps_overrides"] = new PyDict();
 		pyDict["terracotta_extra_nodes"] = Py.L("https://terracotta.glavo.site/acebc7d8-1208-47fd-b212-d03ac49e36e0");
 		pyDict["feedback_url"] = "";

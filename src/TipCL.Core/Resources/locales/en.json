@@ -3891,5 +3891,15 @@
  "「不询问」模式下写操作直接执行": "In \"Don't ask\" mode write actions run directly",
  "「不询问」模式仍然拒绝删除类操作": "In \"Don't ask\" mode delete actions are still refused",
  "[权限设置] 用户选了「不询问」：写操作执行前不再询问、直接放行；删除实例、删除模组这类删除操作仍然会被拒绝。": "[Permissions] The user chose Dont ask: write actions run without asking and are let through; delete operations such as deleting an instance or a mod are still refused.",
- "「不询问」(config.json 的 ai_permission_dont_ask) = 写操作直接放行，删除类仍然拒绝；要逐步确认请换回「每次确认」。": "[Dont ask] (config.json ai_permission_dont_ask) = writes are let through, deletions still refused; switch back to Ask every time to confirm step by step."
+ "「不询问」(config.json 的 ai_permission_dont_ask) = 写操作直接放行，删除类仍然拒绝；要逐步确认请换回「每次确认」。": "[Dont ask] (config.json ai_permission_dont_ask) = writes are let through, deletions still refused; switch back to Ask every time to confirm step by step.",
+ "接口没有返回内容,请稍后重试": "The API returned nothing; please try again later",
+ "流式接口没走通,换成非流式再要一次": "Streaming failed; retrying once without streaming",
+ "AI 接口出错": "The AI API returned an error",
+ "模型没有返回任何内容,请再试一次": "The model returned nothing; please try again",
+ "回复被长度限制截断了,需要的话让我继续。": "The reply was cut off by the length limit; ask me to continue if you need more.",
+ "回复被长度限制截断了,正在接着写(第 {n}/{total} 次)": "The reply was cut off by the length limit; continuing ({n}/{total})",
+ "主模型暂时不可用,正在改用备用模型 {model}": "The primary model is unavailable; switching to the fallback model {model}",
+ "上下文过长,压缩一次后仍然超出模型窗口,请开新对话或减少附件": "The context is too long and still exceeds the model window after one compaction; start a new chat or attach fewer files",
+ "上下文超出模型窗口,正在压缩历史...": "The context exceeds the model window; compacting history...",
+ "已清理较早的工具结果({cleared} 条)": "Cleared older tool results ({cleared})"
 }
