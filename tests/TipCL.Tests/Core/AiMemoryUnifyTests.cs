@@ -127,6 +127,38 @@ public class AiMemoryUnifyTests : IDisposable
         // 丢的是最旧的(FileMemory.Remember 的裁剪方向)
         Assert.DoesNotContain("旧记忆 1", all);
         Assert.Contains("旧记忆 " + (FileMemory.MaxEntries + extra), all);
+        // 诊断量:这次迁移裁掉了 extra 条(给排障/用户看「迁丢了几条」)
+        Assert.Equal(extra, AiMemory.LastMigrationEvicted);
+        // 超出上限的条目**没有销毁**:旧文件只是改名留档,里面 95 条都在
+        string archive = File.ReadAllText(_migratedPath);
+        Assert.Contains("旧记忆 1", archive);
+        Assert.Contains("旧记忆 " + (FileMemory.MaxEntries + extra), archive);
+    }
+
+    /// <summary>上限裁剪要留一条诊断轨迹(ai_memory_migrate:imported / evicted / cap)。</summary>
+    [Fact]
+    public void Migration_WritesAnEvictionTrace()
+    {
+        WriteLegacy(Enumerable.Range(1, FileMemory.MaxEntries + 3).Select(i => "诊断记忆 " + i).ToArray());
+        _ = AiMemory.All();
+        Assert.Equal(3, AiMemory.LastMigrationEvicted);
+
+        string traceDir = Path.Combine(Utils.ROOT, "cache", "ai_trace");
+        string hit = "";
+        if (Directory.Exists(traceDir))
+        {
+            foreach (string file in Directory.EnumerateFiles(traceDir, "*.jsonl"))
+            {
+                string text = File.ReadAllText(file);
+                if (text.Contains("ai_memory_migrate", StringComparison.Ordinal))
+                {
+                    hit = text;
+                    break;
+                }
+            }
+        }
+        Assert.Contains("ai_memory_migrate", hit);
+        Assert.Contains("evicted", hit);
     }
 
     /// <summary>场景 20:助手侧 remember/forget 写的就是面板读的那一份,系统提示里也看得到。</summary>

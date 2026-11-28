@@ -22,7 +22,17 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
   旧的 `ai-memory.json` 在第一次访问时**幂等迁移**:逐条走 `FileMemory.Remember`(自带「同样内容已经记过
   就不重复记」),迁完把原文件改名成 `ai-memory.json.migrated` 留档。
   改名这一步是必须的:原文件留着的话,面板里删掉的记忆下次启动会被再迁一遍(复活)。
-- 上限口径:统一后是 `FileMemory` 的 80 条 / 单条 300 字(原先助手侧是 200 条)—— 迁移按新上限裁剪,最旧的先丢。
+- 上限口径:统一后是 `FileMemory` 的 80 条 / 单条 300 字(原先 Linux 助手侧是 200 条)。
+  这是一处**用户可见的行为变化**(数据没有销毁,见下),已上报用户等裁决:
+  - **两棵树的口径**:Windows 一直用 `FileMemory`(`MaxEntries = 80`),Linux 原 `AiMemory.MaxItems = 200`;
+    B1 是 **Linux 对齐 Windows**(单一记忆抽象 ⇒ 只能有一套上限)。
+  - **影响面**:只有「旧记忆超过 80 条」的用户受影响;超出的部分是**最旧的**
+    (`FileMemory.Remember` 的 `while (all.Count > MaxEntries) all.RemoveAt(0)` 从头部删)。
+  - **缓解(不是不可逆丢失)**:旧 `ai-memory.json` 是被 `File.Move` **改名**成 `ai-memory.json.migrated`,
+    **内容完整保留**(原文件一个字节没删);超出上限的条目原样躺在留档文件里,用户可人工找回。
+  - **诊断**:迁移若触发上限裁剪,`AiMemory.LastMigrationEvicted` 给出「这次迁丢了几条」,
+    同时往 `Trace` 记一条 `ai_memory_migrate`(`files` / `imported` / `evicted` / `cap`),
+    落 `$TIPCL_HOME/cache/ai_trace/YYYYMMDD.jsonl`;诊断写失败不影响记忆读写(两层 try/catch)。
 - README 口径:`README.md:72` 本来就写 `ai_memory.md`,与修完的实现一致(无需改;本包不再新增第二处口径)。
 
 ### B2 `remember` / `forget` 标成只读却会写盘
@@ -129,9 +139,9 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
 全量(Linux,`--filter "FullyQualifiedName!~Terracotta&FullyQualifiedName!~ClickSweep&FullyQualifiedName!~OpenUrl"`):
 
 - 基线(AI5-0,`progress/AI5-0-baseline.md`):**1594 过 / 11 跳 / 0 败 / 总 1605**。
-- 本包改动后(最终):**1639 过 / 11 跳 / 0 败 / 总 1650**,`exit 0`。新增 45 条用例
-  (B1 6 / B2 4 / B3 17 / B4 2 / C2 前置 8 / C2 前缀 6 / 其余为既有 Theory 数据行与 P1 改写组),
-  总数 1605 + 45 = 1650,符合「≥ 基线 + 新增场景数」。
+- 本包改动后(最终):**1640 过 / 11 跳 / 0 败 / 总 1651**,`exit 0`。新增 46 条用例
+  (B1 7 / B2 4 / B3 17 / B4 2 / C2 前置 8 / C2 前缀 6 / 其余为既有 Theory 数据行与 P1 改写组),
+  总数 1605 + 46 = 1651,符合「≥ 基线 + 新增场景数」。
 - 过程中有一次全量出现 `ModDevTaskPersistenceTests.Records_AreCapped_AtomicallyWritten_AndABrokenFileIsIgnored` 红:
   单独复跑 3/3 过、随后全量复跑也绿 —— 该用例不碰本包改动的任何代码路径(`ModDev` 任务持久化),
   判断是同机多 agent 并行争用导致的偶发;如实记录,没有为它改代码。
@@ -166,6 +176,9 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
 3. `dontAsk` 档位仍只能手改 `config.json`(面板只提供五档),本轮不新增控件(避免扩大用户可见交互变化);
    界面文案写在权限面板的说明行里。
 4. 记忆条数上限由 200 降到 80(FileMemory 口径),迁移会按新上限裁剪最旧的条目 —— 这是「以 FileMemory 为准」的既定后果。
+   **不是数据销毁**:旧文件只改名成 `ai-memory.json.migrated`,内容完整保留;裁剪条数有诊断
+   (`AiMemory.LastMigrationEvicted` + `Trace` 的 `ai_memory_migrate` 事件)。是否把这处行为变化改成
+   「只迁上限内 + 提示用户」或「提高上限」,等用户裁决(lead 已上报)。
 5. 体积:本 worktree 不产出 Windows compact exe(那是 `windos/` 的产物),本包只动 Linux 树源码;
    Linux Release 产物字节数见 §6。按 lead 裁决本轮不做体积回收。
 6. `--smoke` / `verify-smoke.ps1` / ClickSweep / VisualTour **按用户要求没有运行**(会抢前台)。动到 AI 页面的包
@@ -175,8 +188,8 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
 
 - Linux Release 构建(`dotnet build src/TipCL.App -c Release -m:1 -p:UseSharedCompilation=false`):
   **0 error / 1 warning**(既有 `src/TipCL.App/Pages/Layout/LayoutEditor.cs:196` CS0649),未新增警告。
-- `dotnet test`(排除 Terracotta / ClickSweep / OpenUrl):**1639 过 / 11 跳 / 0 败 / 总 1650**,`exit 0`
-  (AI5-0 基线 1594 过 / 11 跳 / 总 1605;新增 45 条)。
+- `dotnet test`(排除 Terracotta / ClickSweep / OpenUrl):**1640 过 / 11 跳 / 0 败 / 总 1651**,`exit 0`
+  (AI5-0 基线 1594 过 / 11 跳 / 总 1605;新增 46 条)。
 - `--ai-selftest`(`dotnet src/TipCL.App/bin/Release/net8.0/TipCL.App.dll --ai-selftest`):
   **通过 110 / 失败 0 / 跳过 0,exit 0**(与基线一致;其中「未知工具如实报错」与「只读工具执行成功」
   两项正是 C2 前置修复要保住的判据)。
