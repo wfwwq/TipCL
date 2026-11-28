@@ -35,11 +35,12 @@ public static class FirstRunWizard
 		("none", I18n.L("不隔离"))
 	};
 
-	private static readonly string[] Hints = new string[4]
+	private static readonly string[] Hints = new string[5]
 	{
 		I18n.L("先把游戏目录和下载源定下来。"),
 		I18n.L("版本都会装在这个目录里；下载源决定从哪儿拉文件。"),
 		I18n.L("这两项只影响以后新建的版本，已经装好的不受影响。"),
+		I18n.L("想用自己的 AI 就填这两格；不想弄就留空，不影响后面的步骤。"),
 		I18n.L("最后几句，都是容易错过的地方。")
 	};
 
@@ -94,9 +95,13 @@ public static class FirstRunWizard
 			string text4 = Str("default_isolation");
 			return item == ((text4 != null && text4.Length > 0) ? text4 : "all");
 		}));
-		SPanel sPanel = Ui.V(6.0, Ui.Txt(I18n.L("三步就能开始玩"), 14.0, bold: true), Ui.Muted(I18n.L("1. 选游戏目录和下载源")), Ui.Muted(I18n.L("2. 定默认内存和版本隔离")), Ui.Muted(I18n.L("3. 看一眼几个容易错过的功能")), Ui.Small(I18n.L("这些以后都能在设置里改；不想现在弄就点「跳过向导」。")).Wrap());
+		SPanel sPanel = Ui.V(6.0, Ui.Txt(I18n.L("四步就能开始玩"), 14.0, bold: true), Ui.Muted(I18n.L("1. 选游戏目录和下载源")), Ui.Muted(I18n.L("2. 定默认内存和版本隔离")), Ui.Muted(I18n.L("3. 填 AI 模型和 API Key（可以先留空）")), Ui.Muted(I18n.L("4. 看一眼几个容易错过的功能")), Ui.Small(I18n.L("这些以后都能在设置里改；不想现在弄就点「跳过向导」。")).Wrap());
 		SPanel sPanel2 = Ui.V(8.0, Ui.Txt(I18n.L("游戏目录（版本都装在这里）")), grid, Ui.Txt(I18n.L("文件下载源")), src, Ui.Small(I18n.L("国内网络建议保持「自动」：官方慢的时候会自己切到 BMCLAPI 镜像。")).Wrap());
 		SPanel sPanel3 = Ui.V(8.0, Ui.Txt(I18n.L("默认内存")), grid2, Ui.Txt(I18n.L("新版本默认隔离")), iso, Ui.Small(I18n.L("「完全独立」= 每个版本有自己的 mods / 配置 / 存档，换版本不会把上一个版本的模组拖进去。")).Wrap());
+		TextBox aiModel = Ui.Input("deepseek-v4-flash / gpt-4o-mini", Str("ai_model"));
+		PasswordBox aiKey = Ui.Pw();
+		Button aiTest = Ui.Btn(I18n.L("测试连接"), BtnKind.Chip, null, "\ue99a");
+		SPanel sPanelAi = Ui.V(8.0, Ui.Txt(I18n.L("AI 模型与 API Key（可以先留空）"), 14.0, bold: true), Ui.Txt(I18n.L("模型名")), aiModel, Ui.Small(I18n.L("常用的有 deepseek-v4-flash / gpt-4o-mini / qwen-plus；也可以填端点支持的任意模型名。")).Wrap(), Ui.Txt("API Key"), aiKey, Ui.Small(I18n.L("留空就不改；以后随时能在「设置 → AI 助手」里填。")).Wrap(), Ui.H(8.0, aiTest.Left()), Ui.Small(I18n.L("内置 AI 不用填这两项；想换成自己的网关，还要在「设置 → AI 助手」里把接入方式切成「自定义」并填端点地址。")).Wrap());
 		SPanel sPanel4 = Ui.V(9.0);
 		(string, string)[] highlights = Highlights;
 		for (int num = 0; num < highlights.Length; num++)
@@ -105,7 +110,7 @@ public static class FirstRunWizard
 			sPanel4.Children.Add(Ui.Txt(text, 13.0, bold: true));
 			sPanel4.Children.Add(Ui.Small(text2).Wrap());
 		}
-		UIElement[] pages = new UIElement[4] { sPanel, sPanel2, sPanel3, sPanel4 };
+		UIElement[] pages = new UIElement[5] { sPanel, sPanel2, sPanel3, sPanelAi, sPanel4 };
 		TextBlock hint = Ui.Muted("");
 		hint.TextWrapping = TextWrapping.Wrap;
 		TextBlock step = Ui.Small("");
@@ -154,6 +159,37 @@ public static class FirstRunWizard
 			tcs.TrySetResult(result: false);
 			layer.Close();
 		};
+		aiTest.Click += async (object sender, RoutedEventArgs args) =>
+		{
+			aiTest.IsEnabled = false;
+			try
+			{
+				// 只把这次填的模型 / Key 发过去:test_ai_connection 会用已存的模式、地址和令牌补齐(BackendApi._with_stored_secrets)
+				Dictionary<string, object> probe = new Dictionary<string, object>();
+				if (AiModelTyped().Length > 0)
+				{
+					probe["ai_model"] = AiModelTyped();
+				}
+				if (AiKeyTyped().Length > 0)
+				{
+					probe["ai_api_key"] = AiKeyTyped();
+				}
+				string result = await api.CallAsync<string>("test_ai_connection", new
+				{
+					settings = probe
+				});
+				AppServices.Toast(I18n.L("AI 连接成功"), result ?? "", ToastKind.Success);
+			}
+			catch (Exception ex)
+			{
+				// 只提示,不阻断:AI 没配好也能继续走完向导
+				AppServices.Toast(I18n.L("AI 连接失败"), I18n.L("没连上，可继续；以后在「设置 → AI 助手」里再试。") + "\n" + ex.Message, ToastKind.Warning);
+			}
+			finally
+			{
+				aiTest.IsEnabled = true;
+			}
+		};
 		Show(0);
 		if (!(await tcs.Task))
 		{
@@ -183,17 +219,29 @@ public static class FirstRunWizard
 				await Dlg.Alert(I18n.L("游戏目录没能设置"), I18n.L("{0}\n\n{1}\n\n已保留原来的目录，可到「设置」里重新选择。", typed, ex.Message));
 			}
 		}
+		string modelToSave = AiModelTyped();
+		string keyToSave = AiKeyTyped();
+		Dictionary<string, object> data = new Dictionary<string, object>
+		{
+			["download_source"] = SrcOpts[Math.Max(0, src.SelectedIndex)].Key,
+			["default_memory_mb"] = (int)mem.Value,
+			["default_isolation"] = IsoOpts[Math.Max(0, iso.SelectedIndex)].Key,
+			["first_run"] = false
+		};
+		// 留空就整条不提交:空串会把用户已经存着的模型名 / 令牌覆盖掉(设置页对秘密项也是"非空才提交")
+		if (modelToSave.Length > 0)
+		{
+			data["ai_model"] = modelToSave;
+		}
+		if (keyToSave.Length > 0)
+		{
+			data["ai_api_key"] = keyToSave;
+		}
 		await api.CallAsync<object>("save_settings", new
 		{
-			data = new Dictionary<string, object>
-			{
-				["download_source"] = SrcOpts[Math.Max(0, src.SelectedIndex)].Key,
-				["default_memory_mb"] = (int)mem.Value,
-				["default_isolation"] = IsoOpts[Math.Max(0, iso.SelectedIndex)].Key,
-				["first_run"] = false
-			}
+			data = data
 		});
-		AppServices.Toast(I18n.L("向导已完成"), I18n.L("目录、下载源、内存、隔离已按你的选择写入"), ToastKind.Success);
+		AppServices.Toast(I18n.L("向导已完成"), ((modelToSave.Length > 0 || keyToSave.Length > 0) ? I18n.L("目录、下载源、内存、隔离、AI 已按你的选择写入") : I18n.L("目录、下载源、内存、隔离已按你的选择写入")), ToastKind.Success);
 		if (AppServices.Window?.GetPage("settings") is SettingsPage settingsPage)
 		{
 			await settingsPage.RefreshAsync();
@@ -226,6 +274,14 @@ public static class FirstRunWizard
 				return "";
 			}
 			return value.GetString() ?? "";
+		}
+		string AiModelTyped()
+		{
+			return aiModel.Text?.Trim() ?? "";
+		}
+		string AiKeyTyped()
+		{
+			return (aiKey.Password ?? "").Trim();
 		}
 	}
 }
