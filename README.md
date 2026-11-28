@@ -182,7 +182,7 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 
 exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，点「更多信息 → 仍要运行」即可。个别杀软会对未签名的单文件程序报启发式误报，源码完全公开，也可以自己编译。
 
-- v1.2.0 SHA-256:`a7dba497ed1729cbc63aad5c0a784f2707b42426910dda6741eab8e42b1c5ac6`(Windows 的 `TipCL.exe` 每个 Release 都带同名 `.sha256` 附件，可自行校验(2026-11-19 替换后的 v1.2.0 附件,与仓库根 [`update.json`](update.json) 的 `sha256` 逐字一致)或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
+- v1.3.0 SHA-256:`278626d34a02af88e5f2a0d6b3d1c781cb18449ed8327432018cd0c9b08752b3`(Windows 的 `TipCL.exe` 每个 Release 都带同名 `.sha256` 附件，可自行校验(与仓库根 [`update.json`](update.json) 的 `sha256` 逐字一致)或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
 - Linux 的 AppImage 与 `.deb` 自 v1.3 起每个 Release 都带同名 `.sha256` 附件（格式同 Windows：一行 64 位十六进制），下载后 `sha256sum TipCL-linux-x64.AppImage` 比对即可；v1.2.0 及更早的 Linux 包没有附件，SHA-256 见 Actions 日志。
 - Linux 版的微软账号令牌优先存进系统密钥环（GNOME Keyring / KWallet，经 `secret-tool`）；没有密钥环时存到数据目录下权限 600 的 `secrets.json`，`accounts.json` 也收紧到 600。设 `TIPCL_SECRET_STORE=file` 可强制只用文件。
 

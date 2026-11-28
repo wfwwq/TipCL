@@ -2,5 +2,5 @@
   "version": "1.3.0",
   "notes": "布局 v3:编辑条上移、区块改虚线框+悬停标签、新增「添加」抽屉、只留列表/网格;设置→布局分成外观/导航/页面/方案/高级五组,JSON 改在独立窗口,旧布局照读。Linux 补齐账号/存档/整合包/模组开发等 AI 工具与 MCP Server;微软账号重启后不用重登(优先密钥环,否则 600 权限文件);MCP 只收 JSON、拒绝异常 Origin/Host,Windows 外部写操作也弹确认;Linux 包附 .sha256。",
   "url": "https://github.com/wfwwq/TipCL/releases/download/v1.3.0/TipCL-linux-x64.AppImage",
-  "sha256": "REPLACE-WITH-THE-REAL-SHA256"
+  "sha256": "1d7af093bca0170be034994cda218c5f6be70167e5c2ac0cb2c8afe396902cd6"
 }
