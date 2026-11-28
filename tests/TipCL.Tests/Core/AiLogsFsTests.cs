@@ -664,4 +664,18 @@ public class AiLogsFsTests
             Crash.ShellOpenHook = saved;
         }
     }
+
+    [Fact]
+    public void WindowsDeviceNames_AreRecognised_RegardlessOfExtensionAndCase()
+    {
+        // FsResolve 在 Windows 上靠它拦 nul / con.txt / aux:Windows 11 / Server 2025 的 GetFullPath 不再替我们折成 \\.\nul
+        foreach (string dev in new[] { "nul", "NUL", "con.txt", "aux", "Prn.log", "com1", "LPT9.txt", "nul ", "conin$", "CONOUT$" })
+        {
+            Assert.True(AiFsTools.IsWindowsDeviceName(dev), dev);
+        }
+        foreach (string ok in new[] { "latest.log", "console.txt", "nully", "com", "aux_backup", "mods", "connect.json", "lpt" })
+        {
+            Assert.False(AiFsTools.IsWindowsDeviceName(ok), ok);
+        }
+    }
 }

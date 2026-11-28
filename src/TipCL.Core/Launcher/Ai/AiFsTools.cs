@@ -259,6 +259,60 @@ public static class AiFsTools
         return parts.Any(p => DenyAnywhere.Contains(p));
     }
 
+    private static readonly Regex WindowsDeviceName = new(
+        "^(CON|PRN|AUX|NUL|CONIN\\$|CONOUT\\$|COM[0-9\u00B9\u00B2\u00B3]|LPT[0-9\u00B9\u00B2\u00B3])$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>Windows 保留设备名:看第一个点之前的部分(去掉尾随空格),con、con.txt、NUL.log 都算。</summary>
+    internal static bool IsWindowsDeviceName(string segment)
+    {
+        string head = segment;
+        int dot = head.IndexOf('.');
+        if (dot >= 0)
+        {
+            head = head.Substring(0, dot);
+        }
+        return WindowsDeviceName.IsMatch(head.TrimEnd(' '));
+    }
+
+    /// <summary>
+    /// 绝对路径 <paramref name="norm"/> 开头若正好是某个允许根(按平台大小写、按分隔符边界),返回那段前缀的段数;否则 0。
+    /// 取最长的一个,这样之后逐段检查只覆盖根下面用户写的部分。
+    /// </summary>
+    private static int TrustedPrefixSegments(string norm, List<string>? roots)
+    {
+        int best = 0;
+        char sep = Path.DirectorySeparatorChar;
+        foreach (string r in roots ?? new List<string>())
+        {
+            if (string.IsNullOrWhiteSpace(r))
+            {
+                continue;
+            }
+            string root;
+            try
+            {
+                root = Path.GetFullPath(PPath.Abs(r)).TrimEnd(sep);
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+            if (root.Length == 0)
+            {
+                continue;
+            }
+            bool match = string.Equals(norm.TrimEnd(sep), root, PathCmp)
+                || norm.StartsWith(root + sep, PathCmp);
+            if (match)
+            {
+                int n = root.Split(sep, StringSplitOptions.RemoveEmptyEntries).Length;
+                best = Math.Max(best, n);
+            }
+        }
+        return best;
+    }
+
     /// <summary>
     /// fs_* 共用的路径守卫:绝对路径必须落在允许根内,相对路径基于实例根解析;
     /// 「..」、驱动器相对路径(C:foo)、备用数据流(a.txt:x)、网络 / 设备路径、8.3 短名、末尾带点或空格的段一律拒;
@@ -303,7 +357,11 @@ public static class AiFsTools
             {
                 throw new PermissionError("路径里不能有冒号(备用数据流)");
             }
-            foreach (string s in segs.Skip(hasDrive ? 1 : 0))
+            // 逐段检查只针对「用户自己写的那一截」:绝对路径里允许根本身那段前缀不查。
+            // 原因:允许根来自 TIPCL_HOME / 实例目录,系统可能本来就给的是 8.3 短名
+            // (GitHub windows-latest 的 %TEMP% 就是 C:\Users\RUNNER~1\...),那不是用户在绕守卫。
+            int skip = hasDrive ? TrustedPrefixSegments(norm, roots) : 0;
+            foreach (string s in segs.Skip(Math.Max(skip, hasDrive ? 1 : 0)))
             {
                 if (s != "." && (s.EndsWith(".", StringComparison.Ordinal) || s.EndsWith(" ", StringComparison.Ordinal)))
                 {
@@ -312,6 +370,11 @@ public static class AiFsTools
                 if (Regex.IsMatch(s, "~[0-9]"))
                 {
                     throw new ValueError("不支持 8.3 短文件名,请写完整文件名");
+                }
+                if (IsWindowsDeviceName(s))
+                {
+                    // Windows 11 / Server 2025 起 GetFullPath 不再把 C:\x\nul、con.txt 折成 \\.\nul,得自己拦
+                    throw new PermissionError("不支持设备名(CON / NUL / AUX / COM1 之类)");
                 }
             }
         }
