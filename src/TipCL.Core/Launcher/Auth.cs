@@ -122,6 +122,11 @@ public static class Auth
 
 	private static ISecretStore _keyring_backend()
 	{
+		// SEC-AUTH-1:非 Windows 以前从没注册凭据库,令牌只能存成 "unavailable:"、每次重启都要重新登录
+		if (PlatformServices.SecretStore == null && !Utils.IS_WINDOWS)
+		{
+			PlatformServices.SecretStore = UnixSecretStore.CreateDefault();
+		}
 		return PlatformServices.SecretStore;
 	}
 
@@ -300,6 +305,8 @@ public static class Auth
 
 	public static void _restrict_accounts_file()
 	{
+		// SEC-AUTH-1:accounts.json 里有账号 UUID、令牌引用等,Unix 上收紧到 600
+		UnixPerms.OwnerOnly(ACCOUNTS_FILE);
 	}
 
 	internal static void OpenBrowser(string url)
