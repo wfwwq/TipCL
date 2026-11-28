@@ -114,5 +114,5 @@
 
 - `docs/PARITY.md` §11.4 第 1 条「启动页提示条里来自老 `Preflight` / `Conflict` 代码的条目,英文界面下仍是中文;AI 页「准备:」「完成:」前缀仍是中文」→ 改为已接(AI3-i18n;残留见本文 §5)。
 - `progress/AI2-i18n-ux.md` §9 第 1、2、3 条可标「已由 AI3-i18n 处理」(第 3 条的页面级下拉见本文 §5-1)。
-- `DECISIONS.md` 建议补一句(可并进 D-82):「审计里 `i18n:runtime-tr` 标记 = 运行时过 Tr 的表;只能用在 `RUNTIME_TR_FILES` 白名单里的文件,由 `I18nRuntimeTrMarkerTests` 守住」。
+- `docs/DECISIONS.md` 建议补一句(可并进 D-82):「审计里 `i18n:runtime-tr` 标记 = 运行时过 Tr 的表;只能用在 `RUNTIME_TR_FILES` 白名单里的文件,由 `I18nRuntimeTrMarkerTests` 守住」。
 - `README.md`:无需改动。

@@ -85,7 +85,7 @@
 
 ## 7. 要改的文档行(本包不改,交主线)
 - docs/PARITY.md §11.4 第 2 条整条改为已处理:「『进入主菜单』特征行改为按加载器 × 版本段的可配置表(ReadyMarkers,来源 / 推断已标注,仍待真机核对);测试启动只关自己拉起的进程(LaunchedGames,按启动任务 PID);模组测试任务记录落盘 cache/moddev_tasks.json(重启后可查,未完成的记 interrupted);create_test_instance 依赖 Modrinth 找不到回落 CurseForge」,并指向本文件。
-- DECISIONS.md 建议新增一条(D-83 或主线编号):「run_test_launch 关游戏只按启动任务 id 找 TipCL 自己登记的进程,登记表里没有就不关,绝不退回无参 stop_game;模组测试任务记录落盘 cache/moddev_tasks.json,上限 50,重启前未结束的读回为 interrupted;依赖来源链 Modrinth → CurseForge,前缀可钉单一来源」。
+- docs/DECISIONS.md 建议新增一条(D-83 或主线编号):「run_test_launch 关游戏只按启动任务 id 找 TipCL 自己登记的进程,登记表里没有就不关,绝不退回无参 stop_game;模组测试任务记录落盘 cache/moddev_tasks.json,上限 50,重启前未结束的读回为 interrupted;依赖来源链 Modrinth → CurseForge,前缀可钉单一来源」。
 - progress/AI2-moddev-mcp.md §6 第 1、2、3、6 条可标为已由本包处理。
 - README「🤖 AI 助手」模组测试一句可补:「依赖可回落 CurseForge;测试启动只关自己拉起的游戏;任务记录重启后可查」。
 

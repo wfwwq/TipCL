@@ -74,4 +74,4 @@
 
 - `docs/PARITY.md` §11.4:第 3 条(撤回空目录 / ID 校验 / KubeJS 加固)与第 4 条(plan_modpack CF 候选 / install_mods_batch 后台任务)标为已完成,指向本文件;§10 的 plan_modpack 一行补「候选来源 Modrinth + CurseForge」,install_mods_batch 一行补「后台任务,返回 task_id,任务卡逐项进度」。
 - `README.md` AI 功能列表「一句话造整合包」一句补「候选来自 Modrinth 与 CurseForge」;「数据包 / 资源包」一句补「引用的 ID 命名空间不对时提醒」。
-- `DECISIONS.md` 新增一条:「检查点撤回清空目录只删本次点名的新目录且须整棵为空;ID 命名空间检查只警告不拒绝;KubeJS 静态检查拒模板字符串与方括号动态属性访问(宁可误拦);plan_modpack 合并两平台时同一模组优先 Modrinth;install_mods_batch 走启动器任务表,部分失败 = 任务失败」。
+- `docs/DECISIONS.md` 新增一条:「检查点撤回清空目录只删本次点名的新目录且须整棵为空;ID 命名空间检查只警告不拒绝;KubeJS 静态检查拒模板字符串与方括号动态属性访问(宁可误拦);plan_modpack 合并两平台时同一模组优先 Modrinth;install_mods_batch 走启动器任务表,部分失败 = 任务失败」。

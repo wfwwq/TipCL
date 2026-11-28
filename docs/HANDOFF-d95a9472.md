@@ -40,7 +40,7 @@
 
 ### 1.3 `PermissionNote` —— **已补做,不是缺口**
 
-`ea57b74`(R21d 权限档位注入系统提示)+ `DECISIONS.md` **D-57**;`700cd21` 把 PARITY 里"唯一没搬的半部是 PermissionNote"改成 R21d 口径。
+`ea57b74`(R21d 权限档位注入系统提示)+ `docs/DECISIONS.md` **D-57**;`700cd21` 把 PARITY 里"唯一没搬的半部是 PermissionNote"改成 R21d 口径。
 ⇒ todo 里那条 `[pending] 决定 PermissionNote 是补做还是如实记为缺口` 是**陈旧标签**,事项本身闭环〔转述+提交可查〕。
 
 ### 1.4 发布/推送
@@ -51,7 +51,7 @@ R21k 首次真跑 CI 与修复(`cc4c39d`/`44e9917`)、`ac62394` 把 Linux/Avalon
 
 ## 二、R22 / §9.14 的四条"如实留白"——现在是这个状态
 
-原话在 `PROGRESS.md:1106-1107` 与 `docs/PARITY.md:663`(两处措辞一致):
+原话在 `docs/dev/PROGRESS.md:1106-1107` 与 `docs/PARITY.md:663`(两处措辞一致):
 
 | # | 原留白 | 现状态 | 依据 |
 |---|---|---|---|
@@ -107,7 +107,7 @@ R21k 首次真跑 CI 与修复(`cc4c39d`/`44e9917`)、`ac62394` 把 Linux/Avalon
 | 失败任务在**启动页底部「下载任务」区块**是否可见 | 该区块 `DefaultVisible = false`(`LaunchPage.cs:358`),未点开核对 |
 | 更新失败 toast 的单元测试 | 需改 `tests/**`,不在本轮授权内 |
 | 真模型端到端(需 API key)、手机同步、`CrashUi` 真实数据、Java 大下载、媒体=截图的「打开」、Windows CI job 根因、两条 GitHub 平台级提示 | 会话早先就记的"条件不具备/未定位"项,**本轮未动** |
-| `PROGRESS.md` / `docs/PARITY.md` / `README.md` 的措辞更新 | **不是我的地盘**(task-9 / task-10)。本节只给事实口径,见 `scratch/update-e2e2/REPORT.md §7` |
+| `docs/dev/PROGRESS.md` / `docs/PARITY.md` / `README.md` 的措辞更新 | **不是我的地盘**(task-9 / task-10)。本节只给事实口径,见 `scratch/update-e2e2/REPORT.md §7` |
 
 ---
 

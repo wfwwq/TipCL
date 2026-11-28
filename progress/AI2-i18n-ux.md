@@ -151,6 +151,6 @@
 
 - `docs/PARITY.md` §10.4 第 1 条「启动页预检提示条的文案(`NewFeatures/AiPreflight.cs`)与新工具的中文标签(`Tools.cs` Labels)未接 `I18nCore.Tr`」→ 改为已接(AI2-i18n-ux;残留见本文 §9-1/2)。
 - `docs/PARITY.md` §10 补一条:Linux 存档对话框的还原 = 先自动备份再回滚(Windows 版界面直接覆盖);实例详情 → 设置 可编辑实例内存 / GC。
-- `DECISIONS.md` 建议新增一条:「工具结果里与界面共用的文字(预检条目、确认卡预览)跟界面语言走」;D-81 的「遗留」改为指向本文件。
+- `docs/DECISIONS.md` 建议新增一条:「工具结果里与界面共用的文字(预检条目、确认卡预览)跟界面语言走」;D-81 的「遗留」改为指向本文件。
 - `progress/AI-perf-saves.md` 遗留 1、7,`progress/AI-acct-layout-mp.md` 遗留 4,`progress/AI-new-features.md` 遗留 8 可标「已由 AI2-i18n-ux 处理」。
 - `README.md`:无需改动(功能描述未涉及这些细节);如要写,可在「好卡」行补「实例内存 / GC 可在实例详情 → 设置里改」。

@@ -3,7 +3,7 @@
 - 轮次:M4-H R9(第十棒,接第九棒遗留的临时复现台)
 - 环境:开发机 Windows(无头 Avalonia + 真布局 pass),真机证据来自 R8 的 Ubuntu 24.04 / X11 / XFCE 盒子 `main`
 - 范围:只改 `src/TipCL.App/**` + 新增测试 + 本报告;未 commit / 未 push / 未动版本号 / 未碰 Windows 参考仓库;
-  未改 `PROGRESS.md` / `DECISIONS.md` / `docs/PARITY.md`(留给主 agent 统一合并)
+  未改 `docs/dev/PROGRESS.md` / `docs/DECISIONS.md` / `docs/PARITY.md`(留给主 agent 统一合并)
 
 ---
 

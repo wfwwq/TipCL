@@ -28,7 +28,7 @@ $env:TEMP="D:\项目\TipCL\_tools\tmp-A"; $env:TMP=$env:TEMP
 
 | ID | 目标 | 级别 | 文件:行 | 说明 |
 |----|------|------|---------|------|
-| X-01 | aud-app | 说明（非 bug） | `src/TipCL.App/Pages/Layout/LayoutEngine.cs:1204-1243` | `LayoutCell.HeightPx` 走 `block.Extra["height_px"]` 而不是 v2 契约字段。**核实结论：跨端互导不会丢固定高度**——Core 的 `LayoutJson.MergeExtra`（`LayoutJson.cs:236`）把 `Extra` 里的未知键**平铺写到顶层**，所以 Linux 写出的 JSON 里 `height_px` 就在顶层（与 Windows 契约字段同名）；反向 Windows 导出的顶层 `height_px` 在 Linux `BlockLayout.FromDict` 里落进 `Extra`，`ReadHeightPx` 照样读得到。故 A-线**不改** Core 契约，仅当 App 侧希望 `BlockLayout` 有强类型字段时才需要动（会牵动 App 的 `LayoutCell`/序列化两处）。另外 `DECISIONS.md` 里 grep `height_px`/`Extra` **无任何决策记录**，所以这不是"有意决策"，而是"表示法不同但语义等价"。 |
+| X-01 | aud-app | 说明（非 bug） | `src/TipCL.App/Pages/Layout/LayoutEngine.cs:1204-1243` | `LayoutCell.HeightPx` 走 `block.Extra["height_px"]` 而不是 v2 契约字段。**核实结论：跨端互导不会丢固定高度**——Core 的 `LayoutJson.MergeExtra`（`LayoutJson.cs:236`）把 `Extra` 里的未知键**平铺写到顶层**，所以 Linux 写出的 JSON 里 `height_px` 就在顶层（与 Windows 契约字段同名）；反向 Windows 导出的顶层 `height_px` 在 Linux `BlockLayout.FromDict` 里落进 `Extra`，`ReadHeightPx` 照样读得到。故 A-线**不改** Core 契约，仅当 App 侧希望 `BlockLayout` 有强类型字段时才需要动（会牵动 App 的 `LayoutCell`/序列化两处）。另外 `docs/DECISIONS.md` 里 grep `height_px`/`Extra` **无任何决策记录**，所以这不是"有意决策"，而是"表示法不同但语义等价"。 |
 | X-02 | 测试线（D） | 说明 | `tests/TipCL.Tests/Layout/LayoutV2CompatTests.cs:434` | 该用例断言「读路径不写盘：损坏的 v2 文件读完之后内容原样还在」，与 Windows 版「Load 里就改名备份」相冲突。我按用例冻结的语义实现（Load 只记待办、改名推迟到写前），**用例无需改动**。若后续想让 Windows/Linux 完全同构，需要先改这条断言。 |
 | X-03 | aud-others | P2 观察 | `src/TipCL.App/Common/Launch/LaunchCore.cs:231,254` | `gp.Wait()` 在 `Task.Run` 里跑，`finally` 里 `playtime.Stop()`；`LastLines()` 在 `Wait` 返回后调用（此时 reader 线程已 Join 2s）——与 A-03 修复前存在理论上的锁竞争窗口，A-03 修完后该窗口消失。App 侧无需改动。 |
 

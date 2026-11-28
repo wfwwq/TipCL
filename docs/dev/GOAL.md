@@ -53,7 +53,7 @@
 4. Core 复用层编译通过，附《复用清单》：哪些文件搬了、哪些没搬、为什么。
 5. `--smoke` 参数：离屏渲染主窗口截图到 `smoke.png` 后退出（Avalonia Headless 或 RenderTargetBitmap 等价物）。
 6. `tools/build.sh` + `tools/build.ps1` 一键构建脚本。
-7. 文档齐：`PROGRESS.md`（工作包表）、`DECISIONS.md`、`交接必读.md`。
+7. 文档齐：`docs/dev/PROGRESS.md`（工作包表）、`docs/DECISIONS.md`、`docs/dev/交接必读.md`。
 
 ## 5. 工作包（5 个并行子代理，文件独占）
 
@@ -86,7 +86,7 @@
 
 1. 各代理只写自己独占地盘；需要别人地盘的接口时，在 progress/M1-*.md 里写清"依赖申请"，不许直接改。
 2. 每个代理收尾必须：a) 自证 `dotnet build`（自己范围）0 错误；b) 写 `progress/M1-<包>.md`（做了什么、文件清单、遗留、风险）；c) git commit（信息前缀包编号）。
-3. 共享文件编辑权：GOAL.md 只读；sln 归 A1；PROGRESS.md/DECISIONS.md 各包只**追加**自己小节（追加用 Edit 在文件末尾，禁止重写他人内容）。
+3. 共享文件编辑权：docs/dev/GOAL.md 只读；sln 归 A1；docs/dev/PROGRESS.md / docs/DECISIONS.md 各包只**追加**自己小节（追加用 Edit 在文件末尾，禁止重写他人内容）。
 4. 构建防锁：`dotnet build-server shutdown` 后再 build；遇 CS 文件锁报错先 `dotnet build-server shutdown` 重试。
 
 ---

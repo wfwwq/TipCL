@@ -1,7 +1,7 @@
 # AI-engine-mcp · AI 引擎底层能力 + Linux 版 MCP Server
 
 分支 `ai/engine-mcp`(基于 `main@4277a02`),worktree `D:\项目\TipCL\wt-ai-engine-mcp`。提交前缀 `AI-engine-mcp:`。
-本文件是本包唯一的进度记录;`PROGRESS.md` / `DECISIONS.md` / `README.md` 未改(按公共任务书),需要改的行列在文末。
+本文件是本包唯一的进度记录;`docs/dev/PROGRESS.md` / `docs/DECISIONS.md` / `README.md` 未改(按公共任务书),需要改的行列在文末。
 
 ## 1. 做了什么
 
@@ -119,4 +119,4 @@ docs/PARITY.md:
 - 第 147 行第 4 条「剩真模型端到端与 `McpServer`」→ 只剩真模型端到端。
 - 第 350-359 行权限对位表:新增一行「规则限定参数 `content`(参考版 `Permission._matches` / `RuleContentFromInput`)| D-24 记录但不判定 | `PermissionRules`:键序同参考版、NormPathSpelling 后整串相等、禁止>允许>每次问、删除类无限定 allow 不生效;作用实例按目标实例」。
 - 第 242 行 `PluginHooks / LaunchHooks` 仍「不移植」,可补一句「AI 工具钩子已有进程内 `Hooks`,将来有插件宿主时挂这里」。
-- DECISIONS.md(主线补):D-24「规则匹配只按工具名」与 D-28「McpServer 不移植」两条需要追加更正条目,指向本文件。
+- docs/DECISIONS.md(主线补):D-24「规则匹配只按工具名」与 D-28「McpServer 不移植」两条需要追加更正条目,指向本文件。

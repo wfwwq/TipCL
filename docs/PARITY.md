@@ -39,7 +39,7 @@
 | 插件动态顶部页签(`group:"top"` 追加) | `Shell/TitleBar.SetPluginTabs` + `MainWindow.SyncPluginTabs`(2026-11-12 P8) | ✅ |
 | 标题栏桥接状态红点(`BridgeDot`) | Linux 为进程内 API,无桥接态 | n/a |
 
-> **2026-11-10 补充(D-12)**:整站「代码侧取色」(`Ui.Dyn`/`Res.Bind`/`Ui.Theme`/`Ui.Res`)原先因主题资源从未挂到 Application 级而全部失效,已修复;同时修掉 `Controls.axaml` ComboBox 主题的跨两层模板选择器、滑块 Fluent 蓝、`IconBtn` 图标名渲染成文字三类问题。细节见 `DECISIONS.md` D-12。
+> **2026-11-10 补充(D-12)**:整站「代码侧取色」(`Ui.Dyn`/`Res.Bind`/`Ui.Theme`/`Ui.Res`)原先因主题资源从未挂到 Application 级而全部失效,已修复;同时修掉 `Controls.axaml` ComboBox 主题的跨两层模板选择器、滑块 Fluent 蓝、`IconBtn` 图标名渲染成文字三类问题。细节见 `docs/DECISIONS.md` D-12。
 
 
 ## 2. 页面(按功能域)
@@ -271,7 +271,7 @@ Markdown 渲染链 `MdParser/MdBlock/MdInline/MdView/BlockHost`;
 > (同一 `Avalonia.X11.dll` 内 `_NET_WM_STATE` 命中 9 次,可证搜索方法有效)。
 > 所以这是**平台/后端不支持**,不是本项目的接线问题,也不是自动化脚本问题。下表描述的接入点与识别逻辑**代码层面成立且有测试覆盖**,
 > 但在 Linux 上永远收不到 OS 拖放事件;真机上可用的是各页已有的显式入口(「从文件安装」「导入本地文件」「链接安装」)。
-> 详见 `DECISIONS.md` D-38 与 `PROGRESS.md` 的 `M4-H R8`。
+> 详见 `docs/DECISIONS.md` D-38 与 `docs/dev/PROGRESS.md` 的 `M4-H R8`。
 
 > Windows 参考版:`Services/FileDrop.cs`(291)+ `Services/FileKinds.cs`(671),由 `PageBase.EnableDrop` 在页面级接入,
 > 主窗口再挂一层兜底(`MainWindow.xaml.cs:1175`)。Linux 侧按同一形状落地,逐项差异如下。
@@ -583,7 +583,7 @@ App 侧调用**已证**(xdg-open 收到正确的绝对路径参数),但**对照�
    (与 §9.11 里"选择器的视觉坐标 = 输入坐标、`xwininfo`/`wmctrl` 的 Y 都不可用"是同一条教训的两种表现)。
 
 **清理与边界**:该会话只 kill 自己的 pid(**刻意没有用 `pkill -f mount_TipCL`**,那会误杀 `:0` 上另一个会话的实例),
-`:9` 收尾后已不可连接,`:0` 零残留;`src/`、`tests/`、`docs/`、`PROGRESS.md`、`DECISIONS.md`、`tools/`、`progress/`、`_cmp/`
+`:9` 收尾后已不可连接,`:0` 零残留;`src/`、`tests/`、`docs/`、`docs/dev/PROGRESS.md`、`docs/DECISIONS.md`、`tools/`、`progress/`、`_cmp/`
 **未改一字节**;机器侧只多了 rig 目录(`chips9*`)、`/home/user/Desktop/` 下两个证据文件,以及它 `apt` 装的 `xvfb`。
 
 ### 9.13 CI 已经在真 runner 上跑过,而且全绿(2026-11-14,R21k)
@@ -666,7 +666,7 @@ AppImage 形态取 **`$APPIMAGE`**(磁盘上那个 `.AppImage`,不是 `/tmp/.mou
 > **本轮产物**(改了就重打):AppImage 38,984,184 B `48c3dcea…`、`.deb` 37,544,610 B `109cfd55…`(裸 FUSE 冒烟 exit 0、0 WARN 0 ERROR)。
 > **仍如实留白**:「立即重启」分支未验;失败在任务页是否可见未验;公网真实清单未验;**真发一次版**(release 事件 → `release.yml` 的 linux job → 手工改清单)未验 —— 需要真的切一个 tag。
 
-> **§9.14 留白收口(2026-11-14,linux-finalize)**:上面「仍如实留白」四条逐条见 `PROGRESS.md` 的「M4-H R22 留白收口」小节。摘要:
+> **§9.14 留白收口(2026-11-14,linux-finalize)**:上面「仍如实留白」四条逐条见 `docs/dev/PROGRESS.md` 的「M4-H R22 留白收口」小节。摘要:
 > 1「立即重启」分支 —— **已验(真机)**:点「立即重启」后旧 pid `221529` 正常退出、新 pid `221929` 拉起,磁盘 AppImage 的 sha256 由 `48c3dcea…` 变为更新包真值 `4dc93174…`(与更新包、缓存 `.bin` 三处一致),无 `.new` 残留,重启后窗口仍在;
 > 2「失败在任务页是否可见」—— **已验(真机)**:失败后切「下载」→ 点「任务」,下载任务页上有一行「更新启动器 / 下载失败 … sha256 校验失败 …」,页头「进行中 0 · 共 1」(截图由 linux-finalize 亲自复核);
 >    第 1、2 条的真机工件由同仓库并发 agent `linux-updater` 的本轮 T4/T5 产出(`_tmp/tasks/linux-updater/`,脚本 `t4-fail-toast-and-tasks-page.sh` / `t5-restart-branch.sh`,原始输出与截图在 `box-pull/`)。
@@ -677,7 +677,7 @@ AppImage 形态取 **`$APPIMAGE`**(磁盘上那个 `.AppImage`,不是 `/tmp/.mou
 
 ### 9.15 八帧冒烟矩阵基线钉死(R30 / WP-3,2026-11-15)
 
-R22 之后这套矩阵一直没重跑。本轮重跑并把**帧集与命令钉死在此处**,以后任何一轮只认这 8 帧(顺序与 `PROGRESS.md` 2026-11-13 R13 记录一致)。
+R22 之后这套矩阵一直没重跑。本轮重跑并把**帧集与命令钉死在此处**,以后任何一轮只认这 8 帧(顺序与 `docs/dev/PROGRESS.md` 2026-11-13 R13 记录一致)。
 
 | # | 帧名 | 环境变量 | 备注 |
 |---|---|---|---|
@@ -708,7 +708,7 @@ $env:SMOKE_PAGE='ai'; TipCL.App.exe --smoke
 
 > **旧 `verify-linux.sh` 的两处缺口(本轮修掉)**:原来只跑 `library download plugins settings` 四页 + 默认页 `SMOKE_DARK=1`,于是 (a) **漏掉 `SMOKE_PAGE=ai`**,(b) 深色**只覆盖启动页**,没有 `library-dark` / `plugins-dark`。现已改成上表 8 帧,并给每帧加了「日志 0 WARN / 0 ERROR」判定和逐帧截图留存。
 
-> **与 `PROGRESS.md` 历史 sha 的比对口径**:WP-3 本轮实测 8 帧中 `download` / `plugins` / `ai` / `plugins-dark` 与 2026-11-13 R13 的帧**逐字节相同**;`launch` / `library` / `settings` / `library-dark` 不同(源码树已变,`launch` 还会逐次抖动)。**"哪些帧变了"不是回归判据** —— 判据是这两条:退出码与日志干净、人工看图正常。
+> **与 `docs/dev/PROGRESS.md` 历史 sha 的比对口径**:WP-3 本轮实测 8 帧中 `download` / `plugins` / `ai` / `plugins-dark` 与 2026-11-13 R13 的帧**逐字节相同**;`launch` / `library` / `settings` / `library-dark` 不同(源码树已变,`launch` 还会逐次抖动)。**"哪些帧变了"不是回归判据** —— 判据是这两条:退出码与日志干净、人工看图正常。
 
 ### 9.16 layout-v2 → Linux 移植评估(R30 / WP-3,2026-11-15;**只评估,未移植**)
 

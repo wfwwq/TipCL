@@ -1,6 +1,6 @@
 # M4-H 主 agent 复核待办(交接用)
 
-> 由主 agent(lead)在验收 M4-H 各工作包时写入。下一棒接手请**先读本文件**,再读 `PROGRESS.md` 的 M4-H 各小节。
+> 由主 agent(lead)在验收 M4-H 各工作包时写入。下一棒接手请**先读本文件**,再读 `docs/dev/PROGRESS.md` 的 M4-H 各小节。
 > 本文件只记录「复核发现的问题」与「尚未完成项」,完成后请把对应条目划掉并在 PROGRESS 注明。
 
 ## A. 必须修:CLI 未拒绝不存在的实例(P3.5 遗留缺陷)
@@ -36,7 +36,7 @@ dotnet src\TipCL.App\bin\Release\net8.0\TipCL.App.dll -i bogus_inst launch 26.3
 1. 只在 **CLI 入口**做实例存在性前置校验:名字非空且确实不存在时,以 `CliExit.Usage`(4)退出,打印明确中文原因(如「没有这个实例:<名字>」)。**不要改 UI 路径上 `EnsureInstance` 的「不存在就创建」语义**(安装/导入流程依赖它)。
 2. 测试**直接断言**「未知实例 → exit=4 且输出含该中文原因」。不要再用「没有离线账号」这类别的失败间接得到非零码——那正是本次误判的来源。
 3. `-i` 单独出现(缺值)现在返回裸 `-1`,`CliExit` 里没有对应常量:归到 `Usage=4`,或显式加常量并说明。
-4. 把 `PROGRESS.md` 的 P3.5 小节里「未知实例 exit=3」这句改成实测的真实码与原因。
+4. 把 `docs/dev/PROGRESS.md` 的 P3.5 小节里「未知实例 exit=3」这句改成实测的真实码与原因。
 
 ## B. 文档纠正(docs/PARITY.md 已确认过期)
 
@@ -81,7 +81,7 @@ dotnet src\TipCL.App\bin\Release\net8.0\TipCL.App.dll -i bogus_inst launch 26.3
   ```
 - 冒烟:`TIPCL_HOME=D:\项目\tipcl\linux\_cmp`,可选 `SMOKE_PAGE` / `SMOKE_DARK` / `SMOKE_TASKS` / `SMOKE_SETTINGS_TAB` / `SMOKE_WAIT`,`smoke.png` 落在当前工作目录;退出码 0 且出图即成功。日志看 `_cmp\logs\tipcl-*.log` 的 WARN/ERROR。
 - 用 `dotnet` 跑 CLI 时要接 **.dll**(`dotnet ...\TipCL.App.dll -i ... launch ...`),直接接 apphost `.exe` 会报 deps.json 扩展名不匹配。
-- build 前 `dotnet build-server shutdown`;`PROGRESS.md` 是 CRLF、`DECISIONS.md` 是 LF,追加时保持风格。
+- build 前 `dotnet build-server shutdown`;`docs/dev/PROGRESS.md` 是 CRLF、`docs/DECISIONS.md` 是 LF,追加时保持风格。
 
 ---
 
@@ -110,7 +110,7 @@ dotnet src\TipCL.App\bin\Release\net8.0\TipCL.App.dll -i bogus_inst launch 26.3
 ### 剩余需做的(真实缺口,非「已判定不移植」)
 
 1. ~~**AI 服务层残留**(PARITY §2 AI 小节自己列出的「仍缺」):检查点回滚、上下文压缩、令牌与用量统计、MCP 插件工具、子代理、产物回读;以及 `AiChatOps` 斜杠命令、会话记忆面板、上下文占用环。~~
-   **✅ 已完成(第四棒 R1 + R2,2026-11-12)**:Core 新增 `Checkpoint / Rewind / Store / Compact(+配置与结果类型) / Tokens / TokenState / Usage / Mcp / McpClient / McpError / Artifacts / AiFs / Trace / StopReason`,工具表补 `read_artifact` 与**只读** `dispatch_subagent`,写操作前按 `Tools.AffectedPaths` 建检查点;界面侧斜杠命令(7 条)、记忆面板、占用环、对话持久化、`/撤回` 真接 `Rewind`。判定与理由见 `DECISIONS.md` D-28 / D-29,验收数字见 `PROGRESS.md` M4-H R1~R4 小节。**`McpServer`(对外暴露)判不移植**(依赖 `BackendApi`,且外部客户端没有用户点确认)。
+   **✅ 已完成(第四棒 R1 + R2,2026-11-12)**:Core 新增 `Checkpoint / Rewind / Store / Compact(+配置与结果类型) / Tokens / TokenState / Usage / Mcp / McpClient / McpError / Artifacts / AiFs / Trace / StopReason`,工具表补 `read_artifact` 与**只读** `dispatch_subagent`,写操作前按 `Tools.AffectedPaths` 建检查点;界面侧斜杠命令(7 条)、记忆面板、占用环、对话持久化、`/撤回` 真接 `Rewind`。判定与理由见 `docs/DECISIONS.md` D-28 / D-29,验收数字见 `docs/dev/PROGRESS.md` M4-H R1~R4 小节。**`McpServer`(对外暴露)判不移植**(依赖 `BackendApi`,且外部客户端没有用户点确认)。
 2. ~~**`PhoneSyncPanel`**(世界同步/对比面板)。~~
    **✅ 已完成(第四棒 R3)**:`App/Pages/Settings/PhoneSyncPanel.cs`(对比 + 逐项传 + 一键同步 + 日志),设置页手机同步卡补「同步面板」入口;`docs/PARITY.md` 第 85 行已由 ❌ 改 ✅。
 3. ~~小尾巴:已安装页「有更新」徽标、市场详情截图(现只列链接)。~~

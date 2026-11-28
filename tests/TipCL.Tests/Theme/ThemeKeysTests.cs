@@ -28,7 +28,7 @@ public class ThemeKeysTests
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "GOAL.md")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "docs/dev/GOAL.md")))
         {
             dir = dir.Parent;
         }

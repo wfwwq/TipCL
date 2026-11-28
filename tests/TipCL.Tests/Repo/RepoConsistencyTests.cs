@@ -34,7 +34,7 @@ public class RepoConsistencyTests
         DirectoryInfo? dir = new DirectoryInfo(AppContext.BaseDirectory);
         for (int i = 0; i < 12 && dir != null; i++, dir = dir.Parent)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "GOAL.md"))
+            if (File.Exists(Path.Combine(dir.FullName, "docs/dev/GOAL.md"))
                 && Directory.Exists(Path.Combine(dir.FullName, "src", "TipCL.Core")))
             {
                 return dir.FullName;

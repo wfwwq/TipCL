@@ -2,7 +2,7 @@
 
 TipCL 是 AI 原生 Minecraft 启动器；本仓库根就是它的 **Linux 版**工程：Avalonia UI 11 + .NET 8。
 Windows 桌面版(WPF / .NET Framework 4.8)是**只读参照**，整棵树在同一仓库的 `windos/` 子目录里，移植不改动它。
-立项口径见 [GOAL.md](../GOAL.md)，逐轮过程见 [PROGRESS.md](../PROGRESS.md)，技术决策见 [DECISIONS.md](../DECISIONS.md)。
+立项口径见 [GOAL.md](dev/GOAL.md)，逐轮过程见 [PROGRESS.md](dev/PROGRESS.md)，技术决策见 [DECISIONS.md](DECISIONS.md)。
 
 ## 仓库结构
 
@@ -85,15 +85,15 @@ CI 见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):`test`（ubuntu
 
 ## 文档入口
 
-[GOAL.md](../GOAL.md) 立项任务书（M1 / M2 / M3 的范围、技术决定与验收口径）·
-[PROGRESS.md](../PROGRESS.md) 逐轮过程记录（当前能力看末尾几节）·
-[DECISIONS.md](../DECISIONS.md) 决策 D-1 起，含踩坑与事后更正 ·
+[GOAL.md](dev/GOAL.md) 立项任务书（M1 / M2 / M3 的范围、技术决定与验收口径）·
+[PROGRESS.md](dev/PROGRESS.md) 逐轮过程记录（当前能力看末尾几节）·
+[DECISIONS.md](DECISIONS.md) 决策 D-1 起，含踩坑与事后更正 ·
 [docs/PARITY.md](PARITY.md) 与 Windows 版的逐项对照矩阵 ·
 [docs/DELIVERY.md](DELIVERY.md) 交付物清单、发布参数、冒烟矩阵 ·
 [`progress/`](../progress/) 各工作包收尾报告 ·
 [`docs/m2-recon/`](m2-recon/) M2 立项侦察报告 ·
 [`docs/RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md) **发版前的元数据检查单**（抬版本号要改哪 6 处 / 重算哪些 sha256 / 回填哪两份清单 / 发完怎么复核） ·
-[交接必读.md](../交接必读.md) 接手流程（立项阶段写成，现状以 PROGRESS.md 为准）。
+[交接必读.md](dev/交接必读.md) 接手流程（立项阶段写成，现状以 docs/dev/PROGRESS.md 为准）。
 
 布局 v2 的 **Windows 版**手册(1.2.0):[docs/布局使用指南.md](布局使用指南.md) 完整手册(三个入口 / 手势 / 三种模式 / 分栏 / 整机方案导入导出 / 自建区块 / AI 排版回退 / 本版的坑)·
 [docs/布局快速上手.md](布局快速上手.md) 30 秒版 + 手势速查表 + 10 条 FAQ。**这两份写的是 Windows 桌面版行为**;Linux 侧入口都在(「AI 排版」已于 2026-11-21 补齐,见下),但**编辑态手感有四处差异**(见下面「Linux 编辑态与 Windows 的四处差异」)。

@@ -1,7 +1,7 @@
 # PROGRESS — TipCL Linux 版 M1
 
 > 工作包状态表。各代理收尾后在自己行内更新状态；详细报告见 `progress/M1-<包>.md`。
-> 共享文件编辑纪律见 GOAL.md §6：各包只追加自己的小节，禁止重写他人内容。
+> 共享文件编辑纪律见 docs/dev/GOAL.md §6：各包只追加自己的小节，禁止重写他人内容。
 
 | 工作包 | 内容 | 独占地盘 | 状态 | 报告 |
 |---|---|---|---|---|
@@ -348,7 +348,7 @@
 - **真机顺带暴露的三个问题(都已复现,本轮只记录不改)**:①**点版本行的齿轮(版本设置)直接把应用打崩** —— `System.InvalidOperationException: The control StackPanel already has a visual parent Border while trying to add it as a child of ScrollContentPresenter (Name = PART_ContentPresenter, Host = ScrollViewer)`,`unhandled(UI)` 后进程退出,**2/2 复现**(日志 `~/.tipcl/logs/tipcl-20261112.log`)。②**版本行右键菜单在真机上打不开** —— 同一坐标左键双击能切到启动页(证明命中该行)、悬停高亮也生效,但注入 button-3 后既不弹菜单、`xwininfo -root -tree` 里也没有新窗口(前后共 7 次,含按像素网格量准的行内坐标);而实例卡的「•••」按钮走**同一个** `ContextMenuFx` 能正常弹出。③**界面里看得见的版本,启动时报「版本未安装」** —— 界面「版本选择」列的是 `<TIPCL_HOME>/.minecraft/versions`(全局目录)里的 `1.20.1`,而 CLI 预检找的是实例目录 `<TIPCL_HOME>/.minecraft/26.3/versions`。
 - **C 真机拖放导入(未完成,根因已定位)**:launcher 窗口**没有 `XdndAware` 属性**(`xprop` 实测;同一脚本查 Chrome 窗口 `XdndAware(ATOM) = BITMAP` 正常),按 X11 拖放协议**任何程序都无法向它发起拖放**;再用**真实拖放源**(Thunar 打开 `~/drop-test`,放 `example-mod.jar`,内含 `fabric.mod.json`,按 `FileKinds` 应判「模组 jar」)实拖一次:截图 `_cmp/box-c-52-dragover.png` 里能看到拖影落在应用窗口内、Thunar 图标变蓝选中,松手后**应用毫无反应**(实例 `mods/` 目录无变化、应用日志无新行,`_cmp/box-c-53-dropped.png`)。所以这条真机路径**不可用**,不是自动化脚本的问题;没有伪造任何数据。证据:`_cmp/box-c-50-setup.png`、`-51-before-drag.png`、`-52-dragover.png`、`-53-dropped.png`。
 - **D 手机同步真机传文件(未验证 / 条件不具备)**:需要手机与盒子在同一网络、且手机侧同步服务在跑,本轮无手机、无该服务,**不验证、不编数据**(按方案的「未验证/条件不具备」记)。
-- **验收**:`_cmp/` 里证据齐(文件名见上各条);本节保持 CRLF;`DECISIONS.md` 追加 D-34~D-37 并保持 LF;未 commit / 未 push / 未改版本号;盒子用完 `sleep`。
+- **验收**:`_cmp/` 里证据齐(文件名见上各条);本节保持 CRLF;`docs/DECISIONS.md` 追加 D-34~D-37 并保持 LF;未 commit / 未 push / 未改版本号;盒子用完 `sleep`。
 
 ### 2026-11-13 M4-H R9 崩溃根因修复(实例详情页)+ 版本列表语义(移植代理;主 agent 复核)
 
@@ -509,7 +509,7 @@
 | 冒烟 8 场(Release,隔离 `TIPCL_HOME`) | **8/8 exit=0 出图、WARN 0、ERROR 0** |
 | 红证据(移植代理) | `_cmp/r19-app-red.txt`(改前 3 失败,`Expected "写操作需要确认" / Actual null` —— 卡片那行根本没渲染)、`_cmp/r19-core-red.txt`(改前 `CS0426` 无 `PermissionVerdict`)、`_cmp/r19-core-mutation-red.txt`(负控:清空两句理由 → 3 失败,已还原) |
 | 红证据(主 agent 的 R19b) | 变异掉 `ApplyDontAsk` 后,主 agent 那 4 条里**正好 2 条红**(不询问开关那条 + 步骤行理由那条),还原后按 SHA256 校验**字节级一致** |
-| 边界 | `ConfirmCard.cs` 一行未改;`docs/` / `PROGRESS.md` / `DECISIONS.md` / `progress/` 由主 agent 写;无 csproj / 依赖改动 |
+| 边界 | `ConfirmCard.cs` 一行未改;`docs/` / `docs/dev/PROGRESS.md` / `docs/DECISIONS.md` / `progress/` 由主 agent 写;无 csproj / 依赖改动 |
 
 ### 五、如实说明
 - **`PermissionNote`(把当前档位写进系统提示)仍未做**,而参考版是**真的消费**它的(`Agent.cs:348` / `:368`,6 句「[权限设置] …」,见 `Permission.cs:256-276`)。这是本轮新发现的真缺口,已记进 `docs/PARITY.md` §9.4,仍未做 —— 属独立条目(要把档位随每轮注入系统消息,会改模型可见文本)。
@@ -518,7 +518,7 @@
 
 ## M4-H R17:Markdown 链接真的能点了(2026-11-13,主 agent)
 
-**背景**:参考版 `MdView.cs:367` 用 WPF 的 `Hyperlink` —— 天生可点、点开浏览器。P5 移植时 Avalonia 的 `Span` 不是 `Control`(没有 `Cursor` / `ToolTip` / 事件),于是链接只能画成「主题色 + 下划线」,`DECISIONS.md` D-22 把它记成一条平台限制(「不可点、不弹 URL 提示」)。
+**背景**:参考版 `MdView.cs:367` 用 WPF 的 `Hyperlink` —— 天生可点、点开浏览器。P5 移植时 Avalonia 的 `Span` 不是 `Control`(没有 `Cursor` / `ToolTip` / 事件),于是链接只能画成「主题色 + 下划线」,`docs/DECISIONS.md` D-22 把它记成一条平台限制(「不可点、不弹 URL 提示」)。
 
 **改法**:Avalonia 里 **`Inline` 可以是控件宿主** —— `InlineUIContainer`。链接改用 `InlineUIContainer`,里面放一个真 `TextBlock`(同样的下划线 + `B.AccentText` 主题色,字号 13.5 与段落一致),挂上:
 - `Cursor = Hand`(悬停能看出可点)、`ToolTip` = URL(悬停看到地址);
@@ -547,7 +547,7 @@
 ### 二、数据包装进存档:三条参考版缺陷(不照抄,按真实语义实现)
 移植代理先做了逐条路径对位,发现 Core 这段与参考版**逐行相同**(去掉 Linux 头注释后 diff = 0 行),差异都在共享实现里;三条都判定为**参考版缺陷**,已按仓库纪律在 Linux 侧修正并登记:
 
-1. **「装进哪个存档」等于白选**:页面把选择写成 `extra["save"]`(`CatalogPage.cs:753`),而 Core 侧**没有任何地方读这个键**。主 agent 独立核实:全仓库搜 `["save"]` / `Get("save")` 只有这一处**写入**,没有读取(与 `PROGRESS.md:154` 遗留(2) 那句一致)。→ Linux 侧落地:装完就地复制进该存档的 `datapacks/`;进不去只记一条带原因的日志(数据包本身已装好),不把已成功的安装报成失败(`Api.cs:1442-1467`)。
+1. **「装进哪个存档」等于白选**:页面把选择写成 `extra["save"]`(`CatalogPage.cs:753`),而 Core 侧**没有任何地方读这个键**。主 agent 独立核实:全仓库搜 `["save"]` / `Get("save")` 只有这一处**写入**,没有读取(与 `docs/dev/PROGRESS.md:154` 遗留(2) 那句一致)。→ Linux 侧落地:装完就地复制进该存档的 `datapacks/`;进不去只记一条带原因的日志(数据包本身已装好),不把已成功的安装报成失败(`Api.cs:1442-1467`)。
 2. **隔离版本下「列表里有、点下去说没有」**:源路径硬编码 `<实例>/datapacks`,无视 `version_id`(参考版 `Saves.cs:85-86`;主 agent 已核对该行原文),而带 `version` 的 `get_installed_datapacks` 列的是 `<实例>/versions/<版本>/datapacks`。→ 改为**版本目录优先、实例根回退**(`Saves.cs:99-104`),防路径穿越的判据(`_find_datapack`)保留。
 3. **凭空造空壳存档**:存档目录不存在时无条件 `EnsureDir(<游戏目录>/saves/<存档>/datapacks)`(参考版 `:92-93`),游戏里那是个打不开的假世界;同文件的 `DeleteSave`/`OpenSave` 是会检查存在性的。→ 改为显式抛 `存档不存在: X`,一个目录都不建(`Saves.cs:105-109`)。
 
@@ -560,7 +560,7 @@
 | `dotnet test` ×2 | 每次 **397 = 396 通过 + 1 跳过 + 0 失败**(R16 的 355 → +42:R19/R19b 16 + R17 4 + R18 22) |
 | 冒烟 **10 场**会话(含下载页数据包分段 `SMOKE_SEG=3`、设置页 6 号内层「反馈」、明暗两页) | **10/10 exit=0 出图、WARN 0、ERROR 0** |
 | 三条参考版缺陷的判定 | 主 agent 逐条回参考仓库核对:`Saves.cs:85-86` 源路径写死、`:92-93` 无条件 `EnsureDir`、全仓 `["save"]` 无读取 —— **三条均属实** |
-| 边界 | 未碰 `docs/` / `PROGRESS.md` / `DECISIONS.md` / `progress/`、未碰 `Pages/Ai`(含主 agent 正在改的 `MdView.cs`)与 `LaunchPage*`、无 csproj 改动 |
+| 边界 | 未碰 `docs/` / `docs/dev/PROGRESS.md` / `docs/DECISIONS.md` / `progress/`、未碰 `Pages/Ai`(含主 agent 正在改的 `MdView.cs`)与 `LaunchPage*`、无 csproj 改动 |
 
 ### 四、如实说明
 - **系统文件对话框本身没在真机点过**(无头环境点不了 GTK/portal 对话框),`AllowMultiple = true` 只有代码与注入点测试覆盖;真机只验证到「多选循环把每个文件都处理了」这一层。
@@ -1174,7 +1174,7 @@ Windows 版(`windos/src/TipCL/Core/Launcher/Config.cs:12`、`Updater.cs:12`)与�
   它会对 `http://127.0.0.1:1/api/yggdrasil` 发**真实 HTTP 请求**,并在 **40 秒死线**内轮询任务收尾 ⇒ 天生吃时间/网络;
   本机本地代理 `127.0.0.1:7890` 抖动时会偶发红。**决定性实验**:同一份代码连跑三遍 = 通过(5 s)/ 通过(8 s)/
   **失败(勾到 40 s 死线)**;而 `HEAD` 基线工作树的同一用例 4 次全过(3–13 s)⇒ **失败不由代码差异决定**。
-  同类历史见 `PROGRESS.md` 的 R14「测试套件偶发失败 … 栈是无头会话初始化竞态」与 R21f「修掉那条全量偶发红」。
+  同类历史见 `docs/dev/PROGRESS.md` 的 R14「测试套件偶发失败 … 栈是无头会话初始化竞态」与 R21f「修掉那条全量偶发红」。
   复现:`dotnet test --filter FullyQualifiedName~AccountPageTests.LoginEntries_ReturnTaskIds_AndBogusAuthlibFailsTheTask`(连跑几遍)。
 # PROGRESS（工作包总表）
 
@@ -1229,7 +1229,7 @@ Windows 版(`windos/src/TipCL/Core/Launcher/Config.cs:12`、`Updater.cs:12`)与�
 - 待办：WP-T/U/V 验收 → 全部落定后重切 dist（D-18）→ 总结报告。
 
 ## 2026-11-07 第四轮（WP-S2 记录）
-本轮 10 个工作包实修并验收（详见交接必读.md §5）：
+本轮 10 个工作包实修并验收（详见docs/dev/交接必读.md §5）：
 
 | 包 | 内容 | commit | 状态 |
 |---|---|---|---|
@@ -1305,7 +1305,7 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 | L7a | 顶栏页签数据驱动(`shell.tabs`)+ 标题栏元素开关(`shell.titlebar.*`) | `Pages/Layout/ShellTabs.cs`;`MainWindow.xaml`、`MainWindow.xaml.cs`;`tests/LayoutShellTests.cs` | 默认等价 = 改动前后 PNG **SHA256 相同**;27 例;证据 `artifacts/shot-tabs-dark.png`、`artifacts/shot-tabs-dark-topdiff.png`、`artifacts/l7a_topstrip_diff.py` | 完成(**冒烟未跑通**,见遗留) |
 | D1 | 接线包:跨阈值 `variants` + 布局变更热重排 + `CanEdit` 门槛收口 | `Pages/Layout/LayoutEditor.cs`;`Pages/BlockHost.cs`;`MainWindow.xaml.cs` | 默认等价逐字节相同(D-26);变体对照 `artifacts/l2/variants/`;见下文 D1 节 | 完成 |
 | D4 | 插件端到端:插件区块 `plugin:<plugin>:<blockId>` 的落地与「不可用」降级 | `samples/hello-plugin`;`Pages/Layout/Widgets/PluginBlocks.cs` | `artifacts/l6/widget-fixture.ui_layout_v2.json`、`artifacts/l6/tasks-widgets-dark.png`、`tasks-widgets-dangerous-dark.png`、`artifacts/l6/README.md` | 完成(取证限制见下文 D4 节) |
-| D2 | 词表成对补齐(审计驱动)+ 工程记录(本包) | `Resources/locales/en.json`、`zh_CN.json`;`PROGRESS.md`;`DECISIONS.md` | 见「D2 实测」 | 完成 |
+| D2 | 词表成对补齐(审计驱动)+ 工程记录(本包) | `Resources/locales/en.json`、`zh_CN.json`;`docs/dev/PROGRESS.md`;`docs/DECISIONS.md` | 见「D2 实测」 | 完成 |
 | L5b | 单块页入口收口:区块入口表纳入 `settings:network` / `settings:about` | `Pages/SettingsLayoutPage.cs`(`LayoutBlockEntryCatalog`);`tests/LayoutProfileTests.cs` | `artifacts/shot-settings-layout-blocks-dark.png`(12 行含两个单块页)、`shot-settings-layout-full-dark.png` | 完成 |
 | D3 | 最终验收:构建 / 全量测试 / 冒烟 / 双 flavor 字节 / 默认等价 / 提交清单 | — | 见下文「D3 · 最终验收」 | 完成 |
 
@@ -1430,7 +1430,7 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 ### dist/ 现状(2026-11-14 核对,win-docs;含 A+B1 之后的最终重切)
 
 - **交付目录 `D:\项目\tipcl\windos\dist\` 现有 4 件**(逐件 SHA256 见 `docs/DELIVERY-2026-11-14.md` §3.1;归档件哈希以 `_tmp/dist-archive/MANIFEST.md` 与维护者重切回执为准):
-  - `TipCL-compact-20261114-1546.exe` **5,533,184 B** 与 `TipCL-premium-20261114-1546.exe` **5,553,152 B** —— **A+B1 之后的最终档**,与 `DECISIONS.md` D-38 记录的实测字节**逐字节一致**(两条独立构建互为交叉验证);
+  - `TipCL-compact-20261114-1546.exe` **5,533,184 B** 与 `TipCL-premium-20261114-1546.exe` **5,553,152 B** —— **A+B1 之后的最终档**,与 `docs/DECISIONS.md` D-38 记录的实测字节**逐字节一致**(两条独立构建互为交叉验证);
   - `TipCL-compact-20261114-1349.exe` 6,448,128 B 与 `TipCL-premium-20261114-1349.exe` 6,467,072 B —— **体积回收之前的"改动前参照件",勿当最终件**(维护者定:**保持不归档**)。
 - **已归档到 `D:\项目\tipcl\_tmp\dist-archive\` 的 8 件**:
   `TipCL-{compact,premium}-20261114-1308.exe`、`TipCL-{compact,premium}-20261107-1333-左栏与详情入口.exe`、
@@ -1462,11 +1462,11 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 1. **并发构建用锁**:阶段 B 有 4 个包同时在同一个仓库里动手,所有 `dotnet build` / `dotnet test` / 出包脚本一律持 `D:\项目\TipCL\progress\.build.lock`(目录即锁),避免 MSBuild 争用造成假红。
 2. **跨包在途不算谁的账**:看到**不是自己地盘**的文件造成的红,标「跨包在途」并重试,不许替别人改。
 3. **报告落点固定为工作根** `D:\项目\TipCL\progress\`,不要写进本仓库的 `progress\`(那里是历史包 M1–M4 的报告)。
-4. **共享文件归主 agent**:各包不得改 `PROGRESS.md` / `DECISIONS.md`,只在自己的报告里给材料,由主 agent 统一落「主 agent」小节。
+4. **共享文件归主 agent**:各包不得改 `docs/dev/PROGRESS.md` / `docs/DECISIONS.md`,只在自己的报告里给材料,由主 agent 统一落「主 agent」小节。
 
 ### 阶段 B:并行施工(4 个包 + 3 个追加小包;子代理施工,主 agent 只裁决)
 
-各包报告在**工作根** `D:\项目\TipCL\progress\`(`R30-WP0/1/2/2b/3/3b/4.md`),本仓库内不落报告。本轮**全部业务改动都由子代理完成**,主 agent 只写了本节的 `PROGRESS.md` / `DECISIONS.md` 小节与工作根下的汇总文件。
+各包报告在**工作根** `D:\项目\TipCL\progress\`(`R30-WP0/1/2/2b/3/3b/4.md`),本仓库内不落报告。本轮**全部业务改动都由子代理完成**,主 agent 只写了本节的 `docs/dev/PROGRESS.md` / `docs/DECISIONS.md` 小节与工作根下的汇总文件。
 
 | 包 | 做了什么 | 提交 | 关键结论 |
 |---|---|---|---|
@@ -1479,7 +1479,7 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 | **WP-3d** 工具口径 | 收掉 `tools/i18n-audit.py` 的 `WRAPPERS` 误判 + 改 PARITY 1 行 | `9042ef0` | 见下「i18n 口径」 |
 | **WP-4** 安卓端对齐 | 现状摸底 + 主线判断 + 协议对照 + 版本/品牌建议 | **无代码改动**(工作根不是 git 仓库,安卓仓库零改动) | **手机端同步服务在 `TipCL-Android` 里根本不存在**;主线 = `android-app`,旧线建议冻结;两条安卓线构建都「条件不具备」 |
 
-### 主 agent 的关键裁决(详见 `DECISIONS.md` D-73 ~ D-77 与 `progress/R30-DECISIONS-PENDING.md`)
+### 主 agent 的关键裁决(详见 `docs/DECISIONS.md` D-73 ~ D-77 与 `progress/R30-DECISIONS-PENDING.md`)
 
 - **口径**:任务书的「桌面全量 ≥476 条」是交接文档里 Linux 侧的历史值,按**实测**为准 ⇒ **最终 Linux 484**(483 通过 + 1 固定跳过)/ **Windows 454**(454 通过),**稳定红 0**,flaky 单列。
 - **修 / 不修的分界线**(本轮自定的裁定原则):**测试基建缺陷与"已实现、已翻译、已暴露却因断链而失效的功能"→ 修**;**异常路径下的健壮性硬化 → 只登记不修**(发版前不动产品行为)。据此:R1 修、R3 修、语言断链修;`Utils.WriteJson` 的 `MkStemp` 重试缺口(R2)、`Dlg.AnyOpen` 无 try/finally、`.deb` 下「立即重启」的按钮文案 **只登记**,已写进 `docs/RELEASE-DRAFT.md` 的已知问题。
@@ -1518,7 +1518,7 @@ WP-N 落定确认 → 终版 smoke 回归 → 重切 dist（D-18）→（可选�
 
 ## 2026-11-20 界面帧率角标(FPS,用户需求:默认关 + 埋进设置角落)
 - 需求原话「加个功能,显示当前帧率,默认关闭,埋到设置的角落里面」。落地:`src/TipCL.App/Common/FpsOverlay.cs`(新)+ `Config.BuildDefaults()` 的 `ui_show_fps = false` + MainWindow 一行 Attach + 设置页左导航栏最底部一行小开关(不进 BlockHost 区块、不进布局方案/主题包)。
-- 计帧走 `TopLevel.RequestAnimationFrame`(每帧一回调,与合成器同节拍),500ms 采样出 `NN FPS`;不用 DispatcherTimer 数自己跳了几次(界面卡死时定时器照样准点跳,读数恒为名义值)。角标 `IsHitTestVisible=false`,不吃窗口右下角命中。详见 `progress/R33-FPS.md` 与 `DECISIONS.md` D-80。
+- 计帧走 `TopLevel.RequestAnimationFrame`(每帧一回调,与合成器同节拍),500ms 采样出 `NN FPS`;不用 DispatcherTimer 数自己跳了几次(界面卡死时定时器照样准点跳,读数恒为名义值)。角标 `IsHitTestVisible=false`,不吃窗口右下角命中。详见 `progress/R33-FPS.md` 与 `docs/DECISIONS.md` D-80。
 - 自证:build 0 警告 0 错误;`--filter TipCL.Tests.App` **358 通过 / 0 失败 / 0 跳过**(新增 `App/FpsOverlayTests.cs` 3 条:出厂默认关 / 默认不可见且钉右下角且跟着开关走 / 开关真落盘);`--smoke` 三张真渲染图逐张核过 —— 关:左栏底部开关为关、右下角无角标;开:开关变绿 + 右下角出现 `5 FPS`;深色照片壁纸下白字深底仍可读。
 - 遗留:界面完全静止时 Avalonia 不出帧,读数会偏低/停住(恒定刷新要每帧 `InvalidateVisual`,代价是常态 CPU,不做);该行文案未走词表(英文界面下仍中文,与本页既有写法一致);只挂主窗口,对话框不显示。
 

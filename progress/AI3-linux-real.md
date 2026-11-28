@@ -132,7 +132,7 @@ Windows 与 WSL2 两边 Debug `--no-incremental` 构建 0 错误、
 
 - `docs/PARITY.md` §11(或新 §12)加一条:「Linux 真机验证:WSL2 Ubuntu 24.04 + .NET 8.0.428 上 Debug 构建 / 全量测试
   1366/7/0 / `--ai-selftest` 108 项通过;显卡探测合并 nvidia-smi(含 WSL2);微软登录页 Linux/macOS 自动打开。复跑:`tools/linux-real/verify.sh`。」
-- `PROGRESS.md` 本轮小节记上面同样的数字。
+- `docs/dev/PROGRESS.md` 本轮小节记上面同样的数字。
 - `README.md` 的 Linux 说明可补一句:「装了 NVIDIA 专有驱动时,显卡显存从 nvidia-smi 读取」(可选)。
 
 ## 12. 遗留

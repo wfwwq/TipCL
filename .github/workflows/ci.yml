@@ -66,7 +66,7 @@ jobs:
       # 355(App)+ 425(其余)+ 1 跳过 = 781。改动测试后请同步这行,别让它继续当历史口径。
       # (上一版记录是 2026-11-18 的 346 + 404 + 1 = 751,留作对照。)
       # 注意:增长根因**没有**定位到具体代码(在测试宿主内部,性质上属 Avalonia 无头会话的每派发开销),
-      # 如实记在 PROGRESS.md 里,没有当成已解决。
+      # 如实记在 docs/dev/PROGRESS.md 里,没有当成已解决。
       - name: dotnet test (batch 1/2 — App 界面组)
         run: dotnet test tests/TipCL.Tests/TipCL.Tests.csproj --nologo --filter "FullyQualifiedName~TipCL.Tests.App"
 

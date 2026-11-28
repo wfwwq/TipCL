@@ -92,4 +92,4 @@ i18n:未接线 CJK 字面量 3540 → 3536(删掉了原 ExportPack 里 4 条),�
 
 - `README.md` 功能列表 AI 部分追加:「一句话造整合包(按主题出候选清单、整批确认安装、导出前做分发许可检查)/ 导出 mrpack 与 CurseForge 整合包(禁止分发的模组会拒绝导出,来源不明的 jar 默认不打包)」。
 - `docs/PARITY.md` §10 追加一行:「Linux 独有:plan_modpack / install_mods_batch / check_modpack_distribution / export_modpack(AI)与 CurseForge 格式导出 —— Windows 版只有界面 mrpack 导出」;并在导出一行注明「界面导出与 AI 导出共用 ModpackExport;Linux 修正了 sha512 与 dependencies 加载器键」。
-- `DECISIONS.md` 新增一条:「D-8x 整合包分发许可:mrpack 只链接规范允许域名;CF allowModDistribution=false 且 Modrinth 无 → 禁止分发、拒绝导出;来源不明 jar 默认不打包、需用户显式同意(allow_bundled_jars);export_modpack / install_mods_batch 不给『本对话都允许』」。
+- `docs/DECISIONS.md` 新增一条:「D-8x 整合包分发许可:mrpack 只链接规范允许域名;CF allowModDistribution=false 且 Modrinth 无 → 禁止分发、拒绝导出;来源不明 jar 默认不打包、需用户显式同意(allow_bundled_jars);export_modpack / install_mods_batch 不给『本对话都允许』」。

@@ -13,7 +13,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <RepoRoot Condition="'$(RepoRoot)' == ''">$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), GOAL.md))\</RepoRoot>
+    <RepoRoot Condition="'$(RepoRoot)' == ''">$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), docs/dev/GOAL.md))\</RepoRoot>
     <AppProject>$(RepoRoot)src\TipCL.App\TipCL.App.csproj</AppProject>
   </PropertyGroup>
 

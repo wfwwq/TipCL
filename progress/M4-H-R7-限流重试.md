@@ -14,7 +14,7 @@ Debug + Release **0 警告 0 错误**;全量 `dotnet test` **324 项:通过 323�
 | `tests/TipCL.Tests/Core/AiRetryTests.cs` | **新建**,6 个用例 + 一个本机假网关 `ScriptedChatServer`(TcpListener 手写 HTTP,随机空闲端口)。 |
 
 未动 `Client.cs`(不需要:`Client.ChatStream` 在 HTTP >= 400 时已经抛带 `StatusCode` 的 `AIClientError`,信息足够判断重试)。
-未动 `PROGRESS.md` / `DECISIONS.md` / `tests/TipCL.Tests/App/`,未 commit。
+未动 `docs/dev/PROGRESS.md` / `docs/DECISIONS.md` / `tests/TipCL.Tests/App/`,未 commit。
 
 ## 参考版对照(搬的是哪一段)
 

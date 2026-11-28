@@ -100,5 +100,5 @@ README 第 55/56 行写的两个场景,Linux AI 之前没有对应工具(D-24 �
 
 合并后要改的文档行(本包不改 PROGRESS / DECISIONS / README):
 - `README.md` 第 55/56 行:描述已与实现一致,无需改字;可在「好卡」行补「(调的是该实例的内存与 GC)」。
-- `DECISIONS.md` D-24 第 217 行「`tune_jvm / backup_save … 不写进 schema`」:改为「`tune_jvm / backup_save` 已在 AI-perf-saves 落地(实例级内存/GC、先备份再回滚)」。
+- `docs/DECISIONS.md` D-24 第 217 行「`tune_jvm / backup_save … 不写进 schema`」:改为「`tune_jvm / backup_save` 已在 AI-perf-saves 落地(实例级内存/GC、先备份再回滚)」。
 - `docs/PARITY.md` §2 AI 小节(第 121/129 行附近)补一条:Windows `ExtraTools` 的 get_system_info / diagnose_lag / tune_jvm / list_saves / backup_save / list_save_backups / restore_save_backup 已移植(差别见本文 §1);§6「参考实现缺陷」可补:Windows `restore_save_backup` 只在 overwrite=true 时先备份、`Sysinfo.CpuCountPhysical` 数的是插槽数。

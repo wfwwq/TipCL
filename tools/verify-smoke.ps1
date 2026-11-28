@@ -4,7 +4,7 @@
 #
 #   launch / library / download / plugins / settings / ai / library-dark / plugins-dark
 #
-# This is the set recorded in PROGRESS.md (M4-H R13 / main-agent recheck), see
+# This is the set recorded in docs/dev/PROGRESS.md (M4-H R13 / main-agent recheck), see
 # docs/PARITY.md (section "headless smoke matrix") for the exact per-frame env vars.
 # It is NOT the same set as tools/verify-linux.sh used to cover - that script missed
 # SMOKE_PAGE=ai and used SMOKE_DARK=1 on the default page (launch-dark) instead of
@@ -84,7 +84,7 @@ function Exit-Lock {
 }
 
 # --------------------------------------------------------------- the matrix
-# Name is the frame file name recorded in PROGRESS.md:402. Page '' = default page (launch).
+# Name is the frame file name recorded in docs/dev/PROGRESS.md:402. Page '' = default page (launch).
 $Matrix = @(
     [pscustomobject]@{ Name = 'launch';       Page = '';         Dark = $false },
     [pscustomobject]@{ Name = 'library';      Page = 'library';  Dark = $false },

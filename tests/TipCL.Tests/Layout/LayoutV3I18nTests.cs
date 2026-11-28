@@ -30,7 +30,7 @@ public class LayoutV3I18nTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         for (int i = 0; i < 12 && dir != null; i++, dir = dir.Parent)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "GOAL.md"))
+            if (File.Exists(Path.Combine(dir.FullName, "docs/dev/GOAL.md"))
                 && File.Exists(Path.Combine(dir.FullName, "tools", "i18n-audit.py")))
             {
                 return dir.FullName;

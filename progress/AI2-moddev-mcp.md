@@ -1,7 +1,7 @@
 # AI2-moddev-mcp · 模组开发测试环境(经 MCP 给外部编程工具用)+ MCP 遗留问题
 
 分支 `ai2/moddev-mcp`(基于 `main@f1c070b`),worktree `D:\项目\TipCL\wt-ai2-moddev-mcp`。提交前缀 `AI2-moddev-mcp:`。
-本文件是本包唯一的进度记录;`PROGRESS.md` / `DECISIONS.md` / `README.md` / `docs/PARITY.md` 未改(按公共任务书),要改的行列在 §8。
+本文件是本包唯一的进度记录;`docs/dev/PROGRESS.md` / `docs/DECISIONS.md` / `README.md` / `docs/PARITY.md` 未改(按公共任务书),要改的行列在 §8。
 
 定位(用户已明确):**内置助手不写、不编译 Java 模组。** 外部编程工具(Claude Code、Cursor 等)写代码、编译,
 通过 TipCL 的本机 MCP Server(`http://127.0.0.1:25585/mcp`)让 TipCL 当测试环境:建测试实例 → 装本地 jar → 起一次游戏看能不能进主菜单 → 拿日志 / 崩溃摘要回去改代码。
@@ -150,4 +150,4 @@ xunit **+53**(`ModDevMcpTests.cs` 49:ModJarInfoTests 27 含 18 条版本约束 T
 ## 8. 要改的 README / PARITY / DECISIONS 行(本包不改,交主线)
 - README「🤖 AI 助手」功能行:补一句「模组开发测试环境:外部编程工具经 MCP 建测试实例、装本地 jar、测试启动(内置助手不写/不编译模组)」;MCP Server 小节补:外部写操作确认 120 秒超时按拒绝、确认时主窗口自动置前、AI 页有状态条;并链接 docs 里的「外部编程工具接入指南」(本文件 §2 挪过去)。
 - docs/PARITY.md §10:新增 5 个 Linux 独有工具(Windows 参考版没有对应);`McpServer` 一行补「确认超时 / 置前 / 状态条(状态条对齐参考版 AiPage `_mcpBadge`)」;`--ai-selftest` 项数 +6。
-- DECISIONS.md 新增一条(建议 D-82):「P3 模组开发测试环境:内置助手不写不编译模组,由外部编程工具经 MCP 调 create_test_instance / install_local_mod / revert_local_mod / run_test_launch / get_task_status;测试实例 = `.instance.json` 的 `dev=true`;非 dev 实例装 jar 要 `allow_non_dev` 且执行器强制确认;长任务进度用查询工具而不是 progress notification(本机 MCP 无 SSE);外部确认 120 秒超时按拒绝」。D-81 的 MCP 遗留三条可标为已处理,指向本文件。
+- docs/DECISIONS.md 新增一条(建议 D-82):「P3 模组开发测试环境:内置助手不写不编译模组,由外部编程工具经 MCP 调 create_test_instance / install_local_mod / revert_local_mod / run_test_launch / get_task_status;测试实例 = `.instance.json` 的 `dev=true`;非 dev 实例装 jar 要 `allow_non_dev` 且执行器强制确认;长任务进度用查询工具而不是 progress notification(本机 MCP 无 SSE);外部确认 120 秒超时按拒绝」。D-81 的 MCP 遗留三条可标为已处理,指向本文件。

@@ -181,5 +181,5 @@ search_versions → Manifest.ListRemoteVersions → GetVersionManifest):
 - `progress/AI-perf-saves.md` §5 第 3 条(「Preflight.CheckLaunch 仍用调用方传入的内存」)已解决:三处共用 `EffectiveJvm.Resolve`。
 - `progress/AI-new-features.md` 遗留第 3 条(ping 不解析 SRV)与第 4 条(原地升级撤回残留新版本目录)已解决。
 - `progress/AI-engine-mcp.md` 第 90 行(并行只读工具「真源没有压测」)与第 95–97 行(DlgClose / LayoutSmoothDrag 偶发红)已解决,见本文 §1.1 / §1.5。
-- `DECISIONS.md` 建议追加一条 D-82:测试进程出网闸门(`HttpHandlerHook` + `TestNetworkIsolation`:AI 只放行环回、其余回 400)、界面回调一律走 `AiUiPost`、
+- `docs/DECISIONS.md` 建议追加一条 D-82:测试进程出网闸门(`HttpHandlerHook` + `TestNetworkIsolation`:AI 只放行环回、其余回 400)、界面回调一律走 `AiUiPost`、
   「实际生效内存只算一处(EffectiveJvm)」、检查点新增「只记名单不存内容」的新建子目录操作及其判定口径(目录名 / id / inheritsFrom)。

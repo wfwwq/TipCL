@@ -8,7 +8,7 @@ and its source-tree candidates are hard-coded to `<TIPCL_HOME>/src/TipCL` or
 `<TIPCL_HOME>/wpf/TipCL` (I18nCheck.cs:26-28). It therefore cannot measure the Linux
 port at all, and with an isolated TIPCL_HOME it exits 2 with `没有源码树: ...\wpf\TipCL`.
 This script applies the same criterion to the Linux tree instead of trusting a
-paraphrased list (DECISIONS.md D-33).
+paraphrased list (docs/DECISIONS.md D-33).
 
 Criterion (deliberately identical to I18nCheck.HasCjk / IsWrapped, adapted wrappers)
 ------------------------------------------------------------------------------------

@@ -70,7 +70,7 @@ chmod +x TipCL.App
 | # | 命令 | 页面 | 类型 | Windows 结果 |
 |---|---|---|---|---|
 | 1 | `TipCL --smoke` | launch 启动页 | 真实页（M2-B1） | 通过（单文件 exe 实跑，exit 0） |
-| 2 | `SMOKE_PAGE=library TipCL --smoke` | 实例库 | 真实页（M2-B2） | 通过（M2 验收，见 PROGRESS.md） |
+| 2 | `SMOKE_PAGE=library TipCL --smoke` | 实例库 | 真实页（M2-B2） | 通过（M2 验收，见 docs/dev/PROGRESS.md） |
 | 3 | `SMOKE_PAGE=download TipCL --smoke` | 下载 | 真实页（M2-B3） | 通过（M2 验收） |
 | 4 | `SMOKE_PAGE=plugins TipCL --smoke` | 插件 | 真实页（M2-B4） | 通过（M2 验收） |
 | 5 | `SMOKE_PAGE=settings TipCL --smoke` | 设置 | 真实页（M2-B5） | 通过（M2 验收） |
@@ -83,7 +83,7 @@ chmod +x TipCL.App
 ## 五、已知限制
 
 1. **插件 WebView 降级**：插件宿主走进程内 PluginStateStore，WebView 面在 Linux 下降级（无 WebView2/WebKit 集成），当前状态见 progress/M3-C1.md（撰写时该包并行进行中，以其最新记录为准；M2-B4 报告的降级行为仍是基线）。
-2. **AI / 启动链路**：AI 运行时最小落地与启动链（LaunchCore/Java 探测 Linux 分支）状态见 progress/M3-C0.md 与 progress/M3-C1.md（并行包，以最新记录为准）；M2 阶段启动按钮为占位反馈（PROGRESS.md M2 验收遗留项），M3-C0 落地后自动切换为真实链路。
+2. **AI / 启动链路**：AI 运行时最小落地与启动链（LaunchCore/Java 探测 Linux 分支）状态见 progress/M3-C0.md 与 progress/M3-C1.md（并行包，以最新记录为准）；M2 阶段启动按钮为占位反馈（docs/dev/PROGRESS.md M2 验收遗留项），M3-C0 落地后自动切换为真实链路。
 3. **不 trim**（见上）：体积换取确定性；如需瘦身先做 JSON source-gen 改造。
 4. **csproj 未加发布段**：单文件参数全部命令行传入；若后续希望 `dotnet publish -r linux-x64` 裸命令即出单文件，需要依赖申请在 App csproj 加 `<PublishSingleFile>` 等段。
 5. AppImage 产出依赖 linuxdeploy（脚本不强制安装，AppDir 已按约定组装，缺工具时给出手工命令）。

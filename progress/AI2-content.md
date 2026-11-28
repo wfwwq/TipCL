@@ -133,5 +133,5 @@
 
 - `docs/PARITY.md` §10:工具表 +4 行(上表),注明「Windows 版无对应工具,Linux 独有;命名 snake_case」;工具总数 65 → 69(再加其他包的)。
 - `README.md` 目录树 `Launcher/Ai/` 的说明可补「Content/:数据包 / 资源包 / KubeJS 脚本工具」。
-- `DECISIONS.md` 建议新增一条:「无代码内容制作不放宽 fs_write,改为专用工具 + 窄写入范围 + 按类型校验;pack_format 只认对照表(来源 Wiki),查不到拒绝不猜;
+- `docs/DECISIONS.md` 建议新增一条:「无代码内容制作不放宽 fs_write,改为专用工具 + 窄写入范围 + 按类型校验;pack_format 只认对照表(来源 Wiki),查不到拒绝不猜;
   KubeJS 只在真装了时可用、静态检查拦文件 / 网络 / 进程 / 反射、high 风险且两处都不给『本对话都允许』」。

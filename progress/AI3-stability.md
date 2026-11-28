@@ -168,5 +168,5 @@ AiPermission*Tests 16、AiAgentParallelToolsTests 4……,连 AI2 的 `UpgradeCh
   「~~…~~ —— 2026-11-21 AI3-stability 已处理:撤回按执行前后版本目录的差集删;`--srv-check` 真网络核验 5 个 SRV 名 20/20 命中;
   改全局状态的 85 个测试类全部在串行集合里,有 IL 守卫。」
 - `progress/AI2-stability.md` §5 第 1 条(夹具改全局目录)、第 3 条前半句(OptiFine 认不出)、第 4 条「没有在真网络上验证过」→ 已解决,见本文。
-- `DECISIONS.md` 建议追加一条:「改进程级全局状态的测试类必须挂 `DisableParallelization` 集合,由 `GlobalStateGuardTests` 按 IL 检查;
+- `docs/DECISIONS.md` 建议追加一条:「改进程级全局状态的测试类必须挂 `DisableParallelization` 集合,由 `GlobalStateGuardTests` 按 IL 检查;
   原地升级撤回口径 = 执行前后版本目录差集(兜底:属于目标版本)」。

@@ -209,7 +209,7 @@
 
 | 项 | 事实 | 建议 |
 | --- | --- | --- |
-| `TipCL.exe` 单文件交付 | net48 Release 构建同时产出 `TipCL.exe`、`TipCL.exe.config`(两条 bindingRedirect)、`System.Text.Encoding.CodePages.dll`(被 Costura 刻意排除不嵌);`release.yml` 只上传 exe | **已实测:exe 单独可用**(见 D-11 证据),不需要随包。建议把这条结论写进 `DECISIONS.md`,否则每次发版都要重新论证一遍 |
+| `TipCL.exe` 单文件交付 | net48 Release 构建同时产出 `TipCL.exe`、`TipCL.exe.config`(两条 bindingRedirect)、`System.Text.Encoding.CodePages.dll`(被 Costura 刻意排除不嵌);`release.yml` 只上传 exe | **已实测:exe 单独可用**(见 D-11 证据),不需要随包。建议把这条结论写进 `docs/DECISIONS.md`,否则每次发版都要重新论证一遍 |
 
 ### exe-only 冒烟证据(2026-11-20 本机)
 
