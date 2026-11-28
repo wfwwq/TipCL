@@ -64,8 +64,12 @@ public static class ToolMeta
         new("list_mod_configs", true, "read", "low", false),
         new("read_mod_config", true, "read", "low", false),
         new("update_plan", true, "none", "low", false),
-        new("remember", true, "none", "low", false),
-        new("forget", true, "none", "low", false),
+        // AI5-B2:remember / forget 会写 ai_memory.md(AI5-B1 之后与界面记忆面板是同一份文件),
+        // 原先标成只读是元信息说了假话:它既绕过了确认,也让 MCP Server 的 readOnlyHint 报错值
+        // (`Tools.IsWriteTool` 正是 MCP 判断「要不要外部确认」的依据)。按真实副作用改标 write_local / low
+        // —— 与 Windows 侧同一批元信息口径(见 windos/.../ToolMeta.cs 的同两项)。
+        new("remember", false, "write_local", "low", false),
+        new("forget", false, "write_local", "low", false),
         // 读工具产物（超长工具结果落盘后的回读）与派发只读子代理：两者都不动机器状态
         new("read_artifact", true, "read", "low", false),
         new("dispatch_subagent", true, "none", "low", false),
@@ -191,6 +195,14 @@ public sealed class ToolCall
     public string result = "";
 
     public string error = "";
+
+    /// <summary>
+    /// 结构化错误码(AI5-C2 前置修复):执行器产出的错误载荷({ok:false,error:&lt;code&gt;})里的那个 code,
+    /// 或者执行前的早期失败(如未知工具)。空串 = 这次调用没有错误码。
+    /// 主循环判断「模型叫了本轮没下发的工具」只看 <see cref="ToolRunner.IsUnknownTool"/> ——
+    /// 它读的就是这个字段,别另外去解析结果载荷(那会变成第二套判据)。
+    /// </summary>
+    public string code = "";
 
     public double started_at;
 

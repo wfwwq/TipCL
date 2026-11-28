@@ -576,7 +576,10 @@ public class AiModpackTests : IDisposable
         Assert.EndsWith("mods", Assert.Single(paths));
         var call = new ToolCall("b1", "install_mods_batch", PyDict.Of("instance", t.Name, "mods", mods));
         string text = await runner.RunAsync(call);
-        Assert.Equal(ToolCallStatus.COMPLETED, call.status);
+        // AI5-C2 前置修复:整批有失败时回执里 ok = false,这次调用就不能再算「成功」
+        // (原先 RunAsync 无条件标 COMPLETED,自检与主循环都看不见这类失败)。
+        // 回给模型的文本一个字没变:下面照样读 installed / failed。
+        Assert.Equal(ToolCallStatus.FAILED, call.status);
         List<string> lines = previews.Single();
         Assert.Contains(lines, l => l.Contains("Tech A"));
         Assert.Contains(lines, l => l.Contains("Sodium"));

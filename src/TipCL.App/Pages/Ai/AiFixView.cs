@@ -28,6 +28,12 @@ namespace TipCL.App.Pages.Ai;
 /// <summary>「交给 AI 修复」面板。</summary>
 internal sealed class AiFixView : Border
 {
+    /// <summary>
+    /// AI5-B4:修复面板自己的会话 id。与主对话(AiPage 的 "active")分开,轮次日志与检查点各记各的,
+    /// 「撤回上一轮」不会跨面板退到另一个会话的轮次上。改这个值等于换一个会话域(测试用它验证互不影响)。
+    /// </summary>
+    internal const string FixChatId = "ai-fix";
+
     private readonly PyDict _report;
     private readonly IApi _api;
     private readonly StackPanel _messages = UiClass.V(10);
@@ -47,6 +53,8 @@ internal sealed class AiFixView : Border
     private ConfirmCard? _pendingConfirm;
     private AskCard? _pendingAsk;
     private TaskCompletionSource<(bool ok, bool always)>? _confirmWaiter;
+    /// <summary>AI5-B3:确认卡上「本对话都允许」选的作用域(global / instance);由卡片答案回填。</summary>
+    private string _confirmScope = "";
     private TaskCompletionSource<object?>? _askWaiter;
     private CancellationTokenSource? _run;
     private string _think = "";
@@ -59,6 +67,8 @@ internal sealed class AiFixView : Border
         {
             Instance = Py.S(Py.Or(_report.Get("instance"), TipCL.Core.Launcher.Config.CONFIG.Get("default_instance", "default"))),
             Confirm = ConfirmAsync,
+            // AI5-B3:确认卡选的作用域回传给执行器,由它按作用域把规则写进 config.json(重启仍生效)
+            AlwaysScope = () => _confirmScope,
             AskUser = AskUserAsync,
             PlanChanged = plan => AiUiPost.Post(this, () => ShowPlan(plan)),
             TaskStarted = (taskId, label, tool) => AiUiPost.Post(this, () => AddTaskCard(taskId, label, tool, null)),
@@ -177,6 +187,16 @@ internal sealed class AiFixView : Border
         _ = RunAgentAsync(PyDict.Of("role", "user", "content", text));
     }
 
+    /// <summary>
+    /// 这个面板每一轮用的 AiAgent。单独抽出来是为了让「独立会话 id」这条可测:
+    /// AI5-B4 之前这里没设 ChatId,落到默认值 "active",与主对话同域 —— 两边共用一个轮次/检查点日志,
+    /// 主对话点「撤回上一轮」会退到修复面板那一轮(Rewind 按会话事件流数轮次,见 Rewind.cs:99-120)。
+    /// </summary>
+    internal AiAgent NewAgent() => new AiAgent(_runner, ev => AiUiPost.Post(this, () => OnAgentEvent(ev)))
+    {
+        ChatId = FixChatId,
+    };
+
     private async Task RunAgentAsync(PyDict userMessage)
     {
         _history.Add(userMessage);
@@ -187,7 +207,7 @@ internal sealed class AiFixView : Border
         _input.Stop.IsVisible = true;
         try
         {
-            var agent = new AiAgent(_runner, ev => AiUiPost.Post(this, () => OnAgentEvent(ev)));
+            var agent = NewAgent();
             await Task.Run(() => agent.RunAsync(_history, _runner.Instance, _run!.Token));
         }
         catch (OperationCanceledException)
@@ -437,7 +457,7 @@ internal sealed class AiFixView : Border
             _dock.Children.Clear();
             ConfirmCard? card = null;
             card = new ConfirmCard(call.name, label, reason, Preview.Flatten(preview), ConfirmCard.AllowAlways(call.name),
-                (ok, always, _) =>
+                (ok, always, scope) =>
                 {
                     _pendingConfirm = null;
                     var done = card;
@@ -449,6 +469,8 @@ internal sealed class AiFixView : Border
                         }
                         _dock.IsVisible = _dock.Children.Count > 0;
                     });
+                    // AI5-B3:作用域要在 TrySetResult 之前落进字段(执行器 await 到答案后才读它)
+                    _confirmScope = scope;
                     waiter.TrySetResult((ok, always));
                 });
             _pendingConfirm = card;

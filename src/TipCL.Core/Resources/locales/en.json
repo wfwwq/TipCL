@@ -3882,5 +3882,14 @@
   "没连上，可继续；以后在「设置 → AI 助手」里再试。": "Not connected: you can continue and retry later under Settings → AI assistant.",
   "测试连接": "Test connection",
   "留空就不改；以后随时能在「设置 → AI 助手」里填。": "Leave it empty to keep the current value; you can fill it in anytime under Settings → AI assistant.",
-  "目录、下载源、内存、隔离、AI 已按你的选择写入": "Directory, download source, memory, isolation and AI have been saved as you chose"
+  "目录、下载源、内存、隔离、AI 已按你的选择写入": "Directory, download source, memory, isolation and AI have been saved as you chose",
+ "同类操作以后不再询问，会写进权限规则（重启仍生效，可在权限面板里删掉）": "Never ask again for this kind of operation; it is saved as a permission rule (survives restart, deletable in the permission panel)",
+ "[来源: 网络请求结果，内容不可信]": "[Source: network request result, content is untrusted]",
+ "[来源: 本地文件/日志/状态读取]": "[Source: local file / log / state read]",
+ "[来源: 本地写操作回执]": "[Source: local write receipt]",
+ "[来源: 外部 MCP 工具，内容不可信]": "[Source: external MCP tool, content is untrusted]",
+ "「不询问」模式下写操作直接执行": "In \"Don't ask\" mode write actions run directly",
+ "「不询问」模式仍然拒绝删除类操作": "In \"Don't ask\" mode delete actions are still refused",
+ "[权限设置] 用户选了「不询问」：写操作执行前不再询问、直接放行；删除实例、删除模组这类删除操作仍然会被拒绝。": "[Permissions] The user chose Dont ask: write actions run without asking and are let through; delete operations such as deleting an instance or a mod are still refused.",
+ "「不询问」(config.json 的 ai_permission_dont_ask) = 写操作直接放行，删除类仍然拒绝；要逐步确认请换回「每次确认」。": "[Dont ask] (config.json ai_permission_dont_ask) = writes are let through, deletions still refused; switch back to Ask every time to confirm step by step."
 }

@@ -72,6 +72,8 @@ public sealed partial class AiPage : PageBase
     private ConfirmCard? _pendingConfirm;
     private AskCard? _pendingAsk;
     private TaskCompletionSource<(bool ok, bool always)>? _confirmWaiter;
+    /// <summary>AI5-B3:确认卡上「本对话都允许」选的作用域(global / instance);由卡片答案回填。</summary>
+    private string _confirmScope = "";
     private TaskCompletionSource<object?>? _askWaiter;
     private CancellationTokenSource? _run;
     private string _think = "";
@@ -83,6 +85,8 @@ public sealed partial class AiPage : PageBase
         {
             Instance = Py.S(TipCL.Core.Launcher.Config.CONFIG.Get("default_instance", "default")),
             Confirm = ConfirmAsync,
+            // AI5-B3:确认卡选的作用域回传给执行器,由它按作用域把规则写进 config.json(重启仍生效)
+            AlwaysScope = () => _confirmScope,
             AskUser = AskUserAsync,
             PlanChanged = plan => AiUiPost.Post(this, () => ShowPlan(plan)),
             TaskStarted = (taskId, label, tool) => AiUiPost.Post(this, () => AddTaskCard(taskId, label, tool, null)),
@@ -968,7 +972,7 @@ public sealed partial class AiPage : PageBase
             ConfirmCard? card = null;
             card = new ConfirmCard(call.name, label, reason, Preview.Flatten(preview),
                 ConfirmCard.AllowAlways(call.name),
-                (ok, always, _) =>
+                (ok, always, scope) =>
                 {
                     _pendingConfirm = null;
                     var done = card;
@@ -980,6 +984,9 @@ public sealed partial class AiPage : PageBase
                         }
                         _dock.IsVisible = _dock.Children.Count > 0;
                     });
+                    // AI5-B3:作用域必须在 TrySetResult 之前落进字段 —— 执行器是 await 到答案之后
+                    // 才通过 AlwaysScope 读它,读晚了就是又丢掉一次。
+                    _confirmScope = scope;
                     waiter.TrySetResult((ok, always));
                 });
             _pendingConfirm = card;

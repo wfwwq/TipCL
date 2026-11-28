@@ -64,6 +64,7 @@ internal sealed class AiPermissionPanel : Border
             UiClass.Section(I18nCore.Tr("规则"), I18nCore.Tr("规则可记到全局或当前实例;命中多条时 禁止 > 允许 > 每次问")),
             row,
             UiClass.Small(ContentHint).Wrap(),
+            UiClass.Small(DontAskHint).Wrap(),
             _status,
             _usage,
             new ScrollViewer { Content = _rules, MaxHeight = 290, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
@@ -81,6 +82,12 @@ internal sealed class AiPermissionPanel : Border
         + I18nCore.Tr("path / filename / slug / name / version / major 等参数,例如只允许改 config 里的某个文件、只允许装某个模组。")
         + I18nCore.Tr("「仅当前实例」按这次操作要动的实例算。删除类工具的「允许」必须填限定参数才生效。");
 
+    /// <summary>
+    /// P1 裁决(2026-11-28):「不询问」不是面板上的档位,而是 config.json 的 ai_permission_dont_ask。
+    /// 它的语义 = **自动放行,删除类除外**(此前实现成 ask → deny,名字和行为相反),这句话写在面板上,
+    /// 用户不用翻文档就知道这个开关会做什么。走词表:i18n 下与裁决说的是同一件事。
+    /// </summary>
+    internal static string DontAskHint => I18nCore.Tr("「不询问」(config.json 的 ai_permission_dont_ask) = 写操作直接放行，删除类仍然拒绝；要逐步确认请换回「每次确认」。");
     /// <summary>刷新当前档位与规则列表(宿主在弹出前后各调一次即可)。</summary>
     public Task RefreshAsync()
     {

@@ -115,11 +115,16 @@ public class AiPermissionAliasModeTests
     // ───────────────────────── dontAsk ─────────────────────────
 
     [Fact]
-    public void DontAskMode_DeniesInsteadOfAsking_ReadOnlyStillAllowed()
+    public void DontAskMode_AllowsInsteadOfAsking_DeleteStillDenied()
     {
         ToolRunner runner = Runner("dontAsk");
-        Assert.Equal(("deny", "用户开启了「不询问」模式"), Pair(runner.Decide("install_mod")));
-        Assert.Equal(("deny", "用户开启了「不询问」模式"), Pair(runner.Decide("delete_mod")));
+        // AI5-P1(2026-11-28):dontAsk 由 ask → deny 改成 ask → allow(名字与行为对齐)
+        Assert.Equal(("allow", ToolRunner.DontAskAllowReason), Pair(runner.Decide("install_mod")));
+        Assert.Equal(("allow", ToolRunner.DontAskAllowReason), Pair(runner.Decide("create_instance")));
+        // 删除类不放宽:仍然拒绝
+        Assert.Equal(("deny", ToolRunner.DontAskDeleteReason), Pair(runner.Decide("delete_mod")));
+        Assert.Equal(("deny", ToolRunner.DontAskDeleteReason), Pair(runner.Decide("delete_instance")));
+        // 只读那一支在档位之前,理由仍是「只读操作」
         Assert.Equal(("allow", "只读操作"), Pair(runner.Decide("list_mods")));
         // 负例:它绝不是「问一下」这个档
         Assert.NotEqual("ask", runner.Decide("install_mod").decision);
@@ -170,8 +175,11 @@ public class AiPermissionAliasModeTests
             }
             if (mode == "dontAsk")
             {
+                // P1:这一档现在是「自动放行,删除类除外」,与那句提示一致
                 Assert.Contains("不询问", note);
-                Assert.Equal("deny", runner.Decide("install_mod").decision);
+                Assert.Contains("直接放行", note);
+                Assert.Equal("allow", runner.Decide("install_mod").decision);
+                Assert.Equal("deny", runner.Decide("delete_mod").decision);
                 continue;
             }
             if (mode == "edit")
