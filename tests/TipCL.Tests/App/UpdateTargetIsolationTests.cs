@@ -205,9 +205,37 @@ public class UpdateTargetIsolationTests
     /// 产品侧那条"就地替换"在测试进程里的落点:抄一份包到沙箱旁边再原子改名 —— 全流程都在隔离根内,
     /// 且沙箱内容真的被换成了包(顺便把"替换之后不留 .new"也钉一下)。
     /// </summary>
-    [Fact]
-    public void ApplyStaged_WithTheProcessSandbox_WritesInsideTheIsolationRootOnly()
+    /// <summary>
+    /// R31-CIFLAKE:排空「别的用例泄漏出来、还挂在 UI 线程队列上的自更新续体」。
+    ///
+    /// 文件头已经写明这类续体常在**发出它的用例结束之后**才落地(由后续用例的 pump / 关窗动作触发),
+    /// 而它写的就是同一个进程级沙箱。如果它的落点正好排在某个用例的 `ApplyStaged()` 之后,
+    /// 那个用例读到的就是它写下的旧内容 —— CI windows-latest 上实测 3 次里红 2 次
+    /// (读到其它用例的 `R31-CIFLAKE-REGRESSION-PACKAGE-…`),同一提交本机 5 连绿,纯时序。
+    ///
+    /// 所以断言前先等到沙箱内容**连续若干轮不变**:队列排空之后没有别的写入者,断言才有确定含义。
+    /// 这只影响等待,不放松任何断言。
+    /// </summary>
+    private static async Task DrainPendingUiWritesAsync(string sandbox)
     {
+        string last = ReadShared(sandbox);
+        int stable = 0;
+        for (int i = 0; i < 60 && stable < 3; i++)
+        {
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(1);
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(30);
+            string now = ReadShared(sandbox);
+            if (now == last) stable++;
+            else { last = now; stable = 0; }
+        }
+    }
+
+    [Fact]
+    public async Task ApplyStaged_WithTheProcessSandbox_WritesInsideTheIsolationRootOnly()
+    {
+        await DrainPendingUiWritesAsync(TestWriteGuard.UpdateTargetSandbox);
+
         string pkg = Path.Combine(Utils.ROOT, "cache", "TipCL-ciflake-apply.bin");
         Directory.CreateDirectory(Path.GetDirectoryName(pkg)!);
         File.WriteAllBytes(pkg, Encoding.UTF8.GetBytes("R31-CIFLAKE-APPLIED"));
