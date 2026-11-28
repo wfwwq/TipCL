@@ -165,6 +165,12 @@ public sealed partial class ToolRunner
     public string Instance { get; set; } = "";
 
     /// <summary>
+    /// 当前对话 id(AI5-O 加的):诊断导出要按会话汇总,而工具执行器是唯一「跨 Core / UI 都拿得到」的宿主对象。
+    /// 缺省空 = 落到 "active",与 Store.LogEvent 的兜底口径一致;不参与任何权限或执行判断。
+    /// </summary>
+    public string ChatId { get; set; } = "";
+
+    /// <summary>
     /// 当前权限档位写成一句话,给模型看(照 Windows 版 Permission.PermissionNote,Permission.cs:256-276;
     /// 参考版的消费点在 Agent.cs:348 / :368,作为一条独立的 system 消息)。
     /// 键位一律用 Linux 自己那一份:档位走 <see cref="NormalizeMode"/>(和裁决同一个入口),

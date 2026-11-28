@@ -415,4 +415,49 @@ public static class Store
 		{
 		}
 	}
+
+	/// <summary>会话事件目录(Rewind 找 turn、AI5-O 的会话汇总都读这里)。</summary>
+	public static string SessionDirPath()
+	{
+		return SESSIONS_DIR ?? PPath.Join(Utils.ROOT, "cache", "ai_sessions");
+	}
+
+	/// <summary>
+	/// 读回某个会话的事件(AI5-O 加的;坏行跳过、文件不在就返回空,绝不抛)。
+	/// 与 Linux 版同义:Rewind 内部那份逐行解析保持原样,这里给会话汇总用。
+	/// </summary>
+	public static List<PyDict> ReadEvents(string sessionId)
+	{
+		List<PyDict> list = new List<PyDict>();
+		try
+		{
+			string path = Utils.AbsPath(PPath.Join(SessionDirPath(), (string.IsNullOrEmpty(sessionId) ? "active" : sessionId) + ".jsonl"));
+			if (!File.Exists(path))
+			{
+				return list;
+			}
+			string[] array = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false).GetString(File.ReadAllBytes(path)).Split('\n');
+			foreach (string text in array)
+			{
+				if (text.Length == 0)
+				{
+					continue;
+				}
+				try
+				{
+					if (PyJson.Loads(text) is PyDict pyDict)
+					{
+						list.Add(pyDict);
+					}
+				}
+				catch (Exception)
+				{
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return list;
+	}
 }

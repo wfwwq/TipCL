@@ -146,7 +146,7 @@ public static class DiagnosticReport
     /// 组装报告正文(markdown)与要附带的日志片段。<paramref name="conversation"/> 是当前对话的消息列表
     /// (OpenAI 形状,可为空);<paramref name="hardware"/> 为空时走本地最小探测。
     /// </summary>
-    public static (string Markdown, List<(string Name, string Text)> Logs) Build(Instance inst, List<object>? conversation, PyDict? hardware = null, IEnumerable<string>? extraWords = null)
+    public static (string Markdown, List<(string Name, string Text)> Logs) Build(Instance inst, List<object>? conversation, PyDict? hardware = null, IEnumerable<string>? extraWords = null, string? sessionId = null)
     {
         var words = AccountNames().Concat(extraWords ?? Array.Empty<string>()).ToList();
         string R(string t) => Redact(t, words);
@@ -225,8 +225,41 @@ public static class DiagnosticReport
         }
         md.AppendLine();
 
-        // 4. 硬件摘要
-        md.AppendLine("## 四、硬件摘要");
+        // 4. 会话级可观测性汇总(AI5-O):轮数 / 工具调用与失败率 / 压缩次数 / tool_schema_miss / token。
+        //    数从会话事件(Store.ReadEvents)与轨迹(Trace.ReadRecords)现算,不新开一份计数,免得两边对不上。
+        md.AppendLine("## 四、会话级统计"); // i18n:ignore(诊断报告正文)
+        md.AppendLine();
+        AiSessionMetrics.Result metrics;
+        try
+        {
+            // 注意:汇总用的会话 id 不能先脱敏再拿去读文件(id 是事件文件名;
+            // Uuid 规则会把十六进制的会话 id 整段抹成 <uuid>,那就读不到任何事件了)。
+            // 只在输出那一行里把 id 尾巴打码,方便用户把这个文件发给别人。
+            string session = SessionOf(conversation, sessionId);
+            metrics = AiSessionMetrics.Build(session);
+            foreach (string line in metrics.ToMarkdownLines())
+            {
+                md.AppendLine(R(MaskSessionInLine(line, session)));
+            }
+            md.AppendLine();
+            // 指标口径:字段名的含义不是自明的,写在报告里用户才看得懂;这一节不是界面文案,
+            // 随导出文件走(与下面两节同一性质)。i18n:ignore(诊断报告正文)
+            md.AppendLine("口径:rounds = 各次 TurnSummary 的 rounds 之和;tool_calls = ToolStarted 事件数;"
+                + "tool_failure_rate = 失败 / 调用;compacts = 主动(auto)+ 被动(reactive);"
+                + "token = provider 真值之和。"); // i18n:ignore(诊断报告正文)
+            foreach (string caveat in metrics.Caveats)
+            {
+                md.AppendLine("- ⚠ " + R(caveat));
+            }
+        }
+        catch (Exception ex)
+        {
+            md.AppendLine("- 会话统计没跑完:" + R(Py.ExcStr(ex))); // i18n:ignore(诊断报告正文)
+        }
+        md.AppendLine();
+
+        // 5. 硬件摘要
+        md.AppendLine("## 五、硬件摘要"); // i18n:ignore(诊断报告正文)
         md.AppendLine();
         PyDict hw = hardware ?? ShaderAdvisor.ProbeHardware();
         md.AppendLine("- 内存:" + Py.S(hw.Get("ram_mb")) + " MB(可用 " + Py.S(hw.Get("ram_avail_mb")) + " MB)");
@@ -238,9 +271,9 @@ public static class DiagnosticReport
         md.AppendLine("- 分配给游戏:" + Py.S(Py.Or(Config.CONFIG.Get("memory_mb"), "默认")) + " MB");
         md.AppendLine();
 
-        // 5. 日志关键片段
+        // 6. 日志关键片段
         var logs = new List<(string Name, string Text)>();
-        md.AppendLine("## 五、日志关键片段");
+        md.AppendLine("## 六、日志关键片段"); // i18n:ignore(诊断报告正文)
         md.AppendLine();
         List<string> files;
         try
@@ -330,6 +363,24 @@ public static class DiagnosticReport
     private static string OneLine(string text, int max)
         => AiUiText.Trim(Regex.Replace(text, "\\s+", " "), max);
 
+    /// <summary>会话 id 太长(多为 uuid),输出时只留前 8 位 + 省略号;短 id 原样保留(它只是个随机短串,不是隐私)。</summary>
+    private static string MaskSessionInLine(string line, string session)
+        => session.Length > 12 ? line.Replace(session, session.Substring(0, 8) + "…") : line;
+
+    /// <summary>
+    /// 会话 id:优先用调用方给的(AI 页 / 工具执行器知道当前对话);
+    /// 没给就退回当前轨迹作用域(Agent 跑的时候设的),再没有就 "active"(与 Store.LogEvent 的兜底口径一致)。
+    /// </summary>
+    private static string SessionOf(List<object>? conversation, string? sessionId)
+    {
+        string s = Py.Strip(sessionId ?? "");
+        if (s.Length == 0)
+        {
+            s = Py.Strip(Trace.CurrentSession);
+        }
+        return s.Length == 0 ? "active" : s;
+    }
+
     /// <summary>日志关键片段:报错 / 异常 / Caused by 及其上下 2 行(最多 160 行)+ 末尾 60 行。</summary>
     public static string KeyLines(string text)
     {
@@ -396,9 +447,9 @@ public static class DiagnosticReport
     }
 
     /// <summary>写出报告,返回 {ok, path, format, bytes, files}。</summary>
-    public static PyDict Export(Instance inst, List<object>? conversation, string outPath, PyDict? hardware = null, IEnumerable<string>? extraWords = null)
+    public static PyDict Export(Instance inst, List<object>? conversation, string outPath, PyDict? hardware = null, IEnumerable<string>? extraWords = null, string? sessionId = null)
     {
-        (string markdown, List<(string Name, string Text)> logs) = Build(inst, conversation, hardware, extraWords);
+        (string markdown, List<(string Name, string Text)> logs) = Build(inst, conversation, hardware, extraWords, sessionId);
         string abs = PPath.Abs(outPath);
         string? parent = Path.GetDirectoryName(abs);
         if (!string.IsNullOrEmpty(parent))
@@ -428,6 +479,14 @@ public static class DiagnosticReport
                 entries.Add(name);
             }
             Put("report.md", markdown);
+            // AI5-O:会话指标另落一份机器可读的(要按会话核对数值 / 做趋势图时不必解析 markdown)
+            try
+            {
+                Put("metrics.json", PyJson.Dumps(AiSessionMetrics.Build(SessionOf(conversation, sessionId)).ToPy(), 2, ensureAscii: false));
+            }
+            catch (Exception)
+            {
+            }
             foreach ((string name, string text) in logs)
             {
                 Put("logs/" + name, text);

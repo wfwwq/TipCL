@@ -65,7 +65,7 @@ public sealed partial class AiPage
             var args = PyDict.Of("dest_dir", dir, "instance", inst.name);
             string path = DiagnosticReport.ResolveOutPath(args, inst.name);
             List<object> history = SnapshotHistory();
-            PyDict result = await Task.Run(() => DiagnosticReport.Export(inst, history, path));
+            PyDict result = await Task.Run(() => DiagnosticReport.Export(inst, history, path, null, null, EnsureChatId()));
             ToastHost.Show(I18nCore.Tr("诊断报告已导出"), Py.S(result.Get("path")), ToastKind.Success);
         }
         catch (Exception ex)
