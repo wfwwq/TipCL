@@ -119,6 +119,8 @@ win-agent 分支上是旧版,因为它从 `b4cd7a2` 出发、看不到 win-perm 
 
 另核 win-perm 的 4 段锚点在合并后仍在:`ai_permission_dont_ask` 1 处、`PluginAgentBridge.AffectedPathsOf` 1 处、`内容不可信` 3 处、`Permission.Decide` 2 处。win-agent 的 `AiAgentSourceGuardTests`(「Agent 里不再有第二处判断」)在合并后**全绿**。
 
+**P2 × G 的交互已实测闭环**:`PluginToolSideEffectTests.DeclaredWriteToolIsDeniedInPlanMode`(plan 档对声明 `write_local` 的插件工具判 deny)+ `AiAgentSourceGuardTests`(plan_approval 必须早于 `Scheduler.RunGroups`,且驳回后本轮不执行任何工具)两条都在,定向跑 **39 条全绿**(`失败 0 / 通过 39`)。场景 06(计划驳回 → 零工具执行、零检查点)也已转绿。
+
 ### 2.5 真实集成失败一条:`Scenario12a_子代理写工具被拦截`(已定位并修正)
 
 第 2 轮(合入 win-agent 后)Windows 出现 1 条失败。**单跑同样失败,不是偶发**,是真实集成冲突。
