@@ -83,12 +83,57 @@ public static class Preview
 		return PyDict.Of("kind", kind, "head", head, "lines", lines.Cast<object>().ToList(), "too_large", tooLarge);
 	}
 
+	/// <summary>
+	/// 确认卡的「改前改后」预览。除了各工具自己的那一段(AI5-D4 补的:fs_write / tune_jvm /
+	/// restore_save_backup / layout_apply),还给**写盘但做不了快照**的工具补一句「这一步无法回退:…」
+	/// (AI5-D3:账号、联机、备份存档这类工具 AffectedPaths 返回空清单,撤回时还原不了任何东西)。
+	/// </summary>
 	public static PyDict ChangePreview(BackendApi backend, string name, PyDict args)
 	{
 		args = args ?? new PyDict();
+		PyDict row = _change_preview(backend, name, args);
+		string note = Tools.NoRollbackMessage(name);
+		if (note.Length == 0)
+		{
+			return row;
+		}
+		List<string> list = new List<string>();
+		if (row != null)
+		{
+			foreach (object item in Py.ListOr(row.Get("lines")))
+			{
+				list.Add(Py.S(item));
+			}
+		}
+		list.Add(note);
+		if (row == null)
+		{
+			return R("info", I18nCore.Tr("将要执行:") + Tools.ConfirmLabel(name, args), list, tooLarge: false);
+		}
+		return R(Py.S(row.Get("kind")), Py.S(row.Get("head")), list, Py.Truthy(row.Get("too_large")));
+	}
+
+	private static PyDict _change_preview(BackendApi backend, string name, PyDict args)
+	{
 		List<string> list = new List<string>();
 		switch (name)
 		{
+		// AI5-D4:fs_write 的逐行 diff(路径守卫与执行时同一套:ExtraTools.FsResolve)
+		case "fs_write":
+			return FsWritePreview(backend, args);
+
+		// AI5-D4:tune_jvm 将要写进全局设置的那两项(照 ExtraTools.TuneJvm 的口径算,只算不写)
+		case "tune_jvm":
+			return TunePreview(backend, args);
+
+		// AI5-D4:回滚存档会把哪个存档目录改成什么样(目标路径与检查点同源:Tools.AffectedPaths)
+		case "restore_save_backup":
+			return RestorePreview(backend, args);
+
+		// AI5-D4:layout_apply 的布局文档逐行 diff(干跑同一份 ApplyOps,不落盘)
+		case LayoutTools.ApplyName:
+			return LayoutPreview(args);
+
 		case "write_mod_config":
 		{
 			string head4 = Tr("将要写入的变更：");
@@ -301,6 +346,295 @@ public static class Preview
 		{
 			return I18nCore.Tr(key);
 		}
+	}
+
+	// ───────────────────── 预览覆盖(AI5-D4)─────────────────────
+
+	/// <summary>有专属预览分支的工具(参数不足以定位目标时仍可能返回 null)。</summary>
+	private static readonly HashSet<string> _PREVIEW_TOOLS = new HashSet<string>(StringComparer.Ordinal)
+	{
+		"write_mod_config", "delete_mod", "disable_mod", "enable_mod", "delete_instance", "create_instance",
+		"install_mod", "install_modpack", "install_shader", "install_resourcepack", "install_datapack",
+		"install_world", "install_game", "download_java", "launch_game",
+		// AI5-D4 补齐的四个
+		"fs_write", "tune_jvm", "restore_save_backup", LayoutTools.ApplyName
+	};
+
+	/// <summary>
+	/// 写盘、但没有专属预览的工具 → 理由(AI5-D4 的显式豁免表)。
+	/// 这些工具的确认卡不是空的:ChangePreview 会给它们补上 Tools.NoRollbackMessage 那一行
+	/// (「这一步无法回退:…」),再由 PreviewCoverageTests 按 ToolMeta 的写工具集合锁住 ——
+	/// 新增写工具既没有预览分支、又没登记在这里,用例就红。
+	/// </summary>
+	private static readonly Dictionary<string, string> _NO_PREVIEW = new Dictionary<string, string>(StringComparer.Ordinal)
+	{
+		{ "backup_save", "只新增一个 zip:先扫一遍存档体积才谈得上预览,收益不抵开销;卡上有「无法回退」那一行" },
+		{ "multiplayer", "开房 / 加入房间是起进程、连房间,不是文件改动,没有可比的东西" },
+		{ "add_offline_account", "账号改动由账号面板承接:预览只有「新增一个账号」一句话,增量信息为零" },
+		{ "switch_account", "切换账号只改当前选中项,确认卡标题里已经写着切到哪个账号" },
+		{ "set_skin", "皮肤是外部 png 写进账号文件,diff 只会显示一段不可读的凭据" },
+		{ "remember", "写记忆由记忆面板承接,逐条增删没有可预览的文件改动" },
+		{ "forget", "删记忆由记忆面板承接,逐条增删没有可预览的文件改动" }
+	};
+
+	/// <summary>这个工具是否有专属预览分支(逐行 diff / 目标清单)。</summary>
+	public static bool HasBuiltinPreview(string name)
+	{
+		return _PREVIEW_TOOLS.Contains(name ?? "");
+	}
+
+	/// <summary>没有专属预览的工具的理由(显式豁免表);有预览或不是写工具时返回空串。</summary>
+	public static string NoPreviewReason(string name)
+	{
+		return _NO_PREVIEW.TryGetValue(name ?? "", out string value) ? value : "";
+	}
+
+	/// <summary>
+	/// fs_write 的逐行 diff(AI5-D4;照 Linux 的 AiFsTools.WritePreview)。
+	/// 目标路径与执行时走同一套守卫(ExtraTools.FsResolve):解析不出来就返回 null(执行时也会被拒)。
+	/// </summary>
+	private static PyDict FsWritePreview(BackendApi backend, PyDict args)
+	{
+		Instance instance = null;
+		try
+		{
+			instance = Tools._inst(backend, args);
+		}
+		catch (Exception)
+		{
+			instance = null;
+		}
+		string baseDir = ((instance == null) ? null : instance.path);
+		if (string.IsNullOrEmpty(baseDir))
+		{
+			baseDir = Utils.ROOT;
+		}
+		string target;
+		try
+		{
+			target = ExtraTools.FsResolve(Py.Str(Py.Or(args.Get("path"), "")), ExtraTools.FsRoots(instance), baseDir).Abs();
+		}
+		catch (Exception)
+		{
+			return null;
+		}
+		bool existed = LocalFs.IsFile(target);
+		string old = "";
+		if (existed)
+		{
+			try
+			{
+				old = AiFs.ReadText(target, replace: true);
+			}
+			catch (Exception)
+			{
+				old = "";
+			}
+		}
+		string content = Py.S(args.Get("content"));
+		bool append = Py.Truthy(args.Get("append"));
+		string after = (append ? (old + content) : content);
+		string label = Py.Str(Py.Or(args.Get("path"), "file")).Replace('\\', '/');
+		List<string> diff = UnifiedDiff(Py.SplitLines(old), Py.SplitLines(after), "a/" + label, "b/" + label);
+		List<string> lines = new List<string>();
+		if (!existed)
+		{
+			lines.Add(I18nCore.Tr("(新建文件)"));
+		}
+		else if (append)
+		{
+			lines.Add(I18nCore.Tr("(追加到文件末尾)"));
+		}
+		lines.Add(target);
+		bool tooLarge = false;
+		if (diff.Count > MAX_PREVIEW_LINES)
+		{
+			tooLarge = true;
+			string stored = Artifacts.Store(string.Join("\n", diff), "fs_write");
+			lines.AddRange(diff.Take(MAX_PREVIEW_LINES));
+			lines.Add((stored.Length > 0) ? I18nCore.Tr("变更过大,完整内容见 {path}").Replace("{path}", stored) : I18nCore.Tr("变更过大,仅显示前 {n} 行").Replace("{n}", MAX_PREVIEW_LINES.ToString()));
+		}
+		else
+		{
+			lines.AddRange(diff);
+		}
+		return R("diff", I18nCore.Tr("将要写入的变更:"), lines, tooLarge);
+	}
+
+	/// <summary>
+	/// tune_jvm 将要写进**全局设置**的那两项(AI5-D4;照 ExtraTools.TuneJvm 的口径算,只算不写)。
+	/// apply=false 不落盘 → 说清「只给建议」;内存超上限 / gc 名字不合法 → 说清「这次不会执行」。
+	/// </summary>
+	private static PyDict TunePreview(BackendApi backend, PyDict args)
+	{
+		Instance instance = null;
+		try
+		{
+			instance = Tools._inst(backend, args);
+		}
+		catch (Exception)
+		{
+			instance = null;
+		}
+		List<string> lines = new List<string>();
+		long totalMb = 0L;
+		try
+		{
+			totalMb = Py.Int(Py.Or(Sysinfo.MemoryInfo().Get("total_mb"), 0L));
+		}
+		catch (Exception)
+		{
+			totalMb = 0L;
+		}
+		int mods = ModJarCount(instance);
+		long cur = Py.Int(Py.Or(Config.CONFIG.Get("memory_mb"), 4096L));
+		string curGc = Py.S(Py.Or(Config.CONFIG.Get("gc_preset"), "auto"));
+		long mem = (Py.Truthy(args.Get("memory_mb")) ? Py.Int(args.Get("memory_mb")) : ExtraTools.RecommendMemory(totalMb, mods));
+		string gc = (Py.Truthy(args.Get("gc")) ? Py.S(args.Get("gc")) : ExtraTools.RecommendGc(mem, 17));
+		if (Py.Truthy(args.Get("gc")) && !Py.In(gc, Gc.LABELS.Keys.Cast<object>().ToList()))
+		{
+			lines.Add(I18nCore.Tr("gc 只能是 auto / g1 / g1_tuned / zgc / none"));
+			return R("info", I18nCore.Tr("这次调优不会执行:"), lines, tooLarge: false);
+		}
+		if (totalMb > 0 && mem > totalMb - 1024)
+		{
+			lines.Add(I18nCore.Tr("电脑只有 {total} MB 内存,分配 {want} MB 会让系统卡死,最多建议 {max} MB。")
+				.Replace("{total}", totalMb.ToString())
+				.Replace("{want}", mem.ToString())
+				.Replace("{max}", Math.Max(1024L, totalMb * 7 / 10).ToString()));
+			return R("info", I18nCore.Tr("这次调优不会执行:"), lines, tooLarge: false);
+		}
+		string global = I18nCore.Tr("全局默认");
+		if (!Py.Truthy(args.Get("apply")))
+		{
+			lines.Add(MemLine(mem, global));
+			lines.Add(GcLine(gc));
+			return R("info", I18nCore.Tr("只给建议,不会改动设置:"), lines, tooLarge: false);
+		}
+		lines.Add("- " + MemLine(cur, global));
+		lines.Add("+ " + MemLine(mem, global));
+		lines.Add("- " + GcLine(curGc));
+		lines.Add("+ " + GcLine(gc));
+		lines.Add(I18nCore.Tr("写入:{path}").Replace("{path}", Config.CONFIG_FILE));
+		lines.Add(I18nCore.Tr("单独设置过内存或 GC 的版本仍以它自己的设置为准。"));
+		return R("diff", I18nCore.Tr("将要修改的启动设置:"), lines, tooLarge: false);
+	}
+
+	private static string MemLine(object mb, string src)
+	{
+		return I18nCore.Tr("内存:{mb} MB({src})").Replace("{mb}", Py.Str(mb)).Replace("{src}", src);
+	}
+
+	private static string GcLine(string key)
+	{
+		return I18nCore.Tr("GC:{label}").Replace("{label}", I18nCore.Tr(Py.S(Py.Or(Gc.LABELS.Get(key), key))));
+	}
+
+	/// <summary>模组数量(与 ExtraTools.ModFiles 同一口径:mods 下的 .jar;那边是 private,这里照数一遍)。</summary>
+	private static int ModJarCount(Instance instance)
+	{
+		try
+		{
+			if (instance == null)
+			{
+				return 0;
+			}
+			string dir = PPath.Join(instance.path, "mods");
+			if (!LocalFs.IsDir(dir))
+			{
+				return 0;
+			}
+			return LocalFs.Children(dir).Count((string f) => f.EndsWith(".jar", StringComparison.OrdinalIgnoreCase));
+		}
+		catch (Exception)
+		{
+			return 0;
+		}
+	}
+
+	/// <summary>
+	/// restore_save_backup 会把哪个存档目录改成什么样(AI5-D4)。
+	/// 目标路径与检查点同源(Tools.AffectedPaths):覆盖 = 同名存档;不覆盖 = 执行时真正会新建的那个名字。
+	/// </summary>
+	private static PyDict RestorePreview(BackendApi backend, PyDict args)
+	{
+		Instance instance;
+		try
+		{
+			instance = Tools._inst(backend, args);
+		}
+		catch (Exception)
+		{
+			return null;
+		}
+		string backup = Py.S(args.Get("backup_name"));
+		List<string> targets = Tools.AffectedPaths(instance, "restore_save_backup", args);
+		if (backup.Length == 0 || targets.Count == 0)
+		{
+			return null;
+		}
+		string version = Tools.VerArg(args);
+		string world = new PPath(targets[0]).Name;
+		List<string> lines = new List<string>();
+		lines.Add(I18nCore.Tr("备份文件:{name}").Replace("{name}", backup));
+		try
+		{
+			if (!LocalFs.IsFile(PPath.Join(Saves.BackupsDir(instance, version), backup)))
+			{
+				lines.Add(I18nCore.Tr("(没找到这个备份,执行时会报「备份不存在」)"));
+			}
+		}
+		catch (Exception)
+		{
+		}
+		lines.Add(I18nCore.Tr("目标存档:{name}").Replace("{name}", world));
+		bool overwrite = Py.Truthy(args.Get("overwrite"));
+		lines.Add(overwrite ? I18nCore.Tr("覆盖现有存档") : I18nCore.Tr("恢复成新的存档文件夹,不动现有存档"));
+		if (overwrite)
+		{
+			try
+			{
+				if (Saves.ListSaves(instance, version).OfType<PyDict>().Any((PyDict s) => Py.S(s.Get("name")) == world))
+				{
+					lines.Add(I18nCore.Tr("回滚前先把当前存档「{name}」备份成 zip").Replace("{name}", world));
+				}
+			}
+			catch (Exception)
+			{
+			}
+		}
+		return R("summary", I18nCore.Tr("将要从备份回滚存档:"), lines, tooLarge: false);
+	}
+
+	/// <summary>
+	/// layout_apply 的布局文档逐行 diff(AI5-D4):在副本上干跑同一份 ApplyOps(LayoutTools.PreviewPlan),
+	/// 拿改前 / 改后的整份 v2 文档做 diff —— 算不出来就说清这次为什么改不了,不落盘。
+	/// </summary>
+	private static PyDict LayoutPreview(PyDict args)
+	{
+		PyDict plan = LayoutTools.PreviewPlan(args);
+		List<string> lines = new List<string>();
+		string error = Py.S(plan.Get("error"));
+		List<object> changes = Py.ListOr(plan.Get("changes"));
+		if (error.Length > 0 || changes.Count == 0)
+		{
+			// 干跑认不出任何改动 / 参数用不了:照 LayoutTools.Apply 的原话显示,不要给一份空 diff
+			lines.Add((error.Length > 0) ? error : I18nCore.Tr("没有识别到要修改的内容:请给 page+blocks(改某一页)、profile(应用方案)、json(整份文档)、widgets 或 shell_tabs 中的一个。"));
+			return R("info", I18nCore.Tr("这次改动用不了:"), lines, tooLarge: false);
+		}
+		foreach (object item in changes)
+		{
+			lines.Add("- " + Py.S(item));
+		}
+		lines.Add(I18nCore.Tr("改动前会自动备份为方案「AI 备份 <时间>」"));
+		List<string> diff = UnifiedDiff(Py.SplitLines(Py.S(plan.Get("before"))), Py.SplitLines(Py.S(plan.Get("after"))), "a/ui_layout_v2.json", "b/ui_layout_v2.json");
+		bool tooLarge = diff.Count > MAX_PREVIEW_LINES;
+		lines.AddRange(diff.Take(MAX_PREVIEW_LINES));
+		if (tooLarge)
+		{
+			lines.Add(I18nCore.Tr("变更过大,仅显示前 {n} 行").Replace("{n}", MAX_PREVIEW_LINES.ToString()));
+		}
+		return R("diff", I18nCore.Tr("将要调整的布局:"), lines, tooLarge);
 	}
 
 	private static List<int[]> MatchingBlocks(List<string> a, List<string> b)

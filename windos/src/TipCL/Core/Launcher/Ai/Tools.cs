@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text.RegularExpressions;
+using TipCL.Core.Launcher.Layout;
 
 namespace TipCL.Core.Launcher.Ai;
 
@@ -389,25 +390,156 @@ public static class Tools
 		return Py.S(Py.Or(args.Get("version"), ""));
 	}
 
+	// ───────────────────────── 回滚覆盖(AI5-D3)─────────────────────────
+	//
+	// 背景:检查点(Checkpoint.Snapshot)按 AffectedPaths 做快照,「撤回上一轮」再按快照还原。
+	// 以前这张 switch 只认基础工具,调优 / 回滚存档 / 布局这些**真会改盘**的工具落到 default 分支
+	// 返回空清单 → 不做快照 → 界面上却仍然说「已撤回」,用户以为改动还原了(实际一个字都没动)。
+	// 现在分成两张显式表:
+	//   · _SNAPSHOT_TOOLS = 有快照路径的写工具(AffectedPaths 里有分支);
+	//   · _NO_SNAPSHOT     = 写盘但不做快照的写工具 + 理由(表外的写工具由用例 ToolsRollbackTests 拦住)。
+
+	/// <summary>AffectedPaths 里给了受影响路径的写工具(参数不合法时仍可能返回空清单)。</summary>
+	private static readonly HashSet<string> _SNAPSHOT_TOOLS = new HashSet<string>(StringComparer.Ordinal)
+	{
+		"write_mod_config", "delete_mod", "enable_mod", "disable_mod", "delete_instance", "create_instance",
+		"install_mod", "install_shader", "install_resourcepack", "install_datapack", "install_world",
+		"install_modpack", "install_game", "download_java", "fs_write",
+		// AI5-D3 补齐的三个:调优(写全局 config.json)、回滚存档(写 saves\<存档>)、布局(写 ui_layout_v2.json)
+		"tune_jvm", "restore_save_backup", "layout_apply"
+	};
+
+	/// <summary>
+	/// 写盘、但**故意不做文件快照**的工具 → 理由(AI5-D3)。
+	/// 理由本身会拼进确认卡上给用户看的「这一步无法回退:…」,所以词表(zh_CN / en)里要有对应条目。
+	/// </summary>
+	private static readonly Dictionary<string, string> _NO_SNAPSHOT = new Dictionary<string, string>(StringComparer.Ordinal)
+	{
+		{ "backup_save", "只新增一个 zip,不改动已有文件;整个 backups 目录进检查点会撞 512 MB 上限" },
+		{ "multiplayer", "只驱动联机组件和进程,不改动游戏文件" },
+		{ "add_offline_account", "账号文件里是封存过的登录凭据,回退成旧文件会把之后登录的账号一起冲掉" },
+		{ "switch_account", "账号文件里是封存过的登录凭据,回退成旧文件会把之后登录的账号一起冲掉" },
+		{ "set_skin", "皮肤写在账号文件里,回退成旧文件会连带冲掉之后的账号改动" },
+		{ "launch_game", "只启动游戏进程,不改动文件" },
+		// 记忆目前标成只读(B2 会改成写记忆文件):逐条增删,不做整文件快照(与 Linux 同口径)
+		{ "remember", "记忆逐条增删,由记忆抽象自己管理,不做整文件快照" },
+		{ "forget", "记忆逐条增删,由记忆抽象自己管理,不做整文件快照" }
+	};
+
+	/// <summary>
+	/// 这个工具的检查点覆盖:「snapshot」有快照 /「exempt」写盘但按上表不做快照 /「none」不是写工具。
+	/// 用例按它锁住「每个写工具都必须在两张表之一里」,新增写工具忘了登记就会红。
+	/// </summary>
+	public static string SnapshotCoverage(string name)
+	{
+		if (_NO_SNAPSHOT.ContainsKey(name ?? ""))
+		{
+			return "exempt";
+		}
+		return _SNAPSHOT_TOOLS.Contains(name ?? "") ? "snapshot" : "none";
+	}
+
+	/// <summary>不做快照的理由(AffectedPaths 不给路径的写工具);有快照路径或不是写工具时返回空串。</summary>
+	public static string NoSnapshotReason(string name)
+	{
+		return _NO_SNAPSHOT.TryGetValue(name ?? "", out string value) ? value : "";
+	}
+
+	/// <summary>
+	/// 确认卡上的一句「这一步无法回退:…」(AI5-D3);有快照的工具返回空串(那种工具正常撤回即可)。
+	/// </summary>
+	public static string NoRollbackMessage(string name)
+	{
+		string reason = NoSnapshotReason(name);
+		if (reason.Length == 0)
+		{
+			return "";
+		}
+		return I18nCore.Tr("这一步无法回退:{reason}").Replace("{reason}", I18nCore.Tr(reason));
+	}
+
+	/// <summary>
+	/// 这个工具调用可能会改到本机的哪些路径(检查点按这份清单做快照,「撤回」才知道要还原什么)。
+	/// 认不出的工具返回空清单 = 不做快照(那种写工具必须在 <see cref="SnapshotCoverage"/> 里标成 exempt);
+	/// 解析不出实例、或参数不足以定位目标时也返回空清单(执行时同样会被守卫拒掉)。
+	/// </summary>
 	public static List<string> AffectedPaths(BackendApi backend, string name, PyDict args)
 	{
 		args = args ?? new PyDict();
 		Instance instance;
-		string text;
 		try
 		{
 			instance = _inst(backend, args);
-			text = instance.path;
 		}
 		catch (Exception)
 		{
 			instance = null;
-			text = null;
 		}
-		if (text == null)
+		return AffectedPaths(instance, name, args);
+	}
+
+	/// <summary>
+	/// 同一份实现,但实例按名字解析(AI5-D3:测试和「没有后端也要算路径」的场景用它)。
+	/// <paramref name="instance"/> 传空串表示用默认实例;名字非法或解析失败按「没有实例」处理。
+	/// </summary>
+	public static List<string> AffectedPaths(string name, PyDict args, string instance)
+	{
+		args = args ?? new PyDict();
+		Instance inst = null;
+		try
+		{
+			inst = new Instance(string.IsNullOrEmpty(instance) ? null : instance);
+		}
+		catch (Exception)
+		{
+			inst = null;
+		}
+		return AffectedPaths(inst, name, args);
+	}
+
+	/// <summary>
+	/// 核心实现:实例已经解析好时用它(预览与检查点各拿一次路径会漂,两处都走这一份)。
+	/// <paramref name="instance"/> 为 null = 解析不出实例,返回空清单。
+	/// </summary>
+	internal static List<string> AffectedPaths(Instance instance, string name, PyDict args)
+	{
+		args = args ?? new PyDict();
+		// 与实例无关的两类先处理:
+		//   · 布局写的是**全局**的 ui_layout_v2.json / ui_page_layouts.json(Linux 的
+		//     AcctLayoutMpTools.AffectedPaths 同样排在实例解析之前,免得实例解析失败就丢掉快照);
+		//   · Windows 的 tune_jvm 写的是全局 config.json(ExtraTools.TuneJvm → backend.save_settings)。
+		if (name == LayoutTools.ApplyName)
+		{
+			try
+			{
+				return new List<string> { LayoutStoreV2.FilePath, LayoutStoreV2.V1FilePath };
+			}
+			catch (Exception)
+			{
+				return new List<string>();
+			}
+		}
+		if (name == "tune_jvm")
+		{
+			try
+			{
+				// 只给建议(apply=false)不落盘 → 不做检查点,与执行口径一致
+				if (!Py.Truthy(args.Get("apply")))
+				{
+					return new List<string>();
+				}
+				return new List<string> { Config.CONFIG_FILE };
+			}
+			catch (Exception)
+			{
+				return new List<string>();
+			}
+		}
+		if (instance == null || string.IsNullOrEmpty(instance.path))
 		{
 			return new List<string>();
 		}
+		string text = instance.path;
 		string text2 = PPath.Join(text, "mods");
 		switch (name)
 		{
@@ -433,7 +565,24 @@ public static class Tools
 			return list6;
 		}
 		case "delete_instance":
-			return new List<string> { text };
+		{
+			// 任务书 D3 没写、但同属「路径正确」的一条:删除实例的目标是参数里的 **name**,
+			// 不是 instance —— 以前这里返回的是默认实例目录,快照拍到了别的实例上:
+			// 真被删掉的那个实例没进检查点,而「撤回」仍显示已还原(实测再现)。
+			string asked = Py.S(args.Get("name"));
+			if (asked.Length == 0)
+			{
+				return new List<string>();
+			}
+			try
+			{
+				return new List<string> { new Instance(asked).path };
+			}
+			catch (Exception)
+			{
+				return new List<string>();
+			}
+		}
 		case "create_instance":
 			try
 			{
@@ -493,7 +642,60 @@ public static class Tools
 			{
 				return new List<string>();
 			}
+		// AI5-D3:回滚存档改的是 saves 下某一个存档目录(旧版本这里落到 default,拿不到快照)
+		case "restore_save_backup":
+			return _restore_targets(instance, args);
 		default:
+			return new List<string>();
+		}
+	}
+
+	/// <summary>
+	/// 回滚存档会写到的那**一个**目录(照 Saves.RestoreBackup 的目标推导,只读、不落盘):
+	///   · overwrite=true → 同名的存档目录本身(检查点能整体还原);
+	///   · overwrite=false → 执行时真正会新建的那个名字(同名时按 Saves.RestoreBackup 的规则
+	///     依次试 world-还原 / world-还原2 …,这里算的就是那一个,不存在的目录在检查点里记为「回退时删掉」);
+	///   · 回滚前自动打的那份安全备份 zip **不进**清单:它就是留给用户的后路,对话回退不该把它删掉
+	///     (与 Linux 的 SaveBackups.PlanRestore 同口径)。
+	/// 解析不出来(没有存档名 / 版本 ID 非法)返回空清单:那种调用执行时也会报错。
+	/// </summary>
+	/// <summary>
+	/// 存档所在目录(与 Saves._game_dir 同一口径):写了 version 就是版本隔离目录,否则实例根。
+	/// 注意别拿空版本号直接调 VersionSettings.GameDir —— 它会先校验版本 ID,空串直接抛。
+	/// </summary>
+	private static string _game_dir(Instance instance, string version)
+	{
+		return (version.Length > 0) ? VersionSettings.GameDir(instance, version) : instance.path;
+	}
+
+	private static List<string> _restore_targets(Instance instance, PyDict args)
+	{		try
+		{
+			string backup = Py.S(args.Get("backup_name"));
+			if (backup.Length == 0)
+			{
+				return new List<string>();
+			}
+			string savesDir = PPath.Join(_game_dir(instance, VerArg(args)), "saves");
+			string world = Saves.StripStamp(new PPath(backup).Stem);
+			if (world.Length == 0 || world == "." || world == ".." || world.Contains("..") || world.Contains("/") || world.Contains("\\"))
+			{
+				return new List<string>();
+			}
+			string target = PPath.Join(savesDir, world);
+			if (Py.Truthy(args.Get("overwrite")))
+			{
+				return new List<string> { target };
+			}
+			// 与 Saves.RestoreBackup 的 name / name-还原 / name-还原2 … 逐级避让同一段逻辑
+			for (int n = 1; LocalFs.Exists(target); n++)
+			{
+				target = PPath.Join(savesDir, world + "-还原" + ((n > 1) ? n.ToString() : ""));
+			}
+			return new List<string> { target };
+		}
+		catch (Exception)
+		{
 			return new List<string>();
 		}
 	}

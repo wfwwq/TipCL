@@ -199,6 +199,26 @@ public static class LayoutTools
 		return "已更新布局:" + string.Join(";", changes) + "。改动前的布局已备份为方案「" + backup + "」(可在设置 → 布局里切回)。";
 	}
 
+	/// <summary>
+	/// 确认卡预览用的「先算不改」(AI5-D4):在副本上跑一遍 ApplyOps,给出改动说明 + 改前改后的整份布局文档。
+	/// 不落盘、不碰 profiles、不改进程内缓存 —— Apply 里的 Save / RefreshV1Cache 都不走。
+	/// 返回字典:error(非空 = 这次改动用不了,直接照它显示)、changes(逐条中文说明)、before / after(整份 v2 JSON)。
+	/// (Linux 侧是 LayoutTools.Plan + Summary,同一路数)
+	/// </summary>
+	public static PyDict PreviewPlan(PyDict args)
+	{
+		PyDict input = args ?? new PyDict();
+		LayoutV2 current = LayoutStoreV2.Load();
+		LayoutV2 next = current.Clone();
+		List<string> changes = new List<string>();
+		string? error = ApplyOps(next, input, changes);
+		return PyDict.Of(
+			"error", error ?? "",
+			"changes", changes.Cast<object>().ToList(),
+			"before", LayoutStoreV2.ExportJson(current),
+			"after", LayoutStoreV2.ExportJson(next));
+	}
+
 	// ————— 具体改动(每项都往 changes 里记一句中文说明) —————
 
 	private static string? ApplyOps(LayoutV2 next, PyDict args, List<string> changes)
