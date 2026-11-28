@@ -2339,6 +2339,16 @@ public sealed partial class AiPage : PageBase
 
 	private void OnStatus(BridgeEvent ev)
 	{
+		// AI5-S:子代理的进度只显示一行「子任务进行中:<工具名>」,不把子任务内部的步骤铺进父回合的步骤流。
+		// 事件本身带 subagent 字段(= 那次派发的会话 id,由 Agent.RunSubagent 的 childStatus 加上)。
+		if (PayloadStr(ev, "subagent").Length > 0)
+		{
+			if (!string.IsNullOrWhiteSpace(ev.Name))
+			{
+				_status.Text = I18n.L("子任务进行中:{0}", ev.Name);
+			}
+			return;
+		}
 		string name = (string.IsNullOrEmpty(ev.Name) ? ev.Kind : ev.Name);
 		string text = (string.IsNullOrWhiteSpace(ev.Label) ? ev.Name : ev.Label);
 		switch (ev.Kind)

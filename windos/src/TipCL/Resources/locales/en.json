@@ -2163,6 +2163,7 @@
  "备用模型（可选）": "Fallback model (optional)",
  "主模型连续 429/5xx 时本回合自动切到它；留空不启用": "When the main model keeps returning 429/5xx, the turn switches to it; leave empty to disable",
  "已切换备用模型": "Switched to fallback model",
+  "子任务进行中:{0}": "Subtask running: {0}",
  "主模型连续失败，本回合改用 {model} 完成": "The main model kept failing; this turn continues on {model}",
  "留空不启用": "Leave empty to disable",
  "计划": "Plan",
