@@ -7,13 +7,13 @@ public static class AppInfo
 
 	public const string APP_DISPLAY_NAME = "TipCL 启动器";
 
-	public const string APP_VERSION = "1.2.0";
+	public const string APP_VERSION = "1.3.0";
 
 	public const string APP_ID = "tipcl";
 
 	public const string LAUNCHER_NAME = "TipCL";
 
-	public const string LAUNCHER_VERSION = "1.2.0";
+	public const string LAUNCHER_VERSION = "1.3.0";
 
-	public const string __version__ = "1.2.0";
+	public const string __version__ = "1.3.0";
 }

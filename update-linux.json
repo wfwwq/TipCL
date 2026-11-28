@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "notes": "Linux / Avalonia 移植 1.2.0:自包含 AppImage(免安装,可就地自更新)与 .deb(安装形态只下载、需手动安装)。sha256 是本次发布的 TipCL-linux-x64.AppImage 真值。",
-  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL-linux-x64.AppImage",
-  "sha256": "a98e7d35930315258fb5980b042a56957c06a24a41576c9225d976132cd2f178"
+  "version": "1.3.0",
+  "notes": "布局 v3:编辑条上移、区块改虚线框+悬停标签、新增「添加」抽屉、只留列表/网格;设置→布局分成外观/导航/页面/方案/高级五组,JSON 改在独立窗口,旧布局照读。Linux 补齐账号/存档/整合包/模组开发等 AI 工具与 MCP Server;微软账号重启后不用重登(优先密钥环,否则 600 权限文件);MCP 只收 JSON、拒绝异常 Origin/Host,Windows 外部写操作也弹确认;Linux 包附 .sha256。",
+  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.3.0/TipCL-linux-x64.AppImage",
+  "sha256": "REPLACE-WITH-THE-REAL-SHA256"
 }

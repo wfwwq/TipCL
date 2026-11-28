@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "notes": "布局 v2:页面可自排(网格/自由摆放)、AI 排版、自建区块与布局方案导入导出(仅 Windows);体积回收 −14.2%;Linux 提供自包含 AppImage 与 .deb。修订(2026-11-19):录屏 7 条问题修复、布局引擎审计修复、自建区块管理面板启用(见发版说明「修订」段)",
-  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.2.0/TipCL.exe",
-  "sha256": "a7dba497ed1729cbc63aad5c0a784f2707b42426910dda6741eab8e42b1c5ac6"
+  "version": "1.3.0",
+  "notes": "布局 v3:编辑条上移、区块改虚线框+悬停标签、新增「添加」抽屉、只留列表/网格;设置→布局分成外观/导航/页面/方案/高级五组,JSON 改在独立窗口,旧布局照读。Linux 补齐账号/存档/整合包/模组开发等 AI 工具与 MCP Server;微软账号重启后不用重登(优先密钥环,否则 600 权限文件);MCP 只收 JSON、拒绝异常 Origin/Host,Windows 外部写操作也弹确认;Linux 包附 .sha256。",
+  "url": "https://github.com/wfwwq/TipCL/releases/download/v1.3.0/TipCL.exe",
+  "sha256": "REPLACE-WITH-THE-REAL-SHA256"
 }
