@@ -1315,3 +1315,17 @@
   - 不跑实机:用户不在场时不启动 `TipCL.exe`(含 `--shot / --smoke / --i18n-check / --design-sheet`),只允许 `dotnet build` / `dotnet test`;截图与自检列入「待真机」。
   - 并行对接只靠运行时资源键与三处约定(任务书 §6.4),合并后由主 agent 接线;各包的新决定写在自己的报告里,合并时统一编号 D-82 起。
 - 可回滚:是。删除 `_r34\` 下的工作区与 `r34/*` 分支即完全撤销,`main` 不受影响。
+
+
+### D-86 · AI5:内置 agent 缺陷修复与测试安全网的六项裁决(2026-11-28,用户拍板)
+
+- 处境:a1(Linux 为主的缺陷审核)与 a2(Windows 为主的优化任务书)合并为
+  `windos/docs/改造工程:2611/AI-agent-合并任务书.md`,其中六处冲突或待定项需要拍板。
+- 决定:
+  1. 双实现收敛:本轮只做差异调研(docs/ai-agent-parity.md),合并与主循环拆分另立任务书;
+  2. plan 模式计划审批改为**先审批再执行**,驳回后不执行任何写操作(Windows `Agent.cs` 原先是先执行、后审批);
+  3. 未声明 `sideEffect` 的旧插件工具:方案 A,行为不变、仍然放行,结果统一标「内容不可信」;
+  4. 验证在本机做:补 .NET Framework 4.8 Developer Pack、修 testhost 启动;「禁止 git push」不变;
+  5. 分支沿用 `ai5/agent-fixes`,提交信息写成 `<type>(agent): AI5-<包号> <摘要>`;
+  6. 「不询问」(dontAsk)由 ask→deny 改为 ask→allow;删除类仍拒绝,显式 deny 规则仍优先。
+- 影响:第 2、6 条是有意的行为变化,单独成一组提交;完工后在本条补上实测结论。
