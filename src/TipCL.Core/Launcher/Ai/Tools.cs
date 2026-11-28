@@ -288,14 +288,24 @@ public static class Tools
         return names;
     }
 
+    /// <summary>按需选工具时扫描的消息条数(与 Windows 版 Tools._selection_text 的 lastN = 12 对齐)。</summary>
+    private const int SelectionWindow = 12;
+
+    /// <summary>单条消息参与匹配时的截断长度(与 Windows 版 Tools._selection_text 的 limitPer = 4000 对齐)。</summary>
+    private const int SelectionCharsPerMessage = 4000;
+
     /// <summary>
     /// 按对话内容挑选要暴露给模型的工具(照 Windows 版 Tools.SelectToolSchemas):
-    /// 常驻 CORE_TOOLS 一定带;按用户用词命中 KEYWORD_TOOLS;写操作只在「像在下命令」时带。
+    /// 常驻 CORE_TOOLS 一定带;按最近 12 条 user/tool 消息里的用词命中 KEYWORD_TOOLS;
+    /// 写操作不在关键词表里时,只有**本轮**用户话像在下命令才带(纯提问不给写工具,减少误装)。
     /// </summary>
     public static List<object> SelectToolSchemas(List<object> messages, string? userText = null, bool forceAll = false)
     {
         var allowed = new HashSet<string>(AiData.CORE_TOOLS);
-        string text = userText ?? LastUserText(messages);
+        // AI5-C1:关键词命中扫的是最近 12 条 user / tool 消息(带上一轮的意图),
+        // 但「这一轮是不是在下命令」只看本轮用户话 —— 理由与实测见 progress/AI5-C1.md
+        string text = userText ?? SelectionText(messages);
+        string turnText = userText ?? LastUserText(messages);
         foreach ((string[] keys, string[] extra) in AiData.KEYWORD_TOOLS.Concat(AcctLayoutMpTools.Keywords))
         {
             foreach (string key in keys)
@@ -310,8 +320,8 @@ public static class Tools
                 }
             }
         }
-        bool action = System.Text.RegularExpressions.Regex.IsMatch(text, AiData.ACTION_RE);
-        bool question = System.Text.RegularExpressions.Regex.IsMatch(text, AiData.QUESTION_RE);
+        bool action = System.Text.RegularExpressions.Regex.IsMatch(turnText, AiData.ACTION_RE);
+        bool question = System.Text.RegularExpressions.Regex.IsMatch(turnText, AiData.QUESTION_RE);
         // 上一步的工具结果被存成文件了(太长):这时才把 read_artifact 给它,平时不占位
         foreach (object m in messages)
         {
@@ -344,17 +354,51 @@ public static class Tools
         return result;
     }
 
+    /// <summary>
+    /// 「这一轮是不是在下命令」的判定文本:只看最后一条用户消息。
+    /// 命令 / 提问是**本轮**的属性,拿上一轮的话来判断会让「再来一个」这种续话把 33 个写工具全带上
+    /// (实测:单轮 tools 从约 2.6k token 涨到约 9.7k);关键词命中那边才需要扫窗口。
+    /// </summary>
     private static string LastUserText(List<object> messages)
     {
         for (int i = messages.Count - 1; i >= 0; i--)
         {
-            PyDict message = Py.D(messages[i]);
+            if (messages[i] is not PyDict message)
+            {
+                continue;
+            }
             if (Py.S(message.Get("role")) == "user")
             {
                 return Py.S(message.Get("content"));
             }
         }
         return "";
+    }
+
+    /// <summary>
+    /// 选工具时用来匹配关键词的文本:聚合**最近 12 条** user / tool 消息(照 Windows 版 Tools._selection_text)。
+    /// 只看最后一条用户消息会丢掉上一轮的意图:第一轮说「装个光影包」、第二轮只说「再来一个」时,
+    /// 第二轮会因为最后一句话里没有关键词而漏发 install_shader 这类工具(见 AI5-C1 与场景 19)。
+    /// 每条消息截断到 4000 字,免得超长的工具结果把匹配文本(以及后面顺带的匹配开销)撑大;
+    /// 只看 user / tool 两类角色:系统提示和助手正文不是用户意图,不该决定带哪些工具。
+    /// </summary>
+    private static string SelectionText(List<object> messages)
+    {
+        var parts = new List<string>();
+        for (int i = Math.Max(0, messages.Count - SelectionWindow); i < messages.Count; i++)
+        {
+            if (messages[i] is not PyDict message)
+            {
+                continue;
+            }
+            string role = Py.S(message.Get("role"));
+            if (role != "user" && role != "tool")
+            {
+                continue;
+            }
+            parts.Add(Py.Slice(Py.S(message.Get("content")), null, SelectionCharsPerMessage));
+        }
+        return string.Join("\n", parts);
     }
 
     /// <summary>
