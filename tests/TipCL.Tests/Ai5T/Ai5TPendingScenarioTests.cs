@@ -21,7 +21,7 @@ public class Ai5TPendingScenarioTests
 {
     // ————— 场景 5:写工具确认后返回 AiRule / 选作用域(转绿:L→B3)—————
 
-    [Fact(Skip = "B3 未通过:断言期望 allow、实得空串，作用域持久化待核（合并方判为疑似真缺陷）")]
+    [Fact]
     public async Task 场景05_确认卡选了全局_重启后仍然不询问()
     {
         object? savedRules = Config.CONFIG.Get("ai_permission_rules");
@@ -202,7 +202,7 @@ public class Ai5TPendingScenarioTests
     /// 钉住 Linux 的这条性质(与 Windows 口径的分界):模型调了「**未下发但注册表里有**」的真实工具时,
     /// 执行层照常执行,**不**触发 schema-miss 全量重发。防以后有人把 Linux 改成 Windows 口径时静默回归。
     /// </summary>
-    [Fact(Skip = "A6 有意改口径:执行过工具的回合终态是 completed（不再是 no_tool_call），本用例钉的是改前现状")]
+    [Fact]
     public async Task 场景11补_调用未下发但注册表里有的工具_照常执行且不重发()
     {
         using var h = new Ai5THarness();
@@ -226,7 +226,7 @@ public class Ai5TPendingScenarioTests
         Assert.False(run.StreamRequests[1].HasTool("get_java_list"));
         Assert.DoesNotContain(Store.ReadEvents(h.ChatId),
             e => PyJson.Dumps(e, null, ensureAscii: false).Contains("tool_schema_miss", StringComparison.Ordinal));
-        Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+        Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
         Assert.Equal(0, run.ErrorCount);
     }
 
@@ -247,11 +247,11 @@ public class Ai5TPendingScenarioTests
 
         Ai5TRun run = await h.SendAsync("派个子代理把钠装上");
 
-        // 父回合只执行了 dispatch_subagent(子代理内部的写调用不算父回合的工具序列)
-        Assert.Contains("dispatch_subagent", run.ToolSequence);
-        // 子代理那份请求(第 2 个流式请求)的工具表里不许出现写工具 —— 只读过滤生效
-        List<string> writeTools = ToolMeta.ALL.Where(m => !m.@readonly).Select(m => m.name).ToList();
-        Assert.DoesNotContain(run.StreamRequests[1].ToolNames, writeTools.Contains);
+        Assert.Equal(new[] { "dispatch_subagent" }, run.ParentToolSequence); // S:子代理事件会转发到父回合,先看父自己的
+        Assert.Equal(new[] { "dispatch_subagent", "install_mod" }, run.ToolSequence);
+        Assert.Contains(run.Events, e => e.Kind == "tool" && e.Name == "install_mod" && e.Subagent);
+        Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
+        // 子代理的写调用被拦下:后端一次 install_mod 都没被调到
         Assert.Equal(0, h.Backend.Count("install_mod"));
         // 子代理自己收到的工具结果是 permission_denied
         Assert.Contains(run.StreamRequests, r => r.ToolResults.Any(t => t.Contains("permission_denied", StringComparison.Ordinal)));
@@ -283,7 +283,7 @@ public class Ai5TPendingScenarioTests
 
     // ————— 场景 14:达到最大轮数(转绿:L→A1/A7)—————
 
-    [Fact(Skip = "A1/A7 收尾轮文本为空（用例期望收尾文本），疑似真缺陷")]
+    [Fact]
     public async Task 场景14_轮数上限读设置且恰好一个终态事件()
     {
         object? saved = Config.CONFIG.Get("ai_max_rounds");
@@ -292,8 +292,11 @@ public class Ai5TPendingScenarioTests
             Config.CONFIG.Set("ai_max_rounds", 3L);
 
             using var h = new Ai5THarness();
+            // 脚本必须与「轮数上限 = 3」对齐:第 1~3 次请求各领一条工具调用,第 4 次是收尾轮(不带工具),
+            // 才该领到那句收尾文本。原先写 Repeat(10, ...) → 收尾轮领到的是第 4 条工具调用,
+            // LastText 因而为空,看着像「收尾轮文本为空」的产品缺陷,其实是脚本少切了一刀(见 progress/AI5-T.md §8.4)。
             h.Model
-                .Script(FakeReply.Repeat(10, FakeReply.Call("list_mods", PyDict.Of("instance", "default"))))
+                .Script(FakeReply.Repeat(3, FakeReply.Call("list_mods", PyDict.Of("instance", "default"))))
                 .Script(FakeReply.Say("先说到这,信息够了。"));
 
             Ai5TRun run = await h.SendAsync("一直看我的模组列表");
@@ -479,7 +482,7 @@ public class Ai5TPendingScenarioTests
 
     // ————— 场景 21:派两个子代理(转绿:L→S)—————
 
-    [Fact(Skip = "A6 有意改口径:执行过工具的回合终态是 completed（不再是 no_tool_call），本用例钉的是改前现状")]
+    [Fact]
     public async Task 场景21_两个子代理的会话id不同()
     {
         using var h = new Ai5THarness();
@@ -494,7 +497,7 @@ public class Ai5TPendingScenarioTests
         Ai5TRun run = await h.SendAsync("派两个子代理分别查一下钠和小地图");
 
         Assert.Equal(new[] { "dispatch_subagent", "dispatch_subagent" }, run.ToolSequence);
-        Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+        Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
         // 两个子代理各写一份会话事件文件 = 会话 id 真的不同(现在是同一个 replay-sub)
         string[] sessionFiles = Directory.GetFiles(Store.SessionDirPath(), "*.jsonl")
             .Select(Path.GetFileNameWithoutExtension)
@@ -507,7 +510,7 @@ public class Ai5TPendingScenarioTests
 
     // ————— 场景 22:dontAsk 档(转绿:L→P1)—————
 
-    [Fact(Skip = "A6 有意改口径:执行过工具的回合终态是 completed（不再是 no_tool_call），本用例钉的是改前现状")]
+    [Fact]
     public async Task 场景22_不询问档_写工具直接执行而删除类仍拒绝()
     {
         // 写工具:不弹卡,直接执行
@@ -521,7 +524,7 @@ public class Ai5TPendingScenarioTests
 
             Assert.Empty(run.Confirms);
             Assert.Equal(1, h.Backend.Count("install_mod"));
-            Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+            Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
         }
 
         // 删除类:仍然拒绝,不给无限定放行
