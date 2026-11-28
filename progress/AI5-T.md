@@ -262,11 +262,11 @@ Linux 侧改动后的 Release 产物:`src/TipCL.App/bin/Release/net8.0/TipCL.App
 
 | 项 | 数字 |
 |---|---|
-| 回放套件 `FullyQualifiedName~TipCL.Tests.Ai5T` | **25 过 / 4 跳 / 0 败 / 总 29** |
-| 剩下 4 条跳(都不是本包该改的) | `08`(A6 续写用 `\n\n` 拼接,口径待裁决)、`09`(A5 保留流式残段再拼兜底文本,口径待裁决)、`14`(见 8.4)、`15`(A8 未切 `ai_fallback_model`,疑似真缺陷) |
+| 回放套件 `FullyQualifiedName~TipCL.Tests.Ai5T` | **26 过 / 3 跳 / 0 败 / 总 29** |
+| 剩下 3 条跳 —— 都不是本包该改的 | `08` 续写用 `\n\n` 拼接、`09` 保留流式残段再拼兜底文本,两条都属于 A5/A6 的实现口径,lead 已派 linux-loop;`15` A8 未切 `ai_fallback_model`,疑似真缺陷 |
 | 全量(排除 Terracotta/ClickSweep/OpenUrl) | `1711 过 / 15 跳 / 1 败 / 总 1727` —— 那 1 败是 `Repo.I18nBaselineTests`,见 8.5 |
 
-### 8.4 场景 14 的红灯**不是 A1 的缺陷,是我脚本少切了一刀**(已上报,等 lead 放行再改)
+### 8.4 场景 14 的红灯**不是 A1 的缺陷,是我脚本少切了一刀** —— 已改并转绿
 
 `qa` 报的是「A1/A7 收尾轮文本为空,疑似真缺陷」。我把 `场景14` 的复现过程完整 dump 了一遍,证据是:
 
@@ -280,7 +280,7 @@ StopReason=max_rounds  ToolSeq=list_mods,list_mods,list_mods  TerminalCount=1  E
 「调 list_mods」**而不是那句收尾文本,所以 `LastText` 是空的。断言(请求数 4 / 恰好 1 条终态事件 /
 `stop_reason=max_rounds`)全部成立,**A1/A7 的行为是对的**。
 
-一行修法(等放行):`Repeat(10, ...)` → `Repeat(3, ...)`,让第 4 项就是收尾文本。
+修法已落地:`Repeat(10, ...)` → `Repeat(3, ...)`,让第 4 项就是收尾文本;`Skip` 已去掉,复跑 **绿**(`stop_reason=max_rounds`、4 次请求、收尾轮 0 个工具、`LastText` = 那句收尾文本、恰好 1 条终态事件)。
 
 ### 8.5 全量里那 1 条失败与本包无关:合入后的 i18n 基线已回退 18 条
 

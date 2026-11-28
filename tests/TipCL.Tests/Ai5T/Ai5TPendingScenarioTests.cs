@@ -283,7 +283,7 @@ public class Ai5TPendingScenarioTests
 
     // ————— 场景 14:达到最大轮数(转绿:L→A1/A7)—————
 
-    [Fact(Skip = "A1/A7 收尾轮文本为空（用例期望收尾文本），疑似真缺陷")]
+    [Fact]
     public async Task 场景14_轮数上限读设置且恰好一个终态事件()
     {
         object? saved = Config.CONFIG.Get("ai_max_rounds");
@@ -292,8 +292,11 @@ public class Ai5TPendingScenarioTests
             Config.CONFIG.Set("ai_max_rounds", 3L);
 
             using var h = new Ai5THarness();
+            // 脚本必须与「轮数上限 = 3」对齐:第 1~3 次请求各领一条工具调用,第 4 次是收尾轮(不带工具),
+            // 才该领到那句收尾文本。原先写 Repeat(10, ...) → 收尾轮领到的是第 4 条工具调用,
+            // LastText 因而为空,看着像「收尾轮文本为空」的产品缺陷,其实是脚本少切了一刀(见 progress/AI5-T.md §8.4)。
             h.Model
-                .Script(FakeReply.Repeat(10, FakeReply.Call("list_mods", PyDict.Of("instance", "default"))))
+                .Script(FakeReply.Repeat(3, FakeReply.Call("list_mods", PyDict.Of("instance", "default"))))
                 .Script(FakeReply.Say("先说到这,信息够了。"));
 
             Ai5TRun run = await h.SendAsync("一直看我的模组列表");
