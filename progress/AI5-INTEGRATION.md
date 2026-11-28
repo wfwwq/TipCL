@@ -1,6 +1,6 @@
-# AI5 合并与验收进度(第 1 版 · 侦察)
+# AI5 合并与验收进度(第 2 版 · 侦察 + 环境更正 + 体积口径核实)
 
-- 记录时间:2026-11-28T14:25+08:00
+- 记录时间:2026-11-28T14:30+08:00
 - 执行者:AI5 合并与验收子代理(qa)
 - 工作区:`C:\tipcl-fix`,分支 `ai5/agent-fixes` @ `b4cd7a2`(与 `main` 同点)
 - 任务书:`C:\tipcl-ai5\_shared\AI-agent-合并任务书.md`(567 行,未被 git 跟踪,合并时不得纳入提交)
@@ -74,17 +74,94 @@ dotnet test tests/TipCL.Tests/TipCL.Tests.csproj -c Release --nologo -m:1 -p:Use
 
 ---
 
-## 3. 环境与基线实测(仅取得的部分)
+## 3. 环境与基线实测(第 2 版已更正)
 
 | 项 | 实测 | 与任务书基线对比 |
 |---|---|---|
 | Linux Release 构建 | **0 error / 1 warning**(`src/TipCL.App/Pages/Layout/LayoutEditor.cs:196` CS0649) | 与 §6 基线「0 error / 1 warning」一致 |
 | Linux `--ai-selftest` | **通过 110 / 失败 0 / 跳过 0** | 与 §6 基线「Linux 110 项」一致 |
 | Linux `dotnet test` | 用修正后的 `DOTNET_ROOT` 可跑(小切片 31/31 过);全量数字待取 | 基线口径 1491 过 / 7 跳 / 0 败,待全量复核 |
-| net48 参照程序集 | `C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8` **仍不存在** | Windows 树本机编译**仍不可用**,相关验证继续标「待环境」 |
-| Windows 树全部验证项 | 未取(环境缺失) | 待环境 |
+| Windows Release 构建 | **0 error / 2 warning**(`windos/tests/TipCL.Tests/BridgeMutationAndLaunchGuardTests.cs:34-35` xUnit1031),18.71 s | 与 lead 给的基线一致 |
+| Windows `dotnet test` | **失败 0 / 通过 796 / 跳过 6 / 总计 802**,4 s | 与 lead 给的基线一致(独立复现) |
+| net48 参照程序集(Developer Pack) | 机器上没有 `v4.8` 目录,**但不需要**(见 §3.1) | — |
+| Windows compact exe | **5,759,488 B**,超 D-19 红线 **2,224 B**(见 §3.2) | 任务书 §6 红线 5,757,264 B |
 
-以上构建/自检数字取自 `ai5-0-env` 的 `.ai5-logs/`(14:17-14:18),作为参考;正式基线以 AI5-0 的 `progress/AI5-0-baseline.md` 为准。
+Linux 的构建/自检数字取自 `ai5-0-env` 的 `.ai5-logs/`(14:17-14:18),作为参考;正式基线以 AI5-0 的 `progress/AI5-0-baseline.md` 为准。Windows 数字为本 worktree 独立实测(命令见 §3.1、§3.2)。
+
+### 3.1 环境更正:Windows 树**可以**本机编译,「待环境」的结论作废
+
+第 1 版把 Windows 树标成「本机编译不可用」,是错的。参照程序集**由 NuGet 包提供**,不需要机器级的 net48 Developer Pack:
+
+- `windos/src/TipCL/TipCL.csproj:53` → `<PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />`,已在本地 NuGet 缓存。
+- 实测(pwsh,进程级 `DOTNET_ROOT` 覆盖):
+
+```powershell
+$env:DOTNET_ROOT='C:\Program Files\dotnet'
+dotnet build windos\TipCL.sln -c Release -m:1 -p:UseSharedCompilation=false -p:DebugType=none -p:DebugSymbols=false
+# → 已成功生成;2 个警告(xUnit1031);0 个错误;18.71 s
+# → 产出 C:\tipcl-fix\windos\src\TipCL\bin\Release\net48\TipCL.exe
+
+dotnet test windos\tests\TipCL.Tests -c Release --no-build --filter "FullyQualifiedName!~Terracotta&FullyQualifiedName!~ClickSweep&FullyQualifiedName!~OpenUrl"
+# → 已通过! 失败: 0,通过: 796,已跳过: 6,总计: 802,持续时间: 4 s
+```
+
+**结论:合并验收必须包含 Windows 树**(构建 + 测试),不再标「待环境」。`--smoke`、`tools/verify-smoke.ps1`、ClickSweep/VisualTour、任何 WPF 界面启动仍然禁止(会抢前台)。
+
+### 3.2 体积口径核实:红线口径一致,基线**本身就超线 2,224 B**
+
+核实对象:win-perm 报出的 compact `5,759,488 B`,与任务书 §1/§6 的「红线 5,757,264 B、最近一次合规余量 224,080 B」看似矛盾。**本节只列事实,不判合格/不合格。**
+
+**(1) 两个数字口径是同一个产物,可以直接比**
+
+- 红线出处:D-19(`docs/DECISIONS.md:886-889`,2026-11-07 用户拍板)= **5,757,264 B**,适用对象是 **compact 版 `TipCL.exe`**。
+- 门禁脚本 `windos/tools/build-both.ps1` 量的就是同一个文件:`:85` `$exe = src\TipCL\bin\Release\net48\TipCL.exe`,`:92` `if ($bytes -gt 5757264) { exit 1 }`。
+- 参数也一致:`:61-63` 的标准参数为 `-c Release -p:UseSharedCompilation=false -p:DebugType=none -p:DebugSymbols=false -m:1`,premium 才额外加 `-p:Premium=true`。
+- 所以「5,759,488 vs 5,757,264」是同口径对比,不是口径打架。
+
+**(2) 「余量 224,080 B」是 12 天前的旧记录,不属于当前 HEAD**
+
+- 该记录出自 **D-38**(`docs/DECISIONS.md:1069-1083`,2026-11-14,task-11,当时基线 HEAD `9a3cc52`/`b19012c`):compact **5,533,184 B**,余量 224,080 B。
+- 5,533,184 + 224,080 = 5,757,264 ✓,与红线自洽。
+- 任务书 §1 把它写成「最近一次记录」,而 `main` 此后已从 `b19012c` 走到 `b4cd7a2`(v1.3.0、M5、i18n 词表、R32-R36、AI4 令牌等)。当前实测 5,759,488 比 D-38 记录涨 **226,304 B**。
+
+**(3) 超线的 2,224 B 是基线既有的,与任何 AI5 包无关**
+
+用仓库自己的权威脚本(它内部先 `dotnet build-server shutdown`、再删 `src\TipCL\{bin,obj}` 全量重建,脚本 `:9-10` 明确写「验收以全量构建为准」)在本 worktree 实测:
+
+```
+$env:DOTNET_ROOT='C:\Program Files\dotnet'
+& windos\tools\build-both.ps1 -Compact
+# → compact 构建: 0 错误
+# → compact exe: 5759488 B
+# → 报错: compact 超红线: 5759488 B > 限制 5757264 B,超出 2224 B    (exit 1)
+```
+
+而我的 worktree 相对基线只多了一个文档文件(`git diff --stat b4cd7a2 HEAD` → 仅 `progress/AI5-INTEGRATION.md`),源码与 `b4cd7a2` 逐字节相同 → **该数字就是基线的数字**。win-perm 的 5,759,488 与本机复现值逐字节相同,因此也**不能归因于 win-perm 的改动**。
+
+**(4) 排除两个「构建侧」解释**
+
+- **不是打包漂移**:`windos/tools/pack-core-resources.ps1 -Check` 全部 `ok`(15 个源文件 → .gz 完全同步,源 596,064 B / 压缩后 172,031 B)。
+- **不是双重嵌入**(D-38 偏离提示 1 那个 +158 KB 的坑):该坑源自定义阶段 plugin-host 的**通配** `<EmbeddedResource Include="Resources\plugin-host\**\*" />`;现在的 `TipCL.csproj:97-105` 只列 `.gz`(`*.mjs.gz` / `*.js.gz` / 显式 `tipcl-plugin.d.ts.gz`),原文不会被一起嵌进去。
+
+**(5) 增长来自哪里(线索,未定性)**
+
+D-38 之后被改动的较大资源/代码文件(`git log -1` 实测):
+
+| 文件 | 字节 | 最后改动 |
+|---|---|---|
+| `PremiumAssets\hero.jpg` | 234,735 | `745dba3` 2026-11-21 |
+| `Resources\locales\en.json` | 222,623 | `3009724` 2026-11-28 |
+| `Resources\locales\zh_CN.json` | 214,744 | `3009724` 2026-11-28 |
+| `Services\LucideAssets.cs` | 143,325 | `2f7683e` 2026-11-14 |
+| `TipCL.ico` | 94,953 | `2f7683e` 2026-11-14 |
+
+注意 locales 两文件压缩后合计仅 128,820 B,**单靠 i18n 解释不了 226 KB**,增长是多项叠加,需要专门复核(见 §6 待办 1)。本次不做进一步定性,也不对任何包下体积结论。
+
+**(6) 为什么能长期没人发现**
+
+`ci-windows.yml` 里**没有任何体积门禁步骤**(grep `5757264|build-both|CompactLimit|size` 零命中)。体积门禁只活在 `windos/tools/build-both.ps1` 这个**发布前手动脚本**里 → CI 不会因基线超线变红。
+
+**对任务书 DoD 的影响(提请裁决)**:§10 要求「compact 体积检查通过」、§4 红线 3 要求「每个包收尾都要检查」。按现口径,**基线就超线 2,224 B**,任何包都无法在不回收体积的前提下满足该条。需要 lead / 用户裁决:**是先按 B2/D-28 先例把当前基线如实记录并单独立一个体积回收包,还是要求本轮把 2,224 B 收回来**。在裁决前,体积一项对本轮所有包一律记「基线超线 2,224 B(既有)」,不判合格、不判不合格。
 
 ---
 
@@ -123,16 +200,25 @@ dotnet test tests/TipCL.Tests/TipCL.Tests.csproj -c Release --nologo -m:1 -p:Use
 | # | 风险 / 待办 | 影响 | 处置 |
 |---|---|---|---|
 | 1 | 14 个分支 0 提交,施工仍在早期 | 合并验收无法开始 | 等后续指令;本版只记录侦察 |
-| 2 | net48 参照程序集缺失 | Windows 树 8 个包的构建/测试/C2 体积**全部无法本机验证** | 相关项一律标「待环境」,不硬试;需用户决定是否装 Developer Pack |
+| 2 | ~~net48 参照程序集缺失~~ **已作废**(见 §3.1) | Windows 树可本机验证 | 用 `$env:DOTNET_ROOT='C:\Program Files\dotnet'` + 标准参数;`--smoke` 等仍禁止 |
 | 3 | testhost 环境变量 | 已定位并验证修法(见 §2) | 建议 AI5-0 采纳;合并验收沿用进程级覆盖 |
 | 4 | 红线:禁 push、禁改版本号、禁弹窗 | 冒烟/ClickSweep/VisualTour/`--smoke`/`verify-smoke.ps1` 一律不跑 | 测试统一带 `FullyQualifiedName!~Terracotta&FullyQualifiedName!~ClickSweep&FullyQualifiedName!~OpenUrl` |
 | 5 | 并发写冲突 | 热点文件属主重叠 | 各分支独立 worktree,合并时逐个 review diff |
+| 6 | **compact 基线已超 D-19 红线 2,224 B**(既有,非 AI5 造成) | DoD §10「体积检查通过」在基线上就不成立;`build-both.ps1 -Compact` exit 1 | 只如实记录,不判合格/不合格;等裁决(见 §6 待办 1) |
+
+### 待办
+
+1. **体积**:需要定性「D-38 之后 +226,304 B 来自哪里」。建议做法:在 `b19012c`(D-38 记录点)与 `b4cd7a2` 各做一次全量 compact 构建,逐条 diff 内嵌资源清单与体积,再决定是「重新裁决红线 / 记录豁免」还是「立体积回收包」。**在定性前不要把任何包判成体积不合格**。可与 AI5-0 一起做。
+2. **Windows 变体构建**:`-p:Premium=true`(premium 只记录不限值)本轮尚未实测,合并验收时补。
+3. **Linux 全量测试数**:待取(需先在各会话设对 `DOTNET_ROOT`)。
 
 ---
 
-## 6. 待裁决(本版为空)
+## 6. 待裁决
 
-无。本版未做任何合并,未遇冲突。
+1. **体积项口径**(见 §3.2(6)):基线(b4cd7a2)compact = 5,759,488 B,已超 D-19 红线 5,757,264 B 共 2,224 B,且 `windos/tools/build-both.ps1 -Compact` 在基线上直接 `exit 1`;而 CI 不跑体积门禁,所以长期未暴露。请 lead / 用户裁决:本轮是(a)沿用 D-11/D-28 先例,把基线超线如实记录、另立体积回收包;还是(b)要求 AI5 各包自证不新增体积增长,由某个包顺带回收这 2,224 B。裁决前体积一项按「基线超线 2,224 B(既有)」记录。
+
+除此之外无待裁决项(本版未做任何合并,未遇冲突)。
 
 ---
 
@@ -141,3 +227,4 @@ dotnet test tests/TipCL.Tests/TipCL.Tests.csproj -c Release --nologo -m:1 -p:Use
 | 版本 | 时间 | 内容 |
 |---|---|---|
 | 第 1 版 | 2026-11-28T14:25+08:00 | 侦察:14/14 分支 0 提交,施工中;testhost 根因定位并验证;net48 仍缺失 |
+| 第 2 版 | 2026-11-28T14:30+08:00 | **更正**:Windows 树可本机编译/测试(参照程序集来自 NuGet,实测 0 错 2 警;测试 796/6/802),「待环境」作废;**新增 §3.2 体积口径核实**:红线口径一致,基线 5,759,488 B 超线 2,224 B,D-38 的「余量 224,080 B」是 12 天前旧记录;新增 §6 待裁决 1(体积) |
