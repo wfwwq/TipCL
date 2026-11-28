@@ -13,10 +13,10 @@ namespace TipCL.Core.Launcher.Ai;
 /// </summary>
 public static class ExtraTools
 {
-	public static readonly string[] Names = new string[19]
+	public static readonly string[] Names = new string[18]
 	{
 		"get_system_info", "diagnose_lag", "tune_jvm", "list_saves", "backup_save", "list_save_backups", "restore_save_backup", "multiplayer", "list_accounts", "add_offline_account",
-		"switch_account", "set_skin", "open_folder", "phone_sync", "fs_list", "fs_read", "fs_write", "layout_get", "layout_apply"
+		"switch_account", "set_skin", "open_folder", "fs_list", "fs_read", "fs_write", "layout_get", "layout_apply"
 	};
 
 	public static readonly Dictionary<string, string> Labels = new Dictionary<string, string>
@@ -34,7 +34,6 @@ public static class ExtraTools
 		{ "switch_account", "切换账号" },
 		{ "set_skin", "设置皮肤" },
 		{ "open_folder", "打开文件夹" },
-		{ "phone_sync", "手机同步" },
 		{ "fs_list", "列文件" },
 		{ "fs_read", "读文件" },
 		{ "fs_write", "写文件" },
@@ -42,7 +41,7 @@ public static class ExtraTools
 		{ "layout_apply", "调整界面布局" }
 	};
 
-	public static readonly ToolMetaInfo[] Meta = new ToolMetaInfo[19]
+	public static readonly ToolMetaInfo[] Meta = new ToolMetaInfo[18]
 	{
 		new ToolMetaInfo("get_system_info", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("diagnose_lag", ro: true, "read", "low", lr: false),
@@ -57,7 +56,6 @@ public static class ExtraTools
 		new ToolMetaInfo("switch_account", ro: false, "write_local", "low", lr: false),
 		new ToolMetaInfo("set_skin", ro: false, "write_local", "low", lr: false),
 		new ToolMetaInfo("open_folder", ro: true, "none", "low", lr: false),
-		new ToolMetaInfo("phone_sync", ro: false, "write_local", "low", lr: false),
 		new ToolMetaInfo("fs_list", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("fs_read", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("fs_write", ro: false, "write_local", "high", lr: false),
@@ -73,7 +71,7 @@ public static class ExtraTools
 		(new string[9] { "联机", "开房", "房间", "朋友一起", "一起玩", "局域网", "陶瓦", "lan", "multiplayer" }, new string[1] { "multiplayer" }),
 		(new string[7] { "皮肤", "账号", "账户", "披风", "离线", "skin", "account" }, new string[4] { "list_accounts", "add_offline_account", "switch_account", "set_skin" }),
 		(new string[3] { "文件夹", "目录", "folder" }, new string[1] { "open_folder" }),
-		(new string[8] { "手机", "平板", "同步", "安卓", "配对", "传到", "phone", "sync" }, new string[2] { "phone_sync", "list_saves" }),
+		(new string[8] { "手机", "平板", "同步", "安卓", "配对", "传到", "phone", "sync" }, new string[1] { "list_saves" }),
 		(new string[8] { "latest.log", "日志文件", "读文件", "写文件", "列目录", "文件内容", "这个文件", "debug.log" }, new string[3] { "fs_list", "fs_read", "fs_write" }),
 		(new string[9] { "布局", "排版", "自定义布局", "页面顺序", "区块顺序", "界面太乱", "换布局", "layout", "ui_layout" }, new string[2] { "layout_get", "layout_apply" })
 	};
@@ -98,11 +96,19 @@ public static class ExtraTools
 		"{\"type\": \"function\", \"function\": {\"name\": \"fs_write\", \"description\": \"写文本文件：默认覆盖，append=true 追加到末尾。只能写在启动器数据目录或实例目录（含 versions\\\\版本\\\\）里，内容上限 256 KB，会自动建父目录。适合写配置、说明文件；不要碰启动器自己的核心文件和存档。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}, \"content\": {\"type\": \"string\", \"description\": \"完整文件内容\"}, \"append\": {\"type\": \"boolean\", \"description\": \"true 追加，默认 false 覆盖\"}, \"instance\": {\"type\": \"string\"}}, \"required\": [\"path\", \"content\"]}}}" +
 		"]";
 
+	/// <summary>M5:手机同步的服务端(安卓)还没做,入口先藏起来;做完改回 false。</summary>
+	public const bool PhoneSyncHidden = true;
+	// 注意:M5 藏起来时,phone_sync 必须从 Schemas / Names / Meta / Labels / Keywords 五处一起摘掉 ——
+	// ExtraToolsTests.SchemasMetaLabelsAgree 与 KeywordsOnlyPointAtKnownTools 钉死了这三个集合必须一致。
+	// Run() 里的 case 与 PhoneSync() 实现保留(带 PhoneSyncHidden 闸门),做完把五处加回来即可。
+
 	public static List<object> Schemas()
 	{
 		List<object> list = (List<object>)PyJson.Loads(SchemasJson);
 		// 布局工具单独一个文件(LayoutTools),这里只做合并,避免往上面那大段 JSON 里插字符串
 		list.AddRange(LayoutTools.Schemas());
+		// M5:安卓侧同步服务还没做,别把这个工具挂给模型(SchemasJson / Meta / 面板都还留着)
+		if (PhoneSyncHidden) list.RemoveAll((object s) => Tools.SchemaName(s) == "phone_sync");
 		return list;
 	}
 
@@ -161,6 +167,7 @@ public static class ExtraTools
 			return "已给 " + Py.S(args.Get("name")) + " 换上皮肤（" + model + "）。离线账号进游戏即生效；正版账号的皮肤需要到 Minecraft 官网更换。";
 		}
 		case "phone_sync":
+			if (PhoneSyncHidden) return "手机同步暂未开放:手机端同步服务还没做完,这一版先藏起来了。";
 			return PhoneSync(args);
 		case "fs_list":
 		{

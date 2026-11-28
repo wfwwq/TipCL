@@ -730,7 +730,9 @@ public sealed partial class SettingsPage : PageBase
 			new BlockSpec { Id = "storage", Title = I18n.L("存储"), Content = Ui.V(10.0, Gt(I18n.L("存储")), border6) },
 			new BlockSpec { Id = "ai", Title = I18n.L("AI 助手"), Content = Ui.V(10.0, Gt(I18n.L("AI 助手")), border7) },
 			new BlockSpec { Id = "memory", Title = I18n.L("记忆"), Content = Ui.V(10.0, Gt(I18n.L("记忆")), BuildMemoryCard()) },
-			new BlockSpec { Id = "phoneSync", Title = I18n.L("手机同步"), Content = Ui.V(10.0, Gt(I18n.L("手机同步")), BuildPhoneSyncCard()) }
+			// M5:手机同步入口先藏起来 —— 安卓侧同步服务还没做,点进去也连不上(面板与协议都还在,
+			// 只是不挂到设置页;服务端做完把下面这行放回来):
+			// new BlockSpec { Id = "phoneSync", Title = I18n.L("手机同步"), Content = Ui.V(10.0, Gt(I18n.L("手机同步")), BuildPhoneSyncCard()) }
 		}).Root;
 		_views[3] = new BlockHost("settings:network", new List<BlockSpec>
 		{

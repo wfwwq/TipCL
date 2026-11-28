@@ -78,7 +78,7 @@ public class LayoutBlockHostTests
 		yield return new object[] { "playtime", "header,total,range,list", "total,range,list" };
 		yield return new object[] { "account", "header,list", "header,list" };
 		yield return new object[] { "feedback", "header,content", "header,content" };
-		yield return new object[] { "settings:general", "appearance,wallpaper,themePack,launcher,game,storage,ai,memory,phoneSync", "appearance,wallpaper,themePack,launcher,game,storage,ai,memory,phoneSync" };
+		yield return new object[] { "settings:general", "appearance,wallpaper,themePack,launcher,game,storage,ai,memory", "appearance,wallpaper,themePack,launcher,game,storage,ai,memory" };
 		yield return new object[] { "settings:network", "network", "network" };
 		yield return new object[] { "settings:about", "about", "about" };
 		// 本轮新拆:安装页 / 设置「布局」视图(默认纵向流 = 改动前的同一条渲染路径)

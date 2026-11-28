@@ -352,7 +352,8 @@ public sealed partial class SettingsPage : PageBase
             new() { Id = "storage", Title = I18nCore.Tr("存储"), Content = UiClass.V(10, Gt(I18nCore.Tr("存储")), storageCard) },
             new() { Id = "ai", Title = I18nCore.Tr("AI 助手"), Content = UiClass.V(10, Gt(I18nCore.Tr("AI 助手")), aiCard) },
             new() { Id = "memory", Title = I18nCore.Tr("记忆"), Content = UiClass.V(10, Gt(I18nCore.Tr("记忆")), BuildMemoryCard()) },
-            new() { Id = "phoneSync", Title = I18nCore.Tr("手机同步"), Content = UiClass.V(10, Gt(I18nCore.Tr("手机同步")), BuildPhoneSyncCard()) },
+            // M5:手机同步入口先藏起来 —— 安卓侧同步服务还没做(面板与协议都还在,做完把下面这行放回来)。
+            // new() { Id = "phoneSync", Title = I18nCore.Tr("手机同步"), Content = UiClass.V(10, Gt(I18nCore.Tr("手机同步")), BuildPhoneSyncCard()) },
         }).Root;
 
         // 「下载与网络」= BlockHost("settings:network") 单块
