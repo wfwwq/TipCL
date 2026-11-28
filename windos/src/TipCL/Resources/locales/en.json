@@ -2330,6 +2330,8 @@
  "删除操作仍需确认": "Delete actions still need confirmation",
  "删除/启动操作仍需确认": "Delete / launch actions still need confirmation",
  "用户开启了「不询问」模式": "The user turned on \"Don't ask\" mode",
+ "「不询问」模式下写操作直接执行": "In \"Don't ask\" mode write actions run directly",
+ "「不询问」模式仍然拒绝删除类操作": "In \"Don't ask\" mode delete actions are still refused",
  "高风险操作需要确认": "High-risk actions need confirmation",
  "写操作需要确认": "Write action needs confirmation",
  "未知工具": "Unknown tool",

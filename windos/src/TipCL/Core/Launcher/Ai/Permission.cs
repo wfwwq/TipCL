@@ -243,7 +243,14 @@ public static class Permission
 			}
 			return new PermissionResult("allow", "文件类修改直接执行");
 		case "dontAsk":
-			return new PermissionResult("deny", "用户开启了「不询问」模式");
+			// P1(2026-11-28 §3 裁决 6):「不询问」由「ask → deny」改成「ask → allow」。
+			// 删除类仍然拒绝 —— 它与上面「不带 rule_content 的 allow 规则不放行 delete」是同一条红线:
+			// 删除类不拿无限定放行。显式 deny 规则在规则循环里已经优先命中,这里到不了。
+			if (text == "delete")
+			{
+				return new PermissionResult("deny", "「不询问」模式仍然拒绝删除类操作");
+			}
+			return new PermissionResult("allow", "「不询问」模式下写操作直接执行");
 		default:
 			if (text2 == "high")
 			{
@@ -269,7 +276,7 @@ public static class Permission
 		case "build":
 			return "[权限设置] 写操作会直接执行；删除实例、删除模组前仍会先询问，要等用户点了才执行。";
 		case "dontAsk":
-			return "[权限设置] 用户选了「不询问」：需要确认的写操作会被直接拒绝，只读查看照常。";
+			return "[权限设置] 用户选了「不询问」：写操作执行前不再询问、直接放行；删除实例、删除模组这类删除操作仍然会被拒绝。";
 		case "edit":
 			return "[权限设置] 文件类修改直接执行；安装、删除、启动前会弹确认，要等用户点了才执行。";
 		default:
