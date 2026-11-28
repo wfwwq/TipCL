@@ -306,3 +306,82 @@ dotnet test  windos\tests\TipCL.Tests -c Release --no-build --filter "FullyQuali
 | 第 1 版 | 2026-11-28T14:25+08:00 | 侦察:14/14 分支 0 提交;testhost 根因定位并验证;当时误判 Windows 树不可编译 |
 | 第 2 版 | 2026-11-28T14:30+08:00 | 更正 Windows 树可本机编译/测试;体积口径核实(基线已超线 2,224 B) |
 | **第 3 版** | 2026-11-28T15:30+08:00 | **13 个分支合入并双树全绿**;locales/.gz/Agent.cs 冲突解法与逐行核验;`Scenario12a` 定位与修正;5 条 T 场景转绿(06/09b/12b/21/22a);体积实测 5,796,352 B;记录悬空接口 C2 与 9 条遗留;Linux 侧 26 条 Skip 逐条交代 |
+| 第 4 版(补记) | 2026-11-28T16:10+08:00 | 第二轮新提交合入(linux-tools C3 探针、win-guard 卡关键词、t-linux 场景11、linux-memperm D-88、linux-loop A1-A8);解除抢前台限制后补齐 smoke / ai-ui-selftest / verify-smoke;802 vs 809 查清;Linux 场景 13 绿 / 16 红逐条定性 |
+
+---
+
+## 11. 第二轮补充(2026-11-28T16:10+08:00)
+
+### 11.1 本轮新合入的分支与提交
+
+| 分支 | 新提交 | 并入提交 | 冲突 |
+|---|---|---|---|
+| `ai5/linux-tools` | `f488466` C3-1b 补关键词 + `471485e` 探针入库 | 合并提交 | 无 |
+| `ai5/win-guard` | `0697a81` Windows 补「卡」关键词 | 合并提交 | 无 |
+| `ai5/t-linux` | `ce9cdff` 场景 11 改用注册表外名字 | 合并提交 | 无 |
+| `ai5/linux-memperm` | `e2248dd` B1 迁移诊断 + `d499670` D-88 上限 200 | 合并提交 | **`docs/DECISIONS.md`** |
+| `ai5/linux-loop` | `1af591b` A1-A8 + S-linux + C2 重发 | `d7ee0b2` | **`AiAgent.cs` + Linux `locales/{en,zh_CN}.json`** |
+
+### 11.2 三处冲突的解法
+
+1. **`docs/DECISIONS.md`(D-88)** —— 按编号保留 **D-86(1320 行)/ D-87(1334 行)/ D-88(1347 行)**,三条齐全、编号连续、内容完整;只删了三个冲突标记,没有整段取一边。
+2. **Linux `locales/{en,zh_CN}.json`** —— 双方各在文件末尾追加一批(linux-memperm 9 条、linux-loop 10 条),取**并集**:3685 → **3695**,en/zh_CN key 集合完全相等(3695=3695,零孤儿),双方新增 key 零缺失、零同 key 值冲突。Linux 侧**无 `.gz`**,故无需重跑打包脚本。
+3. **`src/TipCL.Core/Launcher/Ai/AiAgent.cs`** —— observ-o(AI5-O 记账)与 linux-loop(A1-A8 重写)三方冲突 3 处:
+   - hunk1 取**并集**:保留 observ-o 的 `LogTurnSummary` 局部函数 + linux-loop 的终态状态变量;丢掉只服务于旧错误路径的 `failReason`(linux-loop 改用 `terminalError`,留着会成为无用变量警告)。
+   - hunk2/hunk3 取 **linux-loop 的控制流**(A6 续写/COMPLETED 口径、A7 收尾轮),丢弃 HEAD 的两个旧 `return` 出口。
+   - **关键接线**:A1 把终态收敛到唯一出口后,observ-o 原先散在各 return 点的 `LogTurnSummary(...)` 调用全部随之消失。合并方在唯一出口(`Store.LogEvent(TurnCompleted/TurnFailed)` 之后)**补回一次** `LogTurnSummary(reason, RoundsUsed)`,保证 AI5-O「一轮恰好一条 TurnSummary」不丢失。
+   - 核验:双方语义锚点齐全(AI5-O/TurnSummary/toolCalls + AI5-A1/A5/A6/A7/A8/FallbackOnceAsync/_continuations);observ-o 在 `ToolRunner.cs`/`Trace.cs`/`AiPage.cs`/`AiSessionMetrics.cs` 的新增行**零缺失**;编译 0 error / 仅既有 1 warning。
+
+### 11.3 解除「不许抢前台」后的验收(全部实跑)
+
+| 项 | 结果 |
+|---|---|
+| Windows `--smoke`(compact) | **exit 0**,10 页全 ok,**0 WARN / 0 ERROR**,17 张 PNG 已目视(AI 页/下载页正常渲染) |
+| Windows `--smoke`(premium) | **exit 0**,10 页、**0 issues**;启动页 hero 图正常 |
+| Windows `--ai-ui-selftest` | **exit 0,32 条 PASS / 0 FAIL,`ALL PASSED`**,6 张截图(AI5-0 一直缺的这一项,现已取到) |
+| Linux `tools/verify-smoke.ps1` | **exit 0**,A/B1/B2 三批 × 8 帧 = **24 帧全 OK,每帧 0 WARN / 0 ERROR**;已目视 `ai/smoke.png`(含 observ-o 的「导出诊断报告」入口) |
+| Linux 全量(无过滤) | 失败 **1** / 通过 1701 / 跳过 27 / 总 1729 —— 唯一失败是 **i18n 基线守门**(见 §11.5) |
+| Windows 全量(无过滤) | **失败 0 / 通过 1029 / 跳过 8 / 总 1037** |
+
+### 11.4 802 vs 809 已查清
+
+- `OpenUrlGateTests` **恰好 7 条**,正是标准排除过滤器 `FullyQualifiedName!~OpenUrl` 挡掉的那批。
+- 因此:**802 = 套过滤器的口径,809 = 不套过滤器的口径**,同一棵树、同一份用例,差值精确等于 7(通过数 796 + 7 = 803 也对上)。
+- 结论:**AI5-0 的 802 没有记错**,`linux-memperm` 的 809 是没套过滤器。建议在 `progress/AI5-0-baseline.md` 注明「该数字含排除过滤器」,不必改数字。合并后的对应值:过滤器口径 1030(1022 过 / 8 跳)、无过滤器 1037(1029 过 / 8 跳)。
+
+### 11.5 i18n:Linux 唯一红,已定位到机制
+
+- 权威口径(`python tools/i18n-audit.py`):wrapped **2615 → 2813(+198)**、unwrapped **3211 → 3229(+18)**。
+- 审计只认 `WRAPPERS = {"Tr"}`;`linux-loop` 新加了文件内别名 `AiAgent.cs:141 T(string zh) => I18nCore.Tr(zh)`,于是 **11 条实际已接线的用户可见文案被算成未接线**(审计假阴性)。全树 `T("` 调用共 11 处,**全部**在 `AiAgent.cs`,无其他同名校验函数 → 把 `T` 加进 `WRAPPERS` 无误报风险。
+- `AiAgent.cs` 的 49 条未接线拆开:11 条 = 上述假阴性 / 34 条 = 基线既有 / **4 条真新增**,且这 4 条**都不该翻译**:`L129 请从断开处继续,不要重复。`(发给模型的续写系统提示)、`L836 工具参数不完整`、`L837 接口超时`(与 `Client.AssembleStream` 的错误文案做**匹配锚点**,翻译即失效)、`L984 上游负载`(上游错误文案分类关键词)。
+- 待裁决(合并方未擅自改):(a) 把 `T` 加进 `tools/i18n-audit.py` 的 `WRAPPERS`(工具侧一行,+11 条转正,余 **+7**);(b) 给 4 条锚点/系统提示加 `i18n:ignore` 标注;(c) 二者做完再按脚本提示重记基线。**在此之前 Linux 全量测试保持 1 条红。**
+
+### 11.6 Linux 场景转绿结果(15 条逐条试,13 绿 / 16 红)
+
+13 条已去掉 Skip 并转绿:`场景01`(现状)、`场景02`(A6)、`场景06`(P2 等价)、`场景06补`(拒绝即无副作用)、`场景07`(A4)、`场景10`(A2+A6)、`场景11`(C2)、`场景12补`(A5)、`场景13`(取消)、`场景15补`(现状)、`场景19`、`场景19补`(C1)、`场景20`(B1)。
+
+16 条仍红、已按 lead 口径**恢复 Skip 并写明原因**:
+
+| 原因类别 | 场景 | 说明 |
+|---|---|---|
+| A6 有意改口径(`no_tool_call`→`completed`) | 02补、03、04、11补、16、17、18、21、22(9 条) | 实现正确、断言过期;其中 **03/04/16/17/18 合并前是绿的**,属 A6 落地后的口径变化 |
+| A1 有意改口径(`stream_failed`→`cancelled`) | 13补 | 同上 |
+| 疑似真缺陷 | **14**(收尾轮文本为空,期望有收尾文本)、**15**(A8 未切到 `ai_fallback_model`,实得 `deepseek-v4-flash`)、**05**(B3 作用域断言期望 `allow`、实得空串) | 建议退回 `linux-loop` / `linux-memperm` 复核 |
+| 口径待裁决 | 08(`\n\n` 拼接)、09(兜底把流式残段与兜底文本拼接) | 用例与实现的文本拼接策略不一致 |
+| 待核实 | 12(子代理工具表出现 `install_mod`) | 用例期望只有 `dispatch_subagent` |
+
+`场景06`(plan 审批)按指示**保持不转绿**:`research-r` 已核实 Linux 无计划审批实现,任务书该条标的是「W(🕓)」。
+
+### 11.7 体积(如实记录,不回收)
+
+| 构建 | 字节 | 说明 |
+|---|---|---|
+| compact(合并后) | **5,796,352 B** | 基线 5,759,488 → 本轮净增 36,864;超 D-19 红线 39,088 |
+| premium(合并后) | **5,816,320 B** | 比 compact +19,968,与 D-38 记录的差值完全一致 |
+
+### 11.8 仍待处理
+
+1. **`ToolSource.ForModel` 待接线**(`AiAgent.RunAsync` 回填 tool 消息处,约 `AiAgent.cs:243-247`)—— 归属 `linux-loop`,合并方**未动**,验收时不得判为已完成。
+2. i18n 守门 1 条红(§11.5),等裁决。
+3. 16 条场景 Skip(§11.6),其中 3 条疑似真缺陷需退回。
+4. `t-linux` 仍有未提交改动(若它继续提交需再补合)。
