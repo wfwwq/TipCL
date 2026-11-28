@@ -14,6 +14,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TipCL.Core;
+using TipCL.Core.Launcher;
 using TipCL.Core.Launcher.Ai;
 
 namespace TipCL.Tests.Ai5T;
@@ -155,6 +156,10 @@ internal sealed class Ai5TRun
     /// <summary>工具调用序列(按 tool 事件顺序)。</summary>
     public List<string> ToolSequence => Events.Where(e => e.Kind == "tool").Select(e => e.Name).ToList();
 
+    /// <summary>父回合**自己**的工具调用序列。AI5-S 之后子代理的工具事件会转发到父回合(带 Subagent 标记),
+    /// 要单独看父回合的序列就用这个。</summary>
+    public List<string> ParentToolSequence => Events.Where(e => e.Kind == "tool" && !e.Subagent).Select(e => e.Name).ToList();
+
     /// <summary>终态事件(done / error)条数;A1 要求任何结束路径恰好 1 条。</summary>
     public int TerminalCount => Events.Count(e => e.Kind is "done" or "error");
 
@@ -189,6 +194,10 @@ internal sealed class Ai5THarness : IDisposable
     private readonly string? _savedTrace;
     private readonly string? _savedArtifacts;
     private readonly string? _savedHooks;
+
+    /// <summary>AI5-B3 之后,确认 always 会真的往 ai_permission_rules 写规则:进测试台时备份、Dispose 时还原,
+    /// 免得规则泄漏到同一进程里后面的用例(假绿/假红)。</summary>
+    private readonly object? _savedRules;
 
     /// <summary>假模型(脚本 + 请求记录)。</summary>
     public readonly FakeModel Model = new();
@@ -229,8 +238,8 @@ internal sealed class Ai5THarness : IDisposable
     /// <summary>confirmFn 的回答(always:本对话都允许)。</summary>
     public bool ConfirmAlways;
 
-    /// <summary>confirmFn 的第三个回答(作用域);Linux 侧现在没有这个槽,由测试记录用户选了什么。</summary>
-    public string ConfirmScope = "instance";
+    /// <summary>confirmFn 的第三个回答(作用域);Linux 侧现在是 ToolRunner.AlwaysScope,见构造里的接线。</summary>
+    public string ConfirmScope = ToolRunner.ScopeInstance;
 
     /// <summary>askFn 的回答(照 Tools.NormalizeAskAnswer 的形状)。</summary>
     public object? AskAnswer;
@@ -245,6 +254,7 @@ internal sealed class Ai5THarness : IDisposable
         _savedTrace = Trace.TraceDir;
         _savedArtifacts = Artifacts.ArtifactsDir;
         _savedHooks = Hooks.HOOKS_DIR;
+        _savedRules = Config.CONFIG.Get("ai_permission_rules");
         Checkpoint.CheckpointsDir = Path.Combine(_dir, "checkpoints");
         Store.SessionsDir = Path.Combine(_dir, "sessions");
         Store.StoreFileOverride = Path.Combine(_dir, "ai_chats.json");
@@ -258,6 +268,9 @@ internal sealed class Ai5THarness : IDisposable
         {
             PermissionMode = permissionMode,
             Instance = InstanceName,
+            // AI5-B3:确认卡上选的作用域必须转给执行器 —— 不接这个回调,「本对话都允许」只在进程内
+            // 生效、一个字都不会写进 ai_permission_rules,换执行器(≈重启)就不再生效。
+            AlwaysScope = () => ConfirmScope,
             Confirm = (call, label, reason, preview) =>
             {
                 lock (_gate)
@@ -390,6 +403,7 @@ internal sealed class Ai5THarness : IDisposable
         Trace.TraceDir = _savedTrace;
         Artifacts.ArtifactsDir = _savedArtifacts;
         Hooks.HOOKS_DIR = _savedHooks;
+        Config.CONFIG.Set("ai_permission_rules", _savedRules ?? new List<object>());
         try
         {
             Directory.Delete(_dir, recursive: true);

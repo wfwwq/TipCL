@@ -56,10 +56,8 @@ public class Ai5TScenarioTests
     // ————— 场景 2:单个只读工具 → 文字 —————
 
     /// <summary>
-    /// 表里场景 2 的期望是 `completed`。Linux 侧 **`StopReason.COMPLETED` 从来没有被赋过值**
-    /// (A6 自己写着「PENDING_TASK / COMPLETED / RATE_LIMITED 在 Linux 侧从未被赋值」),
-    /// 工具跑完、模型不再调工具时给的是 `no_tool_call`。所以本条按表写断言但挂起,转绿包 = A6;
-    /// Linux 现状由下面那条 `场景02补` 钉住,免得修 A6 的人以为 `no_tool_call` 是新长出来的。
+    /// 表里场景 2 的期望是 `completed`。A6 落地之前 Linux 的 `StopReason.COMPLETED` 从来没被赋过值
+    /// (那时给的是 `no_tool_call`),A6 之后「执行过工具再收尾」就是 `completed`,与表一致。
     /// </summary>
     [Fact]
     public async Task 场景02_单个只读工具后纯文字_结束原因是completed()
@@ -82,12 +80,12 @@ public class Ai5TScenarioTests
     }
 
     /// <summary>
-    /// 场景 2 的 Linux 现状口径钉(与上面那条并存,见 progress/AI5-T.md 的「口径差异」一节):
-    /// Linux 侧 `StopReason.COMPLETED` 从来没被赋过值(A6 明说「这些枚举从未被赋值」),
-    /// 工具跑完、模型不再调工具时给的是 `no_tool_call`。这条钉住现状,免得修 A6 的人以为它是新长的。
+    /// 场景 2 的同形状回归(原先是「Linux 现状是 no_tool_call」的现状钉,A6 落地后口径已对齐,
+    /// 这里跟着改成断言 A6 的规则本身):**执行过工具**再收尾 = `completed`,不是 `no_tool_call`。
+    /// 与上面那条的分工:上面是任务书场景 2 的原样,这条钉 A6 的判据(有没有跑过工具)。
     /// </summary>
-    [Fact(Skip = "A6 有意改口径:同上,本用例钉的是改前现状,A6 落地后应随口径更新")]
-    public async Task 场景02补_只读工具后纯文字_Linux现状口径是no_tool_call()
+    [Fact]
+    public async Task 场景02补_执行过工具的回合收尾是completed()
     {
         using var h = new Ai5THarness();
         h.Model
@@ -96,14 +94,14 @@ public class Ai5TScenarioTests
 
         Ai5TRun run = await h.SendAsync("看看我装了哪些模组");
 
-        Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+        Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
         Assert.Equal(new[] { "list_mods" }, run.ToolSequence);
         Assert.Equal(1, run.DoneCount);
     }
 
     // ————— 场景 3:一轮多个工具,部分并行 —————
 
-    [Fact(Skip = "A6 有意改口径:同上,本用例钉的是改前现状,A6 落地后应随口径更新")]
+    [Fact]
     public async Task 场景03_一轮多工具_分组符合Scheduler且结果顺序正确()
     {
         using var h = new Ai5THarness();
@@ -122,7 +120,7 @@ public class Ai5TScenarioTests
 
         var expected = new[] { "list_mods", "search_mods", "list_installed_versions", "install_mod", "list_mods" };
         Assert.Equal(expected, run.ToolSequence);
-        Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+        Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
         Assert.Equal(1, run.DoneCount);
 
         // 分组:前三个只读相邻可并行 → 一组;写工具自己一组;最后一个只读又一组
@@ -154,7 +152,7 @@ public class Ai5TScenarioTests
 
     // ————— 场景 4:写工具,用户拒绝 —————
 
-    [Fact(Skip = "A6 有意改口径:同上,本用例钉的是改前现状,A6 落地后应随口径更新")]
+    [Fact]
     public async Task 场景04_写工具被拒_不落盘且轮次继续()
     {
         using var h = new Ai5THarness();
@@ -167,7 +165,7 @@ public class Ai5TScenarioTests
         Ai5TRun run = await h.SendAsync("帮我把钠装上");
 
         // 轮次继续:模型收到了拒绝结果,并且接着把话说完了
-        Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+        Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
         Assert.Equal("好的,那我不装了。", run.LastText);
         Assert.Equal(2, run.StreamRequests.Count);
         Assert.Equal(1, run.DoneCount);
@@ -297,12 +295,11 @@ public class Ai5TScenarioTests
 
     /// <summary>
     /// 场景 13 的另一半:取消落在**流式过程中**(请求已经发出、响应还在消费时点停止)。
-    /// 这条钉的是 Linux 现状,给 A1(收敛终态事件)和 A2(一次失败报两遍)当证据:
-    /// 现在这条路会发出 2 条 error、stop_reason 记成 `stream_failed`,而不是 `cancelled`。
-    /// A1/A2 落地后本条应当改成:恰好 1 条终态事件 + `cancelled`。改它是那两个包的验收动作之一。
+    /// A1 之前这条路会发 2 条 error、`stop_reason` 记成 `stream_failed`;A1 收敛终态事件之后,
+    /// 用户主动取消就是 `cancelled`(本条原先钉的是 A1 落地前的现状,现在改成断言新口径)。
     /// </summary>
-    [Fact(Skip = "A1 有意改口径:取消的回合现在记 cancelled（不再是 stream_failed），本用例钉的是改前现状")]
-    public async Task 场景13补_流式过程中取消_Linux现状会记成stream_failed()
+    [Fact]
+    public async Task 场景13补_流式过程中取消_记成cancelled()
     {
         using var h = new Ai5THarness();
         using var cts = new CancellationTokenSource();
@@ -311,15 +308,16 @@ public class Ai5TScenarioTests
 
         Ai5TRun run = await h.SendAsync("在吗", ct: cts.Token);
 
-        Assert.Equal(StopReason.STREAM_FAILED, run.StopReason);
+        Assert.Equal(StopReason.CANCELLED, run.StopReason); // A1:取消的回合记 cancelled(不再是 stream_failed)
         Assert.Equal(0, run.DoneCount);
-        Assert.Equal(2, run.ErrorCount);
-        Assert.Contains(run.ErrorTexts, t => t.Contains("stream_failed", StringComparison.Ordinal));
+        // A1/A2 之后不再重复报错:内部代号也不该出现在给用户看的文案里
+        Assert.DoesNotContain(run.ErrorTexts, t => t.Contains("stream_failed", StringComparison.Ordinal));
+        Assert.True(run.TerminalCount <= 1, "取消至多留一条终态事件,实测 " + run.TerminalCount + " 条");
     }
 
     // ————— 场景 16:「给 1.20.1 Fabric 装上钠和小地图」—————
 
-    [Fact(Skip = "A6 有意改口径:同上,本用例钉的是改前现状,A6 落地后应随口径更新")]
+    [Fact]
     public async Task 场景16_装模组流程_search到ask再到install两次()
     {
         using var h = new Ai5THarness();
@@ -341,7 +339,7 @@ public class Ai5TScenarioTests
         Ai5TRun run = await h.SendAsync("给 1.20.1 Fabric 装上钠和小地图");
 
         Assert.Equal(new[] { "search_mods", "ask_user", "install_mod", "install_mod" }, run.ToolSequence);
-        Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+        Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
         Assert.Equal(1, run.DoneCount);
         Assert.Equal(0, run.ErrorCount);
 
@@ -367,7 +365,7 @@ public class Ai5TScenarioTests
 
     // ————— 场景 17:「游戏闪退了」—————
 
-    [Fact(Skip = "A6 有意改口径:同上,本用例钉的是改前现状,A6 落地后应随口径更新")]
+    [Fact]
     public async Task 场景17_闪退流程_日志到诊断()
     {
         using var h = new Ai5THarness();
@@ -380,7 +378,7 @@ public class Ai5TScenarioTests
         Ai5TRun run = await h.SendAsync("游戏闪退了");
 
         Assert.Equal(new[] { "get_crash_report", "get_latest_log", "diagnose_launch" }, run.ToolSequence);
-        Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+        Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
         Assert.Equal("看起来是 Java 版本不对,建议换成 17。", run.LastText);
         Assert.Equal(1, run.DoneCount);
         Assert.Equal(0, run.ErrorCount);
@@ -396,7 +394,7 @@ public class Ai5TScenarioTests
 
     // ————— 场景 18:「好卡」—————
 
-    [Fact(Skip = "A6 有意改口径:同上,本用例钉的是改前现状,A6 落地后应随口径更新")]
+    [Fact]
     public async Task 场景18_卡顿流程_系统信息到诊断再到调JVM()
     {
         using var h = new Ai5THarness();
@@ -410,7 +408,7 @@ public class Ai5TScenarioTests
         Ai5TRun run = await h.SendAsync("好卡");
 
         Assert.Equal(new[] { "get_system_info", "diagnose_lag", "tune_jvm" }, run.ToolSequence);
-        Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+        Assert.Equal(StopReason.COMPLETED, run.StopReason); // A6:执行过工具再收尾 = completed(不再是 no_tool_call)
         Assert.Equal("已经把内存调到 4G 了,启动一次试试。", run.LastText);
         Assert.Equal(1, run.DoneCount);
         Assert.Equal(0, run.ErrorCount);

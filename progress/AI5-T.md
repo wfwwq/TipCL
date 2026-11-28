@@ -230,3 +230,70 @@ Linux 侧改动后的 Release 产物:`src/TipCL.App/bin/Release/net8.0/TipCL.App
      与 `Persist()` 的原子替换抢时序,机器上有别的子代理在编译/测试时更容易露头。与本包无关,不归本包修。
 7. 断言口径已按「别断言易变措辞」收紧:被拒/权限拒绝只断言 `ToolCallStatus`、`call.error` 非空与工具结果里的
    结构化错误码(`permission_denied`),不断言中文理由;`stop_reason` 一律走 `StopReason` 常量。
+
+---
+
+## 8. 合并后对齐(2026-11-28 第二轮,基 `ai5/agent-fixes` @ `de3662b`)
+
+`qa` 把 14 个分支合入后,回放套件里有 16 条红:A6 改了「执行过工具再收尾」的终态口径、A1 改了取消的口径,
+剩下的是真缺口。本轮按 lead 的裁决只改「实现正确、断言过期」的那些,**没有为凑数字改断言值**。
+
+### 8.1 改了什么
+
+| 位置 | 改前 | 改后 | 理由 |
+|---|---|---|---|
+| 场景 02补/03/04/11补/16/17/18/21/22(9 条) | `NO_TOOL_CALL` | `COMPLETED` | **A6**:执行过工具的回合终态是 `completed`;只有一个工具都没调、只回文字才是 `no_tool_call`。每条改动行上都写了 `// A6:执行过工具再收尾 = completed(不再是 no_tool_call)` |
+| 场景 13补 | `STREAM_FAILED` + 2 条 error | `CANCELLED` + 至多 1 条终态事件 + 文案里没有 `stream_failed` | **A1**:流式过程中取消现在记 `cancelled`;用例名也从「Linux现状会记成stream_failed」改成「记成cancelled」 |
+| 场景 12 | `ToolSequence == [dispatch_subagent]` | `ParentToolSequence == [dispatch_subagent]`,并断言 `ToolSequence == [dispatch_subagent, install_mod]` + 转发事件带 `Subagent` 标记 | **S**:子代理的工具事件现在会转发给父回合(带 `Subagent` 字段)。这不是脚本错位 —— 借助转发,子代理那次被拒的写调用反而变得可观测了(后端 0 次落地的断言不变) |
+| 场景 02 的 XML 注释、场景 02补 的名字 | 写的是「Linux 现状是 no_tool_call」 | 改成断言 A6 的判据(执行过工具 → `completed`) | 口径已对齐,旧注释会误导 |
+
+### 8.2 测试台(harness)的两处修复 —— 场景 05 的红灯根因在这里,不在 B3
+
+`linux-memperm`(B3 实现方)定位:`Ai5THarness` 构造 `ToolRunner` 时**没接 `AlwaysScope`**,执行器收到
+`always=true` 后读不到作用域 ⇒ 一个字都不写 `ai_permission_rules` ⇒ `PermissionRules.Pick` 返回空串。
+它的两半实验(同一份参数,只差一行):不接 `AlwaysScope` → `""`;接上 → `"allow"`,换实例仍 `allow`。
+
+- **接线**:`AlwaysScope = () => ConfirmScope`(时序安全:`Confirm` 返回后执行器才读它);
+- **隔离**(必须与接线一起落):harness 现在备份/还原 `ai_permission_rules`。接线之后**任何**
+  `ConfirmAlways = true` 的用例都会真的写规则,不还原就会「单独跑绿、一起跑红」;
+- 场景 05 的 `Skip` 去掉,**已绿**(两半:同轮不再问 + 换执行器读同一份 config 也不再问)。
+
+### 8.3 本轮最终数字
+
+| 项 | 数字 |
+|---|---|
+| 回放套件 `FullyQualifiedName~TipCL.Tests.Ai5T` | **25 过 / 4 跳 / 0 败 / 总 29** |
+| 剩下 4 条跳(都不是本包该改的) | `08`(A6 续写用 `\n\n` 拼接,口径待裁决)、`09`(A5 保留流式残段再拼兜底文本,口径待裁决)、`14`(见 8.4)、`15`(A8 未切 `ai_fallback_model`,疑似真缺陷) |
+| 全量(排除 Terracotta/ClickSweep/OpenUrl) | `1711 过 / 15 跳 / 1 败 / 总 1727` —— 那 1 败是 `Repo.I18nBaselineTests`,见 8.5 |
+
+### 8.4 场景 14 的红灯**不是 A1 的缺陷,是我脚本少切了一刀**(已上报,等 lead 放行再改)
+
+`qa` 报的是「A1/A7 收尾轮文本为空,疑似真缺陷」。我把 `场景14` 的复现过程完整 dump 了一遍,证据是:
+
+```
+StopReason=max_rounds  ToolSeq=list_mods,list_mods,list_mods  TerminalCount=1  ErrorCount=0  LastText=<>
+  #1 #2 #3 = 三轮工具(每轮 list_mods),后端真被调到 3 次
+  #4 tools=0  ← A7 正确读到了 ai_max_rounds=3,收尾轮不带工具
+```
+
+问题在我的假模型脚本:`Repeat(10, Call(list_mods)) + Say(...)` —— 收尾轮是第 4 次请求,它领到的是**第 4 个
+「调 list_mods」**而不是那句收尾文本,所以 `LastText` 是空的。断言(请求数 4 / 恰好 1 条终态事件 /
+`stop_reason=max_rounds`)全部成立,**A1/A7 的行为是对的**。
+
+一行修法(等放行):`Repeat(10, ...)` → `Repeat(3, ...)`,让第 4 项就是收尾文本。
+
+### 8.5 全量里那 1 条失败与本包无关:合入后的 i18n 基线已回退 18 条
+
+`Repo.I18nBaselineTests.UnwiredCjkLiteralCountMustNotGrowSinceBaseline`:
+「未接线的 CJK 字面量从基线的 3211 涨到了 3229」。
+我把本轮改动 `git stash` 掉(即 `de3662b` 原样)重跑同一条用例 → **同样 3211 → 3229**,
+确认不是本包引入的(+18 来自别的包的文案)。本包新增的字面量只有测试里的 1~2 条断言消息。
+按 DoD「i18n 基线不得回退」,这条需要别的包处理(重跑 `python tools/i18n-audit.py --baseline progress/I18N-BASELINE.md`
+或把文案接进 `I18nCore.Tr`)。
+
+### 8.6 本轮的做法纪律
+
+- 只改「A6 / A1 / S 有意改口径」这一类,每条改动行上都留了理由;`08`、`09` 属于口径待裁决,**没碰**;
+  `15` 疑似真缺陷,**没碰**;`14` 按 lead 的「先别动」,**没碰**(只上报根因)。
+- 改前先跑一遍全部 16 条(临时去掉全部 `Skip`)拿到 Expected/Actual 实测,再据此改 —— 没有凭 qa 的转述直接改。
+- 分支:`ai5/t-linux-scenarios`,基于合入点 `de3662b`(我的原分支 `ai5/t-linux` 上一个提交是 `ce9cdff`,已并入合入点)。
