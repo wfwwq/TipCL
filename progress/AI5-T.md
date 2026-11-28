@@ -30,7 +30,7 @@ Client 流式/非流式请求 → 工具执行 → 权限 → 事件与终态)�
    model)、终态事件条数(`done`/`error`)、工具调用序列;不是只看「有没有报错」。
 5. **场景表**:22 条在 Linux 侧全部落地(场景 6 按 Linux 的等价口径写),另外补了 6 条「补」用例
    (把表里那条字面场景在 Linux 上侥幸绿、或任务书没给包号的那半单独钉住):`02补 / 06补 / 12补 / 13补 / 15补 / 19补`。
-   合计 28 条用例 = 22 条表内 + 6 条「补」。
+   合计 29 条用例 = 22 条表内 + 7 条「补」。
 
 ## 2. 文件清单
 
@@ -81,7 +81,7 @@ dotnet test tests/TipCL.Tests/TipCL.Tests.csproj -c Release --nologo --filter "F
 | 8 | `finish_reason=length` | 两 | L→A6 | **挂起(A6)** | 现在给 `no_tool_call`,不续写、不给 `truncated` |
 | 9 | 流式失败 → 非流式兜底成功 | 两 | L→A5 | **挂起(A5)** | 现在 0 次非流式请求 |
 | 10 | 流式和兜底都空 | 两 | L→A2/A6 | **挂起(A2/A6)** | 现在 **2 条 error**,第二条文案就是内部代号 `stream_failed` |
-| 11 | 模型调用了本轮没下发的工具 | 两 | L→C2 | **挂起(C2)** | 现在 `unknown_tool` 直接回错,没有全量重发 |
+| 11 | 模型调用了本轮没下发的工具 | 两 | L→C2 | **挂起(C2)** | Linux 判据是「注册表里没有」(`totally_unregistered_tool`),现在 `unknown_tool` 直接回错、没有全量重发;「未下发但注册表里有 → 照常执行」由 `场景11补` 钉住并且是绿的 |
 | 12 | 子代理尝试写工具 | 两 | W→D8 | **绿** | 子代理写调用被拦成 `permission_denied`、后端 0 次落盘;`场景12补`(子代理请求里不含写工具)挂起,见 §5 发现 3 |
 | 13 | 中途取消 | 两 | 现状 | **绿** | 工具执行中取消 → `cancelled` + `OperationCanceledException`;`场景13补`(流式过程中取消)钉住现状,见 §5 发现 2 |
 | 14 | 达到最大轮数 | 两 | L→A1/A7 | **挂起(A1/A7)** | 现在第 4 轮还会发起(上限硬编码 12,不读 `ai_max_rounds`) |
@@ -94,7 +94,7 @@ dotnet test tests/TipCL.Tests/TipCL.Tests.csproj -c Release --nologo --filter "F
 | 21 | 派两个子代理 | 两 | S | **挂起(S)** | 两次派发写同一份会话事件(`replay-sub.jsonl`) |
 | 22 | `dontAsk` 档 | 两 | P1 | **挂起(P1)** | 现在写工具被直接拒绝,不弹卡也不执行 |
 
-**统计**:实做 28 条用例(21 条表内 + 7 条「补」)= **13 绿 / 15 挂起 / 0 失败**。
+**统计**:实做 29 条用例(22 条表内 + 7 条「补」)= **14 绿 / 15 挂起 / 0 失败**。
 「现状」那一批里除场景 2 外全绿;场景 2 的差异见 §5。
 
 ### 挂起场景清单(转绿时把 `Skip` 去掉、把断言跑绿即可)
@@ -108,7 +108,7 @@ dotnet test tests/TipCL.Tests/TipCL.Tests.csproj -c Release --nologo --filter "F
 | `场景08_输出被截断_...` | A6 | `Expected: "truncated" / Actual: "no_tool_call"` |
 | `场景09_流式参数不全_兜底...` | A5 | `Assert.Single(run.OnceRequests)` 失败:非流式请求 0 次 |
 | `场景10_流式与兜底都空_...` | A2/A6 | `Assert.Equal(1, run.ErrorCount)` 失败:实际 2 条,其中一条文案是 `stream_failed` |
-| `场景11_调用了没下发的工具_...` | C2 | `Assert.Equal(2, run.StreamRequests.Count)` 失败:只有 1 次请求,没有全量重发 |
+| `场景11_调用了不存在的工具_记schema_miss并用全量工具重试一次` | C2 | `Assert.Equal(2, run.StreamRequests.Count)` 失败:只有 1 次请求,没有全量重发 |
 | `场景12补_子代理的请求里不含写工具` | **无独立包号**(A5 / P2 核实项相关) | 子代理请求的工具表里出现 `install_game / install_mod / install_modpack …` |
 | `场景14_轮数上限读设置...` | A1/A7 | `Expected: "max_rounds" / Actual: "no_tool_call"`(请求发起 13 次,不是 4 次) |
 | `场景15_先429_重试并粘性切到兜底模型` | A8 | `Expected: "fallback-model" / Actual: "deepseek-v4-flash"` |
@@ -144,6 +144,21 @@ user/tool 消息,ACTION_RE/QUESTION_RE 仍只看本轮用户话)。我的分支�
 - 第二轮:「**再来一个**」→ 本轮一个关键词都没有,`ACTION_RE` 也不命中(所以拿不到「下命令就给所有写工具」的兜底),
   只可能靠「上一轮的话还在窗口里」把这两个工具带出来;
 - 同时钉反向:不相关的非常驻工具(`tune_jvm` / `create_datapack`)不许冒出来 —— 防「直接把 forceAll 打开」这种假绿。
+
+### 场景 11 的触发口径(2026-11-28 裁决,两棵树有意不同)
+
+- **Windows** = 模型调了「**本轮没下发**」的工具 → 丢弃整轮调用 + 用全量工具重发;
+- **Linux** = 模型调了「**注册表里根本没有**」的工具名 → 记 `tool_schema_miss` + 用全量重发。
+
+Linux 不跟 Windows 一致是有意的:Linux 的执行层(`ToolRunner` 只认 `ToolMeta`)本来就不要求工具先被下发,
+所以「调了未下发但真实存在」在 Linux 上是**能正常执行**的路 —— 按「没下发」判会把一条能跑的路变成
+丢弃重发,那是回归。因此:
+
+- `场景11` 改用**不存在**的名字复现(`totally_unregistered_tool`),断言:记 `tool_schema_miss`、
+  用全量工具重发一次(每轮最多 1 次)、最终 `stop_reason` 不是失败(仍挂起等 C2);
+- 新增 `场景11补`(现状即绿)钉住分界的另一半:调了「**未下发但注册表里有**」的真实工具
+  (`get_java_list`)→ 执行层照常执行、**不**触发 schema-miss 全量重发。这条防以后有人把 Linux
+  改成 Windows 口径时静默回归。
 
 ## 5. 超出任务书的发现(红线 5:记在这里)
 
@@ -183,8 +198,8 @@ user/tool 消息,ACTION_RE/QUESTION_RE 仍只看本轮用户话)。我的分支�
 | 项 | 数字 |
 |---|---|
 | Linux Release 构建 | `0 error / 1 warning`(`src/TipCL.App/Pages/Layout/LayoutEditor.cs:196` CS0649,既有),**不新增警告** |
-| 回放套件 | `13 过 / 15 跳 / 0 败 / 总 28`(约 3 s) |
-| 全量 `dotnet test`(按红线排除 Terracotta / ClickSweep / OpenUrl) | `1607 过 / 26 跳 / 0 败 / 总 1633` |
+| 回放套件 | `14 过 / 15 跳 / 0 败 / 总 29`(约 3 s) |
+| 全量 `dotnet test`(按红线排除 Terracotta / ClickSweep / OpenUrl) | `1608 过 / 26 跳 / 0 败 / 总 1634` |
 | 与 AI5-0 基线(`1594 过 / 11 跳 / 总 1605`)对比 | 总数 +28(= 本包新增用例数);通过 +13、跳过 +15;失败 0 |
 | 生产代码改动面 | `git diff --stat` 只有 `src/TipCL.Core/Launcher/Ai/Client.cs`:**+62 行 / -0 行** |
 
@@ -208,7 +223,7 @@ Linux 侧改动后的 Release 产物:`src/TipCL.App/bin/Release/net8.0/TipCL.App
    - 一次「**测试主机进程崩溃**」(输出尾部只有这一句、没有具体用例名,总计只跑到 36 条就中断):
      已由 lead 通报定位 —— 是 `win-guard` 清理自己那条挂死的 `dotnet test` 时**按进程名批量杀**
      (`testhost|vstest`),误杀了我这一次的 testhost/vstest(PID 42896,父进程 53832,路径就是本 worktree)。
-     重跑即恢复;最近一次全量是 `1607 过 / 26 跳 / 0 败`,本包用例单跑 `13 过 / 15 跳 / 0 败` 稳定复现。
+     重跑即恢复;最近一次全量是 `1608 过 / 26 跳 / 0 败`,本包用例单跑 `14 过 / 15 跳 / 0 败` 稳定复现。
    - `TipCL.Tests.Core.ModDevTaskPersistenceTests.Records_AreCapped_AtomicallyWritten_AndABrokenFileIsIgnored`
      (`tests/TipCL.Tests/Core/ModDevAi3Tests.cs:322`,断言 `cache` 目录里没有 `*.tmp` 残渣)在全量跑法下
      偶发红(公布最终数字前 5 次全量里命中 2 次),单跑该类连跑 3 次全绿 —— 看着是 `ModDevTasks` 的后台任务

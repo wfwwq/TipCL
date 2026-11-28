@@ -163,29 +163,71 @@ public class Ai5TPendingScenarioTests
         }
     }
 
-    // ————— 场景 11:模型调用了本轮没下发的工具(转绿:L→C2)—————
+    // ————— 场景 11:模型调用了注册表里没有的工具(转绿:L→C2)—————
 
-    [Fact(Skip = "AI5-T 场景 11(转绿:L→C2):unknown_tool 直接回错,没有 schema-miss 全量重发")]
-    public async Task 场景11_调用了没下发的工具_记schema_miss并用全量工具重试一次()
+    /// <summary>
+    /// 触发口径(2026-11-28 裁决,两棵树**有意不同**):
+    ///   · Windows = 模型调了「本轮没下发」的工具 → 丢弃整轮 + 全量重发;
+    ///   · Linux   = 模型调了「**注册表里根本没有**」的工具名 → 记 `tool_schema_miss` + 全量重发。
+    /// Linux 不跟 Windows 一致的原因:Linux 的执行层(`ToolRunner` 只认 `ToolMeta`)本来就不要求工具
+    /// 先被下发,「调了未下发但真实存在」在 Linux 上是**能正常执行**的路;按「没下发」判会把它变成
+    /// 丢弃重发,那是回归。所以本条用**不存在**的名字复现,「未下发但存在 → 照常执行」另见 场景11补。
+    /// </summary>
+    [Fact(Skip = "AI5-T 场景 11(转绿:L→C2):调了注册表里没有的工具,现在 unknown_tool 直接回错,没有 schema-miss 全量重发")]
+    public async Task 场景11_调用了不存在的工具_记schema_miss并用全量工具重试一次()
     {
         using var h = new Ai5THarness();
-        h.ConfirmOk = false; // 全量重发之后即使真的调到写工具也不要落盘
         h.Model
-            .Script(FakeReply.Call("fs_write", PyDict.Of("path", "notes.txt", "content", "hi")))
-            .Script(FakeReply.Say("这一步我先不动你的文件。"));
+            .Script(FakeReply.Call("totally_unregistered_tool", PyDict.Of("x", "1")))
+            .Script(FakeReply.Say("我换个方式再查一次。"));
 
         Ai5TRun run = await h.SendAsync("钠在哪个目录里");
 
-        // 前提:本轮确实没下发 fs_write
-        Assert.False(run.StreamRequests[0].HasTool("fs_write"));
-        // 用全量工具重发一次(每轮最多一次)
+        // 前提:这个名字在工具注册表里根本没有(ToolMeta 不认 = Linux 的触发判据)
+        Assert.Null(ToolMeta.Get("totally_unregistered_tool"));
+        // 用全量工具重发一次(每轮最多 1 次)
         Assert.Equal(2, run.StreamRequests.Count);
         Assert.Equal(Tools.Schemas.Count, run.StreamRequests[1].ToolNames.Count);
         // 记一条 tool_schema_miss(会话事件流里能查到)
-        List<PyDict> events = Store.ReadEvents(h.ChatId);
-        Assert.Contains(events, e => Py.S(e.Get("event")).Contains("SchemaMiss", StringComparison.OrdinalIgnoreCase)
-                                     || PyJson.Dumps(e, null, ensureAscii: false).Contains("tool_schema_miss", StringComparison.Ordinal));
+        Assert.Contains(Store.ReadEvents(h.ChatId),
+            e => Py.S(e.Get("event")).Contains("SchemaMiss", StringComparison.OrdinalIgnoreCase)
+                 || PyJson.Dumps(e, null, ensureAscii: false).Contains("tool_schema_miss", StringComparison.Ordinal));
+        // 重发之后这一轮照常收尾,不是失败
+        Assert.Contains(run.StopReason, new[] { StopReason.NO_TOOL_CALL, StopReason.COMPLETED });
+        Assert.Equal(0, run.ErrorCount);
+        Assert.Equal(1, run.DoneCount);
+    }
+
+    /// <summary>
+    /// 钉住 Linux 的这条性质(与 Windows 口径的分界):模型调了「**未下发但注册表里有**」的真实工具时,
+    /// 执行层照常执行,**不**触发 schema-miss 全量重发。防以后有人把 Linux 改成 Windows 口径时静默回归。
+    /// </summary>
+    [Fact]
+    public async Task 场景11补_调用未下发但注册表里有的工具_照常执行且不重发()
+    {
+        using var h = new Ai5THarness();
+        h.Model
+            .Script(FakeReply.Call("get_java_list", new PyDict()))
+            .Script(FakeReply.Say("我先看看你的 Java 运行时。"));
+
+        Ai5TRun run = await h.SendAsync("钠在哪个目录里");
+
+        // 前提:这个工具真实存在(注册表里有),但本轮没被下发
+        Assert.NotNull(ToolMeta.Get("get_java_list"));
+        Assert.False(run.StreamRequests[0].HasTool("get_java_list"));
+
+        // Linux 的语义:执行层只认 ToolMeta,不要求先下发 —— 照常执行
+        Assert.Equal(1, h.Backend.Count("get_java_list"));
+        ToolCall call = run.Events.Where(e => e.Kind == "tool_done").Select(e => e.Call!).Single();
+        Assert.Equal(ToolCallStatus.COMPLETED, call.status);
+
+        // 不整轮丢弃、不重发:就 2 次正常请求(工具轮 + 收尾轮)
+        Assert.Equal(2, run.StreamRequests.Count);
+        Assert.False(run.StreamRequests[1].HasTool("get_java_list"));
+        Assert.DoesNotContain(Store.ReadEvents(h.ChatId),
+            e => PyJson.Dumps(e, null, ensureAscii: false).Contains("tool_schema_miss", StringComparison.Ordinal));
         Assert.Equal(StopReason.NO_TOOL_CALL, run.StopReason);
+        Assert.Equal(0, run.ErrorCount);
     }
 
     // ————— 场景 12:子代理尝试写工具(转绿:拦截部分已是现状;工具表过滤见 12 补)—————
