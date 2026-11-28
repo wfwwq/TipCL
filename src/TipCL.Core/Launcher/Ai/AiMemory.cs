@@ -1,87 +1,126 @@
 // M4-H P5:AI 的长期记忆(照 Windows 版 Launcher/Ai/Memory 的 remember/forget 工具语义)。
 //
-// 落盘位置 `$TIPCL_HOME/ai-memory.json`,形状 `{"items":["...","..."]}`(与 Windows 版
-// FileMemory 的存储约定一致,便于两边共用同一份记忆)。纯文件读写,无平台依赖。
+// AI5-B1:原先记忆分成两份 —— 助手侧(AiAgent.SystemMessage / ToolRunner 的 remember / forget)
+// 读写 `$TIPCL_HOME/ai-memory.json`,界面侧(记忆面板 AiMemoryPanel、设置页 SettingsPage.Cards)
+// 读写 `$TIPCL_HOME/ai_memory.md`(Core 的 FileMemory),两边零交叉调用 ⇒「助手记的事面板看不见、
+// 面板删掉的条目助手还记着」。现在**只留一份**,以 FileMemory 为准(ai_memory.md,一行一条
+// `- 日期 内容`,玩家可直接用记事本改);本类退化成 FileMemory 的门面,调用点不用改,
+// 也就不会再出现「同一件事两个真源」。
+//
+// 迁移:第一次访问时把旧的 `ai-memory.json`(形状 `{"items":[...]}`)**幂等**迁进 ai_memory.md,
+// 逐条走 FileMemory.Remember(它自带「同样内容已经记过就不重复记」的去重),迁完把原文件改名成
+// `ai-memory.json.migrated` 留档。改名这一步不能省:原文件留着的话,面板里删掉的记忆会在下次启动
+// 被再迁一遍(复活);万一改名失败(只读盘之类),去重仍然保证不出现重复条目 —— 迁移本身是幂等的。
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using TipCL.Core;
 
 namespace TipCL.Core.Launcher.Ai;
 
-/// <summary>AI 记住的长期事实(用户偏好、常用实例、踩过的坑)。</summary>
+/// <summary>AI 记住的长期事实(用户偏好、常用实例、踩过的坑)。落盘见 <see cref="FileMemory"/>。</summary>
 public static class AiMemory
 {
-    /// <summary>上限:超过就丢最旧的(避免记忆无限膨胀进上下文)。</summary>
-    public const int MaxItems = 200;
+    /// <summary>上限:与 FileMemory 一致(超过就丢最旧的,避免记忆无限膨胀进上下文)。</summary>
+    public const int MaxItems = FileMemory.MaxEntries;
+
+    /// <summary>旧文件迁完之后的留档后缀(AI5-B1)。</summary>
+    public const string MigratedSuffix = ".migrated";
+
+    /// <summary>旧记忆文件名(AI5-B1 之前助手侧写的那一份)。</summary>
+    public const string LegacyFileName = "ai-memory.json";
 
     private static readonly object Gate = new();
 
-    public static string FilePath() => PPath.Join(Utils.ROOT, "ai-memory.json");
+    /// <summary>记忆落盘的文件 —— 就是界面记忆面板操作的那一份(AI5-B1:一份真源)。</summary>
+    public static string FilePath() => FileMemory.FilePath;
 
-    /// <summary>全部记忆(顺序即写入顺序)。</summary>
-    public static List<string> All()
+    /// <summary>旧的 JSON 记忆文件(还在的话;用于迁移与诊断)。</summary>
+    public static List<string> LegacyFiles()
+    {
+        var found = new List<string>();
+        foreach (string dir in new[] { Utils.ROOT, Path.GetDirectoryName(FilePath()) ?? "" })
+        {
+            if (dir.Length == 0)
+            {
+                continue;
+            }
+            string path = Path.Combine(PPath.Abs(new PPath(dir).ToString()), LegacyFileName);
+            if (File.Exists(path) && !found.Contains(path, StringComparer.Ordinal))
+            {
+                found.Add(path);
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// 把旧的 <c>ai-memory.json</c> 幂等迁进 <c>ai_memory.md</c>;返回这次真的新增的条数。
+    /// 每次访问都查一遍(只是两三次 File.Exists):**不缓存「已经查过」** —— 缓存住的话,
+    /// 测试/用户在同一次运行里新放下的旧文件永远不会被迁(用例要能验这条路径)。
+    /// 幂等性不靠缓存:条目重复靠 FileMemory.Remember 的去重挡住,文件迁完会改名。
+    /// </summary>
+    public static int MigrateLegacy()
     {
         lock (Gate)
         {
-            return Load().ToList();
+            int added = 0;
+            foreach (string file in LegacyFiles())
+            {
+                foreach (string item in ReadLegacy(file))
+                {
+                    string result = FileMemory.Remember(item);
+                    if (result.StartsWith("已记住:", StringComparison.Ordinal))
+                    {
+                        added++;
+                    }
+                }
+                try
+                {
+                    File.Move(file, file + MigratedSuffix, overwrite: true);
+                }
+                catch (Exception)
+                {
+                    // 留档失败不该影响对话:条目已经进 ai_memory.md,下次启动去重后会原样跳过
+                }
+            }
+            return added;
         }
     }
 
-    /// <summary>记一条;重复内容不重复记(按去空白后的全等判断)。</summary>
+    /// <summary>全部记忆(顺序即写入顺序;不含 FileMemory 记的日期前缀)。</summary>
+    public static List<string> All()
+    {
+        MigrateLegacy();
+        return FileMemory.Entries()
+            .Select(FileMemory.TextOf)
+            .Where(x => x.Length > 0)
+            .ToList();
+    }
+
+    /// <summary>记一条;重复内容不重复记(判据沿用 FileMemory.Remember)。返回是否真的新增。</summary>
     public static bool Add(string text)
     {
-        string item = Py.Strip(text ?? "");
-        if (item.Length == 0)
-        {
-            return false;
-        }
-        lock (Gate)
-        {
-            var items = Load().ToList();
-            if (items.Any(x => string.Equals(x.Trim(), item, StringComparison.Ordinal)))
-            {
-                return false;
-            }
-            items.Add(item);
-            if (items.Count > MaxItems)
-            {
-                items = items.Skip(items.Count - MaxItems).ToList();
-            }
-            Save(items);
-            return true;
-        }
+        MigrateLegacy();
+        return FileMemory.Remember(text).StartsWith("已记住:", StringComparison.Ordinal);
     }
 
     /// <summary>按关键词忘掉(包含匹配,大小写不敏感);返回忘掉的条数。</summary>
     public static int Forget(string keyword)
     {
-        string key = Py.Strip(keyword ?? "");
-        if (key.Length == 0)
-        {
-            return 0;
-        }
-        lock (Gate)
-        {
-            var items = Load().ToList();
-            int before = items.Count;
-            items = items.Where(x => x.IndexOf(key, StringComparison.OrdinalIgnoreCase) < 0).ToList();
-            int removed = before - items.Count;
-            if (removed > 0)
-            {
-                Save(items);
-            }
-            return removed;
-        }
+        MigrateLegacy();
+        int before = FileMemory.Entries().Count;
+        FileMemory.Forget(keyword);
+        int after = FileMemory.Entries().Count;
+        return Math.Max(0, before - after);
     }
 
     /// <summary>清空(测试与「重置」用)。</summary>
     public static void Clear()
     {
-        lock (Gate)
-        {
-            Save(new List<string>());
-        }
+        MigrateLegacy();
+        FileMemory.Clear();
     }
 
     /// <summary>拼成给模型看的上下文片段(没有记忆返回空串)。</summary>
@@ -95,30 +134,21 @@ public static class AiMemory
         return "# 你之前记住的事\n" + string.Join("\n", items.Select(x => "- " + x));
     }
 
-    private static IEnumerable<string> Load()
+    /// <summary>读旧 JSON 文件里的条目;文件坏了当空(不拖垮对话)。</summary>
+    private static List<string> ReadLegacy(string path)
     {
-        string path = PPath.Abs(FilePath());
-        if (!System.IO.File.Exists(path))
-        {
-            return Array.Empty<string>();
-        }
         try
         {
-            object parsed = PyJson.Loads(System.IO.File.ReadAllText(path));
-            object raw = Py.D(parsed).Get("items");
-            return Py.ListOr(raw).Select(Py.Str).Where(x => x.Trim().Length > 0).ToList();
+            object parsed = PyJson.Loads(File.ReadAllText(path));
+            return Py.ListOr(Py.D(parsed).Get("items"))
+                .Select(Py.Str)
+                .Select(x => x.Replace("\r", " ").Replace("\n", " ").Trim())
+                .Where(x => x.Length > 0)
+                .ToList();
         }
         catch (Exception)
         {
-            // 记忆文件坏了不该影响对话:当空处理,下一次写入会覆盖成合法 JSON
-            return Array.Empty<string>();
+            return new List<string>();
         }
-    }
-
-    private static void Save(List<string> items)
-    {
-        string path = PPath.Abs(FilePath());
-        System.IO.Directory.CreateDirectory(PPath.Abs(new PPath(path).Parent.ToString()));
-        System.IO.File.WriteAllText(path, PyJson.Dumps(PyDict.Of("items", items.Cast<object>().ToList())));
     }
 }
