@@ -16,6 +16,15 @@ public static class Agent
 
 	private static readonly Dictionary<string, CompactState> _COMPACT_STATES = new Dictionary<string, CompactState>();
 
+	/// <summary>每个会话状态最近一次被访问的序号(单调递增),用来做 LRU 淘汰。</summary>
+	private static readonly Dictionary<string, long> _COMPACT_TOUCH = new Dictionary<string, long>();
+
+	/// <summary>访问序号发号器。用序号而不是时钟:同一毫秒里的多次访问也能排出先后。</summary>
+	private static long _COMPACT_TICK;
+
+	/// <summary>压缩状态缓存容量:满了淘汰最久未访问的那一个,不做整表清空。</summary>
+	public const int COMPACT_STATES_MAX = 16;
+
 	private static double _LAST_ACTIVITY_TS;
 
 	private static readonly Regex _ACTION_RE = new Regex("下载|安装|重装|卸载|装(?:个|一下|上|好|到|进|下)|删(?:除|掉|了|个|一下)|移除|清(?:理|掉|空|一下)|修(?:复|好|一下|下)|修改|改(?:成|为|一下|下|掉|到|个)|设(?:置|成|为|定|到)|配置|调(?:成|到|整|一下|大|小|高|低)|换(?:成|到|个|一下)|切(?:换|到|成)|开(?:启|一下|下)|关(?:闭|掉|上|一下)|打开|启动|运行|跑(?:一下|起来|个)|导入|导出|更新|升级|备份|恢复|还原|重启|添加|加(?:个|上|一下|进|到)|新建|创建|重命名|迁移|干活|搞定|弄(?:好|一下|个)|试试|继续|开始|执行|动手|\\b(?:install|download|uninstall|remove|delete|clean|fix|repair|set|change|configure|config|enable|disable|turn (?:on|off)|switch|launch|start|run|import|export|update|upgrade|back ?up|restore|add|create|rename|migrate|do it|go ahead|continue|proceed)\\b", RegexOptions.IgnoreCase);
@@ -28,7 +37,6 @@ public static class Agent
 
 	private static readonly Regex _DIAGNOSE_RE = new Regex("报错|崩溃|日志|闪退|起不来|打不开|蓝屏|错误|异常|排查|哪里出了|什么问题");
 
-	private static readonly Regex _CLAIM_RE = new Regex("(?:已经?|正在|马上|现在)(?:帮你|为你|给你)?(?:开始)?(?:下载|安装|重装|卸载|删除|移除|清理|修复|修改|设置|配置|调整|切换|开启|关闭|打开|启动|导入|导出|更新|升级|备份|恢复|重启|添加|创建|重命名|迁移)|(?:下载|安装|删除|清理|修复|修改|设置|切换|导入|导出|更新|升级|备份|恢复|添加)(?:完成|好了|成功|完毕)|(?:打算|准备|即将|计划|这就(?:去|开始)|接下来我?(?:会|要|将)|我(?:会|要|将)(?:先|直接|把)?)(?:[^。！？\\n]{0,80}?)?(?:下载|安装|重装|卸载|删除|删掉|移除|禁用|启用|清理|修复|修改|设置|配置|调整|切换|开启|关闭|打开|启动|导入|导出|更新|升级|备份|恢复|重启|添加|创建|新建|重命名|迁移)|\\bI(?:'ve| have) (?:installed|downloaded|removed|deleted|updated|set|changed|configured|enabled|disabled|fixed|added|created)\\b|\\b(?:installing|downloading|removing|updating|configuring) (?:it|now|the)\\b|\\bI(?:'ll| will) (?:install|download|remove|delete|disable|enable|fix|set|change|update)\\b", RegexOptions.IgnoreCase);
 
 	public static object DGet(object d, string k)
 	{
@@ -415,21 +423,82 @@ public static class Agent
 		}
 	}
 
-	private static CompactState _compact_state_for(string sessionId)
+	/// <summary>
+	/// 取会话的压缩状态。缓存上限 <see cref="COMPACT_STATES_MAX"/>,满了只淘汰**最久未访问**的那一条。
+	/// 以前是整表 <c>Clear()</c>:正在用的会话会连带丢掉 CheckRapidRefill 的连击保护和连续失败计数。
+	/// 沿用同一个 lock。
+	/// </summary>
+	public static CompactState _compact_state_for(string sessionId)
 	{
 		lock (_COMPACT_STATES)
 		{
 			if (!_COMPACT_STATES.TryGetValue(sessionId, out CompactState value))
 			{
-				if (_COMPACT_STATES.Count >= 16)
+				if (_COMPACT_STATES.Count >= COMPACT_STATES_MAX)
 				{
-					_COMPACT_STATES.Clear();
+					string oldest = null;
+					long oldestTick = long.MaxValue;
+					foreach (KeyValuePair<string, long> item in _COMPACT_TOUCH)
+					{
+						if (item.Value < oldestTick)
+						{
+							oldestTick = item.Value;
+							oldest = item.Key;
+						}
+					}
+					if (oldest != null)
+					{
+						_COMPACT_STATES.Remove(oldest);
+						_COMPACT_TOUCH.Remove(oldest);
+					}
 				}
 				value = new CompactState();
 				_COMPACT_STATES[sessionId] = value;
 			}
+			_COMPACT_TOUCH[sessionId] = ++_COMPACT_TICK;
 			return value;
 		}
+	}
+
+	/// <summary>
+	/// 丢掉某个会话的压缩状态(子代理跑完清掉自己那份,别占着 16 个缓存槽;测试也用它做隔离)。
+	/// </summary>
+	public static void ForgetCompactState(string sessionId)
+	{
+		if (string.IsNullOrEmpty(sessionId))
+		{
+			return;
+		}
+		lock (_COMPACT_STATES)
+		{
+			_COMPACT_STATES.Remove(sessionId);
+			_COMPACT_TOUCH.Remove(sessionId);
+		}
+	}
+
+	/// <summary>当前缓存里的会话 id,最久没用过的排在最前(测试用;生产代码不要调)。不改变访问顺序。</summary>
+	public static List<string> CompactStateSessions()
+	{
+		lock (_COMPACT_STATES)
+		{
+			return _COMPACT_STATES.Keys.OrderBy((string k) => _COMPACT_TOUCH.TryGetValue(k, out long tick) ? tick : 0L).ToList();
+		}
+	}
+
+	/// <summary>
+	/// 没有 provider usage 时的估算兜底:只算**新增**的消息,不再每轮把整段 messages 估一遍再累加(D7)。
+	/// 返回本次要累加的估算值,以及留给下一轮的基准下标。
+	/// 基准下标比当前条数还大(中途压缩/裁剪把消息表换掉了)时按全量重算一次。
+	/// </summary>
+	public static (long delta, long nextBase) EstimateNewMessages(List<object> messages, long baseCount)
+	{
+		List<object> list = messages ?? new List<object>();
+		if (baseCount < 0L || baseCount > list.Count)
+		{
+			baseCount = 0L;
+		}
+		long delta = Tokens.EstimateMessages(list.Skip((int)baseCount).ToList());
+		return (delta, list.Count);
 	}
 
 	public static bool WantsAction(string userText)
@@ -454,9 +523,179 @@ public static class Agent
 		return true;
 	}
 
+	/// <summary>「光说没做」判定的操作类别:与 ToolMeta.side_effect + 工具名前缀一一对齐。</summary>
+	public const string CLAIM_INSTALL = "install";
+
+	public const string CLAIM_REMOVE = "remove";
+
+	public const string CLAIM_MODIFY = "modify";
+
+	public const string CLAIM_CREATE = "create";
+
+	public const string CLAIM_LAUNCH = "launch";
+
+	public const string CLAIM_MEMORY = "memory";
+
+	/// <summary>否定/条件/失败句:这些话里的动词不算「声称已经做了」(「没删成功」「如果安装成功了」)。</summary>
+	private static readonly Regex _CLAIM_NEG_RE = new Regex("没有|没能|没法|没删|没装|没改|没做|没成功|未(?:能|曾|完成|成功)|无法|不能|不再|不用|不要|别(?=忘|急|动|关|删|改|用)|拒绝|取消|失败|错误|不成功|尚未|暂时不|如果|假如|要是|一旦|万一");
+
+	/// <summary>把回复切成短句再判:一个句子里出现否定,不影响另一个句子里的完成声明。</summary>
+	private static readonly Regex _CLAIM_SPLIT_RE = new Regex("[。!?;,\uFF0C\u3001\n:]");
+
+	private const string _CLAIM_PAT_INSTALL = "(?:已经|已|刚刚|刚|正在|马上|帮(?:你|我|您)|给(?:你|我|您))[^。!?;,\\n]{0,16}?(?:装(?:好|上|完|进|到)|安装|部署|导入|应用上|下载)|装好了|装上了|装完了|装进去了|安装好了|安装成功了|安装完毕|部署好了|导入了|应用上了|\\bI(?:'m| am)\\b[^.!?]{0,24}?\\b(?:downloading|installing)\\b|\\b(?:is|are|has been|have been|I've|I have|we've)\\b[^.!?]{0,24}?\\b(?:installed|downloaded|applied)\\b|\\b(?:installed|downloaded|reinstalled)\\s+(?:and|,)?\\s*(?:ready|done)\\b";
+
+	private const string _CLAIM_PAT_REMOVE = "(?:已经|已|刚刚|刚|正在|马上|帮(?:你|我|您)|给(?:你|我|您))[^。!?;,\\n]{0,16}?(?:删(?:除|掉|了|干净|完)|移除|卸载|清理|清掉|清除|还原|恢复)|删掉了|删除了|删干净了|清理完了|清理掉了|清掉了|卸载了|移除了|还原了|\\bI(?:'ve| have)\\b[^.!?]{0,24}?\\b(?:removed|deleted|uninstalled|cleaned)\\b|\\b(?:is|are|has been|have been)\\b[^.!?]{0,24}?\\b(?:removed|deleted|uninstalled)\\b";
+
+	private const string _CLAIM_PAT_MODIFY = "(?:已经|已|刚刚|刚|正在|马上|帮(?:你|我|您)|给(?:你|我|您))[^。!?;,\\n]{0,16}?(?:改|调|设|配置|禁用|启用|关闭|打开|应用(?!上)|修|优化|处理|备份|换|切换|写)|(?:调到|调成|调为|改成|改为|设为|设置成|设置为|换成|切换到|调整为|修改为)[^。!?;,\\n]{0,12}?了|调好了|改好了|修好了|优化掉了|处理好了|备份好了|写好了|应用了|\\bI(?:'ve| have)\\b[^.!?]{0,24}?\\b(?:set|changed|updated|configured|enabled|disabled|adjusted|fixed)\\b|\\b(?:is|are|has been|have been)\\b[^.!?]{0,24}?\\b(?:set|changed|updated|configured|enabled|disabled|adjusted)\\b";
+
+	private const string _CLAIM_PAT_CREATE = "(?:已经|已|刚刚|刚)[^。!?;,\\n]{0,12}?(?:创建|新建|建好|建成|建立|建)|创建好了|建好了|创建完成|建完了|\\bI(?:'ve| have)\\b[^.!?]{0,20}?\\b(?:created|added)\\b|\\b(?:is|are|has been|have been)\\b[^.!?]{0,20}?\\bcreated\\b";
+
+	private const string _CLAIM_PAT_LAUNCH = "游戏\\s*(?:已经|已|正在|马上)?\\s*(?:启动|运行|打开)(?:了|起来|成功|完成|好)?|(?:启动|运行|打开)\\s*(?:了)?\\s*(?:游戏|客户端)(?:了|起来|成功|完成|好)|\\b(?:game|client)\\b[^.!?]{0,16}?\\b(?:launched|started|running)\\b|\\b(?:launched|started)\\s+(?:the )?(?:game|client)\\b";
+
+	private const string _CLAIM_PAT_MEMORY = "记住了|记下来了|已经记住|已记住|帮你记住|\\bI(?:'ve| have) (?:noted|remembered|saved)\\b";
+
+	/// <summary>声称句式的提取正则:只负责「提取声称的类别」,判据见 <see cref="UnfulfilledClaims"/>。</summary>
+	private static readonly Regex _CLAIM_CATS_RE = new Regex("(?<install>" + _CLAIM_PAT_INSTALL + ")|(?<remove>" + _CLAIM_PAT_REMOVE + ")|(?<modify>" + _CLAIM_PAT_MODIFY + ")|(?<create>" + _CLAIM_PAT_CREATE + ")|(?<launch>" + _CLAIM_PAT_LAUNCH + ")|(?<memory>" + _CLAIM_PAT_MEMORY + ")", RegexOptions.IgnoreCase);
+
+	/// <summary>从回复里提取「声称做过哪几类操作」:按短句切、跳过否定句,再扫六类句式。</summary>
+	public static List<string> ClaimCategories(string reply)
+	{
+		List<string> found = new List<string>();
+		string text = reply ?? "";
+		if (text.Length == 0)
+		{
+			return found;
+		}
+		foreach (string clause in _CLAIM_SPLIT_RE.Split(text))
+		{
+			if (string.IsNullOrWhiteSpace(clause) || _CLAIM_NEG_RE.IsMatch(clause))
+			{
+				continue;
+			}
+			foreach (Match match in _CLAIM_CATS_RE.Matches(clause))
+			{
+				string category = null;
+				if (match.Groups["install"].Success)
+				{
+					category = CLAIM_INSTALL;
+				}
+				else if (match.Groups["remove"].Success)
+				{
+					category = CLAIM_REMOVE;
+				}
+				else if (match.Groups["modify"].Success)
+				{
+					category = CLAIM_MODIFY;
+				}
+				else if (match.Groups["create"].Success)
+				{
+					category = CLAIM_CREATE;
+				}
+				else if (match.Groups["launch"].Success)
+				{
+					category = CLAIM_LAUNCH;
+				}
+				else if (match.Groups["memory"].Success)
+				{
+					category = CLAIM_MEMORY;
+				}
+				if (category != null && !found.Contains(category))
+				{
+					found.Add(category);
+				}
+			}
+		}
+		return found;
+	}
+
+	/// <summary>
+	/// 工具名 → 它「兑现」的声称类别:只认 install / remove / modify / create / launch / memory 六类。
+	/// 只读、检索类工具(以及未知工具、MCP 工具)一律返回 null —— 看一眼、搜一下不算把活干了。
+	/// 类别口径 = ToolMeta.side_effect(delete → remove、launch → launch、write_local → modify)+ 工具名前缀。
+	/// </summary>
+	public static string ToolClaimCategory(string name)
+	{
+		if (string.IsNullOrEmpty(name))
+		{
+			return null;
+		}
+		if (name == "remember" || name == "forget")
+		{
+			return CLAIM_MEMORY;
+		}
+		if (name.StartsWith("install_", StringComparison.Ordinal) || name.StartsWith("download_", StringComparison.Ordinal))
+		{
+			return CLAIM_INSTALL;
+		}
+		if (name.StartsWith("create_", StringComparison.Ordinal) || name.StartsWith("new_", StringComparison.Ordinal))
+		{
+			return CLAIM_CREATE;
+		}
+		if (name.StartsWith("launch_", StringComparison.Ordinal) || name.StartsWith("run_", StringComparison.Ordinal))
+		{
+			return CLAIM_LAUNCH;
+		}
+		if (name.StartsWith("delete_", StringComparison.Ordinal) || name.StartsWith("remove_", StringComparison.Ordinal) || name.StartsWith("uninstall_", StringComparison.Ordinal))
+		{
+			return CLAIM_REMOVE;
+		}
+		switch (ToolMeta.Get(name)?.side_effect ?? "")
+		{
+		case "delete":
+			return CLAIM_REMOVE;
+		case "launch":
+			return CLAIM_LAUNCH;
+		case "write_local":
+			return CLAIM_MODIFY;
+		default:
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// 「光说没做」的判据:回复里声称做完了某类操作,而本回合**没有任何同类工具成功执行**,就返回没兑现的类别;
+	/// 全部兑现、或者压根没声称,返回空表。多个类别逐个判,不因为另一个真做成了就整体放过。
+	/// </summary>
+	/// <param name="reply">模型这一轮的回复正文。</param>
+	/// <param name="toolRuns">本回合的工具执行记录:工具名 + 状态(ok / error / denied)。只有 ok 算成功执行。</param>
+	public static List<string> UnfulfilledClaims(string reply, IEnumerable<(string name, string status)> toolRuns)
+	{
+		List<string> missing = new List<string>();
+		List<string> claimed = ClaimCategories(reply);
+		if (claimed.Count == 0)
+		{
+			return missing;
+		}
+		HashSet<string> done = new HashSet<string>();
+		foreach ((string name, string status) in toolRuns ?? Enumerable.Empty<(string, string)>())
+		{
+			if (!string.Equals(status, "ok", StringComparison.Ordinal))
+			{
+				continue;
+			}
+			string category = ToolClaimCategory(name);
+			if (category != null)
+			{
+				done.Add(category);
+			}
+		}
+		foreach (string category2 in claimed)
+		{
+			if (!done.Contains(category2))
+			{
+				missing.Add(category2);
+			}
+		}
+		return missing;
+	}
+
+	/// <summary>
+	/// 回复里有没有「已经/正在 ... 装、改、删」这类完成声明(旧 API,保留给插件和既有测试)。
+	/// 判「光说没做」请用 <see cref="UnfulfilledClaims"/>:它还要看本回合有没有同类工具真的执行成功。
+	/// </summary>
 	public static bool ClaimsAction(string reply)
 	{
-		return _CLAIM_RE.IsMatch(reply ?? "");
+		return ClaimCategories(reply).Count > 0;
 	}
 
 	/// <summary>
@@ -595,6 +834,8 @@ public static class Agent
 		}
 		TokenState tokenState = new TokenState();
 		bool usageGot = false;
+		// 没有 provider usage 时按估算兜底的基准下标:只估算本轮**新增**的消息(D7)
+		long usageEstBase = 0L;
 		Random rnd = new Random();
 		string fallbackModel = Py.Strip(Py.S(settings.Get("ai_fallback_model")));
 		bool fallbackActive = false;
@@ -887,7 +1128,9 @@ public static class Agent
 					PyDict pyDict2;
 					try
 					{
-						pyDict2 = Client.ChatOnce(_request_settings(), messages, PluginAgentBridge.Tools(pturn, Tools.TOOL_SCHEMAS), 0.3, httpCancel);
+						// 兜底请求必须用**本轮流式实际下发的那份工具表**(list4:按需选择 + 预设筛选 + 子代理只读过滤 + MCP)。
+						// 以前这里重新发全量 Tools.TOOL_SCHEMAS:兜底时上下文变大,子代理在兜底里还能看到写工具(D8)。
+						pyDict2 = Client.ChatOnce(_request_settings(), messages, list4, 0.3, httpCancel);
 					}
 					catch (AIClientError aIClientError2)
 					{
@@ -954,7 +1197,10 @@ public static class Agent
 				}
 				if (!usageGot)
 				{
-					Usage.Add(sessionId, null, Tokens.EstimateMessages(messages), 0L);
+					// 兜底估算:只累加本轮新增的消息,不再每轮拿整段 messages 估一遍(见 EstimateNewMessages)
+					(long estDelta, long estNextBase) = EstimateNewMessages(messages, usageEstBase);
+					usageEstBase = estNextBase;
+					Usage.Add(sessionId, null, estDelta, 0L);
 				}
 				string text9 = string.Concat(list7);
 				if (text9.Length > 0)
@@ -1253,6 +1499,61 @@ public static class Agent
 					}
 				}
 				turn.Transition("executing_tools");
+				// plan 档:计划审批必须在执行之前(P2)。以前是先 Scheduler.RunGroups 把这一轮的工具跑完,
+				// 再弹 plan_approval;用户驳回时写操作已经落盘、检查点也已经生成,收不回来。
+				// 现在改成:本轮有 update_plan(且它被权限放行)就先问,批准了照常执行,驳回了本轮一个工具都不跑。
+				ToolCall planCall = null;
+				if (text3 == "plan" && !planApproved)
+				{
+					foreach (ToolCall candidate in list10)
+					{
+						if (candidate.name == "update_plan" && decisions[candidate.id].kind == "allow")
+						{
+							planCall = candidate;
+						}
+					}
+				}
+				if (planCall != null)
+				{
+					List<object> list14 = (from it in Py.ListOr(Py.Or(planCall.args.Get("items"), new List<object>()))
+						where it is PyDict pyDictPlan && Py.Strip(Py.S(pyDictPlan.Get("title"))).Length > 0
+						select it).ToList();
+					PyDict args2 = PyDict.Of("items", list14);
+					object obj4 = _call_confirm(confirmFn, "plan_approval", args2, Tools.ConfirmLabel("plan_approval", args2), "");
+					if (obj4 is AiRule)
+					{
+						obj4 = true;
+					}
+					planApproved = Py.Truthy(obj4);
+					// 计划先落到 turn 上:_result 会把它回报给界面;驳回时界面也要能看到被驳回的是哪一份计划
+					planItems = list14;
+					planTurnId = turn.id;
+					_status("plan_approval", PyDict.Of("approved", Py.Truthy(obj4), "turn_id", turn.id));
+					if (!Py.Truthy(obj4))
+					{
+						// 驳回:本轮工具一律不执行,也不生成检查点;把「计划未获批准」回填成工具结果
+						foreach (ToolCall item15 in list10)
+						{
+							if (decisions[item15.id].kind != "allow")
+							{
+								// 本来就被权限/插件拦下的,保留原来的拒绝原因
+								continue;
+							}
+							// 复用现成的文案键(工具结果和回合说明说的是同一件事),不新造 i18n 键
+							string rejected = I18nCore.Tr("计划未获批准,本轮到此为止");
+							decisions[item15.id] = ("deny", rejected);
+							turn.SetToolStatus(item15.id, "denied", rejected);
+							PluginAgentBridge.ToolResult(pturn, item15.id, item15.name, rejected, isError: true);
+							messages.Add(PyDict.Of("role", "tool", "tool_call_id", item15.id, "name", item15.name, "content", rejected));
+						}
+						List<object> list16 = list10.Where((ToolCall o) => ToolMeta.Get(o.name) != null && !ToolMeta.Get(o.name).@readonly).Select<ToolCall, object>((Func<ToolCall, object>)((ToolCall o) => o.name)).ToList();
+						object[] extra5 = new object[2] { "writes", list16 };
+						text_len = null;
+						Trace.Record("plan_rejected", null, "", "", null, null, text_len, extra5);
+						_to_phase(turn, "completing");
+						return _result(I18nCore.Tr("计划未获批准,本轮到此为止") + ((list16.Count == 0) ? I18nCore.Tr("。(本轮没有执行任何写操作)") : ""), "completed", "", null, roundNo);
+					}
+				}
 				List<List<ToolCall>> list13 = Scheduler.Group(list10.Where((ToolCall o) => decisions[o.id].kind == "allow").ToList());
 				turn.parallel_groups = ((IEnumerable<List<ToolCall>>)list13).Select((Func<List<ToolCall>, object>)((List<ToolCall> g) => ((IEnumerable<ToolCall>)g).Select((Func<ToolCall, object>)((ToolCall tc) => tc.id)).ToList())).ToList();
 				Scheduler.RunGroups(list13, _execute);
@@ -1271,26 +1572,6 @@ public static class Agent
 				}
 				// 插件工具结果里的图片：紧跟工具结果补一条 user 视觉消息
 				PluginAgentBridge.AppendVisionMessages(pturn, messages, list10.Select((ToolCall x) => (x.id, x.name)).ToList(), () => Client.SupportsImage(_request_settings()));
-				if (text3 == "plan" && planItems.Count > 0 && planTurnId == turn.id && !planApproved)
-				{
-					PyDict args2 = PyDict.Of("items", planItems);
-					object obj4 = _call_confirm(confirmFn, "plan_approval", args2, Tools.ConfirmLabel("plan_approval", PyDict.Of("items", planItems)), "");
-					if (obj4 is AiRule)
-					{
-						obj4 = true;
-					}
-					planApproved = Py.Truthy(obj4);
-					_status("plan_approval", PyDict.Of("approved", Py.Truthy(obj4), "turn_id", turn.id));
-					if (!Py.Truthy(obj4))
-					{
-						List<object> list14 = list10.Where((ToolCall o) => ToolMeta.Get(o.name) != null && !ToolMeta.Get(o.name).@readonly).Select<ToolCall, object>((Func<ToolCall, object>)((ToolCall o) => o.name)).ToList();
-						object[] extra5 = new object[2] { "writes", list14 };
-						text_len = null;
-						Trace.Record("plan_rejected", null, "", "", null, null, text_len, extra5);
-						_to_phase(turn, "completing");
-						return _result(I18nCore.Tr("计划未获批准，本轮到此为止") + ((list14.Count == 0) ? I18nCore.Tr("。（本轮没有执行任何写操作）") : ""), "completed", "", null, roundNo);
-					}
-				}
 				turn.Transition("awaiting_model");
 				cstate.tool_turns_since_compact++;
 				string _execute(ToolCall toolCall2)
@@ -1363,7 +1644,8 @@ public static class Agent
 						}
 						else if (toolCall2.name == "dispatch_subagent")
 						{
-							o = RunSubagent(backend, settings, toolCall2.args, cancelled);
+							// 子代理的进度事件转给父回合(事件里带 subagent 字段),界面据此显示「子任务进行中」
+							o = RunSubagent(backend, settings, toolCall2.args, cancelled, _status);
 						}
 						else if (toolCall2.name.StartsWith("mcp_", StringComparison.Ordinal))
 						{
@@ -1659,18 +1941,49 @@ public static class Agent
 		}
 		AgentResult _result(string text19, string text18, string detail = "", List<PyDict> pendingTasks = null, long roundsUsed2 = 0L, bool hasDetail = true)
 		{
-			// 只有回复里声称「已经/正在/我会去 装、改、删…」却没调工具，才算假装干活；
-			// 模型只是解释原因、提建议（哪怕用户要它干活），不再挂「它没有真的开始执行」的提示
-			if (text18 == "no_tool_call" && !ClaimsAction(text19))
+			// 「光说没做」:回复里声称做完了某类操作,而本回合**没有任何同类工具成功执行**,才算命中(I 包)。
+			// 模型只是解释原因、提建议(哪怕用户要它干活),不算命中;以前只看 no_tool_call 那一支,漏判很多。
+			List<(string name, string status)> turnRuns = new List<(string, string)>();
+			foreach (ToolCall ran in turn.tool_calls)
+			{
+				turnRuns.Add((ran.name, (ran.status == "completed") ? "ok" : ((ran.status == "denied") ? "denied" : "error")));
+			}
+			List<string> unmatchedClaims = UnfulfilledClaims(text19, turnRuns);
+			if (text18 == "no_tool_call" && unmatchedClaims.Count == 0)
 			{
 				text18 = "completed";
 				detail = "";
+			}
+			if (unmatchedClaims.Count > 0)
+			{
+				object[] claimExtra = new object[4]
+				{
+					"claims",
+					unmatchedClaims.Cast<object>().ToList(),
+					"ran",
+					turnRuns.Select(((string name, string status) r) => r.name + ":" + r.status).Cast<object>().ToList()
+				};
+				object round_claim = roundNo;
+				text_len = null;
+				Trace.Record("claim_without_action", round_claim, "", "", null, null, text_len, claimExtra);
+				Store.LogEvent(sessionId, "ClaimWithoutAction", PyDict.Of("turn_id", turn.id, "round", roundNo, "claims", unmatchedClaims.Cast<object>().ToList()));
+				// 界面侧可以据此显示一行提示(本包只把事件发出去,文案留给界面)
+				_status("claim_unmatched", PyDict.Of("claims", unmatchedClaims.Cast<object>().ToList(), "turn_id", turn.id));
 			}
 			AgentResult agentResult = new AgentResult(text19, text18, detail, pendingTasks?.Cast<object>().ToList(), roundsUsed2)
 			{
 				usage_source = tokenState.source,
 				usage = Usage.Get(sessionId)
 			};
+			List<object> usedTools = new List<object>();
+			foreach (ToolCall called in turn.tool_calls)
+			{
+				if (!usedTools.Contains(called.name))
+				{
+					usedTools.Add(called.name);
+				}
+			}
+			agentResult.tools_used = usedTools;
 			if (!agentResult._summary_recorded)
 			{
 				agentResult._summary_recorded = true;
@@ -1680,6 +1993,8 @@ public static class Agent
 				Store.LogEvent(sessionId, "TurnSummary", PyDict.Of("turn_id", turn.id, "stop_reason", text18, "rounds", roundNo, "tools", toolCalls_n, "tool_failures", toolFailures, "elapsed", num8));
 			}
 			agentResult.plan = ((planTurnId == turn.id) ? new List<object>(planItems) : new List<object>());
+			// 「光说没做」命中的类别也挂在结果上,界面/测试可以直接读(空表 = 没命中)
+			agentResult.claims_unmatched = unmatchedClaims.Cast<object>().ToList();
 			try
 			{
 				List<object> list15 = (from m in messages.OfType<PyDict>()
@@ -1756,7 +2071,74 @@ public static class Agent
 		}
 	}
 
-	public static string RunSubagent(BackendApi backend, PyDict settings, PyDict args, Func<bool> cancelled = null)
+	/// <summary>子代理默认轮数(设置项 ai_subagent_max_rounds 没配时用它,与改造前写死的值一致)。</summary>
+	public const long SUBAGENT_MAX_ROUNDS_DEFAULT = 4L;
+
+	/// <summary>子代理轮数硬上限:设置项和 <c>dispatch_subagent</c> 的 max_rounds 参数都会被夹到这个值以内。</summary>
+	public const long SUBAGENT_MAX_ROUNDS_HARD_CAP = 20L;
+
+	/// <summary>
+	/// 子代理实际能跑几轮:优先 <c>dispatch_subagent</c> 的 <c>max_rounds</c> 参数,
+	/// 其次设置项 <c>ai_subagent_max_rounds</c>,最后 SUBAGENT_MAX_ROUNDS_DEFAULT;
+	/// 一律夹在 1..SUBAGENT_MAX_ROUNDS_HARD_CAP 之间。
+	/// 设置项先看本轮 settings,再看 config.json(主设置白名单在 BackendApi 里,没加这条键时也要能用;
+	/// 与本文件 _current_instance 读 default_instance 的口径一致)。
+	/// </summary>
+	public static long SubagentMaxRounds(PyDict settings, PyDict args)
+	{
+		object raw = (args ?? new PyDict()).Get("max_rounds");
+		if (!Py.Truthy(raw))
+		{
+			raw = (settings ?? new PyDict()).Get("ai_subagent_max_rounds");
+		}
+		if (!Py.Truthy(raw))
+		{
+			try
+			{
+				raw = Config.CONFIG.Get("ai_subagent_max_rounds");
+			}
+			catch (Exception)
+			{
+				raw = null;
+			}
+		}
+		long rounds = _int_setting(raw, SUBAGENT_MAX_ROUNDS_DEFAULT);
+		return Math.Max(1L, Math.Min(rounds, SUBAGENT_MAX_ROUNDS_HARD_CAP));
+	}
+
+	/// <summary>配置值转整数:认不出来(字符串、非法数字)就用 fallback,不抛。</summary>
+	private static long _int_setting(object raw, long fallback)
+	{
+		if (raw == null || raw is bool)
+		{
+			return fallback;
+		}
+		if (raw is string text)
+		{
+			return long.TryParse(text.Trim(), out long parsed) ? parsed : fallback;
+		}
+		try
+		{
+			return Py.Int(raw);
+		}
+		catch (Exception)
+		{
+			return fallback;
+		}
+	}
+
+	/// <summary>子代理的会话 id:父会话 id + "-sub-" + 8 位随机。每次派发都唯一,压缩状态和事件日志不再串(S 包)。</summary>
+	public static string SubagentSessionId(string parentSessionId)
+	{
+		string parent = (string.IsNullOrEmpty(parentSessionId) ? "active" : parentSessionId);
+		return parent + "-sub-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+	}
+
+	/// <summary>
+	/// 跑一个子代理,返回给模型的 JSON。父回合的 <paramref name="onStatus"/> 会收到子代理的进度事件
+	/// (payload 里多一个 <c>subagent</c> 字段 = 这次派发的会话 id),界面据此显示「子任务进行中」。
+	/// </summary>
+	public static string RunSubagent(BackendApi backend, PyDict settings, PyDict args, Func<bool> cancelled = null, Action<string, PyDict> onStatus = null)
 	{
 		string text = Py.Strip(Py.S((args ?? new PyDict()).Get("task")));
 		string text2 = Py.Strip(Py.S((args ?? new PyDict()).Get("context")));
@@ -1765,14 +2147,29 @@ public static class Agent
 			return PyJson.Dumps(PyDict.Of("ok", false, "error", "缺少子任务描述（task 字段）"), null, ensureAscii: false);
 		}
 		string userText = "[子任务] " + text + ((text2.Length > 0) ? ("\n相关背景：" + text2) : "");
+		string parentSessionId = Py.Str(Py.Or((settings ?? new PyDict()).Get("ai_session_id"), "active"));
 		PyDict pyDict = (settings ?? new PyDict()).Copy();
+		// 会话 id 每次派发都唯一:以前固定 "<父id>-sub",同一轮派两个子代理会共用一份压缩状态和事件日志,
+		// 状态互相串、压缩计数也互相影响(S 包)
+		string subSessionId = SubagentSessionId(parentSessionId);
 		pyDict["ai_subagent"] = true;
-		pyDict["ai_max_rounds"] = 4L;
-		pyDict["ai_session_id"] = Py.Str(Py.Or((settings ?? new PyDict()).Get("ai_session_id"), "active")) + "-sub";
+		pyDict["ai_max_rounds"] = SubagentMaxRounds(settings, args);
+		pyDict["ai_session_id"] = subSessionId;
+		Action<string, PyDict> childStatus = null;
+		if (onStatus != null)
+		{
+			childStatus = delegate(string kind, PyDict payload)
+			{
+				PyDict copy = (payload ?? new PyDict()).Copy();
+				copy["subagent"] = subSessionId;
+				copy["subagent_task"] = Py.Slice(text, null, 80);
+				onStatus(kind, copy);
+			};
+		}
 		AgentResult agentResult;
 		try
 		{
-			agentResult = RunAgent(backend, pyDict, new List<object>(), userText, null, null, null, null, cancelled);
+			agentResult = RunAgent(backend, pyDict, new List<object>(), userText, null, childStatus, null, null, cancelled);
 		}
 		catch (AgentCancelled)
 		{
@@ -1788,11 +2185,23 @@ public static class Agent
 			Trace.Record("subagent_failed", null, "", "", ex, null, null, extra);
 			return PyJson.Dumps(PyDict.Of("ok", false, "error", "子代理执行失败: " + Py.ExcStr(ex)), null, ensureAscii: false);
 		}
+		finally
+		{
+			// 跑完把自己的压缩状态从静态缓存里清掉,别一直占着 16 个槽位
+			ForgetCompactState(subSessionId);
+		}
+		bool truncated = agentResult.stop_reason == "truncated" || agentResult.stop_reason == "max_rounds";
 		string text3 = agentResult.Text;
+		PyDict payload2 = PyDict.Of("ok", true, "answer", text3, "stop_reason", agentResult.stop_reason);
 		if (agentResult.stop_reason != "completed" && agentResult.stop_reason != "no_tool_call" && Py.Strip(text3).Length == 0)
 		{
-			return PyJson.Dumps(PyDict.Of("ok", false, "error", "子代理未得出结论（停止原因: " + agentResult.stop_reason + "）"), null, ensureAscii: false);
+			payload2["ok"] = false;
+			payload2["error"] = "子代理未得出结论（停止原因: " + agentResult.stop_reason + "）";
 		}
-		return PyJson.Dumps(PyDict.Of("ok", true, "answer", text3, "stop_reason", agentResult.stop_reason), null, ensureAscii: false);
+		// 旧字段(ok / answer / stop_reason / error)一个都不动,新字段只是追加
+		payload2["rounds"] = agentResult.rounds_used;
+		payload2["tools_used"] = new List<object>(agentResult.tools_used);
+		payload2["truncated"] = truncated;
+		return PyJson.Dumps(payload2, null, ensureAscii: false);
 	}
 }

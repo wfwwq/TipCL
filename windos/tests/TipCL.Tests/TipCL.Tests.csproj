@@ -26,6 +26,8 @@
   <ItemGroup>
     <!-- WebpFallbackTests.RealWebpDecodesToPng 的样本：libwebp 1.6.0 官方发布包自带 test.webp（BSD） -->
     <None Include="fixtures\webp-sample.webp" CopyToOutputDirectory="PreserveNewest" />
+    <!-- AI5-I 的评测集(由 I 包的数据提交带进来):AiClaimTests 用它比对误判数 -->
+    <None Include="Data\*.jsonl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
