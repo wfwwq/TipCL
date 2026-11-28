@@ -52,6 +52,25 @@ if (text3 == "plan" && planItems.Count > 0 && planTurnId == turn.id && !planAppr
 所以「批准」的语义是「同意这份计划并让回合继续」,批准的回合里执行的仍然只有只读工具;
 本包只把「问」挪到「做」之前,不改变 plan 档的写权限判定(任务书也没要求放开)。
 
+### 闭环:P2 + G + B2 三者合起来才构成完整的 plan 档保护(2026-11-28 与 lead 对齐)
+
+`Permission.Decide` 在 plan 档拒绝非只读工具,这条结论只在「工具元信息老实」且「工具没有绕过 `Decide`」时才成立。
+三个缺口各由一组提交补,缺任何一个 plan 档都有洞:
+
+| 缺口 | 谁补 | 状态 |
+|---|---|---|
+| 计划审批在执行之后 —— 驳回时写操作已经落盘、检查点已经生成 | **P2(本包)** | 审批前移到 `Scheduler.RunGroups` 之前;驳回本轮一个工具都不执行、不生成检查点 |
+| 插件工具一律 allow,绕过 `Permission.Decide` ⇒ plan 档也放行 | **G 包**(`win-perm` 提交 `a15d1ce`) | 插件工具现在也走 `Decide` |
+| `remember` / `forget` 标成只读但实际写盘 ⇒ 「假只读」在 plan 档放行 | **B2**(`win-perm` 提交 `37d25b9`) | 改成 `readonly:false` / `write_local`,plan 档会被拒 |
+
+- 没有 P2:驳回之前写操作已经执行完,审批只能拦住后续回合。
+- 没有 G:插件工具在 plan 档照跑。
+- 没有 B2:记忆写入在 plan 档照跑。
+
+**因此本包不在 D8 / schema-miss 重试上加 plan 档 schema 过滤**:那只是重复 `Permission.Decide` 的判定,
+既省不了风险,还会掩盖上面两个真缺口(已与 lead 确认,不加「双保险」)。
+**验收时请把 P2 / G / B2 三组提交放在一起看**,单看 P2 会以为 plan 档还有洞。
+
 ## 二、文件清单
 
 | 文件 | 改动 |

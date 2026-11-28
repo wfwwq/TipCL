@@ -120,14 +120,43 @@ dotnet test windos\tests\TipCL.Tests -c Release --no-build \
 
 ## 六、遗留问题
 
-1. **非 `no_tool_call` 回合的提示还没显示**:命中信息目前落在 `AgentResult.claims_unmatched` +
-   `Store` 事件 + `claim_unmatched` status 上,`AiPage.OnStatus` 没有对应分支,所以「completed 但声称做了没做」这一档
-   用户暂时看不到提示。要显示需要界面侧加一行(并在需要文案时加 i18n 词条)。
-2. **是否要把 `ClaimsAction` 的老正则从 `AiData` 里删掉**:`AiData.CLAIM_RE` / `ACTION_RE` 零引用,
-   本包没删(不在属主范围),建议由 R/G 或收尾包统一清理。
-3. **`WantsAction` 没有接线**:如果以后要让「用户要动手」影响工具表(像 Linux 那样),建议直接复用
-   `ClaimCategories` 的类别体系重写,而不是把旧正则接上去(旧正则实测 7/60 误判,且只看最后一条用户消息)。
-4. **类别体系与 Linux 树口径**:Linux 没有这套判据;C2/AG 若要在 Linux 落地,可以直接搬 `ClaimCategories` +
-   `ToolClaimCategory`(类别口径按 `AiToolTypes.side_effect` 对齐)。
-5. **评测集依赖**:本分支不含 `Data/*.jsonl`,合并 `ai5/intent-i` 后 `EvalSetIsNotWorseThanBaseline` 才会真的断言;
-   merge 时请确认 `windos/tests/TipCL.Tests/Data/` 下两个文件到位,且 `TipCL.Tests.csproj` 只加了一份 `Data\*.jsonl`(本包已加,勿重复)。
+### 1. 非 `no_tool_call` 回合的提示还没显示 —— 本轮**不做**(命中信息已就位)
+
+- **缺什么**:命中之后用户暂时看不到提示。现在只在「`stop_reason == no_tool_call` 且回复声称干了活」这一档
+  有既有提示(`BackendApi.cs:539` + `AiPage.cs:2305/2336` 的「它没有真的开始执行」);
+  「调了只读工具却声称做完」这一档(`completed`)没有任何界面反馈。
+- **要改哪个文件**:`windos/src/TipCL/Pages/AiPage.cs` 的 `OnStatus(BridgeEvent ev)` 加一个 `claim_unmatched` 分支
+  (读 `ev.Payload.claims`,显示一行提示;文案要新增 i18n 词条,或复用现成词条)。
+- **字段已经就位(可测的部分都做了)**:
+  - `_result` 里的 `_status("claim_unmatched", PyDict.Of("claims", …, "turn_id", turn.id))`(`Agent.cs` 现 L1940 附近);
+  - `Store` 事件 `ClaimWithoutAction`(`claim/turn_id/round/claims`)与 `Trace.Record("claim_without_action", …)`
+    (带 `claims` 与 `ran` = 本回合每个工具的名字:状态);
+  - `AgentResult.claims_unmatched`(判「命中」的类别列表,空表 = 没命中)。
+- **为什么本轮不做**:动 `Pages/AiPage.cs` 属于「动到 AI 页面」的改动,任务书 §6 的验收判据是
+  「smoke exit 0、日志 0 WARN / 0 ERROR、**目视检查 PNG**」;本轮 smoke 明令禁止(会弹 WPF 窗口抢用户前台),
+  `ci-e` 也核实 Windows 自检 `AiSelfTest.RunAll` 会 `new Window{}.Show()`,必须有交互桌面 ——
+  **改完无法验证的 UI 改动比留着不做风险更大**。
+- **验收时需要什么**:能开界面的环境 + `--smoke`(两版)+ PNG 目视;再加用例断言
+  「声称已装但只调过 search_mods 的回合会发出 `claim_unmatched` 事件且 `claims` 含 `install`」
+  (有了回放框架后由 T 的框架覆盖)。
+
+### 2. `AiData` 里的死正则没删
+
+`AiData.CLAIM_RE` / `ACTION_RE` / `SYSTEM_PROMPT` / `TOOL_SCHEMAS_JSON` 零引用,本包没删
+(不在属主范围),建议由 R/G 或收尾包统一清理。
+
+### 3. `WantsAction` 没有接线
+
+如果以后要让「用户要动手」影响工具表(像 Linux 那样),建议直接复用 `ClaimCategories` 的类别体系重写,
+而不是把旧正则接上去(旧正则实测 7/60 误判,且只看最后一条用户消息)。
+
+### 4. 类别体系与 Linux 树口径
+
+Linux 没有这套判据;C2/AG 若要在 Linux 落地,可以直接搬 `ClaimCategories` + `ToolClaimCategory`
+(类别口径按 `AiToolTypes.side_effect` 对齐)。
+
+### 5. 评测集依赖
+
+本分支不含 `Data/*.jsonl`,合并 `ai5/intent-i` 后 `EvalSetIsNotWorseThanBaseline` 才会真的断言;
+merge 时请确认 `windos/tests/TipCL.Tests/Data/` 下两个文件到位,且 `TipCL.Tests.csproj` 只加了一份
+`Data\*.jsonl`(本包已加,`intent-i` 故意没加,**勿重复添加**)。

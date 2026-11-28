@@ -63,14 +63,49 @@
 
 ## 五、遗留问题
 
-1. **界面一行提示未接**:事件已带 `subagent` / `subagent_task`,但 `windos/src/TipCL/Pages/AiPage.cs`
-   的 `OnStatus` 没有加对应分支(不在本包属主范围)。现在子代理的进度事件会按普通步骤渲染。
-2. **`ai_subagent_max_rounds` 没有界面项**:当前只能写 `config.json`。`BackendApi._settings_full()`
-   里也没加这条键(那是 D6 属主的文件),本包按「先读 settings、再读 config」兜底,所以 config 里写就能生效。
-   若要加设置页控件,由界面侧补一行即可。
-3. **`dispatch_subagent` 并行的安全性**依赖会话 id 唯一(已做)+ 每个子代理独立 `CompactState`(已做)。
-   但 `Usage` / `Trace` / `Store.LogEvent` 仍是进程级静态字典,并发派发时用量会按不同会话 id 各自累计(不会串),
-   `Usage.Get(父会话)` 不含子代理用量 —— 与改造前一致,是否合并统计留给 O 包口径。
-4. `truncated` 的判定口径是「`stop_reason` 为 `truncated` 或 `max_rounds`」,即「输出/额度被截断」;
-   如果后续想要「是否被压缩过」之类的语义,需要另加字段。
-5. research-r 指出的 `Scheduler` 异常语义差异(Windows faulted 直接抛 / Linux 收成载荷)未改,记录在案。
+### 1. UI 那一行「子任务进行中:<工具名>」——本轮**不做**(字段已就位)
+
+- **缺什么**:界面不认子代理事件,现在子代理的进度会按普通步骤渲染(工具名直接出现在父回合的步骤流里)。
+- **要改哪个文件**:`windos/src/TipCL/Pages/AiPage.cs` 的 `OnStatus(BridgeEvent ev)`(switch 里加一个分支,
+  读 `ev.Payload.subagent`;文案「子任务进行中:」需要新增 i18n 词条,或改用现成词条)。
+- **字段已经就位(可测的部分都做了)**:
+  - `Agent.cs` 的 `RunSubagent(backend, settings, args, cancelled, onStatus)` 里包的 `childStatus`:
+    转发子代理的 `_status` 时给 payload 追加 `subagent`(= 本次派发的会话 id,`<父id>-sub-<8位随机>`)与
+    `subagent_task`(= 任务文本前 80 字);
+  - 父回合调用点:`Agent.cs` 的 `_execute` 里 `RunSubagent(backend, settings, toolCall2.args, cancelled, _status)`。
+- **为什么本轮不做**:这是「动到 AI 页面的改动」,任务书 §6 对这类改动的验收判据是
+  「smoke exit 0、日志 0 WARN / 0 ERROR、**目视检查 PNG**」;而本轮 smoke 是明令禁止的(会弹 WPF 窗口抢用户前台),
+  `ci-e` 也已核实 Windows 自检 `AiSelfTest.RunAll` 会 `new Window{}.Show()`,必须有交互桌面。
+  **改完无法验证的 UI 改动比留着不做风险更大** —— 因此本轮只交付事件与字段。
+- **验收时需要什么**:能开界面的环境 + `--smoke`(两版)+ PNG 目视检查;再加一条用例断言
+  「子代理 status 事件带 `subagent` 字段且值与派发 id 一致」(有了回放框架后由 T 的框架覆盖)。
+
+### 2. `ai_subagent_max_rounds` 没有界面项 —— 本轮**不做**,但功能已可用
+
+- **功能状态**:可用。`Agent.SubagentMaxRounds` 先读本轮 `settings`,没有再读 `config.json`,
+  所以在 `config.json` 里写 `"ai_subagent_max_rounds": 8` 立即生效;不写就是默认 4;`dispatch_subagent`
+  的 `max_rounds` 参数可在硬上限 20 内覆盖(见 `AiSubagentTests` 的 6 条断言)。
+- **缺什么**:「界面能看到 / 能改」。
+  1. `windos/src/TipCL/Core/BackendApi.cs` 的 `_settings_full()` 白名单里加一行
+     `pyDict["ai_subagent_max_rounds"] = Py.Int(Py.Or(G("ai_subagent_max_rounds"), 4L));`
+     (该文件是 D6 属主,不在本包范围);
+  2. `windos/src/TipCL/Pages/SettingsPage.cs` 的 AI 卡片加一个数字输入(或做成 `ai_max_rounds` 的同款)。
+- **为什么本轮不做**:和上面第 1 条同一个理由(UI 面,smoke 禁用,无法目视验证)。
+  而且**只加白名单不加界面控件**会出现「有个设置项但界面上改不了」的半成品状态,不如等能开界面时一起做。
+- **验收时需要什么**:设置页能改、保存后 `config.json` 落盘、下一轮派发子代理时轮数按新值生效(各一条用例)+ smoke 目视。
+
+### 3. `dispatch_subagent` 并行的安全性
+
+依赖会话 id 唯一(已做)+ 每个子代理独立 `CompactState`(已做)。但 `Usage` / `Trace` / `Store.LogEvent`
+仍是进程级静态字典:并发派发时用量按不同会话 id 各自累计(不会串),`Usage.Get(父会话)` 不含子代理用量 ——
+与改造前一致;要不要合并统计到父会话,留给 O 包口径。
+
+### 4. `truncated` 的判定口径
+
+`stop_reason` 为 `truncated` 或 `max_rounds` 即 `truncated = true`(「输出/额度被截断」)。
+如果后续想要「是否被压缩过」之类的语义,需要另加字段。
+
+### 5. `Scheduler` 异常语义差异未改
+
+research-r 指出 Windows 的 `RunGroups` 遇 faulted 直接抛(打断同组),Linux 收成工具错误载荷。
+本包只加了「谁能进并行组」的判定,没动执行与异常语义;这条差异记在这里,不在本包顺手改。
