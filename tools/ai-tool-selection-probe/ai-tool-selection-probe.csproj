@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    AI5-C3 工具选择回放探针(dev 工具)。
+    注意:
+      · 这是开发期用的控制台工具,**不进产品构建**:TipCL.Linux.sln 只登记 src/TipCL.App、
+        src/TipCL.Core、tests/TipCL.Tests 三个工程,CI 也只 build/test 那三个 csproj,
+        打包脚本(tools/package.sh、tools/deb.sh)只拷发布产物,不会把它带进 AppImage / deb。
+      · i18n 审计(tools/i18n-audit.py)只扫 src/TipCL.App 与 src/TipCL.Core,本目录里的中文
+        字符串不参与 i18n 基线统计,所以不需要 i18n 标记。
+      · 用法见同目录 README.md。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>ai-tool-selection-probe</AssemblyName>
+    <RootNamespace>AiToolSelectionProbe</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TipCL.Core\TipCL.Core.csproj" />
+  </ItemGroup>
+
+</Project>

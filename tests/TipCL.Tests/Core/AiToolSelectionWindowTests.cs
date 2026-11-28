@@ -121,15 +121,17 @@ public class AiToolSelectionWindowTests
     }
 
     /// <summary>
-    /// 「这一轮是不是在下命令」只看本轮用户话:上一轮的命令动词不会让本轮把全部写工具带上
+    /// 「这一轮是不是在下命令」只看本轮用户话:上一轮的命令动词不会让本轮把**全部写工具**带上
     /// (实测那样一轮要多约 7.1k token 的裸写工具,口径对比见 progress/AI5-C1.md)。
+    /// 注意区分:上一轮话里的**关键词**(AI5-C3 补的「卸了」)照旧参与命中 → delete_mod 会来;
+    /// 这里拦的是「光凭上一轮的命令动词就把 33 个写工具全倒进来」。
     /// </summary>
     [Fact]
     public void EarlierTurnCommand_DoesNotEnableBareWriteTools()
     {
         var history = new List<object>
         {
-            User("帮我把 JEI 卸了"), // 上一轮像在下命令
+            User("帮我把 JEI 卸了"), // 上一轮像在下命令,而且「卸了」是 AI5-C3 补进关键词表的说法
             ToolResult("search_mods", "{\"ok\":true}"),
             User("那别的呢"), // 本轮既不是命令,也没有关键词
         };
@@ -137,8 +139,8 @@ public class AiToolSelectionWindowTests
         List<string> picked = Picked(history);
 
         Assert.Contains("install_mod", picked); // 常驻工具照旧
-        Assert.DoesNotContain("delete_mod", picked); // 裸写工具没被上一轮的命令带进来
-        Assert.DoesNotContain("delete_instance", picked);
+        Assert.Contains("delete_mod", picked); // 关键词窗口命中「卸了」→ 该带的照带
+        Assert.DoesNotContain("delete_instance", picked); // 但没有因为上一轮的命令动词把裸写工具倒进来
     }
 
     /// <summary>本轮确实是命令时,关键词表没覆盖的写工具照旧带上(原有口径不变)。</summary>
