@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using TipCL.Core.Plugins;
 
 namespace TipCL.Core.Launcher.Ai;
 
@@ -45,8 +46,6 @@ public static class ToolMeta
 		new ToolMetaInfo("read_artifact", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("dispatch_subagent", ro: true, "none", "low", lr: false),
 		new ToolMetaInfo("update_plan", ro: true, "none", "low", lr: false),
-		// B2(2026-11-28):remember / forget 真的会写盘(记忆文件),元信息必须与真实副作用一致 ——
-		// 标成只读会让经 MCP 调用时不弹外部确认(Tools.IsWriteTool 就是这个判断的依据)。
 		new ToolMetaInfo("remember", ro: false, "write_local", "low", lr: false),
 		new ToolMetaInfo("forget", ro: false, "write_local", "low", lr: false)
 	};
@@ -55,10 +54,16 @@ public static class ToolMeta
 
 	public static ToolMetaInfo Get(object name)
 	{
-		if (!(name is string key) || !Map.TryGetValue(key, out ToolMetaInfo value))
+		if (!(name is string key))
 		{
 			return null;
 		}
-		return value;
+		if (Map.TryGetValue(key, out ToolMetaInfo value))
+		{
+			return value;
+		}
+		// G 包:插件工具的元数据来自 manifest 声明的 sideEffect。没声明(老插件)返回 null ——
+		// 那就是方案 A 的老行为:不参与权限判定、不做检查点、不进并行组,照旧放行。
+		return PluginTools.DeclaredMeta(key);
 	}
 }

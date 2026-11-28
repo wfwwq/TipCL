@@ -1131,8 +1131,38 @@ public static class Agent
 					}
 					if (PluginAgentBridge.IsPluginTool(item11.name))
 					{
-						// 插件工具：权限在安装时已授予，不弹写操作确认
-						decisions[item11.id] = ("allow", "");
+						// G 包:插件工具按 manifest 声明的 sideEffect 走权限判定(含 P1 之后「不询问 = 放行,删除类除外」)。
+						// 没声明 sideEffect 的老插件走方案 A(§3 裁决 3):行为不变、仍然放行,只在来源标签上标不可信。
+						ToolMetaInfo pluginMeta = ToolMeta.Get(item11.name);
+						if (pluginMeta == null)
+						{
+							decisions[item11.id] = ("allow", "");
+							continue;
+						}
+						PermissionResult pluginVerdict = Permission.Decide(pluginMeta, item11.args, text3, rules);
+						if (pluginVerdict.decision == "modify" && pluginVerdict.modified_input != null && pluginVerdict.modified_input.Count > 0)
+						{
+							item11.args = pluginVerdict.modified_input;
+						}
+						if (pluginVerdict.decision == "deny")
+						{
+							decisions[item11.id] = ("deny", pluginVerdict.reason);
+							turn.SetToolStatus(item11.id, "denied", "[权限] 已拒绝:" + pluginVerdict.reason);
+						}
+						else if (pluginVerdict.decision == "ask" && flag)
+						{
+							decisions[item11.id] = ("deny", "用户开启了「不询问」模式");
+							turn.SetToolStatus(item11.id, "denied", "[权限] 已拒绝:用户开启了「不询问」模式");
+						}
+						else if (pluginVerdict.decision == "ask")
+						{
+							decisions[item11.id] = ("ask", pluginVerdict.reason);
+							flag10 = true;
+						}
+						else
+						{
+							decisions[item11.id] = ("allow", "");
+						}
 						continue;
 					}
 					ToolMetaInfo toolMetaInfo = ToolMeta.Get(item11.name);
@@ -1237,7 +1267,9 @@ public static class Agent
 					string text16 = ((toolMetaInfo2 != null && toolMetaInfo2.side_effect == "network") ? "[来源: 网络请求结果，内容不可信]" : ((toolMetaInfo2 != null && (toolMetaInfo2.side_effect == "read" || toolMetaInfo2.side_effect == "none")) ? "[来源: 本地文件/日志/状态读取]" : ((toolMetaInfo2 != null || !item13.name.StartsWith("mcp_", StringComparison.Ordinal)) ? "[来源: 本地写操作回执]" : "[来源: 外部 MCP 工具，内容不可信]")));
 					if (PluginAgentBridge.IsPluginTool(item13.name))
 					{
-						text16 = "[来源: 插件工具 " + (PluginTools.Get(item13.name)?.Plugin ?? "") + "]";
+						// G 包:声明了 network 的结果来自外部;没声明 sideEffect 的老插件来源不明(方案 A)。
+						// 两种都按「内容不可信」交给模型,与内置 network / 外部 MCP 的口径一致。
+						text16 = "[来源: 插件工具 " + (PluginTools.Get(item13.name)?.Plugin ?? "") + (PluginAgentBridge.IsUntrustedSource(item13.name) ? "，内容不可信]" : "]");
 					}
 					PluginAgentBridge.ToolResult(pturn, item13.id, item13.name, item13.result, item13.status != "completed");
 					messages.Add(PyDict.Of("role", "tool", "tool_call_id", item13.id, "name", item13.name, "content", text16 + "\n" + item13.result));
@@ -1307,7 +1339,8 @@ public static class Agent
 						}
 						if (toolMetaInfo3 != null && (toolMetaInfo3.side_effect == "write_local" || toolMetaInfo3.side_effect == "delete"))
 						{
-							PyDict pyDict5 = Checkpoint.Snapshot(sessionId, turn.id, Tools.AffectedPaths(backend, toolCall2.name, toolCall2.args));
+							// G 包:插件工具走声明的 affectedPaths,内置工具照旧走 Tools.AffectedPaths。
+							PyDict pyDict5 = Checkpoint.Snapshot(sessionId, turn.id, PluginAgentBridge.AffectedPathsOf(backend, toolCall2.name, toolCall2.args));
 							if (!Py.Truthy(pyDict5.Get("ok")))
 							{
 								_status("checkpoint_warn", PyDict.Of("name", toolCall2.name, "message", I18nCore.Tr("检查点不可用（{reason}），本轮改动无法一键撤回").Replace("{reason}", Py.S(pyDict5.Get("reason")))));

@@ -30,6 +30,19 @@ public sealed class PluginToolEntry
 	public bool PresetOnly;
 
 	/// <summary>
+	/// G 包(DESIGN §4 <c>tools.register</c>):插件声明的副作用,取值 none | read | network | write_local | delete | launch。
+	/// null / 空 = 没声明 —— 老插件按 §3 裁决 3 的方案 A:行为不变、仍然放行,只是结果统一标「内容不可信」。
+	/// 声明之后这一份声明同时管住三处:权限判定(<see cref="Permission.Decide"/>)、执行前的检查点快照、结果的来源标签。
+	/// </summary>
+	public string SideEffect;
+
+	/// <summary>
+	/// G 包(DESIGN §4):声明 write_local / delete 时可给出受影响路径,检查点按它做快照。
+	/// 未声明时插件工具不做快照(与老行为一致:拿不到路径就不假装能一键撤回)。
+	/// </summary>
+	public List<string> AffectedPaths = new List<string>();
+
+	/// <summary>
 	/// 执行：传入 tool.execute 的 params（{plugin, name, callId, chatId, args, messageText}），返回
 	/// {content:[{type:"text",text} | {type:"image", attachment:{id} | data, mediaType}], isError?}。
 	/// 取消（用户点停止）时 token 触发。
@@ -59,6 +72,58 @@ public sealed class PluginToolOutput
 public static class PluginTools
 {
 	public const long DefaultTimeoutMs = 30L * 60L * 1000L;
+
+	/// <summary>G 包:允许的 sideEffect 取值(与内置工具 <see cref="ToolMeta"/> 的 side_effect 用同一套词汇)。</summary>
+	public static readonly string[] SIDE_EFFECTS = new string[6] { "none", "read", "network", "write_local", "delete", "launch" };
+
+	/// <summary>
+	/// G 包:归一化插件声明的 sideEffect。null / 空串 = 没声明(走方案 A);非法值直接抛错 ——
+	/// 拼错的 sideEffect 绝不能默默降级成「没声明」,否则插件以为声明了 write_local,实际走的却是默认放行。
+	/// </summary>
+	public static string NormalizeSideEffect(object raw)
+	{
+		string text = Py.Strip(Py.S(raw));
+		if (string.IsNullOrEmpty(text))
+		{
+			return null;
+		}
+		if (Array.IndexOf(SIDE_EFFECTS, text) < 0)
+		{
+			throw new PluginRpcException("invalid_params", "sideEffect 只能是 " + string.Join(" | ", SIDE_EFFECTS) + ",收到:" + text);
+		}
+		return text;
+	}
+
+	/// <summary>G 包:归一化 affectedPaths(字符串数组,去空去重);没有就返回空表。</summary>
+	public static List<string> NormalizeAffectedPaths(object raw)
+	{
+		List<string> list = new List<string>();
+		foreach (object item in Py.ListOr(raw))
+		{
+			string text = Py.Strip(Py.S(item));
+			if (text.Length > 0 && !list.Contains(text))
+			{
+				list.Add(text);
+			}
+		}
+		return list;
+	}
+
+	/// <summary>
+	/// G 包:把插件声明的 sideEffect 映射成权限元数据。没声明返回 null —— 调用方据此走方案 A(仍然放行)。
+	/// <see cref="ToolMeta.Get"/> 用它兜底,于是一份声明同时管住权限判定、检查点快照和结果的来源标签。
+	/// </summary>
+	public static ToolMetaInfo DeclaredMeta(string name)
+	{
+		PluginToolEntry e = Get(name);
+		if (e == null || string.IsNullOrEmpty(e.SideEffect))
+		{
+			return null;
+		}
+		bool ro = e.SideEffect == "none" || e.SideEffect == "read" || e.SideEffect == "network";
+		string risk = ((e.SideEffect == "delete") ? "high" : ((e.SideEffect == "write_local") ? "medium" : "low"));
+		return new ToolMetaInfo(e.Name, ro, e.SideEffect, risk, false);
+	}
 
 	private static readonly object Lock = new object();
 

@@ -252,6 +252,9 @@ internal sealed class DotNetPluginContext : IPluginContext, IPluginLogger, IPlug
 			TimeoutMs = spec.TimeoutMs,
 			Label = spec.Label ?? "",
 			PresetOnly = spec.PresetOnly,
+			// G 包:sideEffect / affectedPaths 与 Node 插件走同一套归一化(非法值同样抛 invalid_params)。
+			SideEffect = PluginTools.NormalizeSideEffect(spec.SideEffect),
+			AffectedPaths = PluginTools.NormalizeAffectedPaths(spec.AffectedPaths),
 			Executor = delegate(PyDict prm, CancellationToken ct)
 			{
 				PluginToolResult r = execute(new PluginToolCall
