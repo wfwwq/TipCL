@@ -159,3 +159,53 @@ dotnet test windos\tests\TipCL.Tests -c Release --no-build --filter "FullyQualif
 4. **D1 的两处「有意多出 Linux 口径」**:① 读路径也拦「账号 / 配置文件」(与 Linux `SecretFiles` 一致,属修缺陷本身);② `ai_permissions.json`、`mcp_server.json` 是 Windows 侧新增到 `NoWriteFiles` 里的(任务书 D1 验收点名要拒 `ai_permissions.json`,Linux 侧没有这两个文件)。
 5. **体积**:见 §4。若回收包要动这三处,注意守卫表的字符串与 `fs_write` 描述是主要占用,别把守卫逻辑本身砍掉。
 6. **另有一次事故已单独报给 lead**:清理自己挂死的 `dotnet test` 时按进程名批量 `Stop-Process`,误杀了 `C:\tipcl-ai5\t-linux` 那个会话的 `testhost.exe`(可能中断了它一次测试跑)。后续只按「命令行里含自己 worktree 路径」筛进程。
+
+---
+
+## 7. 追加(2026-11-28):卡顿关键词补一个「卡」
+
+> 独立小提交。D1/D2/D6 三个包不动。
+
+### 做了什么
+
+- `ExtraTools.Keywords` 里卡顿那一行的 keys 从 14 项变 15 项,补一个**单独的字**「卡」(在「卡顿」之后)。
+  覆盖的说法:「好卡」「有点卡」「一卡一卡」「太卡了」「卡得不行」「卡住不动」。
+- 由来:`t-win` 做回放场景时发现、`linux-tools` 独立核实:Windows 这张表原来只有「卡顿 / 很卡 / 掉帧 / 帧数 / fps / lag / 优化 / 流畅 / 内存 / JVM / GC / 电脑配置」,**没有「卡」也没有「好卡」**,用户说「好卡」时首轮不下发 `get_system_info` / `diagnose_lag` / `tune_jvm`。Linux 侧同一行本来就有「好卡」,且 `linux-tools` 在 Linux 侧补单字「卡」后漏选率从 23.5/百回合降到 0。
+- **没有动** `ActionRe` / `QuestionRe`(「是不是在下命令」的判定):`linux-tools` 实测过,那个扫窗口会让 33 个写工具全带上、tools token 从 +2.3% 涨到 +9.1%。
+
+### 反向风险与取舍(独立判断,不是照抄 Linux 结论)
+
+命中方式是**子串**匹配(`Tools.SelectToolSchemas` → `text.Contains(k)`,扫最近 12 条 user/tool 消息的 `content`),所以「卡」必然把「显卡」「卡片」一起命中。按代价分两类:
+
+| 误命中 | 判断 |
+|---|---|
+| 「显卡」(问配置)→ 多下发 3 个工具 | **语义相邻**,问显卡本来就要看配置,不算误伤 |
+| 「卡住不动」(游戏挂住)→ 多下发 3 个工具 | **正好是该诊断的场景**,是收益不是代价 |
+| 「卡片」类说法(界面卡片、任务卡片) | 纯噪声,但这个启动器的用户对话里很少见 |
+
+误命中的代价上界:这一轮多下发 3 个工具,`get_system_info`、`diagnose_lag` 都是 `ro=true` 只读;`tune_jvm` 是 `ro=false` 但只有 `apply=true` 才写,写设置仍走原有权限判定。**不弹确认、不落盘、不放宽任何权限**,粗估 +3 个 schema ≈ 300 token/轮,且只在出现「卡」的那一轮。
+
+为什么不用「好卡 / 有点卡」这种更长组合:会漏「太卡了」「卡得不行」「巨卡」这些同样常见的说法。**漏选比多选贵** —— 漏选要多花一整轮 + 一次全量 schema 重发(`tool_schema_miss`),多选只多几百 token。故按 lead 与 Linux 侧的一致口径补单字。
+
+### 用例与三步证据
+
+新增 `windos/tests/TipCL.Tests/AiLagKeywordTests.cs`(10 条)。断言走**真实调用** `Tools.SelectToolSchemas`(纯函数,不碰后端),即验证「工具真的被下发」,不是「表里有字」。
+
+- 复现(把「卡」去掉,`-t:Rebuild` 重编):**8 红 / 2 过**,总计 10;通过的两条正好是不该受影响的 —— `UnrelatedMessageDoesNotSelectDiagnoseTools`(无关消息)和那个本来就能命中「掉帧」的 Theory 分支。
+- 修复:补回「卡」。
+- 转绿:`已通过! - 失败: 0,通过: 10,已跳过: 0,总计: 10`。
+
+### 验收数字
+
+| 项 | 上一包 | 本次追加 |
+|---|---|---|
+| 全量 `dotnet test`(排除 Terracotta/ClickSweep/OpenUrl) | 838 总 / 832 过 / 6 跳 / 0 败 | **848 总 / 842 过 / 6 跳 / 0 败**(+10 条) |
+| Windows Release 构建 | 0 error / 2 warning | 0 error / 2 warning(既有那两条,零新增) |
+| compact `TipCL.exe` | 5,764,096 B | **5,764,096 B(+0 B)** |
+
+体积 **+0 B**:新增的 1 个汉字关键词与几行注释被 PE 对齐余量吸收,逐字节相同。仍按裁决不做回收。
+
+### 遗留 / 说明
+
+- 关键词表是子串匹配,没法排除「显卡」「卡片」这类组合;真要精细到「排除法」得给 `Keywords` 加否定词字段(会改数据结构与 `Tools.SelectToolSchemas`,超出本包边界),建议留给 C3(工具选择量化)一起评。
+- 若后续 `docs/DECISIONS.md` 要给这条留痕:Windows 关键词表卡顿行新增「卡」,与 Linux 对齐。

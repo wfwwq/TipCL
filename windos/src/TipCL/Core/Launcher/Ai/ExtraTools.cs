@@ -66,7 +66,11 @@ public static class ExtraTools
 
 	public static readonly (string[] keys, string[] extra)[] Keywords = new(string[], string[])[8]
 	{
-		(new string[14] { "卡顿", "很卡", "掉帧", "帧数", "fps", "FPS", "lag", "优化", "流畅", "内存", "JVM", "jvm", "GC", "电脑配置" }, new string[3] { "get_system_info", "diagnose_lag", "tune_jvm" }),
+		// 2026-11-28 补的「卡」:原来只有「卡顿 / 很卡」,用户说「好卡」「有点卡」「一卡一卡」「太卡了」时首轮不下发
+		// get_system_info / diagnose_lag / tune_jvm(模型拿不到诊断工具,只能瞎猜)。与 Linux 侧同一个字。
+		// 取舍:「卡」是常用字,「显卡」「卡片」也会命中 —— 多下发的这三个工具是只读 / 建议类(tune_jvm 只有 apply=true 才写),
+		// 不会弹确认、不落盘,代价只是这一轮请求多 ~3 个工具;详见 progress/AI5-D-guard.md。
+		(new string[15] { "卡顿", "卡", "很卡", "掉帧", "帧数", "fps", "FPS", "lag", "优化", "流畅", "内存", "JVM", "jvm", "GC", "电脑配置" }, new string[3] { "get_system_info", "diagnose_lag", "tune_jvm" }),
 		(new string[9] { "备份", "回滚", "还原", "恢复", "存档", "坏档", "世界", "save", "backup" }, new string[5] { "list_saves", "backup_save", "list_save_backups", "restore_save_backup", "open_folder" }),
 		(new string[9] { "联机", "开房", "房间", "朋友一起", "一起玩", "局域网", "陶瓦", "lan", "multiplayer" }, new string[1] { "multiplayer" }),
 		(new string[7] { "皮肤", "账号", "账户", "披风", "离线", "skin", "account" }, new string[4] { "list_accounts", "add_offline_account", "switch_account", "set_skin" }),
