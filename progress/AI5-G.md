@@ -104,9 +104,12 @@ dotnet test windos\tests\TipCL.Tests -c Release --no-build --filter "FullyQualif
 
 | 段 | 行范围(本分支提交后) | 内容 |
 |---|---|---|
-| 1 | `Agent.cs:1132-1167` | 插件工具分支:原来一行 `decisions[...] = ("allow", "")`,现在按声明的 `sideEffect` 走 `Permission.Decide`(deny / ask / allow 三种去向与内置工具一致)。未声明(`ToolMeta.Get` 返回 null)时**仍然直接 allow** |
-| 2 | `Agent.cs:1268-1273` | 插件工具结果来源标签:按 `IsUntrustedSource` 决定是否加「内容不可信」 |
-| 3 | `Agent.cs:1343` | 检查点取路径:`Tools.AffectedPaths(...)` → `PluginAgentBridge.AffectedPathsOf(...)`(内置工具行为不变)|
+| 1 | `Agent.cs:1134-1164` | 插件工具分支:原来一行 `decisions[...] = ("allow", "")`,现在按声明的 `sideEffect` 走 `Permission.Decide`(deny / ask / allow 三种去向与内置工具一致)。未声明(`ToolMeta.Get` 返回 null)时**仍然直接 allow** |
+| 2 | `Agent.cs:1260-1265` | 插件工具结果来源标签:按 `IsUntrustedSource` 决定是否加「内容不可信」 |
+| 3 | `Agent.cs:1335` | 检查点取路径:`Tools.AffectedPaths(...)` → `PluginAgentBridge.AffectedPathsOf(...)`(内置工具行为不变)|
+
+> 行号以最终提交为准(2026-11-28 修完「不询问」开关后重新取过;开关那个改动删掉了每轮两处 `ask → deny` 分支,
+> 所以比 G 包刚落地时整体上移了 8 行)。
 
 段 1 的判据只是「`ToolMeta.Get(插件工具名)` 非空」,所以合并时若 `win-agent` 已经改过这一带,冲突是局部可解的。
 

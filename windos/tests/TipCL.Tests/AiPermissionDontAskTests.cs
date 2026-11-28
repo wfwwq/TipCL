@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using TipCL.Core;
 using TipCL.Core.Launcher.Ai;
 using Xunit;
@@ -129,5 +131,153 @@ public class AiPermissionDontAskTests
 	{
 		Assert.True(Permission.PermissionMode.IsValid("dontAsk"));
 		Assert.Equal("dontAsk", Permission.NormalizePermissionMode("dontAsk"));
+	}
+
+	// ── P1 补充(2026-11-28):「不询问」开关 ai_permission_dont_ask 与 dontAsk 档同口径 ──
+	//
+	// 改动前那个开关是叠在 Permission.Decide 之外的**第二条判断**:只认「ask」并一律改成 deny,
+	// 于是同一个「不询问」语义有两种相反行为(勾了开关写操作被拒、切到档位却放行)。
+	// 现在只在入口处合成一个「生效档位」,回合里不再有第二处判断。
+
+	private static PyDict Settings(string mode, bool dontAsk)
+	{
+		return PyDict.Of("ai_permission_mode", mode, "ai_confirm_writes", true, "ai_permission_dont_ask", dontAsk);
+	}
+
+	[Theory]
+	[InlineData("default")]
+	[InlineData("edit")]
+	[InlineData("acceptEdits")]
+	[InlineData("auto")]
+	[InlineData("autoEdit")]
+	[InlineData("build")]
+	[InlineData("custom")]
+	[InlineData("dontAsk")]
+	public void SwitchFoldsIntoTheDontAskMode(string mode)
+	{
+		Assert.Equal("dontAsk", Permission.EffectiveMode(Settings(mode, true)));
+	}
+
+	/// <summary>plan / yolo / bypassPermissions 是档位给的更明确态度,开关不该压过它们。</summary>
+	[Theory]
+	[InlineData("plan")]
+	[InlineData("yolo")]
+	[InlineData("bypassPermissions")]
+	public void ClearModesOutrankTheSwitch(string mode)
+	{
+		Assert.Equal(mode, Permission.EffectiveMode(Settings(mode, true)));
+	}
+
+	[Fact]
+	public void SwitchOffLeavesTheModeAlone()
+	{
+		Assert.Equal("acceptEdits", Permission.EffectiveMode(Settings("acceptEdits", false)));
+		Assert.Equal("default", Permission.EffectiveMode(Settings("default", false)));
+	}
+
+	/// <summary>验收:开关开启 + 写工具 → allow(与 dontAsk 档逐字一致)。</summary>
+	[Theory]
+	[InlineData("install_mod")]
+	[InlineData("install_game")]
+	[InlineData("write_mod_config")]
+	[InlineData("launch_game")]
+	public void SwitchOnAllowsWritesLikeTheMode(string tool)
+	{
+		string effective = Permission.EffectiveMode(Settings("default", true));
+		PermissionResult bySwitch = Permission.Decide(ToolMeta.Get(tool), new PyDict(), effective, null);
+		PermissionResult byMode = Permission.Decide(ToolMeta.Get(tool), new PyDict(), DontAsk, null);
+		Assert.Equal("allow", bySwitch.decision);
+		Assert.Equal(byMode.decision, bySwitch.decision);   // 两条路径必须给出同一个答案
+	}
+
+	/// <summary>验收:开关开启 + 删除类 → deny。</summary>
+	[Theory]
+	[InlineData("delete_mod")]
+	[InlineData("delete_instance")]
+	public void SwitchOnStillDeniesDelete(string tool)
+	{
+		string effective = Permission.EffectiveMode(Settings("default", true));
+		Assert.Equal("deny", Permission.Decide(ToolMeta.Get(tool), new PyDict(), effective, null).decision);
+	}
+
+	/// <summary>开关开启也不放宽既有规则:显式 deny 优先,不带内容的 allow 规则仍不放行删除。</summary>
+	[Fact]
+	public void SwitchOnStillHonoursRules()
+	{
+		string effective = Permission.EffectiveMode(Settings("default", true));
+		Assert.Equal("deny", Permission.Decide(ToolMeta.Get("install_mod"), new PyDict(), effective, new[] { new AiRule("install_mod", null, "deny") }).decision);
+
+		PermissionResult byRule = Permission.Decide(ToolMeta.Get("delete_mod"), new PyDict(), effective, new[] { new AiRule("delete_mod", null, "allow") });
+		Assert.Equal("deny", byRule.decision);   // delete 仍是档位级的 deny
+		Assert.Equal("", byRule.rule_id);        // 而且不是那条 allow 规则给的
+	}
+
+	/// <summary>开关开启不削弱 plan 档(只看不动)。</summary>
+	[Fact]
+	public void SwitchOnDoesNotWeakenPlanMode()
+	{
+		string effective = Permission.EffectiveMode(Settings("plan", true));
+		Assert.Equal("plan", effective);
+		Assert.Equal("deny", Permission.Decide(ToolMeta.Get("install_mod"), new PyDict(), effective, null).decision);
+		Assert.Equal("allow", Permission.Decide(ToolMeta.Get("list_mods"), new PyDict(), effective, null).decision);
+	}
+
+	/// <summary>开关开启也不收紧 yolo / bypassPermissions(它们本来连 delete 都放行)。</summary>
+	[Fact]
+	public void SwitchOnDoesNotTightenYolo()
+	{
+		string effective = Permission.EffectiveMode(Settings("yolo", true));
+		Assert.Equal("yolo", effective);
+		Assert.Equal("allow", Permission.Decide(ToolMeta.Get("delete_mod"), new PyDict(), effective, null).decision);
+	}
+
+	/// <summary>
+	/// 口径不变:能力未知的外部 MCP 工具仍然要先确认。
+	/// 生效档位不是 yolo / bypassPermissions ⇒ Agent 里那条「等 MCP 能力未知 → ask」的分支条件成立
+	/// (它比对的就是这个生效档位);分支本身由下面那条源码守卫钉住。
+	/// </summary>
+	[Fact]
+	public void SwitchOnKeepsUnknownMcpToolsAsking()
+	{
+		string effective = Permission.EffectiveMode(Settings("default", true));
+		Assert.NotEqual("yolo", effective);
+		Assert.NotEqual("bypassPermissions", effective);
+		Assert.Equal("allow", Permission.Decide(null, new PyDict(), effective, null).decision);   // 元数据为空时 Decide 按 write_local 放行
+	}
+
+	/// <summary>系统提示要跟着生效档位说,不能再说「会被直接拒绝」。</summary>
+	[Fact]
+	public void PermissionNoteFoldsTheSwitch()
+	{
+		string note = Permission.PermissionNote(Settings("default", true));
+		Assert.Contains("不询问", note);
+		Assert.Contains("删除", note);
+		Assert.DoesNotContain("会被直接拒绝", note);
+	}
+
+	/// <summary>
+	/// 接线守卫:开关在 Agent 里只剩入口处一次合成,不再有第二处「ask → deny」。
+	/// 端到端(真跑一轮)归 AI5-T 的回放框架。
+	/// </summary>
+	[Fact]
+	public void AgentHasNoSecondSwitchPath()
+	{
+		string agent = File.ReadAllText(Path.Combine(RepoRoot(), "src", "TipCL", "Core", "Launcher", "Ai", "Agent.cs"));
+		Assert.Contains("Permission.EffectiveMode(settings)", agent, StringComparison.Ordinal);
+		// 键名只允许出现在注释里(说明这段改动),不允许再被读一次 —— 读了就又是第二处判断。
+		Assert.DoesNotContain("Get(\"ai_permission_dont_ask\"", agent, StringComparison.Ordinal);
+		Assert.DoesNotContain("&& flag)", agent, StringComparison.Ordinal);
+		Assert.Contains("外部 MCP 工具能力未知", agent, StringComparison.Ordinal);
+	}
+
+	private static string RepoRoot()
+	{
+		DirectoryInfo d = new DirectoryInfo(AppContext.BaseDirectory);
+		while (d != null && !File.Exists(Path.Combine(d.FullName, "TipCL.sln")))
+		{
+			d = d.Parent;
+		}
+		Assert.NotNull(d);
+		return d!.FullName;
 	}
 }

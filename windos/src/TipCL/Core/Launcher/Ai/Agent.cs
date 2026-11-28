@@ -567,8 +567,10 @@ public static class Agent
 			text = "";
 		}
 		string text2 = _current_instance();
-		string text3 = Permission.NormalizePermissionMode(settings.Get("ai_permission_mode"), Py.Truthy(settings.Get("ai_confirm_writes", true)));
-		bool flag = Py.Truthy(settings.Get("ai_permission_dont_ask", false));
+		// P1 补充(2026-11-28 裁决 6):档位与「不询问」开关(ai_permission_dont_ask)在入口合成同一个生效档位 ——
+		// 开关打开就等于 dontAsk 档(写操作放行、删除类仍拒绝)。回合里不再叠第二处判断:
+		// 叠出来的那份会漏掉规则顺序、plan 硬停和「外部 MCP 工具能力未知要先确认」。
+		string text3 = Permission.EffectiveMode(settings);
 		List<AiRule> rules = Permission.DedupeRules(Permission.LoadRules(text2).Cast<object>().Concat<object>(Py.ListOr(Py.Or(settings.Get("ai_permission_rules"), new List<object>()))));
 		string text4 = "";
 		bool flag2 = false;
@@ -1149,11 +1151,6 @@ public static class Agent
 							decisions[item11.id] = ("deny", pluginVerdict.reason);
 							turn.SetToolStatus(item11.id, "denied", "[权限] 已拒绝:" + pluginVerdict.reason);
 						}
-						else if (pluginVerdict.decision == "ask" && flag)
-						{
-							decisions[item11.id] = ("deny", "用户开启了「不询问」模式");
-							turn.SetToolStatus(item11.id, "denied", "[权限] 已拒绝:用户开启了「不询问」模式");
-						}
 						else if (pluginVerdict.decision == "ask")
 						{
 							decisions[item11.id] = ("ask", pluginVerdict.reason);
@@ -1175,11 +1172,6 @@ public static class Agent
 					{
 						decisions[item11.id] = ("deny", permissionResult.reason);
 						turn.SetToolStatus(item11.id, "denied", "[权限] 已拒绝：" + permissionResult.reason);
-					}
-					else if (permissionResult.decision == "ask" && flag)
-					{
-						decisions[item11.id] = ("deny", "用户开启了「不询问」模式");
-						turn.SetToolStatus(item11.id, "denied", "[权限] 已拒绝：用户开启了「不询问」模式");
 					}
 					else if (permissionResult.decision == "ask")
 					{

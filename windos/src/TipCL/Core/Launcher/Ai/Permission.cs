@@ -260,10 +260,34 @@ public static class Permission
 		}
 	}
 
+	/// <summary>
+	/// P1 补充(2026-11-28 裁决 6):把「不询问」开关(<c>ai_permission_dont_ask</c>)与 <c>dontAsk</c> 档合成**同一个**口径。
+	/// 开关打开就等于档位是 <c>dontAsk</c>:档位算出来的 <c>ask</c> 变成 <c>allow</c>,删除类仍然拒绝,显式 deny 规则仍然优先。
+	/// 两处例外(档位给了更明确的态度,开关不该压过它):<c>plan</c>(只看不动)与 <c>yolo</c> / <c>bypassPermissions</c>(全自动)。
+	///
+	/// 为什么合成一个生效档位、而不是在回合里再叠一条「ask → deny/allow」:叠出来的第二处判断会漏掉
+	/// 规则顺序、plan 硬停、以及「能力未知的外部 MCP 工具要先确认」这些只在 <see cref="Decide"/> 内部生效的东西 ——
+	/// 那正是改动前「开关说拒绝、档位说放行」这种同语义两种行为的来源。
+	/// </summary>
+	public static string EffectiveMode(PyDict settings)
+	{
+		settings = settings ?? new PyDict();
+		string text = NormalizePermissionMode(settings.Get("ai_permission_mode"), Py.Truthy(settings.Get("ai_confirm_writes", true)));
+		if (!Py.Truthy(settings.Get("ai_permission_dont_ask", false)))
+		{
+			return text;
+		}
+		if (text == "plan" || text == "yolo" || text == "bypassPermissions")
+		{
+			return text;
+		}
+		return PermissionMode.DONT_ASK;
+	}
+
 	public static string PermissionNote(PyDict settings)
 	{
 		settings = settings ?? new PyDict();
-		switch (NormalizePermissionMode(settings.Get("ai_permission_mode"), Py.Truthy(settings.Get("ai_confirm_writes", true))))
+		switch (EffectiveMode(settings))
 		{
 		case "yolo":
 		case "bypassPermissions":
