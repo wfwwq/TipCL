@@ -64,8 +64,12 @@ public static class ToolMeta
         new("list_mod_configs", true, "read", "low", false),
         new("read_mod_config", true, "read", "low", false),
         new("update_plan", true, "none", "low", false),
-        new("remember", true, "none", "low", false),
-        new("forget", true, "none", "low", false),
+        // AI5-B2:remember / forget 会写 ai_memory.md(AI5-B1 之后与界面记忆面板是同一份文件),
+        // 原先标成只读是元信息说了假话:它既绕过了确认,也让 MCP Server 的 readOnlyHint 报错值
+        // (`Tools.IsWriteTool` 正是 MCP 判断「要不要外部确认」的依据)。按真实副作用改标 write_local / low
+        // —— 与 Windows 侧同一批元信息口径(见 windos/.../ToolMeta.cs 的同两项)。
+        new("remember", false, "write_local", "low", false),
+        new("forget", false, "write_local", "low", false),
         // 读工具产物（超长工具结果落盘后的回读）与派发只读子代理：两者都不动机器状态
         new("read_artifact", true, "read", "low", false),
         new("dispatch_subagent", true, "none", "low", false),
