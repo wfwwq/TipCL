@@ -86,7 +86,7 @@ TipCL 的 AI 不只是聊天框，它能直接操作启动器：查实例、装�
 | 🏠 **仪表盘首页** | 默认呈现启动横幅、启动配置、快捷入口和新闻；日志、时长、便签等卡片按需添加，布局随心拖拽，支持方案与导入导出 |
 | 🎨 **外观** | 浅色 / 深色主题，中英双语界面 |
 
-> **两条实现在这张表上的差异（2026-11-20 逐条核对）**：上表对 **Windows 桌面版**逐条成立；Linux / Avalonia 版（`src/`）除下面两处外也都已落地（启动链、Java 探测、模组/整合包、实例与存档、账号、Terracotta、AI 助手、MCP Server、插件市场与钩子、仪表盘、主题与双语）。MCP Server 自 2026-11-21 起两版都有，Linux 版外部 agent 发起的写操作每次都会在启动器里弹确认（见[下文](#-mcp-server)）：
+> **两条实现在这张表上的差异（2026-11-20 逐条核对）**：上表对 **Windows 桌面版**逐条成立；Linux / Avalonia 版（`src/`）除下面两处外也都已落地（启动链、Java 探测、模组/整合包、实例与存档、账号、Terracotta、AI 助手、MCP Server、插件市场与钩子、仪表盘、主题与双语）。MCP Server 自 2026-11-21 起两版都有，外部 agent 发起的写操作每次都会在启动器里弹确认（Windows 版自 v1.3 起与 Linux 对齐，见[下文](#-mcp-server)）：
 >
 > | 能力 | Windows | Linux 树 | 事实 |
 > |---|---|---|---|
@@ -171,7 +171,7 @@ windos/tools/iconfont/          内置图标字体的映射表与生成脚本
 
 ## 🔗 MCP Server
 
-> **平台口径(2026-11-21 更新)**:两版都有 MCP Server(Windows `windos/src/TipCL/Core/Launcher/Ai/McpServer.cs`,Linux `src/TipCL.Core/Launcher/Ai/McpServer.cs`),地址、端口 `25585`、协议版本、`mcp_server.json` 的键名都一样,默认都是关闭。差别只有一条:**Linux 版外部 agent 发起的写操作每次都会在启动器里弹确认**(即使权限档是全自动,「以后都允许」对外部调用也不生效;没有确认界面时返回 `permission_denied`);Windows 版直接执行,只在工具说明里请外部 agent 先问用户。
+> **平台口径(2026-11-21 更新)**:两版都有 MCP Server(Windows `windos/src/TipCL/Core/Launcher/Ai/McpServer.cs`,Linux `src/TipCL.Core/Launcher/Ai/McpServer.cs`),地址、端口 `25585`、协议版本、`mcp_server.json` 的键名都一样,默认都是关闭。**两版外部 agent 发起的写操作每次都会在启动器里弹确认**(Linux 版即使权限档是全自动,「以后都允许」对外部调用也不生效;Windows 版自 v1.3 起同样弹确认;没有确认界面、拒绝或 120 秒超时都返回 `permission_denied`)。两版都只收 `Content-Type: application/json` 的 POST,`Origin: null` 与非本机 `Host` 一律 403,防止网页借浏览器调用本机接口。
 
 TipCL 可以作为本机 MCP Server，让 Claude、Cursor 等外部 AI 直接调用启动器的工具：查实例、装版本 / 模组 / 整合包 / 光影、启动游戏、诊断崩溃和卡顿、备份存档。
 
@@ -243,7 +243,8 @@ Claude Desktop 等只支持 stdio 的客户端可以通过 `npx mcp-remote http:
 exe 没有代码签名，首次运行 Windows 可能弹出 SmartScreen 提示，点「更多信息 → 仍要运行」即可。个别杀软会对未签名的单文件程序报启发式误报，源码完全公开，也可以自己编译。
 
 - v1.2.0 SHA-256:`a7dba497ed1729cbc63aad5c0a784f2707b42426910dda6741eab8e42b1c5ac6`(Windows 的 `TipCL.exe` 每个 Release 都带同名 `.sha256` 附件，可自行校验(2026-11-19 替换后的 v1.2.0 附件,与仓库根 [`update.json`](update.json) 的 `sha256` 逐字一致)或上传到 [VirusTotal](https://www.virustotal.com) 扫描)
-- Linux 的 AppImage 与 `.deb` **不带** `.sha256` 附件：AppImage 的 SHA-256 会在发版时打印进 CI 的 Actions 日志（`.github/workflows/release.yml`），也可以自己 `sha256sum TipCL-linux-x64.AppImage` 比对。
+- Linux 的 AppImage 与 `.deb` 自 v1.3 起每个 Release 都带同名 `.sha256` 附件（格式同 Windows：一行 64 位十六进制），下载后 `sha256sum TipCL-linux-x64.AppImage` 比对即可；v1.2.0 及更早的 Linux 包没有附件，SHA-256 见 Actions 日志。
+- Linux 版的微软账号令牌优先存进系统密钥环（GNOME Keyring / KWallet，经 `secret-tool`）；没有密钥环时存到数据目录下权限 600 的 `secrets.json`，`accounts.json` 也收紧到 600。设 `TIPCL_SECRET_STORE=file` 可强制只用文件。
 
 ## 💬 社区建议
 

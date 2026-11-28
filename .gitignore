@@ -31,3 +31,4 @@ _wpf_run/
 .testtmp/
 # CI 落地取证目录(API 请求/响应副本、jobs 快照、CI 临时 home):只在本机留痕,不进仓库
 .ci-check/
+_screen.png
