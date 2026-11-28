@@ -385,3 +385,54 @@ dotnet test  windos\tests\TipCL.Tests -c Release --no-build --filter "FullyQuali
 2. i18n 守门 1 条红(§11.5),等裁决。
 3. 16 条场景 Skip(§11.6),其中 3 条疑似真缺陷需退回。
 4. `t-linux` 仍有未提交改动(若它继续提交需再补合)。
+
+---
+
+## 12. 第三轮(2026-11-28T16:45+08:00):win-agent S 包 UI + linux-loop i18n/4 处修法
+
+### 12.1 合入
+
+| 分支 | 提交 | 冲突 | 解法 |
+|---|---|---|---|
+| `ai5/win-agent` | `3f0b082` 子代理进度一行「子任务进行中」+ 4 条接线用例 | Windows `locales/*.json.gz`(二进制 UU) | `.json` 自动合并(3347→**3348**),`.gz` **重新生成**并逐字节校验一致 |
+| `ai5/linux-loop` | `820797a` i18n 别名改名 + 4 处修法 | 无 | — |
+
+### 12.2 i18n 守门已转绿
+
+- `AiAgent.cs:141` 别名 `T` → **`Tr`**(全树 12 文件既有约定);`T("` 残留 **0**,`Tr("` 12 处。
+- 审计:`wrapped 2813 → 2825`、**`unwrapped 3211 = 基线 3211`(零回退)**、`missing en/zh = 0`。
+- Linux 全量里那条「未接线的 CJK 字面量从基线的 3211 涨到了 3229」**已不再出现**。
+- 按 lead 裁决,**未**去改 `tools/i18n-audit.py` 的 `WRAPPERS`。
+
+### 12.3 四处断言更正(逐条实测)
+
+| 场景 | 结果 | 说明 |
+|---|---|---|
+| 08 续写拼接 | **转绿** ✅ | 实现已改成首尾直接相接,原断言 `"第一段......续写一。续写二。"` 通过 |
+| 12 子代理写工具 | **转绿** ✅ | 按指示改成查**子请求**(`StreamRequests[1]`)的工具表:`Assert.DoesNotContain(子请求.ToolNames, writeTools.Contains)`;父回合不再用 `ToolSequence` 求全等 |
+| 15 粘性兜底 | **转绿** ✅ | 真根因是**档位**:`builtin` 档 model 被 `ResolveEndpoint` 写死,必须显式 `ai_mode=custom`(照 `AiAgentLoopTests` 那条通过用例的设置)。改后 `请求[0].Model=primary-model`、`请求[1].Model=fallback-model` |
+| 09 非流式兜底 | **仍红 → 挂回 Skip** | 实测 `LastText = "正在准备安装钠...已经装好了。"`,**仍带流式残段**,与「落盘侧本来就是替换」的描述不符;另 `stop_reason` 现为 `completed`(工具执行过)而非 `no_tool_call`。按纪律不改断言凑绿,Skip 里写明实测值待确认 |
+
+**Ai5T 最终:16 绿 / 13 跳 / 29 总。**
+
+### 12.4 `UpdateTargetIsolationTests` 定性:既存 flake,不是回归
+
+| 检查 | 结果 |
+|---|---|
+| 单独跑 5 次 | **5/5 全绿**(每次 4 条用例) |
+| 合并态全量连续 3 次 | **3/3 全绿**,`1709 过 / 24 跳 / 0 败 / 1733`,三次数字完全一致 |
+| 与本包关系 | 合并从未碰 `UpdateTarget*` / 自更新相关文件 |
+| `linux-loop` 的 1 条红 | `AppliedStaged...` 报 Avalonia `Call from invalid thread`,它称开工前基线首跑也遇过 |
+
+结论:**既存 flake**(Avalonia 线程亲和 × 自更新替换并发的时序敏感),非本轮引入。**未加 Skip、未挂串行集合掩盖**;建议单独立项根治。
+
+### 12.5 行尾检查(一次自查发现并修正)
+
+- `ExtraTools.cs`:`i/mixed w/mixed` 是**基线既有**状态;baseline→final 仅 **97/5 行**内容改动,**无整文件翻转**。
+- `windos/src/TipCL/Pages/AiPage.cs`(win-agent 刚改):base→final **10/0**,基线本来就是 CRLF(2840 行),**无翻转**。
+- ⚠ **自查发现**:我用脚本 `WriteAllLines` 批量改 Ai5T 用例时,把 `Ai5TPendingScenarioTests.cs` 写成了 **CRLF**(提交里 565/551 行变动,忽略行尾后仅 24/10)。已按字节改回 **LF** 并 `commit --amend`,现为 **24/10**。
+- 全树核对:我改过的 7 个文件(`DECISIONS.md`、`AI5-INTEGRATION.md`、两侧 locales、两个 Ai5T 文件…)**全部 LF**;基线→最终 diff 在加不加 `--ignore-cr-at-eol` 时**完全相同** → 最终树**无行尾翻动**。
+
+### 12.6 清理
+
+`_ai_ui_selftest/`(验收产物)已删除;`ALL PASSED` 已记入本文档 §11.3。
