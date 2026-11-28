@@ -1315,3 +1315,22 @@
   - 不跑实机:用户不在场时不启动 `TipCL.exe`(含 `--shot / --smoke / --i18n-check / --design-sheet`),只允许 `dotnet build` / `dotnet test`;截图与自检列入「待真机」。
   - 并行对接只靠运行时资源键与三处约定(任务书 §6.4),合并后由主 agent 接线;各包的新决定写在自己的报告里,合并时统一编号 D-82 起。
 - 可回滚:是。删除 `_r34\` 下的工作区与 `r34/*` 分支即完全撤销,`main` 不受影响。
+
+### D-88 · AI5:记忆容量上限统一为 200 与「不询问」豁免范围(2026-11-28,用户拍板)
+
+- 处境：
+  1. AI5-B1 把长期记忆统一到 FileMemory 后，容量上限由 Linux 原有的 `AiMemory.MaxItems = 200`
+     变成 `FileMemory.MaxEntries = 80`(Windows 一直是 80)。旧记忆超过 80 条的用户,
+     迁移后超出部分（最旧的那些）不再出现在记忆面板里；原 ai-memory.json 已改名为
+     `.migrated` 完整留档，数据未销毁但需人工找回。
+  2. 「不询问」(dontAsk)档在 D-87 改为放行、仅删除类除外,`launch_game` 等启动类工具
+     在该档下也会被自动放行。
+- 决定：
+  - a) **两棵树 `FileMemory.MaxEntries` 统一提到 200**(Linux 与 Windows 同步改),
+    以保住 B1 迁移前的用户数据，不出现「统一记忆抽象导致容量缩水」的回归。
+    上下文开销不变:`MaxLoadChars = 4000` 才是加载上限，多存的条目不会进提示词。
+  - b) **「不询问」只豁免删除类，维持不变**:`launch_game` 等启动类在该档下继续自动放行;
+    不放宽到「启动类也拒绝」。
+- 影响:`AiMemory.MaxItems` 自动跟随 `FileMemory.MaxEntries`;迁移的 evicted 计数与
+  `ai_memory_migrate` 轨迹保留，超过 200 条时仍然会裁最旧的。
+- 可回滚：是（改常量即可，文件格式不变）。

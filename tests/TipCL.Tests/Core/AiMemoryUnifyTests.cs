@@ -116,7 +116,10 @@ public class AiMemoryUnifyTests : IDisposable
         Assert.True(File.Exists(_migratedPath));
     }
 
-    /// <summary>迁移与新增都吃 FileMemory 的上限(统一到 FileMemory 之后是 80 条,原先助手侧是 200)。</summary>
+    /// <summary>
+    /// 迁移与新增都吃 FileMemory 的上限(D-88 之后是 200 条,与迁移前 Linux 助手侧的 200 一致)。
+    /// **这个上限不是上下文上限**:进提示词的是 MaxLoadChars / MaxEntryChars 算出来的最新约 13 条。
+    /// </summary>
     [Fact]
     public void Migration_RespectsTheSharedEntryCap()
     {

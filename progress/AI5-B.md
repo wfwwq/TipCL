@@ -2,7 +2,7 @@
 
 > 分支 `ai5/linux-memperm`(worktree `C:\tipcl-ai5\linux-memperm`,从 `b4cd7a2` 拉出)。
 > 日期一律 ISO 8601。任务书:`windos/docs/改造工程:2611/AI-agent-合并任务书.md` §4/§5/§7 的 B 包、C2、P1。
-> 只改 Linux 树(`src/`、`tests/`),没碰 `windos/`、没改版本号、没发 release、没 push。
+> 主体改善 Linux 树(`src/`、`tests/`);**D-88 追加载后**在 lead 明确授权下改了 `windos/` 的两处(`FileMemory.MaxEntries` 常量 + 它的 Windows 侧用例),其余 `windos/` 文件一律没碰。没改版本号、没发 release、没 push。
 
 ## 0. 一句话结论
 
@@ -22,17 +22,25 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
   旧的 `ai-memory.json` 在第一次访问时**幂等迁移**:逐条走 `FileMemory.Remember`(自带「同样内容已经记过
   就不重复记」),迁完把原文件改名成 `ai-memory.json.migrated` 留档。
   改名这一步是必须的:原文件留着的话,面板里删掉的记忆下次启动会被再迁一遍(复活)。
-- 上限口径:统一后是 `FileMemory` 的 80 条 / 单条 300 字(原先 Linux 助手侧是 200 条)。
-  这是一处**用户可见的行为变化**(数据没有销毁,见下),已上报用户等裁决:
+- 上限口径(**已按 D-88 收口**):两棵树统一 `FileMemory.MaxEntries = 200`,单条 300 字。
+  中间过程与缓解链条(保留,供回溯):
   - **两棵树的口径**:Windows 一直用 `FileMemory`(`MaxEntries = 80`),Linux 原 `AiMemory.MaxItems = 200`;
-    B1 是 **Linux 对齐 Windows**(单一记忆抽象 ⇒ 只能有一套上限)。
-  - **影响面**:只有「旧记忆超过 80 条」的用户受影响;超出的部分是**最旧的**
+    B1 先按「Linux 对齐 Windows」降到 80,迁移过程中发现这是**用户可见的容量缩水**并上报,
+    用户拍板 **D-88:两棵树一起提到 200**(Linux `src/TipCL.Core/Launcher/Ai/FileMemory.cs:22`、
+    Windows `windos/src/TipCL/Core/Launcher/Ai/FileMemory.cs:20`),`AiMemory.MaxItems` 自动跟随。
+  - **影响面(80 期间的临时口径,现已不适用)**:只有「旧记忆超过 80 条」的用户受影响;超出部分是**最旧的**
     (`FileMemory.Remember` 的 `while (all.Count > MaxEntries) all.RemoveAt(0)` 从头部删)。
+    提到 200 之后,原先 200 条以内的用户数据**一条都不会少**;超过 200 条的仍会裁最旧的(上限本身还留着)。
+  - **上下文开销几乎为零(这一点写进 D-88,免得以后有人以为「用上下文换数据」)**:
+    进提示词的是**加载**上限 `MaxLoadChars = 4000`(读记忆时 `if (total > MaxLoadChars) break`),
+    单条最多 `MaxEntryChars = 300` ⇒ 真正进系统提示的永远是最新约 13 条。
+    `MaxEntries` 只决定**文件里能留多少**,从 80 提到 200 不会让提示词变大。
   - **缓解(不是不可逆丢失)**:旧 `ai-memory.json` 是被 `File.Move` **改名**成 `ai-memory.json.migrated`,
-    **内容完整保留**(原文件一个字节没删);超出上限的条目原样躺在留档文件里,用户可人工找回。
+    **内容完整保留**(原文件一个字节没删);超上限的条目原样躺在留档文件里,用户可人工找回。
   - **诊断**:迁移若触发上限裁剪,`AiMemory.LastMigrationEvicted` 给出「这次迁丢了几条」,
     同时往 `Trace` 记一条 `ai_memory_migrate`(`files` / `imported` / `evicted` / `cap`),
     落 `$TIPCL_HOME/cache/ai_trace/YYYYMMDD.jsonl`;诊断写失败不影响记忆读写(两层 try/catch)。
+    提到 200 之后这条诊断仍然有效(只有真超过 200 条才会出现非 0 的 evicted)。
 - README 口径:`README.md:72` 本来就写 `ai_memory.md`,与修完的实现一致(无需改;本包不再新增第二处口径)。
 
 ### B2 `remember` / `forget` 标成只读却会写盘
@@ -117,23 +125,26 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
 | `src/TipCL.App/Pages/Ai/AiFixView.cs` | B3:同上;B4:`FixChatId` + `NewAgent()` |
 | `src/TipCL.App/Pages/Ai/ConfirmCard.cs` | B3:按钮提示写明落盘 |
 | `src/TipCL.Core/Resources/locales/{zh_CN,en}.json` | 新词条 9 条(清单见 §4) |
-| `tests/TipCL.Tests/Core/AiMemoryUnifyTests.cs`(新) | B1:6 条(迁移/幂等/防复活/坏文件/上限/工具写入同源) |
+| `tests/TipCL.Tests/Core/AiMemoryUnifyTests.cs`(新) | B1:7 条(迁移/幂等/防复活/坏文件/上限与 evicted 诊断/工具写入同源/诊断轨迹) |
 | `tests/TipCL.Tests/Core/AiToolMetaSideEffectTests.cs`(新) | B2:4 条(元信息 / 写工具判据 / 不并行 / 表名唯一) |
 | `tests/TipCL.Tests/Core/AiPermissionScopeTests.cs`(新) | B3:10 条(全局 / 仅当前实例 / 去重 / 删除类与高危工具拒写 / 端到端落盘) |
 | `tests/TipCL.Tests/App/AiFixChatIdTests.cs`(新) | B4:2 条(agent 用独立 id / 撤回候选按会话隔离) |
 | `tests/TipCL.Tests/Core/AiToolSourceTests.cs`(新) | C2:6 条(四类前缀 / 不可信标记 / 拼法) |
 | `tests/TipCL.Tests/Core/AiToolUnknownToolTests.cs`(新) | C2 前置:7 条(未知工具 / 其它错误载荷 / 成功不变 / 异常不算 schema-miss / 分发探针) |
 | `tests/TipCL.Tests/Core/AiModpackTests.cs` | C2 前置:整批失败那条断言随语义改 FAILED(附注释) |
+| `windos/src/TipCL/Core/Launcher/Ai/FileMemory.cs` | **D-88(lead 明确授权动 windos)**:`MaxEntries` 80 → 200,与 Linux 同步 |
+| `windos/tests/TipCL.Tests/FileMemoryTests.cs` | 同一裁决:上限那条用例按常量写(`MaxEntries + 20` 压裁剪),原有头写死 80 的断言去掉 |
+| `docs/DECISIONS.md` | 追加 D-88(记忆上限 200 + 「不询问」豁免范围),格式按既有条目风格 |
 
 ## 3. 复现 → 修复 → 转绿(三步证据)
 
 | 条目 | 复现(修复前) | 修复 | 转绿 |
 |---|---|---|---|
-| B1 | 新用例 `AiMemoryUnifyTests` / `RememberAndForgetTools_WriteTheSameFileThePanelReads` 在旧实现下红(助手写的 `ai-memory.json` 与面板读的 `ai_memory.md` 不是一份) | `AiMemory` → FileMemory 门面 + 迁移 | 6/6 过 |
+| B1 | 新用例 `AiMemoryUnifyTests` / `RememberAndForgetTools_WriteTheSameFileThePanelReads` 在旧实现下红(助手写的 `ai-memory.json` 与面板读的 `ai_memory.md` 不是一份) | `AiMemory` → FileMemory 门面 + 迁移(上限按 D-88 收到 200) | 7/7 过 |
 | B2 | `AiToolMetaSideEffectTests.RememberAndForget_DeclareTheirRealSideEffect` 在旧实现下红(`@readonly` 为 true、`IsWriteTool` 为 false) | 元信息改 `write_local` | 4/4 过 |
 | B3 | `AiPermissionScopeTests.InstanceScope_OnlyAppliesToThatInstance` / `ConfirmWithAlways_PersistsTheChosenScope` 在旧实现下红(作用域丢失 ⇒ 没有规则、重启又问) | `AlwaysScope` + `RememberScope` 落盘 | 10/10 过 |
 | B4 | `AiFixChatIdTests.FixPanel_AgentUsesItsOwnChatId` 在旧实现下红(agent.ChatId == "active") | `FixChatId` + `NewAgent()` | 2/2 过 |
-| C2 前置 | `AiToolUnknownToolTests.UnknownTool_IsMarkedFailedWithTheCode` 在旧实现下红(status 是 COMPLETED);`AiModpackTests.BatchInstall_...` 原本断言 COMPLETED(旧语义) | 错误载荷 → FAILED + code | 7/7 过;全量只剩那 1 条随语义更新的断言 |
+| C2 前置 | `AiToolUnknownToolTests.UnknownTool_IsMarkedFailedWithTheCode` 在旧实现下红(status 是 COMPLETED);`AiModpackTests.BatchInstall_...` 原本断言 COMPLETED(旧语义) | 错误载荷 → FAILED + code | 8/8 过;全量只剩那 1 条随语义更新的断言 |
 | C2 前缀 | `AiToolSourceTests` 在旧实现下编译不过(Linux 没有 `ToolSource`)—— 这就是「Linux 零命中」的形式化 | 新增 `ToolSource`(四句与 Windows 逐字相同) | 6/6 过 |
 
 全量(Linux,`--filter "FullyQualifiedName!~Terracotta&FullyQualifiedName!~ClickSweep&FullyQualifiedName!~OpenUrl"`):
@@ -175,14 +186,16 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
 2. **C2 来源前缀的接线**同上:调用点是 `AiAgent.RunAsync` 回填 tool 消息那一行,用 `ToolSource.ForModel(name, result)`。
 3. `dontAsk` 档位仍只能手改 `config.json`(面板只提供五档),本轮不新增控件(避免扩大用户可见交互变化);
    界面文案写在权限面板的说明行里。
-4. 记忆条数上限由 200 降到 80(FileMemory 口径),迁移会按新上限裁剪最旧的条目 —— 这是「以 FileMemory 为准」的既定后果。
-   **不是数据销毁**:旧文件只改名成 `ai-memory.json.migrated`,内容完整保留;裁剪条数有诊断
-   (`AiMemory.LastMigrationEvicted` + `Trace` 的 `ai_memory_migrate` 事件)。是否把这处行为变化改成
-   「只迁上限内 + 提示用户」或「提高上限」,等用户裁决(lead 已上报)。
-5. 体积:本 worktree 不产出 Windows compact exe(那是 `windos/` 的产物),本包只动 Linux 树源码;
-   Linux Release 产物字节数见 §6。按 lead 裁决本轮不做体积回收。
+4. 记忆条数上限:**已按 D-88 收到 200**(两棵树;原先中间态是 80)。超上限时仍会裁最旧的,**不是数据销毁**:
+   旧文件只改名成 `ai-memory.json.migrated`,内容完整保留;裁剪条数有诊断
+   (`AiMemory.LastMigrationEvicted` + `Trace` 的 `ai_memory_migrate` 事件)。
+   这条已由用户拍板收口,不再挂「待裁决」。
+5. 体积:按 lead 裁决本轮不做体积回收,只如实记录(Linux Release 产物与 Windows compact exe 的字节数见 §6)。
 6. `--smoke` / `verify-smoke.ps1` / ClickSweep / VisualTour **按用户要求没有运行**(会抢前台)。动到 AI 页面的包
    本应跑 smoke,这里如实记为未跑。
+7. **`docs/DECISIONS.md` 的追加点**:我这条分支上只有到 D-85(本分支基于 `b4cd7a2`),D-86 / D-87 在别的分支上,
+   所以 D-88 是**直接接在 D-85 之后**追加的;合并时与别人的追加落在同一处,**会有文本冲突**,按「保留 D-86 / D-87 / D-88 三条、
+   顺序按编号」解即可(内容我没有改动 lead 给的事实与决定,只把子项排成 `- a)` / `- b)` 的既有风格)。
 
 ## 6. 验收数字(最终)
 
@@ -193,12 +206,22 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
 - `--ai-selftest`(`dotnet src/TipCL.App/bin/Release/net8.0/TipCL.App.dll --ai-selftest`):
   **通过 110 / 失败 0 / 跳过 0,exit 0**(与基线一致;其中「未知工具如实报错」与「只读工具执行成功」
   两项正是 C2 前置修复要保住的判据)。
-- i18n 审计(`python tools/i18n-audit.py --json`):`unwrapped` **3211 → 3177(-34)**、
-  `wrapped` 2615 → 2809、`missing_en` / `missing_zh` 均为 0 —— 基线判据「未接线数量不得回退」满足
+- i18n 审计(`python tools/i18n-audit.py --json`,D-88 后复跑):`unwrapped` **3211 → 3173**、
+  `wrapped` 2615 → 2813、`missing_en` / `missing_zh` 均为 0 —— 基线判据「未接线数量不得回退」满足
   (我新增的用户可见文案全部走了 `I18nCore.Tr`,并且都入了两张词表)。
-- 体积(如实记录,按 lead 裁决本轮**不做**回收):本 worktree 产出的是 Linux Release 产物,
-  `src/TipCL.App/bin/Release/net8.0` 目录 33 个文件、合计 **12,794,560 B**,其中
-  `TipCL.Core.dll` 2,157,568 B、`TipCL.App.dll` 1,976,832 B。
-  红线里的 compact(**Windows 单 exe**)不是本棵树的产物,本包**没有改动 `windos/`**,所以那个产物的字节数不受本包影响。
-- 源码规模:`git diff --stat b4cd7a2`:24 个文件、+1499 / -127 行(含用例与词条)。
+- 体积(如实记录,按 lead 裁决本轮**不做**回收):
+  - Linux Release 产物 `src/TipCL.App/bin/Release/net8.0`:33 个文件、合计 12,794,560 B
+    (`TipCL.Core.dll` 2,157,568 B、`TipCL.App.dll` 1,976,832 B);
+  - Windows compact 单 exe(`windos/src/TipCL/bin/Release/net48/TipCL.exe`,`-t:Rebuild` 后实测):
+    **5,760,000 B**(AI5-0 基线 5,759,488 B ⇒ 本包 +512 B;红线 5,757,264 B,**合格性由用户裁决,我不下结论**)。
+    这 +512 B 来自 `FileMemory.MaxEntries` 常量与注释,不是代码膨胀。
+- Windows 树(本包按 D-88 授权只动了 FileMemory 的两处):
+  - `dotnet build windos/TipCL.sln -c Release -t:Rebuild -m:1 -p:UseSharedCompilation=false`:
+    **0 error / 2 warning**(既有 xUnit1031 ×2,与 AI5-0 基线一致);
+  - `dotnet test windos/tests/TipCL.Tests -c Release`: **803 过 / 6 跳 / 0 败 / 总 809**,`exit 0`
+    (AI5-0 基线记的是 796 过 / 6 跳 / 总 802;这里的 +7 条与我的改动无关 —— 我只改了一条既有用例的断言,没有增删用例,
+    差值来自基线快照的时点,如实记录);
+  - Windows 侧 `--ai-selftest`(要经 WPF `App` 启动)**没有跑**:会弹窗口,与用户「不许抢前台」的要求冲突,
+    留给 Windows 侧属主 / 合并后的 CI 步骤。
+- 源码规模:`git diff --stat b4cd7a2`:**27 个文件、+1578 / -137 行**(含用例、词条、D-88 与两份 progress)。
 - `--smoke` / `tools/verify-smoke.ps1` / ClickSweep / VisualTour **按用户要求未运行**(会抢前台)。
