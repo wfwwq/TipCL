@@ -290,8 +290,11 @@ public sealed partial class ToolRunner
         bool mcp = Mcp.IsMcpTool(call.name);
         if (!mcp && !ToolMeta.Map.ContainsKey(call.name))
         {
+            // AI5-C2 前置修复:错误码也要落到 call.code 上 —— 主循环(schema-miss 全量重发)与自检
+            // 都按 ToolRunner.IsUnknownTool(call) 判断,不再各自去解析结果载荷。
+            call.code = UnknownToolCode;
             call.Mark(ToolCallStatus.FAILED, error: "未知工具");
-            return ToolErr(call.name, "unknown_tool", "没有这个工具: " + call.name, "");
+            return ToolErr(call.name, UnknownToolCode, "没有这个工具: " + call.name, "");
         }
 
         // AI-engine-mcp:执行前钩子(可改写参数 / 拦下调用;钩子自己出错只进 errors,不影响这次调用)
@@ -359,6 +362,19 @@ public sealed partial class ToolRunner
         {
             object? result = await ExecuteAsync(call, ct).ConfigureAwait(false);
             string text = Clip(RunAfterHooks(call, AsText(result)), call.name);
+            // AI5-C2 前置修复:分发层吐出来的**错误载荷**(ToolErr 那一族 {ok:false,error:<code>})不能再被
+            // 无条件标成「成功」。原先连 unknown_tool 都是 COMPLETED ⇒ 自检的「status == COMPLETED &&
+            // 结果非空」判据与主循环的「模型叫了没下发的工具」都看不见漏接(ci-e 的变异验证就是靠这个
+            // 把漏接藏过去的)。声称失败不算数:工具结果文本原样回给模型,只是状态与错误码如实。
+            string code = PayloadErrorCode(result);
+            if (code.Length > 0)
+            {
+                string detail = PayloadMessage(result);
+                call.code = code;
+                call.Mark(ToolCallStatus.FAILED, result: text, error: detail.Length > 0 ? detail : code);
+                Log?.Invoke("失败: " + Tools.ErrorText(code) + " — " + (detail.Length > 0 ? detail : code));
+                return text;
+            }
             call.Mark(ToolCallStatus.COMPLETED, result: text);
             return text;
         }
@@ -400,6 +416,70 @@ public sealed partial class ToolRunner
 
     private static string ToolErr(string name, string code, string message, string detail)
         => PyJson.Dumps(PyDict.Of("ok", false, "error", code, "message", message, "detail", detail, "tool", name));
+
+    /// <summary>「模型叫了一个本轮没下发的工具」的错误码(结果载荷与 <see cref="ToolCall.code"/> 里的那个值)。</summary>
+    public const string UnknownToolCode = "unknown_tool";
+
+    /// <summary>
+    /// 这次调用是不是「工具表 / 分发层不认这个名字」(unknown_tool)。
+    /// **这是主循环决定「要不要用全量工具重发一次」的唯一判据**(C2 的重发那一半读它;自检与用例也读它),
+    /// 别再各自解析结果载荷里的小写字符串 —— 两套判据一定会漂。
+    /// 判据 = <c>status == FAILED</c> 且 <c>call.code == unknown_tool</c>。
+    /// 与 AiAgent 的 bad_arguments 预检(<c>status == FAILED &amp;&amp; error.Length &gt; 0 &amp;&amp; started_at == 0</c>)
+    /// 不冲突:这里的调用已经跑过 RUNNING,started_at 非 0。
+    /// </summary>
+    public static bool IsUnknownTool(ToolCall? call)
+        => call != null && call.status == ToolCallStatus.FAILED
+           && string.Equals(call.code, UnknownToolCode, StringComparison.Ordinal);
+
+    /// <summary>
+    /// 结果载荷里的错误码:载荷里 <c>ok</c> 明确为 false 时取 <c>error</c> 字段,没有就用 "error" 兜底。
+    /// 不是错误载荷(不是对象 / ok 缺失 / ok 为真)返回空串。
+    /// </summary>
+    public static string PayloadErrorCode(object? result)
+    {
+        PyDict? dict = AsPayloadDict(result);
+        object? ok = dict?.Get("ok");
+        if (dict == null || ok == null || Py.Truthy(ok))
+        {
+            return "";
+        }
+        string code = Py.S(dict.Get("error"));
+        return code.Length > 0 ? code : "error";
+    }
+
+    /// <summary>错误载荷里给人看的那句话(没有就返回空串)。</summary>
+    public static string PayloadMessage(object? result)
+    {
+        PyDict? dict = AsPayloadDict(result);
+        if (dict == null)
+        {
+            return "";
+        }
+        string message = Py.S(dict.Get("message"));
+        return message.Length > 0 ? message : Py.S(dict.Get("error"));
+    }
+
+    /// <summary>结果是不是一个结构化载荷对象(对象本身,或它的 JSON 文本);不是返回 null。</summary>
+    private static PyDict? AsPayloadDict(object? result)
+    {
+        if (result is PyDict dict)
+        {
+            return dict;
+        }
+        if (result is string text && text.StartsWith("{", StringComparison.Ordinal) && text.Contains("\"ok\"", StringComparison.Ordinal))
+        {
+            try
+            {
+                return PyJson.Loads(text) as PyDict;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+        return null;
+    }
 
     private static string AsText(object? result)
     {

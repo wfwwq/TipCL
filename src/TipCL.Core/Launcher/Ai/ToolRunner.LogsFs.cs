@@ -74,17 +74,11 @@ public sealed partial class ToolRunner
         }
     }
 
-    private static bool IsUnknownToolPayload(string text)
-    {
-        try
-        {
-            return PyJson.Loads(text) is PyDict d && Py.S(d.Get("error")) == "unknown_tool" && d.Get("ok") is false;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
+    /// <summary>
+    /// 这段文本是不是 unknown_tool 错误载荷。AI5-C2 前置修复后它只是 <see cref="PayloadErrorCode"/>
+    /// 的薄封装:判据只有一处(ToolRunner.PayloadErrorCode / IsUnknownTool),别在这里另写一套。
+    /// </summary>
+    private static bool IsUnknownToolPayload(string text) => PayloadErrorCode(text) == UnknownToolCode;
 
     /// <summary>某个工具 schema 里声明的参数名(没有这个工具就是空)。</summary>
     private static IEnumerable<string> SchemaParams(string name)

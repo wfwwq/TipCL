@@ -196,6 +196,14 @@ public sealed class ToolCall
 
     public string error = "";
 
+    /// <summary>
+    /// 结构化错误码(AI5-C2 前置修复):执行器产出的错误载荷({ok:false,error:&lt;code&gt;})里的那个 code,
+    /// 或者执行前的早期失败(如未知工具)。空串 = 这次调用没有错误码。
+    /// 主循环判断「模型叫了本轮没下发的工具」只看 <see cref="ToolRunner.IsUnknownTool"/> ——
+    /// 它读的就是这个字段,别另外去解析结果载荷(那会变成第二套判据)。
+    /// </summary>
+    public string code = "";
+
     public double started_at;
 
     public double ended_at;
