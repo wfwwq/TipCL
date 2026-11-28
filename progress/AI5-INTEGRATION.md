@@ -503,3 +503,51 @@ dotnet test  windos\tests\TipCL.Tests -c Release --no-build --filter "FullyQuali
 - 等 `ai5/linux-loop-followup`(builtin 扩展 + 场景 09 口径 + `ToolSource.ForModel` 接线)。
 - 场景 09 保持 Skip。
 - §13.3 的「builtin 备用模型无验证手段」风险**保留**在最终验收报告里。
+
+---
+
+## 15. 最终验收(2026-11-28T18:00+08:00)
+
+### 15.1 合入 `ai5/linux-loop-followup`(`d0d4435`)—— **零冲突**
+
+- `docs/DECISIONS.md`:D-89 干净接在 D-88 之后 → **D-86 / D-87 / D-88 / D-89 四条齐全、编号连续**(L1320 / L1334 / L1347 / L1366)。
+- **`Client.cs` 注入点未被触碰**:`TestTransport` 三处调用仍在(L497 / L872 / L962)✓
+- 新增 `Client.EffectiveModel`(L124),`CurrentModel` 与 `ResolveEndpoint` 的内置分支同源改用它(L137 / L188);`AiAgent.FallbackApplies` 已删除;新增 `AiAgent.ModelNameHint`(L544)。
+- **`ToolSource.ForModel` 生产侧接线已确认**:`src/TipCL.Core/Launcher/Ai/AiAgent.cs:450` → **「待接线」一项销掉**。
+
+### 15.2 Ai5T:29 过 / 0 跳 / 29(零 Skip)
+
+- 场景 09 按新口径转绿:`LastText == "已经装好了。"`、按 `AiPage.ResetStreamingBubble` 规则折叠 delta 后 `== LastText`、折叠结果不含残段、`TerminalCount == 1`。
+- 场景 16 适配 C2 来源前缀(回给模型的工具结果前多了 `[来源: …]`,解析前先跳到第一个 `{`)。
+- ⚠ **两处与指示不同的实测**,已按证据处理并在此声明:
+  1. 场景 09 的 `stop_reason` 实测为 **`stream_failed`**,不是 `completed`;`DoneCount` 为 **0**。原因是兜底成功后工具执行完,本测试台**没有再给下一轮脚本**,属脚本边界(给第 3 轮补脚本则 `LastText` 会变成那一轮文本,与「LastText = 兜底文本」冲突)。因此**不钉** `stop_reason`/`DoneCount`,改钉 A1 的 `TerminalCount == 1`;任务书场景 9 的验收点(文本不重复 + 兜底工具表 == 流式工具表)已全覆盖。
+  2. 场景 16 的修复方式与指示不同:它并非「断言查错对象」,而是 `ToolSource.ForModel` 前缀导致原有 `PyJson.Loads(工具结果)` 解析失败;已改为先跳前缀再解析,并**新增** `Assert.StartsWith("[来源:", askResult)` 把 C2 口径钉住。
+
+### 15.3 最终数字(**全部逐次 tee 日志**)
+
+| 项 | 结果 |
+|---|---|
+| Linux 构建 | 0 error / 1 warning(既有 CS0649) |
+| **Linux 全量(无过滤)** | **0 败 / 1724 过 / 11 跳 / 1735**,**连跑 3 次 × 有日志,三次数字完全一致,未再现任何失败** |
+| Windows 构建(`-t:Rebuild`) | 0 error / 2 warning(既有 xUnit1031) |
+| **Windows 全量(无过滤)** | **0 败 / 1033 过 / 8 跳 / 1041**,连跑 2 次一致 |
+| compact `--smoke` | exit 0 / 10 页 / `issues: []` / `i18n_missing: []` / **0 WARN 0 ERROR** / 17 张 PNG 已目视(AI 页与改动前一致) |
+| premium `--smoke` | exit 0 / 10 页 / `issues: []` / **0 WARN 0 ERROR** |
+| Linux `verify-smoke.ps1` | **exit 0**,A/B1/B2 ×8 帧 = 24 帧全 OK,**每帧 0 WARN / 0 ERROR**;已目视 `work-A-ai/smoke.png` |
+| Windows `--ai-ui-selftest` | **exit 0,32 PASS / 0 FAIL / 6 张截图,`ALL PASSED`** |
+| compact 体积 | **5,796,864 B**(基线 5,759,488,本轮净增 37,376;**超 D-19 红线 39,600 B**,按 D-87 只记录) |
+| premium 体积 | 5,816,832 B(比 compact +19,968,与 D-38 记录差值一致) |
+| i18n 审计 | `wrapped 2826` / **`unwrapped 3211 = 基线 3211`(零回退)** / `ignored 137` / **`missing en = 0, missing zh = 0`** |
+
+### 15.4 剩余 Skip 的归属(双树均**无任何 AI5 相关 Skip**)
+
+- **Linux 11 条**:`LayoutGridCanvasTests`×4、`CliSmokeTests`×5、`LayoutMotionAndHeightTests`×1、`SmokeIntegrationTests`×1 —— 全是「需真实界面/冒烟环境」的**既有**挂起项。
+- **Windows 8 条**:`LayoutCanvasTests`×6(既有)、`AiReplayRoutingTests.Scenario16c`(需真实访问 Modrinth/CurseForge,红线内不跑)、`Scenario18a`(关键词路由缺口,建议并入 C3)。
+
+### 15.5 ⚠ 必须随最终报告交付的风险(不因全绿而省略)
+
+1. **builtin 档支持备用模型无验证手段**:内置网关是否接受**非默认模型名**,本机无法验证(不许联网实测、无该网关凭据)。代码只保证「模型名被正确选择并发送」,**不保证服务端接受**。需一次联机实测(需用户授权 + 凭据)才能定论。
+2. **体积超 D-19 红线 39,600 B**(基线即超 2,224 B),按 D-87「如实记录、本轮回购另立包」执行;DoD §10「compact 体积检查通过」在本轮**不成立**。
+3. **两处 flake**:`UpdateTargetIsolationTests`(Avalonia 线程 × 自更新替换,已定性既存 flake,单跑 5/5 + 全量多次均绿);另有一次全量出现 **2 条未定名失败**(当时未 tee 日志,后续多次未再现)——**属高负载偶发嫌疑,未查清,不宣布「已确认无问题」**。
+4. **`launch_game` 在 `dontAsk` 档下放行**、**Linux 记忆上限 200**(D-88)等行为变化需在用户侧确认接受。
+5. 未 push、未改版本号(仍 1.3.0)、未发 release。
