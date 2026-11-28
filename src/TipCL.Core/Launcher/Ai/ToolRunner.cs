@@ -305,7 +305,15 @@ public sealed partial class ToolRunner
                     preview = null;
                 }
                 (bool ok, bool always) = await Confirm(call, label, verdict.reason, preview).ConfigureAwait(false);
-                if (always && !ForceConfirmWrites && !NeverAlwaysAllow(call.name) && AllowsAlways(call.name)) AllowAlways(call.name);
+                if (always && !ForceConfirmWrites && !NeverAlwaysAllow(call.name) && AllowsAlways(call.name))
+                {
+                    AllowAlways(call.name);
+                    // AI5-B3:按确认卡选的作用域落盘(没接作用域回传的宿主不落盘,仍在进程内记住)
+                    if (ok)
+                    {
+                        RememberScope(call.name, AlwaysScope?.Invoke(), Instance);
+                    }
+                }
                 if (!ok)
                 {
                     call.Mark(ToolCallStatus.DENIED, error: "用户拒绝");

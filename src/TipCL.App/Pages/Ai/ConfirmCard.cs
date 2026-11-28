@@ -114,7 +114,7 @@ internal sealed class ConfirmCard : Border
         // 按钮的点击回调在局部函数 Done 之后才绑定:局部函数必须先声明才好在 lambda 里引用
         var yes = U.Btn(I18nCore.Tr("允许"), BtnKind.Primary);
         var always = U.Btn(I18nCore.Tr("本对话都允许"), BtnKind.Normal);
-        ToolTip.SetTip(always, I18nCore.Tr("同类操作以后不再询问"));
+        ToolTip.SetTip(always, I18nCore.Tr("同类操作以后不再询问，会写进权限规则（重启仍生效，可在权限面板里删掉）"));
         var scope = UiClass.Combo(new[] { I18nCore.Tr("仅当前实例"), I18nCore.Tr("所有实例") }, I18nCore.Tr("仅当前实例"), 110);
         var no = U.Btn(I18nCore.Tr("拒绝"), BtnKind.Normal);
         var state = UiClass.Txt("", 12, false, "B.InkMuted");
