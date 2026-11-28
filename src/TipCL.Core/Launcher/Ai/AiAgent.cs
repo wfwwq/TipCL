@@ -125,8 +125,8 @@ public sealed class AiAgent
     /// <summary>AI5-A6:finish_reason=length 时最多续写几次(照参考版 Agent.cs 的「num &lt; 2」)。</summary>
     private const int MaxContinuations = 2;
 
-    /// <summary>AI5-A6:续写时追加的提醒(照参考版 Agent.cs:998 的文案)。</summary>
-    private const string ContinuationPrompt = "请从断开处继续,不要重复。";
+    /// <summary>AI5-A6:续写时追加的提醒(照参考版 Agent.cs:998 的文案)。给模型看的指令,不进词表。</summary>
+    private const string ContinuationPrompt = "请从断开处继续,不要重复。"; // i18n:ignore(给模型看的续写指令,与参考版同文;界面上不会出现)
 
     /// <summary>AI5-A6:已经续写了几次。</summary>
     private int _continuations;
@@ -138,7 +138,7 @@ public sealed class AiAgent
     public const int SubagentHardMaxRounds = Defaults.MAX_TOOL_ROUNDS_MAIN;
 
     /// <summary>AI5-A2:用户可见文案走词表(中文界面下与改动前逐字相同,英文界面下跟着切换)。</summary>
-    private static string T(string zh) => I18nCore.Tr(zh);
+    private static string Tr(string zh) => I18nCore.Tr(zh);
 
     /// <summary>AI5-S:记一次工具使用(去重、按首次出现顺序)。</summary>
     private void NoteToolUsed(string name)
@@ -271,7 +271,7 @@ public sealed class AiAgent
                 ct.ThrowIfCancellationRequested();
                 if (MaybeCompact(messages, roundNo))
                 {
-                    terminalError = T("上下文反复逼近窗口上限,已中断本轮以保护额度");
+                    terminalError = Tr("上下文反复逼近窗口上限,已中断本轮以保护额度");
                     break;
                 }
                 // AI5-A3:整段压缩之后再做一遍微压缩(清掉较旧的工具结果,不调模型、不花额度)。
@@ -300,17 +300,17 @@ public sealed class AiAgent
                         stop_reason = StopReason.STREAM_FAILED;
                         if (terminalError.Length == 0)
                         {
-                            terminalError = state.Error.Length > 0 ? state.Error : T("接口没有返回内容,请稍后重试");
+                            terminalError = state.Error.Length > 0 ? state.Error : Tr("接口没有返回内容,请稍后重试");
                         }
                     }
                     break;
                 }
 
                 // 把 assistant 这一轮的话(可能为空)+ 工具调用追加进对话。
+                // AI5-A6(口径修正):续写是「从断开处继续」,**首尾直接相接**,不插空行 ——
+                // 参考版 _full 就是 `string.Concat(concat(continuationParts), text)`,没有分隔符。
                 string full = _continuationParts.Count > 0
-                    ? state.Text.ToString().StartsWith(string.Concat(_continuationParts), StringComparison.Ordinal)
-                        ? string.Concat(_continuationParts) + state.Text.ToString().Substring(string.Concat(_continuationParts).Length)
-                        : string.Concat(_continuationParts) + "\n\n" + state.Text.ToString()
+                    ? string.Concat(_continuationParts) + state.Text.ToString()
                     : state.Text.ToString();
                 var assistant = PyDict.Of("role", "assistant", "content", full);
                 if (state.Calls.Count > 0)
@@ -318,7 +318,14 @@ public sealed class AiAgent
                     assistant["tool_calls"] = state.Calls.Select(c => c.Raw).ToList();
                 }
                 messages.Add(assistant);
-                LastText = full;   // 续写过的正文也要整段带回去(子代理的结论走这里)
+                // AI5-A1/A6(2026-11-28 qa 跟进):`LastText` 只在**这一轮真吐了正文**时才更新 ——
+                // 从前无条件赋值,于是「调了工具但没说话」的一轮会把上一轮已经拿到的答案抹成空;
+                // 收尾轮若又回一个工具调用(工具不执行、正文为空),用户看到的就是「跑了很多步,一句空话」。
+                // 保留「最后一段非空助手文本」对子代理也更稳(它把 LastText 当结论带回去)。
+                if (full.Length > 0)
+                {
+                    LastText = full;
+                }
 
                 if (state.Calls.Count == 0)
                 {
@@ -336,7 +343,7 @@ public sealed class AiAgent
                             _emit(new AiAgentEvent
                             {
                                 Kind = "status",
-                                Text = T("回复被长度限制截断了,正在接着写(第 {n}/{total} 次)")
+                                Text = Tr("回复被长度限制截断了,正在接着写(第 {n}/{total} 次)")
                                     .Replace("{n}", _continuations.ToString())
                                     .Replace("{total}", MaxContinuations.ToString()),
                                 Round = roundNo,
@@ -355,7 +362,7 @@ public sealed class AiAgent
                     if (Py.Strip(string.Concat(_continuationParts) + state.Text).Length == 0)
                     {
                         stop_reason = StopReason.EMPTY_RESPONSE;
-                        terminalError = T("模型没有返回任何内容,请再试一次");
+                        terminalError = Tr("模型没有返回任何内容,请再试一次");
                         break;
                     }
                     // AI5-A6:让 COMPLETED 真正被赋值 —— 这一轮**执行过工具**再说完整的话,就是完成的正常收尾;
@@ -431,12 +438,16 @@ public sealed class AiAgent
                 if (tail.Failed)
                 {
                     stop_reason = StopReason.STREAM_FAILED;
-                    terminalError = tail.Error.Length > 0 ? tail.Error : T("接口没有返回内容,请稍后重试");
+                    terminalError = tail.Error.Length > 0 ? tail.Error : Tr("接口没有返回内容,请稍后重试");
                 }
                 else
                 {
                     messages.Add(PyDict.Of("role", "assistant", "content", tail.Text.ToString()));
-                    LastText = tail.Text.ToString();
+                    // 收尾轮**没吐出正文**时不要把已有的答案抹掉(理由同上,见主循环里的同一处理)
+                    if (tail.Text.Length > 0)
+                    {
+                        LastText = tail.Text.ToString();
+                    }
                     done = true;
                     stop_reason = StopReason.MAX_ROUNDS;
                     terminalFinish = tail.FinishReason;
@@ -476,7 +487,7 @@ public sealed class AiAgent
         else
         {
             // AI5-A2:失败只留这一条(上游原文优先),不再有第二条内部代号 stream_failed 的重复报错
-            string message = terminalError.Length > 0 ? terminalError : T("AI 接口出错");
+            string message = terminalError.Length > 0 ? terminalError : Tr("AI 接口出错");
             _emit(new AiAgentEvent { Kind = "error", Error = message, Text = message, StopReason = reason, Round = lastRound });
         }
     }
@@ -626,7 +637,7 @@ public sealed class AiAgent
         try
         {
             AutoConfig cfg = Compact.AutoConfigFromSettings(Config.CONFIG.data);
-            _emit(new AiAgentEvent { Kind = "compact", Text = T("上下文超出模型窗口,正在压缩历史..."), Round = round });
+            _emit(new AiAgentEvent { Kind = "compact", Text = Tr("上下文超出模型窗口,正在压缩历史..."), Round = round });
             CompactionResult result = Compact.CompactConversation(_reactiveMessages!, cfg, Summarize);
             _reactiveMessages!.Clear();
             _reactiveMessages.AddRange(result.messages);
@@ -700,7 +711,7 @@ public sealed class AiAgent
             _emit(new AiAgentEvent
             {
                 Kind = "status",
-                Text = T("已清理较早的工具结果({cleared} 条)").Replace("{cleared}", result.cleared_count.ToString()),
+                Text = Tr("已清理较早的工具结果({cleared} 条)").Replace("{cleared}", result.cleared_count.ToString()),
                 Round = round,
             });
         }
@@ -795,12 +806,13 @@ public sealed class AiAgent
     /// 那些错误重试或降级后该失败还是要失败,否则会把额度不足掩盖成「重试成功」。
     /// 这三条文案来自 Client.AssembleStream(SSE 装配层自己给出的「换一次非流式」信号):
     /// 参数截断(ArgsComplete=false)、超时、流中断。
+    /// 注意:这三条是**内部匹配串**(拿去比对方给的中文信号),永远不许翻译 —— 接线会让检测静默失效。
     /// </summary>
     private static bool StreamIncomplete(string message)
     {
-        return message.Contains("工具参数不完整")
-            || message.Contains("接口超时")
-            || message.Contains("连接中断");
+        return message.Contains("工具参数不完整") // i18n:ignore(内部匹配串:比对上层的信号文案,不能翻译)
+            || message.Contains("接口超时") // i18n:ignore(内部匹配串:比对上层的信号文案,不能翻译)
+            || message.Contains("连接中断"); // i18n:ignore(内部匹配串:比对上层的信号文案,不能翻译)
     }
 
     /// <summary>
@@ -824,7 +836,7 @@ public sealed class AiAgent
         // StreamOnceAsync 只把「最终失败」留在这里,所以这条路最多走一次(它自己内部也有上限)
         if (!TryFallbackModel(null, upstream, state.Round))
         {
-            _emit(new AiAgentEvent { Kind = "status", Text = T("流式接口没走通,换成非流式再要一次"), Round = state.Round });
+            _emit(new AiAgentEvent { Kind = "status", Text = Tr("流式接口没走通,换成非流式再要一次"), Round = state.Round });
         }
         Store.LogEvent(ChatId, "ChatOnceFallback", PyDict.Of(
             "turn_id", TurnId, "round", (long)state.Round, "error", Py.Slice(upstream, null, 160)));
@@ -889,10 +901,20 @@ public sealed class AiAgent
                 }
                 else
                 {
-                    // 兜底返回的和已经吐出去的对不上:整段替换,只把差量补出去(界面上的半截收不回来)
+                    // AI5-A5(口径修正,场景 9「文本不重复拼接」):兜底是「整轮重新要一次」,不是「接着写」。
+                    // 兜底文本与流式残段对不上(不是残段的延长)时,**整段替换** state.Text —— 上下文里不留残段
+                    // (否则下一轮会同时看到残段与完整答复,模型也跟着重复)。
+                    // 界面上已经渲染出去的半截收不回来,所以先发一条带「正在重试」的状态让页面重置本轮流式气泡
+                    // (AiPage 的 IsRetryNotice 就是认这个词),再把完整正文当增量发出去。
                     state.Text.Clear();
                     state.Text.Append(text);
-                    _emit(new AiAgentEvent { Kind = "delta", Text = "\n\n" + text, Round = state.Round });
+                    _emit(new AiAgentEvent
+                    {
+                        Kind = "status",
+                        Text = Tr("兜底返回的内容与已显示的不一致,正在重试(已换成非流式重新回答)"),
+                        Round = state.Round,
+                    });
+                    _emit(new AiAgentEvent { Kind = "delta", Text = text, Round = state.Round });
                 }
             }
         }
@@ -921,7 +943,7 @@ public sealed class AiAgent
         _emit(new AiAgentEvent
         {
             Kind = "status",
-            Text = T("主模型暂时不可用,正在改用备用模型 {model}").Replace("{model}", _fallbackModel),
+            Text = Tr("主模型暂时不可用,正在改用备用模型 {model}").Replace("{model}", _fallbackModel),
             Round = round,
         });
         Trace.Record("model_fallback", round, "", "", err, null, null, "model", _fallbackModel);
@@ -931,10 +953,22 @@ public sealed class AiAgent
         return true;
     }
 
-    /// <summary>该不该换备用模型(还没切过 + 配上备用模型 + 这次失败是限流/5xx 之类)。</summary>
+    /// <summary>
+    /// AI5-A8:这次降级**会不会真的生效**。内置网关(builtin)档下模型名由
+    /// `Client.ResolveEndpoint` 固定成 `Defaults.DEFAULT_MODEL`,设置根本改不动 ——
+    /// 在这一档做降级只会出现「告诉用户已切到备用模型,实际发的还是内置默认模型」的**假承诺**,
+    /// 比不降级更糟。想让内置网关也支持备用模型属于产品口径变更(等于让用户能改内置网关的模型名),
+    /// 需要单独裁决;在那之前这里只管自定义端点(custom)。
+    /// </summary>
+    internal static bool FallbackApplies(string fallbackModel, PyDict settings)
+        => fallbackModel.Length > 0 && Client.Mode(settings) == "custom";
+
+    /// <summary>
+    /// 该不该换备用模型(还没切过 + 配上备用模型 + **换了真的会生效** + 这次失败是限流/5xx 之类)。
+    /// </summary>
     private bool ShouldTryFallback(AIClientError? err, string message)
     {
-        if (_fallbackModel.Length == 0 || _fallbackActive)
+        if (!FallbackApplies(_fallbackModel, Config.CONFIG.data) || _fallbackActive)
         {
             return false;
         }
@@ -942,11 +976,12 @@ public sealed class AiAgent
         {
             return true;
         }
-        // 没有分类信息时(比如流里 error 事件、ChatOnce 抛的非 5xx)按文案兜一下
+        // 没有分类信息时(比如流里 error 事件、ChatOnce 抛的非 5xx)按文案兜一下。
+        // 与 StreamIncomplete 同理:这些是**内部匹配串**,永远不许翻译。
         string text = message ?? "";
         return text.Contains("429") || text.Contains("500") || text.Contains("502") || text.Contains("503")
-            || text.Contains("504") || text.Contains("rate limit") || text.Contains("限流")
-            || text.Contains("额度") || text.Contains("上游负载");
+            || text.Contains("504") || text.Contains("rate limit") || text.Contains("限流") // i18n:ignore(内部匹配串:比对上游报文,不能翻译)
+            || text.Contains("额度") || text.Contains("上游负载"); // i18n:ignore(内部匹配串:比对上游报文,不能翻译)
     }
 
     /// <summary>摘要输入:把要压的消息铺成「role: content」，必要时截断。</summary>
@@ -1264,7 +1299,7 @@ public sealed class AiAgent
                     if (reactiveBudget == 0)
                     {
                         // 已经压过一次还是溢出:把话说清楚,别让用户看到一句看不懂的上游报文
-                        state.Error = T("上下文太长,压缩一次后仍然超出模型窗口,请开新对话或减少附件");
+                        state.Error = Tr("上下文太长,压缩一次后仍然超出模型窗口,请开新对话或减少附件");
                     }
                 }
                 // AI5-A2:这里不再自己发 error 事件 —— 从前这里发一条(上游原文)、RunAsync 收尾又发一条
