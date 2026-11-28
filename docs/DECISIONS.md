@@ -1362,3 +1362,28 @@
 - 影响:`AiMemory.MaxItems` 自动跟随 `FileMemory.MaxEntries`;迁移的 evicted 计数与
   `ai_memory_migrate` 轨迹保留，超过 200 条时仍然会裁最旧的。
 - 可回滚：是（改常量即可，文件格式不变）。
+
+### D-89 · AI5:内置网关(builtin)档也认设置里的模型名与备用模型(2026-11-28,用户拍板)
+
+- 处境:AI5-A8 做完粘性 fallback 后,我在实现里加了一道「诚实性闸门」——只在自定义端点(custom)档做降级。
+  理由是查证发现 `Client.ResolveEndpoint` 的内置分支把请求体里的 model **写死**成
+  `Defaults.DEFAULT_MODEL`(`deepseek-v4-flash`),`ai_model` / `ai_fallback_model` 在内置档
+  根本不参与请求;在这一档降级只会出现「界面说已切到备用模型、实际发的还是内置默认模型」的假承诺。
+  上报后用户裁决:**把内置档也扩展成支持**。
+- 决定:
+  - a) `Client` 新增 `EffectiveModel(settings)`:custom 档取 `ai_model`;builtin 档在 `ai_model` 非空时
+    取它、为空时取 `Defaults.DEFAULT_MODEL`。`ResolveEndpoint` 的内置分支、`CurrentModel`、`ModelCaps`
+    三处统一改用它,保证「实际发出去的模型 / 界面显示的模型 / 能力判断用的模型」是同一个名字。
+  - b) `ai_fallback_model` 因此在两档都生效(粘性切换,见 `AiAgent.ShouldTryFallback`)。
+  - c) 删掉 `AiAgent.FallbackApplies`(它唯一的存在理由就是「builtin 档改不了模型」,前提已不存在)。
+  - d) 模型名被接口拒绝时,终态报错追加一句可读提示(报出该名字 + 指路「设置 → AI 助手」清空即可恢复默认),
+    不再只甩「接口出错」。
+- 风险(用户已知并接受):
+  1. **破坏「内置网关什么都不让用户改」的既有设计**:模型名现在由用户设置决定,可以指向网关不认识的模型。
+  2. **内置网关是否接受非默认模型名,我们没有验证手段** —— 它指向后端服务,本轮不许联网实测。
+     若网关只认自己的模型名,用户设了别的名字会导致请求失败(D-89 d 的提示会指路改回去)。
+  3. 视觉能力判断(`VisionCaps` → `CurrentModel`/`ModelCaps`)会跟着用户填的名字走:
+     填了不存在的名字时,判断结果也以那个名字为准。
+- 向后兼容:`ai_model` 与 `ai_fallback_model` 都为空时,请求体与旧行为**逐字节一致**
+  (仍是 `Defaults.DEFAULT_MODEL`),有 `AiAgentLoopTests.BuiltinGateway_ResolvesTheConfiguredModelName` 钉住。
+- 可回滚:是(把内置分支的 model 改回 `Defaults.DEFAULT_MODEL`、恢复 custom-only 闸门即可)。

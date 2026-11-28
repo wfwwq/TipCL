@@ -531,30 +531,153 @@ public class AiAgentLoopTests : IDisposable
         string joined = string.Join("\u0001", assistantTexts);
         Assert.DoesNotContain("前半段", joined);            // 残段被替换掉了,没有留在上下文里
         Assert.Contains("兜底重新生成的完整答复", joined);
+        // 关键一致性(2026-11-28 qa 场景 09 跟进):LastText 必须**逐字等于**落盘的那条 assistant 消息。
+        // 否则用户这一轮看到的、和下一轮上下文里带着的,会变成两份不一样的话。
+        Assert.Equal(joined, agent.LastText);
         // 页面上要能重置气泡:发了一条带「正在重试」的状态
         Assert.Contains(events, e => e.Kind == "status" && e.Text.Contains("正在重试"));
+        // 把 delta 流按 AiPage 的重置规则(AiPage.ResetStreamingBubble:遇到含「正在重试」的状态就清空本轮气泡)
+        // 折叠起来,结果必须等于 LastText —— 也就是「用户在气泡里看到的」和「落盘的」是同一段话。
+        string shown = FoldDeltasLikeAiPage(events);
+        Assert.Equal(agent.LastText, shown);
+        Assert.DoesNotContain("前半段", shown);
     }
 
     /// <summary>
-    /// A8 的诚实性闸门:内置网关(builtin)档下模型名由 `Client.ResolveEndpoint` 固定成默认值,
-    /// 设置改不动 —— 所以**不做降级、也不谎报**「已切到备用模型」;自定义端点(custom)档才降级。
-    /// 这里直接查闸门本身:走行为路径需要真的发到内置网关(测试网络闸门不允许,也不该去连)。
+    /// 按 AiPage.OnAgentEvent 的规则折叠事件流:delta / think 累加;status 文本含「正在重试」时清空累计
+    /// (对应 <c>AiPage.ResetStreamingBubble()</c>)。这是「用户看到的正文」的等价物。
+    /// </summary>
+    private static string FoldDeltasLikeAiPage(List<AiAgentEvent> events)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (AiAgentEvent e in events)
+        {
+            if (e.Kind == "status" && e.Text.Contains("正在重试"))
+            {
+                sb.Clear();
+                continue;
+            }
+            if (e.Kind is "delta" or "think")
+            {
+                sb.Append(e.Text);
+            }
+        }
+        string text = sb.ToString();
+        int sep = text.IndexOf("<think>", StringComparison.Ordinal);
+        return sep >= 0 ? text.Substring(0, sep) : text;
+    }
+
+    /// <summary>
+    /// D-89(2026-11-28 用户裁决):内置网关(builtin)档**也**认 `ai_model` / `ai_fallback_model` ——
+    /// 以前 `ResolveEndpoint` 在内置分支把 model 写死成 `Defaults.DEFAULT_MODEL`,于是「备用模型」那一档
+    /// 设置在内置网关下完全空转(还会谎报「已切到备用模型」)。这里钉两件事:
+    ///   1 模型名解析:内置档下 ai_model 非空就发它,为空时**逐字节等于旧行为**(向后兼容);
+    ///   2 原来那条「只在 custom 档降级」的闸门(fallback 的前提已不存在)已删除,两档都能降级。
+    /// 只断言解析结果,不发请求(测试网络闸门指向环回,内置网关那台地址不该去连)。
     /// </summary>
     [Fact]
-    public void Fallback_OnlyAppliesToCustomEndpoints()
+    public void BuiltinGateway_ResolvesTheConfiguredModelName()
     {
-        Config.CONFIG.Set("ai_base_url", "http://127.0.0.1:1/v1");
-        Config.CONFIG.Set("ai_mode", "custom");
-        Assert.True(AiAgent.FallbackApplies("backup-model", Config.CONFIG.data));
-        // 没配备用模型 = 不做降级
-        Assert.False(AiAgent.FallbackApplies("", Config.CONFIG.data));
+        string savedModel = Py.S(Config.CONFIG.Get("ai_model"));
+        try
+        {
+            Config.CONFIG.Set("ai_mode", "builtin");
+            Config.CONFIG.Set("ai_base_url", "");
 
-        // builtin 档(以及「custom 但没填地址」都会被 Client.Mode 归一成 builtin)
-        Config.CONFIG.Set("ai_mode", "builtin");
-        Assert.False(AiAgent.FallbackApplies("backup-model", Config.CONFIG.data));
-        Config.CONFIG.Set("ai_mode", "custom");
-        Config.CONFIG.Set("ai_base_url", "");
-        Assert.False(AiAgent.FallbackApplies("backup-model", Config.CONFIG.data));
+            // 向后兼容:两个设置都为空 → 与旧行为逐字节一致
+            Config.CONFIG.Set("ai_model", "");
+            Assert.Equal(Defaults.DEFAULT_MODEL, Client.EffectiveModel(Config.CONFIG.data));
+            Assert.Equal(Defaults.DEFAULT_MODEL, Client.CurrentModel(Config.CONFIG.data));
+            Assert.Equal(Defaults.DEFAULT_MODEL, Py.S(Client.ResolveEndpoint(Config.CONFIG.data).Get("model")));
+
+            // 配了 ai_model → 内置档也发这个名字(备用模型降级才有意义)
+            Config.CONFIG.Set("ai_model", "gateway-model-x");
+            Assert.Equal("gateway-model-x", Client.EffectiveModel(Config.CONFIG.data));
+            Assert.Equal("gateway-model-x", Client.CurrentModel(Config.CONFIG.data));
+            Assert.Equal("gateway-model-x", Py.S(Client.ResolveEndpoint(Config.CONFIG.data).Get("model")));
+
+            // 网址仍然是内置网关那一个(只改了 model,没有把请求引到别处)
+            Assert.Equal(Defaults.DEFAULT_API_BASE + "/chat/completions",
+                Py.S(Client.ResolveEndpoint(Config.CONFIG.data).Get("url")));
+        }
+        finally
+        {
+            Config.CONFIG.Set("ai_model", savedModel);
+            Config.CONFIG.Set("ai_mode", "custom");
+            Config.CONFIG.Set("ai_base_url", _server.BaseUrl);
+        }
+    }
+
+    /// <summary>
+    /// D-89 风险兜底:模型名不被接口接受时,报错不能只甩「接口出错」,要说清是哪个名字、怎么改回去。
+    /// </summary>
+    [Fact]
+    public async Task RejectedModelName_GetsAReadableHint()
+    {
+        Config.CONFIG.Set("ai_model", "gateway-model-x");
+        _server.Script((400,
+            "{\"error\":{\"message\":\"The model `gateway-model-x` does not exist\",\"type\":\"invalid_request_error\"}}"));
+
+        (AiAgent agent, List<AiAgentEvent> events) = await RunAsync(rounds: 1);
+
+        AiAgentEvent error = Assert.Single(events, e => e.Kind == "error");
+        Assert.Contains("gateway-model-x", error.Text);      // 把名字说出来
+        Assert.Contains("设置", error.Text);                  // 说清怎么改回去
+        Assert.Equal(StopReason.STREAM_FAILED, agent.stop_reason);
+    }
+
+    // ————————————————— C2 来源前缀:ToolSource.ForModel 接线(2026-11-28 第三步) —————————————————
+
+    /// <summary>
+    /// `ToolSource.ForModel(...)` 的接线:回给模型的 tool 消息正文 = 来源前缀 + 换行 + 原结果。
+    /// 双向钉住(避免「统一加前缀」或「统一不加」两种情况都能让用例绿):
+    ///   · 网络来源(search_mods,side_effect=network)→ 「内容不可信」前缀;
+    ///   · 本地只读(list_instances,side_effect=read)→ 「本地文件/日志/状态读取」前缀,且**不是**不可信;
+    ///   · 本地写操作回执(被拒的 install_mod)→ 「本地写操作回执」前缀。
+    /// 同时钉住「结果本身一个字没改」:前缀后面仍是原来那份载荷(界面步骤行 / 产物落盘读的是原值)。
+    /// </summary>
+    [Fact]
+    public async Task ToolResults_CarryToolSourcePrefix_ForModel()
+    {
+        _server.Script(
+            (200, ToolCallSse("search_mods", "{\"query\":\"sodium\"}")),
+            (200, ToolCallSse("list_instances", "{}")),
+            (200, ToolCallSse("install_mod", "{\"name\":\"sodium\",\"instance\":\"default\"}")),
+            (200, TextSse("好了", "stop")));
+
+        var events = new List<AiAgentEvent>();
+        var runner = new ToolRunner(new FakeBackend()) { PermissionMode = "plan" };   // plan 档 → 写工具被拒
+        var agent = new AiAgent(runner, ev => { lock (events) events.Add(ev); })
+        {
+            ChatId = "toolsource-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+            MaxRounds = 4,
+        };
+        var messages = new List<object>
+        {
+            PyDict.Of("role", "system", "content", "系统"),
+            PyDict.Of("role", "user", "content", "搜一下钠,顺手装上"),
+        };
+        await agent.RunAsync(messages, "default", CancellationToken.None);
+
+        List<string> toolContents = messages.OfType<PyDict>()
+            .Where(m => Py.S(m.Get("role")) == "tool")
+            .Select(m => Py.S(m.Get("content"))).ToList();
+        Assert.Equal(3, toolContents.Count);
+
+        // 1 网络来源(search_mods,side_effect=network)→ 内容不可信
+        Assert.StartsWith(ToolSource.Network, toolContents[0]);
+        Assert.True(ToolSource.IsPrefixed(toolContents[0]));
+        // 2 本地只读(list_instances,side_effect=read)→ 本地读取前缀,且**不是**不可信
+        Assert.StartsWith(ToolSource.Local, toolContents[1]);
+        Assert.DoesNotContain(ToolSource.Network, toolContents[1]);
+        // 3 被拒的写工具 → 本地写操作回执(而且拒绝原因没被前缀吃掉)
+        Assert.StartsWith(ToolSource.Write, toolContents[2]);
+        Assert.Contains("permission_denied", toolContents[2]);
+
+        // 结果本身没被改:前缀之后仍是原来那份载荷(假后端对 list_instances 回空表 → "[]"),一字未动;而且前缀只加一次
+        string body = toolContents[1].Substring(ToolSource.Local.Length);
+        Assert.Equal("\n[]", body);
+        Assert.DoesNotContain(ToolSource.Local, body);
     }
 
     // ————————————————— 06补:拒绝即无副作用 —————————————————

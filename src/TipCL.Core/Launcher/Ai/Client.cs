@@ -111,32 +111,38 @@ public static class Client
 		return Py.Strip(Py.S(settings.Get("ai_model")));
 	}
 
-	public static PyDict ModelCaps(PyDict settings)
-	{
-		string mode = Mode(settings);
-		string text;
-		string baseUrl;
-		if (IsCustom(mode))
-		{
-			text = CustomModel(settings);
-			baseUrl = NormalizeBase(Py.S(settings.Get("ai_base_url")));
-		}
-		else
-		{
-			text = Defaults.DEFAULT_MODEL;
-			baseUrl = Defaults.DEFAULT_API_BASE;
-		}
-		return TipCL.Core.Launcher.Ai.ModelCaps.Resolve(text, TipCL.Core.Launcher.Ai.ModelCaps.ApiTypeForMode(mode), baseUrl, settings);
-	}
-
-	public static string CurrentModel(PyDict settings)
+	/// <summary>
+	/// 这一档**实际会发出去**的模型名。
+	/// AI5-A8 / D-89(2026-11-28 用户裁决):内置网关(builtin)档**也**认 `ai_model` ——
+	/// 以前这里一律写死 <see cref="Defaults.DEFAULT_MODEL"/>,于是「备用模型(可选)」这一档设置在
+	/// 内置网关下完全空转,还会出现「界面说切到备用模型、实际发的还是内置默认模型」的假承诺。
+	/// 向后兼容:`ai_model` 为空时逐字节等于旧行为(`Defaults.DEFAULT_MODEL`)。
+	/// ⚠ 风险:内置网关是否接受非默认的模型名**没有验证手段**(它指向后端服务,本轮不许联网实测);
+	/// 若网关只认自己的模型名,用户设了别的名字会让请求失败 —— 这是用户已知并接受的代价(见 D-89),
+	/// 失败时 <see cref="TipCL.Core.Launcher.Ai.AiAgent"/> 会尽量给一句可读提示。
+	/// </summary>
+	public static string EffectiveModel(PyDict settings)
 	{
 		if (IsCustom(Mode(settings)))
 		{
 			return CustomModel(settings);
 		}
-		return Defaults.DEFAULT_MODEL;
+		string custom = Py.Strip(Py.S((settings ?? new PyDict()).Get("ai_model")));
+		return (custom.Length > 0) ? custom : Defaults.DEFAULT_MODEL;
 	}
+
+	public static PyDict ModelCaps(PyDict settings)
+	{
+		string mode = Mode(settings);
+		string text = EffectiveModel(settings);
+		string baseUrl = IsCustom(mode)
+			? NormalizeBase(Py.S(settings.Get("ai_base_url")))
+			: Defaults.DEFAULT_API_BASE;
+		return TipCL.Core.Launcher.Ai.ModelCaps.Resolve(text, TipCL.Core.Launcher.Ai.ModelCaps.ApiTypeForMode(mode), baseUrl, settings);
+	}
+
+	/// <summary>当前生效的模型名(与请求里实际发的那一个同源,见 <see cref="EffectiveModel"/>)。</summary>
+	public static string CurrentModel(PyDict settings) => EffectiveModel(settings);
 
 	public static bool SupportsImage(PyDict settings)
 	{
@@ -178,7 +184,8 @@ public static class Client
 		{
 			headers2["Authorization"] = "Bearer " + Defaults.DEFAULT_API_KEY;
 		}
-		return PyDict.Of("mode", "builtin", "url", text3 + "/chat/completions", "models_url", text3 + "/models", "headers", headers2, "model", Defaults.DEFAULT_MODEL, "public", false, "builtin", true);
+		// AI5-A8 / D-89:内置网关的模型名不再写死 —— 设置里有 ai_model 就用它,否则与旧行为逐字节一致
+		return PyDict.Of("mode", "builtin", "url", text3 + "/chat/completions", "models_url", text3 + "/models", "headers", headers2, "model", EffectiveModel(settings), "public", false, "builtin", true);
 	}
 
 	public static AiSession _Session()

@@ -440,11 +440,14 @@ public sealed class AiAgent
                             Call = invocation.Call,
                             Round = roundNo,
                         });
+                        // C2(来源前缀)接线:回给模型的正文带来源标记(网络 / 外部 MCP = 内容不可信
+                        // —— 提示注入的第一道防线)。只改这条消息的 content:界面步骤行、产物落盘、
+                        // ToolRunner 的返回值都保持原样(与 Windows Agent.cs:1237 同口径)。
                         messages.Add(PyDict.Of(
                             "role", "tool",
                             "tool_call_id", invocation.Call.id,
                             "name", invocation.Call.name,
-                            "content", result));
+                            "content", ToolSource.ForModel(invocation.Call.name, result)));
                     }
                 }
                 CompactState.tool_turns_since_compact++;
@@ -523,9 +526,42 @@ public sealed class AiAgent
         {
             // AI5-A2:失败只留这一条(上游原文优先),不再有第二条内部代号 stream_failed 的重复报错
             string message = terminalError.Length > 0 ? terminalError : Tr("AI 接口出错");
+            // D-89 风险兜底:内置网关档现在会用设置里的模型名,而网关是否认这个名字我们没法验证。
+            // 如果是「模型名不被接受」导致的失败,别只甩一句「接口出错」——把名字和怎么改说清楚。
+            string hint = ModelNameHint(message);
+            if (hint.Length > 0)
+            {
+                message = message + "\n" + hint;
+            }
             _emit(new AiAgentEvent { Kind = "error", Error = message, Text = message, StopReason = reason, Round = lastRound });
         }
     }
+
+    /// <summary>
+    /// D-89:上游拒绝了这个模型名时给一句可读的补救提示(空 = 不是这类失败,原样报上游原文)。
+    /// 判据只认「报文里同时出现 model 与不认识/不存在/无效」这类词 —— 宁可漏判,不误判成模型问题。
+    /// </summary>
+    private static string ModelNameHint(string message)
+    {
+        string text = Py.Lower(message ?? "");
+        if (text.Length == 0 || (!text.Contains("model") && !text.Contains("模型"))) // i18n:ignore(内部匹配串:比对上游报文,不能翻译)
+        {
+            return "";
+        }
+        bool rejected = text.Contains("not found") || text.Contains("does not exist") || text.Contains("unknown model")
+            || text.Contains("invalid model") || text.Contains("unsupported model") || text.Contains("no such model")
+            || text.Contains("不存在") || text.Contains("无效") || text.Contains("不认识") || text.Contains("不支持"); // i18n:ignore(内部匹配串:比对上游报文,不能翻译)
+        if (!rejected)
+        {
+            return "";
+        }
+        string model = Client.EffectiveModel(RequestSettingsSnapshot());
+        return Tr("当前模型名 {model} 可能不被接口接受:到「设置 → AI 助手」把「模型」和「备用模型」清空即可恢复默认。")
+            .Replace("{model}", model.Length > 0 ? model : "(空)"); // i18n:ignore(占位填充值,不是文案)
+    }
+
+    /// <summary>只读快照:提示文案里要报「当前生效的模型名」,但不能因为读它而改动设置。</summary>
+    private static PyDict RequestSettingsSnapshot() => Config.CONFIG.data;
 
     private static int LastUserLength(List<object> messages)
     {
@@ -989,21 +1025,15 @@ public sealed class AiAgent
     }
 
     /// <summary>
-    /// AI5-A8:这次降级**会不会真的生效**。内置网关(builtin)档下模型名由
-    /// `Client.ResolveEndpoint` 固定成 `Defaults.DEFAULT_MODEL`,设置根本改不动 ——
-    /// 在这一档做降级只会出现「告诉用户已切到备用模型,实际发的还是内置默认模型」的**假承诺**,
-    /// 比不降级更糟。想让内置网关也支持备用模型属于产品口径变更(等于让用户能改内置网关的模型名),
-    /// 需要单独裁决;在那之前这里只管自定义端点(custom)。
-    /// </summary>
-    internal static bool FallbackApplies(string fallbackModel, PyDict settings)
-        => fallbackModel.Length > 0 && Client.Mode(settings) == "custom";
-
-    /// <summary>
-    /// 该不该换备用模型(还没切过 + 配上备用模型 + **换了真的会生效** + 这次失败是限流/5xx 之类)。
+    /// 该不该换备用模型(还没切过 + 配上备用模型 + 这次失败是限流/5xx 之类)。
+    /// 2026-11-28 用户裁决 D-89 之后不再按档位设限:内置网关(builtin)档的模型名现在也认
+    /// `ai_model`(见 <see cref="Client.EffectiveModel"/>),所以两档都能真正降级,
+    /// 「告诉用户已切到备用模型、实际发的还是默认模型」的假承诺不会再出现 ——
+    /// 原本为此加的 `FallbackApplies(只在 custom 档生效)` 随之删除。
     /// </summary>
     private bool ShouldTryFallback(AIClientError? err, string message)
     {
-        if (!FallbackApplies(_fallbackModel, Config.CONFIG.data) || _fallbackActive)
+        if (_fallbackModel.Length == 0 || _fallbackActive)
         {
             return false;
         }
