@@ -8,7 +8,9 @@
 //
 // 六句断言一律**逐字节**比较(这一批句子里全是全角逗号/分号,抄错一个标点就是一条假绿或假红,
 // 见 R19 的教训),而且必须另有负例 ——「任何一句非空中文都算过」这种断言等于没断言。
-// 本轮只补「告知」这一面:裁决(Decide)/确认卡/拒绝理由(D-48)一行没动,见 Decide_IsUnchanged_ByTheNote。
+// 其中「不询问」那句在 AI5-P1(2026-11-28 用户裁决)时**有意偏离参考版**:参考版/原先的 Linux 都是
+// ask → deny,现在是 ask → allow(删除类除外),那句话也跟着改成「自动放行」。其余五句与裁决判据
+// 一行没动,见 Decide_IsUnchanged_ByTheNote。
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,13 +28,18 @@ namespace TipCL.Tests.Core;
 public class AiPermissionNoteTests
 {
     /// <summary>参考版 Permission.cs:256-276 的六句(逐字;由脚本从参考仓源码的字节直接注入)。</summary>
+    /// 其中 NoteDontAsk 是例外：P1 裁决(2026-11-28)把「不询问」由 ask → deny 改成「自动放行，删除类除外」，那句话随裁决一起改。
     private const string NoteYolo = "[权限设置] 用户选了「全自动」：写操作直接执行，不会弹确认。你仍要先用一句话说明将要做什么。";
 
     private const string NotePlan = "[权限设置] 用户选了「只看不动」：你只能查看和诊断，不能安装/删除/改配置。";
 
     private const string NoteAuto = "[权限设置] 写操作会直接执行；删除实例、删除模组前仍会先询问，要等用户点了才执行。";
 
-    private const string NoteDontAsk = "[权限设置] 用户选了「不询问」：需要确认的写操作会被直接拒绝，只读查看照常。";
+    /// <summary>
+    /// AI5-P1(2026-11-28 用户裁决)之后的「不询问」那句:写操作自动放行、删除类除外。
+    /// 逐字取自 ToolRunner.PermissionNote 的实现(占位符由脚本按源码字节填,别手抄全角标点)。
+    /// </summary>
+    private static readonly string NoteDontAsk = "[权限设置] 用户选了「不询问」：写操作执行前不再询问、直接放行；删除实例、删除模组这类删除操作仍然会被拒绝。";
 
     private const string NoteEdit = "[权限设置] 文件类修改直接执行；安装、删除、启动前会弹确认，要等用户点了才执行。";
 
@@ -141,7 +148,7 @@ public class AiPermissionNoteTests
         WithMode("acceptEdits", false, () => Assert.Equal(NoteAuto, ToolRunner.PermissionNote()));
         WithMode("default", false, () => Assert.Equal(NoteDefault, ToolRunner.PermissionNote()));
         WithMode("", false, () => Assert.Equal(NoteDefault, ToolRunner.PermissionNote()));
-        // 「不询问」开关打开:句子换成「会被直接拒绝」那句(D-48 的语义)
+        // 「不询问」开关打开:句子换成「自动放行,删除类除外」那句(P1 裁决后的语义)
         WithMode("default", true, () => Assert.Equal(NoteDontAsk, ToolRunner.PermissionNote()));
         WithMode("acceptEdits", true, () => Assert.Equal(NoteDontAsk, ToolRunner.PermissionNote()));
         // 但 yolo(全放行)与 plan(本来就拒)两档下这个开关根本不生效,句子不该跟着换
@@ -150,8 +157,8 @@ public class AiPermissionNoteTests
     }
 
     /// <summary>
-    /// 那句话必须与**真实裁决**对得上:「不询问」= 需要确认的写操作直接拒绝(D-48),
-    /// 既不是「任何档位都拒绝」,也不是「只是说说」。
+    /// 那句话必须与**真实裁决**对得上(P1 裁决):「不询问」= 写操作自动放行、删除类除外,
+    /// 既不是「全都放行」,也不是「只是说说」。
     /// </summary>
     [Fact]
     public void DontAskSentence_MatchesTheActualDontAskSemantics()
@@ -159,8 +166,12 @@ public class AiPermissionNoteTests
         WithMode("default", true, () =>
         {
             Assert.Equal(NoteDontAsk, ToolRunner.PermissionNote());
-            // 同一档位、同一开关下的真实裁决:写操作 ask → deny(理由与参考版逐字相同)
-            Assert.Equal(("deny", "用户开启了「不询问」模式"), Pair(Runner("default").Decide("install_mod")));
+            // 同一档位、同一开关下的真实裁决:写操作 ask → allow;删除类仍然 deny
+            Assert.Equal(("allow", ToolRunner.DontAskAllowReason), Pair(Runner("default").Decide("install_mod")));
+            Assert.Equal(("deny", ToolRunner.DontAskDeleteReason), Pair(Runner("default").Decide("delete_mod")));
+            // 句子里说的两件事都要在这两句理由里出现(句子与裁决说的是同一件事)
+            Assert.Contains("删除操作", NoteDontAsk);
+            Assert.Contains("直接放行", NoteDontAsk);
         });
         WithMode("default", false, () =>
         {

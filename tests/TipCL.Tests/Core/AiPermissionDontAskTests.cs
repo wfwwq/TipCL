@@ -1,8 +1,9 @@
 // M4-H R19b(主 agent 补):两个「配置里有开关、代码里没人读」的收口。
 //
 // 1) `ai_permission_dont_ask`:Linux 的 Config 一直写着这个键的默认值(Config.cs:122)却没人读,
-//    而 Windows 版在 Agent 里消费它(Agent.cs:571 / :1149-1152):需要确认的写操作直接拒绝,
-//    理由「用户开启了「不询问」模式」。这里按同一语义钉住,并且必须有负例(allow 不受影响)。
+//    而 Windows 版在 Agent 里消费它(Agent.cs:571 / :1149-1152):需要确认的写操作**直接拒绝**。
+//    AI5-P1(2026-11-28 用户裁决)把这一档改成**放行**:原本 ask 的改成 allow,删除类仍然拒绝,
+//    显式 deny 规则仍然优先(名字与行为对齐 —— 不询问 = 自动放行,删除类除外)。
 // 2) 被拒的步骤行要显示理由:`ToolRunner` 把裁决理由写进 `ToolCall.error`,界面侧
 //    `AiPage.Summarize` 对被拒的调用返回它(照 Windows 的 denied 工具状态)。
 using System;
@@ -45,23 +46,28 @@ public class AiPermissionDontAskTests
     }
 
     [Fact]
-    public void DontAsk_TurnsAskIntoDeny_WithWindowsWording()
+    public void DontAsk_TurnsAskIntoAllow_DeleteStillDenied()
     {
         // 开关关着:写操作照旧要问(基线,防止这条用例在开关恒真的实现下也「通过」)
         WithDontAsk(false, () =>
             Assert.Equal(("ask", "写操作需要确认"), Pair(Runner("default").Decide("install_mod"))));
 
-        // 开关打开:同样的调用变成拒绝,理由与 Windows 逐字相同
+        // 开关打开(P1 裁决,2026-11-28):原本是 ask 的写操作改成**放行**;删除类仍然拒绝
         WithDontAsk(true, () =>
         {
             ToolRunner runner = Runner("default");
-            Assert.Equal(("deny", "用户开启了「不询问」模式"), Pair(runner.Decide("install_mod")));
-            // 高风险(删除类)在 default 档本来就要问 → 同样被这条开关拒掉
-            Assert.Equal(("deny", "用户开启了「不询问」模式"), Pair(runner.Decide("delete_mod")));
-            // 档位不接受规则覆盖:自定义规则说 allow 时不该被「不询问」改写
+            Assert.Equal(("allow", ToolRunner.DontAskAllowReason), Pair(runner.Decide("install_mod")));
+            Assert.Equal(("deny", ToolRunner.DontAskDeleteReason), Pair(runner.Decide("delete_mod")));
+            // 显式 deny 规则仍然优先:「不询问」只动 ask,规则说的 deny 不会被改写成 allow
             object? before = Config.CONFIG.Get("ai_permission_rules");
             try
             {
+                Config.CONFIG.Set("ai_permission_rules", new List<object>
+                {
+                    PyDict.Of("tool", "install_mod", "behavior", "deny"),
+                });
+                Assert.Equal(("deny", "这条操作被你的规则禁止"), Pair(runner.Decide("install_mod")));
+                // allow 规则照旧(理由仍是规则那句)
                 Config.CONFIG.Set("ai_permission_rules", new List<object>
                 {
                     PyDict.Of("tool", "install_mod", "behavior", "allow"),
@@ -99,15 +105,24 @@ public class AiPermissionDontAskTests
         await WithDontAskAsync(true, async () =>
         {
             ToolRunner runner = Runner("default");
-            var call = new ToolCall("d1", "install_mod",
-                PyDict.Of("name", "sodium", "instance", "default"));
+            // P1 之后这条开关放行写操作,所以「被拒时步骤行带理由」这条用删除类验(它仍然拒)
+            var call = new ToolCall("d1", "delete_mod",
+                PyDict.Of("filename", "sodium.jar", "instance", "default"));
             string result = await runner.RunAsync(call);
 
             Assert.Equal(ToolCallStatus.DENIED, call.status);
             // 界面读的是 call.error(见 AiPage.Summarize);理由必须一路带到这里
-            Assert.Contains("不询问", call.error);
+            Assert.Contains("删除类", call.error);
             // 模型可见的文本保持原样(不因为这次改动变脸)
             Assert.Contains("permission_denied", result);
+
+            // 对照:同一个开关下写操作不再弹卡也不再被拒 —— 这就是 P1 的行为变化
+            // (选 disable_mod 而不是 install_mod:后者要后端真起一个下载任务,假门面给不出任务 id)
+            var allowed = new ToolCall("d2", "disable_mod",
+                PyDict.Of("filename", "sodium.jar", "instance", "default"));
+            string allowedText = await runner.RunAsync(allowed);
+            Assert.Equal(ToolCallStatus.COMPLETED, allowed.status);
+            Assert.DoesNotContain("permission_denied", allowedText);
         });
     }
 

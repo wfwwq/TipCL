@@ -68,28 +68,54 @@ public sealed partial class ToolRunner
     /// 理由文案与 Windows 版 Permission.Decide 的 switch 逐字对位(见下面 switch 里各分支的判据);
     /// 档位集合与参考版一致(含别名),面板仍只写本地那几档。
     /// </summary>
-    public PermissionVerdict Decide(string tool) => ApplyDontAsk(DecideRaw(tool, null));
+    public PermissionVerdict Decide(string tool) => ApplyDontAsk(tool, DecideRaw(tool, null), allowAsking: true);
 
     /// <summary>
     /// 带参数的裁决(AI-engine-mcp):自定义规则的「限定参数 / 作用实例」要拿本次调用的参数来比,
     /// 见 <see cref="PermissionRules"/>。RunAsync 走这个入口;不带参数时只有「整个工具」的规则会命中。
     /// </summary>
-    public PermissionVerdict Decide(string tool, PyDict? args) => ApplyDontAsk(DecideRaw(tool, args));
+    public PermissionVerdict Decide(string tool, PyDict? args) => ApplyDontAsk(tool, DecideRaw(tool, args), allowAsking: true);
+
+    /// <summary>「不询问」档放行时的理由(P1 裁决:名字与行为对齐 —— 不询问 = 自动放行)。</summary>
+    public static string DontAskAllowReason => I18nCore.Tr("「不询问」模式下写操作直接执行");
+
+    /// <summary>「不询问」档下删除类仍然拒绝的理由(P1 裁决:删除类不给无限定放行)。</summary>
+    public static string DontAskDeleteReason => I18nCore.Tr("「不询问」模式仍然拒绝删除类操作");
+
+    /// <summary>「不询问」档对**外部 MCP 工具**的口径(不变:按拒绝处理,不是放行)。</summary>
+    public static string DontAskMcpReason => I18nCore.Tr("用户开启了「不询问」模式");
 
     /// <summary>
-    /// 「不询问」开关(<c>config.json</c> 的 <c>ai_permission_dont_ask</c>):需要确认的写操作**直接拒绝**。
-    /// Windows 版在 Agent 里消费同一个键(<c>Agent.cs:571</c> / <c>:1149-1152</c>),理由文案逐字相同。
-    /// 只作用于 ask —— allow 与 deny 一律保持原样;Linux 侧的 Config 一直写着这个键的默认值,
-    /// 不读它等于「配置里有开关、拉了没反应」。
+    /// 「不询问」开关 / 档位(<c>config.json</c> 的 <c>ai_permission_dont_ask</c>,或
+    /// <see cref="DecideRaw"/> 里的 dontAsk 档):判定结果原本是 **ask** 的改成 **allow**
+    /// (P1 裁决,2026-11-28:原先实现成 ask → deny,名字和行为相反)。三条保持不变:
+    /// 1 显式 deny 规则优先(规则在 <see cref="DecideRaw"/> 里先算,这里只动 ask);
+    /// 2 删除类(side_effect = <c>delete</c>)仍然 deny,不给无限定放行;
+    /// 3 外部 MCP 工具的确认口径不变 —— <see cref="McpVerdict"/> 那一支传 <c>allowAsking: false</c>,
+    ///   照旧按拒绝处理(本机外部进程的写操作不交给一个开关决定)。
+    /// allow 与 deny 一律保持原样:这条只在 ask 上生效。
     /// </summary>
-    private static PermissionVerdict ApplyDontAsk(PermissionVerdict verdict)
+    private PermissionVerdict ApplyDontAsk(string tool, PermissionVerdict verdict, bool allowAsking)
     {
-        if (verdict.decision == "ask" && Py.Truthy(Config.CONFIG.Get("ai_permission_dont_ask")))
+        if (verdict.decision != "ask" || !Py.Truthy(Config.CONFIG.Get("ai_permission_dont_ask")))
         {
-            return new PermissionVerdict("deny", "用户开启了「不询问」模式");
+            return verdict;
         }
-        return verdict;
+        if (ToolMeta.Get(tool)?.side_effect == "delete")
+        {
+            return new PermissionVerdict("deny", DontAskDeleteReason);
+        }
+        return allowAsking
+            ? new PermissionVerdict("allow", DontAskAllowReason)
+            : new PermissionVerdict("deny", DontAskMcpReason);
     }
+
+    /// <summary>
+    /// MCP 工具的裁决入口:plan 档不动、yolo 档放行,其余都要用户点一下。
+    /// 「不询问」开关在 MCP 这一支上仍然按**拒绝**处理(P1 第 4 条:外部确认口径不变),
+    /// 所以这里不能直接用 <see cref="Decide(string)"/> —— 那一条现在会把 ask 变成 allow。
+    /// </summary>
+    private PermissionVerdict McpDecide() => ApplyDontAsk("", McpVerdict(), allowAsking: false);
 
     /// <summary>按档位与自定义规则算出的原始裁决(「不询问」开关由 <see cref="Decide"/> 叠加)。</summary>
     private PermissionVerdict DecideRaw(string tool, PyDict? args)
@@ -142,9 +168,12 @@ public sealed partial class ToolRunner
             "edit" => meta.side_effect == "write_local"
                 ? new PermissionVerdict("allow", "文件类修改直接执行")
                 : new PermissionVerdict("ask", "这类操作需要确认"),
-            // dontAsk 档的拒绝理由与 ApplyDontAsk 那句逐字相同:一个是档位本身就是「不询问」,
-            // 一个是独立开关把 ask 翻成 deny,给用户看的话是同一句(Permission.cs:245-246)
-            "dontAsk" => new PermissionVerdict("deny", "用户开启了「不询问」模式"),
+            // P1 裁决(2026-11-28):dontAsk 档由 ask → deny 改成 ask → **allow**(删除类除外)。
+            // 档位名与理由文案仍与「不询问」开关那一支共用常量,两处说的是同一件事:
+            // 不询问 = 自动放行,删除类除外。显式 deny 规则在上面的规则段就算过了,不会走到这里。
+            "dontAsk" => meta.side_effect == "delete"
+                ? new PermissionVerdict("deny", DontAskDeleteReason)
+                : new PermissionVerdict("allow", DontAskAllowReason),
             // default / custom / 空档:一律要确认,理由按风险等级分句(判据同 Windows 版 default 分支的 risk == "high")
             _ => meta.risk == "high"
                 ? new PermissionVerdict("ask", "高风险操作需要确认")
@@ -178,8 +207,8 @@ public sealed partial class ToolRunner
     /// <summary>
     /// 档位 → 那句话(档位名与参考版 PermissionNote 的 switch 逐字对位;句中的全角标点也是照抄的)。
     /// <paramref name="dontAsk"/> 是 config 的 ai_permission_dont_ask:Linux 侧「不询问」是一个**独立开关**
-    /// 而不是档位名,它把「需要确认」直接改成「拒绝」(D-48),所以模型看到的档位描述也要跟着换,
-    /// 否则模型会以为还有确认卡可等。yolo(全放行)与 plan(本来就拒)两档下这个开关不生效,保持原句更准。
+    /// 而不是档位名,它把「需要确认」改成**自动放行**(P1 裁决,2026-11-28;D-48 那条「直接拒绝」已作废),
+    /// 所以模型看到的档位描述也要跟着换,否则模型会以为还有确认卡可等、或者以为这一步会被拒。yolo(全放行)与 plan(本来就拒)两档下这个开关不生效,保持原句更准。
     /// 别名(bypassPermissions / auto / autoEdit / build / edit)照参考版给同一句:裁决现在也认这些
     /// 别名(见 DecideRaw 的 switch),所以「告知」与「裁决」说的是同一件事(两面的回归分别在
     /// Core/AiPermissionNoteTests 与 Core/AiPermissionReasonTests)。
@@ -196,7 +225,9 @@ public sealed partial class ToolRunner
             "yolo" or "bypassPermissions" => "[权限设置] 用户选了「全自动」：写操作直接执行，不会弹确认。你仍要先用一句话说明将要做什么。",
             "plan" => "[权限设置] 用户选了「只看不动」：你只能查看和诊断，不能安装/删除/改配置。",
             "auto" or "acceptEdits" or "autoEdit" or "build" => "[权限设置] 写操作会直接执行；删除实例、删除模组前仍会先询问，要等用户点了才执行。",
-            "dontAsk" => "[权限设置] 用户选了「不询问」：需要确认的写操作会被直接拒绝，只读查看照常。",
+            // P1 裁决:这句话必须与裁决说的是同一件事(不询问 = 自动放行,删除类除外);原文是「需要确认的写操作会被直接拒绝」,
+            // 档位改成放行之后它就成了反话。
+            "dontAsk" => I18nCore.Tr("[权限设置] 用户选了「不询问」：写操作执行前不再询问、直接放行；删除实例、删除模组这类删除操作仍然会被拒绝。"),
             "edit" => "[权限设置] 文件类修改直接执行；安装、删除、启动前会弹确认，要等用户点了才执行。",
             _ => "[权限设置] 安装、删除、禁用、改配置、启动这类写操作执行前都会弹确认，用户点了才会真的执行；查看类操作不弹。被拒绝时不要重复发起同一操作，改为说明原因。",
         };
@@ -275,7 +306,7 @@ public sealed partial class ToolRunner
         bool readOnly = !mcp && ToolMeta.Get(call.name)!.@readonly;
         if (!readOnly && (ForceConfirmWrites || !IsAllowedAlways(call.name) || ModDevForceAsk(call)))
         {
-            PermissionVerdict verdict = ModDevGate(call, ExternalWriteGate(mcp ? ApplyDontAsk(McpVerdict()) : Decide(call.name, call.args)));
+            PermissionVerdict verdict = ModDevGate(call, ExternalWriteGate(mcp ? McpDecide() : Decide(call.name, call.args)));
             if (verdict.decision == "deny")
             {
                 // 步骤行右侧那格要说明「为什么被拒」(照 Windows 的 "denied" 工具状态带 reason),
