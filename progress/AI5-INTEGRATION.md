@@ -469,3 +469,37 @@ dotnet test  windos\tests\TipCL.Tests -c Release --no-build --filter "FullyQuali
 | `ai5/linux-loop-followup` | 未开 | 会动 `Client.cs` 的 `ResolveEndpoint`(**model 解析**段);而 `Client.cs` 的**注入点**是 `t-linux` 的 → 合并时按「注入点不动、model 解析段取 linux-loop」处理 |
 
 > 提醒:合 `linux-loop-followup` 时还要接上 `ToolSource.ForModel`(目前**待接线**:`ToolSource.ForModel` 与 `ToolRunner.IsUnknownTool` 生产侧零调用者),以及场景 09 的口径修正。
+
+---
+
+## 14. 合入 `ai5/t-linux-scenarios`(2026-11-28T17:20+08:00)
+
+### 14.1 合入与冲突
+
+合并 `0106501`(harness `AlwaysScope` 接线 + `ai_permission_rules` 隔离 + 场景按 A6/A1/S 新口径对齐 + 场景 05 去 Skip)与 `a280a12`(场景 14 脚本 `Repeat(10)`→`Repeat(3)` 并去 Skip)。
+
+- **冲突 1 处**:`tests/TipCL.Tests/Ai5T/Ai5TPendingScenarioTests.cs` 的场景 12 断言段。
+  - 我方(整合方)写法:查**子请求** `StreamRequests[1]` 的工具表无写工具。
+  - `t-linux` 写法(较新,且它同时扩了 harness):`Assert.Equal(new[]{ "dispatch_subagent" }, run.ParentToolSequence)`(父回合独有)+ 聚合 `ToolSequence` 允许含子代理的 `install_mod` + `Assert.Contains(run.Events, e => e.Kind=="tool" && e.Name=="install_mod" && e.Subagent)` + `stop_reason == COMPLETED`。
+  - **裁决:取 `t-linux` 版本**。它把「子代理事件转发到父回合」这条 S 包语义显式钉住了,比我的单点断言更完整;而「子代理工具表无写工具」由同一文件的 `场景12补`(未冲突,使用 `StreamRequests[1]`)继续覆盖。
+- **08/15 的 Skip 状态**:`t-linux` 分支基于 `de3662b`、不含 `820797a`,所以它那边 08/15 仍标的 Skip;合并后**保留了我方的「已去 Skip」**,并按 lead 要求**实跑确认真绿**(不是「去掉 Skip 然后红」)。
+- 行尾:合并后 `--numstat` 与 `--ignore-cr-at-eol` 结果**完全相同**(17/14)→ 无行尾翻动。
+- 未碰任何生产代码(`git diff --name-only de3662b 0106501` 里 `src/` 为空)。
+
+### 14.2 验证
+
+| 项 | 结果 |
+|---|---|
+| **Ai5T** | **26 预期的 3 跳 → 实测 28 过 / 1 跳 / 0 败 / 29**(08、15 在集成树上直接转绿;仅 09 保留 Skip 等 `linux-loop` 定口径) |
+| i18n 审计 | `unwrapped = 3211 = 基线` ✓(该分支上那条 `I18nBaselineTests` 红已随 `820797a` 消失,与预判一致) |
+| **Linux 全量(无过滤)** | **0 败 / 1721 过 / 12 跳 / 1733**,**连续 3 次数字完全一致** |
+| Windows 全量(无过滤) | 0 败 / 1033 过 / 8 跳 / 1041(树未变) |
+| compact | 5,796,864 B(本次仅动测试,不变) |
+
+⚠ **如实记录一次无法定名的偶发**:合并后第一次全量跑出过 `失败: 2`(当次耗时 **3m57s**,而稳定态为 1m42s~2m19s;那次**我没有 tee 日志**,所以**没能拿到失败用例名**,是我的疏漏)。随后 1 次 + 连续 3 次共 **4 次全量全部 0 败**,数字完全一致。按现有证据归类为**高负载下的偶发**(与 §12.4 定性为既存 flake 的 `UpdateTargetIsolationTests` 同一嫌疑面),但**未拿到用例名,故不宣布「已查清」**;最终验收会再连跑并逐次留日志,若再现即可定名。
+
+### 14.3 待办
+
+- 等 `ai5/linux-loop-followup`(builtin 扩展 + 场景 09 口径 + `ToolSource.ForModel` 接线)。
+- 场景 09 保持 Skip。
+- §13.3 的「builtin 备用模型无验证手段」风险**保留**在最终验收报告里。
