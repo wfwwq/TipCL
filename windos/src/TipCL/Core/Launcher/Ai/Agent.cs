@@ -1305,6 +1305,61 @@ public static class Agent
 					}
 				}
 				turn.Transition("executing_tools");
+				// plan 档:计划审批必须在执行之前(P2)。以前是先 Scheduler.RunGroups 把这一轮的工具跑完,
+				// 再弹 plan_approval;用户驳回时写操作已经落盘、检查点也已经生成,收不回来。
+				// 现在改成:本轮有 update_plan(且它被权限放行)就先问,批准了照常执行,驳回了本轮一个工具都不跑。
+				ToolCall planCall = null;
+				if (text3 == "plan" && !planApproved)
+				{
+					foreach (ToolCall candidate in list10)
+					{
+						if (candidate.name == "update_plan" && decisions[candidate.id].kind == "allow")
+						{
+							planCall = candidate;
+						}
+					}
+				}
+				if (planCall != null)
+				{
+					List<object> list14 = (from it in Py.ListOr(Py.Or(planCall.args.Get("items"), new List<object>()))
+						where it is PyDict pyDictPlan && Py.Strip(Py.S(pyDictPlan.Get("title"))).Length > 0
+						select it).ToList();
+					PyDict args2 = PyDict.Of("items", list14);
+					object obj4 = _call_confirm(confirmFn, "plan_approval", args2, Tools.ConfirmLabel("plan_approval", args2), "");
+					if (obj4 is AiRule)
+					{
+						obj4 = true;
+					}
+					planApproved = Py.Truthy(obj4);
+					// 计划先落到 turn 上:_result 会把它回报给界面;驳回时界面也要能看到被驳回的是哪一份计划
+					planItems = list14;
+					planTurnId = turn.id;
+					_status("plan_approval", PyDict.Of("approved", Py.Truthy(obj4), "turn_id", turn.id));
+					if (!Py.Truthy(obj4))
+					{
+						// 驳回:本轮工具一律不执行,也不生成检查点;把「计划未获批准」回填成工具结果
+						foreach (ToolCall item15 in list10)
+						{
+							if (decisions[item15.id].kind != "allow")
+							{
+								// 本来就被权限/插件拦下的,保留原来的拒绝原因
+								continue;
+							}
+							// 复用现成的文案键(工具结果和回合说明说的是同一件事),不新造 i18n 键
+							string rejected = I18nCore.Tr("计划未获批准,本轮到此为止");
+							decisions[item15.id] = ("deny", rejected);
+							turn.SetToolStatus(item15.id, "denied", rejected);
+							PluginAgentBridge.ToolResult(pturn, item15.id, item15.name, rejected, isError: true);
+							messages.Add(PyDict.Of("role", "tool", "tool_call_id", item15.id, "name", item15.name, "content", rejected));
+						}
+						List<object> list16 = list10.Where((ToolCall o) => ToolMeta.Get(o.name) != null && !ToolMeta.Get(o.name).@readonly).Select<ToolCall, object>((Func<ToolCall, object>)((ToolCall o) => o.name)).ToList();
+						object[] extra5 = new object[2] { "writes", list16 };
+						text_len = null;
+						Trace.Record("plan_rejected", null, "", "", null, null, text_len, extra5);
+						_to_phase(turn, "completing");
+						return _result(I18nCore.Tr("计划未获批准,本轮到此为止") + ((list16.Count == 0) ? I18nCore.Tr("。(本轮没有执行任何写操作)") : ""), "completed", "", null, roundNo);
+					}
+				}
 				List<List<ToolCall>> list13 = Scheduler.Group(list10.Where((ToolCall o) => decisions[o.id].kind == "allow").ToList());
 				turn.parallel_groups = ((IEnumerable<List<ToolCall>>)list13).Select((Func<List<ToolCall>, object>)((List<ToolCall> g) => ((IEnumerable<ToolCall>)g).Select((Func<ToolCall, object>)((ToolCall tc) => tc.id)).ToList())).ToList();
 				Scheduler.RunGroups(list13, _execute);
@@ -1321,26 +1376,6 @@ public static class Agent
 				}
 				// 插件工具结果里的图片：紧跟工具结果补一条 user 视觉消息
 				PluginAgentBridge.AppendVisionMessages(pturn, messages, list10.Select((ToolCall x) => (x.id, x.name)).ToList(), () => Client.SupportsImage(_request_settings()));
-				if (text3 == "plan" && planItems.Count > 0 && planTurnId == turn.id && !planApproved)
-				{
-					PyDict args2 = PyDict.Of("items", planItems);
-					object obj4 = _call_confirm(confirmFn, "plan_approval", args2, Tools.ConfirmLabel("plan_approval", PyDict.Of("items", planItems)), "");
-					if (obj4 is AiRule)
-					{
-						obj4 = true;
-					}
-					planApproved = Py.Truthy(obj4);
-					_status("plan_approval", PyDict.Of("approved", Py.Truthy(obj4), "turn_id", turn.id));
-					if (!Py.Truthy(obj4))
-					{
-						List<object> list14 = list10.Where((ToolCall o) => ToolMeta.Get(o.name) != null && !ToolMeta.Get(o.name).@readonly).Select<ToolCall, object>((Func<ToolCall, object>)((ToolCall o) => o.name)).ToList();
-						object[] extra5 = new object[2] { "writes", list14 };
-						text_len = null;
-						Trace.Record("plan_rejected", null, "", "", null, null, text_len, extra5);
-						_to_phase(turn, "completing");
-						return _result(I18nCore.Tr("计划未获批准，本轮到此为止") + ((list14.Count == 0) ? I18nCore.Tr("。（本轮没有执行任何写操作）") : ""), "completed", "", null, roundNo);
-					}
-				}
 				turn.Transition("awaiting_model");
 				cstate.tool_turns_since_compact++;
 				string _execute(ToolCall toolCall2)
