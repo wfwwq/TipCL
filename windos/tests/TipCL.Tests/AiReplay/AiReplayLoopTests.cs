@@ -274,7 +274,7 @@ public class AiReplayLoopTests
 		h.AssertSingleTurnEnd("stop");
 	}
 
-	[Fact(Skip = "AI5-T 场景 9(工具表一致性):兜底请求传的是全量表 —— Agent.cs 的 ChatOnce 用的是 Tools.TOOL_SCHEMAS;由 D8 修好(改成复用本轮流式请求下发的那份 list3 ?? list4)后去掉 Skip")]
+	[Fact]
 	public void Scenario09b_兜底请求的工具表与流式一致()
 	{
 		using AiReplayHarness h = new AiReplayHarness();
