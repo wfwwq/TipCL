@@ -356,7 +356,9 @@ public class Ai5TScenarioTests
             .Single(t => t.Contains("\"answers\"", StringComparison.Ordinal));
         Assert.Contains("opt_0", askResult);
         // 工具结果里的中文是按 \uXXXX 转义的:解出来再看,别拿裸 JSON 找中文
-        Assert.Contains("都装", PyJson.Dumps(PyJson.Loads(askResult), null, ensureAscii: false));
+        // C2(AI5):回给模型的工具结果前面多了一行来源前缀(如「[来源: ...]」),解析前先跳到第一个 '{'
+        Assert.StartsWith("[来源:", askResult);
+        Assert.Contains("都装", PyJson.Dumps(PyJson.Loads(askResult.Substring(askResult.IndexOf('{'))), null, ensureAscii: false));
 
         // 两次安装都真的发起了任务
         Assert.Equal(2, h.Backend.Count("install_mod"));
