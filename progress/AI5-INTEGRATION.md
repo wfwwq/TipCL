@@ -436,3 +436,36 @@ dotnet test  windos\tests\TipCL.Tests -c Release --no-build --filter "FullyQuali
 ### 12.6 清理
 
 `_ai_ui_selftest/`(验收产物)已删除;`ALL PASSED` 已记入本文档 §11.3。
+
+---
+
+## 13. 第三轮收尾:定性、风险与待合清单(2026-11-28T17:05+08:00)
+
+### 13.1 场景 14 定性:**测试台脚本问题,不是产品缺陷**
+
+- 现象:收尾轮(第 4 次请求)`LastText` 为空。
+- 根因(`t-linux` dump):假模型脚本是 `Repeat(10, Call(list_mods)) + Say(收尾文本)`,收尾轮领到的是第 4 个「调 list_mods」,自然没有正文。
+- 产品侧 A1/A7 **正确**:断言(4 次请求 / 1 条终态事件 / `stop_reason = max_rounds`)全部成立。
+- 处置:`t-linux` 把 `Repeat(10, ...)` 改成 `Repeat(3, ...)`;改完场景 14 应转绿。**合并方不动**,等其新提交。
+
+### 13.2 场景 09:口径待 `linux-loop` 裁决,**合并方不动**
+
+- 合并方实测:`LastText = "正在准备安装钠...已经装好了。"`(带流式残段),而落盘的 assistant 消息是替换后的正文 → **同一次回复「界面看到的」与「存下来的」不一致**,这个不一致本身才是问题。
+- `stop_reason` 现为 `completed`(该轮执行过工具)= A6 的正确口径,`t-linux` 按 `completed` 改断言即可。
+- 现状:保持 Skip,等 `linux-loop` 给定口径后再改;**不要**为了凑绿自行改断言。
+
+### 13.3 ⚠ 新增风险:builtin 档支持备用模型(**本轮无验证手段**)
+
+- 用户已裁决要做「builtin 档也支持备用模型」,`linux-loop` 会改 `Client.cs` 的 `ResolveEndpoint` 内置分支(model 解析)。
+- **风险**:内置网关(TipCL 官方网关)是否接受**非默认模型名**,本机**没有验证手段**(本轮不许联网实测、也没有该网关的凭据)。
+- 后果:若内置网关拒绝非默认模型名,`ai_fallback_model` 在 builtin 档下可能表现为**请求被拒 / 报错**,而不是「降级成功」。代码侧只能保证 model 名被正确选择与发送,**不能保证服务端接受**。
+- 处置:**此条在最终验收报告里必须保留**,不得因为测试全绿而省略。建议验收后单独做一次「内置网关是否接受备用模型名」的联机实测(需用户授权与可用凭据)。
+
+### 13.4 待合清单与冲突面
+
+| 分支 | 状态 | 冲突面 |
+|---|---|---|
+| `ai5/t-linux-scenarios` | 已有 `0106501`(harness `AlwaysScope` 接线 + `ai_permission_rules` 隔离 + 9 条断言更新 + 场景 05 去 Skip),**等它再提交场景 14 修复** | **只动测试**(实测 `git diff --name-only de3662b 0106501` 里 `src/` 为空)→ 与生产代码零冲突 |
+| `ai5/linux-loop-followup` | 未开 | 会动 `Client.cs` 的 `ResolveEndpoint`(**model 解析**段);而 `Client.cs` 的**注入点**是 `t-linux` 的 → 合并时按「注入点不动、model 解析段取 linux-loop」处理 |
+
+> 提醒:合 `linux-loop-followup` 时还要接上 `ToolSource.ForModel`(目前**待接线**:`ToolSource.ForModel` 与 `ToolRunner.IsUnknownTool` 生产侧零调用者),以及场景 09 的口径修正。
