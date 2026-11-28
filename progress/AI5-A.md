@@ -266,6 +266,140 @@ A1–A8 全部按任务书修完并转绿;`06补`(拒绝即无副作用)一并�
 
 ---
 
+## 11. i18n 别名修正(`T` → `Tr`)与审计数字(2026-11-28 补做)
+
+**问题(lead 指出)**:本包一开始把词表别名写成 `private static string T(string zh) => I18nCore.Tr(zh);`,
+而全树其他 12 个文件一律叫 `Tr`;`tools/i18n-audit.py` 的 `WRAPPERS` 只认 `{"Tr"}`,
+于是这 11 处**实际已接线**的调用在审计里全被算成未接线 → i18n 守卫对 `AiAgent.cs` 失明,
+per-file 数字假回退(32 → 49),真正的未接线文案会被淹掉。
+
+**处理**:
+1. 别名改名为 `Tr`(1 处定义 + 11 处调用),跟随全树约定。**没有**去改审计工具的 `WRAPPERS`
+   (`T` 是通用类型参数名,加进去会在别的文件造成假阴性)。
+2. 顺带把本包**新增**的 7 处「必须保持字面量、永远不能翻译」的串打上 `i18n:ignore(理由)`:
+   - `ContinuationPrompt`(给模型看的续写指令,与参考版同文);
+   - `StreamIncomplete` 的 3 条内部匹配串(工具参数不完整 / 接口超时 / 连接中断);
+   - `ShouldTryFallback` 的 `限流` / `额度` / `上游负载` 三条内部匹配串。
+   这些是拿去比对方报文的**检测串**,接线会让检测静默失效,所以显式标注。
+3. 修掉一个**我自己写错的词表键**:代码里是「上下文**太长**,压缩一次后…」,词表里却写成了
+   「上下文**过长**,…」→ 审计报 `missing en: 2`。已把键改成与代码一致,并补上漏掉的
+   「上下文反复逼近窗口上限,已中断本轮以保护额度」。现在 `missing en: 0 / missing zh: 0`。
+
+**审计数字(改前 → 改后)**
+
+| 指标 | 改前 | 改后 | 说明 |
+|---|---|---|---|
+| `wrapped` | 2804 | **2815** | +11(11 处 `T(...)` 被审计认出来) |
+| `unwrapped` | 3190 | **3172** | −18 |
+| `AiAgent.cs` 未接线条目 | 49 | **31** | 基线是 32,现在**低于基线** |
+| `ignored lines` | 119 | 126 | +7(新增的内部匹配串标注) |
+| `missing en` / `missing zh` | 0 / 0 | **0 / 0** | 中途一度是 2,已修(见上第 3 点) |
+| 词表键数 | zh 3686 / en 3686 | zh **3687** / en **3687** | 键集合仍相等 |
+| `T("` 残留 | 11 | **0** | — |
+
+`AiAgent.cs` 剩下的 31 条全部是**既有**文案或不该翻译的东西,逐类核对过:
+`RuntimeContext` 系统提示词的 8 条(给模型看)、`messages 不能为空`(异常消息)、
+`已停止` / `正在整理...` / `步骤太多,正在收尾...`(既有用户可见状态行,见下)、
+`工具轮数已达上限…`(给模型看)、`这一步的改动无法回退:`、`正在压缩历史...`、
+`[调用工具:` / `[子任务]`(给模型看)、子代理两条错误文案、`RetryNotice` 的 4 段拼接片段、
+`AI 接口出错`(既有那条)、`AI 对话异常:`。
+
+**关于「用户可见但没接线」的判定**(lead 问的第 2 条):被点到的三条
+`正在整理...`、`步骤太多,正在收尾...`、`已停止` **全部是既有文案**——
+实测 `git show b4cd7a2:src/TipCL.Core/Launcher/Ai/AiAgent.cs` 里三条各出现 1 次,
+本包只是把它们随 A1 的重构**挪了位置**,没有新造。按「不动既有文案」的口径**未接线**,
+在此说明一句「既有文案,本次仅移位」。
+
+> 顺带发现(不在本包范围,交 lead 判断):`AiPage.cs:731` 用 `ev.Text == I18nCore.Tr("已停止")`
+> 判断「用户点了停止」。因为事件侧的 `已停止` 是裸字面量,英文界面下 `Tr("已停止")` 会返回英文,
+> 而 `ev.Text` 仍是中文 → 比较不成立,页面会走「对话失败」分支而不是「已停止」。
+> 这是**既有**的 en 显示缺陷;要修的话把 `AiAgent.cs:295` 那条接线即可,但那是既有文案,
+> 本包按纪律没动。
+
+---
+
+## 12. qa 合并后跟进的 6 件事(2026-11-28 第二批)
+
+`qa` 合并后验出 6 项,逐条处置如下。**1、2 已在前一节做完**(别名改名 + `i18n:ignore`),
+这里记 3–6 与新增的修法。
+
+### 3 ⚠→✅ `场景 14` 收尾轮文本为空 —— **真缺陷,已修**
+
+**根因(不是 A1 丢事件,而是 `LastText` 被两处无条件覆盖)**:
+- 主循环每轮结尾无条件 `LastText = full` —— 「调了工具但没说话」的那一轮会把上一轮已经拿到的答案抹成空;
+- 收尾轮同样无条件 `LastText = tail.Text`,而收尾轮是「不带工具、请直接用已有信息回答」,
+  模型完全可能又回一个工具调用(那一轮的工具不执行、正文为空)→ `LastText` 变空字符串。
+
+**修法**:两处都改成「**这一轮真吐了正文才更新** `LastText`」,保留最后一段非空助手文本。
+对子代理也更稳(它把 `LastText` 当结论带回去)。
+**用例**:`TailRoundWithoutText_KeepsTheAnswerFromEarlierRounds`(工具轮有话说 + 收尾轮只回工具调用 →
+断言 `LastText` 仍是前面的答案、`stop_reason == max_rounds`、终态事件恰好 1 条)。
+
+### 4 ⚠→✅ `场景 15` A8 没切到 `ai_fallback_model` —— **根因不是键名,是内置网关不让改模型;已加诚实性闸门**
+
+**实测根因**:`Client.ResolveEndpoint`(内置分支,`Client.cs:181`)把请求体里的 model **固定**成
+`Defaults.DEFAULT_MODEL`(= `deepseek-v4-flash`),`ai_model` / `ai_fallback_model` 在这一档**根本不参与请求**。
+`qa` 的回放框架跑在内置(builtin)档,所以「实得模型 = deepseek-v4-flash」是必然的 —— 不是键名写错:
+键名我读的就是 `ai_fallback_model`(与 `SettingsPage.SaveLoad.cs:346` 的写入方一致),在 **custom 档**下
+`agent.Model == "backup-model"` 且第二次请求的 model 确实是 `backup-model`(`RateLimited_SticksToFallbackModel_AndLogsTheSwitch` 锁着)。
+
+**修法(诚实性闸门)**:新增 `AiAgent.FallbackApplies(fallbackModel, settings)`,只有**自定义端点(custom)档**
+才做降级。理由:内置档做降级只会出现「告诉用户已切到备用模型、实际发的还是内置默认模型」的**假承诺**,
+比不降级更糟(这类假承诺正是 A2 要消灭的东西)。
+**用例**:`Fallback_OnlyAppliesToCustomEndpoints`(custom → true;builtin → false;custom 但没填地址 → false;
+没配备用模型 → false)。
+**要 qa 改的地方**:场景 15 必须在 **custom 档**(指向假网关)跑,断言第 2 次请求的 model == 配置值。
+**需要拍板的事**(我没做):要让内置网关也支持备用模型,等于让用户能改内置网关的模型名 ——
+这与「内置网关什么都不让用户改」的既有口径冲突,属产品变更,请 lead 裁决。
+
+### 5a ✅ `场景 08` 续写拼接方式 —— **确实无条件加了 `\n\n`,已改成首尾直接相接**
+
+**根因**:续写时每轮是**新的** `RoundState`,所以判断「新文本是否以已拼内容开头」永远为假,
+于是每次都走 `concat + "\n\n" + text` 分支 —— 等于无条件插空行。
+**修法**:直接 `string.Concat(_continuationParts) + state.Text`,与参考版 `_full`
+(`string.Concat(string.Concat(continuationParts), text18)`)逐字一致,不加任何分隔符。
+**用例**:`LengthContinuation_JoinsWithoutInsertingBlankLines`(断言 `前半段后半段`,且不含 `\n\n`)。
+**给 qa 的断言口径**:`agent.LastText == 各段直接相接`(不要断言 `\n\n`)。
+
+### 5b ✅ `场景 09` 兜底把残段与兜底文本拼接 —— **state 早已替换,界面会重复;已补齐界面侧**
+
+**实际状态**:
+- **落盘/上下文侧本来就是替换**:`ApplyChatOnce` 在「兜底文本不以残段开头」时 `state.Text.Clear()` 再装兜底文本,
+  所以 `messages` 与 `LastText` 里**没有**残段(用例 `FallbackReplacesStreamedFragment_InsteadOfAppendingIt`
+  断言 assistant 消息里查不到「前半段」)。
+- **但界面侧会重复**:已渲染出去的半截收不回来,旧代码又用 `"\n\n" + text` 当增量发出去 → 气泡里是「残段 + 空行 + 完整答复」。
+**修法**:替换时先发一条**含「正在重试」**的状态(`AiPage.IsRetryNotice` 认这个词 → `ResetStreamingBubble()`
+清掉本轮气泡),再把完整正文当增量发。文案进词表:
+「兜底返回的内容与已显示的不一致,正在重试(已换成非流式重新回答)」。
+**用例**:同上那条(断言回填内容不含残段,且出现过带「正在重试」的状态)。
+
+### 6 ✅ `场景 12` 子代理工具表里出现 `install_mod` —— **过滤是生效的,断言查错了对象(附实测清单)**
+
+自己构造子代理请求,把**实际下发的 tools** 打出来核对(一次性证据,已固化成常驻断言):
+```
+父请求(Records[0])里的写工具 : install_mod, install_modpack, create_instance, launch_game
+子请求(Records[1])的工具表   : ask_user, get_launcher_state, list_instances, search_mods, list_mods,
+                              diagnose_launch, list_mod_configs, read_mod_config, update_plan, remember,
+                              forget, get_latest_log, get_crash_report
+```
+**`install_mod` 只在父请求里,子请求里没有**(也没有 `dispatch_subagent`)。所以 `qa` 那条断言应该是查了
+**父回合**那次请求、或没有按「第几次请求」区分。
+**已固化**:`Subagent_IsReadOnlyOnly_AndReturnsTheNewFields` 现在同时断言
+`Assert.Contains("install_mod", Records[0].Tools)`(父表有)与 `Assert.DoesNotContain(subTools, IsWriteTool)`(子表没有),
+以后两边都不会再被误判。
+
+### 词表新增(第二批 1 条)
+
+| key | en |
+|---|---|
+| 兜底返回的内容与已显示的不一致,正在重试(已换成非流式重新回答) | The fallback answer did not match what was already shown; retrying with a fresh non-streaming reply |
+
+另:第二批同时修掉了两个**我自己写错的键**(见上一节第 3 点:`上下文过长` → `上下文太长`;
+补 `上下文反复逼近窗口上限,已中断本轮以保护额度`)。词表现在 zh **3688** / en **3688**,键集合相等,
+`missing en: 0 / missing zh: 0`。
+
+---
+
 ## 10. 构建与测试命令(本包实际使用)
 
 ```powershell

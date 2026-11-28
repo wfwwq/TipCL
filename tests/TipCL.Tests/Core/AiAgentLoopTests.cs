@@ -352,6 +352,11 @@ public class AiAgentLoopTests : IDisposable
         Assert.DoesNotContain("dispatch_subagent", subTools);
         // 父的请求里照常有写工具(只读过滤只对子代理生效)
         Assert.Contains(_server.Records[0].Tools, t => Tools.IsWriteTool(t));
+        // 证据固化(2026-11-28,qa 场景 12 跟进):父请求的表里有写工具(install_mod 等),
+        // 子请求的表里一条写工具都没有、也没有 dispatch_subagent —— 所以「子代理看到 install_mod」
+        // 只可能是断言查了父回合那次请求(Records[0] 或没有区分第几次请求)。
+        Assert.Contains("install_mod", _server.Records[0].Tools);
+        Assert.DoesNotContain(subTools, t => Tools.IsWriteTool(t));
         // 子代理的进度事件转给了父回合,并带 subagent 标记
         Assert.Contains(events, e => e.Subagent && e.Kind == "tool");
     }
@@ -459,6 +464,97 @@ public class AiAgentLoopTests : IDisposable
         Assert.DoesNotContain(Store.ReadEvents(agent.ChatId), e => Py.S(e.Get("event")) == "ToolSchemaMiss");
         // 而且这个工具真的执行了(进了这一轮的工具使用清单)
         Assert.Contains("search_versions", agent.ToolsUsed);
+    }
+
+    // ————————————————— 收尾轮 / 续写拼接 / 兜底替换(2026-11-28 qa 跟进) —————————————————
+
+    /// <summary>
+    /// 收尾轮没吐出正文时,不能把前面几轮已经拿到的答案抹成空。
+    /// (qa 在场景 14 上实测「收尾轮文本为空」——根因是旧代码无条件 `LastText = tail.Text`。)
+    /// </summary>
+    [Fact]
+    public async Task TailRoundWithoutText_KeepsTheAnswerFromEarlierRounds()
+    {
+        // 前 2 轮:工具 + 正文;收尾轮:又回一个工具调用(不执行)且没有正文
+        _server.Script(
+            (200, ToolCallWithTextSse("查到了:钠和小地图都在。", "list_instances", "{}")),
+            (200, ToolCallSse("list_instances", "{}")),
+            (200, ToolCallSse("list_instances", "{}")));
+
+        (AiAgent agent, List<AiAgentEvent> events) = await RunAsync(rounds: 2);
+
+        Assert.Equal(StopReason.MAX_ROUNDS, agent.stop_reason);
+        Assert.Equal("查到了:钠和小地图都在。", agent.LastText);   // 不被收尾轮的空文本抹掉
+        Assert.Single(events, e => e.Kind == "done" || e.Kind == "error");
+    }
+
+    /// <summary>续写是「从断开处继续」:首尾**直接相接**,不插空行(照参考版 _full 的 string.Concat)。</summary>
+    [Fact]
+    public async Task LengthContinuation_JoinsWithoutInsertingBlankLines()
+    {
+        _server.Script(
+            (200, TextSse("前半段", "length")),
+            (200, TextSse("后半段", "stop")));
+
+        (AiAgent agent, List<AiAgentEvent> _events) = await RunAsync(rounds: 5);
+
+        Assert.Equal("前半段后半段", agent.LastText);
+        Assert.DoesNotContain("\n\n", agent.LastText);
+    }
+
+    /// <summary>
+    /// 兜底文本与流式残段对不上时:**整段替换**,不追加(场景 9「文本不重复拼接」)。
+    /// 关键断言是「回填进上下文的 assistant 内容里,残段只出现一次」。
+    /// </summary>
+    [Fact]
+    public async Task FallbackReplacesStreamedFragment_InsteadOfAppendingIt()
+    {
+        // 流式先吐「前半段」再断(参数不完整),兜底给出一份**完全不同**的完整答复
+        _server.Script(
+            (200, IncompleteToolArgsSse("list_instances", partialText: "前半段")),
+            (200, ChatOnceTextJson("兜底重新生成的完整答复")),
+            (200, TextSse("好", "stop")));
+
+        var messages = new List<object>
+        {
+            PyDict.Of("role", "system", "content", "系统"),
+            PyDict.Of("role", "user", "content", "帮我看看实例列表"),
+        };
+        var events = new List<AiAgentEvent>();
+        AiAgent agent = NewAgent(events, rounds: 2);
+        await agent.RunAsync(messages, "default", CancellationToken.None);
+
+        Assert.Equal("兜底重新生成的完整答复", agent.LastText);
+        List<string> assistantTexts = messages.OfType<PyDict>()
+            .Where(m => Py.S(m.Get("role")) == "assistant")
+            .Select(m => Py.S(m.Get("content"))).ToList();
+        string joined = string.Join("\u0001", assistantTexts);
+        Assert.DoesNotContain("前半段", joined);            // 残段被替换掉了,没有留在上下文里
+        Assert.Contains("兜底重新生成的完整答复", joined);
+        // 页面上要能重置气泡:发了一条带「正在重试」的状态
+        Assert.Contains(events, e => e.Kind == "status" && e.Text.Contains("正在重试"));
+    }
+
+    /// <summary>
+    /// A8 的诚实性闸门:内置网关(builtin)档下模型名由 `Client.ResolveEndpoint` 固定成默认值,
+    /// 设置改不动 —— 所以**不做降级、也不谎报**「已切到备用模型」;自定义端点(custom)档才降级。
+    /// 这里直接查闸门本身:走行为路径需要真的发到内置网关(测试网络闸门不允许,也不该去连)。
+    /// </summary>
+    [Fact]
+    public void Fallback_OnlyAppliesToCustomEndpoints()
+    {
+        Config.CONFIG.Set("ai_base_url", "http://127.0.0.1:1/v1");
+        Config.CONFIG.Set("ai_mode", "custom");
+        Assert.True(AiAgent.FallbackApplies("backup-model", Config.CONFIG.data));
+        // 没配备用模型 = 不做降级
+        Assert.False(AiAgent.FallbackApplies("", Config.CONFIG.data));
+
+        // builtin 档(以及「custom 但没填地址」都会被 Client.Mode 归一成 builtin)
+        Config.CONFIG.Set("ai_mode", "builtin");
+        Assert.False(AiAgent.FallbackApplies("backup-model", Config.CONFIG.data));
+        Config.CONFIG.Set("ai_mode", "custom");
+        Config.CONFIG.Set("ai_base_url", "");
+        Assert.False(AiAgent.FallbackApplies("backup-model", Config.CONFIG.data));
     }
 
     // ————————————————— 06补:拒绝即无副作用 —————————————————
@@ -588,8 +684,9 @@ public class AiAgentLoopTests : IDisposable
            + "data: [DONE]\n";
 
     /// <summary>工具参数被上游截断(非法 JSON)的流:Client 会给出「工具参数不完整,正在换一次非流式」。</summary>
-    private static string IncompleteToolArgsSse(string name)
-        => "data: " + PyJson.Dumps(PyDict.Of("choices", new List<object>
+    private static string IncompleteToolArgsSse(string name, string partialText = "")
+        => (partialText.Length > 0 ? TextPartSse(partialText) : "")
+           + "data: " + PyJson.Dumps(PyDict.Of("choices", new List<object>
            {
                PyDict.Of(
                    "delta", PyDict.Of(
@@ -602,6 +699,26 @@ public class AiAgentLoopTests : IDisposable
                    "finish_reason", "tool_calls"),
            }), null, ensureAscii: false) + "\n"
            + "data: [DONE]\n";
+
+    /// <summary>只有一段正文增量的 SSE(不含 finish_reason,用来构造「吐了半截就断」)。</summary>
+    private static string TextPartSse(string text)
+        => "data: " + PyJson.Dumps(PyDict.Of("choices", new List<object>
+           {
+               PyDict.Of("delta", PyDict.Of("content", text)),
+           }), null, ensureAscii: false) + "\n";
+
+    /// <summary>一次响应里既有正文又有工具调用(用来构造「工具轮也有话说」)。</summary>
+    private static string ToolCallWithTextSse(string text, string name, string args)
+        => TextPartSse(text) + ToolCallSse(name, args);
+
+    /// <summary>非流式(兜底)应答:纯正文。</summary>
+    private static string ChatOnceTextJson(string text)
+        => PyJson.Dumps(PyDict.Of("choices", new List<object>
+           {
+               PyDict.Of(
+                   "message", PyDict.Of("content", text, "tool_calls", new List<object>()),
+                   "finish_reason", "stop"),
+           }), null, ensureAscii: false);
 
     /// <summary>非流式(兜底)应答:直接给出一个工具调用。</summary>
     private static string ChatOnceToolCallJson(string name, string args)
