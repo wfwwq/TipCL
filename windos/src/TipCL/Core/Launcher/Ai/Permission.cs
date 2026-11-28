@@ -243,7 +243,14 @@ public static class Permission
 			}
 			return new PermissionResult("allow", "文件类修改直接执行");
 		case "dontAsk":
-			return new PermissionResult("deny", "用户开启了「不询问」模式");
+			// P1(2026-11-28 §3 裁决 6):「不询问」由「ask → deny」改成「ask → allow」。
+			// 删除类仍然拒绝 —— 它与上面「不带 rule_content 的 allow 规则不放行 delete」是同一条红线:
+			// 删除类不拿无限定放行。显式 deny 规则在规则循环里已经优先命中,这里到不了。
+			if (text == "delete")
+			{
+				return new PermissionResult("deny", "「不询问」模式仍然拒绝删除类操作");
+			}
+			return new PermissionResult("allow", "「不询问」模式下写操作直接执行");
 		default:
 			if (text2 == "high")
 			{
@@ -253,10 +260,34 @@ public static class Permission
 		}
 	}
 
+	/// <summary>
+	/// P1 补充(2026-11-28 裁决 6):把「不询问」开关(<c>ai_permission_dont_ask</c>)与 <c>dontAsk</c> 档合成**同一个**口径。
+	/// 开关打开就等于档位是 <c>dontAsk</c>:档位算出来的 <c>ask</c> 变成 <c>allow</c>,删除类仍然拒绝,显式 deny 规则仍然优先。
+	/// 两处例外(档位给了更明确的态度,开关不该压过它):<c>plan</c>(只看不动)与 <c>yolo</c> / <c>bypassPermissions</c>(全自动)。
+	///
+	/// 为什么合成一个生效档位、而不是在回合里再叠一条「ask → deny/allow」:叠出来的第二处判断会漏掉
+	/// 规则顺序、plan 硬停、以及「能力未知的外部 MCP 工具要先确认」这些只在 <see cref="Decide"/> 内部生效的东西 ——
+	/// 那正是改动前「开关说拒绝、档位说放行」这种同语义两种行为的来源。
+	/// </summary>
+	public static string EffectiveMode(PyDict settings)
+	{
+		settings = settings ?? new PyDict();
+		string text = NormalizePermissionMode(settings.Get("ai_permission_mode"), Py.Truthy(settings.Get("ai_confirm_writes", true)));
+		if (!Py.Truthy(settings.Get("ai_permission_dont_ask", false)))
+		{
+			return text;
+		}
+		if (text == "plan" || text == "yolo" || text == "bypassPermissions")
+		{
+			return text;
+		}
+		return PermissionMode.DONT_ASK;
+	}
+
 	public static string PermissionNote(PyDict settings)
 	{
 		settings = settings ?? new PyDict();
-		switch (NormalizePermissionMode(settings.Get("ai_permission_mode"), Py.Truthy(settings.Get("ai_confirm_writes", true))))
+		switch (EffectiveMode(settings))
 		{
 		case "yolo":
 		case "bypassPermissions":
@@ -269,7 +300,7 @@ public static class Permission
 		case "build":
 			return "[权限设置] 写操作会直接执行；删除实例、删除模组前仍会先询问，要等用户点了才执行。";
 		case "dontAsk":
-			return "[权限设置] 用户选了「不询问」：需要确认的写操作会被直接拒绝，只读查看照常。";
+			return "[权限设置] 用户选了「不询问」：写操作执行前不再询问、直接放行；删除实例、删除模组这类删除操作仍然会被拒绝。";
 		case "edit":
 			return "[权限设置] 文件类修改直接执行；安装、删除、启动前会弹确认，要等用户点了才执行。";
 		default:

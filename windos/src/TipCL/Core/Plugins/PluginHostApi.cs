@@ -349,7 +349,10 @@ public sealed class PluginHostApi
 			Parameters = PluginTools.NormalizeParameters(tool.Get("parameters") ?? tool.Get("inputSchema")),
 			TimeoutMs = tool.ContainsKey("timeoutMs") ? Math.Max(0L, Py.IntOr(tool.Get("timeoutMs"), PluginTools.DefaultTimeoutMs)) : PluginTools.DefaultTimeoutMs,
 			Label = Py.S(tool.Get("label")),
-			PresetOnly = Py.Truthy(tool.Get("presetOnly"))
+			PresetOnly = Py.Truthy(tool.Get("presetOnly")),
+			// G 包:可选声明。没声明 = null,老插件照旧放行(方案 A);非法值由 NormalizeSideEffect 抛 invalid_params。
+			SideEffect = PluginTools.NormalizeSideEffect(tool.Get("sideEffect")),
+			AffectedPaths = PluginTools.NormalizeAffectedPaths(tool.Get("affectedPaths"))
 		};
 	}
 

@@ -195,7 +195,7 @@ FrameworkElement NativeUiEntry.CreateBlock();               // block(布局文�
 | `launcher.call` | `{plugin, method, args?:[], kwargs?:{}}` | BackendApi 返回值 | launcher |
 | `events.subscribe` | `{plugin, topics:[...]}`（支持 `*` 通配，如 `game.*`）。**累加**：只加不减 | — | 按 topic |
 | `events.unsubscribe` | `{plugin, topics:[...]}` 取消这些 topic | — | — |
-| `tools.register` | `{plugin, tool:{name, description, parameters(JSON Schema), timeoutMs?, label?}}` | — | ai.tools |
+| `tools.register` | `{plugin, tool:{name, description, parameters(JSON Schema), timeoutMs?, label?, sideEffect?, affectedPaths?}}` | — | ai.tools |
 | `tools.unregister` | `{plugin, name}` | — | ai.tools |
 | `presets.register` | `{plugin, preset}`（同 manifest 结构） | — | ai.presets |
 | `presets.unregister` | `{plugin, id}` | — | ai.presets |
@@ -238,6 +238,36 @@ UI spec：
 - `block`:`{id, label?, view, group?}` → 页面区块:出现在布局文档 `pages[].blocks[]` 里,引用 id 是 `plugin:<本插件>:<块 id>`(块可重排/显隐/跨列;插件被卸载后**块保留**、界面显示「不可用」,不删用户数据;编辑布局时内嵌 WebView 会被临时隐藏)
 - `settings`：`{view}` → 替换自动生成的设置页（自动页仍可从“高级”打开）
 - `action`：`{id, label, where:"instance"|"launch"|"tray"|"ai.input", icon?}` → 点击时 TipCL 发 `action.invoke`
+
+### 工具副作用声明（`sideEffect` / `affectedPaths`）〔G 包，2026-11-28 新增；只加字段，不改已有字段语义〕
+
+`tools.register` 的 `tool` 里两个**可选**字段。老插件不写它们，行为与以前完全一致。
+
+| 字段 | 取值 | 说明 |
+|---|---|---|
+| `sideEffect` | `none` \| `read` \| `network` \| `write_local` \| `delete` \| `launch` | 这个工具真实会产生的副作用。**不写 = 没声明** |
+| `affectedPaths` | `string[]` | 声明了 `write_local` / `delete` 时给出会被改动的路径（文件或目录），启动器按它做「执行前检查点」。路径解析与其它工具一致 |
+
+声明之后启动器按三件事处理：
+
+1. **权限**：`write_local` / `delete` 的工具走与内置工具同一套权限判定 —— 受当前档位和自定义规则约束（「每次确认」档会弹确认卡，用户拒绝就不执行）。「不询问」档按 P1 的口径放行，**删除类除外**（`delete` 仍然拒绝）。`none` / `read` / `network` 算只读，不弹确认。
+2. **检查点**：声明 `write_local` / `delete` 的工具在执行前按 `affectedPaths` 做一次检查点快照（供「撤回上一轮」用）。不声明 `affectedPaths` 就不做快照 —— 启动器不假装这一步能撤回。
+3. **来源标签**：工具结果交给模型时带来源前缀。`network` 的工具标「内容不可信」；**没声明 `sideEffect` 的老插件也标**「内容不可信」（来源不明，按兼容优先的方案 A：仍然放行，但结果不可信）；声明了 `none` / `read` / `write_local` / `delete` / `launch` 的不标。
+
+```js
+ctx.tools.register({
+  name: 'write_note',
+  description: '把一段文字写进实例目录里的笔记文件',
+  parameters: { type: 'object', properties: { text: { type: 'string' } } },
+  sideEffect: 'write_local',
+  affectedPaths: ['<实例目录>/notes.md'],
+  execute: (args) => `已写入 ${args.text}`,
+});
+```
+
+.NET 插件用同一套声明：`PluginToolSpec.SideEffect` / `PluginToolSpec.AffectedPaths`。
+
+取值写错了（比如拼成 `write`）在注册那一刻就报 `invalid_params`，不会被当成「没声明」—— 那等于悄悄绕过权限判定。
 
 ### TipCL → Node 宿主（请求/通知）
 | method | params | 说明 |
@@ -376,7 +406,7 @@ Node 宿主实现细节（`src/TipCL/Resources/plugin-host/`，类型见 `tipcl-
 - `ctx.paths = { plugin, data, cache, logs, logFile }`；未知属性按 `ctx.get(name)` 取（DSH 的 `ctx.liveBody` 写法）。
 - `DSH_HOME` = `plugin-data` 根目录（所以 `$DSH_HOME/<id>` 正好是 `ctx.paths.data`，所有插件一致）；`TIPCL_PLUGIN_DATA` = 本插件数据目录。两者在**导入模块之前**设好（dsh-game 在模块顶层读 `DSH_HOME`）。环境变量是进程级的：`TIPCL_PLUGIN_DATA` 只在本插件的模块求值和 `apply` 期间可靠，之后请用 `ctx.paths.data`。
 - `config` 单元格：任何键都能 `.get()`（未声明的读到 `undefined`）；manifest `default` 先填，模块若导出可调用的 `Config`（schemastery）也用它补默认值。
-- `tools.register`：执行时 `exec = {callId, chatId, agent:{id: chatId}, signal, messageText}`；返回字符串 → 文字；`{content, isError}` → 原样；有 `output.render` 则用它；图片片段可带 `attachment`（`saveImages` 的结果）或原始 `data`（Buffer/Uint8Array/base64）。抛错 → `isError:true`。执行前若会话镜像还没有这个对话，先回填一次。
+- `tools.register`：声明里可带 `sideEffect`（见本节末的「工具副作用声明」）与 `affectedPaths`；执行时 `exec = {callId, chatId, agent:{id: chatId}, signal, messageText}`；返回字符串 → 文字；`{content, isError}` → 原样；有 `output.render` 则用它；图片片段可带 `attachment`（`saveImages` 的结果）或原始 `data`（Buffer/Uint8Array/base64）。抛错 → `isError:true`。执行前若会话镜像还没有这个对话，先回填一次。
 - `sessions.get(id)` 同步返回 `{id, seq, running, snapshotEvents(from), send, cancel, open, ready()}`（`snapshotEvents` 返回 `seq > from` 的事件，事件同时带 `at` 和 DSH 的 `time`）；没 `ai.sessions` 权限返回 `undefined`。
 - `llm.listProviders()` 是**同步**的（dsh-game 不 await），读宿主缓存（插件加载前预取，之后每 5 秒最多刷新一次）；`stream()` 的 `signal` 中止时发 `llm.abort` 并抛出 `signal.reason`；消费方提前 `break` 也会发 `llm.abort`。
 - 所有注册（工具、路由、预设、UI、钩子、事件、provide）都自动记在插件的 effect 栈里，卸载时逆序撤销；返回的 dispose 幂等，可以再包一层 `ctx.effect`（dsh-game 的写法）。卸载时该插件所有进行中的路由流和网页 SSE 连接被关闭（`ReadableStream.cancel()` 会被调用），进行中的工具 `signal` 被 abort。

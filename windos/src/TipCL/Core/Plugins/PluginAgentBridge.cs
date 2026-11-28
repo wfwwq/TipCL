@@ -250,6 +250,36 @@ public static class PluginAgentBridge
 		return (e == null || string.IsNullOrEmpty(e.Label)) ? name : e.Label;
 	}
 
+	/// <summary>
+	/// G 包:插件工具的结果要不要标「内容不可信」。声明了 network 的要(结果来自外部);
+	/// 没声明 sideEffect 的老插件也要(来源不明,按 §3 裁决 3 的方案 A 统一标记);
+	/// 声明了 none / read / write_local / delete / launch 的不标。不是插件工具一律 false
+	/// (内置工具的来源标签由 <see cref="ToolMeta"/> 的 side_effect 决定)。
+	/// </summary>
+	public static bool IsUntrustedSource(string name)
+	{
+		PluginToolEntry e = PluginTools.Get(name);
+		if (e == null)
+		{
+			return false;
+		}
+		return string.IsNullOrEmpty(e.SideEffect) || e.SideEffect == "network";
+	}
+
+	/// <summary>
+	/// G 包:检查点要快照的路径。插件工具用时 manifest 声明的 affectedPaths(声明了才快照);
+	/// 内置工具照旧走 <see cref="TipCL.Core.Launcher.Ai.Tools.AffectedPaths"/>。
+	/// </summary>
+	public static List<string> AffectedPathsOf(BackendApi backend, string name, PyDict args)
+	{
+		PluginToolEntry e = PluginTools.Get(name);
+		if (e == null)
+		{
+			return TipCL.Core.Launcher.Ai.Tools.AffectedPaths(backend, name, args);
+		}
+		return new List<string>(e.AffectedPaths ?? new List<string>());
+	}
+
 	public static void ToolStart(PluginTurn t, string callId, string name, string label)
 	{
 		Emit(t, "tool/start", PyDict.Of("callId", callId, "name", name, "label", label ?? name));

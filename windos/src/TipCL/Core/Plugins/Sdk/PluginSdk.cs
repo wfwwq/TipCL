@@ -58,6 +58,16 @@ public sealed class PluginToolSpec
 
 	/// <summary>true：只在白名单匹配的预设对话里出现。</summary>
 	public bool PresetOnly { get; set; }
+
+	/// <summary>
+	/// G 包(DESIGN §4):工具声明的副作用,none | read | network | write_local | delete | launch。
+	/// 留空 = 没声明,行为与老版本一致(仍然放行),只是结果会带「内容不可信」标记。
+	/// 声明 write_local / delete 后:调用前走权限判定(受档位和自定义规则约束),并在执行前做检查点快照。
+	/// </summary>
+	public string SideEffect { get; set; }
+
+	/// <summary>G 包:声明 write_local / delete 时可给出受影响路径(检查点快照用);留空则不做快照。</summary>
+	public List<string> AffectedPaths { get; set; } = new List<string>();
 }
 
 /// <summary>一次工具调用。</summary>
