@@ -678,4 +678,34 @@ public class AiLogsFsTests
             Assert.False(AiFsTools.IsWindowsDeviceName(ok), ok);
         }
     }
+
+    [Fact]
+    public void FsResolve_LetsAnAllowedRootCarryItsOwnShortName_ButStillRejectsShortNamesTheUserWrites()
+    {
+        // GitHub windows-latest 的 %TEMP% 就是 C:\Users\RUNNER~1\AppData\Local\Temp\(短名是系统给的),
+        // TestIsolation 把 TIPCL_HOME 建在里面 ⇒ 绝对路径的根前缀自带 RUNNER~1。那不是用户在绕守卫,必须放行;
+        // 否则整批文件用例**只在 CI 上红** —— 本机 TEMP 是长名,这条红在本机永远复现不出来。
+        // (2026-11-28:e42697e 之前 `~[0-9]` 会逐段扫到根前缀,报「不支持 8.3 短文件名」;
+        //  ci-windows 的 batch 2 就是被它判红的,具体是 FsList_And_FsRead_ResolveRelativeToInstance_AndSupportGlob。)
+        string tmp = Path.Combine(Path.GetTempPath(), "tipcl-83root-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        string root = Path.Combine(tmp, "RUNNER~1", "home");
+        Directory.CreateDirectory(Path.Combine(root, "logs"));
+        string file = WriteFile(Path.Combine(root, "logs", "latest.log"), "vsync = true\n");
+        try
+        {
+            var roots = new List<string> { root };
+            // 绝对路径与相对路径两条都要放行
+            Assert.True(AiFsTools.IsWithin(AiFsTools.FsResolve(file, roots, root), root));
+            Assert.True(AiFsTools.IsWithin(AiFsTools.FsResolve("logs/latest.log", roots, root), root));
+            if (OperatingSystem.IsWindows())
+            {
+                // 根**下面**的 8.3 段是用户自己写的:照旧拒(本轮只放开根前缀,没放开守卫本身)
+                Assert.ThrowsAny<PyException>(() => AiFsTools.FsResolve(Path.Combine(root, "LATEST~1.LOG"), roots, root));
+            }
+        }
+        finally
+        {
+            Directory.Delete(tmp, true);
+        }
+    }
 }
