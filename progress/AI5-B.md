@@ -129,8 +129,12 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
 全量(Linux,`--filter "FullyQualifiedName!~Terracotta&FullyQualifiedName!~ClickSweep&FullyQualifiedName!~OpenUrl"`):
 
 - 基线(AI5-0,`progress/AI5-0-baseline.md`):**1594 过 / 11 跳 / 0 败 / 总 1605**。
-- 本包改动后:**1638 过 / 11 跳 / 1 败 / 总 1650**(那次全量跑在 `AiModpackTests` 那条随语义更新的断言之前);
-  更新该断言后的复跑见 §6 的最终数字。新增 45 条用例,总数为 1605 + 45 = 1650(符合「≥ 基线 + 新增场景数」)。
+- 本包改动后(最终):**1639 过 / 11 跳 / 0 败 / 总 1650**,`exit 0`。新增 45 条用例
+  (B1 6 / B2 4 / B3 17 / B4 2 / C2 前置 8 / C2 前缀 6 / 其余为既有 Theory 数据行与 P1 改写组),
+  总数 1605 + 45 = 1650,符合「≥ 基线 + 新增场景数」。
+- 过程中有一次全量出现 `ModDevTaskPersistenceTests.Records_AreCapped_AtomicallyWritten_AndABrokenFileIsIgnored` 红:
+  单独复跑 3/3 过、随后全量复跑也绿 —— 该用例不碰本包改动的任何代码路径(`ModDev` 任务持久化),
+  判断是同机多 agent 并行争用导致的偶发;如实记录,没有为它改代码。
 
 ## 4. i18n 词条清单(合并核对用;zh_CN 与 en 各 9 条,键集合一致)
 
@@ -169,8 +173,19 @@ B1–B4 四条接线缺陷全部修完并有回归用例;**C2 的来源前缀这
 
 ## 6. 验收数字(最终)
 
-- Linux Release 构建:`0 error / 1 warning`(既有 `LayoutEditor.cs:196` CS0649),不新增警告。
-- `dotnet test`(排除 Terracotta / ClickSweep / OpenUrl):见下方「最终全量」一行(本文件随最后一次提交更新)。
-- 新增用例:45 条(分段:B1 6 / B2 4 / B3 10 / B4 2 / C2 前缀 6 / C2 前置 7 / P1 10,其中 P1 见另一份 progress)。
-- `--ai-selftest`:基线 110 过;本包改动后用同样入口复跑(见最终数字),预期仍 110 过 —— 其中「未知工具如实报错」
-  与「只读工具执行成功」两项正是 C2 前置修复要保住的判据。
+- Linux Release 构建(`dotnet build src/TipCL.App -c Release -m:1 -p:UseSharedCompilation=false`):
+  **0 error / 1 warning**(既有 `src/TipCL.App/Pages/Layout/LayoutEditor.cs:196` CS0649),未新增警告。
+- `dotnet test`(排除 Terracotta / ClickSweep / OpenUrl):**1639 过 / 11 跳 / 0 败 / 总 1650**,`exit 0`
+  (AI5-0 基线 1594 过 / 11 跳 / 总 1605;新增 45 条)。
+- `--ai-selftest`(`dotnet src/TipCL.App/bin/Release/net8.0/TipCL.App.dll --ai-selftest`):
+  **通过 110 / 失败 0 / 跳过 0,exit 0**(与基线一致;其中「未知工具如实报错」与「只读工具执行成功」
+  两项正是 C2 前置修复要保住的判据)。
+- i18n 审计(`python tools/i18n-audit.py --json`):`unwrapped` **3211 → 3177(-34)**、
+  `wrapped` 2615 → 2809、`missing_en` / `missing_zh` 均为 0 —— 基线判据「未接线数量不得回退」满足
+  (我新增的用户可见文案全部走了 `I18nCore.Tr`,并且都入了两张词表)。
+- 体积(如实记录,按 lead 裁决本轮**不做**回收):本 worktree 产出的是 Linux Release 产物,
+  `src/TipCL.App/bin/Release/net8.0` 目录 33 个文件、合计 **12,794,560 B**,其中
+  `TipCL.Core.dll` 2,157,568 B、`TipCL.App.dll` 1,976,832 B。
+  红线里的 compact(**Windows 单 exe**)不是本棵树的产物,本包**没有改动 `windos/`**,所以那个产物的字节数不受本包影响。
+- 源码规模:`git diff --stat b4cd7a2`:24 个文件、+1499 / -127 行(含用例与词条)。
+- `--smoke` / `tools/verify-smoke.ps1` / ClickSweep / VisualTour **按用户要求未运行**(会抢前台)。
