@@ -17,6 +17,9 @@ public sealed class AgentResult
 	/// <summary>本回合实际调用过的工具名(去重,按首次调用顺序;子代理的返回值里会带上它)。</summary>
 	public List<object> tools_used = new List<object>();
 
+	/// <summary>「光说没做」命中的类别(install/remove/modify/create/launch/memory;空表 = 没命中)。</summary>
+	public List<object> claims_unmatched = new List<object>();
+
 	public List<object> messages = new List<object>();
 
 	public List<object> turn_messages = new List<object>();

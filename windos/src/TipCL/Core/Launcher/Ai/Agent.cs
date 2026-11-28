@@ -37,7 +37,6 @@ public static class Agent
 
 	private static readonly Regex _DIAGNOSE_RE = new Regex("报错|崩溃|日志|闪退|起不来|打不开|蓝屏|错误|异常|排查|哪里出了|什么问题");
 
-	private static readonly Regex _CLAIM_RE = new Regex("(?:已经?|正在|马上|现在)(?:帮你|为你|给你)?(?:开始)?(?:下载|安装|重装|卸载|删除|移除|清理|修复|修改|设置|配置|调整|切换|开启|关闭|打开|启动|导入|导出|更新|升级|备份|恢复|重启|添加|创建|重命名|迁移)|(?:下载|安装|删除|清理|修复|修改|设置|切换|导入|导出|更新|升级|备份|恢复|添加)(?:完成|好了|成功|完毕)|(?:打算|准备|即将|计划|这就(?:去|开始)|接下来我?(?:会|要|将)|我(?:会|要|将)(?:先|直接|把)?)(?:[^。！？\\n]{0,80}?)?(?:下载|安装|重装|卸载|删除|删掉|移除|禁用|启用|清理|修复|修改|设置|配置|调整|切换|开启|关闭|打开|启动|导入|导出|更新|升级|备份|恢复|重启|添加|创建|新建|重命名|迁移)|\\bI(?:'ve| have) (?:installed|downloaded|removed|deleted|updated|set|changed|configured|enabled|disabled|fixed|added|created)\\b|\\b(?:installing|downloading|removing|updating|configuring) (?:it|now|the)\\b|\\bI(?:'ll| will) (?:install|download|remove|delete|disable|enable|fix|set|change|update)\\b", RegexOptions.IgnoreCase);
 
 	public static object DGet(object d, string k)
 	{
@@ -524,9 +523,179 @@ public static class Agent
 		return true;
 	}
 
+	/// <summary>「光说没做」判定的操作类别:与 ToolMeta.side_effect + 工具名前缀一一对齐。</summary>
+	public const string CLAIM_INSTALL = "install";
+
+	public const string CLAIM_REMOVE = "remove";
+
+	public const string CLAIM_MODIFY = "modify";
+
+	public const string CLAIM_CREATE = "create";
+
+	public const string CLAIM_LAUNCH = "launch";
+
+	public const string CLAIM_MEMORY = "memory";
+
+	/// <summary>否定/条件/失败句:这些话里的动词不算「声称已经做了」(「没删成功」「如果安装成功了」)。</summary>
+	private static readonly Regex _CLAIM_NEG_RE = new Regex("没有|没能|没法|没删|没装|没改|没做|没成功|未(?:能|曾|完成|成功)|无法|不能|不再|不用|不要|别(?=忘|急|动|关|删|改|用)|拒绝|取消|失败|错误|不成功|尚未|暂时不|如果|假如|要是|一旦|万一");
+
+	/// <summary>把回复切成短句再判:一个句子里出现否定,不影响另一个句子里的完成声明。</summary>
+	private static readonly Regex _CLAIM_SPLIT_RE = new Regex("[。!?;,\uFF0C\u3001\n:]");
+
+	private const string _CLAIM_PAT_INSTALL = "(?:已经|已|刚刚|刚|正在|马上|帮(?:你|我|您)|给(?:你|我|您))[^。!?;,\\n]{0,16}?(?:装(?:好|上|完|进|到)|安装|部署|导入|应用上|下载)|装好了|装上了|装完了|装进去了|安装好了|安装成功了|安装完毕|部署好了|导入了|应用上了|\\bI(?:'m| am)\\b[^.!?]{0,24}?\\b(?:downloading|installing)\\b|\\b(?:is|are|has been|have been|I've|I have|we've)\\b[^.!?]{0,24}?\\b(?:installed|downloaded|applied)\\b|\\b(?:installed|downloaded|reinstalled)\\s+(?:and|,)?\\s*(?:ready|done)\\b";
+
+	private const string _CLAIM_PAT_REMOVE = "(?:已经|已|刚刚|刚|正在|马上|帮(?:你|我|您)|给(?:你|我|您))[^。!?;,\\n]{0,16}?(?:删(?:除|掉|了|干净|完)|移除|卸载|清理|清掉|清除|还原|恢复)|删掉了|删除了|删干净了|清理完了|清理掉了|清掉了|卸载了|移除了|还原了|\\bI(?:'ve| have)\\b[^.!?]{0,24}?\\b(?:removed|deleted|uninstalled|cleaned)\\b|\\b(?:is|are|has been|have been)\\b[^.!?]{0,24}?\\b(?:removed|deleted|uninstalled)\\b";
+
+	private const string _CLAIM_PAT_MODIFY = "(?:已经|已|刚刚|刚|正在|马上|帮(?:你|我|您)|给(?:你|我|您))[^。!?;,\\n]{0,16}?(?:改|调|设|配置|禁用|启用|关闭|打开|应用(?!上)|修|优化|处理|备份|换|切换|写)|(?:调到|调成|调为|改成|改为|设为|设置成|设置为|换成|切换到|调整为|修改为)[^。!?;,\\n]{0,12}?了|调好了|改好了|修好了|优化掉了|处理好了|备份好了|写好了|应用了|\\bI(?:'ve| have)\\b[^.!?]{0,24}?\\b(?:set|changed|updated|configured|enabled|disabled|adjusted|fixed)\\b|\\b(?:is|are|has been|have been)\\b[^.!?]{0,24}?\\b(?:set|changed|updated|configured|enabled|disabled|adjusted)\\b";
+
+	private const string _CLAIM_PAT_CREATE = "(?:已经|已|刚刚|刚)[^。!?;,\\n]{0,12}?(?:创建|新建|建好|建成|建立|建)|创建好了|建好了|创建完成|建完了|\\bI(?:'ve| have)\\b[^.!?]{0,20}?\\b(?:created|added)\\b|\\b(?:is|are|has been|have been)\\b[^.!?]{0,20}?\\bcreated\\b";
+
+	private const string _CLAIM_PAT_LAUNCH = "游戏\\s*(?:已经|已|正在|马上)?\\s*(?:启动|运行|打开)(?:了|起来|成功|完成|好)?|(?:启动|运行|打开)\\s*(?:了)?\\s*(?:游戏|客户端)(?:了|起来|成功|完成|好)|\\b(?:game|client)\\b[^.!?]{0,16}?\\b(?:launched|started|running)\\b|\\b(?:launched|started)\\s+(?:the )?(?:game|client)\\b";
+
+	private const string _CLAIM_PAT_MEMORY = "记住了|记下来了|已经记住|已记住|帮你记住|\\bI(?:'ve| have) (?:noted|remembered|saved)\\b";
+
+	/// <summary>声称句式的提取正则:只负责「提取声称的类别」,判据见 <see cref="UnfulfilledClaims"/>。</summary>
+	private static readonly Regex _CLAIM_CATS_RE = new Regex("(?<install>" + _CLAIM_PAT_INSTALL + ")|(?<remove>" + _CLAIM_PAT_REMOVE + ")|(?<modify>" + _CLAIM_PAT_MODIFY + ")|(?<create>" + _CLAIM_PAT_CREATE + ")|(?<launch>" + _CLAIM_PAT_LAUNCH + ")|(?<memory>" + _CLAIM_PAT_MEMORY + ")", RegexOptions.IgnoreCase);
+
+	/// <summary>从回复里提取「声称做过哪几类操作」:按短句切、跳过否定句,再扫六类句式。</summary>
+	public static List<string> ClaimCategories(string reply)
+	{
+		List<string> found = new List<string>();
+		string text = reply ?? "";
+		if (text.Length == 0)
+		{
+			return found;
+		}
+		foreach (string clause in _CLAIM_SPLIT_RE.Split(text))
+		{
+			if (string.IsNullOrWhiteSpace(clause) || _CLAIM_NEG_RE.IsMatch(clause))
+			{
+				continue;
+			}
+			foreach (Match match in _CLAIM_CATS_RE.Matches(clause))
+			{
+				string category = null;
+				if (match.Groups["install"].Success)
+				{
+					category = CLAIM_INSTALL;
+				}
+				else if (match.Groups["remove"].Success)
+				{
+					category = CLAIM_REMOVE;
+				}
+				else if (match.Groups["modify"].Success)
+				{
+					category = CLAIM_MODIFY;
+				}
+				else if (match.Groups["create"].Success)
+				{
+					category = CLAIM_CREATE;
+				}
+				else if (match.Groups["launch"].Success)
+				{
+					category = CLAIM_LAUNCH;
+				}
+				else if (match.Groups["memory"].Success)
+				{
+					category = CLAIM_MEMORY;
+				}
+				if (category != null && !found.Contains(category))
+				{
+					found.Add(category);
+				}
+			}
+		}
+		return found;
+	}
+
+	/// <summary>
+	/// 工具名 → 它「兑现」的声称类别:只认 install / remove / modify / create / launch / memory 六类。
+	/// 只读、检索类工具(以及未知工具、MCP 工具)一律返回 null —— 看一眼、搜一下不算把活干了。
+	/// 类别口径 = ToolMeta.side_effect(delete → remove、launch → launch、write_local → modify)+ 工具名前缀。
+	/// </summary>
+	public static string ToolClaimCategory(string name)
+	{
+		if (string.IsNullOrEmpty(name))
+		{
+			return null;
+		}
+		if (name == "remember" || name == "forget")
+		{
+			return CLAIM_MEMORY;
+		}
+		if (name.StartsWith("install_", StringComparison.Ordinal) || name.StartsWith("download_", StringComparison.Ordinal))
+		{
+			return CLAIM_INSTALL;
+		}
+		if (name.StartsWith("create_", StringComparison.Ordinal) || name.StartsWith("new_", StringComparison.Ordinal))
+		{
+			return CLAIM_CREATE;
+		}
+		if (name.StartsWith("launch_", StringComparison.Ordinal) || name.StartsWith("run_", StringComparison.Ordinal))
+		{
+			return CLAIM_LAUNCH;
+		}
+		if (name.StartsWith("delete_", StringComparison.Ordinal) || name.StartsWith("remove_", StringComparison.Ordinal) || name.StartsWith("uninstall_", StringComparison.Ordinal))
+		{
+			return CLAIM_REMOVE;
+		}
+		switch (ToolMeta.Get(name)?.side_effect ?? "")
+		{
+		case "delete":
+			return CLAIM_REMOVE;
+		case "launch":
+			return CLAIM_LAUNCH;
+		case "write_local":
+			return CLAIM_MODIFY;
+		default:
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// 「光说没做」的判据:回复里声称做完了某类操作,而本回合**没有任何同类工具成功执行**,就返回没兑现的类别;
+	/// 全部兑现、或者压根没声称,返回空表。多个类别逐个判,不因为另一个真做成了就整体放过。
+	/// </summary>
+	/// <param name="reply">模型这一轮的回复正文。</param>
+	/// <param name="toolRuns">本回合的工具执行记录:工具名 + 状态(ok / error / denied)。只有 ok 算成功执行。</param>
+	public static List<string> UnfulfilledClaims(string reply, IEnumerable<(string name, string status)> toolRuns)
+	{
+		List<string> missing = new List<string>();
+		List<string> claimed = ClaimCategories(reply);
+		if (claimed.Count == 0)
+		{
+			return missing;
+		}
+		HashSet<string> done = new HashSet<string>();
+		foreach ((string name, string status) in toolRuns ?? Enumerable.Empty<(string, string)>())
+		{
+			if (!string.Equals(status, "ok", StringComparison.Ordinal))
+			{
+				continue;
+			}
+			string category = ToolClaimCategory(name);
+			if (category != null)
+			{
+				done.Add(category);
+			}
+		}
+		foreach (string category2 in claimed)
+		{
+			if (!done.Contains(category2))
+			{
+				missing.Add(category2);
+			}
+		}
+		return missing;
+	}
+
+	/// <summary>
+	/// 回复里有没有「已经/正在 ... 装、改、删」这类完成声明(旧 API,保留给插件和既有测试)。
+	/// 判「光说没做」请用 <see cref="UnfulfilledClaims"/>:它还要看本回合有没有同类工具真的执行成功。
+	/// </summary>
 	public static bool ClaimsAction(string reply)
 	{
-		return _CLAIM_RE.IsMatch(reply ?? "");
+		return ClaimCategories(reply).Count > 0;
 	}
 
 	/// <summary>
@@ -1744,18 +1913,49 @@ public static class Agent
 		}
 		AgentResult _result(string text19, string text18, string detail = "", List<PyDict> pendingTasks = null, long roundsUsed2 = 0L, bool hasDetail = true)
 		{
-			// 只有回复里声称「已经/正在/我会去 装、改、删…」却没调工具，才算假装干活；
-			// 模型只是解释原因、提建议（哪怕用户要它干活），不再挂「它没有真的开始执行」的提示
-			if (text18 == "no_tool_call" && !ClaimsAction(text19))
+			// 「光说没做」:回复里声称做完了某类操作,而本回合**没有任何同类工具成功执行**,才算命中(I 包)。
+			// 模型只是解释原因、提建议(哪怕用户要它干活),不算命中;以前只看 no_tool_call 那一支,漏判很多。
+			List<(string name, string status)> turnRuns = new List<(string, string)>();
+			foreach (ToolCall ran in turn.tool_calls)
+			{
+				turnRuns.Add((ran.name, (ran.status == "completed") ? "ok" : ((ran.status == "denied") ? "denied" : "error")));
+			}
+			List<string> unmatchedClaims = UnfulfilledClaims(text19, turnRuns);
+			if (text18 == "no_tool_call" && unmatchedClaims.Count == 0)
 			{
 				text18 = "completed";
 				detail = "";
+			}
+			if (unmatchedClaims.Count > 0)
+			{
+				object[] claimExtra = new object[4]
+				{
+					"claims",
+					unmatchedClaims.Cast<object>().ToList(),
+					"ran",
+					turnRuns.Select(((string name, string status) r) => r.name + ":" + r.status).Cast<object>().ToList()
+				};
+				object round_claim = roundNo;
+				text_len = null;
+				Trace.Record("claim_without_action", round_claim, "", "", null, null, text_len, claimExtra);
+				Store.LogEvent(sessionId, "ClaimWithoutAction", PyDict.Of("turn_id", turn.id, "round", roundNo, "claims", unmatchedClaims.Cast<object>().ToList()));
+				// 界面侧可以据此显示一行提示(本包只把事件发出去,文案留给界面)
+				_status("claim_unmatched", PyDict.Of("claims", unmatchedClaims.Cast<object>().ToList(), "turn_id", turn.id));
 			}
 			AgentResult agentResult = new AgentResult(text19, text18, detail, pendingTasks?.Cast<object>().ToList(), roundsUsed2)
 			{
 				usage_source = tokenState.source,
 				usage = Usage.Get(sessionId)
 			};
+			List<object> usedTools = new List<object>();
+			foreach (ToolCall called in turn.tool_calls)
+			{
+				if (!usedTools.Contains(called.name))
+				{
+					usedTools.Add(called.name);
+				}
+			}
+			agentResult.tools_used = usedTools;
 			if (!agentResult._summary_recorded)
 			{
 				agentResult._summary_recorded = true;
@@ -1765,6 +1965,8 @@ public static class Agent
 				Store.LogEvent(sessionId, "TurnSummary", PyDict.Of("turn_id", turn.id, "stop_reason", text18, "rounds", roundNo, "tools", toolCalls_n, "tool_failures", toolFailures, "elapsed", num8));
 			}
 			agentResult.plan = ((planTurnId == turn.id) ? new List<object>(planItems) : new List<object>());
+			// 「光说没做」命中的类别也挂在结果上,界面/测试可以直接读(空表 = 没命中)
+			agentResult.claims_unmatched = unmatchedClaims.Cast<object>().ToList();
 			try
 			{
 				List<object> list15 = (from m in messages.OfType<PyDict>()
