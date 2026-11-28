@@ -16,6 +16,15 @@ public static class Agent
 
 	private static readonly Dictionary<string, CompactState> _COMPACT_STATES = new Dictionary<string, CompactState>();
 
+	/// <summary>每个会话状态最近一次被访问的序号(单调递增),用来做 LRU 淘汰。</summary>
+	private static readonly Dictionary<string, long> _COMPACT_TOUCH = new Dictionary<string, long>();
+
+	/// <summary>访问序号发号器。用序号而不是时钟:同一毫秒里的多次访问也能排出先后。</summary>
+	private static long _COMPACT_TICK;
+
+	/// <summary>压缩状态缓存容量:满了淘汰最久未访问的那一个,不做整表清空。</summary>
+	public const int COMPACT_STATES_MAX = 16;
+
 	private static double _LAST_ACTIVITY_TS;
 
 	private static readonly Regex _ACTION_RE = new Regex("下载|安装|重装|卸载|装(?:个|一下|上|好|到|进|下)|删(?:除|掉|了|个|一下)|移除|清(?:理|掉|空|一下)|修(?:复|好|一下|下)|修改|改(?:成|为|一下|下|掉|到|个)|设(?:置|成|为|定|到)|配置|调(?:成|到|整|一下|大|小|高|低)|换(?:成|到|个|一下)|切(?:换|到|成)|开(?:启|一下|下)|关(?:闭|掉|上|一下)|打开|启动|运行|跑(?:一下|起来|个)|导入|导出|更新|升级|备份|恢复|还原|重启|添加|加(?:个|上|一下|进|到)|新建|创建|重命名|迁移|干活|搞定|弄(?:好|一下|个)|试试|继续|开始|执行|动手|\\b(?:install|download|uninstall|remove|delete|clean|fix|repair|set|change|configure|config|enable|disable|turn (?:on|off)|switch|launch|start|run|import|export|update|upgrade|back ?up|restore|add|create|rename|migrate|do it|go ahead|continue|proceed)\\b", RegexOptions.IgnoreCase);
@@ -415,21 +424,82 @@ public static class Agent
 		}
 	}
 
-	private static CompactState _compact_state_for(string sessionId)
+	/// <summary>
+	/// 取会话的压缩状态。缓存上限 <see cref="COMPACT_STATES_MAX"/>,满了只淘汰**最久未访问**的那一条。
+	/// 以前是整表 <c>Clear()</c>:正在用的会话会连带丢掉 CheckRapidRefill 的连击保护和连续失败计数。
+	/// 沿用同一个 lock。
+	/// </summary>
+	public static CompactState _compact_state_for(string sessionId)
 	{
 		lock (_COMPACT_STATES)
 		{
 			if (!_COMPACT_STATES.TryGetValue(sessionId, out CompactState value))
 			{
-				if (_COMPACT_STATES.Count >= 16)
+				if (_COMPACT_STATES.Count >= COMPACT_STATES_MAX)
 				{
-					_COMPACT_STATES.Clear();
+					string oldest = null;
+					long oldestTick = long.MaxValue;
+					foreach (KeyValuePair<string, long> item in _COMPACT_TOUCH)
+					{
+						if (item.Value < oldestTick)
+						{
+							oldestTick = item.Value;
+							oldest = item.Key;
+						}
+					}
+					if (oldest != null)
+					{
+						_COMPACT_STATES.Remove(oldest);
+						_COMPACT_TOUCH.Remove(oldest);
+					}
 				}
 				value = new CompactState();
 				_COMPACT_STATES[sessionId] = value;
 			}
+			_COMPACT_TOUCH[sessionId] = ++_COMPACT_TICK;
 			return value;
 		}
+	}
+
+	/// <summary>
+	/// 丢掉某个会话的压缩状态(子代理跑完清掉自己那份,别占着 16 个缓存槽;测试也用它做隔离)。
+	/// </summary>
+	public static void ForgetCompactState(string sessionId)
+	{
+		if (string.IsNullOrEmpty(sessionId))
+		{
+			return;
+		}
+		lock (_COMPACT_STATES)
+		{
+			_COMPACT_STATES.Remove(sessionId);
+			_COMPACT_TOUCH.Remove(sessionId);
+		}
+	}
+
+	/// <summary>当前缓存里的会话 id,最久没用过的排在最前(测试用;生产代码不要调)。不改变访问顺序。</summary>
+	public static List<string> CompactStateSessions()
+	{
+		lock (_COMPACT_STATES)
+		{
+			return _COMPACT_STATES.Keys.OrderBy((string k) => _COMPACT_TOUCH.TryGetValue(k, out long tick) ? tick : 0L).ToList();
+		}
+	}
+
+	/// <summary>
+	/// 没有 provider usage 时的估算兜底:只算**新增**的消息,不再每轮把整段 messages 估一遍再累加(D7)。
+	/// 返回本次要累加的估算值,以及留给下一轮的基准下标。
+	/// 基准下标比当前条数还大(中途压缩/裁剪把消息表换掉了)时按全量重算一次。
+	/// </summary>
+	public static (long delta, long nextBase) EstimateNewMessages(List<object> messages, long baseCount)
+	{
+		List<object> list = messages ?? new List<object>();
+		if (baseCount < 0L || baseCount > list.Count)
+		{
+			baseCount = 0L;
+		}
+		long delta = Tokens.EstimateMessages(list.Skip((int)baseCount).ToList());
+		return (delta, list.Count);
 	}
 
 	public static bool WantsAction(string userText)
@@ -593,6 +663,8 @@ public static class Agent
 		}
 		TokenState tokenState = new TokenState();
 		bool usageGot = false;
+		// 没有 provider usage 时按估算兜底的基准下标:只估算本轮**新增**的消息(D7)
+		long usageEstBase = 0L;
 		Random rnd = new Random();
 		string fallbackModel = Py.Strip(Py.S(settings.Get("ai_fallback_model")));
 		bool fallbackActive = false;
@@ -882,7 +954,9 @@ public static class Agent
 					PyDict pyDict2;
 					try
 					{
-						pyDict2 = Client.ChatOnce(_request_settings(), messages, PluginAgentBridge.Tools(pturn, Tools.TOOL_SCHEMAS), 0.3, httpCancel);
+						// 兜底请求必须用**本轮流式实际下发的那份工具表**(list4:按需选择 + 预设筛选 + 子代理只读过滤 + MCP)。
+						// 以前这里重新发全量 Tools.TOOL_SCHEMAS:兜底时上下文变大,子代理在兜底里还能看到写工具(D8)。
+						pyDict2 = Client.ChatOnce(_request_settings(), messages, list4, 0.3, httpCancel);
 					}
 					catch (AIClientError aIClientError2)
 					{
@@ -949,7 +1023,10 @@ public static class Agent
 				}
 				if (!usageGot)
 				{
-					Usage.Add(sessionId, null, Tokens.EstimateMessages(messages), 0L);
+					// 兜底估算:只累加本轮新增的消息,不再每轮拿整段 messages 估一遍(见 EstimateNewMessages)
+					(long estDelta, long estNextBase) = EstimateNewMessages(messages, usageEstBase);
+					usageEstBase = estNextBase;
+					Usage.Add(sessionId, null, estDelta, 0L);
 				}
 				string text9 = string.Concat(list7);
 				if (text9.Length > 0)
