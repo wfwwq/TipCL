@@ -76,6 +76,61 @@ jobs:
       - name: Release build (warnings are the signal)
         run: dotnet build src/TipCL.App/TipCL.App.csproj -c Release --nologo
 
+      # ---- AI 自检接进 CI(E 包,2026-11-28)---------------------------------------------
+      # 在这之前,`--ai-selftest` 只在 tools/linux-real/verify.sh 和 `.deb` 的手工步骤里跑过
+      # (tools/deb.sh:122 的提示行),也就是说这条流水线**从来没有在 CI 里证明过 AI 子系统还是好的**。
+      #
+      # 为什么它可以当**硬门槛**(与同一 job 的逐页冒烟、win-x64 那边的 `--smoke` 不同):
+      # 入口是 Program.cs 的 `--ai-selftest` → Session/AiSelfTestCli,是纯功能自检 ——
+      # **不起 GUI、不联网**(「真模型端到端」那几项默认不跑,要显式加 `--ai-selftest-send` 才发),
+      # 结论由退出码交差:0 = 全过,4 = 有用例没过(AiSelfTestCli.cs 的 SelftestFailed)。
+      # 所以「托管 runner 没有交互桌面」对它不构成障碍 —— 这也正是 Windows 那条只能作提示的原因
+      # (见 ci-windows.yml 里同名步骤的注释:那边走的是 WPF 窗口自检)。
+      #
+      # 隔离 TIPCL_HOME(与 tools/linux-real/verify.sh 同一口径):AppLog 会把汇总与失败项写进
+      # `$TIPCL_HOME/logs/`,不隔离既污染 runner 的用户目录,也让「这次自检到底看了什么」说不清。
+      #
+      # 判据两条,缺一不可:退出码 0;报告末行的**汇总**必须是「失败 0」。
+      # 退出码 0 而汇总写着失败 > 0,说明自检自己坏了,同样算红(别让「红了却报绿」蒙混过去)。
+      #
+      # AI5-T 的回放场景套件放在测试工程里,随上面两批 `dotnet test` 一起跑,**不需要额外步骤**;
+      # 本步骤只负责「自检」这一层。
+      - name: AI 自检(--ai-selftest;不起 GUI、不联网,硬门槛)
+        if: runner.os == 'Linux'
+        run: |
+          set -uo pipefail
+          H="$(mktemp -d)"
+          set +e
+          TIPCL_HOME="$H" dotnet src/TipCL.App/bin/Release/net8.0/TipCL.App.dll --ai-selftest 2>&1 | tee ai-selftest.log
+          CODE="${PIPESTATUS[0]}"
+          set -e
+          SUMMARY="$(grep -a '^AI 自检:' ai-selftest.log | tail -1)"
+          echo "--- 退出码:$CODE;汇总:$SUMMARY ---"
+          {
+            echo "## AI 自检(--ai-selftest)"
+            echo ""
+            echo "- 命令:\`TIPCL_HOME=<临时目录> dotnet src/TipCL.App/bin/Release/net8.0/TipCL.App.dll --ai-selftest\`"
+            echo "- 退出码:\`$CODE\`(0 = 全过,4 = 有用例没过)"
+            echo "- 汇总:\`${SUMMARY:-<没打出汇总行>}\`"
+            echo ""
+            echo "<details><summary>完整报告</summary>"
+            echo ""
+            echo '```'
+            cat ai-selftest.log
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$CODE" -ne 0 ]; then
+            echo "::error title=AI 自检未通过::退出码 $CODE(0=全过 / 4=有用例没过),失败项见日志与 job summary"
+            exit 1
+          fi
+          if ! printf '%s' "$SUMMARY" | grep -q '失败 0'; then
+            echo "::error title=AI 自检汇总与退出码不一致::退出码 0,但汇总行不是「失败 0」:${SUMMARY:-<没有汇总行>}"
+            exit 1
+          fi
+          echo "AI 自检通过:$SUMMARY"
+
       # 逐页冒烟矩阵(audit/D 第二轮):默认帧只拍启动页,「某一页点进去就白屏/报错」在默认帧里看不见。
       # tools/smoke-matrix.sh 对每个页面 id 各起一次独立进程 + 隔离 TIPCL_HOME,判据四条:
       # 退出码 0 / smoke.png > 10 KB / 0 个 [WARN] / 0 个 [ERROR]。任意一页不达标就红。

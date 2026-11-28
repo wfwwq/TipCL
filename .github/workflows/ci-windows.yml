@@ -29,3 +29,61 @@ jobs:
         run: dotnet build windos/tests/TipCL.NativeBlockE2E/TipCL.NativeBlockE2E.csproj -c Release
       - name: 单元测试
         run: dotnet test windos/tests/TipCL.Tests -c Release --logger "console;verbosity=normal" --logger GitHubActions
+
+      # ---- AI 自检接进 CI(E 包,2026-11-28)--------------------------------------------
+      # 参数名是 `--ai-ui-selftest`,**不是** Linux 侧那个 `--ai-selftest`。
+      # (任务书 §6 对这一条标了「🕓 核对参数写法」;这里是照代码核出来的:App.xaml.cs 的
+      #  OnStartup 分支读 `--ai-ui-selftest`,并把 AiSelfTest.Run 的返回赋给 ExitCode。)
+      #
+      # 这一步**只作提示、不作门槛**。原因是核过代码的,不是照抄结论:
+      #   * Pages/Ai/AiSelfTest.cs 的 RunAll 会 `new Window{...}.Show()` 开一个**真的 WPF 窗口**,
+      #     再用 RenderTargetBitmap 对窗口里的控件截图(Shot())—— 必须有交互桌面;
+      #   * 托管 runner 没有交互桌面。姊妹流水线 ci.yml 里 win-x64 那条 `--smoke` 就是因此红的
+      #     (exit 1 且没有 smoke.png),那里也只作提示。
+      # 所以失败只打 ::warning(带上退出码 / 有没有 result.txt / 末几行输出),不阻断 job;
+      # 真正的硬门槛是 ubuntu job 上那条纯功能、无窗口的 `--ai-selftest`(见 ci.yml)。
+      #
+      # 硬超时是必需的,不是装饰:WPF 窗口在无桌面的会话里建不起来时,进程可能挂在等窗口上;
+      # 不设超时会把 job 拖到默认的 6 小时。到点直接 Kill,再按「未通过」处理。
+      #
+      # WinExe 没有附带的控制台,所以判据以它自己落盘的 `result.txt` 为准
+      # (AiSelfTest.cs 末行写 ALL PASSED / FAILED: n;进程退出码 = 失败项数),stdout 只作兜底。
+      - name: AI 自检(最好努力 —— 托管 runner 无交互桌面,不阻断)
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path windos/src/TipCL/bin/Release/net48/TipCL.exe).Path
+          $out = Join-Path $env:GITHUB_WORKSPACE 'dist/ai-selftest-win'
+          if (Test-Path $out) { Remove-Item -Recurse -Force $out }
+          New-Item -ItemType Directory -Path $out | Out-Null
+          $p = Start-Process -FilePath $exe -ArgumentList @('--ai-ui-selftest', $out) -PassThru `
+                 -RedirectStandardOutput (Join-Path $out 'stdout.txt') `
+                 -RedirectStandardError (Join-Path $out 'stderr.txt')
+          $finished = $p.WaitForExit(300000)
+          if (-not $finished) {
+            $p.Kill()
+            Write-Host "::warning title=Windows AI 自检超时(无桌面,不阻断)::5 分钟没结束,已 Kill —— 多半是 WPF 窗口在无交互桌面的会话里建不起来"
+          }
+          $code = if ($finished) { $p.ExitCode } else { -1 }
+          $result = Join-Path $out 'result.txt'
+          $hasResult = Test-Path $result
+          $allPassed = $hasResult -and (Select-String -Path $result -Pattern '^ALL PASSED' -Quiet)
+          if ($code -eq 0 -and $allPassed) {
+            $n = (Select-String -Path $result -Pattern '^PASS  ').Count
+            Write-Host "Windows AI 自检通过:exit=0 result.txt=ALL PASSED(通过 $n 项)"
+          } else {
+            $tail = if ($hasResult) {
+              ((Get-Content $result -Tail 6) -join ' / ')
+            } elseif (Test-Path (Join-Path $out 'stdout.txt')) {
+              ((Get-Content (Join-Path $out 'stdout.txt') -Tail 6) -join ' / ')
+            } else { '<没有任何输出>' }
+            Write-Host "::warning title=Windows AI 自检未通过(托管 runner 无交互桌面,不阻断)::exit=$code result.txt=$hasResult tail=$tail"
+          }
+
+      # 失败也要把证据带出来,否则只能登 runner 才能看日志
+      - name: AI 自检证据(result.txt / stdout / 截图)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tipcl-win-ai-selftest
+          path: dist/ai-selftest-win
+          if-no-files-found: warn
