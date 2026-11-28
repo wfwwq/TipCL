@@ -4,9 +4,11 @@
 // 用途与参考版一致:排查「这一轮为什么没出结果」「MCP server 为什么没连上」这类问题，
 // 与给用户看的对话日志（Store 的 ai_sessions）分开，不需要用户理解。
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using TipCL.Core;
 
 namespace TipCL.Core.Launcher.Ai;
@@ -22,6 +24,42 @@ public static class Trace
     private static readonly object Lock = new();
 
     private static bool _pruned;
+
+    /// <summary>
+    /// 当前会话 id(AsyncLocal:谁在这个作用域里记轨迹,行里就带上 <c>session</c> 字段)。
+    /// AI5-O 加的:轨迹原先只有时间戳,按会话汇总时无从下手。
+    /// 不设作用域时该字段省略 —— 旧日志格式与既有调用点行为完全不变。
+    /// </summary>
+    private static readonly AsyncLocal<string?> SessionNow = new();
+
+    /// <summary>在「这本会话」的作用域里执行(AsyncLocal 传递:并行的其它会话不会串进来)。</summary>
+    public static IDisposable SessionScope(string? sessionId)
+    {
+        string? previous = SessionNow.Value;
+        SessionNow.Value = string.IsNullOrEmpty(sessionId) ? null : sessionId;
+        return new Scope(() => SessionNow.Value = previous);
+    }
+
+    /// <summary>当前会话 id(没设作用域就是空串)。</summary>
+    public static string CurrentSession => SessionNow.Value ?? "";
+
+    private sealed class Scope : IDisposable
+    {
+        private readonly Action _restore;
+
+        private bool _done;
+
+        public Scope(Action restore) => _restore = restore;
+
+        public void Dispose()
+        {
+            if (!_done)
+            {
+                _done = true;
+                _restore();
+            }
+        }
+    }
 
     private static string Dir()
     {
@@ -120,6 +158,11 @@ public static class Trace
                 "round", round is int n ? (long)n : round,
                 "phase", phase ?? "",
                 "tool_name", tool_name ?? "");
+            // AI5-O:在会话作用域里记的轨迹带上归属,按会话汇总时就能只数这一会话的行
+            if (SessionNow.Value is string session && session.Length > 0)
+            {
+                row["session"] = session;
+            }
             if (exc != null)
             {
                 row["exc_type"] = ExcType(exc);
@@ -151,5 +194,56 @@ public static class Trace
         catch (Exception)
         {
         }
+    }
+
+    /// <summary>
+    /// 读回最近 <paramref name="days"/> 天(含今天)的轨迹行,按时间从早到晚。
+    /// AI5-O 加的,只服务于会话级汇总:坏行跳过、读不到的日期跳过,绝不抛(同 <see cref="Record"/> 的口径)。
+    /// </summary>
+    public static List<PyDict> ReadRecords(int days = 1)
+    {
+        var rows = new List<PyDict>();
+        try
+        {
+            int span = Math.Max(1, Math.Min(days, KeepDays));
+            for (int i = span - 1; i >= 0; i--)
+            {
+                string path = Utils.AbsPath(PPath.Join(Dir(), DateTime.Now.AddDays(-i).ToString("yyyyMMdd") + ".jsonl"));
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+                string[] lines;
+                try
+                {
+                    lines = new UTF8Encoding(false, false).GetString(File.ReadAllBytes(path)).Split('\n');
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                foreach (string line in lines)
+                {
+                    if (line.Length == 0)
+                    {
+                        continue;
+                    }
+                    try
+                    {
+                        if (PyJson.Loads(line) is PyDict row)
+                        {
+                            rows.Add(row);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+        return rows;
     }
 }

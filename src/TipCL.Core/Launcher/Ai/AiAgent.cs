@@ -149,6 +149,13 @@ public sealed class AiAgent
             throw new ValueError("messages 不能为空");
         }
 
+        // AI5-O:整轮跑在「本会话」的轨迹作用域里,期间记的轨迹行都带上 session,
+        // 按会话汇总(诊断导出)时才能把这一会话的轨迹与其它会话分开。窗口/子代理各自有自己的会话 id。
+        using IDisposable traceScope = Trace.SessionScope(ChatId);
+        double startedAt = Py.Monotonic();
+        long toolCalls = 0;
+        long toolFailures = 0;
+
         TurnId = "t" + DateTime.Now.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 4);
         stop_reason = "";
         LastText = "";
@@ -174,6 +181,24 @@ public sealed class AiAgent
         }
 
         string failReason = "";
+        // AI5-O:一轮收尾时补一条会话事件(TurnSummary),它是诊断导出里「轮数 / 工具调用数 / 失败数 / 耗时」
+        // 的权威来源(字段口径照 Windows 版 Agent.cs 的 TurnSummary)。纯记账,不改任何对话行为。
+        void LogTurnSummary(string stopReason, long rounds)
+        {
+            try
+            {
+                Store.LogEvent(ChatId, "TurnSummary", PyDict.Of(
+                    "turn_id", TurnId,
+                    "stop_reason", stopReason ?? "",
+                    "rounds", rounds,
+                    "tools", toolCalls,
+                    "tool_failures", toolFailures,
+                    "elapsed", Py.Round(Py.Monotonic() - startedAt, 2)));
+            }
+            catch (Exception)
+            {
+            }
+        }
         try
         {
             for (int round = 1; round <= MaxRounds; round++)
@@ -205,6 +230,7 @@ public sealed class AiAgent
                 {
                     stop_reason = StopReason.NO_TOOL_CALL;
                     Store.LogEvent(ChatId, "TurnCompleted", PyDict.Of("turn_id", TurnId, "rounds", (long)round, "stop_reason", stop_reason));
+                    LogTurnSummary(stop_reason, round);
                     _emit(new AiAgentEvent { Kind = "done", FinishReason = state.FinishReason, Round = round });
                     return;
                 }
@@ -225,6 +251,12 @@ public sealed class AiAgent
                     {
                         ToolInvocation invocation = group[k];
                         string result = results[k];
+                        // AI5-O:就地累计这一轮的工具调用数/失败数(TurnSummary 用;失败 = 没到 COMPLETED)
+                        toolCalls++;
+                        if (invocation.Call.status != ToolCallStatus.COMPLETED)
+                        {
+                            toolFailures++;
+                        }
                         Store.LogEvent(ChatId, "ToolCompleted", PyDict.Of(
                             "turn_id", TurnId,
                             "round", (long)round,
@@ -256,6 +288,7 @@ public sealed class AiAgent
             {
                 stop_reason = failReason == "stream_failed" ? StopReason.STREAM_FAILED : StopReason.ERROR;
                 Store.LogEvent(ChatId, "TurnFailed", PyDict.Of("turn_id", TurnId, "rounds", (long)MaxRounds, "reason", stop_reason));
+                LogTurnSummary(stop_reason, MaxRounds);
                 _emit(new AiAgentEvent { Kind = "error", Error = failReason, Text = failReason, Round = MaxRounds });
                 return;
             }
@@ -268,6 +301,7 @@ public sealed class AiAgent
             stop_reason = tail.Failed ? StopReason.STREAM_FAILED : StopReason.MAX_ROUNDS;
             Store.LogEvent(ChatId, tail.Failed ? "TurnFailed" : "TurnCompleted",
                 PyDict.Of("turn_id", TurnId, "rounds", (long)MaxRounds, "reason", stop_reason));
+            LogTurnSummary(stop_reason, MaxRounds);
             if (!tail.Failed)
             {
                 messages.Add(PyDict.Of("role", "assistant", "content", tail.Text.ToString()));
@@ -713,6 +747,21 @@ public sealed class AiAgent
                             PyDict usage = ev.Get("usage") is PyDict u ? u : new PyDict();
                             Tokens.UpdateFromUsage(TokenState, usage, messages.Count);
                             Usage.Add(ChatId, usage, Tokens.EstimateMessages(messages), 0);
+                            // AI5-O:provider 的真值顺带落一条会话事件(字段口径照 Windows 版 Agent.cs 的 Usage 事件)。
+                            // 内存里的 Usage 表只活到本进程结束,重启后诊断导出就读不到 token 了,落盘才留得住。
+                            long promptTokens = Tokens.UsageInt(usage, "prompt_tokens", "input_tokens");
+                            long completionTokens = Tokens.UsageInt(usage, "completion_tokens", "output_tokens");
+                            if (promptTokens > 0 || completionTokens > 0)
+                            {
+                                PyDict usageDetails = Py.D(Py.Or(usage.Get("prompt_tokens_details"), new PyDict()));
+                                Store.LogEvent(ChatId, "Usage", PyDict.Of(
+                                    "turn_id", TurnId,
+                                    "round", (long)state.Round,
+                                    "prompt_tokens", promptTokens,
+                                    "completion_tokens", completionTokens,
+                                    "cached_tokens", Py.Int(Py.Or(usageDetails.Get("cached_tokens"), 0L)),
+                                    "source", "provider"));
+                            }
                             _emit(new AiAgentEvent { Kind = "usage", Round = state.Round, Usage = Usage.Get(ChatId) });
                             break;
                         }

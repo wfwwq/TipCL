@@ -657,6 +657,8 @@ public sealed partial class AiPage : PageBase
         {
             ChatId = EnsureChatId(),
         };
+        // AI5-O:工具执行器也带上当前对话 id,诊断导出(export_diagnostic_report)才能汇总「这本会话」的数
+        _runner.ChatId = agent.ChatId;
         try
         {
             await Task.Run(() => agent.RunAsync(_history, _runner.Instance, _run!.Token));

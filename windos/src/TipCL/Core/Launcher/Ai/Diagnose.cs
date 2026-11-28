@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-
 namespace TipCL.Core.Launcher.Ai;
 
 public static class Diagnose
@@ -88,5 +87,42 @@ public static class Diagnose
 			return "没有 " + kind + " 日志";
 		}
 		return "文件: " + text2 + "\n\n" + Py.Slice(text, -maxChars);
+	}
+
+	/// <summary>
+	/// 会话级可观测性汇总(AI5-O):轮数 / 工具调用数与失败率 / 压缩次数 / tool_schema_miss / 输入输出 token。
+	/// 数从会话事件与轨迹现算(见 AiSessionMetrics),这里只负责嵌进诊断导出;
+	/// sessionId 空 = 用当前轨迹作用域,再空就 "active"。UI 面板等用户拍板后再做。
+	/// </summary>
+	public static PyDict SessionMetrics(string sessionId = null)
+	{
+		try
+		{
+			return AiSessionMetrics.Build(sessionId).ToPy();
+		}
+		catch (Exception ex)
+		{
+			// 诊断导出绝不能因为统计失败而失败:如实报出来,别把整次导出拖垮
+			return PyDict.Of("ok", false, "error", Py.ExcStr(ex), "caveats", new List<object> { "会话统计没跑完:" + Py.ExcStr(ex) });
+		}
+	}
+
+	/// <summary>会话级汇总拼成几行文本(诊断导出落盘时直接写进文件)。</summary>
+	public static string SessionMetricsText(string sessionId = null)
+	{
+		try
+		{
+			AiSessionMetrics.Result result = AiSessionMetrics.Build(sessionId);
+			List<string> lines = result.ToLines();
+			foreach (string caveat in result.Caveats)
+			{
+				lines.Add("- ！ " + caveat);
+			}
+			return string.Join("\n", lines);
+		}
+		catch (Exception ex)
+		{
+			return "会话统计没跑完:" + Py.ExcStr(ex);
+		}
 	}
 }

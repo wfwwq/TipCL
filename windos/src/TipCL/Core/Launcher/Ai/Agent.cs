@@ -605,6 +605,9 @@ public static class Agent
 		long toolFailures = 0L;
 		object countsLock = new object();
 		bool isSubagent = Py.Truthy(settings.Get("ai_subagent"));
+		// AI5-O:整轮跑在「本会话」的轨迹作用域里,期间记的轨迹行(含 tool_schema_miss)都带上 session,
+		// 诊断导出按会话汇总时才数得准。与 Linux 侧同名同义(见 AiAgent.RunAsync 的同名一行)。
+		using IDisposable traceScope = Trace.SessionScope(sessionId);
 		Checkpoint.BeginChat(sessionId);
 		Hooks.SetEnabled(Py.Truthy(settings.Get("ai_hooks_enabled", true)));
 		List<McpClient> mcpClients;

@@ -164,7 +164,7 @@ public sealed partial class ToolRunner
                 Instance inst = ExistingInstance(InstName(args));
                 string outPath = DiagnosticReport.ResolveOutPath(args, inst.name);
                 List<object>? conversation = ConversationProvider?.Invoke();
-                return await Task.Run(() => DiagnosticReport.Export(inst, conversation, outPath), ct).ConfigureAwait(false);
+                return await Task.Run(() => DiagnosticReport.Export(inst, conversation, outPath, null, null, ChatId), ct).ConfigureAwait(false);
             }
 
             default:
