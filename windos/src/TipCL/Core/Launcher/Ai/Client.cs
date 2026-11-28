@@ -708,6 +708,18 @@ public static class Client
 		}
 	}
 
+	/// <summary>
+	/// 测试用的可替换传输(AI5-T 假模型回放框架的唯一注入点)。
+	/// 不为 null 时 <see cref="ChatStream" /> / <see cref="ChatOnce" /> 不再真的发 HTTP,
+	/// 改为调用这个函数拿到响应;参数依次是(解析好的端点、请求体、是否流式)。
+	/// 生产环境恒为 null,行为与加这个字段之前逐字一致。
+	/// <para>约定:返回的流式响应仍旧走 <see cref="AiResponse.IterLines" /> + <see cref="AssembleStream" /> 的 SSE 解析,
+	/// 非流式响应仍旧走 <see cref="AiResponse.Text" /> + JSON 解析 —— 这个字段只把「网线」换成脚本,不绕开任何解析路径。</para>
+	/// <para>internal:仓库的 Windows 树没有 InternalsVisibleTo(见 PluginManager.cs 里那条刻意的 public),
+	/// 所以测试工程用反射挂载(见 windos/tests/TipCL.Tests/AiReplay/AiReplayHarness.cs)。</para>
+	/// </summary>
+	internal static Func<PyDict, PyDict, bool, AiResponse> TestTransport;
+
 	private static AIClientError HttpError(Exception exc, HttpCancel httpCancel)
 	{
 		if (httpCancel != null && httpCancel.Cancelled())
@@ -848,7 +860,8 @@ public static class Client
 		AiResponse aiResponse;
 		try
 		{
-			aiResponse = aiSession.Post((string)pyDict["url"], (PyDict)pyDict["headers"], pyDict2, 15, 90, stream: true);
+			// 回放框架挂上 TestTransport 后,这里不再发真实请求(生产为 null → 走原来的 HTTP 路径)
+			aiResponse = ((TestTransport != null) ? TestTransport(pyDict, pyDict2, true) : aiSession.Post((string)pyDict["url"], (PyDict)pyDict["headers"], pyDict2, 15, 90, stream: true));
 		}
 		catch (AiRequestException exc)
 		{
@@ -885,7 +898,8 @@ public static class Client
 		AiResponse aiResponse;
 		try
 		{
-			aiResponse = aiSession.Post((string)pyDict["url"], (PyDict)pyDict["headers"], jsonBody, 90, 90, stream: false);
+			// 回放框架挂上 TestTransport 后,这里不再发真实请求(生产为 null → 走原来的 HTTP 路径)
+			aiResponse = ((TestTransport != null) ? TestTransport(pyDict, jsonBody, false) : aiSession.Post((string)pyDict["url"], (PyDict)pyDict["headers"], jsonBody, 90, 90, stream: false));
 		}
 		catch (AiRequestException exc)
 		{
