@@ -56,17 +56,33 @@ public static class AiMemory
     }
 
     /// <summary>
+    /// 最近一次**真的执行了**迁移时,因为 <see cref="FileMemory.MaxEntries"/> 条上限被裁掉的条数
+    /// (裁剪方向与 FileMemory 一致:从最旧的开始丢)。没执行过迁移时保持 0。
+    /// 这是给排障/用户看的诊断量:迁移本身不销毁任何东西(旧文件被改名留档),但超出上限的条目
+    /// 不会进 ai_memory.md,用户需要知道「这次迁丢了几条」才知道去留档文件里找。
+    /// </summary>
+    public static int LastMigrationEvicted { get; private set; }
+
+    /// <summary>
     /// 把旧的 <c>ai-memory.json</c> 幂等迁进 <c>ai_memory.md</c>;返回这次真的新增的条数。
     /// 每次访问都查一遍(只是两三次 File.Exists):**不缓存「已经查过」** —— 缓存住的话,
     /// 测试/用户在同一次运行里新放下的旧文件永远不会被迁(用例要能验这条路径)。
     /// 幂等性不靠缓存:条目重复靠 FileMemory.Remember 的去重挡住,文件迁完会改名。
+    /// 迁移若触发了上限裁剪,会往 <see cref="Trace"/> 记一条 <c>ai_memory_migrate</c>(带 imported / evicted / cap);
+    /// 诊断写失败不影响对话(Trace.Record 自己吞异常,这里再包一层)。
     /// </summary>
     public static int MigrateLegacy()
     {
         lock (Gate)
         {
+            List<string> files = LegacyFiles();
+            if (files.Count == 0)
+            {
+                return 0;
+            }
+            int before = FileMemory.Entries().Count;
             int added = 0;
-            foreach (string file in LegacyFiles())
+            foreach (string file in files)
             {
                 foreach (string item in ReadLegacy(file))
                 {
@@ -78,12 +94,26 @@ public static class AiMemory
                 }
                 try
                 {
+                    // 关键:只改名,不删除。超出上限的条目在 .migrated 里原样留着,用户可人工找回。
                     File.Move(file, file + MigratedSuffix, overwrite: true);
                 }
                 catch (Exception)
                 {
                     // 留档失败不该影响对话:条目已经进 ai_memory.md,下次启动去重后会原样跳过
                 }
+            }
+            LastMigrationEvicted = Math.Max(0, before + added - FileMemory.Entries().Count);
+            try
+            {
+                Trace.Record("ai_memory_migrate", null, "", "", null, null, null,
+                    "files", (long)files.Count,
+                    "imported", (long)added,
+                    "evicted", (long)LastMigrationEvicted,
+                    "cap", (long)FileMemory.MaxEntries);
+            }
+            catch (Exception)
+            {
+                // 诊断不能拖垮记忆读写
             }
             return added;
         }

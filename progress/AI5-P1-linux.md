@@ -98,8 +98,8 @@
 
 - 相关用例组(`AiPermissionNoteTests` / `AiPermissionAliasModeTests` / `AiPermissionDontAskTests` /
   `AiPermissionScopeTests` / `AiPermissionContentTests` / `I18nCoreLocalesTests`):**52 过 / 0 败**。
-- 全量 Linux `dotnet test`(排除 Terracotta / ClickSweep / OpenUrl):**1639 过 / 11 跳 / 0 败 / 总 1650**,
-  `exit 0`(AI5-0 基线 1594 过 / 11 跳 / 总 1605;本分支一共新增 45 条用例)。
+- 全量 Linux `dotnet test`(排除 Terracotta / ClickSweep / OpenUrl):**1640 过 / 11 跳 / 0 败 / 总 1651**,
+  `exit 0`(AI5-0 基线 1594 过 / 11 跳 / 总 1605;本分支一共新增 46 条用例)。
 - Linux Release 构建:0 error / 1 warning(既有 CS0649),未新增警告。
 - `--ai-selftest`:通过 110 / 失败 0 / 跳过 0,exit 0。
 - i18n 审计:`unwrapped` 3211 → 3177(不增反降),`missing_en` / `missing_zh` 均为 0。
