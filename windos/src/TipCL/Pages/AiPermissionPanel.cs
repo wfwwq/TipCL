@@ -1,13 +1,31 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using TipCL.Core.Launcher.Ai;
 using TipCL.Models;
 using TipCL.Services;
 
 namespace TipCL.Pages;
+
+/// <summary>
+/// 权限规则下拉里的工具清单:直接来自工具注册表 <see cref="ToolMeta.Map" />,不再手抄一份。
+/// 手抄版曾经只有 34 条,而注册表已经有 56 条 —— 少掉的那些(全部 extra 工具、dispatch_subagent、remember 等)
+/// 在面板里根本选不到,想给它们加规则只能手改 ai_permissions.json。
+/// 单独放一个 public 类是刻意的:仓库没有 InternalsVisibleTo,而 net8 测试宿主实例化不了 WPF 控件,
+/// 这样「面板条目集合 == 注册表工具集合」这条验收才能用真实调用钉住(见 AiPermissionPanelToolsTests)。
+/// </summary>
+public static class AiPermissionTools
+{
+	/// <summary>面板规则下拉里的全部工具名:注册表里的工具,按名称排序(与原来的手抄表同一个排序口径)。</summary>
+	public static string[] Names()
+	{
+		return ToolMeta.Map.Keys.OrderBy((string n) => n, StringComparer.Ordinal).ToArray();
+	}
+}
 
 internal sealed class AiPermissionPanel : Border
 {
@@ -22,13 +40,7 @@ internal sealed class AiPermissionPanel : Border
 		I18n.L("自定义")
 	};
 
-	private static readonly string[] Tools = new string[34]
-	{
-		"ask_user", "create_instance", "delete_instance", "delete_mod", "diagnose_launch", "disable_mod", "download_java", "enable_mod", "get_crash_report", "get_java_list",
-		"get_latest_log", "get_launcher_state", "inspect_mod", "install_datapack", "install_game", "install_mod", "install_modpack", "install_resourcepack", "install_shader", "install_world",
-		"launch_game", "list_installed_versions", "list_instances", "list_mod_configs", "list_mods", "read_artifact", "read_mod_config", "scan_mod_conflicts", "search_content", "search_modpacks",
-		"search_mods", "search_versions", "search_worlds", "write_mod_config"
-	};
+	private static readonly string[] Tools = AiPermissionTools.Names();
 
 	private readonly string _instance;
 

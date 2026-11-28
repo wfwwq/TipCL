@@ -93,7 +93,7 @@ public static class ExtraTools
 		"{\"type\": \"function\", \"function\": {\"name\": \"phone_sync\", \"description\": \"和手机启动器互传 Java 版存档。手机上要先打开：启动器 → 存档管理 → 从 zip 导入 → 启动同步服务，屏幕会显示地址和 6 位配对码。action：status 查看连接；connect 用 address+code 连接（局域网）；usb 用 code 通过 USB 数据线连接（需手机开 USB 调试）；scan 扫描局域网里的手机；compare 对比两边世界；push 把电脑上的 world 传到手机；pull 把手机上的 world 传到电脑；sync 一键同步（两边都改过的世界会跳过，需要问玩家后再用 push/pull）。被覆盖的一边都会先自动备份。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"status / connect / usb / scan / compare / push / pull / sync\"}, \"address\": {\"type\": \"string\", \"description\": \"手机 IP，可带端口\"}, \"code\": {\"type\": \"string\", \"description\": \"手机上显示的 6 位配对码\"}, \"instance\": {\"type\": \"string\"}, \"version\": {\"type\": \"string\", \"description\": \"开了版本隔离时的版本名\"}, \"root\": {\"type\": \"string\", \"description\": \"手机上的位置 id，默认自动对应（global 或 v:版本名）\"}, \"world\": {\"type\": \"string\", \"description\": \"世界文件夹名\"}}, \"required\": [\"action\"]}}}, " +
 		"{\"type\": \"function\", \"function\": {\"name\": \"fs_list\", \"description\": \"列出目录内容：文件名、类型、大小、修改时间，最多 200 条，可用 glob 过滤（如 *.log）。path 填绝对路径，或相对实例根的路径。只能访问启动器数据目录和实例目录（含版本隔离的 versions\\\\版本\\\\），Windows / Program Files 等系统目录会被拒绝。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}, \"glob\": {\"type\": \"string\", \"description\": \"可选，按文件名过滤，如 *.log\"}, \"instance\": {\"type\": \"string\"}}, \"required\": [\"path\"]}}}, " +
 		"{\"type\": \"function\", \"function\": {\"name\": \"fs_read\", \"description\": \"读文本文件，典型用途是读 latest.log 排查启动失败。默认返回最后 200 行；offset_line 从第几行开始读（0 起），max_lines 控制行数。上限 512 KB；二进制文件（jar / png / exe / zip 等）会拒绝，先用 fs_list 看看。路径限制同 fs_list。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}, \"offset_line\": {\"type\": \"integer\", \"description\": \"起始行（0 起），不填读末尾\"}, \"max_lines\": {\"type\": \"integer\", \"description\": \"读取行数，默认 200\"}, \"instance\": {\"type\": \"string\"}}, \"required\": [\"path\"]}}}, " +
-		"{\"type\": \"function\", \"function\": {\"name\": \"fs_write\", \"description\": \"写文本文件：默认覆盖，append=true 追加到末尾。只能写在启动器数据目录或实例目录（含 versions\\\\版本\\\\）里，内容上限 256 KB，会自动建父目录。适合写配置、说明文件；不要碰启动器自己的核心文件和存档。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}, \"content\": {\"type\": \"string\", \"description\": \"完整文件内容\"}, \"append\": {\"type\": \"boolean\", \"description\": \"true 追加，默认 false 覆盖\"}, \"instance\": {\"type\": \"string\"}}, \"required\": [\"path\", \"content\"]}}}" +
+		"{\"type\": \"function\", \"function\": {\"name\": \"fs_write\", \"description\": \"写文本文件：默认覆盖，append=true 追加到末尾。只能写在启动器数据目录或实例目录（含 versions\\\\版本\\\\）里，内容上限 256 KB，会自动建父目录。适合写配置、说明文件；不要碰启动器自己的核心文件和存档。启动器的账号/配置文件(config.json、accounts.json、device_id)、AI 助手自己的状态文件(ai_chats.json、ai_permissions.json、ai_memory.md、mcp_server.json)、cache 目录,以及 .bat / .exe / .ps1 之类的脚本或二进制文件一律拒绝。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}, \"content\": {\"type\": \"string\", \"description\": \"完整文件内容\"}, \"append\": {\"type\": \"boolean\", \"description\": \"true 追加，默认 false 覆盖\"}, \"instance\": {\"type\": \"string\"}}, \"required\": [\"path\", \"content\"]}}}" +
 		"]";
 
 	/// <summary>M5:手机同步的服务端(安卓)还没做,入口先藏起来;做完改回 false。</summary>
@@ -525,6 +525,93 @@ public static class ExtraTools
 		"windows", "program files", "program files (x86)", "programdata", "$recycle.bin", "system volume information"
 	};
 
+	/// <summary>fs_write 不写的可执行脚本后缀(移植自 Linux 版 AiFsTools.ScriptSuffix:写出来就能被双击执行)。</summary>
+	private static readonly HashSet<string> _FS_SCRIPT_SUFFIX = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+	{
+		".sh", ".bash", ".bat", ".cmd", ".ps1", ".vbs", ".desktop", ".command", ".appimage", ".msi", ".lnk"
+	};
+
+	/// <summary>数据目录根下的账号 / 配置文件:读、写都拒(里面有令牌、API Key、权限档位)。</summary>
+	private static readonly string[] _FS_SECRET_FILES = new string[3] { "accounts.json", "config.json", "device_id" };
+
+	/// <summary>
+	/// 数据目录根下 AI 自己的状态文件:可以读,不许写(与 Linux 版 AiFsTools.NoWriteFiles 同一口径;
+	/// ai_permissions.json、mcp_server.json 是 Windows 侧自己的状态文件,一并收进来)。
+	/// </summary>
+	private static readonly string[] _FS_NO_WRITE_FILES = new string[4] { "ai_chats.json", "ai_memory.md", "ai_permissions.json", "mcp_server.json" };
+
+	/// <summary>数据目录根下不许写的目录:检查点、会话、工具产物、缓存都在 cache 里。</summary>
+	private static readonly string[] _FS_NO_WRITE_DIRS = new string[1] { "cache" };
+
+	private static string[] FsDataRoots()
+	{
+		List<string> list = new List<string>();
+		void Add(string p)
+		{
+			if (string.IsNullOrEmpty(p))
+			{
+				return;
+			}
+			string a = PPath.Abs(p);
+			if (!list.Any((string r) => string.Equals(r, a, StringComparison.OrdinalIgnoreCase)))
+			{
+				list.Add(a);
+			}
+		}
+		Add(Utils.ROOT);
+		Add(Utils.ResolveRoot());
+		return list.ToArray();
+	}
+
+	private static bool FsSameDir(string a, string b)
+	{
+		return string.Equals((a ?? "").TrimEnd('\\', '/'), (b ?? "").TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+	}
+
+	private static bool FsInside(string path, string dir)
+	{
+		string a = (path ?? "").TrimEnd('\\', '/');
+		string d = (dir ?? "").TrimEnd('\\', '/');
+		if (d.Length == 0)
+		{
+			return false;
+		}
+		return string.Equals(a, d, StringComparison.OrdinalIgnoreCase) || a.StartsWith(d + "\\", StringComparison.OrdinalIgnoreCase) || a.StartsWith(d + "/", StringComparison.OrdinalIgnoreCase);
+	}
+
+	/// <summary>
+	/// 数据目录守卫(移植自 Linux 版 AiFsTools.FsResolve 末尾的同段检查):数据目录根下的账号 / 配置文件读写都拒,
+	/// AI 自己的状态文件只读不写,cache 目录(检查点、会话、工具产物)不许写;写的时候再拒脚本和二进制后缀。
+	/// 修的是「AI 能改写自己的权限库 / 对话历史 / 记忆」这条:这些文件原来就落在 fs_write 的允许根(数据目录)里。
+	/// </summary>
+	public static void FsGuardDataDir(PPath p, bool forWrite)
+	{
+		string[] dataRoots = FsDataRoots();
+		string name = p.Name;
+		bool atDataRoot = dataRoots.Any((string r) => FsSameDir(p.Parent.Abs(), r));
+		if (atDataRoot && _FS_SECRET_FILES.Any((string f) => string.Equals(f, name, StringComparison.OrdinalIgnoreCase)))
+		{
+			throw new ConfigEditError("这是启动器的账号/配置文件,不允许 AI 直接读写;要改设置请让用户在设置页里改");
+		}
+		if (!forWrite)
+		{
+			return;
+		}
+		if (atDataRoot && _FS_NO_WRITE_FILES.Any((string f) => string.Equals(f, name, StringComparison.OrdinalIgnoreCase)))
+		{
+			throw new ConfigEditError("这是 AI 助手自己的状态文件,不能用 fs_write 改");
+		}
+		if (_FS_NO_WRITE_DIRS.Any((string d) => dataRoots.Any((string r) => FsInside(p.Abs(), PPath.Join(r, d)))))
+		{
+			throw new ConfigEditError("缓存目录(检查点、会话、工具产物)不能用 fs_write 改");
+		}
+		string suffix = p.Suffix;
+		if (_FS_SCRIPT_SUFFIX.Contains(suffix) || _FS_BINARY_SUFFIX.Contains(suffix))
+		{
+			throw new ConfigEditError("不能写可执行脚本或二进制文件(" + suffix + ")");
+		}
+	}
+
 	/// <summary>fs_* 允许的根目录：启动器数据目录、实例根，以及版本隔离时的 versions\&lt;版本&gt;\（有独立 saves 的版本目录）。实例根本身包含 versions，单列出来是为了把隔离版本目录说清楚。</summary>
 	public static List<string> FsRoots(Instance instance)
 	{
@@ -581,8 +668,8 @@ public static class ExtraTools
 		return false;
 	}
 
-	/// <summary>fs_* 三条工具共用的路径守卫：绝对路径必须落在允许根内，相对路径基于实例根解析，逃出允许根或命中拒绝列表就抛 ConfigEditError。</summary>
-	public static PPath FsResolve(string raw, List<string> roots, string baseDir)
+	/// <summary>fs_* 三条工具共用的路径守卫：绝对路径必须落在允许根内，相对路径基于实例根解析，逃出允许根或命中拒绝列表就抛 ConfigEditError;forWrite=true 时再走 FsGuardDataDir(数据目录根下的账号/配置文件、AI 状态文件、cache、脚本与二进制后缀)。</summary>
+	public static PPath FsResolve(string raw, List<string> roots, string baseDir, bool forWrite = false)
 	{
 		string text = (raw ?? "").Trim();
 		if (text.Length == 0)
@@ -621,6 +708,7 @@ public static class ExtraTools
 		{
 			throw new ConfigEditError("不允许访问系统目录");
 		}
+		FsGuardDataDir(pPath2, forWrite);
 		return pPath2;
 	}
 
@@ -776,7 +864,7 @@ public static class ExtraTools
 	public static object FsWrite(PyDict args, List<string> roots, string baseDir)
 	{
 		args = args ?? new PyDict();
-		PPath pPath = FsResolve(Py.Str(Py.Or(args.Get("path"), "")), roots, baseDir);
+		PPath pPath = FsResolve(Py.Str(Py.Or(args.Get("path"), "")), roots, baseDir, forWrite: true);
 		if (pPath.IsDir())
 		{
 			throw new ConfigEditError("目标是个目录，不能当文件写");

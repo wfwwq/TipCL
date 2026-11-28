@@ -37,6 +37,41 @@ public partial class BackendApi
 
 	internal readonly ManualResetEventSlim _ai_ask_ev = new ManualResetEventSlim(initialState: false);
 
+	/// <summary>确认卡等用户回答的最长时间,超时按拒绝处理。默认 120 秒,与 MCP 外部确认(McpServer.ConfirmTimeout)同一口径。</summary>
+	public static TimeSpan ConfirmCardTimeout { get; set; } = TimeSpan.FromSeconds(120);
+
+	/// <summary>
+	/// 等一张卡片回答:返回 false 表示被取消或超时(超时由调用方按拒绝处理);timeout &lt;= TimeSpan.Zero 表示不超时。
+	/// clock 只给测试注入,生产用 Py.Monotonic(秒)。
+	/// public 是刻意的:仓库没有 InternalsVisibleTo,net8 测试宿主(不同程序集)要能直接钉住这条超时口径。
+	/// </summary>
+	public static bool WaitCardAnswered(ManualResetEventSlim ev, Func<bool> cancelled, TimeSpan timeout, Func<double> clock = null)
+	{
+		Func<double> now = clock ?? (() => Py.Monotonic());
+		double start = now();
+		while (!ev.Wait(200))
+		{
+			if (cancelled != null && cancelled())
+			{
+				return false;
+			}
+			if (timeout > TimeSpan.Zero && now() - start >= timeout.TotalSeconds)
+			{
+				return false;
+			}
+		}
+		return cancelled == null || !cancelled();
+	}
+
+	/// <summary>
+	/// 确认卡超时后发给界面的状态事件:超时按拒绝处理,并在状态行上说清「是超时,不是有人点了拒绝」。
+	/// 单独一个方法是为了让这条说明能被真实调用钉住(界面文案走 I18nCore.Tr,缺 en 词条时回退成中文原文)。
+	/// </summary>
+	public static PyDict ConfirmTimeoutStatus(TimeSpan timeout, string chatId)
+	{
+		return PyDict.Of("kind", "confirm_timeout", "chat_id", chatId ?? "", "label", Py.Fmt(I18nCore.Tr("等你确认超过 {0} 秒,这一次已按拒绝处理"), (long)timeout.TotalSeconds));
+	}
+
 	internal Action _ai_http_abort;
 
 	internal readonly EventBus _bus;
@@ -757,8 +792,14 @@ public partial class BackendApi
 			_bus.Emit("ai.confirm", pyDict6);
 			try
 			{
-				if (!WaitCard(_ai_confirm_ev))
+				TimeSpan timeout = ConfirmCardTimeout;
+				if (!WaitCard(_ai_confirm_ev, timeout))
 				{
+					if (!_ai_cancel && timeout > TimeSpan.Zero)
+					{
+						// 超时不等于用户点了「拒绝」,但结果一样是不执行:在状态行上说清楚,别让人以为卡片被谁点过
+						_bus.Emit("ai.status", ConfirmTimeoutStatus(timeout, runCid));
+					}
 					return false;
 				}
 				return _ai_confirm_ok;
@@ -895,16 +936,9 @@ public partial class BackendApi
 			}
 			return (compacts: list4, rows: list5);
 		}
-		bool WaitCard(ManualResetEventSlim ev)
+		bool WaitCard(ManualResetEventSlim ev, TimeSpan timeout = default(TimeSpan))
 		{
-			while (!ev.Wait(200))
-			{
-				if (_ai_cancel)
-				{
-					return false;
-				}
-			}
-			return !_ai_cancel;
+			return WaitCardAnswered(ev, () => _ai_cancel, timeout);
 		}
 	}
 
