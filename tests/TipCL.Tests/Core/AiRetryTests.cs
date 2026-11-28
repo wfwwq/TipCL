@@ -200,6 +200,9 @@ public class AiRetryTests : IDisposable
 /// <summary>
 /// 本机假网关:TcpListener 手写 HTTP(免 Windows 的 HttpListener URL ACL),按脚本逐个请求应答。
 /// 非 200 回 OpenAI 风格的错误体;200 回一段最小 SSE(一格正文 + finish_reason + [DONE]),写完关连接。
+/// AI5-A/S:再加两样 —— 1 记录每个请求的「流式还是非流式 / model / 下发的工具名」,
+/// 兜底与降级用例靠它断言「兜底请求用的是本轮流式那份工具表」「降级后 model 换了」;
+/// 2 允许按请求逐条脚本化应答(SSE 正文或非流式 JSON),A4 的「溢出一次后成功」需要它。
 /// </summary>
 internal sealed class ScriptedChatServer : IDisposable
 {
@@ -215,11 +218,23 @@ internal sealed class ScriptedChatServer : IDisposable
     private const string UnauthorizedBody =
         "{\"error\":{\"message\":\"令牌无效(unauthorized)\",\"type\":\"invalid_request_error\"}}";
 
+    /// <summary>一次请求的可观测快照(AI5-A/S 的断言靠它)。</summary>
+    internal sealed class RequestRecord
+    {
+        /// <summary>请求体是不是带 "stream":true 的那条路(兜底走非流式)。</summary>
+        public bool Streaming;
+
+        public string Model = "";
+
+        /// <summary>本次请求下发的工具名(按请求体顺序;空 = 没带工具)。</summary>
+        public List<string> Tools = new();
+    }
+
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly object _gate = new();
-    private readonly List<int> _statuses = new();
-    private string? _sse;
+    private readonly List<(int Status, string? Body)> _scripted = new();
+    private readonly List<RequestRecord> _records = new();
     private int _index;
     private int _requests;
 
@@ -227,6 +242,12 @@ internal sealed class ScriptedChatServer : IDisposable
 
     /// <summary>已经收到的请求数(每次重试都会加一)。</summary>
     public int Requests => Volatile.Read(ref _requests);
+
+    /// <summary>已经收到的请求快照(与 <see cref="Requests"/> 同序)。</summary>
+    public List<RequestRecord> Records
+    {
+        get { lock (_gate) return new List<RequestRecord>(_records); }
+    }
 
     public ScriptedChatServer()
     {
@@ -241,9 +262,11 @@ internal sealed class ScriptedChatServer : IDisposable
     {
         lock (_gate)
         {
-            _statuses.Clear();
-            _statuses.AddRange(statuses);
-            _sse = null;
+            _scripted.Clear();
+            foreach (int s in statuses)
+            {
+                _scripted.Add((s, null));
+            }
             _index = 0;
         }
     }
@@ -253,32 +276,192 @@ internal sealed class ScriptedChatServer : IDisposable
     {
         lock (_gate)
         {
-            _statuses.Clear();
-            _sse = sse;
+            _scripted.Clear();
+            _scripted.Add((200, sse));
             _index = 0;
         }
     }
 
-    private (int Status, string Body) Next()
+    /// <summary>按顺序脚本化应答;用完一直重复最后一条。<paramref name="body"/> 为 SSE 正文(非流式请求会转成 JSON)。</summary>
+    public void Script(params (int Status, string? Body)[] responses)
     {
         lock (_gate)
         {
-            if (_sse != null)
-            {
-                return (200, _sse);
-            }
-            if (_statuses.Count == 0)
+            _scripted.Clear();
+            _scripted.AddRange(responses);
+            _index = 0;
+        }
+    }
+
+    private (int Status, string Body) Next(bool streaming)
+    {
+        lock (_gate)
+        {
+            if (_scripted.Count == 0)
             {
                 return (200, DefaultSse);
             }
-            int status = _statuses[Math.Min(_index, _statuses.Count - 1)];
+            (int status, string? body) = _scripted[Math.Min(_index, _scripted.Count - 1)];
             _index++;
             if (status == 200)
             {
-                return (200, DefaultSse);
+                return (200, body ?? DefaultSse);
+            }
+            // 脚本给了非 200 的正文就用它(溢出类错误需要自己的文案),否则用限流/认证两套现成的
+            if (!string.IsNullOrEmpty(body))
+            {
+                return (status, body!);
             }
             return (status, status == 401 || status == 403 ? UnauthorizedBody : RateLimitedBody);
         }
+    }
+
+    private void Record(string body)
+    {
+        var record = new RequestRecord
+        {
+            Streaming = body.Contains("\"stream\":true") || body.Contains("\"stream\": true"),
+            Model = JsonField(body, "model"),
+        };
+        foreach (string name in ToolNames(body))
+        {
+            record.Tools.Add(name);
+        }
+        lock (_gate)
+        {
+            _records.Add(record);
+        }
+    }
+
+    /// <summary>从请求体里粗取出 model(测试专用,不做完整 JSON 解析)。</summary>
+    private static string JsonField(string body, string key)
+    {
+        string needle = "\"" + key + "\":";
+        int at = body.IndexOf(needle, StringComparison.Ordinal);
+        if (at < 0)
+        {
+            needle = "\"" + key + "\": ";
+            at = body.IndexOf(needle, StringComparison.Ordinal);
+        }
+        if (at < 0)
+        {
+            return "";
+        }
+        int i = at + needle.Length;
+        while (i < body.Length && body[i] == ' ')
+        {
+            i++;
+        }
+        if (i >= body.Length || body[i] != '"')
+        {
+            return "";
+        }
+        int end = body.IndexOf('"', i + 1);
+        return end < 0 ? "" : body.Substring(i + 1, end - i - 1);
+    }
+
+    /// <summary>把请求体里 tools 数组的每个 function.name 抠出来(只按出现顺序收集 "name":"...")。</summary>
+    private static List<string> ToolNames(string body)
+    {
+        var names = new List<string>();
+        int toolsAt = body.IndexOf("\"tools\":", StringComparison.Ordinal);
+        if (toolsAt < 0)
+        {
+            return names;
+        }
+        string slice = body.Substring(toolsAt);
+        int depth = 0;
+        int end = slice.Length;
+        for (int i = 0; i < slice.Length; i++)
+        {
+            if (slice[i] == '[')
+            {
+                depth++;
+            }
+            else if (slice[i] == ']')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    end = i + 1;
+                    break;
+                }
+            }
+        }
+        slice = slice.Substring(0, end);
+        int at = 0;
+        while (true)
+        {
+            int fn = slice.IndexOf("\"function\":", at, StringComparison.Ordinal);
+            if (fn < 0)
+            {
+                break;
+            }
+            string name = JsonField(slice.Substring(fn), "name");
+            if (name.Length > 0)
+            {
+                names.Add(name);
+            }
+            at = fn + 11;
+        }
+        return names;
+    }
+
+    /// <summary>把 SSE 正文折成非流式 JSON 应答(兜底走 ChatOnce 时用)。</summary>
+    private static string ToChatOnceJson(string sse)
+    {
+        var content = new System.Text.StringBuilder();
+        string finish = "stop";
+        var toolCalls = new List<object>();
+        foreach (string raw in sse.Split('\n'))
+        {
+            string line = raw.Trim();
+            if (!line.StartsWith("data:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            string payload = line.Substring(5).Trim();
+            if (payload.Length == 0 || payload == "[DONE]")
+            {
+                continue;
+            }
+            PyDict ev;
+            try
+            {
+                ev = Py.D(PyJson.Loads(payload));
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+            List<object> choices = Py.ListOr(ev.Get("choices"));
+            if (choices.Count == 0)
+            {
+                continue;
+            }
+            PyDict choice = Py.D(choices[0]);
+            PyDict delta = Py.D(choice.Get("delta"));
+            content.Append(Py.S(delta.Get("content")));
+            foreach (object tc in Py.ListOr(delta.Get("tool_calls")))
+            {
+                toolCalls.Add(tc);
+            }
+            string reason = Py.S(choice.Get("finish_reason"));
+            if (reason.Length > 0)
+            {
+                finish = reason;
+            }
+        }
+        return PyJson.Dumps(PyDict.Of(
+            "choices", new List<object>
+            {
+                PyDict.Of(
+                    "message", PyDict.Of(
+                        "content", content.ToString(),
+                        "tool_calls", toolCalls),
+                    "finish_reason", finish),
+            },
+            "usage", PyDict.Of("prompt_tokens", 10L, "completion_tokens", 5L)), null, ensureAscii: false);
     }
 
     private async Task AcceptLoopAsync()
@@ -331,12 +514,24 @@ internal sealed class ScriptedChatServer : IDisposable
                 }
 
                 Interlocked.Increment(ref _requests);
-                (int status, string body) = Next();
+                string requestBody = Encoding.UTF8.GetString(buffer.ToArray(), headerEnd + 1,
+                    Math.Max(0, Math.Min(contentLength, buffer.Count - headerEnd - 1)));
+                Record(requestBody);
+                bool streaming = requestBody.Contains("\"stream\":true") || requestBody.Contains("\"stream\": true");
+                (int status, string body) = Next(streaming);
+                // 非流式这条(兜底 ChatOnce)期待 JSON,SSE 脚本要折成等价 JSON,否则解析必失败
+                if (status == 200 && !streaming && body.StartsWith("data:", StringComparison.Ordinal))
+                {
+                    body = ToChatOnceJson(body);
+                }
 
                 byte[] payload = Encoding.UTF8.GetBytes(body);
+                string contentType = status != 200
+                    ? "application/json"
+                    : streaming ? "text/event-stream" : "application/json";
                 string head =
                     $"HTTP/1.1 {status} {(status == 200 ? "OK" : "Error")}\r\n" +
-                    "Content-Type: " + (status == 200 ? "text/event-stream" : "application/json") + "\r\n" +
+                    "Content-Type: " + contentType + "\r\n" +
                     $"Content-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
                 await stream.WriteAsync(Encoding.UTF8.GetBytes(head), _cts.Token).ConfigureAwait(false);
                 await stream.WriteAsync(payload, _cts.Token).ConfigureAwait(false);

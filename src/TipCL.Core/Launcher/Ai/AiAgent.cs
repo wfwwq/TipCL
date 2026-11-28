@@ -50,14 +50,21 @@ public sealed class AiAgentEvent
     /// <summary>错误文案(error)。</summary>
     public string Error = "";
 
-    /// <summary>完成原因(done)。</summary>
+    /// <summary>完成原因(done):这是**模型的** finish_reason(通常是 "stop"),不是 StopReason。</summary>
+    /// <remarks>AI5-A1 新增的 <see cref="StopReason"/> 才是这一轮为什么结束。既有字段含义不动。</remarks>
     public string FinishReason = "";
+
+    /// <summary>AI5-A1:终态事件(error / done)里的结束原因(StopReason 的一组常量)。其它事件为空。</summary>
+    public string StopReason = "";
 
     /// <summary>计划(update_plan)。</summary>
     public List<(string Title, string Status)>? Plan;
 
     /// <summary>本条事件对应的用量快照(usage;对话页的上下文占用环直接读它)。</summary>
     public PyDict? Usage;
+
+    /// <summary>AI5-S:这条事件来自子代理(tool / tool_done / status / compact)。界面可据此显示「子任务进行中」一行。</summary>
+    public bool Subagent;
 
     /// <summary>本轮序号(从 1 起)。</summary>
     public int Round;
@@ -66,8 +73,19 @@ public sealed class AiAgentEvent
 /// <summary>带工具的 AI 会话。构造后调 <see cref="RunAsync"/>;取消走传进来的 CancellationToken。</summary>
 public sealed class AiAgent
 {
-    /// <summary>最多几轮工具调用(防止模型来回刷;照 Windows 版 Agent 的轮数上限口径)。</summary>
-    public int MaxRounds { get; set; } = 12;
+    /// <summary>
+    /// 最多几轮工具调用(防止模型来回刷;照 Windows 版 Agent 的轮数上限口径)。
+    /// AI5-A7:默认与 Windows 对齐(20,见 Defaults.MAX_TOOL_ROUNDS_MAIN);**不显式赋值**时按 config 的
+    /// ai_max_rounds 取值(每轮开始时读一次,改设置立刻生效)。默认值从 12 变成 20 是本包有意的行为变化,
+    /// 已写进 progress/AI5-A.md。
+    /// </summary>
+    public int MaxRounds
+    {
+        get => _maxRounds ?? (int)Math.Max(1L, Py.IntOr(Config.CONFIG.Get("ai_max_rounds"), Defaults.MAX_TOOL_ROUNDS_MAIN));
+        set => _maxRounds = Math.Max(1, value);
+    }
+
+    private int? _maxRounds;
 
     /// <summary>组内并行上限(照参考版 Scheduler 的 maxConcurrency=4;设成 1 就退回完全串行)。</summary>
     public int MaxToolConcurrency { get; set; } = Scheduler.DefaultMaxConcurrency;
@@ -83,6 +101,53 @@ public sealed class AiAgent
 
     /// <summary>本轮 id(检查点与事件流按它对轮;每轮开始时生成)。</summary>
     public string TurnId { get; private set; } = "";
+
+    /// <summary>AI5-S:本轮实际用掉的轮数(给 dispatch_subagent 的返回值用)。</summary>
+    public int RoundsUsed { get; private set; }
+
+    /// <summary>AI5-S:本轮调用过的工具名(去重、按首次出现顺序;给 dispatch_subagent 的返回值用)。</summary>
+    public List<string> ToolsUsed { get; } = new();
+
+    /// <summary>AI5-S:本轮是不是被长度/轮数上限截断(给 dispatch_subagent 的返回值用)。</summary>
+    public bool Truncated { get; private set; }
+
+    /// <summary>AI5-A8:本轮实际生效的模型名(空 = 用设置里的主模型;粘性降级后指向备用模型)。</summary>
+    public string Model { get; private set; } = "";
+
+    /// <summary>
+    /// AI5-A8:粘性降级状态。第一次撞上限流/5xx 时切到 ai_fallback_model,之后本轮所有请求都走它
+    /// (照 Windows 版 Agent 的 fallbackActive 口径:切换是粘性的,不来回跳)。
+    /// </summary>
+    private bool _fallbackActive;
+
+    private string _fallbackModel = "";
+
+    /// <summary>AI5-A6:finish_reason=length 时最多续写几次(照参考版 Agent.cs 的「num &lt; 2」)。</summary>
+    private const int MaxContinuations = 2;
+
+    /// <summary>AI5-A6:续写时追加的提醒(照参考版 Agent.cs:998 的文案)。</summary>
+    private const string ContinuationPrompt = "请从断开处继续,不要重复。";
+
+    /// <summary>AI5-A6:已经续写了几次。</summary>
+    private int _continuations;
+
+    /// <summary>AI5-A6:续写拼起来的正文(续写成功后首尾相接,不重复拼接)。</summary>
+    private readonly List<string> _continuationParts = new();
+
+    /// <summary>AI5-S:派子代理的硬上限(用户设置再大也夹在这个范围内,防着一轮子会话把额度跑光)。</summary>
+    public const int SubagentHardMaxRounds = Defaults.MAX_TOOL_ROUNDS_MAIN;
+
+    /// <summary>AI5-A2:用户可见文案走词表(中文界面下与改动前逐字相同,英文界面下跟着切换)。</summary>
+    private static string T(string zh) => I18nCore.Tr(zh);
+
+    /// <summary>AI5-S:记一次工具使用(去重、按首次出现顺序)。</summary>
+    private void NoteToolUsed(string name)
+    {
+        if (name.Length > 0 && !ToolsUsed.Contains(name))
+        {
+            ToolsUsed.Add(name);
+        }
+    }
 
     /// <summary>结束原因(照参考版 StopReason:completed / no_tool_call / max_rounds / ...)。</summary>
     public string stop_reason { get; private set; } = "";
@@ -152,6 +217,14 @@ public sealed class AiAgent
         TurnId = "t" + DateTime.Now.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 4);
         stop_reason = "";
         LastText = "";
+        // AI5-A6/S:续写与统计每次 Run 都从零开始(同一个 AiAgent 可能被复用跑多轮)
+        _continuationParts.Clear();
+        _continuations = 0;
+        ToolsUsed.Clear();
+        RoundsUsed = 0;
+        Truncated = false;
+        Model = "";
+        _reactiveMessages = messages;   // AI5-A4:反应式压缩要就地替换这份对话
         Checkpoint.BeginChat(ChatId);
         Store.LogEvent(ChatId, "TurnStarted", PyDict.Of("turn_id", TurnId, "user_len", (long)LastUserLength(messages)));
 
@@ -173,40 +246,128 @@ public sealed class AiAgent
             _runner.Subagent = RunSubagentAsync;
         }
 
-        string failReason = "";
+        // AI5-A1:整轮只从下面那个出口发终态事件(done / error),每条结束路径都恰好一条。
+        // 从前有两处不对:轮数用尽后的收尾轮失败时只写 Store.LogEvent、一个事件都不发(页面永远停在「生成中」);
+        // 失败路径又多发一条重复的报错(AI5-A2)。页面只认 error/done 才解锁,漏一条就卡住。
+        bool done = false;
+        string terminalError = "";
+        string terminalFinish = "";
+        int lastRound = 0;
+        // AI5-A7:轮数上限在读的时候取一次(不显式赋 MaxRounds 时就是 config 的 ai_max_rounds)
+        int maxRounds = Math.Max(1, MaxRounds);
         try
         {
-            for (int round = 1; round <= MaxRounds; round++)
+            // AI5-A8:本轮开始时把设置里的备用模型读一次(粘性降级用;空 = 没配,不做降级)
+            _fallbackActive = false;
+            _fallbackModel = Py.Strip(Py.S(Config.CONFIG.Get("ai_fallback_model")));
+            Model = "";
+
+            // AI5-A6:「续写」不占轮次(照参考版:续写时轮号不变,最多 2 次),所以轮号手动维护
+            int roundNo = 0;
+            while (roundNo < maxRounds && !done)
             {
+                roundNo++;
+                lastRound = roundNo;
                 ct.ThrowIfCancellationRequested();
-                if (MaybeCompact(messages, round))
+                if (MaybeCompact(messages, roundNo))
                 {
-                    failReason = "上下文反复逼近窗口上限,已中断本轮以保护额度";
+                    terminalError = T("上下文反复逼近窗口上限,已中断本轮以保护额度");
                     break;
                 }
-                var state = new RoundState { Round = round };
+                // AI5-A3:整段压缩之后再做一遍微压缩(清掉较旧的工具结果,不调模型、不花额度)。
+                // 参考版每轮都走这一步(Microcompact 原先只在自检里被调用过,主循环根本没接)。
+                Microcompact(messages, roundNo);
+
+                var state = new RoundState { Round = roundNo };
                 await StreamOnceAsync(messages, state, mcpSchemas, ct).ConfigureAwait(false);
+                // AI5-A5:流式这条路整体没走通(工具参数不全 / 超时 / 重试用尽)→ 用**本轮流式请求实际下发的
+                // 那份工具表**再发一次非流式请求兜底,把这一轮救回来;救不回来才按失败语义收尾。
+                if (state.Failed && await FallbackOnceAsync(messages, state, mcpSchemas, ct).ConfigureAwait(false))
+                {
+                    state.Failed = false;
+                }
                 if (state.Failed)
                 {
-                    failReason = "stream_failed";
+                    if (state.Cancelled)
+                    {
+                        // 用户点了「停止」:终态文案是「已停止」(页面按它解锁,不回显成「对话失败」)
+                        stop_reason = StopReason.CANCELLED;
+                        terminalError = "已停止";
+                    }
+                    else
+                    {
+                        // 流式/兜底两条路都没拿到内容 —— 这就是参考版的 stream_failed
+                        stop_reason = StopReason.STREAM_FAILED;
+                        if (terminalError.Length == 0)
+                        {
+                            terminalError = state.Error.Length > 0 ? state.Error : T("接口没有返回内容,请稍后重试");
+                        }
+                    }
                     break;
                 }
 
-                // 把 assistant 这一轮的话(可能为空)+ 工具调用追加进对话
-                var assistant = PyDict.Of("role", "assistant", "content", state.Text.ToString());
+                // 把 assistant 这一轮的话(可能为空)+ 工具调用追加进对话。
+                string full = _continuationParts.Count > 0
+                    ? state.Text.ToString().StartsWith(string.Concat(_continuationParts), StringComparison.Ordinal)
+                        ? string.Concat(_continuationParts) + state.Text.ToString().Substring(string.Concat(_continuationParts).Length)
+                        : string.Concat(_continuationParts) + "\n\n" + state.Text.ToString()
+                    : state.Text.ToString();
+                var assistant = PyDict.Of("role", "assistant", "content", full);
                 if (state.Calls.Count > 0)
                 {
                     assistant["tool_calls"] = state.Calls.Select(c => c.Raw).ToList();
                 }
                 messages.Add(assistant);
-                LastText = state.Text.ToString();
+                LastText = full;   // 续写过的正文也要整段带回去(子代理的结论走这里)
 
                 if (state.Calls.Count == 0)
                 {
-                    stop_reason = StopReason.NO_TOOL_CALL;
-                    Store.LogEvent(ChatId, "TurnCompleted", PyDict.Of("turn_id", TurnId, "rounds", (long)round, "stop_reason", stop_reason));
-                    _emit(new AiAgentEvent { Kind = "done", FinishReason = state.FinishReason, Round = round });
-                    return;
+                    // AI5-A6:finish_reason=length = 被输出上限截断。先续写(最多 2 次);续写次数用尽、
+                    // 或者这一轮干脆没吐出任何增量,就直接按 truncated 收尾(参考版 Agent.cs:991-1006)。
+                    if (Py.Eq(state.FinishReason, "length"))
+                    {
+                        if (_continuations < MaxContinuations && state.Text.Length > 0)
+                        {
+                            _continuations++;
+                            _continuationParts.Add(state.Text.ToString());
+                            messages.Add(PyDict.Of("role", "user", "content", ContinuationPrompt));
+                            Store.LogEvent(ChatId, "LengthContinuation", PyDict.Of(
+                                "turn_id", TurnId, "round", (long)roundNo, "attempt", (long)_continuations));
+                            _emit(new AiAgentEvent
+                            {
+                                Kind = "status",
+                                Text = T("回复被长度限制截断了,正在接着写(第 {n}/{total} 次)")
+                                    .Replace("{n}", _continuations.ToString())
+                                    .Replace("{total}", MaxContinuations.ToString()),
+                                Round = roundNo,
+                            });
+                            roundNo--;                       // 续写不占轮次
+                            continue;
+                        }
+                        Truncated = true;
+                        stop_reason = StopReason.TRUNCATED;
+                        terminalFinish = state.FinishReason;
+                        done = true;
+                        break;
+                    }
+                    // AI5-A6:上游回了空内容(既没正文、也没工具调用)以前被当成 no_tool_call 静默收尾,
+                    // 现在给明确的 empty_response,页面提示「模型没返回内容」而不是什么都不显示
+                    if (Py.Strip(string.Concat(_continuationParts) + state.Text).Length == 0)
+                    {
+                        stop_reason = StopReason.EMPTY_RESPONSE;
+                        terminalError = T("模型没有返回任何内容,请再试一次");
+                        break;
+                    }
+                    // AI5-A6:让 COMPLETED 真正被赋值 —— 这一轮**执行过工具**再说完整的话,就是完成的正常收尾;
+                    // 一句工具都没调过就只回了文字,才是「模型只回了文字」(no_tool_call)。
+                    // 这与参考版把 no_tool_call 归一成 completed 的口径一致,同时保住了 Linux 侧
+                    // 「纯文字回复 = no_tool_call」的既有语义(场景 1 / 场景 2 的期望正是这两条)。
+                    stop_reason = (ToolsUsed.Count > 0 || _continuationParts.Count > 0)
+                        ? StopReason.COMPLETED
+                        : StopReason.NO_TOOL_CALL;
+                    done = true;
+                    terminalFinish = state.FinishReason;
+                    break;
                 }
 
                 // AI-engine-mcp:同一轮的工具调用按 Scheduler 分组 —— 相邻的只读调用并行,写/删/启动/ask_user 单独串行。
@@ -217,8 +378,8 @@ public sealed class AiAgent
                     ct.ThrowIfCancellationRequested();
                     foreach (ToolInvocation invocation in group)
                     {
-                        _emit(new AiAgentEvent { Kind = "tool", Name = invocation.Call.name, Text = Tools.Label(invocation.Call.name, invocation.Call.args), Call = invocation.Call, Round = round });
-                        Store.LogEvent(ChatId, "ToolStarted", PyDict.Of("turn_id", TurnId, "round", (long)round, "tool", invocation.Call.name, "tool_call_id", invocation.Call.id));
+                        _emit(new AiAgentEvent { Kind = "tool", Name = invocation.Call.name, Text = Tools.Label(invocation.Call.name, invocation.Call.args), Call = invocation.Call, Round = roundNo });
+                        Store.LogEvent(ChatId, "ToolStarted", PyDict.Of("turn_id", TurnId, "round", (long)roundNo, "tool", invocation.Call.name, "tool_call_id", invocation.Call.id));
                     }
                     string[] results = await Scheduler.RunGroupAsync(group.Select(i => i.Call).ToList(), call => ExecuteOneAsync(call, ct), MaxToolConcurrency, ct).ConfigureAwait(false);
                     for (int k = 0; k < group.Count; k++)
@@ -227,18 +388,19 @@ public sealed class AiAgent
                         string result = results[k];
                         Store.LogEvent(ChatId, "ToolCompleted", PyDict.Of(
                             "turn_id", TurnId,
-                            "round", (long)round,
+                            "round", (long)roundNo,
                             "tool", invocation.Call.name,
                             "tool_call_id", invocation.Call.id,
                             "result_len", (long)(result ?? "").Length,
                             "ok", invocation.Call.status == ToolCallStatus.COMPLETED));
+                        NoteToolUsed(invocation.Call.name);
                         _emit(new AiAgentEvent
                         {
                             Kind = "tool_done",
                             Name = invocation.Call.name,
                             Text = Tools.Label(invocation.Call.name, invocation.Call.args),
                             Call = invocation.Call,
-                            Round = round,
+                            Round = roundNo,
                         });
                         messages.Add(PyDict.Of(
                             "role", "tool",
@@ -249,30 +411,36 @@ public sealed class AiAgent
                 }
                 CompactState.tool_turns_since_compact++;
 
-                _emit(new AiAgentEvent { Kind = "status", Text = "正在整理...", Round = round });
+                _emit(new AiAgentEvent { Kind = "status", Text = "正在整理...", Round = roundNo });
             }
 
-            if (failReason.Length > 0)
+            if (!done && terminalError.Length == 0)
             {
-                stop_reason = failReason == "stream_failed" ? StopReason.STREAM_FAILED : StopReason.ERROR;
-                Store.LogEvent(ChatId, "TurnFailed", PyDict.Of("turn_id", TurnId, "rounds", (long)MaxRounds, "reason", stop_reason));
-                _emit(new AiAgentEvent { Kind = "error", Error = failReason, Text = failReason, Round = MaxRounds });
-                return;
-            }
-
-            // 轮数用尽:让模型收个尾(不带工具,避免又调一轮)
-            _emit(new AiAgentEvent { Kind = "status", Text = "步骤太多,正在收尾...", Round = MaxRounds });
-            messages.Add(PyDict.Of("role", "system", "content", "工具轮数已达上限。请直接用已有信息回答用户,不要再调用工具。"));
-            var tail = new RoundState { Round = MaxRounds + 1, NoTools = true };
-            await StreamOnceAsync(messages, tail, mcpSchemas, ct).ConfigureAwait(false);
-            stop_reason = tail.Failed ? StopReason.STREAM_FAILED : StopReason.MAX_ROUNDS;
-            Store.LogEvent(ChatId, tail.Failed ? "TurnFailed" : "TurnCompleted",
-                PyDict.Of("turn_id", TurnId, "rounds", (long)MaxRounds, "reason", stop_reason));
-            if (!tail.Failed)
-            {
-                messages.Add(PyDict.Of("role", "assistant", "content", tail.Text.ToString()));
-                LastText = tail.Text.ToString();
-                _emit(new AiAgentEvent { Kind = "done", FinishReason = tail.FinishReason, Round = tail.Round });
+                // 轮数用尽:让模型收个尾(不带工具,避免又调一轮)
+                _emit(new AiAgentEvent { Kind = "status", Text = "步骤太多,正在收尾...", Round = maxRounds });
+                messages.Add(PyDict.Of("role", "system", "content", "工具轮数已达上限。请直接用已有信息回答用户,不要再调用工具。"));
+                var tail = new RoundState { Round = maxRounds + 1, NoTools = true };
+                await StreamOnceAsync(messages, tail, mcpSchemas, ct).ConfigureAwait(false);
+                if (tail.Failed && await FallbackOnceAsync(messages, tail, mcpSchemas, ct).ConfigureAwait(false))
+                {
+                    tail.Failed = false;
+                }
+                lastRound = tail.Round;
+                RoundsUsed = maxRounds;
+                Truncated = true;
+                if (tail.Failed)
+                {
+                    stop_reason = StopReason.STREAM_FAILED;
+                    terminalError = tail.Error.Length > 0 ? tail.Error : T("接口没有返回内容,请稍后重试");
+                }
+                else
+                {
+                    messages.Add(PyDict.Of("role", "assistant", "content", tail.Text.ToString()));
+                    LastText = tail.Text.ToString();
+                    done = true;
+                    stop_reason = StopReason.MAX_ROUNDS;
+                    terminalFinish = tail.FinishReason;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -283,6 +451,8 @@ public sealed class AiAgent
         }
         finally
         {
+            // AI5-S:粘性降级不跨轮泄漏(子代理共用同一个 runner,更要清干净)
+            _fallbackActive = false;
             if (!IsSubagent)
             {
                 Mcp.CloseAll(mcpClients);
@@ -290,7 +460,27 @@ public sealed class AiAgent
                 _runner.Subagent = null;
             }
         }
+
+        // AI5-A1:唯一出口 —— 到这里必然发出恰好一条终态事件
+        RoundsUsed = Math.Max(RoundsUsed, Math.Min(lastRound, maxRounds));
+        string reason = done
+            ? stop_reason
+            : (stop_reason.Length > 0 ? stop_reason : StopReason.ERROR);
+        stop_reason = reason;
+        Store.LogEvent(ChatId, done ? "TurnCompleted" : "TurnFailed",
+            PyDict.Of("turn_id", TurnId, "rounds", (long)RoundsUsed, "stop_reason", reason));
+        if (done)
+        {
+            _emit(new AiAgentEvent { Kind = "done", FinishReason = terminalFinish, StopReason = reason, Round = lastRound });
+        }
+        else
+        {
+            // AI5-A2:失败只留这一条(上游原文优先),不再有第二条内部代号 stream_failed 的重复报错
+            string message = terminalError.Length > 0 ? terminalError : T("AI 接口出错");
+            _emit(new AiAgentEvent { Kind = "error", Error = message, Text = message, StopReason = reason, Round = lastRound });
+        }
     }
+
     private static int LastUserLength(List<object> messages)
     {
         for (int i = messages.Count - 1; i >= 0; i--)
@@ -314,6 +504,17 @@ public sealed class AiAgent
         {
             Trace.Record("tool_bad_args", null, "", call.name, null, null, null, "detail", Py.Slice(call.error, null, 200));
             return Tools.ErrorPayload(new ValueError(call.error), call.name, "bad_arguments");
+        }
+        // 06补(「拒绝即无副作用」):判成 deny 的写工具连检查点快照都不该做。
+        // 以前是先 SnapshotForTool 再判权限,于是 plan 档下被拒的写操作照样在检查点里留下一条快照
+        // (实测证据见 progress/AI5-A.md 的 06补 一节)。这里只做**保守前置**:完全按 ToolRunner 的裁决口径
+        // 先问一句会不会被拒(免确认放行与强制确认两种例外都不动,交给 RunAsync 原样处理)。
+        if (Tools.IsWriteTool(call.name) && !_runner.ForceConfirmWrites && !_runner.IsAllowedAlways(call.name)
+            && _runner.Decide(call.name, call.args).decision == "deny")
+        {
+            Trace.Record("tool_denied_no_snapshot", null, "", call.name, null, null, null,
+                "reason", _runner.Decide(call.name, call.args).reason);
+            return await _runner.RunAsync(call, ct).ConfigureAwait(false);   // 走它原本的拒绝路径(回 permission_denied)
         }
         SnapshotForTool(call);
         string? text = null;
@@ -415,6 +616,50 @@ public sealed class AiAgent
         }
     }
 
+    /// <summary>
+    /// AI5-A4:反应式压缩(照参考版 _force_compact,Agent.cs:1532-1559)。
+    /// 与 <see cref="MaybeCompact"/> 的区别:这里不做「该不该压」的判断(上游已经用溢出错误告诉我们该压了),
+    /// 直接压一次;成功换掉对话并重置 token 状态,返回 true 让调用方重发这一轮。
+    /// </summary>
+    private bool ReactiveCompact(int round)
+    {
+        try
+        {
+            AutoConfig cfg = Compact.AutoConfigFromSettings(Config.CONFIG.data);
+            _emit(new AiAgentEvent { Kind = "compact", Text = T("上下文超出模型窗口,正在压缩历史..."), Round = round });
+            CompactionResult result = Compact.CompactConversation(_reactiveMessages!, cfg, Summarize);
+            _reactiveMessages!.Clear();
+            _reactiveMessages.AddRange(result.messages);
+            Store.LogEvent(ChatId, "CompactBoundary", PyDict.Of(
+                "turn_id", TurnId,
+                "round", (long)round,
+                "trigger", "reactive",
+                "pre", result.pre_token_count,
+                "post", result.post_token_count,
+                "summarized", result.summarized_message_count));
+            Compact.NoteCompactSuccess(CompactState);
+            Trace.Record("reactive_compact", round, "", "", null, null, null,
+                "pre", result.pre_token_count, "post", result.post_token_count);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Compact.NoteCompactFailure(CompactState, Compact.AutoConfigFromSettings(Config.CONFIG.data));
+            Trace.Record("reactive_compact_failure", round, "", "", ex);
+            return false;
+        }
+    }
+
+    /// <summary>AI5-A4:反应式压缩要就地替换调用方的 messages 列表,所以压之前把引用挂在这里。</summary>
+    private List<object>? _reactiveMessages;
+
+    /// <summary>
+    /// AI5-A3:微压缩配置的测试接缝。生产路径恒为 null(按设置推导,见 <see cref="MicroConfigFromSettings"/>)。
+    /// 存在的理由:微压缩与整段压缩的阈值同源于 ai_context_window,要在用例里只压低微压缩阈值,
+    /// 否则得造十几万 token 的历史才能触发一次,用例又慢又脆。
+    /// </summary>
+    internal MicroConfig? MicroConfigOverride { get; set; }
+
     /// <summary>把一段历史交给模型摘要(照参考版 _summarize:一次非流式请求)。</summary>
     private string Summarize(List<object> slice)
     {
@@ -427,7 +672,302 @@ public sealed class AiAgent
         return Py.S(reply.Get("content"));
     }
 
+    // ——————— AI5-A3 ~ A5,A8:压缩 / 兜底 / 降级的接线(以下都在 AiAgent.cs 内部,不改别的文件) ———————
+
+    /// <summary>
+    /// AI5-A3:微压缩接线。整段压缩(MaybeCompact)之后每轮再跑一遍 <see cref="Compact.Microcompact"/>:
+    /// 把较旧的 tool 结果换成占位串,保留最近若干条。不调模型、不花额度,所以放主循环里每轮都跑。
+    /// 照参考版 Agent.cs:747-756 的口径:阈值取「整段压缩阈值 - 16000」(留出富余,别等真的要压了才动手);
+    /// idle 传 0 —— Microcompact 只在 idleSeconds &gt; 0 时才按空闲时长触发,而它自己的注释说明 0 表示「不知道空闲多久」,
+    /// 靠 threshold_tokens 这条路径触发就够,不会因此把最近的工具结果清掉。
+    /// </summary>
+    private void Microcompact(List<object> messages, int round)
+    {
+        try
+        {
+            MicroConfig cfg = MicroConfigOverride ?? MicroConfigFromSettings(Config.CONFIG.data);
+            if (!cfg.threshold_tokens.HasValue)
+            {
+                return;
+            }
+            MicroResult result = Compact.Microcompact(messages, cfg, idleSeconds: 0);
+            if (!result.changed)
+            {
+                return;   // disabled / not_triggered / below_min_savings / nothing_to_clear:都不记事件
+            }
+            messages.Clear();
+            messages.AddRange(result.messages);
+            _emit(new AiAgentEvent
+            {
+                Kind = "status",
+                Text = T("已清理较早的工具结果({cleared} 条)").Replace("{cleared}", result.cleared_count.ToString()),
+                Round = round,
+            });
+        }
+        catch (Exception ex)
+        {
+            // 微压缩只是省额度,失败不该打断对话
+            Trace.Record("microcompact_failed", round, "", "", ex);
+        }
+    }
+
+    /// <summary>微压缩配置:阈值照参考版(整段压缩阈值减 16000,最少 4000),其余用默认(保留最近 5 条工具结果)。</summary>
+    private static MicroConfig MicroConfigFromSettings(PyDict? settings)
+    {
+        AutoConfig auto = Compact.AutoConfigFromSettings(settings);
+        return new MicroConfig
+        {
+            threshold_tokens = Math.Max(4000L, Compact.AutoThreshold(auto) - 16000),
+        };
+    }
+
+    /// <summary>AI5-A5:算出这一轮真正要下发的工具表。子代理只读过滤也在这里(兜底复用同一份)。</summary>
+    private List<object>? RoundTools(List<object> messages, RoundState state, List<object> mcpSchemas, bool forceAll = false)
+    {
+        if (state.NoTools || !ToolsEnabled)
+        {
+            return null;
+        }
+        List<object> schemas = Tools.SelectToolSchemas(messages, null, forceAll).Concat(mcpSchemas).ToList();
+        // AI5-S/C2:子代理在全量重发时也必须过滤写工具(参考版同样如此:plan 档与子代理不给写工具)
+        return IsSubagent ? FilterSubagentTools(schemas) : schemas;
+    }
+
+    /// <summary>
+    /// AI5-S:子代理只读 —— 把写工具从下发的工具表里摘掉。
+    /// 以前只靠子执行器的 plan 档在执行时拒绝,工具表本身还是全的:模型会去调写工具,白烧一轮上下文。
+    /// 兜底请求也走这一层,所以「子代理的兜底请求里也没有写工具」是同一份表带来的。
+    /// </summary>
+    private static List<object> FilterSubagentTools(List<object> schemas)
+    {
+        return schemas.Where(s =>
+        {
+            string name = Tools.SchemaName(s);
+            if (name.Length == 0)
+            {
+                return false;
+            }
+            if (name == "dispatch_subagent")
+            {
+                return false;   // 子代理不许再派子代理
+            }
+            if (Mcp.IsMcpTool(name))
+            {
+                return false;   // MCP 工具一律当写工具(与 ToolRunner 的 MCP 裁决同口径)
+            }
+            ToolMetaInfo? meta = ToolMeta.Get(name);
+            return meta != null && meta.@readonly;
+        }).ToList();
+    }
+
+    /// <summary>AI5-A5:把一次响应里的 tool_calls 转成本轮的调用(参数解析失败的不丢,回 bad_arguments 让模型重发)。</summary>
+    private static void AddPendingTools(RoundState state, List<object> pending)
+    {
+        foreach (object? raw in pending)
+        {
+            PyDict item = Py.D(raw);
+            PyDict function = Py.D(item.Get("function"));
+            string name = Py.S(function.Get("name"));
+            if (name.Length == 0)
+            {
+                continue;
+            }
+            (PyDict? args, string parseError) = Tools.ParseArgs(function.Get("arguments"), name);
+            if (args == null)
+            {
+                // 参数解析不了的调用不丢弃:回一条工具错误给模型,让它重发
+                var broken = new ToolCall(Py.S(Py.Or(item.Get("id"), "call_bad")), name, new PyDict());
+                state.Calls.Add(new ToolInvocation
+                {
+                    Raw = new PyDict(item),
+                    Call = broken,
+                });
+                broken.Mark(ToolCallStatus.FAILED, error: parseError);
+                continue;
+            }
+            var call = new ToolCall(Py.S(Py.Or(item.Get("id"), "call_" + state.Calls.Count)), name, args);
+            state.Calls.Add(new ToolInvocation { Raw = new PyDict(item), Call = call });
+        }
+    }
+
+    /// <summary>
+    /// AI5-A5:流式这条路是不是「结构性没走通」。命中才做非流式兜底,而不是拿它去吞掉限流/认证这类错误 ——
+    /// 那些错误重试或降级后该失败还是要失败,否则会把额度不足掩盖成「重试成功」。
+    /// 这三条文案来自 Client.AssembleStream(SSE 装配层自己给出的「换一次非流式」信号):
+    /// 参数截断(ArgsComplete=false)、超时、流中断。
+    /// </summary>
+    private static bool StreamIncomplete(string message)
+    {
+        return message.Contains("工具参数不完整")
+            || message.Contains("接口超时")
+            || message.Contains("连接中断");
+    }
+
+    /// <summary>
+    /// AI5-A5:流式失败后的非流式兜底(照参考版 Agent.cs:882-914 的 ChatOnce 分支)。
+    /// 关键要求:兜底请求用**本轮流式请求实际下发的那份工具表**(<see cref="RoundState.Tools"/>,含预设筛选、
+    /// on-the-wire 的子代理只读过滤),绝不用全量表;因此也不会出现「兜底时子代理看到写工具」。
+    /// 只处理结构性失败(见 <see cref="StreamIncomplete"/>);已经吐过正文的不重发(免得正文重复)。
+    /// </summary>
+    private async Task<bool> FallbackOnceAsync(List<object> messages, RoundState state, List<object> mcpSchemas, CancellationToken ct)
+    {
+        if (state.Tools == null && !state.NoTools && ToolsEnabled)
+        {
+            // 正常情况下 StreamOnceAsync 已经填好;这条只是为了「没填也不能用全量表」兜住
+            state.Tools = RoundTools(messages, state, mcpSchemas);
+        }
+        string upstream = state.Error;
+        if (!StreamIncomplete(upstream))
+        {
+            return false;
+        }
+        // StreamOnceAsync 只把「最终失败」留在这里,所以这条路最多走一次(它自己内部也有上限)
+        if (!TryFallbackModel(null, upstream, state.Round))
+        {
+            _emit(new AiAgentEvent { Kind = "status", Text = T("流式接口没走通,换成非流式再要一次"), Round = state.Round });
+        }
+        Store.LogEvent(ChatId, "ChatOnceFallback", PyDict.Of(
+            "turn_id", TurnId, "round", (long)state.Round, "error", Py.Slice(upstream, null, 160)));
+        Trace.Record("chat_once_fallback", state.Round, "", "", null, null, null, "error", Py.Slice(upstream, null, 120));
+        try
+        {
+            // 兜底请求的工具表 == 本轮流式请求实际下发的工具表(不能换成 Tools.Schemas 全量)
+            PyDict reply = await Task.Run(
+                () => Client.ChatOnce(RequestSettings(), messages, state.Tools, 0.3, new HttpCancel()),
+                ct).ConfigureAwait(false);
+            ApplyChatOnce(state, reply);
+            state.Failed = false;
+            state.Error = "";
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Trace.Record("chat_once_fallback_failed", state.Round, "", "", ex);
+            string detail = ex is AIClientError ce ? ce.Message : Py.ExcStr(ex);
+            state.Error = StreamIncomplete(detail) ? upstream : detail;
+            state.Failed = true;
+            return false;
+        }
+    }
+
+    /// <summary>把非流式响应装进这一轮的状态(正文可能已经流出去一段:只补差量,不重复拼接)。</summary>
+    private void ApplyChatOnce(RoundState state, PyDict reply)
+    {
+        if (reply == null)
+        {
+            return;
+        }
+        if (reply.Get("usage") is PyDict usage && usage.Count > 0)
+        {
+            Tokens.UpdateFromUsage(TokenState, usage, 1);
+            Usage.Add(ChatId, usage, Tokens.EstimateMessages(new List<object>()), 0);
+            _emit(new AiAgentEvent { Kind = "usage", Round = state.Round, Usage = Usage.Get(ChatId) });
+        }
+        string text = Py.S(reply.Get("content"));
+        if (text.Length > 0)
+        {
+            if (state.Text.Length == 0)
+            {
+                state.Text.Append(text);
+                _emit(new AiAgentEvent { Kind = "delta", Text = text, Round = state.Round });
+            }
+            else
+            {
+                string had = state.Text.ToString();
+                if (text.StartsWith(had, StringComparison.Ordinal))
+                {
+                    string extra = text.Substring(had.Length);
+                    if (extra.Length > 0)
+                    {
+                        state.Text.Append(extra);
+                        _emit(new AiAgentEvent { Kind = "delta", Text = extra, Round = state.Round });
+                    }
+                }
+                else
+                {
+                    // 兜底返回的和已经吐出去的对不上:整段替换,只把差量补出去(界面上的半截收不回来)
+                    state.Text.Clear();
+                    state.Text.Append(text);
+                    _emit(new AiAgentEvent { Kind = "delta", Text = "\n\n" + text, Round = state.Round });
+                }
+            }
+        }
+        if (state.Calls.Count == 0)
+        {
+            AddPendingTools(state, Py.ListOr(reply.Get("tool_calls")));
+        }
+        string finish = Py.S(reply.Get("finish_reason"));
+        if (finish.Length > 0)
+        {
+            state.FinishReason = finish;
+        }
+    }
+
+    /// <summary>
+    /// AI5-A8:粘性降级 —— 撞上限流/5xx 且设置里配了备用模型时,把本轮剩余请求都切到备用模型
+    /// (照参考版 Agent.cs:1568-1585 的 _maybe_fallback)。粘性:只切一次,切完不再来回跳。
+    /// </summary>
+    private bool TryFallbackModel(AIClientError? err, string message, int round)
+    {
+        if (!ShouldTryFallback(err, message))
+        {
+            return false;
+        }
+        _fallbackActive = true;
+        _emit(new AiAgentEvent
+        {
+            Kind = "status",
+            Text = T("主模型暂时不可用,正在改用备用模型 {model}").Replace("{model}", _fallbackModel),
+            Round = round,
+        });
+        Trace.Record("model_fallback", round, "", "", err, null, null, "model", _fallbackModel);
+        Store.LogEvent(ChatId, "ModelFallback", PyDict.Of(
+            "turn_id", TurnId, "round", (long)round, "model", _fallbackModel,
+            "error", Py.Slice(message, null, 160)));
+        return true;
+    }
+
+    /// <summary>该不该换备用模型(还没切过 + 配上备用模型 + 这次失败是限流/5xx 之类)。</summary>
+    private bool ShouldTryFallback(AIClientError? err, string message)
+    {
+        if (_fallbackModel.Length == 0 || _fallbackActive)
+        {
+            return false;
+        }
+        if (err != null && (err.Status is 429 or 500 or 502 or 503 or 504 || err.Category == "rate_limited"))
+        {
+            return true;
+        }
+        // 没有分类信息时(比如流里 error 事件、ChatOnce 抛的非 5xx)按文案兜一下
+        string text = message ?? "";
+        return text.Contains("429") || text.Contains("500") || text.Contains("502") || text.Contains("503")
+            || text.Contains("504") || text.Contains("rate limit") || text.Contains("限流")
+            || text.Contains("额度") || text.Contains("上游负载");
+    }
+
     /// <summary>摘要输入:把要压的消息铺成「role: content」，必要时截断。</summary>
+    /// <summary>
+    /// AI5-A8:这一轮真正要下发给接口的设置。粘性降级生效后把 ai_model 换成备用模型,
+    /// 并把当前生效的模型记进 <see cref="Model"/>(状态行、日志、用例都读它)。
+    /// 只改这份内存配置,不动用户在设置里填的值。
+    /// </summary>
+    private PyDict RequestSettings()
+    {
+        PyDict settings = Config.CONFIG.data;
+        if (!_fallbackActive || _fallbackModel.Length == 0)
+        {
+            Model = "";
+            return settings;
+        }
+        settings["ai_model"] = _fallbackModel;
+        Model = _fallbackModel;
+        return settings;
+    }
+
     private static string SummaryInput(List<object> slice)
     {
         var sb = new StringBuilder();
@@ -468,11 +1008,15 @@ public sealed class AiAgent
             Instance = _runner.Instance,
             McpClients = _runner.McpClients,
         };
-        var sub = new AiAgent(subRunner, _ => { })
+        // AI5-S:轮数 = 设置 ai_subagent_max_rounds(默认 4)与 dispatch_subagent 的 max_rounds 参数取夹在硬上限内的值
+        int rounds = SubagentRounds(args);
+        var sub = new AiAgent(subRunner, ev => ForwardSubagentEvent(ev))
         {
-            MaxRounds = 4,
+            MaxRounds = rounds,
             IsSubagent = true,
-            ChatId = ChatId + "-sub",
+            // AI5-S:每次派发唯一。原来是固定的 <父id>-sub,同一轮派两个子代理会共用一个会话域
+            // (压缩状态、检查点、事件日志全串在一起)。
+            ChatId = ChatId + "-sub-" + Guid.NewGuid().ToString("N").Substring(0, 6),
         };
         var messages = new List<object>
         {
@@ -495,9 +1039,60 @@ public sealed class AiAgent
         string answer = sub.LastText;
         if (sub.stop_reason != StopReason.COMPLETED && sub.stop_reason != StopReason.NO_TOOL_CALL && Py.Strip(answer).Length == 0)
         {
-            return PyJson.Dumps(PyDict.Of("ok", false, "error", "子代理未得出结论(停止原因: " + sub.stop_reason + ")"), null, ensureAscii: false);
+            return PyJson.Dumps(PyDict.Of(
+                "ok", false,
+                "error", "子代理未得出结论(停止原因: " + sub.stop_reason + ")",
+                "stop_reason", sub.stop_reason,
+                "rounds", (long)sub.RoundsUsed,
+                "tools_used", new List<object>(sub.ToolsUsed),
+                "truncated", sub.Truncated), null, ensureAscii: false);
         }
-        return PyJson.Dumps(PyDict.Of("ok", true, "answer", answer, "stop_reason", sub.stop_reason), null, ensureAscii: false);
+        // AI5-S:原有字段不动,新增 rounds / tools_used / truncated
+        return PyJson.Dumps(PyDict.Of(
+            "ok", true,
+            "answer", answer,
+            "stop_reason", sub.stop_reason,
+            "rounds", (long)sub.RoundsUsed,
+            "tools_used", new List<object>(sub.ToolsUsed),
+            "truncated", sub.Truncated), null, ensureAscii: false);
+    }
+
+    /// <summary>AI5-S:子代理轮数默认值(与改造前一致)。</summary>
+    private const int SubagentDefaultRounds = Defaults.MAX_TOOL_ROUNDS_SUBAGENT;
+
+    /// <summary>
+    /// AI5-S:子代理轮数 —— 设置项 ai_subagent_max_rounds(默认 4)为基线,dispatch_subagent 的
+    /// max_rounds 参数可覆盖,但一律夹在 [1, SubagentHardMaxRounds] 内(硬上限挡着,参数再大也跑不飞)。
+    /// </summary>
+    internal static int SubagentRounds(PyDict args)
+    {
+        int configured = (int)Py.IntOr(Config.CONFIG.Get("ai_subagent_max_rounds"), SubagentDefaultRounds);
+        int rounds = Math.Clamp(configured, 1, SubagentHardMaxRounds);
+        object? raw = args.Get("max_rounds");
+        if (raw != null && Py.Truthy(raw))
+        {
+            rounds = Math.Clamp((int)Py.IntOr(raw, rounds), 1, SubagentHardMaxRounds);
+        }
+        return rounds;
+    }
+
+    /// <summary>AI5-S:把子代理的状态/工具事件转给父回合(带 subagent 字段,界面据它显示「子任务进行中」)。</summary>
+    private void ForwardSubagentEvent(AiAgentEvent ev)
+    {
+        // 只转状态与工具进度:子代理的正文增量丢掉(父回合只用它的最终结论,照参考版口径)
+        if (ev.Kind != "status" && ev.Kind != "tool" && ev.Kind != "tool_done" && ev.Kind != "compact")
+        {
+            return;
+        }
+        _emit(new AiAgentEvent
+        {
+            Kind = ev.Kind,
+            Name = ev.Name,
+            Text = ev.Text,
+            Call = ev.Call,
+            Round = ev.Round,
+            Subagent = true,
+        });
     }
 
     /// <summary>一轮工具调用的原始形状(要原样回填进 assistant.tool_calls)。</summary>
@@ -512,6 +1107,17 @@ public sealed class AiAgent
         public int Round;
         public bool NoTools;
         public bool Failed;
+
+        /// <summary>AI5-A2:用户点了「停止」——终态是「已停止」,不是接口报错。</summary>
+        public bool Cancelled;
+
+        /// <summary>AI5-A2/A5:这一轮最终失败时的报文(只由唯一出口发一条 error 事件)。</summary>
+        public string Error = "";
+
+        /// <summary>AI5-A5:这一轮流式请求**实际下发**的工具表(授权过筛 + MCP 合并 + 子代理只读过滤);
+        /// 空表示这轮不带工具。非流式兜底必须原样用这一份,不能改用全量表。</summary>
+        public List<object>? Tools;
+
         public string FinishReason = "";
         public readonly StringBuilder Text = new();
         public readonly List<ToolInvocation> Calls = new();
@@ -582,11 +1188,16 @@ public sealed class AiAgent
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         linked.Token.Register(() => cancel.Abort());
 
-        List<object>? tools = state.NoTools || !ToolsEnabled
-            ? null
-            : Tools.SelectToolSchemas(messages).Concat(mcpSchemas).ToList();
+        // AI5-A5:这一轮实际下发的工具表算一次就固定下来 —— 流式请求与随后的非流式兜底必须用同一份
+        // (子代理只读过滤也在里面),否则兜底时上下文会突然变大、子代理还能看到写工具。
+        List<object>? tools = RoundTools(messages, state, mcpSchemas);
+        state.Tools = tools;
 
         int retries = 0;
+        // AI5-A4:这一轮还剩几次「反应式压缩后重发」的额度(每轮最多 1 次,照参考版的 flag6)
+        int reactiveBudget = 1;
+        // AI5-C2:tool_schema_miss 全量重发每轮最多 1 次(防死循环)
+        bool schemaMissRetried = false;
         while (true)
         {
             // 这一轮尝试开始时的已生成文本长度:流断在半途、稍后整轮重试时,必须回到这个位置再重写,
@@ -597,13 +1208,24 @@ public sealed class AiAgent
 
             if (linked.IsCancellationRequested)
             {
+                // AI5-A2:取消也走唯一出口 —— 这里只留状态,事件由 RunAsync 收尾时发一条「已停止」
                 state.Failed = true;
-                _emit(new AiAgentEvent { Kind = "error", Error = "", Text = "已停止", Round = state.Round });
+                state.Error = "";
+                state.Cancelled = true;
                 return;
             }
             if (attempt.Error.Length > 0)
             {
-                if (retries < MaxStreamRetries && CanRetryStream(attempt.ClientError, state, attempt))
+                // AI5-A8:撞上限流/5xx 且配了备用模型 → **先**换模型再试(不能排在重试上限之后:
+                // 那 3 次重试会把同一个限流错误重发 3 遍,兜底模型永远轮不到)。
+                // 粘性:切一次之后本轮都用它,不会来回跳。
+                bool fallbackNow = ShouldTryFallback(attempt.ClientError, attempt.Error);
+                if (fallbackNow && TryFallbackModel(attempt.ClientError, attempt.Error, state.Round))
+                {
+                    retries = 0;
+                    continue;
+                }
+                if (!fallbackNow && retries < MaxStreamRetries && CanRetryStream(attempt.ClientError, state, attempt))
                 {
                     retries++;
                     double wait = BackoffSeconds(retries);
@@ -628,41 +1250,82 @@ public sealed class AiAgent
                     state.Text.Length = textBase;
                     continue;
                 }
+                // AI5-A4:上下文溢出 = 反应式压缩。强制压一次(不调模型的判断,直接压),压成功就重发这一轮;
+                // 每轮最多 1 次(压完还溢出就照失败报错,不再无限压 —— 见 reactiveBudget)。
+                if (Client.IsContextOverflow(attempt.Error))
+                {
+                    if (reactiveBudget > 0 && ReactiveCompact(state.Round))
+                    {
+                        reactiveBudget--;
+                        state.Text.Length = textBase;   // 溢出的那一轮白吐的增量不要留在上下文里
+                        retries = 0;
+                        continue;
+                    }
+                    if (reactiveBudget == 0)
+                    {
+                        // 已经压过一次还是溢出:把话说清楚,别让用户看到一句看不懂的上游报文
+                        state.Error = T("上下文太长,压缩一次后仍然超出模型窗口,请开新对话或减少附件");
+                    }
+                }
+                // AI5-A2:这里不再自己发 error 事件 —— 从前这里发一条(上游原文)、RunAsync 收尾又发一条
+                // (内部代号 stream_failed),页面渲染成两个气泡 + 两次 toast。现在只把报文带回去,
+                // 由唯一出口发**恰好一条**用户能看懂的 error。
                 state.Failed = true;
+                state.Error = state.Error.Length > 0 ? state.Error : attempt.Error;
                 // 报错也要记一次用量(这一轮确实花掉了请求)
                 Usage.Add(ChatId, null, Tokens.EstimateMessages(messages), 0);
-                _emit(new AiAgentEvent { Kind = "error", Error = attempt.Error, Round = state.Round });
                 return;
             }
 
             state.FinishReason = attempt.Finish;
-            foreach (object? raw in attempt.PendingTools)
+            AddPendingTools(state, attempt.PendingTools);
+
+            // AI5-C2(第 1 条):模型调用了**本机根本不认识**的工具 → 用全量表重发一次(每轮最多 1 次)。
+            // 判据与参考版 Agent.cs:959-977 逐条对齐:那里 declared 取的是 Tools.TOOL_SCHEMAS **全量注册表**
+            // (不是本轮按需选出来的那份),所以只有「注册表里没有这个名字」才触发(比如插件/MCP 侧新出现的工具)。
+            // 这与 linux-memperm 的 ToolRunner.IsUnknownTool 是同一类问题、两个层次:它按执行结果判 unknown_tool
+            // (那需要它的 ToolCall.code 修复),这里按「名字在不在注册表」在**发起执行之前**判,不依赖该修复。
+            // 不执行那些调用,先把工具表放宽再问一次,否则这一轮只会拿到一串「没有这个工具」。
+            if (!schemaMissRetried && HasUndeclaredTools(state, mcpSchemas))
             {
-                PyDict item = Py.D(raw);
-                PyDict function = Py.D(item.Get("function"));
-                string name = Py.S(function.Get("name"));
-                if (name.Length == 0)
-                {
-                    continue;
-                }
-                (PyDict? args, string parseError) = Tools.ParseArgs(function.Get("arguments"), name);
-                if (args == null)
-                {
-                    // 参数解析不了的调用不丢弃:回一条工具错误给模型,让它重发
-                    var broken = new ToolCall(Py.S(Py.Or(item.Get("id"), "call_bad")), name, new PyDict());
-                    state.Calls.Add(new ToolInvocation
-                    {
-                        Raw = new PyDict(item),
-                        Call = broken,
-                    });
-                    broken.Mark(ToolCallStatus.FAILED, error: parseError);
-                    continue;
-                }
-                var call = new ToolCall(Py.S(Py.Or(item.Get("id"), "call_" + state.Calls.Count)), name, args);
-                state.Calls.Add(new ToolInvocation { Raw = new PyDict(item), Call = call });
+                schemaMissRetried = true;
+                List<object> upgraded = RoundTools(messages, state, mcpSchemas, forceAll: true);
+                state.Tools = upgraded;
+                tools = upgraded;
+                state.Calls.Clear();
+                state.Text.Clear();
+                string missing = string.Join(",", attempt.PendingTools
+                    .Select(t => Py.S(Py.DictOr(Tools.DGet(t, "function")).Get("name")))
+                    .Where(n => n.Length > 0 && !AllKnownToolNames(mcpSchemas).Contains(n)));
+                Trace.Record("tool_schema_miss", state.Round, "", "", null, null, null, "tools", missing);
+                Store.LogEvent(ChatId, "ToolSchemaMiss", PyDict.Of(
+                    "turn_id", TurnId, "round", (long)state.Round, "tools", missing));
+                continue;   // 用放宽后的工具表重发这一轮
             }
             return;
         }
+    }
+
+    /// <summary>本机认识的全部工具名(注册表 + 本轮连上的 MCP 工具)。</summary>
+    private static HashSet<string> AllKnownToolNames(List<object> mcpSchemas)
+    {
+        var known = new HashSet<string>(Tools.Schemas.Select(Tools.SchemaName), StringComparer.Ordinal);
+        foreach (object schema in mcpSchemas ?? new List<object>())
+        {
+            string name = Tools.SchemaName(schema);
+            if (name.Length > 0)
+            {
+                known.Add(name);
+            }
+        }
+        return known;
+    }
+
+    /// <summary>AI5-C2:这轮返回的 tool_call 里有没有「本机根本不认识的工具」。</summary>
+    private static bool HasUndeclaredTools(RoundState state, List<object> mcpSchemas)
+    {
+        HashSet<string> known = AllKnownToolNames(mcpSchemas);
+        return state.Calls.Any(c => c.Call.name.Length > 0 && !known.Contains(c.Call.name));
     }
 
     /// <summary>
@@ -672,12 +1335,14 @@ public sealed class AiAgent
     private async Task<StreamAttempt> StreamAttemptAsync(List<object> messages, RoundState state, List<object>? tools, HttpCancel cancel, CancellationTokenSource linked)
     {
         var attempt = new StreamAttempt();
+        // AI5-A8:粘性降级生效后,本轮剩余请求都走备用模型(照参考版把模型换成 fallbackModel 的口径)
+        PyDict settings = RequestSettings();
 
         await Task.Run(() =>
         {
             try
             {
-                foreach (PyDict ev in Client.ChatStream(Config.CONFIG.data, messages, tools, 0.3, cancel))
+                foreach (PyDict ev in Client.ChatStream(settings, messages, tools, 0.3, cancel))
                 {
                     if (linked.IsCancellationRequested)
                     {
