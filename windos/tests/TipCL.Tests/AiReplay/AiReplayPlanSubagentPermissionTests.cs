@@ -24,7 +24,7 @@ public class AiReplayPlanSubagentPermissionTests
 
 	// ————————————————————— 6 update_plan 后计划被驳回 —————————————————————
 
-	[Fact(Skip = "AI5-T 场景 6:Windows 现在是「先执行工具、再弹计划审批」(Agent.cs 的 Scheduler.RunGroups 在 plan_approval 之前),驳回时写操作已经落盘;由 P2(审批挪到执行之前)修好后去掉 Skip")]
+	[Fact]
 	public void Scenario06_计划被驳回_不执行任何写操作()
 	{
 		using AiReplayHarness h = new AiReplayHarness();
@@ -68,13 +68,15 @@ public class AiReplayPlanSubagentPermissionTests
 		Assert.NotEmpty(h.TraceEventsOf("subagent_write_blocked"));
 		// 没有真的写盘
 		Assert.False(File.Exists(Path.Combine(h.Root, "out.txt")));
-		// 子代理自己的会话记录写在 <父id>-sub 里
-		Assert.NotEmpty(h.StoreEvents(h.ChatId + "-sub"));
+		// 子代理自己的会话记录写在 <父id>-sub-<8位随机> 里(S 包:每次派发都唯一,不再固定 "-sub")
+		string[] subSessions = Directory.GetFiles(Path.Combine(h.Root, "cache", "ai_sessions"), h.ChatId + "-sub-*.jsonl");
+		Assert.Single(subSessions);
+		Assert.NotEmpty(h.ReadJsonl(subSessions[0]));
 		Assert.Contains("子代理只读", h.TraceEventsOf("subagent_write_blocked")[0].Get("exc_msg")?.ToString() ?? "子代理只读");
 		h.AssertSingleTurnEnd("stop");
 	}
 
-	[Fact(Skip = "AI5-T 场景 12(兜底工具表):子代理走非流式兜底时,Agent.cs 的 ChatOnce 传的是全量 Tools.TOOL_SCHEMAS,子代理在兜底里也能看到写工具;由 D8 修好后去掉 Skip")]
+	[Fact]
 	public void Scenario12b_子代理兜底请求里没有写工具()
 	{
 		using AiReplayHarness h = new AiReplayHarness();
@@ -95,7 +97,7 @@ public class AiReplayPlanSubagentPermissionTests
 
 	// ————————————————————— 21 派两个子代理 —————————————————————
 
-	[Fact(Skip = "AI5-T 场景 21:Windows 的 RunSubagent 把会话 id 固定成 <父id>-sub,同一回合派两个子代理会串在一起;由 S(改成 <父id>-sub-<短随机id>)修好后去掉 Skip")]
+	[Fact]
 	public void Scenario21_两个子代理的会话id不同()
 	{
 		using AiReplayHarness h = new AiReplayHarness();
@@ -112,7 +114,7 @@ public class AiReplayPlanSubagentPermissionTests
 
 	// ————————————————————— 22「不询问」档 —————————————————————
 
-	[Fact(Skip = "AI5-T 场景 22:「不询问」(dontAsk)现在是 ask → deny,写工具被拒绝而不是直接执行;由 P1(改成 ask → allow,删除类仍拒绝)修好后去掉 Skip")]
+	[Fact]
 	public void Scenario22a_不询问档_写工具直接执行()
 	{
 		using AiReplayHarness h = new AiReplayHarness();
