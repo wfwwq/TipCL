@@ -13,7 +13,13 @@ namespace TipCL.Core.Launcher.Ai;
 /// </summary>
 public class FileMemory : NoopMemory
 {
-	public const int MaxEntries = 80;
+	/// <summary>
+	/// 文件里最多留多少条(D-88,2026-11-28 用户裁决:两棵树统一 200)。
+	/// **这不是上下文上限**:读记忆时按 <see cref="MaxLoadChars"/> 截断(累计超过 4000 字符就停),
+	/// 而单条最多 <see cref="MaxEntryChars"/> 字符 ⇒ 真正进提示词的永远是最新约 13 条。
+	/// 把这里提到 200 只是允许文件多存(保住 B1 迁移前的用户数据),不会让提示词变大。
+	/// </summary>
+	public const int MaxEntries = 200;
 
 	public const int MaxEntryChars = 300;
 

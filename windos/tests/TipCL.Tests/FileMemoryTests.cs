@@ -46,11 +46,13 @@ public class FileMemoryTests
 		using TestHome home = new TestHome();
 		FileMemory.Remember(new string('a', 1000));
 		Assert.True(FileMemory.Entries().Single().Length <= 340);
-		for (int i = 0; i < 100; i++)
+		// D-88:上限提到 200(两棵树统一),所以这里按常量写、并多写 20 条把裁剪压出来
+		for (int i = 0; i < FileMemory.MaxEntries + 20; i++)
 		{
 			FileMemory.Remember("第 " + i + " 条");
 		}
-		Assert.True(FileMemory.Entries().Count <= 80);
+		Assert.Equal(FileMemory.MaxEntries, FileMemory.Entries().Count);
+		Assert.DoesNotContain(FileMemory.Entries(), e => e.EndsWith("第 0 条", System.StringComparison.Ordinal));
 	}
 
 	[Fact]
