@@ -11,6 +11,14 @@ public static class Scheduler
 
 	private static readonly string[] PARALLEL_SIDE_EFFECTS = new string[3] { "none", "read", "network" };
 
+	/// <summary>
+	/// 标了只读、但同一轮里的先后顺序有语义的会话内工具:计划与记忆(先记再忘不能颠倒,计划要按调用顺序更新)。
+	/// 它们进并行组会和同轮的兄弟调用抢顺序,所以一律单独成组串行。
+	/// Linux 树的 SESSION_STATE_TOOLS 把 dispatch_subagent 也排除了;Windows 侧在会话 id 唯一之后
+	/// 保留 dispatch_subagent 并行 —— 每个子代理有自己的会话 id 和压缩状态,并起来互不影响(S 包)。
+	/// </summary>
+	private static readonly string[] SESSION_STATE_TOOLS = new string[3] { "update_plan", "remember", "forget" };
+
 	public static bool IsExclusive(ToolCall tc)
 	{
 		if (tc.name == "ask_user")
@@ -32,11 +40,16 @@ public static class Scheduler
 		{
 			return false;
 		}
-		if (toolMetaInfo.@readonly)
+		if (!toolMetaInfo.@readonly)
 		{
-			return Array.IndexOf<string>(PARALLEL_SIDE_EFFECTS, toolMetaInfo.side_effect) >= 0;
+			return false;
 		}
-		return false;
+		// 会话内状态工具(计划、记忆)虽然标了只读,同一轮里先后顺序有语义,单独成组串行
+		if (Array.IndexOf<string>(SESSION_STATE_TOOLS, tc.name) >= 0)
+		{
+			return false;
+		}
+		return Array.IndexOf<string>(PARALLEL_SIDE_EFFECTS, toolMetaInfo.side_effect) >= 0;
 	}
 
 	public static List<List<ToolCall>> Group(IEnumerable<ToolCall> toolCalls, int maxConcurrency = 4)

@@ -1412,7 +1412,8 @@ public static class Agent
 						}
 						else if (toolCall2.name == "dispatch_subagent")
 						{
-							o = RunSubagent(backend, settings, toolCall2.args, cancelled);
+							// 子代理的进度事件转给父回合(事件里带 subagent 字段),界面据此显示「子任务进行中」
+							o = RunSubagent(backend, settings, toolCall2.args, cancelled, _status);
 						}
 						else if (toolCall2.name.StartsWith("mcp_", StringComparison.Ordinal))
 						{
@@ -1805,7 +1806,74 @@ public static class Agent
 		}
 	}
 
-	public static string RunSubagent(BackendApi backend, PyDict settings, PyDict args, Func<bool> cancelled = null)
+	/// <summary>子代理默认轮数(设置项 ai_subagent_max_rounds 没配时用它,与改造前写死的值一致)。</summary>
+	public const long SUBAGENT_MAX_ROUNDS_DEFAULT = 4L;
+
+	/// <summary>子代理轮数硬上限:设置项和 <c>dispatch_subagent</c> 的 max_rounds 参数都会被夹到这个值以内。</summary>
+	public const long SUBAGENT_MAX_ROUNDS_HARD_CAP = 20L;
+
+	/// <summary>
+	/// 子代理实际能跑几轮:优先 <c>dispatch_subagent</c> 的 <c>max_rounds</c> 参数,
+	/// 其次设置项 <c>ai_subagent_max_rounds</c>,最后 SUBAGENT_MAX_ROUNDS_DEFAULT;
+	/// 一律夹在 1..SUBAGENT_MAX_ROUNDS_HARD_CAP 之间。
+	/// 设置项先看本轮 settings,再看 config.json(主设置白名单在 BackendApi 里,没加这条键时也要能用;
+	/// 与本文件 _current_instance 读 default_instance 的口径一致)。
+	/// </summary>
+	public static long SubagentMaxRounds(PyDict settings, PyDict args)
+	{
+		object raw = (args ?? new PyDict()).Get("max_rounds");
+		if (!Py.Truthy(raw))
+		{
+			raw = (settings ?? new PyDict()).Get("ai_subagent_max_rounds");
+		}
+		if (!Py.Truthy(raw))
+		{
+			try
+			{
+				raw = Config.CONFIG.Get("ai_subagent_max_rounds");
+			}
+			catch (Exception)
+			{
+				raw = null;
+			}
+		}
+		long rounds = _int_setting(raw, SUBAGENT_MAX_ROUNDS_DEFAULT);
+		return Math.Max(1L, Math.Min(rounds, SUBAGENT_MAX_ROUNDS_HARD_CAP));
+	}
+
+	/// <summary>配置值转整数:认不出来(字符串、非法数字)就用 fallback,不抛。</summary>
+	private static long _int_setting(object raw, long fallback)
+	{
+		if (raw == null || raw is bool)
+		{
+			return fallback;
+		}
+		if (raw is string text)
+		{
+			return long.TryParse(text.Trim(), out long parsed) ? parsed : fallback;
+		}
+		try
+		{
+			return Py.Int(raw);
+		}
+		catch (Exception)
+		{
+			return fallback;
+		}
+	}
+
+	/// <summary>子代理的会话 id:父会话 id + "-sub-" + 8 位随机。每次派发都唯一,压缩状态和事件日志不再串(S 包)。</summary>
+	public static string SubagentSessionId(string parentSessionId)
+	{
+		string parent = (string.IsNullOrEmpty(parentSessionId) ? "active" : parentSessionId);
+		return parent + "-sub-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+	}
+
+	/// <summary>
+	/// 跑一个子代理,返回给模型的 JSON。父回合的 <paramref name="onStatus"/> 会收到子代理的进度事件
+	/// (payload 里多一个 <c>subagent</c> 字段 = 这次派发的会话 id),界面据此显示「子任务进行中」。
+	/// </summary>
+	public static string RunSubagent(BackendApi backend, PyDict settings, PyDict args, Func<bool> cancelled = null, Action<string, PyDict> onStatus = null)
 	{
 		string text = Py.Strip(Py.S((args ?? new PyDict()).Get("task")));
 		string text2 = Py.Strip(Py.S((args ?? new PyDict()).Get("context")));
@@ -1814,14 +1882,29 @@ public static class Agent
 			return PyJson.Dumps(PyDict.Of("ok", false, "error", "缺少子任务描述（task 字段）"), null, ensureAscii: false);
 		}
 		string userText = "[子任务] " + text + ((text2.Length > 0) ? ("\n相关背景：" + text2) : "");
+		string parentSessionId = Py.Str(Py.Or((settings ?? new PyDict()).Get("ai_session_id"), "active"));
 		PyDict pyDict = (settings ?? new PyDict()).Copy();
+		// 会话 id 每次派发都唯一:以前固定 "<父id>-sub",同一轮派两个子代理会共用一份压缩状态和事件日志,
+		// 状态互相串、压缩计数也互相影响(S 包)
+		string subSessionId = SubagentSessionId(parentSessionId);
 		pyDict["ai_subagent"] = true;
-		pyDict["ai_max_rounds"] = 4L;
-		pyDict["ai_session_id"] = Py.Str(Py.Or((settings ?? new PyDict()).Get("ai_session_id"), "active")) + "-sub";
+		pyDict["ai_max_rounds"] = SubagentMaxRounds(settings, args);
+		pyDict["ai_session_id"] = subSessionId;
+		Action<string, PyDict> childStatus = null;
+		if (onStatus != null)
+		{
+			childStatus = delegate(string kind, PyDict payload)
+			{
+				PyDict copy = (payload ?? new PyDict()).Copy();
+				copy["subagent"] = subSessionId;
+				copy["subagent_task"] = Py.Slice(text, null, 80);
+				onStatus(kind, copy);
+			};
+		}
 		AgentResult agentResult;
 		try
 		{
-			agentResult = RunAgent(backend, pyDict, new List<object>(), userText, null, null, null, null, cancelled);
+			agentResult = RunAgent(backend, pyDict, new List<object>(), userText, null, childStatus, null, null, cancelled);
 		}
 		catch (AgentCancelled)
 		{
@@ -1837,11 +1920,23 @@ public static class Agent
 			Trace.Record("subagent_failed", null, "", "", ex, null, null, extra);
 			return PyJson.Dumps(PyDict.Of("ok", false, "error", "子代理执行失败: " + Py.ExcStr(ex)), null, ensureAscii: false);
 		}
+		finally
+		{
+			// 跑完把自己的压缩状态从静态缓存里清掉,别一直占着 16 个槽位
+			ForgetCompactState(subSessionId);
+		}
+		bool truncated = agentResult.stop_reason == "truncated" || agentResult.stop_reason == "max_rounds";
 		string text3 = agentResult.Text;
+		PyDict payload2 = PyDict.Of("ok", true, "answer", text3, "stop_reason", agentResult.stop_reason);
 		if (agentResult.stop_reason != "completed" && agentResult.stop_reason != "no_tool_call" && Py.Strip(text3).Length == 0)
 		{
-			return PyJson.Dumps(PyDict.Of("ok", false, "error", "子代理未得出结论（停止原因: " + agentResult.stop_reason + "）"), null, ensureAscii: false);
+			payload2["ok"] = false;
+			payload2["error"] = "子代理未得出结论（停止原因: " + agentResult.stop_reason + "）";
 		}
-		return PyJson.Dumps(PyDict.Of("ok", true, "answer", text3, "stop_reason", agentResult.stop_reason), null, ensureAscii: false);
+		// 旧字段(ok / answer / stop_reason / error)一个都不动,新字段只是追加
+		payload2["rounds"] = agentResult.rounds_used;
+		payload2["tools_used"] = new List<object>(agentResult.tools_used);
+		payload2["truncated"] = truncated;
+		return PyJson.Dumps(payload2, null, ensureAscii: false);
 	}
 }

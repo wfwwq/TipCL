@@ -14,6 +14,9 @@ public sealed class AgentResult
 
 	public long rounds_used;
 
+	/// <summary>本回合实际调用过的工具名(去重,按首次调用顺序;子代理的返回值里会带上它)。</summary>
+	public List<object> tools_used = new List<object>();
+
 	public List<object> messages = new List<object>();
 
 	public List<object> turn_messages = new List<object>();
