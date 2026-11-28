@@ -45,8 +45,10 @@ public static class ToolMeta
 		new ToolMetaInfo("read_artifact", ro: true, "read", "low", lr: false),
 		new ToolMetaInfo("dispatch_subagent", ro: true, "none", "low", lr: false),
 		new ToolMetaInfo("update_plan", ro: true, "none", "low", lr: false),
-		new ToolMetaInfo("remember", ro: true, "none", "low", lr: false),
-		new ToolMetaInfo("forget", ro: true, "none", "low", lr: false)
+		// B2(2026-11-28):remember / forget 真的会写盘(记忆文件),元信息必须与真实副作用一致 ——
+		// 标成只读会让经 MCP 调用时不弹外部确认(Tools.IsWriteTool 就是这个判断的依据)。
+		new ToolMetaInfo("remember", ro: false, "write_local", "low", lr: false),
+		new ToolMetaInfo("forget", ro: false, "write_local", "low", lr: false)
 	};
 
 	public static Dictionary<string, ToolMetaInfo> Map => _map ?? (_map = ALL.Concat(ExtraTools.Meta).ToDictionary((ToolMetaInfo m) => m.name));
